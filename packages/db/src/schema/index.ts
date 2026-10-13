@@ -33,6 +33,7 @@ export * from './reports.js';
 export * from './retention-settings.js';
 export * from './settings.js';
 export * from './sla-policies.js';
+export * from './sso.js';
 export * from './tags.js';
 export * from './team-members.js';
 export * from './teams.js';

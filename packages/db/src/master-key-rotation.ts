@@ -33,6 +33,7 @@ export const ENVELOPE_COLUMNS: readonly EnvelopeColumn[] = [
   { table: 'meta_accounts', column: 'access_token' },
   { table: 'webhooks', column: 'secret' },
   { table: 'knowledge_sources', column: 'config_encrypted' },
+  { table: 'sso_connections', column: 'secret_encrypted' },
 ];
 
 /**

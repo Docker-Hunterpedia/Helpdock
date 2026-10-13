@@ -94,6 +94,7 @@ describe('@helpdock/db', () => {
       'retention-settings.ts',
       'settings.ts',
       'sla-policies.ts',
+      'sso.ts',
       'tags.ts',
       'team-members.ts',
       'teams.ts',

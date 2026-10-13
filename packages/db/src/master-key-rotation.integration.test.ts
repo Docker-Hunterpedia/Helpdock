@@ -19,6 +19,7 @@ import {
   metaAccounts,
   outbox,
   settings,
+  ssoConnections,
   users,
   webhooks,
   widgetSettings,
@@ -80,11 +81,17 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
         const [metaAccount] = await tx.select().from(metaAccounts);
         return { widget, webhook, pending, metaAccount };
       });
+    const [connection] = await db.select().from(ssoConnections);
+    const [spKey] = await withTenant(db, installContext, (tx) =>
+      tx.select().from(settings).where(eq(settings.key, 'sso.spPrivateKey')),
+    );
     const a = await brandSecret(acme);
     const b = await brandSecret(globex);
 
     return {
       totp: user?.totpSecretEncrypted ?? '',
+      ssoClientSecret: connection?.secretEncrypted ?? '',
+      ssoSpKey: spKey?.value ?? '',
       installSetting: install?.value ?? '',
       acmeWidget: a.widget?.signingSecret ?? '',
       acmeWebhook: a.webhook?.secret ?? '',
@@ -121,6 +128,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
 
   beforeEach(async () => {
     const { db } = handle;
+    await db.delete(ssoConnections);
     await db.delete(brands);
     await db.delete(users);
     await withTenant(db, installContext, (tx) => tx.delete(settings));
@@ -135,12 +143,25 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
       name: 'Ada',
       totpSecretEncrypted: encryptSecret('totp-secret', oldOnly),
     });
+    await db.insert(ssoConnections).values({
+      name: 'OIDC',
+      protocol: 'oidc',
+      createdBy: userId,
+      config: { issuer: 'https://idp.example.test', clientId: 'client' },
+      secretEncrypted: encryptSecret('sso-client-secret', oldOnly),
+    });
     await withTenant(db, installContext, (tx) =>
       tx.insert(settings).values([
         {
           key: 'smtp.password',
           brandId: INSTALL_SCOPE_BRAND_ID,
           value: encryptSecret('"smtp-password"', oldOnly),
+          updatedBy: 'test',
+        },
+        {
+          key: 'sso.spPrivateKey',
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          value: encryptSecret(JSON.stringify('private-signing-key'), oldOnly),
           updatedBy: 'test',
         },
         { key: 'smtp.port', brandId: INSTALL_SCOPE_BRAND_ID, value: '587', updatedBy: 'test' },
@@ -198,7 +219,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
 
     const report = await rotateMasterKey(handle.db, rotating);
 
-    expect(report.rotated).toBe(7);
+    expect(report.rotated).toBe(9);
     expect(report.currentKeyId).toBe(newOnly.current.id);
     expect(report.previousKeyId).toBe(oldOnly.current.id);
     await expect(plaintexts(newOnly)).resolves.toEqual(before);
@@ -254,7 +275,7 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
     expect(rows[0]?.meta).toEqual({
       currentKeyId: newOnly.current.id,
       previousKeyId: oldOnly.current.id,
-      rotated: 7,
+      rotated: 9,
     });
     expect(JSON.stringify(rows[0])).not.toContain(NEW_KEY);
   });

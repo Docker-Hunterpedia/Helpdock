@@ -50,6 +50,8 @@ const membership = (
   brandId,
   role,
   departmentIds,
+  source: 'manual',
+  ssoConnectionId: null,
   createdAt: new Date(),
 });
 

@@ -1,7 +1,7 @@
 # M11 SSO and migration
 
-Status: planned
-Started: —
+Status: in development
+Started: 2026-10-13
 Owner: @Docker-Hunterpedia
 
 ## Scope
@@ -94,7 +94,7 @@ connectors on the same SDK and **may ship after 1.0**.
 
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
-| M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | planned |
+| M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | in review |
 | M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | planned |
 | M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | planned |
 | M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | planned |
@@ -164,7 +164,7 @@ earlier one.
 
 - `0053_sso` (M11-01): `sso_connections`, `sso_role_mappings`,
   `user_sso_identities`; `brand_role_source` enum (`manual`, `sso`) and
-  `user_brand_roles.source` default `manual`.
+  `user_brand_roles.source` default `manual`, `sso_connection_id`, and a provenance check constraint.
 - `0054_imports` (M11-07): `import_runs`, `import_records`, `import_mappings`,
   `import_external_ids`, `import_log`, `import_file_presets`, their RLS policies (`gen:rls`);
   `ticket_messages.author_display varchar(200) null` (the name shown for an
@@ -179,26 +179,25 @@ earlier one.
 **Should an imported ticket that is still open get an SLA?** Default proposed:
 no clocks for imported tickets, closed or open; the Import screen's last step
 offers "Start SLA clocks for the N open imported tickets now", which calls
-`SlaService.sync` for them and starts the clocks at that moment. *Status
-(2026-10-13): proposed, owner to confirm.*
+`SlaService.sync` for them and starts the clocks at that moment. *Status (2026-10-13): default approved by the owner in the implementation instruction.*
 
 **Should imported tickets keep the old tool's numbers?** Default proposed: no.
 Every imported ticket gets a new number from the brand's sequence; the old number
 is shown on the "Imported from …" chip and is searchable. Keeping numbers is
 offered only when the brand has no tickets yet, the brand prefix is chosen to
 match, and no vendor number collides; the loader then `setval`s the sequence
-past the highest. *Status: proposed.*
+past the highest. *Status: default approved by the owner in the implementation instruction.*
 
 **Are imported agents created as staff?** Default proposed: the Map step offers,
 per vendor agent, "Map to an existing person", "Create an invited person" (no
 email is sent; the admin sends invites later from Staff), or "Keep as a name
 only" (messages are authored by a placeholder system author with the agent's
-name in `author_display`). *Status: proposed.*
+name in `author_display`). *Status: default approved by the owner in the implementation instruction.*
 
 **Do SSO roles override manual ones?** Default proposed: no. A membership has a
 `source`; the sync at sign-in adds and removes only `sso` memberships and never
 touches `manual` ones. An admin who edits an SSO membership by hand turns it
-`manual`. *Status: proposed.*
+`manual`. *Status: default approved by the owner in the implementation instruction.*
 
 ## Artboards to draw
 
@@ -298,6 +297,8 @@ user_sso_identities
   unique (connection_id, subject)
 
 user_brand_roles.source brand_role_source not null default 'manual'  -- manual | sso
+user_brand_roles.sso_connection_id uuid null fk sso_connections on delete restrict
+  -- non-null exactly for an SSO membership; one owning connection per user/brand
 ```
 
 `config` by protocol (Zod in `packages/schemas/src/sso.ts`, `ssoConnectionConfigSchema`
@@ -317,11 +318,11 @@ discriminated on `protocol`):
 
 **`SsoService`** (`apps/api/src/sso/sso.service.ts`, module `apps/api/src/sso/sso.module.ts`):
 
-- `list()`, `get(id)`, `create(input, actor)`, `update(id, input, actor)`,
-  `remove(id, actor)`; the client secret is accepted on write and never returned
+- `list()`, `get(id)`, `create(input)`, `update(id, input)`,
+  `remove(id)` with the install-admin actor from request context; the client secret is accepted on write and never returned
   (`secretConfigured: boolean` instead), exactly as the OAuth settings do.
 - `spKeys()` returns `{ privateKey, certificate }`, generating both once:
-  RSA-2048 with `node:crypto` `generateKeyPairSync`, and a self-signed
+  RSA-2048 with asynchronous Node WebCrypto key generation, and a self-signed
   certificate built with `@peculiar/x509` (2.1.0 at planning time; ADR 0026),
   because `node:crypto` can parse X.509 but cannot issue one.
 - `requestStore`: Redis-backed, keys `auth:sso:req:<sha256(id)>`, TTL 10 min,
@@ -338,9 +339,9 @@ discriminated on `protocol`):
 | POST | `/api/install/sso/connections` | `ssoConnectionCreateSchema` → `ssoConnectionSchema` |
 | GET | `/api/install/sso/connections/:id` | `ssoConnectionSchema` (+ `sp`: `{ entityId, acsUrl, metadataUrl, oidcRedirectUri }`) |
 | PUT | `/api/install/sso/connections/:id` | `ssoConnectionUpdateSchema` (secret optional: absent keeps) |
-| DELETE | `/api/install/sso/connections/:id` | 204; refused with `409 sso-enforced-last` if it is the last enabled connection while enforced |
+| DELETE | `/api/install/sso/connections/:id` | 204; linked connections are refused with `409 sso-connection-in-use`; refused with `409 sso-enforced-last` if it is the last enabled connection while enforced |
 | PUT | `/api/install/sso/connections/:id/mappings` | the whole mapping list, replaced |
-| POST | `/api/install/sso/connections/:id/test` | `{ startUrl }` for a test sign-in that does not open a session |
+| POST | `/api/install/sso/connections/:id/test` | M11-02/M11-03: `{ startUrl }` for a test sign-in that does not open a session |
 | GET/PUT | `/api/install/sso/settings` | `{ enforced, breakGlassUserIds }` with locked flags |
 
 The SP identity is install-wide: entity ID `${APP_URL}/api/auth/sso/saml/metadata`,
@@ -351,6 +352,45 @@ per-connection ACS `${APP_URL}/api/auth/sso/<id>/saml/acs`, OIDC redirect
 unless its host resolves inside `OUTBOUND_ALLOW_CIDRS`, as AI providers). Integration:
 CRUD; secret encrypted at rest and absent from every response; key generation
 happens once across two concurrent callers; audit rows.
+
+### M11-01 implementation notes
+
+Master-key rotation includes the encrypted OIDC client secret and the SP private
+key setting. The real-Postgres rotation suite verifies both remain decryptable
+with the replacement key alone; migration-runner expectations include `0053_sso`.
+
+
+Issue #183; implementation branch `feat/m11-01-sso-schema`.
+
+Migration `0053_sso` adds the three install-scope tables and membership
+provenance, preserving existing rows as manual. The tables are explicitly
+classified in `GLOBAL_TABLES`; existing membership RLS remains enforced.
+Connection CRUD, detail URLs, mapping reads/replacement, and settings reads/
+updates are installed under `/api/install/sso`, each guarded by `install:admin`
+and validated/serialized through shared Zod DTOs. Client secrets are encrypted
+and only `secretConfigured` is returned. Audit rows contain field names only.
+The protocol start/callback/test routes belong to M11-02/M11-03; no placeholder
+sign-in URL is exposed by this foundation.
+
+Enforcement configuration requires an active break-glass install admin with a
+password, enabled TOTP and a stored TOTP secret. Connection disabling and
+removal share the settings transaction lock, so concurrent requests cannot
+remove every enabled provider. Authentication integration is still M11-04;
+setting the configuration here does not change existing sign-in methods yet.
+
+Settings and SP keys use uncached transaction reads to avoid stale control
+state. Key/certificate generation commits atomically under a database lock in
+addition to the ownership-safe Redis lease. A linked connection's identity
+authority cannot change; mappings validate active brands and department
+ownership. Protocol-specific request-store namespaces have ten-minute TTLs and
+atomic GETDEL consumption across replicas. ADR 0026 is accepted with amendments
+covering these corrections and the requirements for later protocol work.
+
+Tests cover encrypted CRUD and audit, authorization and input failures,
+cross-brand mapping rejection, enforced-provider concurrency, immutable linked
+identity authority, certificate validation, concurrent key generation, request
+expiry/replay, membership isolation, and migration rollback/reapplication over
+existing manual memberships. This deliverable adds no screen.
 
 ## M11-02 OIDC sign-in
 
@@ -959,7 +999,9 @@ PRD status board.
 
 ## Pull requests
 
-- none yet
+- [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (in review; aggregate CI must pass).
+
+- [#209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209) — dependency-aware CI selection (merged).
 
 ## Supporting CI work
 

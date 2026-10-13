@@ -39,6 +39,7 @@ export * from './retention.js';
 export * from './rule-conditions.js';
 export * from './sla.js';
 export * from './spam.js';
+export * from './sso.js';
 export * from './staff.js';
 export * from './system.js';
 export * from './tags.js';

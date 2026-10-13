@@ -84,6 +84,7 @@ describe('@helpdock/db', () => {
       'enums.ts',
       'help-center-search.ts',
       'help-center.ts',
+      'imports.ts',
       'job-receipts.ts',
       'knowledge.ts',
       'mailboxes.ts',

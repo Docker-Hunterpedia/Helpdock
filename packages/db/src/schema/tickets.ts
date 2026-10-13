@@ -17,7 +17,7 @@ import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
-import { ticketChannelEnum, ticketPriorityEnum } from './enums.js';
+import { importSourceEnum, ticketChannelEnum, ticketPriorityEnum } from './enums.js';
 import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
@@ -71,6 +71,8 @@ export const tickets = pgTable(
      * reserved for the same reason).
      */
     prefix: text('prefix').notNull(),
+    importedAt: timestamp('imported_at', { withTimezone: true }),
+    importSource: importSourceEnum('import_source'),
     subject: text('subject').notNull(),
     statusId: uuid('status_id')
       .notNull()

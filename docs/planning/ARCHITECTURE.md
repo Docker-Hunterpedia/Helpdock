@@ -27,7 +27,7 @@ Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural 
 | Audio/video | ffmpeg (static binary in image) | — | Voice-note normalization, video posters |
 | Auth | argon2 + jose + otplib | 0.45 / 6.2 / 13.5 | Hand-wired, auditable (passport was listed here but never installed) |
 | Staff SSO (M11) | openid-client + @node-saml/node-saml + @peculiar/x509 | 6.8 / 5.1 / 2.1 | OIDC and SAML 2.0 for staff, all IdP HTTP through `safeFetch` ([ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), accepted) |
-| Imports (M11, planned) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0 / 3.4 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), proposed) |
+| Imports (M11, in development) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0.3 / 3.4.0 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), accepted) |
 | Storage | @aws-sdk/client-s3 | 3.x | S3 / MinIO / R2 — S3-only in v1 |
 | Docs parsing | unpdf, mammoth, cheerio, playwright (optional) | 1.8 / 1.12 / 1.2 / 1.63 | PDF, DOCX, HTML crawl |
 | Connectors | @notionhq/client, googleapis | 5.26 / 181 | Notion + Google Drive knowledge |
@@ -277,6 +277,7 @@ packages/ai
 
 | Queue | Jobs | Notes |
 |---|---|---|
+| `import` | `import.extract`, `import.load`, `import.attachments`, `import.finish` (M11, in development) | resumable staging; per-brand load lock; vendor retry delays |
 | `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit`, `meta.media_fetch` (M10: the bytes of an attachment a Meta webhook named, into the pipeline) | dedupe by external id |
 | `outbound` | `email.send`, `telegram.send`, `meta.send` (M10, paced per recipient), `widget.deliver` | retries 5, backoff exp, DLQ |
 | `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |

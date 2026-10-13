@@ -31,6 +31,12 @@ export interface TenantTable {
  * fails until the new table appears in it (DOMAIN-RULES §1.6).
  */
 export const TENANT_TABLES: readonly TenantTable[] = [
+  { name: 'import_runs', departmentScoped: false },
+  { name: 'import_records', departmentScoped: false },
+  { name: 'import_mappings', departmentScoped: false },
+  { name: 'import_external_ids', departmentScoped: false },
+  { name: 'import_log', departmentScoped: false },
+  { name: 'import_file_presets', departmentScoped: false },
   { name: 'user_brand_roles', departmentScoped: false },
   { name: 'departments', departmentScoped: false },
   // Not department-scoped: §1.3 lists the six ticket-scoped tables and neither

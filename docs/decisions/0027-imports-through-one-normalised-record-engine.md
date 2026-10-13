@@ -1,6 +1,6 @@
 # 0027 Imports through one engine of normalised records, written without side effects
 
-Status: proposed
+Status: accepted
 Date: 2026-10-13
 
 ## Context
@@ -76,3 +76,22 @@ for hours and must survive restarts.
   API covering history (original authors and dates), which v1 does not expose.
 - **Import over the public REST API**: the v1 API creates live tickets with live
   side effects by design.
+
+## Amendments
+
+### 2026-10-13 — one remaining-milestone PR and database invariants
+
+The owner requested one PR for M11-07 through M11-23. Keep the dependency order,
+per-connector official-documentation research and distinct reviewable commits.
+
+Import child tables bind `(brand_id, run_id)` to the same run through composite
+foreign keys, so a row cannot claim one brand while referencing another brand's
+run. Delta parents likewise bind to their own brand. Terminal run states require
+null credentials in the database, not only in application cleanup. Payload hashes
+are lowercase SHA-256. These constraints reinforce the existing tenancy and
+credential-purge decisions without adding a new table or protocol.
+
+The outbound client gains an optional exact `allowedHosts` policy checked before
+DNS on every redirect hop. Importers provide their documented API and download
+hosts; a public redirect outside that list is refused. The existing DNS/IP, port,
+credential-stripping and total-time protections continue to apply.

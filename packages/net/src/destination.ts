@@ -82,6 +82,17 @@ export function validateUrl(raw: string | URL, policy: ResolvedPolicy, hop: numb
     throw new SafeFetchError('invalid-url', `URL has no host: ${url.href}`, { url: url.href, hop });
   }
 
+  if (policy.allowedHosts !== undefined && !policy.allowedHosts.has(hostname.toLowerCase())) {
+    throw new SafeFetchError(
+      'host-not-allowed',
+      'Destination host is outside the allowed host list',
+      {
+        url: url.href,
+        host: hostname,
+        hop,
+      },
+    );
+  }
   return { url, hostname, port: portOf(url, hostname, policy, hop) };
 }
 

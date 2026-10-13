@@ -66,6 +66,7 @@ const MIGRATION_TAGS = [
   '0051_meta_profile_checked',
   '0052_meta_deliveries_platform_ids',
   '0053_sso',
+  '0054_imports',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -147,6 +148,37 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
+  });
+
+  it('binds import children to their own brand and refuses credentials in terminal runs', async () => {
+    const url = await migrated('import_constraints');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'import-test@example.com', 'Importer') RETURNING id`;
+      const tenants = await owner`INSERT INTO brands (id, name, prefix) VALUES
+        (gen_random_uuid(), 'Import A', 'IA'),
+        (gen_random_uuid(), 'Import B', 'IB') RETURNING id`;
+      const [run] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, credentials_encrypted)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', ${person?.id}, 'encrypted-fixture') RETURNING id`;
+      await expect(owner`INSERT INTO import_records (id, brand_id, run_id, entity, external_id, payload, payload_hash)
+        VALUES (gen_random_uuid(), ${tenants[1]?.id}, ${run?.id}, 'ticket', '1', '{}', ${'a'.repeat(64)})`).rejects.toMatchObject(
+        { code: '23503' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET status = 'completed' WHERE id = ${run?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'completed', credentials_encrypted = NULL WHERE id = ${run?.id}`;
+      const [completed] =
+        await owner`SELECT status, credentials_encrypted FROM import_runs WHERE id = ${run?.id}`;
+      expect(completed).toEqual({ status: 'completed', credentials_encrypted: null });
+      const origins =
+        await owner`SELECT enumlabel FROM pg_enum JOIN pg_type ON enumtypid = pg_type.oid WHERE typname = 'csat_answer_channel'`;
+      expect(origins.map((entry) => entry.enumlabel)).toContain('import');
+    } finally {
+      await owner.end();
+    }
   });
 
   it('applies each migration once when two replicas start at the same time', async () => {

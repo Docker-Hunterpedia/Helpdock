@@ -4,6 +4,8 @@
  * every job definition points at one of them.
  */
 export const QUEUE_NAMES = {
+  /** M11 extraction, loading, attachment retrieval and report rebuilds. */
+  import: 'import',
   /** `email.poll`, `telegram.poll` (development), `meta.media_fetch`, `form.submit`. Deduped by external id. */
   inbound: 'inbound',
   /** `email.send`, `telegram.send`, `meta.send` (M10-06), `widget.deliver`. */

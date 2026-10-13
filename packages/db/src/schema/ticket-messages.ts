@@ -9,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
@@ -65,6 +66,7 @@ export const ticketMessages = pgTable(
      * `audit_log` is text for the same reason.
      */
     authorId: text('author_id'),
+    authorDisplay: varchar('author_display', { length: 200 }),
     /** Sanitised on the way in (REQUIREMENTS §5.1). Never stored as it arrived. */
     bodyHtml: text('body_html').notNull(),
     /** The same body as plain text: what search, notifications and digests read. */

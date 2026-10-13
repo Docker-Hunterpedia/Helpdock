@@ -96,7 +96,8 @@ Update this table in the same PR that changes a milestone's status.
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
 | 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | shipped | 2026-10-11 | 2026-10-13 |
-| | **Total** | | **51–65** | | | |
+| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | planned | | |
+| | **Total** | | **60–78** | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
 
@@ -117,6 +118,8 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M10-03 | A WhatsApp Business account with its test number, and a payment method for a real number | @Docker-Hunterpedia | needed |
 | M10-04, M10-05 | A Facebook Page and an Instagram professional account for staging, with the maintainer in an app role | @Docker-Hunterpedia | needed |
 | M10-04, M10-05, M10-09 | App Review of `pages_messaging`, `instagram_business_manage_messages` and the Human Agent feature on the staging app, so messages from people outside the app's roles arrive | @Docker-Hunterpedia | not started |
+| M11-02 to M11-06 | Developer tenants of Okta and Microsoft Entra ID, and a Google Workspace or Keycloak instance, each with a test user in two groups | @Docker-Hunterpedia | needed |
+| M11-12 to M11-14 | Trial accounts of Zendesk, Freshdesk and Zoho Desk seeded with the M11 reference dataset | @Docker-Hunterpedia | needed |
 
 ---
 
@@ -385,7 +388,7 @@ Depends on: everything above.
 | M9-06 | User docs under `docs/guides/`: install, configuration, channels, help center, AI, API, security, widget protocol, **operations** (backup, restore, upgrade, master key rotation, Redis loss) | A §2, D §10 |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers on the 3-click reply task; fix friction | R §7, D §15 |
 | M9-08 | Release pipeline: Changesets, multi-arch image to GHCR, GitHub release with changelog | A §16 |
-| M9-09 | Tag `1.0.0` | |
+| M9-09 | Tag `1.0.0`, after M11's exit criteria are met | |
 | M9-10 | Restore drill: dump + bucket + `.env` restored on a clean VM within RTO; master key rotation rehearsed; results recorded in `docs/completed/` | D §10 |
 
 Exit criteria:
@@ -420,6 +423,44 @@ Exit criteria:
 - [x] The stand-in suites pass in CI: webhook, inbound per platform, replies, health.
 - [x] Channels › Meta and the Meta ticket pass Playwright in `en` and `ar` with axe. See [the milestone doc](../completed/M10-meta-channels.md#exit-criteria).
 
+#### M11 SSO and migration
+
+Depends on: M0 (auth, settings, outbox, SSRF-safe client), M1, M3, M5, M8. Part of 1.0: M9-09 waits for its exit criteria. Design: [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), [ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md). Milestone doc: [docs/in-development/M11-sso-and-migration.md](../in-development/M11-sso-and-migration.md).
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M11-01 | SSO schema, settings and shared service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, `sso.*` settings, the SP key, the Redis request store, audit | A §7, R §5.1 |
+| M11-02 | OIDC sign-in through `openid-client` with discovery and JWKS over the SSRF-safe client, PKCE, `state` and `nonce` | A §7, D §13 |
+| M11-03 | SAML sign-in through `@node-saml/node-saml`: SP metadata, signed AuthnRequest, ACS with signed assertions, single-use `InResponseTo`, certificate rotation | A §7 |
+| M11-04 | Sign-in integration: linking, JIT provisioning, group-to-role sync at every sign-in, IdP MFA, enforcement with break-glass, email-first discovery, invites through SSO | A §7, D §1 |
+| M11-05 | Admin: Settings › Single sign-on, connection page with mappings and Test, sign-in buttons and discovery, Staff badges | R §4.10 |
+| M11-06 | SSO docs: `docs/guides/sso.md` with Okta, Entra ID, Google Workspace and Keycloak walk-throughs; authentication and configuration guides | A §2 |
+| M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log`, `import_file_presets` with RLS; `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `ticket_messages.author_display`; the `import` queue | A §5, §13 |
+| M11-08 | Normalised import records and the Helpdock import bundle format | A §5 |
+| M11-09 | The loader: direct writes with no lifecycle hooks and no outbound events, original dates kept, idempotent, reports rebuilt over the imported range | D §2, §4, §7 |
+| M11-10 | Import jobs: extract, load, attachments, finish; resumable, rate-limit aware, pause and cancel, dry run, delta sync, credentials purged at the end | A §13 |
+| M11-11 | Connector SDK (`@helpdock/importers`) and a stand-in server per vendor | A §5 |
+| M11-12 | Zendesk connector | |
+| M11-13 | Freshdesk connector | |
+| M11-14 | Zoho Desk connector | |
+| M11-15 | Manual mapper: CSV or bundle upload, column mapping with transforms, preview, saved presets | |
+| M11-16 | Admin: Brand › Import with the wizard (source, connect, scope, map, dry run, import, done) | R §4.10 |
+| M11-17 | Imported tickets in the workspace: "Imported from" chip, activity line, view filter, System page card | DESIGN §6.3 |
+| M11-18 | Import docs: `docs/guides/importing.md` with the cutover runbook; retention, reports, tickets guides | A §2 |
+| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. May ship after 1.0 | |
+
+Exit criteria:
+
+- [ ] A staff member signs in through an OIDC IdP and a SAML IdP; the first sign-in creates the account and memberships from the IdP's groups; a group removed in the IdP removes the matching SSO role at the next sign-in.
+- [ ] With SSO enforced, password, magic link and OAuth are refused for everyone except the break-glass install admin.
+- [ ] Zendesk, Freshdesk and Zoho Desk accounts (stand-ins with the reference dataset) import into a brand with every thread, author, date, note, attachment, tag, field and assignee intact.
+- [ ] An import sends nothing: no email, Telegram or Meta send, webhook, rule run, SLA clock, notification or AI call exists for imported tickets.
+- [ ] Reports show the imported history on its original days.
+- [ ] A repeated import writes nothing, a delta brings only changes, and a resumed import loses and duplicates nothing.
+- [ ] A CSV from a tool without a connector imports through the manual mapper.
+- [ ] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6); vendor credentials are never returned and are deleted when a run ends.
+- [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+
 ---
 
 ## 5. Post-1.0 backlog (v1.1+)
@@ -429,11 +470,11 @@ Not scheduled. Each item needs its own PRD section before work starts.
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, importing replies typed in Meta Business Suite, backfill of missed webhooks, auto-reply and the satisfaction survey on these channels
 - Customer portal with magic-link login, ticket history, restricted KB
-- Custom roles and permission sets; SAML/OIDC SSO
+- Custom roles and permission sets; SCIM provisioning and single logout (SSO itself is M11)
 - React Native and Flutter widget SDKs
 - More UI locales; per-department language routing
 - AI actions via MCP tools with approval flow
-- Importers: Zoho Desk, Zendesk, Freshdesk
+- Importers beyond M11: connectors for further tools, and importing macros, automations and SLA policies
 - Scheduled reports, custom dashboards
 - Article versioning and review workflow
 - Knowledge: Confluence, GitHub docs, generic MCP servers
@@ -464,6 +505,10 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | Messenger and Instagram unsubscribe the app after an hour of failed webhook deliveries, with no replay (M10) | Medium | The webhook answers 200 for everything after a valid signature; `meta.health` re-subscribes hourly; backfill is backlog |
 | Meta's pages disagree on deadlines, retry windows and which secret signs Instagram webhooks (M10) | Medium | The design assumes the worse case of each; the open questions are settled against the staging accounts and recorded in the milestone doc |
 | The pinned Graph version expires (M10) | Low | `META_GRAPH_VERSION` is one key; the stand-in's fixtures carry the version; the operations guide notes the date |
+| A SAML library vulnerability (signature wrapping, XML parsing) lets someone sign in as staff (M11) | Critical | Signed assertions required, single-use `InResponseTo`, pinned `xml-crypto`/`@xmldom/xmldom` under the CI dependency audit, signature-wrapping and replay cases in the test suite |
+| An import emails customers or fires rules about old tickets (M11) | High | One writer that never calls the live creation paths, a check script that fails the build if it does, and an exit criterion asserting nothing left the install |
+| Vendor APIs change or rate-limit harder than documented (M11) | Medium | Connectors are thin over one engine; each is checked against the vendor's docs in its PR; runs resume from cursors and honour `Retry-After` |
+| M11 delays 1.0 by two months or more | Medium | SSO and import are independent tracks; connectors beyond the first three may ship after 1.0 |
 
 ---
 
@@ -485,3 +530,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-10-11 | M9 pre-pentest fixes, the ASVS re-walk and the M6–M8 gaps, in #167 (open when this was written). Landed: the internal pre-pentest review ([record](../completed/internal-security-review.md)) with its fixes F1 to F5, F6 and N1 still open; the re-walk's gaps closed, so [asvs-l2](../completed/asvs-l2.md) reads 198 Met, 35 Partial, 0 Gap, 24 N/A and 1 Operator; the automated zoom, forced-colours, semantics and bidi audit ([accessibility-audit](../completed/accessibility-audit.md)); `v0.4.0` signed keylessly on 2026-10-09 and #158 closed; the per-bot Telegram language prompt, the ticket list's AI state and agent assist's Arabic prompt. Still needs people or a decision: the external pentest (M9-01), the screen-reader pass (M9-04), the §14 host run (M9-03), the clean-VM onboarding and restore drills and the three outside testers (M9-07, M9-10), and a decision or an artboard for F6, N1, the Telegram empty welcome, the ticket list's `answeredAt` and the AIPausedStrip caption in DESIGN.md. |
 | 2026-10-11 | **Scope change: the Meta channels are in scope as M10.** The owner brought WhatsApp Cloud API, Facebook Messenger and Instagram direct messages into scope as a new milestone, M10 Meta channels, stacked after M9: every message to a connected number, Page or account opens or continues a ticket, and the agent's reply reaches the customer on the same platform. Removed from §1's non-goals and §5's backlog, where REQUIREMENTS §1, §4.4 and §6 listed them as v1.1; eleven deliverables M10-01 to M10-11 in §4, a status board row (5–6 weeks, started 2026-10-11), four external dependencies (a Meta app with the three products, a WhatsApp Business account and test number, a Page and an Instagram professional account for staging, App Review for Messenger and Instagram), five risks. The design is [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md); the milestone doc is [M10-meta-channels.md](../completed/M10-meta-channels.md). §1's release goal for 1.0.0 is unchanged. |
 | 2026-10-13 | M10 shipped. Ten of eleven deliverables merged in #168 (M10-01 to M10-08, M10-10, M10-11) with M10-09's Human Agent tag, released in 0.5.0; all six exit criteria met against the Graph stand-in, each proved in [docs/completed/M10-meta-channels.md](../completed/M10-meta-channels.md#exit-criteria). M10-09's WhatsApp templates and a run against Meta itself are carried as [gaps](../completed/M10-meta-channels.md#gaps-and-follow-ups). |
+| 2026-10-13 | **Scope change: SSO and migration are in scope for 1.0 as M11.** The owner brought SAML 2.0 and OpenID Connect sign-in for staff (JIT provisioning and group-to-role sync, enforcement with break-glass; no SCIM) and importers into 1.0, on the user feedback in [#180](https://github.com/Docker-Hunterpedia/Helpdock/issues/180): teams switch when migration does not hurt. Importers cover every helpdesk whose API can export a whole account (Zendesk, Freshdesk and Zoho Desk for 1.0; Help Scout, Intercom, Gorgias, Zammad and Front on the same SDK, may ship after 1.0) and a manual CSV mapper for the rest. Removed from §5's backlog, where REQUIREMENTS §6 listed both as v1.1; twenty-three deliverables M11-01 to M11-23 in §4, a status board row (9–13 weeks), two external dependencies (IdP developer tenants; vendor trial accounts), four risks. M9-09 now waits for M11. The designs are [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md) and [ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md); the milestone doc is [M11-sso-and-migration.md](../in-development/M11-sso-and-migration.md). |

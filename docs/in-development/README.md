@@ -1,6 +1,6 @@
 # In development
 
-Active milestone: [M9 Hardening and 1.0](M9-hardening-and-1-0.md), started 2026-10-05. M10 Meta channels shipped on 2026-10-13 and is in [completed](../completed/M10-meta-channels.md).
+Active milestones: [M9 Hardening and 1.0](M9-hardening-and-1-0.md), started 2026-10-05, and [M11 SSO and migration](M11-sso-and-migration.md), planned on 2026-10-13 as part of 1.0. M10 Meta channels shipped on 2026-10-13 and is in [completed](../completed/M10-meta-channels.md).
 
 M0 Skeleton shipped on 2026-09-19, M1 Ticketing core on 2026-09-25, M2
 Email channel, M3 Automation and SLAs, M4 Widget and realtime and M5 Help

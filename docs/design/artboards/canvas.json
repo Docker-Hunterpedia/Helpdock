@@ -652,6 +652,69 @@
       "w": 1280,
       "x": 5920,
       "y": 49928
+    },
+    "AdminSettingsSSO.dc.html": {
+      "x": 0,
+      "y": 53620,
+      "w": 1440,
+      "h": 1300,
+      "title": "Admin/Settings-SSO"
+    },
+    "AdminSettingsSSOConnection.dc.html": {
+      "x": 1520,
+      "y": 53620,
+      "w": 1440,
+      "h": 2360,
+      "title": "Admin/Settings-SSO-Connection"
+    },
+    "AdminLoginSSO.dc.html": {
+      "x": 3040,
+      "y": 53620,
+      "w": 3840,
+      "h": 840,
+      "title": "Admin/Login-SSO"
+    },
+    "AdminLoginSSOAR.dc.html": {
+      "x": 3040,
+      "y": 54580,
+      "w": 3840,
+      "h": 840,
+      "title": "Admin/Login-SSO-AR"
+    },
+    "AdminImport.dc.html": {
+      "x": 0,
+      "y": 56240,
+      "w": 1440,
+      "h": 1240,
+      "title": "Admin/Import"
+    },
+    "AdminImportWizard.dc.html": {
+      "x": 1520,
+      "y": 56240,
+      "w": 1440,
+      "h": 3640,
+      "title": "Admin/Import-Wizard"
+    },
+    "AdminImportRun.dc.html": {
+      "x": 3040,
+      "y": 56240,
+      "w": 1440,
+      "h": 1960,
+      "title": "Admin/Import-Run"
+    },
+    "AdminImportFileMapper.dc.html": {
+      "x": 4560,
+      "y": 56240,
+      "w": 1440,
+      "h": 2120,
+      "title": "Admin/Import-FileMapper"
+    },
+    "AdminTicketImported.dc.html": {
+      "x": 6080,
+      "y": 56240,
+      "w": 1440,
+      "h": 900,
+      "title": "Admin/Ticket-Imported"
     }
   },
   "createdOnFiles": {
@@ -809,6 +872,27 @@
       "w": 460,
       "x": 7480,
       "y": 46400
+    },
+    "m11": {
+      "x": 0,
+      "y": 53340,
+      "text": "M11 SSO and migration — single sign-on for staff",
+      "kind": "title1",
+      "maxW": 6880
+    },
+    "m11b": {
+      "x": 0,
+      "y": 55960,
+      "text": "M11 SSO and migration — import from Zendesk, Freshdesk, Zoho Desk and files",
+      "kind": "title1",
+      "maxW": 7520
+    },
+    "m11-note": {
+      "x": 6960,
+      "y": 55480,
+      "w": 520,
+      "maxH": 420,
+      "text": "M11 decisions (proposed, docs/in-development/M11-sso-and-migration.md): SSO connections are install-wide (Settings › Single sign-on); groups map to brand roles and only SSO-sourced roles are synced. Imports live under Brand › Import, one brand at a time; nothing is sent to customers while importing; new HD numbers by default, the old number on the chip; no SLA timers until the admin starts them. Names, counts and URLs on these boards are sample values."
     }
   },
   "order": [
@@ -904,7 +988,16 @@
     "AdminChannelsMetaAccount.dc.html",
     "AdminTicketMeta.dc.html",
     "MetaChatEN.dc.html",
-    "MetaChatAR.dc.html"
+    "MetaChatAR.dc.html",
+    "AdminSettingsSSO.dc.html",
+    "AdminSettingsSSOConnection.dc.html",
+    "AdminLoginSSO.dc.html",
+    "AdminLoginSSOAR.dc.html",
+    "AdminImport.dc.html",
+    "AdminImportWizard.dc.html",
+    "AdminImportRun.dc.html",
+    "AdminImportFileMapper.dc.html",
+    "AdminTicketImported.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

@@ -95,3 +95,13 @@ The outbound client gains an optional exact `allowedHosts` policy checked before
 DNS on every redirect hop. Importers provide their documented API and download
 hosts; a public redirect outside that list is refused. The existing DNS/IP, port,
 credential-stripping and total-time protections continue to apply.
+
+Bundle resource bounds are explicit: 2 GiB compressed and expanded, 100,000 ZIP
+members, 64 KiB manifest, 4 MiB per NDJSON line and 100 JSON nesting levels. ZIP
+links/encrypted members, traversal, duplicate members, missing attachments and
+count mismatches are refused. Normal attachment directory entries are allowed.
+Validation is streaming; failed extraction never advances to domain loading.
+
+Dependency versions were checked against npm on 2026-10-13: `csv-parse` 7.0.3,
+`yauzl` 3.4.0 and its matching `@types/yauzl` 3.4.0. ZIP reading uses the documented
+3.4 promise/async-iterator API, avoiding a custom archive parser.

@@ -104,7 +104,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
 | M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | planned |
 | M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | planned |
-| M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | planned |
+| M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: API token or OAuth; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | planned |
 | M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
 | M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | planned |
@@ -774,8 +774,12 @@ ISO times remain intact. Field enums retain vendor status/priority/channel strin
 for explicit mapping. Attachment references require exactly one HTTP(S) URL or a
 relative path under `attachments/`; bundle paths reject traversal. Article locales
 are EN/AR. The manifest is versioned and declares per-entity counts. Seventeen
-focused schema tests pass. Streaming ZIP validation, reference vendor fixtures
-and file-mapper integration are pending; this deliverable is not complete.
+focused schema tests pass. The streaming ZIP reader now validates manifest/counts, attachment references,
+member safety and bounded NDJSON (with original UTF-8/line diagnostics). Resource
+limits are recorded in ADR 0027 and the workspace README. Twenty-five SDK/file
+unit tests pass, including local HTTP, directory compatibility and nesting-depth
+regressions. Reference vendor fixtures, attachment delivery and file-mapper
+integration remain pending; this deliverable is not complete.
 
 ## M11-08 Normalised records and the bundle format
 
@@ -983,6 +987,15 @@ signal.
 from `@helpdock/importers/testing`, never bundled into the runtime): HTTP servers
 like `FakeGraph`, seeded from the reference dataset in each vendor's own JSON shape,
 with controls for 429, 5xx, expired attachment URLs and a "changed since" delta.
+
+### M11-11 implementation notes (in progress)
+
+`@helpdock/importers` contains the typed connector contract, a non-blocking token
+bucket, safe status-code errors, `Retry-After` parsing and bounded host-restricted
+HTTP with output validation. The runtime exports no testing stand-ins. Unit tests
+cover local HTTP success/schema refusal, 429 delay and sanitized vendor errors.
+Vendor stand-ins, documented default mappings and extraction adapters remain
+pending; this deliverable is not complete.
 
 ## M11-12 Zendesk connector
 

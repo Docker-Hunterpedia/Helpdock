@@ -45,6 +45,7 @@ import { countRateLimitRefusalsIn } from './observability/rate-limit-refusals.js
 import { METRICS, QUEUE_REGISTRY } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
+import { SAML_ACS_ROUTE } from './sso/sso-saml.controller.js';
 import { resolveAdminDist } from './static/admin-assets.js';
 import { WEB_FORM_ROUTE } from './web-form/web-form-page.controller.js';
 import { registerWidgetCors } from './widget/widget-cors.js';
@@ -331,7 +332,11 @@ export const createApiApp = async ({
 
   // M2-03 and M4-09. Before `init()`, which is when Nest adds its routes: the
   // `onRoute` hook that raises their body limit only sees routes added after it.
-  registerFormBodies(app.getHttpAdapter().getInstance(), [INBOUND_PARSE_ROUTE, WEB_FORM_ROUTE]);
+  registerFormBodies(app.getHttpAdapter().getInstance(), [
+    INBOUND_PARSE_ROUTE,
+    WEB_FORM_ROUTE,
+    SAML_ACS_ROUTE,
+  ]);
 
   // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's
   // parser checks it over them, and the address's budget, before it parses;

@@ -31,7 +31,8 @@ export const QUEUE_NAMES = {
   assignment: 'assignment',
   /**
    * `cleanup.tokens`, `maintenance.retention`, `stats.rollup`; `meta.health`, the hourly check of
-   * each connected Meta account, and its daily re-registration `meta.health.schedule` (M10-10).
+   * each connected Meta account, and its daily re-registration `meta.health.schedule` (M10-10);
+   * `sso.metadata_refresh`, daily install-wide IdP signing-certificate refresh (M11-03).
    */
   maintenance: 'maintenance',
   /** `domain.verify` and its schedule (M5-07): custom-domain DNS and TLS checks. */

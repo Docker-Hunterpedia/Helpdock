@@ -95,8 +95,8 @@ connectors on the same SDK and **may ship after 1.0**.
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
 | M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | done |
-| M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | in review |
-| M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | planned |
+| M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | done |
+| M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | in review |
 | M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | planned |
 | M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | planned |
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | planned |
@@ -466,42 +466,92 @@ real-install JIT and IdP MFA policy remain M11-04 / M11-18 validation.
 
 ## M11-03 SAML sign-in
 
-Library: **`@node-saml/node-saml` 5.x** (5.1.0 at planning time; ADR 0026).
-`xml-crypto` and `@xmldom/xmldom` come with it; pin the transitive versions in
-the lockfile review and track their advisories (they are the usual source of SAML
-CVEs).
+**Verified 2026-10-13:** npm reports `@node-saml/node-saml` **5.1.0**.
+The [published version's documentation](https://github.com/node-saml/node-saml/blob/v5.1.0/README.md)
+and installed implementation were checked before implementation. The supported
+cache interface is `saveAsync` / `getAsync` / `removeAsync`; it has no
+`consumeAsync`. `idpIssuer` validates logout messages, so Helpdock additionally
+checks the issuer and recipient in the authenticated assertion XML.
 
-- **SP metadata** `GET /api/auth/sso/saml/metadata` (`@Public`): one document for
-  the install, via `generateServiceProviderMetadata` with the SP cert, and one
-  `AssertionConsumerService` per enabled SAML connection.
-- **Start** (the shared `GET /api/auth/sso/:id/start`): build a `SAML` instance
-  with `{ callbackUrl: acsUrl, issuer: spEntityId, idpCert: idpCertificates, entryPoint: idpSsoUrl, audience: spEntityId, wantAssertionsSigned: true, wantAuthnResponseSigned: false, signatureAlgorithm: 'sha256', digestAlgorithm: 'sha256', privateKey: spPrivateKey, identifierFormat, acceptedClockSkewMs: clockSkewSeconds*1000, validateInResponseTo: allowIdpInitiated ? 'ifPresent' : 'always', requestIdExpirationPeriodMs: 600 000, cacheProvider: redisCacheProvider }`;
-  `getAuthorizeUrlAsync(relayState)` where `relayState` is a request-store key
-  holding `returnTo`, `test`, `browserNonceHash`.
-- **`redisCacheProvider`** implements node-saml's `CacheProvider` including
-  `consumeAsync` (GETDEL) so `InResponseTo` is single-use across replicas.
-- **ACS** `POST /api/auth/sso/:id/saml/acs` (`@Public`, form body, 256 KB cap):
-  `validatePostResponseAsync`; require a signed assertion, audience = SP entity
-  ID, recipient = ACS URL, `NotBefore`/`NotOnOrAfter` within skew; NameID or
-  `emailAttribute` → email; `nameAttribute` → name; `group_attribute` →
-  groups. SAML email is trusted as verified **only** if its domain is in the
-  connection's `email_domains` (the IdP is the authority for its domains).
-- **IdP metadata URL** (optional): fetched through `safeFetch` on save and by a
-  daily `sso.metadata_refresh` job to pick up rotated certificates; a fetched cert
-  set that drops every current cert is not applied automatically (audit warning,
-  admin confirms).
-- Encrypted assertions are accepted when the IdP sends them (`decryptionPvk` =
-  SP key); not required.
+Dependencies are pinned: node-saml 5.1.0, its lockfile `xml-crypto` 6.3.3,
+`xml-encryption` 3.1.0 and parser 0.8.15. Helpdock's boundary parser uses
+`@xmldom/xmldom` 0.9.12, whose scoped types avoid leaking browser globals into
+the server build. Explicit XML dependencies own parsing/cryptography already
+approved by ADR 0026. Browser fixtures use the same approved signing libraries.
 
-**Fake SAML IdP for tests** (`apps/api/src/testing/fake-saml-idp.ts` and
-`apps/admin/e2e/api/fake-saml.ts`): issues signed `Response`s with `xml-crypto`
-(dev dependency, already transitive) from a fixed IdP key; controls for unsigned,
-wrong audience, expired, IdP-initiated, replay.
+- **SP metadata:** public `GET /api/auth/sso/saml/metadata`, one stable install
+  entity ID (the metadata URL), signing/encryption certificates, and one indexed
+  HTTP-POST ACS for every enabled SAML connection. It advertises signed
+  AuthnRequests, signed assertions and AES-GCM encryption. No SLO is advertised.
+- **Start:** shared `GET /api/auth/sso/:id/start` dispatches by the enabled
+  connection's protocol. HTTP-Redirect AuthnRequests are signed RSA-SHA256,
+  request the configured NameID format and the exact configured ACS. The
+  front-channel endpoint passes the outbound destination policy before redirect.
+  Request IDs and opaque RelayState are random; ten-minute Redis state binds
+  connection, configuration revision, signed request ID, return path and browser
+  nonce. HTTPS uses a host-prefixed HttpOnly Lax nonce cookie; local HTTP uses
+  the existing connection-scoped cookie.
+- **ACS:** public `POST /api/auth/sso/:id/saml/acs`, URL-encoded body capped at
+  256 KiB and validated with Zod. Signed assertions are mandatory; a signed
+  response alone is insufficient. Node-saml validates signatures/audience and
+  correlated request times; Helpdock reads only `getAssertionXml()` after
+  verification and additionally checks issuer, bearer confirmation, recipient,
+  NameID format, mandatory validity windows, signed correlation and duplicate
+  attributes. Assertion age is capped at ten minutes; configured skew is 0–60
+  seconds. UTC and offset timestamps, including submillisecond fractions, are
+  accepted. DTDs/entities, ambiguous children and malformed XML are refused.
+- **Cryptographic policy:** inbound signatures/digests use RSA SHA-256 or
+  SHA-512. Encrypted assertions require AES-128/256-GCM and RSA-OAEP;
+  decrypted XML passes the same boundary and signature validation. Legacy SHA-1
+  signatures, CBC and RSA1.5 encryption are refused. The RSA-OAEP MGF1P
+  algorithm's SHA-1 padding digest is separate from the signature policy.
+- **Replay:** connection-scoped Redis cache implements the actual published
+  library interface. After validation a Lua claim atomically reserves the signed
+  assertion ID and request ID for twelve minutes, beyond the maximum assertion
+  age plus skew. Concurrent callbacks cannot both finish. Library `get`/`remove`
+  alone is not the replay authority.
+- **Browser handoff:** ACS creates a single-use ten-minute pending assertion and
+  returns 303 to `GET /api/auth/sso/:id/saml/complete?token=...`. The GET receives
+  the Lax cookie and atomically consumes pending/request state before checking
+  the browser nonce, signed request ID and current configuration revision.
+  ACS never opens a session or requires a cookie on the cross-site POST. Failed
+  callbacks use the existing translated completion screen; successful callbacks
+  preserve local TOTP and the refresh-cookie / one-time exchange flow.
+- **Claims:** persistent NameID is the subject. Configured `emailAttribute`
+  supplies email, otherwise NameID must be an email address; the domain must be
+  explicitly listed in `emailDomains`. A configured group attribute must be
+  present and contain strings; missing groups refuse sign-in. M11-04 owns JIT,
+  email linking, group-role sync and IdP MFA. Only existing subject bindings
+  complete sessions in this PR. `test=1` remains refused until M11-06.
+- **Optional IdP initiation:** disabled by default. When enabled, a validated
+  unsolicited assertion is replay-claimed, then starts a fresh browser-bound
+  SP round trip. The second assertion must name the same subject. The
+  unsolicited response never opens a session directly; arbitrary RelayState
+  cannot choose a redirect or bypass browser binding.
+- **IdP metadata:** optional URL fetched through safeFetch on save and by the
+  daily `sso.metadata_refresh` maintenance job (04:45 UTC), re-registered on
+  worker boot. Entity ID, Redirect SSO URL and one to three RSA signing
+  certificates (at least 2048 bits) must match the configured provider. A
+  refresh only applies a set overlapping a current certificate, under the
+  configuration lock and revision check. Dropping every trusted certificate
+  keeps the old set and writes `sso.metadata.rotation-refused` with
+  `admin-confirmation-required`. An admin confirms by explicitly saving the
+  new certificate set; failed fetches write sanitized audit warnings. Identical
+  refreshes do not rewrite configuration.
 
-**Tests** (integration): happy path; unsigned assertion; signature by an unknown
-cert; wrong audience; wrong recipient; expired; replayed response (second POST of
-the same response refused); IdP-initiated refused by default and accepted when
-enabled; certificate rotation with two certs.
+**Stand-ins:** `apps/api/src/testing/fake-saml-idp.ts` and
+`apps/admin/e2e/api/fake-saml.ts`, disposable RSA certificates, verify actual
+SP redirect signatures and issue signed responses. Integration controls cover
+unknown/rotated certificates, wrapping, forged attributes, issuer/audience/
+recipient, expiry/future/missing timestamps, missing groups, duplicate
+attributes, encryption, replay, unsolicited responses and metadata rotation.
+No test calls a live IdP.
+
+**Validation:** focused unit tests for XML/crypto/input boundaries; real
+Postgres/Redis protocol, metadata and HTTP integration; en/ar real-api
+Playwright happy/failure flows with axe and local TOTP. Reuses existing
+completion/TOTP artboards; no new UI state. Real Okta/Entra/Google SAML runs
+remain later milestone acceptance evidence, not claimed by stand-in tests.
 
 ## M11-04 Sign-in integration
 
@@ -1039,7 +1089,7 @@ PRD status board.
 
 - [#209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209) — dependency-aware CI selection (merged).
 
-- [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) — M11-02 OIDC protocol and verified identity handoff (in review).
+- [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) — M11-02 OIDC protocol and verified identity handoff (merged).
 
 ## Supporting CI work
 

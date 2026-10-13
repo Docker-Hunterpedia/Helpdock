@@ -158,3 +158,33 @@ domain must not plant a matching login nonce. Local HTTP retains an unprefixed,
 connection-scoped cookie. See the [browser prefix requirements](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#cookie_prefixes).
 Provider requests advertise `Accept-Encoding: identity` because safeFetch
 returns bounded raw bytes rather than automatically decompressing responses.
+
+### 2026-10-13 — M11-03 SAML protocol and metadata
+
+- The published node-saml 5.1.0 cache has get/remove, not atomic consume. An
+  application Lua claim reserves assertion/request IDs together after signature
+  validation; pending handoff and browser request state use GETDEL. Replay
+  claims last twelve minutes, exceeding the ten-minute assertion age plus skew.
+- Issuer, recipient, mandatory validity windows, NameID format and signed
+  request correlation are checked from authenticated assertion XML. Duplicate
+  attributes and unavailable configured groups fail closed. No unsigned
+  envelope field establishes identity.
+- Cross-site POSTs use a local GET completion bridge, preserving the Lax cookie
+  policy instead of requiring SameSite=None. ACS issues no session. Optional
+  IdP initiation requires a fresh SP round trip naming the same subject; an
+  unsolicited assertion cannot silently sign a browser into an attacker's
+  account. This adds a protocol round trip without a new screen.
+- Strong signatures use RSA SHA-256/512 and encrypted assertions use AES-GCM
+  with RSA-OAEP. Legacy SHA-1 signatures, CBC and RSA1.5 are refused before
+  library processing. Explicit xml-encryption 3.1.0 owns decryption with the
+  approved library family; boundary xmldom 0.9.12 avoids global DOM types while
+  node-saml's own parser remains lockfile-pinned 0.8.15.
+- Public SP metadata adds every enabled connection's indexed ACS to the
+  library-generated install entity. It advertises only supported GCM encryption
+  and no single logout. IdP metadata fetches refuse redirects and use the same
+  socket-pinned outbound transport as OIDC. Saving or daily refreshing validates
+  entity/SSO endpoint and signing certificates. Refreshes cannot replace all
+  trusted certificates without explicit admin confirmation, or overwrite a
+  concurrent configuration change. The install-global maintenance schedule
+  runs at 04:45 UTC and is registered again on worker boot; it creates no
+  customer side effect or tenant-scoped outbox event.

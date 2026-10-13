@@ -1,4 +1,3 @@
-import { X509Certificate } from 'node:crypto';
 import { type Env, encryptSecret, type Keyring, type Settings } from '@helpdock/config';
 import {
   auditLog,
@@ -26,6 +25,7 @@ import type { Redis } from 'ioredis';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
+import { fetchSamlMetadata, overlappingCertificates, samlCertificate } from './saml-metadata.js';
 import { loadSpKeys, SSO_CONFIG_LOCK } from './sp-keys.js';
 import { readSsoSetting, writeSsoSetting } from './sso-settings.js';
 
@@ -48,6 +48,16 @@ const view = (row: typeof ssoConnections.$inferSelect) =>
 
 export class SsoService {
   constructor(private readonly options: SsoServiceOptions) {}
+
+  async signInProtocol(id: string): Promise<'oidc' | 'saml'> {
+    // Explicit pre-tenant read of install-global configuration for protocol dispatch.
+    const [connection] = await this.options.db
+      .select({ protocol: ssoConnections.protocol, enabled: ssoConnections.enabled })
+      .from(ssoConnections)
+      .where(eq(ssoConnections.id, id));
+    if (!connection?.enabled) throw new NotFoundException('sso-connection-disabled');
+    return connection.protocol;
+  }
 
   async list() {
     return {
@@ -278,11 +288,22 @@ export class SsoService {
     if (config.protocol === 'saml')
       for (const pem of config.idpCertificates) {
         try {
-          new X509Certificate(pem);
+          samlCertificate(pem);
         } catch {
           throw new BadRequestException('sso-invalid-certificate');
         }
       }
+    if (config.protocol === 'saml' && config.idpMetadataUrl) {
+      try {
+        const certificates = await fetchSamlMetadata(config, this.options.env.OUTBOUND_ALLOW_CIDRS);
+        if (!overlappingCertificates(config.idpCertificates, certificates))
+          throw new BadRequestException('sso-metadata-confirm-certificates');
+        config.idpCertificates = certificates;
+      } catch (error) {
+        if (error instanceof BadRequestException) throw error;
+        throw new BadRequestException('sso-metadata-refused');
+      }
+    }
     if (input.defaultAccess !== null) await this.validateAccess(input.defaultAccess);
   }
 

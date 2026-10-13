@@ -5,9 +5,12 @@ import type { Redis } from 'ioredis';
 import type { Logger } from '../logging/logger.js';
 import { REDIS, SETTINGS } from '../runtime/tokens.js';
 import { OidcService } from './oidc.service.js';
+import { SamlService } from './saml.service.js';
 import { SsoService } from './sso.service.js';
 import { SsoAdminController } from './sso-admin.controller.js';
 import { SsoOidcController } from './sso-oidc.controller.js';
+import { SsoSamlController } from './sso-saml.controller.js';
+import { SsoSessionCompletion } from './sso-session-completion.js';
 
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: Nest dynamic modules use decorated classes.
@@ -15,8 +18,15 @@ export class SsoModule {
   static forRoot(env: Env, db: Db, logger: Logger): DynamicModule {
     return {
       module: SsoModule,
-      controllers: [SsoAdminController, SsoOidcController],
+      controllers: [SsoAdminController, SsoOidcController, SsoSamlController],
       providers: [
+        SsoSessionCompletion,
+        {
+          provide: SamlService,
+          inject: [REDIS, SsoService],
+          useFactory: (redis: Redis, sso: SsoService) =>
+            new SamlService({ env, db, redis, sso, logger }),
+        },
         {
           provide: OidcService,
           inject: [REDIS],

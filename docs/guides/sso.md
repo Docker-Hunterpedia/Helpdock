@@ -1,7 +1,7 @@
 # Staff single sign-on configuration
 
 M11-01 adds install-wide configuration; M11-02 adds OIDC for already-linked
-accounts. SAML is M11-03. Provisioning, role sync and enforcement are M11-04;
+accounts; M11-03 adds SAML for the same existing bindings. Provisioning, role sync and enforcement are M11-04;
 the existing password, magic-link and Google/GitHub paths remain available.
 
 ## Access and connections
@@ -50,12 +50,12 @@ SAML configuration contains `protocol: "saml"`, `idpEntityId`, `idpSsoUrl`,
 and one to three PEM `idpCertificates`. Optional fields include
 `idpMetadataUrl`, `emailAttribute` and `nameAttribute`. AuthnRequests must be
 signed; IdP-initiated sign-in defaults to disabled; clock skew is bounded to
-60 seconds. Certificate syntax is checked before configuration is stored.
+60 seconds. Certificates must contain RSA keys of at least 2048 bits before configuration is stored.
 
 Every endpoint host passes the shared outbound destination policy. HTTPS is
 required unless the resolved address is inside `OUTBOUND_ALLOW_CIDRS`, for
 example an explicitly allowed local identity provider. Userinfo and URL
-fragments are refused. Future protocol fetches must apply the same policy
+fragments are refused. Protocol fetches apply the same policy
 again when connecting; saving a URL is not protection against DNS rebinding.
 
 ## Mappings and enforcement configuration
@@ -132,3 +132,43 @@ is rejected until the protected M11-06 test flow exists.
 The fake-IdP suites need no provider credentials. For a real local Keycloak
 Docker/Chromium smoke test, follow the commands in
 [M11-02](../in-development/M11-sso-and-migration.md#m11-02-oidc-sign-in).
+
+## SAML protocol (M11-03)
+
+Copy the entity ID, metadata URL and ACS URL from the connection details API
+into the IdP's SAML service-provider configuration. Enable the connection to
+publish its ACS in the install metadata. Import the signing certificate and
+require signed AuthnRequests. Send signed assertions with RSA SHA-256/512,
+Audience equal to the entity ID, Recipient/Destination equal to the ACS, and
+bearer confirmation with matching InResponseTo. Supply assertion and subject
+expiry, assertion NotBefore/IssueInstant, and the configured NameID format
+(`persistent` by default). Encrypted assertions are optional and must use
+AES-GCM with RSA-OAEP; CBC, RSA1.5 and SHA-1 signatures are refused.
+
+Set `emailAttribute` when NameID is a stable opaque identifier. The asserted
+email must belong to `emailDomains`; SAML cannot establish verified email for
+an unlisted domain. Set `nameAttribute` and `groupAttribute` to the IdP's exact
+attribute names. A configured but absent group attribute refuses sign-in.
+
+The callback is a URL-encoded POST with `SAMLResponse` and opaque `RelayState`,
+limited to 256 KiB. Its 303 redirect completes through a local GET so the Lax
+HttpOnly nonce cookie works across sites. Cookies and unconsumed request state
+must survive the round trip; assertions older than ten minutes, replayed
+responses, changed/disabled connections and wrong browsers are refused.
+Failures use the existing translated sign-in completion error. Local TOTP
+still applies to existing subject bindings.
+
+`allowIdpInitiated` defaults to false. When enabled, an unsolicited assertion
+starts a fresh SP round trip and must return the same subject. IdP dashboards
+must support that Redirect request; no session is issued from the unsolicited
+POST alone. Helpdock does not offer single logout.
+
+For certificate rotation, save up to three signing certificates. If
+`idpMetadataUrl` is configured, save fetches and validates its entity ID, Redirect
+SSO URL and signing certificates. The worker refreshes enabled connections at
+04:45 UTC. A fetched set must overlap a current certificate; otherwise the
+current set remains and the audit log records
+`sso.metadata.rotation-refused` / `admin-confirmation-required`. After verifying
+the new keys with your IdP, explicitly save them to confirm a complete
+replacement. Metadata errors produce `sso.metadata.refused` without raw
+provider errors. Unchanged sets do not rewrite the connection.

@@ -204,3 +204,18 @@ replies.
 - Pin the image to a release and upgrade when a security release is published
   ([operations › Upgrading](operations.md#upgrading)). Each release has a
   CycloneDX SBOM attached ([security scanning](security-scanning.md#sbom)).
+
+## Staff SAML boundary (M11-03)
+
+Signed assertions are mandatory even when the enclosing response is signed.
+Identity is read from the library's authenticated assertion XML; issuer,
+audience, bearer recipient, request correlation and validity are checked before
+completion. DTDs/entities, duplicate attributes, wrapping, weak signatures and
+legacy encryption are refused. Atomic Redis assertion/request replay claims
+cover concurrent replicas. A local GET handoff binds the validated assertion to
+a host-bound Lax nonce cookie before any session is created. Optional
+IdP-initiated login requires a fresh SP round trip for the same subject.
+
+Metadata URLs use the shared SSRF-safe, socket-pinned client with redirects
+refused. A daily refresh never replaces every currently trusted certificate
+without admin confirmation. See [SSO setup and rotation](sso.md#saml-protocol-m11-03).

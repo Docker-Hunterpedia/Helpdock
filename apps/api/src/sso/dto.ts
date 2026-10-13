@@ -24,3 +24,7 @@ export class SsoSettingsUpdateDto extends createZodDto(ssoSettingsUpdateSchema) 
 import { oidcCallbackQuerySchema, oidcStartQuerySchema } from './oidc-contracts.js';
 export class OidcStartQueryDto extends createZodDto(oidcStartQuerySchema) {}
 export class OidcCallbackQueryDto extends createZodDto(oidcCallbackQuerySchema) {}
+
+import { samlAcsSchema, samlCompleteQuerySchema } from './saml-contracts.js';
+export class SamlAcsDto extends createZodDto(samlAcsSchema) {}
+export class SamlCompleteQueryDto extends createZodDto(samlCompleteQuerySchema) {}

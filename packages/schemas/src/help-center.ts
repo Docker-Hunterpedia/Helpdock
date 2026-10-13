@@ -21,7 +21,7 @@ import { localeSchema } from './brand.js';
 export const HC_SLUG_MAX = 120;
 export const HC_NAME_MAX = 120;
 export const HC_CATEGORY_DESCRIPTION_MAX = 300;
-export const HC_TITLE_MAX = 200;
+export const HC_TITLE_MAX = 500;
 /** The search description: what a results page shows under the title. */
 export const HC_DESCRIPTION_MAX = 160;
 /** Of the stored, sanitised html. A long article is tens of kilobytes. */

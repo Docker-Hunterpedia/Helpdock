@@ -3,6 +3,8 @@ import path from 'node:path';
 import { SyntaxKind, type Token, tokenize } from './controller-scan.ts';
 
 const ALLOWED_MODULES = new Set([
+  '../../help-center/help-center.repository.js',
+  '../../help-center/slugs.js',
   '@helpdock/channels',
   '@helpdock/db',
   '@helpdock/importers',
@@ -15,7 +17,14 @@ const PURE_CHANNEL_EXPORTS = new Set([
   'sanitizeMessageBody',
   'sanitizeMessageHtml',
   'sanitizeArticleHtml',
+  'articleImageSources',
   'htmlToText',
+]);
+const REVIEWED_EXPORTS = new Map([
+  ['@helpdock/channels', PURE_CHANNEL_EXPORTS],
+  ['@helpdock/importers', new Set(['hashImportValue'])],
+  ['../../help-center/help-center.repository.js', new Set(['HelpCenterRepository'])],
+  ['../../help-center/slugs.js', new Set(['resolveSlug'])],
 ]);
 const FORBIDDEN_IDENTIFIERS = new Set([
   'TicketsService',
@@ -47,21 +56,22 @@ function dependencyViolations(tokens: readonly Token[], index: number): string[]
       !(specifier.startsWith('./') && !specifier.split('/').includes('..')))
   )
     failures.push(`unreviewed dependency: ${specifier}`);
-  if (specifier !== '@helpdock/channels') return failures;
+  const allowedExports = REVIEWED_EXPORTS.get(specifier);
+  if (!allowedExports) return failures;
   if (
     declaration.some((token) => token.kind === SyntaxKind.AsteriskToken) ||
     declaration[0]?.kind !== SyntaxKind.OpenBraceToken
   )
-    return [...failures, 'channel namespace/default imports are forbidden'];
+    return [...failures, `namespace/default imports are forbidden: ${specifier}`];
   for (let position = 1; position < declaration.length; position += 1) {
     const token = declaration[position];
     if (token?.kind === SyntaxKind.CloseBraceToken) break;
     if (
       token?.kind === SyntaxKind.Identifier &&
       declaration[position - 1]?.kind !== SyntaxKind.AsKeyword &&
-      !PURE_CHANNEL_EXPORTS.has(token.text)
+      !allowedExports.has(token.text)
     )
-      failures.push(`non-pure channel export: ${token.text}`);
+      failures.push(`unreviewed export: ${specifier}:${token.text}`);
   }
   return failures;
 }

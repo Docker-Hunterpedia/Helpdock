@@ -156,6 +156,13 @@ document by the owner (external dependencies), but is not a CI gate.
       suite); vendor credentials are never returned after save and are deleted
       when a run finishes.
 - [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+- [ ] After implementation, a separate full import-path review reconciles every
+      connector's source fixtures against loaded tickets, contacts, companies and
+      knowledge content. Check thread order, authors, dates, notes, attachments,
+      fields, tags, assignees, relationships, repeat/delta/resume behaviour and
+      absence of sends. The dry-run UI shows representative tickets and contacts,
+      data completeness warnings and blocking errors before approval. Record the
+      evidence and resolved findings in this document and the final PR.
 
 ## Migrations
 
@@ -173,6 +180,10 @@ earlier one.
   `attachment_origin` enum (`upload`, `channel`, `import`) and
   `attachments.origin` default `upload` (backfilled `channel` where
   `uploader_type = 'system'`); `csat_answer_channel` value `import`.
+- `0058_imported_knowledge_metadata` (M11-09): private source descriptions for
+  help-center categories, sections and article versions, source category parent
+  references, and 500-character working/published article titles. Existing tenant
+  tables keep their FORCE RLS policies; no new table is introduced.
 
 ## Open questions
 
@@ -212,6 +223,7 @@ was; the admin screens in English, with the RTL rules of DESIGN §7.
 | `Admin/Login-SSO`, `Admin/Login-SSO-AR` | M11-05 | Sign-in with SSO buttons, email-first discovery ("Continue" sends you to Okta), enforced state where only SSO shows, the break-glass link | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import` | M11-16 | Brand › Import: runs table (source, started, status, counts), "New import" with source picker (connectors + Manual file), empty state | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-Wizard` | M11-16 | Steps 1–4 with StepProgress: Connect (credentials, Test), Scope (date range, entities, help center), Map (statuses, priorities, groups→departments, agents→staff, fields, tags), Dry run report | Drawn 2026-10-13, as on the canvas |
+| `Admin/Import-Wizard` dry-run preview states | M11-16 | Sample contacts with identity/company links; sample ticket threads showing notes, authors, original dates and attachment availability; explicit completeness warnings and blocking errors | Owner requested 2026-10-14; extend the existing artboard with DESIGN components before implementation |
 | `Admin/Import-Run` | M11-16, M11-17 | Running import (progress per entity, live log, pause/cancel), done summary with warnings, delta-sync button, "Start SLA clocks" offer | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-FileMapper` | M11-15 | Upload, detected columns, mapping table with transforms, 20-row preview with row errors, save preset | Drawn 2026-10-13, as on the canvas |
 | `Admin/Ticket-Imported` | M11-17 | The ticket header chip "Imported from Zendesk · #1234", the `ticket.imported` activity line | Drawn 2026-10-13, as on the canvas |
@@ -780,9 +792,11 @@ relative path under `attachments/`; bundle paths reject traversal. Article local
 are EN/AR. The manifest is versioned and declares per-entity counts. Seventeen
 focused schema tests pass. The streaming ZIP reader now validates manifest/counts, attachment references,
 member safety and bounded NDJSON (with original UTF-8/line diagnostics). Resource
-limits are recorded in ADR 0027 and the workspace README. Twenty-five SDK/file
-unit tests pass, including local HTTP, directory compatibility and nesting-depth
-regressions. Reference vendor fixtures, attachment delivery and file-mapper
+limits are recorded in ADR 0027 and the workspace README. Thirty-two SDK/file
+unit tests pass, including local HTTP, directory compatibility, nesting-depth and
+malformed-UTF-8 regressions. JSON responses, manifests and NDJSON use fatal UTF-8
+decoding so malformed bytes cannot silently alter source history; valid split
+characters remain intact. Reference vendor fixtures, attachment delivery and file-mapper
 integration remain pending; this deliverable is not complete.
 
 ## M11-08 Normalised records and the bundle format
@@ -1051,6 +1065,30 @@ Twenty-four focused writer integration cases pass on real PostgreSQL/Redis.
 The full loader, workers, vendor connectors and UI acceptance remain incomplete.
 
 
+### Implementation checkpoint — help-center history (2026-10-14)
+
+The direct writer now loads categories, sections and EN/AR article versions without
+calling ordinary publication hooks. Imported translations share one article;
+source creation/update times, draft/publication state and internal visibility are
+retained. Slugs remain stable on repeat and delta imports. Unchanged source data
+does not overwrite local edits. Changed source data updates the mapped content.
+
+Helpdock's category tree is flat. Nested source categories retain their parent
+external ID and display a bilingual breadcrumb; cycles and missing parents refuse
+loading. Full source category/section descriptions and article descriptions are
+retained in private imported metadata, while public descriptions use the existing
+300/160-character limits. Article titles now permit 500 characters consistently
+in storage and the shared editor/API schema. Oversized bodies or category names
+are rejected rather than truncated.
+
+Prepared article images must reference ready, re-encoded media in the same brand.
+Remote images, foreign-brand routes and missing media are refused before the body
+is sanitized. Media downloading/preparation and final search refresh remain
+unimplemented; this checkpoint does not establish full article import acceptance.
+The focused writer suite passes 47 cases on real PostgreSQL/Redis. Additional
+unit cases cover parser-decoded image sources, storage bounds and complete source
+descriptions with safe Unicode display excerpts.
+
 ## M11-10 Import jobs
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,
@@ -1068,7 +1106,14 @@ claim older than 30 min is taken over, as `knowledge.sync` does).
   (`connector.defaultMappings(staged)` + name matching against existing statuses,
   departments, staff by email, fields by key). The admin confirms in the wizard.
 - **dry run**: validates every staged record against the mappings without writing
-  domain rows; fills `dry_run_report` `{ counts, warnings[], blocking[], samples[3 tickets rendered as they would appear] }`.
+  domain rows; fills `dry_run_report` with entity counts, warnings, blocking errors,
+  three sample tickets rendered as they would appear and sample contacts with their
+  proposed identity/company links. Show public replies and internal notes, authors,
+  original dates, attachment availability, tags, fields and assignee mappings in
+  the samples. Explain omitted or unsupported source data explicitly. Blocking
+  errors prevent starting the import. This contact/history preview requirement
+  was added by the owner on 2026-10-14; use the existing wizard artboard and
+  DESIGN components, recording any missing state in Artboards to draw.
 - **load**: batches of 50 tickets (one transaction each), honouring pause/cancel
   between batches; progress in `counts`.
 - **attachments**: pending `origin='import'` attachments of the run, 4 at a time,

@@ -213,3 +213,19 @@ export const sanitizeArticleHtml = (
 
   return { html: safe, text: htmlToText(safe) };
 };
+
+/** The same HTML parser as sanitization, so quoted/encoded attributes cannot bypass image preparation. */
+export function articleImageSources(html: string): string[] {
+  const sources: string[] = [];
+  sanitizeHtmlLibrary(html, {
+    allowedTags: [],
+    allowedAttributes: {},
+    transformTags: {
+      img: (tagName, attribs) => {
+        if (attribs.src) sources.push(attribs.src);
+        return { tagName, attribs };
+      },
+    },
+  });
+  return sources;
+}

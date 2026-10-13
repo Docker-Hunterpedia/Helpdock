@@ -203,3 +203,21 @@ resumption. Known fatal errors and opaque adapter exceptions terminate with fixe
 error codes and purge credentials. Raw adapter error messages and vendor bodies
 are not persisted or returned; this deliberately favors credential privacy over
 exception-detail diagnostics. Connector log messages use a fixed code allow-list.
+
+### 2026-10-14 — source knowledge metadata and destination limits
+
+Helpdock has categories and sections, not an arbitrary-depth knowledge tree.
+Imported nested categories retain a private parent external ID and a bilingual
+breadcrumb name, with an import-log warning. Missing parents and cycles are
+blocked. Category/section source descriptions and article source descriptions
+are retained in nullable private metadata; public descriptions still respect the
+existing 300/160-character bounds. Article title storage and the shared schema
+increase from 200 to 500 characters to match the normalized import contract.
+Content exceeding remaining destination limits is blocked, not silently dropped.
+
+Translation records share the source article's destination ID and preserve each
+locale's original version dates, draft state and visibility. Repeat hashes avoid
+overwriting local edits when source content is unchanged. Article bodies must
+already reference ready same-brand WebP media before loading; media preparation
+remains outside the transaction-only writer. No ordinary publication event is
+emitted while loading history.

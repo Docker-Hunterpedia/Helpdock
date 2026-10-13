@@ -10,6 +10,11 @@ import {
   customFieldDefs,
   type DbHandle,
   departments,
+  hcArticles,
+  hcArticleVersions,
+  hcCategories,
+  hcMedia,
+  hcSections,
   importExternalIds,
   importLog,
   importRecords,
@@ -56,6 +61,7 @@ import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-co
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
+import { articleLoadSchema, categoryLoadSchema, sectionLoadSchema } from './knowledge-contracts.js';
 import { contactLoadSchema, organizationLoadSchema } from './profile-contracts.js';
 import { staffLoadSchema } from './staff-contracts.js';
 
@@ -1544,6 +1550,286 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         externalId: 'deleted-group',
       },
     ]);
+  });
+
+  it('imports bilingual knowledge with source dates, stable slugs, draft/private copies and no publish side effects', async () => {
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    const categoryInput = categoryLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-category',
+        names: { en: 'Knowledge', ar: 'المعرفة' },
+        descriptions: { en: 'C'.repeat(600) },
+      },
+    });
+    const category = await withSystem(app.db, BRAND, (tx) => writer.category(tx, categoryInput));
+    const sectionInput = sectionLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-section',
+        parentExternalId: 'kb-category',
+        names: { en: 'Answers', ar: 'الإجابات' },
+        descriptions: { ar: 'وصف القسم' },
+      },
+    });
+    const section = await withSystem(app.db, BRAND, (tx) => writer.section(tx, sectionInput));
+    const input = articleLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-article-en',
+        sectionExternalId: 'kb-section',
+        locale: 'en',
+        title: 'Original title '.repeat(20),
+        description: 'D'.repeat(250),
+        bodyHtml: '<p>Answer</p><script>unsafe()</script>',
+        draft: false,
+        internal: false,
+        createdAt: '2019-01-01T00:00:00Z',
+        updatedAt: '2020-01-01T00:00:00Z',
+      },
+      preparedBodyHtml: '<p>Answer</p><script>unsafe()</script>',
+    });
+    const english = await withSystem(app.db, BRAND, (tx) => writer.article(tx, input));
+    const arabic = articleLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-article-ar',
+        translationOf: 'kb-article-en',
+        sectionExternalId: 'kb-section',
+        locale: 'ar',
+        title: 'إجابة قديمة',
+        bodyHtml: '<p dir="rtl">إجابة</p>',
+        draft: true,
+        internal: true,
+        createdAt: '2018-01-01T00:00:00Z',
+        updatedAt: '2021-01-01T00:00:00Z',
+      },
+      preparedBodyHtml: '<p dir="rtl">إجابة</p>',
+    });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.article(tx, arabic))).toMatchObject({
+      id: english.id,
+    });
+    const versions = await owner.db
+      .select()
+      .from(hcArticleVersions)
+      .where(eq(hcArticleVersions.articleId, english.id));
+    expect(versions).toHaveLength(2);
+    expect(versions.find((row) => row.locale === 'en')).toMatchObject({
+      title: input.record.title.trim(),
+      bodyHtml: '<p>Answer</p>',
+      publishedBodyHtml: '<p>Answer</p>',
+      publishedBodyText: 'Answer',
+      status: 'published',
+      visibility: 'public',
+      description: 'D'.repeat(160),
+      importedDescription: 'D'.repeat(250),
+    });
+    expect(versions.find((row) => row.locale === 'en')?.publishedAt?.toISOString()).toBe(
+      '2020-01-01T00:00:00.000Z',
+    );
+    expect(versions.find((row) => row.locale === 'ar')).toMatchObject({
+      status: 'draft',
+      visibility: 'internal',
+      publishedBodyHtml: null,
+      publishedAt: null,
+      bodyHtml: '<p dir="rtl">إجابة</p>',
+    });
+    const [article] = await owner.db.select().from(hcArticles).where(eq(hcArticles.id, english.id));
+    expect(article?.createdAt.toISOString()).toBe('2018-01-01T00:00:00.000Z');
+    expect(article?.updatedAt.toISOString()).toBe('2021-01-01T00:00:00.000Z');
+    const beforeCategory = await owner.db
+      .select()
+      .from(hcCategories)
+      .where(eq(hcCategories.id, category.id));
+    const beforeSection = await owner.db
+      .select()
+      .from(hcSections)
+      .where(eq(hcSections.id, section.id));
+    expect(beforeCategory[0]).toMatchObject({
+      descriptions: { en: 'C'.repeat(300), ar: '' },
+      importedDescriptions: { en: 'C'.repeat(600), ar: '' },
+    });
+    expect(beforeSection[0]?.importedDescriptions).toEqual({ en: '', ar: 'وصف القسم' });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => writer.category(tx, categoryInput)),
+    ).toMatchObject({ outcome: 'unchanged' });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.section(tx, sectionInput))).toMatchObject(
+      { outcome: 'unchanged' },
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.article(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect(
+      await owner.db
+        .select()
+        .from(hcArticleVersions)
+        .where(eq(hcArticleVersions.articleId, english.id)),
+    ).toEqual(versions);
+    expect(
+      await owner.db.select().from(hcCategories).where(eq(hcCategories.id, category.id)),
+    ).toEqual(beforeCategory);
+    expect(await owner.db.select().from(hcSections).where(eq(hcSections.id, section.id))).toEqual(
+      beforeSection,
+    );
+    input.record.title = 'Updated source title';
+    input.record.updatedAt = '2022-01-01T00:00:00Z';
+    input.record.internal = true;
+    expect(await withSystem(app.db, BRAND, (tx) => writer.article(tx, input))).toMatchObject({
+      outcome: 'updated',
+    });
+    const [changed] = await owner.db.select().from(hcArticles).where(eq(hcArticles.id, english.id));
+    expect(changed?.slug).toBe(article?.slug);
+    const changedVersions = await owner.db
+      .select()
+      .from(hcArticleVersions)
+      .where(eq(hcArticleVersions.articleId, english.id));
+    expect(changedVersions.find((row) => row.locale === 'ar')).toEqual(
+      versions.find((row) => row.locale === 'ar'),
+    );
+    expect(changedVersions.find((row) => row.locale === 'en')).toMatchObject({
+      visibility: 'internal',
+      publishedTitle: 'Updated source title',
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('retains nested category breadcrumbs and rejects cycles without rewriting local names on a repeated source', async () => {
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    const rootInput = categoryLoadSchema.parse({
+      ...scope,
+      record: { externalId: 'kb-parent', names: { en: 'Parent', ar: 'الرئيسي' } },
+    });
+    const root = await withSystem(app.db, BRAND, (tx) => writer.category(tx, rootInput));
+    const nested = categoryLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-child',
+        parentExternalId: 'kb-parent',
+        names: { en: 'Child', ar: 'الفرعي' },
+      },
+    });
+    const child = await withSystem(app.db, BRAND, (tx) => writer.category(tx, nested));
+    const [row] = await owner.db.select().from(hcCategories).where(eq(hcCategories.id, child.id));
+    expect(row).toMatchObject({
+      names: { en: 'Parent / Child', ar: 'الرئيسي / الفرعي' },
+      importedParentExternalId: 'kb-parent',
+    });
+    await owner.db
+      .update(hcCategories)
+      .set({ names: { en: 'Manual parent', ar: '' } })
+      .where(eq(hcCategories.id, root.id));
+    expect(await withSystem(app.db, BRAND, (tx) => writer.category(tx, nested))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect(await owner.db.select().from(hcCategories).where(eq(hcCategories.id, child.id))).toEqual(
+      [row],
+    );
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.category(tx, {
+          ...rootInput,
+          record: { ...rootInput.record, parentExternalId: 'kb-child' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.category(tx, {
+          ...rootInput,
+          record: { ...rootInput.record, parentExternalId: 'kb-parent' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db.select().from(importLog).where(eq(importLog.externalId, 'kb-child')),
+    ).toMatchObject([{ message: 'import.category.flattened' }]);
+  });
+
+  it('accepts only ready same-brand images and refuses missing knowledge parents without leaving content', async () => {
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    const mediaId = uuidv7();
+    const foreignId = uuidv7();
+    await owner.db.insert(hcMedia).values([
+      {
+        id: mediaId,
+        brandId: BRAND,
+        s3Key: `hc/${mediaId}`,
+        originalName: 'image.png',
+        mime: 'image/webp',
+        size: 10,
+        status: 'ready',
+        webpKey: `hc/${mediaId}.webp`,
+      },
+      {
+        id: foreignId,
+        brandId: OTHER_BRAND,
+        s3Key: `hc/${foreignId}`,
+        originalName: 'private.png',
+        mime: 'image/webp',
+        size: 10,
+        status: 'ready',
+        webpKey: `hc/${foreignId}.webp`,
+      },
+    ]);
+    const input = articleLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'kb-image',
+        sectionExternalId: 'kb-section',
+        locale: 'en',
+        title: 'Image',
+        bodyHtml: '<p>Image</p>',
+        draft: false,
+        internal: false,
+        createdAt: '2019-01-01T00:00:00Z',
+        updatedAt: '2019-01-01T00:00:00Z',
+      },
+      preparedBodyHtml: `<img src="/api/help-center/brands/${BRAND}/media/${mediaId}" alt="original">`,
+    });
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.article(tx, input));
+    const [version] = await owner.db
+      .select()
+      .from(hcArticleVersions)
+      .where(eq(hcArticleVersions.articleId, loaded.id));
+    expect(version?.publishedBodyHtml).toContain(mediaId);
+    for (const src of [
+      'https://vendor.invalid/image.png',
+      `/api/help-center/brands/${OTHER_BRAND}/media/${foreignId}`,
+      `/api/help-center/brands/${BRAND}/media/${foreignId}`,
+    ]) {
+      await expect(
+        withSystem(app.db, BRAND, (tx) =>
+          writer.article(tx, {
+            ...input,
+            record: { ...input.record, externalId: `invalid-image-${src.length}` },
+            preparedBodyHtml: `<img src='${src}'>`,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    }
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.section(
+          tx,
+          sectionLoadSchema.parse({
+            ...scope,
+            record: {
+              externalId: 'missing-section',
+              parentExternalId: 'missing-parent',
+              names: { en: 'Missing' },
+            },
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, 'missing-section')),
+    ).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

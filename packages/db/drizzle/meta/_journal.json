@@ -393,6 +393,13 @@
       "when": 1791929908817,
       "tag": "0057_import_worker_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791932888209,
+      "tag": "0058_imported_knowledge_metadata",
+      "breakpoints": true
     }
   ]
 }

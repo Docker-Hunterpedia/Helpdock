@@ -2,6 +2,13 @@
 
 The published help center: the pages customers read on a brand's own domain, what search engines are told about them, and how they look (M5-03, M5-04, M5-06; [ADR 0015](../decisions/0015-help-center-pages-rendered-by-the-api.md)). Writing articles is **Help center › Articles**; who may read them is **Help center › Settings › Who can read it** ([M5 doc](../completed/M5-help-center.md)).
 
+Article titles allow up to 500 characters. Search descriptions allow 160
+characters, and article HTML allows 500,000 characters. Category and section
+names allow 120 characters in each language; category descriptions allow 300.
+These limits apply to the editor/API and the M11 import writer. Imported source
+descriptions exceeding the display limits remain in private import metadata;
+oversized article bodies and category/section names must be resolved before loading.
+
 ## Where it is served
 
 | Address | When |

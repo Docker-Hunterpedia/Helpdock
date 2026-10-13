@@ -5,6 +5,8 @@ import { mappedTicketLoadSchema, type TicketLoad } from './contracts.js';
 import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import type { FieldLoad } from './field-contracts.js';
+import type { ArticleLoad, CategoryLoad, SectionLoad } from './knowledge-contracts.js';
+import { loadImportedArticle } from './load-articles.js';
 import { loadImportedContact } from './load-contacts.js';
 import { loadImportedCsat } from './load-csat.js';
 import { loadImportedField } from './load-fields.js';
@@ -13,6 +15,7 @@ import { loadImportedOrganization } from './load-organizations.js';
 import { loadImportedParticipants } from './load-participants.js';
 import { loadImportedStaff } from './load-staff.js';
 import { loadImportedTags } from './load-tags.js';
+import { loadImportedCategory, loadImportedSection } from './load-taxonomy.js';
 import {
   createImportedTicket,
   importedTicketChanges,
@@ -25,6 +28,15 @@ import type { StaffLoad } from './staff-contracts.js';
 
 /** The caller owns one system-job transaction per ticket; this module emits no live-ticket events. */
 export class ImportWriter {
+  article(tx: DbTransaction, input: ArticleLoad) {
+    return loadImportedArticle(tx, input);
+  }
+  category(tx: DbTransaction, input: CategoryLoad) {
+    return loadImportedCategory(tx, input);
+  }
+  section(tx: DbTransaction, input: SectionLoad) {
+    return loadImportedSection(tx, input);
+  }
   field(tx: DbTransaction, input: FieldLoad) {
     return loadImportedField(tx, input);
   }

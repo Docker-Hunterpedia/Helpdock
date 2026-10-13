@@ -14,6 +14,22 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 0.5.1 — 2026-10-13
+
+A fix release for two admin defects that only show against a real api, so the
+mock-backed test suites never caught them. No migration, configuration or API
+change; upgrade by pulling the new image.
+
+- **Agent assist works in the production admin again.** Since 0.4.0 the
+  composer's Assist menu (suggest reply, summarize, suggest fields, translate,
+  rewrite, draft article), the "items redacted before AI" notice, voice-note
+  transcripts and Help center › Proposals called `/api/api/…`, got a 404 and
+  stayed hidden. They now reach the api ([#175](https://github.com/Docker-Hunterpedia/Helpdock/pull/175)).
+- **The "is viewing" indicator names colleagues for Agents.** An Agent, who
+  cannot read the staff list, saw part of a user id ("01a13522 is replying").
+  Names now come from the department's assignable list, as the assignee picker's
+  do ([#175](https://github.com/Docker-Hunterpedia/Helpdock/pull/175)).
+
 ## 0.5.0 — 2026-10-13
 
 **M10 Meta channels**, and the code half of **M9 Hardening**: the fixes from

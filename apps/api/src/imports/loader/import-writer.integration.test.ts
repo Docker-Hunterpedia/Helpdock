@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   accounts,
   attachments,
@@ -47,13 +50,20 @@ import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { eq, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
+import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
+import { objectKeyBeside } from '../../media/keys.js';
+import { MediaRepository } from '../../media/media.repository.js';
+import { createMediaProcessor } from '../../media/process.job.js';
 import { RollupRepository } from '../../reports/rollup.repository.js';
+import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
+import { runTranscription } from '../../transcription/transcribe.job.js';
+import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
@@ -2234,6 +2244,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .where(eq(attachments.ticketId, loaded.ticketId));
     expect(files).toHaveLength(2);
     expect(new Set(files.map((file) => file.s3Key)).size).toBe(1);
+    expect(files.every((file) => file.s3Key.endsWith('/original'))).toBe(true);
     expect(files.filter((file) => file.copiedFromAttachmentId !== null)).toHaveLength(1);
     expect(files.every((file) => file.originalName === 'screenshot.png')).toBe(true);
     const ledger = await owner.db
@@ -2251,6 +2262,170 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       outcome: 'unchanged',
       messages: 0,
     });
+  });
+
+  it('processes a shared imported image once, updates all historical copies and emits nothing', async () => {
+    const input = request('processed-import-asset');
+    for (const message of input.messages)
+      message.attachments.push({
+        externalId: 'processed-shared-image',
+        fileName: 'screenshot.png',
+        contentType: 'image/png',
+        url: 'https://vendor.example/image',
+      });
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const files = await owner.db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    const original = files.find((file) => file.copiedFromAttachmentId === null);
+    if (!original) throw new Error('Missing source attachment');
+    const bytes = await sharp({
+      create: { width: 32, height: 32, channels: 3, background: '#ffffff' },
+    })
+      .png()
+      .toBuffer();
+    await owner.db
+      .update(attachments)
+      .set({ status: 'processing', kind: 'image', size: bytes.length })
+      .where(eq(attachments.id, original.id));
+    const liveId = uuidv7();
+    await owner.db.insert(attachments).values({
+      ...original,
+      id: liveId,
+      copiedFromAttachmentId: original.id,
+      origin: 'upload',
+      status: 'pending',
+    });
+    const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-import-media-'));
+    try {
+      const storage = new FakeStorage(directory);
+      await storage.put(original.s3Key, bytes);
+      const repository = new MediaRepository();
+      await withSystem(app.db, OTHER_BRAND, (tx) =>
+        repository.setImportedAssetStatus(tx, original, { status: 'ready' }),
+      );
+      expect(
+        (await owner.db.select().from(attachments).where(eq(attachments.id, original.id)))[0]
+          ?.status,
+      ).toBe('processing');
+      const processor = createMediaProcessor({ storage, tools: fakeTools(), scanner: undefined });
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          processor.run({
+            tx,
+            payload: { brandId: BRAND, attachmentId: original.id },
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'ready' });
+      const processed = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.ticketId, loaded.ticketId));
+      const imported = processed.filter((file) => file.origin === 'import');
+      expect(imported).toHaveLength(2);
+      for (const file of imported) {
+        expect(file).toMatchObject({
+          status: 'ready',
+          kind: 'image',
+          mime: 'image/png',
+          size: bytes.length,
+          scanStatus: 'skipped',
+        });
+        expect(file.variants).toHaveProperty('webp');
+        expect(
+          (await sharp(await storage.read(objectKeyBeside(file.s3Key, 'webp'))).metadata()).format,
+        ).toBe('webp');
+        expect(file.createdAt).toEqual(files.find((prior) => prior.id === file.id)?.createdAt);
+      }
+      expect(imported[0]?.processedAt).toEqual(imported[1]?.processedAt);
+      expect(processed.find((file) => file.id === liveId)?.status).toBe('pending');
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await redis.keys('*')).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses transcription of historical audio even through a stale live event or queued job', async () => {
+    const input = request('import-transcription-refused');
+    input.messages[0]?.attachments.push({
+      externalId: 'historical-audio',
+      fileName: 'voice.ogg',
+      contentType: 'audio/ogg',
+      url: 'https://vendor.example/voice',
+    });
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [audio] = await owner.db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    if (!audio) throw new Error('Missing audio attachment');
+    await owner.db
+      .update(attachments)
+      .set({ status: 'ready', kind: 'audio' })
+      .where(eq(attachments.id, audio.id));
+    const config = async () => ({
+      endpoint: 'https://whisper.test/v1/audio/transcriptions',
+      model: 'whisper-1',
+      apiKey: 'fixture-only',
+    });
+    let queued = 0;
+    const handler = createTranscriptionHandler(
+      {
+        add: async () => {
+          queued++;
+        },
+      },
+      config,
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      handler({
+        brandId: BRAND,
+        tx,
+        event: 'attachment.ready',
+        outboxId: uuidv7(),
+        log: silentJobLogger,
+        payload: {
+          attachmentId: audio.id,
+          ticketId: loaded.ticketId,
+          departmentId: DEPARTMENT,
+          status: 'ready',
+        },
+      }),
+    );
+    expect(queued).toBe(0);
+    expect(
+      (await owner.db.select().from(attachments).where(eq(attachments.id, audio.id)))[0]
+        ?.transcriptStatus,
+    ).toBeNull();
+    let downloaded = 0;
+    let calledAi = 0;
+    expect(
+      await runTranscription(
+        {
+          db: app.db,
+          config,
+          log: silentJobLogger,
+          storage: {
+            download: async () => {
+              downloaded++;
+            },
+          },
+          ai: {
+            transcribe: async () => {
+              calledAi++;
+              throw new Error('Historical audio must not reach AI');
+            },
+          },
+        },
+        { brandId: BRAND, attachmentId: audio.id },
+        { jobId: 'stale-import-fixture', lastAttempt: true },
+      ),
+    ).toBe('skipped');
+    expect(downloaded).toBe(0);
+    expect(calledAi).toBe(0);
   });
 
   it('refuses a system message mapped to an old agent name rather than fabricating a reportable reply', async () => {

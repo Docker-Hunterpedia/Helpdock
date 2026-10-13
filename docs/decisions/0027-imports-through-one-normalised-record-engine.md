@@ -221,3 +221,14 @@ overwriting local edits when source content is unchanged. Article bodies must
 already reference ready same-brand WebP media before loading; media preparation
 remains outside the transaction-only writer. No ordinary publication event is
 emitted while loading history.
+
+### 2026-10-14 — imported media settles silently
+
+Imported ticket files use the existing ticket/attachment `/original` key layout,
+not a separate run-specific format, so existing variant reads and retention
+purges remain valid. Processing updates all imported rows sharing the same asset
+key in the same brand, without emitting the live `attachment.ready` event.
+Transcription also checks origin at both subscription and worker execution.
+Preserving attachment origin and historical author display names through ticket
+splits closes supporting issue #214 without changing ordinary split permissions
+or download authorization.

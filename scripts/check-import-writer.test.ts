@@ -9,6 +9,7 @@ it.each([
   "import { ImportHttp as HiddenHttp } from '@helpdock/importers';",
   "export * from '@helpdock/importers';",
   "import { publishVersion } from '../../help-center/help-center.repository.js';",
+  "import { ObjectStorage } from '../../media/keys.js';",
   "const hook = await import('../hooks.js');",
   'globalThis.fetch(url);',
   'enqueueContactCreated(tx, person);',
@@ -18,7 +19,7 @@ it.each([
 it('allows reviewed pure dependencies and does not mistake historical text or comments for calls', () => {
   expect(
     findImportWriterViolations(
-      "import { sanitizeMessageBody } from '@helpdock/channels'; import { hashImportValue as hash } from '@helpdock/importers'; import { HelpCenterRepository } from '../../help-center/help-center.repository.js'; import { resolveSlug } from '../../help-center/slugs.js'; import { tickets } from '@helpdock/db'; // TicketsService is never called\nconst body = 'fetch';",
+      "import { sanitizeMessageBody } from '@helpdock/channels'; import { hashImportValue as hash } from '@helpdock/importers'; import { HelpCenterRepository } from '../../help-center/help-center.repository.js'; import { resolveSlug } from '../../help-center/slugs.js'; import { attachmentKey } from '../../media/keys.js'; import { tickets } from '@helpdock/db'; // TicketsService is never called\nconst body = 'fetch';",
     ),
   ).toEqual([]);
 });

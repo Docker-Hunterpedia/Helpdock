@@ -2,6 +2,7 @@ import { attachments, type DbTransaction, importExternalIds, uuidv7 } from '@hel
 import { hashImportValue } from '@helpdock/importers';
 import { type ImportAttachmentRef, safeFileName } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
+import { attachmentKey } from '../../media/keys.js';
 import type { TicketLoad } from './contracts.js';
 import { importedIdentity } from './external-ids.js';
 
@@ -46,7 +47,10 @@ export async function loadImportedAttachment(
     uploaderId: `import:${input.runId}`,
     s3Key:
       original?.s3Key ??
-      `brands/${input.brandId}/imports/${input.runId}/attachments/${attachmentId}`,
+      attachmentKey(
+        { brandId: input.brandId, ticketId: options.ticketId, attachmentId },
+        'original',
+      ),
     copiedFromAttachmentId: original?.copiedFromAttachmentId ?? original?.id ?? null,
     originalName: safeFileName(ref.fileName),
     mime: original?.mime ?? ref.contentType ?? 'application/octet-stream',

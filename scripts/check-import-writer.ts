@@ -5,6 +5,7 @@ import { SyntaxKind, type Token, tokenize } from './controller-scan.ts';
 const ALLOWED_MODULES = new Set([
   '../../help-center/help-center.repository.js',
   '../../help-center/slugs.js',
+  '../../media/keys.js',
   '@helpdock/channels',
   '@helpdock/db',
   '@helpdock/importers',
@@ -25,6 +26,7 @@ const REVIEWED_EXPORTS = new Map([
   ['@helpdock/importers', new Set(['hashImportValue'])],
   ['../../help-center/help-center.repository.js', new Set(['HelpCenterRepository'])],
   ['../../help-center/slugs.js', new Set(['resolveSlug'])],
+  ['../../media/keys.js', new Set(['attachmentKey'])],
 ]);
 const FORBIDDEN_IDENTIFIERS = new Set([
   'TicketsService',

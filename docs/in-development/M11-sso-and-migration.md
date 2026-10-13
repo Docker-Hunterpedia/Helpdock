@@ -1089,6 +1089,30 @@ The focused writer suite passes 47 cases on real PostgreSQL/Redis. Additional
 unit cases cover parser-decoded image sources, storage bounds and complete source
 descriptions with safe Unicode display excerpts.
 
+### Implementation checkpoint — imported attachment safety (2026-10-14)
+
+Imported attachment originals now use `attachmentKey(..., 'original')`, matching
+the download/variant/purge contract. A repeated source file retains one stored
+asset and separate message-authorized rows. Processing settles all same-brand
+imported copies together, including kind, size, verdict, variants and processing
+time; ordinary upload/channel copies are not changed by that import update.
+
+Imported processing emits no `attachment.ready` event. The transcription
+subscriber and worker independently exclude imported files, so stale events and
+previously queued jobs cannot send historical audio to AI. The real
+PostgreSQL/Redis writer suite passes 49 cases, including a shared PNG converted
+to readable WebP, a cross-brand update refusal and absence of outbox/Redis sends.
+The media decision suite passes 27 cases, including silent ready/rejected imports.
+Three existing live-transcription integration cases still pass, proving ordinary
+voice-note scheduling and transcription are preserved.
+
+Supporting issue [#214](https://github.com/Docker-Hunterpedia/Helpdock/issues/214)
+fixes an existing split-copy gap: attachment `origin` and message `author_display`
+were dropped. The real-API merge/split suite reproduced the channel/import
+failures first and passes 25 cases after preserving both fields. This fix belongs
+to the owner's single remaining-M11 PR. Import attachment-fetch jobs, orchestration
+and connector/browser acceptance remain incomplete.
+
 ## M11-10 Import jobs
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,

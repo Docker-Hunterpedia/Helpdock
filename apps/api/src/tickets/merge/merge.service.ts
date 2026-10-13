@@ -535,6 +535,7 @@ export class MergeService {
         kind: message.kind,
         authorType: message.authorType,
         authorId: message.authorId,
+        authorDisplay: message.authorDisplay,
         bodyHtml: message.bodyHtml,
         bodyText: message.bodyText,
         channel: message.channel,

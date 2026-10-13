@@ -172,21 +172,31 @@ const settleRow = async ({
   row: AttachmentRow;
   values: SettleValues;
 }): Promise<ProcessOutcome> => {
-  await attachments.setStatus(tx, row.id, {
+  const statusValues = {
     status: values.status,
     rejectReason: values.rejectReason ?? null,
     scanStatus: values.scanStatus,
     ...(values.mime === undefined ? {} : { mime: values.mime }),
     ...(values.variants === undefined ? {} : { variants: values.variants }),
     processedAt: new Date(),
-  });
+  };
 
-  await enqueueAttachmentReady(tx, row.brandId, {
-    attachmentId: row.id,
-    ticketId: row.ticketId,
-    departmentId: row.departmentId,
-    status: values.status,
-  });
+  if (row.origin === 'import')
+    await attachments.setImportedAssetStatus(tx, row, {
+      ...statusValues,
+      kind: row.kind,
+      size: row.size,
+    });
+  else {
+    await attachments.setStatus(tx, row.id, statusValues);
+
+    await enqueueAttachmentReady(tx, row.brandId, {
+      attachmentId: row.id,
+      ticketId: row.ticketId,
+      departmentId: row.departmentId,
+      status: values.status,
+    });
+  }
 
   return values.rejectReason === undefined
     ? { status: values.status }

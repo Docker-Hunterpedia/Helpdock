@@ -63,6 +63,7 @@ const process = async (options: {
   maxBytes?: number;
   tools?: ReturnType<typeof fakeTools>;
   status?: 'pending' | 'processing' | 'ready';
+  origin?: 'upload' | 'channel' | 'import';
 }): Promise<Harness> => {
   const storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-bucket-')));
   await storage.put(KEY, options.bytes);
@@ -76,6 +77,7 @@ const process = async (options: {
       kind,
       mime: options.mime ?? 'image/png',
       status: options.status ?? 'processing',
+      origin: options.origin ?? 'upload',
     }),
     policy: policyWith({
       keepOriginals: options.keepOriginals ?? false,
@@ -343,6 +345,17 @@ describe('files', () => {
 });
 
 describe('the outbox row every outcome leaves', () => {
+  it.each([
+    ['ready', Buffer.from('%PDF-1.7'), 'file' as const, 'application/pdf'],
+    ['rejected', Buffer.from('definitely not a png'), 'image' as const, 'image/png'],
+  ])(
+    'settles imported files as %s without announcing live attachment events',
+    async (expected, bytes, kind, mime) => {
+      const result = await process({ bytes, kind, mime, origin: 'import' });
+      expect(result.status).toBe(expected);
+      expect(result.outbox).toEqual([]);
+    },
+  );
   it.each([
     ['ready', Buffer.from('%PDF-1.7'), 'file' as const, 'application/pdf'],
     ['rejected', Buffer.from('definitely not a png'), 'image' as const, 'image/png'],

@@ -9,6 +9,21 @@ import {
 import type { AttachmentStatus } from '@helpdock/schemas';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 
+type AttachmentStatusValues = Partial<
+  Pick<
+    NewAttachment,
+    | 'status'
+    | 'rejectReason'
+    | 'scanStatus'
+    | 'mime'
+    | 'size'
+    | 'kind'
+    | 'originalName'
+    | 'variants'
+    | 'processedAt'
+  >
+>;
+
 /**
  * Every statement the attachment endpoints and the media worker make.
  *
@@ -180,20 +195,7 @@ export class MediaRepository {
   async setStatus(
     tx: DbTransaction,
     attachmentId: string,
-    values: Partial<
-      Pick<
-        NewAttachment,
-        | 'status'
-        | 'rejectReason'
-        | 'scanStatus'
-        | 'mime'
-        | 'size'
-        | 'kind'
-        | 'originalName'
-        | 'variants'
-        | 'processedAt'
-      >
-    >,
+    values: AttachmentStatusValues,
   ): Promise<AttachmentRow | undefined> {
     const rows = await tx
       .update(attachments)
@@ -202,6 +204,24 @@ export class MediaRepository {
       .returning();
 
     return rows[0];
+  }
+
+  /** One source asset can appear in several imported messages, each with its own authorized row. */
+  async setImportedAssetStatus(
+    tx: DbTransaction,
+    asset: Pick<AttachmentRow, 'brandId' | 's3Key'>,
+    values: AttachmentStatusValues,
+  ): Promise<void> {
+    await tx
+      .update(attachments)
+      .set(values)
+      .where(
+        and(
+          eq(attachments.brandId, asset.brandId),
+          eq(attachments.s3Key, asset.s3Key),
+          eq(attachments.origin, 'import'),
+        ),
+      );
   }
 
   /**

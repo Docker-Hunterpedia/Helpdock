@@ -610,7 +610,8 @@ cannot open comes in two kinds (§1.2):
 The named messages are **copied** onto a new ticket: `split_from_id`, the same
 contact and channel, the department and subject the agent chose, the priority
 chosen or the original's, a fresh number, and the default open status. Each copy
-has `copied_from_message_id`, keeps its original `created_at`, and takes the new
+has `copied_from_message_id`, keeps its original `created_at` and historical
+`author_display`, and takes the new
 ticket's own `seq` from 1; a `system` message "Split from HD-1042" follows them,
 and the original gets "Messages split to HD-1043". The new ticket is announced
 with `ticket.created`, which is where M3-02's fresh clocks start; the original's
@@ -623,7 +624,8 @@ ticket answers 404; a `system` message answers 400.
 **Attachments are copied as rows, not bytes.** A copy of a `ready` attachment
 points at the **same object** with the new ticket's `ticket_id`, `message_id`
 and — through the trigger — `department_id`, which is what authorises a
-download through it; `copied_from_attachment_id` names the original.
+download through it; `copied_from_attachment_id` names the original. The copy
+retains the original's `origin`, including imported and channel files.
 `attachments.s3_key` is therefore unique among originals only
 (`attachments_s3_key_original_key`). Rejected and infected rows are not copied,
 and a message whose attachment is still `pending` or `processing` is refused

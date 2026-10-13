@@ -170,6 +170,7 @@ export class MergeRepository {
         departmentId: target.departmentId,
         messageId: target.messageId,
         uploaderType: original.uploaderType,
+        origin: original.origin,
         uploaderId: original.uploaderId,
         s3Key: original.s3Key,
         originalName: original.originalName,

@@ -184,6 +184,13 @@ export const fakeRepository = (state: FakeAttachmentState): MediaRepository =>
       state.row = { ...state.row, ...values } as AttachmentRow;
       return state.row;
     },
+    setImportedAssetStatus: async (
+      _tx: DbTransaction,
+      _asset: unknown,
+      values: Record<string, unknown>,
+    ) => {
+      state.row = { ...state.row, ...values } as AttachmentRow;
+    },
   }) as unknown as MediaRepository;
 
 export const attachmentRow = (overrides: Partial<AttachmentRow> = {}): AttachmentRow =>
@@ -194,6 +201,7 @@ export const attachmentRow = (overrides: Partial<AttachmentRow> = {}): Attachmen
     departmentId: '01937f5e-7e53-7000-8000-00000000000d',
     messageId: null,
     uploaderType: 'staff',
+    origin: 'upload',
     uploaderId: '01937f5e-7e53-7000-8000-000000000001',
     s3Key: 'brands/a/tickets/b/c/original',
     originalName: 'upload.bin',

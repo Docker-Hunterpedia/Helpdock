@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { createPrivateKey, randomBytes, verify, webcrypto, X509Certificate } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { inflateRawSync } from 'node:zlib';
 import { X509CertificateGenerator } from '@peculiar/x509';
 import { SignedXml } from 'xml-crypto';
@@ -173,22 +173,32 @@ export async function fakeSamlIdp() {
       ),
     ).toString('base64');
   };
-  const server = createServer((request, reply) => {
-    try {
-      if (request.url === '/metadata') {
-        reply.writeHead(controls.metadataStatus, {
-          'content-type': 'application/samlmetadata+xml',
-        });
-        reply.end(
-          `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(controls.metadataEntityId)}"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">${controls.metadataCertificates.map((certificate) => `<KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>${certificate.replace(/-----[^-]+-----|\s/g, '')}</ds:X509Certificate></ds:X509Data></ds:KeyInfo></KeyDescriptor>`).join('')}<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${issuer}/sso"/></IDPSSODescriptor></EntityDescriptor>`,
-        );
-        return;
-      }
+  const handlers: Record<string, (request: IncomingMessage, reply: ServerResponse) => void> = {
+    '/metadata': (_request, reply) => {
+      reply.writeHead(controls.metadataStatus, {
+        'content-type': 'application/samlmetadata+xml',
+      });
+      reply.end(
+        `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(controls.metadataEntityId)}"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">${controls.metadataCertificates.map((certificate) => `<KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>${certificate.replace(/-----[^-]+-----|\s/g, '')}</ds:X509Certificate></ds:X509Data></ds:KeyInfo></KeyDescriptor>`).join('')}<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${issuer}/sso"/></IDPSSODescriptor></EntityDescriptor>`,
+      );
+    },
+    '/sso': (request, reply) => {
       const issued = authorize(new URL(request.url ?? '/', issuer).toString());
       reply.writeHead(200, { 'content-type': 'text/html' });
       reply.end(
         `<html><body><form method="POST" action="${xmlEscape(issued.recipient)}"><input name="SAMLResponse" value="${xmlEscape(issued.SAMLResponse)}"><input name="RelayState" value="${xmlEscape(issued.RelayState)}"></form><script>document.forms[0].submit()</script></body></html>`,
       );
+    },
+  };
+  const server = createServer((request, reply) => {
+    const handler = handlers[new URL(request.url ?? '/', issuer).pathname];
+    if (!handler) {
+      reply.writeHead(404);
+      reply.end();
+      return;
+    }
+    try {
+      handler(request, reply);
     } catch {
       reply.writeHead(400);
       reply.end('Invalid test request');

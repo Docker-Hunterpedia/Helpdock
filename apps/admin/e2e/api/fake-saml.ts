@@ -53,9 +53,6 @@ export async function fakeSamlIdp() {
     missingGroups: false,
     duplicateAttribute: false,
     wrapping: false,
-    metadataCertificates: [key.certificate],
-    metadataEntityId: issuer,
-    metadataStatus: 200,
     subject: 'staff-1',
     email: 'ada@example.com',
     spCertificate: '',
@@ -74,9 +71,6 @@ export async function fakeSamlIdp() {
       missingGroups: false,
       duplicateAttribute: false,
       wrapping: false,
-      metadataCertificates: [key.certificate],
-      metadataEntityId: issuer,
-      metadataStatus: 200,
       subject: 'staff-1',
       email: 'ada@example.com',
     });
@@ -143,15 +137,6 @@ export async function fakeSamlIdp() {
   };
   const server = createServer((request, reply) => {
     try {
-      if (request.url === '/metadata') {
-        reply.writeHead(controls.metadataStatus, {
-          'content-type': 'application/samlmetadata+xml',
-        });
-        reply.end(
-          `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(controls.metadataEntityId)}"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">${controls.metadataCertificates.map((certificate) => `<KeyDescriptor use="signing"><ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:X509Data><ds:X509Certificate>${certificate.replace(/-----[^-]+-----|\s/g, '')}</ds:X509Certificate></ds:X509Data></ds:KeyInfo></KeyDescriptor>`).join('')}<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${issuer}/sso"/></IDPSSODescriptor></EntityDescriptor>`,
-        );
-        return;
-      }
       const issued = authorize(new URL(request.url ?? '/', issuer).toString());
       reply.writeHead(200, { 'content-type': 'text/html' });
       reply.end(

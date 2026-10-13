@@ -221,7 +221,7 @@ export class AppModule implements NestModule {
         ConfigModule.forRoot(options.env),
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
-        SsoModule.forRoot(options.env, options.db),
+        SsoModule.forRoot(options.env, options.db, options.logger),
         auth,
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),

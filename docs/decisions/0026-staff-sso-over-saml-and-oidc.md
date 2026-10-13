@@ -129,3 +129,25 @@ validate signed assertion issuer/recipient, and bind a cross-site POST without
 relying on a Lax cookie. The configured session lifetime, rather than an
 unconditional 12-hour ceiling, is the pre-M11 exposure; M11-04 must document or
 bound that lifetime when integrating enforcement.
+
+### 2026-10-13 — M11-02 protocol validation
+
+- `openid-client` 6.8.8 uses TLS as the default trust mechanism for ID tokens
+  obtained directly from the token endpoint. Helpdock explicitly enables
+  `enableNonRepudiationChecks` to verify JWS signatures through safe JWKS fetches.
+- All OIDC server requests refuse redirects. Forwarding a 307/308 token POST
+  could expose a client secret in its body even when cross-origin auth headers
+  are stripped; discovery redirects are refused as well for a consistent policy.
+- HTTP endpoints require explicit outbound CIDR exceptions on every request.
+  Library-level insecure-request support exists only behind this transport.
+  The socket-pinning DNS resolver checks every HTTP address against these CIDRs,
+  including a changed or mixed private/public answer; a separate preflight
+  check alone would leave a DNS-rebinding window.
+- Configured group overage or a missing/malformed authoritative group list fails
+  sign-in. It is never represented as an empty list that could revoke grants.
+- Browser cookies are scoped and named per connection; the request binds the
+  current configuration revision so disabling or changing a provider during
+  a flow cannot complete against stale cached settings.
+- M11-02 completes existing subject bindings through local MFA and the existing
+  exchange flow. M11-04 owns JIT, email linking, group sync, and IdP MFA policy;
+  protocol acceptance alone never creates or grants an account.

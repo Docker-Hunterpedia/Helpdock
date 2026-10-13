@@ -94,8 +94,8 @@ connectors on the same SDK and **may ship after 1.0**.
 
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
-| M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | in review |
-| M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | planned |
+| M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | done |
+| M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | in review |
 | M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | planned |
 | M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | planned |
 | M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | planned |
@@ -394,39 +394,75 @@ existing manual memberships. This deliverable adds no screen.
 
 ## M11-02 OIDC sign-in
 
-Library: **`openid-client` 6.x** (6.8.8 at planning time; panva; ADR 0026).
+Implementation uses **`openid-client` 6.8.8**, verified against npm and the
+[official API reference](https://github.com/panva/openid-client/tree/v6.8.8/docs)
+on 2026-10-13. A provider client must allow authorization code, PKCE S256 and
+`client_secret_post` (or an explicitly public client when no secret is saved).
 
-- **Discovery** with `client.discovery(new URL(issuer), clientId, clientSecret, undefined, { [client.customFetch]: safeFetchAdapter })`.
-  `safeFetchAdapter` wraps `safeFetch` (`@helpdock/net`) into the `fetch`
-  signature openid-client expects (policy: `maxRedirects: 3`, `totalTimeoutMs: 10 000`,
-  `maxBodyBytes: 1 MB`, `allowCidrs: env.OUTBOUND_ALLOW_CIDRS`). The `Configuration`
-  is cached per connection for 1 h and dropped on update.
-- **Start** `GET /api/auth/sso/:id/start?returnTo=…&test=0|1` (`@Public`, rate
-  limit 20/min per IP): `state` (32 bytes) and `nonce` stored in the request store
-  with `{ connectionId, codeVerifier, nonceHash, browserNonceHash, returnTo, test }`;
-  PKCE S256; a browser nonce cookie `hd_sso` (path `/api/auth/sso`, `SameSite=Lax`,
-  `HttpOnly`, `Secure` over https), like `hd_oauth`. Redirect to
-  `buildAuthorizationUrl` with `scope`, `state`, `nonce`, `code_challenge`.
-- **Callback** `GET /api/auth/sso/:id/oidc/callback`: consume `state` (GETDEL),
-  check connection id and the browser nonce (timing-safe), `authorizationCodeGrant`
-  with `pkceCodeVerifier`, `expectedState`, `expectedNonce`; claims from the ID
-  token (`claims()`), falling back to `fetchUserInfo` only for name/groups.
-- **Claims** → `SsoAssertion { connectionId, subject: sub, email, emailVerified, name, groups: string[] }`.
-  `email_verified !== true` with `requireEmailVerified` → `sso-email-unverified`.
-  Groups from `group_attribute` (string or string[]; Entra's `groups` overage claim
-  is a gap: log a warning and continue with no groups).
-- Hand the assertion to `AuthService.completeSso` (M11-04).
+- Discovery, token exchange, JWKS and UserInfo use the same `customFetch`
+  adapter over `safeFetch`: 10-second deadline, 1 MB body cap and **zero
+  redirects**. HTTP is permitted only for addresses explicitly allowed by
+  `OUTBOUND_ALLOW_CIDRS`; discovered endpoints also receive destination checks.
+  Cached discovery expires after one hour and is keyed by the current database
+  configuration revision. Disabled providers and changed configuration are
+  checked again at callback, across replicas.
+- **Signature validation is explicitly enabled** with
+  `enableNonRepudiationChecks`. In this authorization-code flow the library
+  otherwise relies on token-endpoint TLS and does not require ID-token JWS
+  validation. The fake-IdP suite proves a correctly formed token signed by an
+  untrusted key is rejected.
+- `GET /api/auth/sso/:id/start?returnTo=...` is public with a 20/minute/IP budget.
+  It stores random state, nonce, PKCE verifier, connection/configuration binding,
+  browser-nonce hash and validated local return path in Redis for ten minutes.
+  The per-connection `hd_sso_<id>` cookie is HttpOnly, host-only, SameSite=Lax,
+  Secure over HTTPS, and limited to that connection's auth path. Its HTTPS name
+  has the `__Secure-` prefix. `test=1` is rejected until M11-06 adds the protected
+  connection-test flow; it must never accidentally create a session.
+- `GET /api/auth/sso/:id/oidc/callback` has a 40/minute/IP budget, atomically
+  consumes state, checks the browser and configuration, validates PKCE, state,
+  nonce, issuer, audience, expiry and signature, and clears the nonce cookie.
+  The callback is built from `APP_URL`, never Host/forwarded headers. Responses
+  are not cached; completion redirects also suppress the referrer.
+- Verified email and subject come only from the validated ID token.
+  `email_verified` must be boolean `true`. Subject-checked UserInfo can supplement
+  name/groups, never email or verification. Configured groups may be a string
+  or string array. Missing/malformed groups and Entra overage claims are refused
+  with a safe warning, so an unknown list cannot remove SSO grants. Distributed
+  claim URLs are never fetched.
+- `AuthService.completeSso` currently accepts **already-linked subjects only**,
+  preserves existing manual roles and local TOTP, and uses the existing refresh
+  cookie / one-time exchange-code completion flow. No email auto-linking, JIT or
+  group sync occurs in this deliverable; M11-04 extends that shared completion
+  method. The validated return path is carried through the protocol handoff;
+  the current completion UI still lands on Tickets. M11-05 adds the SSO login UI.
 
-**Fake OIDC IdP for tests** (`apps/api/src/testing/fake-oidc-idp.ts`, and a copy
-for the browser project in `apps/admin/e2e/api/fake-oidc.ts`): a small HTTP server
-with `/.well-known/openid-configuration`, `/authorize` (auto-approves a configured
-user, redirects with `code`), `/token` (signs an ID token with `jose`, ES256),
-`/jwks`, `/userinfo`; controls to change claims, sign with another key, expire.
+The API fake IdP lives in `apps/api/src/testing/fake-oidc-idp.ts`; its browser
+counterpart is `apps/admin/e2e/api/fake-oidc.ts`, without cross-app imports.
+They implement discovery, authorization-code/PKCE, RSA-signed ID tokens, JWKS
+and subject-checked UserInfo, with controls for token attacks, private JWKS and
+307 redirects. The RSA stand-in matches the library's default RS256 client
+algorithm instead of the plan's original ES256 fixture.
 
-**Tests** (integration): happy path; state replay refused; wrong browser nonce;
-nonce mismatch in the token; issuer mismatch; expired ID token; `email_verified:false`;
-discovery to a private address refused by `safeFetch`; a disabled connection is
-`sso-connection-disabled`.
+Tests: unit claim/return-path boundaries and shared completion; real-Postgres
+and Redis integration against the fake IdP (including full HTTP session handoff,
+state concurrency, rate limiting, configuration changes and token attacks);
+Playwright happy/failure paths in `en` and `ar`, with axe. Browser fixtures
+pre-link the existing seeded account explicitly and preserve its local TOTP.
+
+An optional **real Keycloak 26.8.0 Docker smoke test** complements CI's fake
+attack suite. It imports a disposable realm, drives Keycloak's real login page
+in Chromium, then validates its authorization code, signed subject, verified
+email and groups through Helpdock and refuses replay. Run:
+
+```sh
+pnpm --filter @helpdock/api exec playwright install chromium
+HD_TEST_KEYCLOAK=1 pnpm exec vitest run --project integration apps/api/src/sso/oidc-keycloak.integration.test.ts
+```
+
+This needs free loopback ports 8443 (Keycloak) and 3126 (callback capture), plus
+Docker. Testcontainers removes the realm and containers afterwards. The fake
+IdP/browser fixture uses port 8080. These runs prove protocol interoperability;
+real-install JIT and IdP MFA policy remain M11-04 / M11-18 validation.
 
 ## M11-03 SAML sign-in
 
@@ -999,7 +1035,7 @@ PRD status board.
 
 ## Pull requests
 
-- [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (in review; aggregate CI must pass).
+- [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (merged).
 
 - [#209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209) — dependency-aware CI selection (merged).
 

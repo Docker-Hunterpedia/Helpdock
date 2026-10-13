@@ -11,6 +11,7 @@ import {
   E2E_META_APP_ID,
   startFakeGraph,
 } from './fake-graph.js';
+import { fakeOidcIdp } from './fake-oidc.js';
 import { E2E_TELEGRAM_ROOT, startFakeTelegram } from './fake-telegram.js';
 
 /**
@@ -69,6 +70,7 @@ export const ACCOUNT_PASSWORD_ENV = 'HD_E2E_PASSWORD';
 export const INVITE_TOKEN_ENV = 'HD_E2E_INVITE_TOKEN';
 export const INVITEE_EMAIL = 'invitee@helpdock.test';
 /** Set when Docker is missing, so the specs skip with a reason instead of failing. */
+export const SSO_CONNECTION_ENV = 'HD_E2E_SSO_CONNECTION_ID';
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 /**
  * The seeded api's environment, as JSON, so a spec can start a replica of it
@@ -150,16 +152,18 @@ export const startInstall = async (): Promise<RunningInstall> => {
     );
   }
 
-  const [postgres, redis, telegram, graph] = (await Promise.all([
+  const [postgres, redis, telegram, graph, oidc] = (await Promise.all([
     new PostgreSqlContainer(POSTGRES_IMAGE).start(),
     new RedisContainer(REDIS_IMAGE).start(),
     startFakeTelegram(),
     startFakeGraph(),
+    fakeOidcIdp(),
   ])) as [
     StartedPostgreSqlContainer,
     StartedRedisContainer,
     Awaited<ReturnType<typeof startFakeTelegram>>,
     Awaited<ReturnType<typeof startFakeGraph>>,
+    Awaited<ReturnType<typeof fakeOidcIdp>>,
   ];
 
   const host = postgres.getHost();
@@ -246,7 +250,12 @@ export const startInstall = async (): Promise<RunningInstall> => {
       '--with-invite',
       '--json',
     ]),
-  ) as { email: string; password: string; totpSecret: string; inviteToken: string };
+  ) as { userId: string; email: string; password: string; totpSecret: string; inviteToken: string };
+
+  const oidcSeed = JSON.parse(
+    await run(path.join(apiRoot, 'dist/seed/seed-oidc.js'), env, [seeded.userId]),
+  ) as { connectionId: string };
+  process.env[SSO_CONNECTION_ENV] = oidcSeed.connectionId;
 
   // A worker beside the seeded api, as in production: the outbox relay and
   // the event handlers are what carry an agent's reply to the widget's socket
@@ -282,7 +291,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
           }),
       ),
     );
-    await Promise.all([postgres.stop(), redis.stop(), telegram.stop(), graph.stop()]);
+    await Promise.all([postgres.stop(), redis.stop(), telegram.stop(), graph.stop(), oidc.close()]);
   };
 
   try {

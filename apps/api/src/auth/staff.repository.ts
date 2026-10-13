@@ -3,9 +3,11 @@ import {
   brands,
   type Db,
   type DbTransaction,
+  ssoConnections,
   type User,
   type UserBrandRole,
   userBrandRoles,
+  userSsoIdentities,
   users,
   withTenant,
 } from '@helpdock/db';
@@ -54,6 +56,24 @@ export class StaffRepository {
 
   constructor({ db }: StaffRepositoryOptions) {
     this.#db = db;
+  }
+
+  /** Explicit pre-tenant identity lookup; provisioning and email linking are M11-04. */
+  async findBySsoIdentity(connectionId: string, subject: string): Promise<StaffUser | undefined> {
+    const [found] = await this.#db
+      .select({ user: users })
+      .from(userSsoIdentities)
+      .innerJoin(users, eq(users.id, userSsoIdentities.userId))
+      .innerJoin(ssoConnections, eq(ssoConnections.id, userSsoIdentities.connectionId))
+      .where(
+        and(
+          eq(userSsoIdentities.connectionId, connectionId),
+          eq(userSsoIdentities.subject, subject),
+          eq(ssoConnections.enabled, true),
+        ),
+      )
+      .limit(1);
+    return found?.user;
   }
 
   /**

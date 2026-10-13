@@ -61,6 +61,7 @@ export default defineConfig({
         'src/testing/**',
         'src/main.ts',
         'src/seed/seed-dev.ts',
+        'src/seed/seed-oidc.ts',
       ],
       thresholds: { lines: 90 },
     },

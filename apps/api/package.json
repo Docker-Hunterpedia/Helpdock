@@ -65,6 +65,7 @@
     "ioredis": "6.0.0",
     "jose": "6.2.12",
     "nestjs-zod": "5.5.0",
+    "openid-client": "6.8.8",
     "otplib": "13.5.0",
     "pino": "10.3.1",
     "playwright": "1.63.0",

@@ -20,3 +20,7 @@ export class SsoParamDto extends createZodDto(ssoConnectionParamSchema) {}
 export class SsoMappingsDto extends createZodDto(ssoMappingsSchema) {}
 export class SsoSettingsDto extends createZodDto(ssoSettingsSchema) {}
 export class SsoSettingsUpdateDto extends createZodDto(ssoSettingsUpdateSchema) {}
+
+import { oidcCallbackQuerySchema, oidcStartQuerySchema } from './oidc-contracts.js';
+export class OidcStartQueryDto extends createZodDto(oidcStartQuerySchema) {}
+export class OidcCallbackQueryDto extends createZodDto(oidcCallbackQuerySchema) {}

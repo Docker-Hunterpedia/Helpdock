@@ -38,6 +38,7 @@ const challengeSchema = z.object({
   kind: z.enum(['second-factor', 'enrolment']),
   /** How the password step was proved, for the audit row of the sign-in it completes. */
   firstFactor: z.string().min(1).max(32).optional(),
+  ssoConnectionId: z.uuid().optional(),
 });
 
 export type TotpChallenge = z.infer<typeof challengeSchema>;
@@ -62,10 +63,12 @@ export class TotpChallengeStore {
     userId,
     kind,
     firstFactor,
+    ssoConnectionId,
   }: {
     readonly userId: string;
     readonly kind: TotpChallenge['kind'];
     readonly firstFactor?: string;
+    readonly ssoConnectionId?: string;
   }): Promise<string> {
     const challengeId = uuidv7();
     const challenge: TotpChallenge = {
@@ -74,6 +77,7 @@ export class TotpChallengeStore {
       createdAt: Math.floor(Date.now() / 1000),
       kind,
       ...(firstFactor === undefined ? {} : { firstFactor }),
+      ...(ssoConnectionId === undefined ? {} : { ssoConnectionId }),
     };
 
     await this.#redis.set(

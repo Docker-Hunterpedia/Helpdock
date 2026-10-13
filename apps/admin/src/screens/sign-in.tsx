@@ -9,12 +9,14 @@ import { RETURN_TO_PARAM, ROUTES, safeReturnTo } from '../app/route-paths.js';
 import type { AuthApi } from '../auth/api.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
+import { ssoErrorKey } from '../auth/sso-error.js';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { ProviderMark } from '../ui/provider-marks.tsx';
 import { AuthLayout, LanguageLink } from './auth-layout.tsx';
 import { type SignInFormErrors, validateEmail, validateSignInForm } from './sign-in-form.js';
+import { SsoButtons, SsoEmailForm } from './sso-sign-in.tsx';
 
 const EMAIL_ERROR_KEYS = {
   required: 'auth:signIn.emailRequired',
@@ -73,6 +75,8 @@ export function SignIn(): ReactNode {
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get(RETURN_TO_PARAM));
 
+  const methods = useQuery({ queryKey: ['auth', 'methods'], queryFn: () => api.authMethods() });
+  const [breakGlass, setBreakGlass] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignInFormErrors>({});
@@ -167,14 +171,17 @@ export function SignIn(): ReactNode {
 
   const emailError = errors.email ? t(EMAIL_ERROR_KEYS[errors.email]) : undefined;
   const passwordError = errors.password ? t('auth:signIn.passwordRequired') : undefined;
+  const ssoFailure = ssoErrorKey(failure);
   const failureMessage =
     failure === 'invalid-credentials'
       ? t('auth:signIn.invalidCredentials')
       : failure === 'no-account'
         ? t('auth:noAccount')
-        : failure
-          ? t('auth:unavailable')
-          : undefined;
+        : ssoFailure
+          ? t(ssoFailure)
+          : failure
+            ? t('auth:unavailable')
+            : undefined;
 
   return (
     <AuthLayout
@@ -190,111 +197,131 @@ export function SignIn(): ReactNode {
           }}
         >
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('auth:signIn.twoFactorRequired')}
+            {methods.data?.ssoEnforced ? (
+              <Link
+                component="button"
+                type="button"
+                variant="caption"
+                onClick={() => setBreakGlass(!breakGlass)}
+              >
+                {t(breakGlass ? 'auth:sso.useSso' : 'auth:sso.breakGlass')}
+              </Link>
+            ) : (
+              t('auth:signIn.twoFactorRequired')
+            )}
           </Typography>
           <LanguageLink />
         </Box>
       }
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {failureMessage ? <AlertBanner tone="danger">{failureMessage}</AlertBanner> : null}
+      {methods.data?.ssoEnforced && !breakGlass ? (
+        <SsoEmailForm returnTo={returnTo} />
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <SsoButtons connections={methods.data?.sso ?? []} returnTo={returnTo} />
+          {failureMessage ? <AlertBanner tone="danger">{failureMessage}</AlertBanner> : null}
 
-        <Box
-          component="form"
-          noValidate
-          onSubmit={submitPassword}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
-        >
-          <Field id="sign-in-email" label={t('auth:signIn.emailLabel')} error={emailError}>
-            <OutlinedInput
-              id="sign-in-email"
-              type="email"
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-              }}
-              error={Boolean(emailError)}
-              fullWidth
-              slotProps={{
-                input: {
-                  dir: 'ltr',
-                  autoComplete: 'username',
-                  'aria-describedby': fieldDescribedBy('sign-in-email', { error: emailError }),
-                },
-              }}
-            />
-          </Field>
-
-          <Field
-            id="sign-in-password"
-            label={t('auth:signIn.passwordLabel')}
-            error={passwordError}
-            action={
-              <Link
-                component="button"
-                type="button"
-                variant="caption"
-                onClick={submitPasswordReset}
-              >
-                {t('auth:signIn.forgotPassword')}
-              </Link>
-            }
+          <Box
+            component="form"
+            noValidate
+            onSubmit={submitPassword}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
           >
-            <OutlinedInput
+            <Field id="sign-in-email" label={t('auth:signIn.emailLabel')} error={emailError}>
+              <OutlinedInput
+                id="sign-in-email"
+                type="email"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                }}
+                error={Boolean(emailError)}
+                fullWidth
+                slotProps={{
+                  input: {
+                    dir: 'ltr',
+                    autoComplete: 'username',
+                    'aria-describedby': fieldDescribedBy('sign-in-email', { error: emailError }),
+                  },
+                }}
+              />
+            </Field>
+
+            <Field
               id="sign-in-password"
-              type="password"
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-              }}
-              error={Boolean(passwordError)}
+              label={t('auth:signIn.passwordLabel')}
+              error={passwordError}
+              action={
+                <Link
+                  component="button"
+                  type="button"
+                  variant="caption"
+                  onClick={submitPasswordReset}
+                >
+                  {t('auth:signIn.forgotPassword')}
+                </Link>
+              }
+            >
+              <OutlinedInput
+                id="sign-in-password"
+                type="password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                }}
+                error={Boolean(passwordError)}
+                fullWidth
+                slotProps={{
+                  input: {
+                    dir: 'ltr',
+                    autoComplete: 'current-password',
+                    'aria-describedby': fieldDescribedBy('sign-in-password', {
+                      error: passwordError,
+                    }),
+                  },
+                }}
+              />
+            </Field>
+
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
               fullWidth
-              slotProps={{
-                input: {
-                  dir: 'ltr',
-                  autoComplete: 'current-password',
-                  'aria-describedby': fieldDescribedBy('sign-in-password', {
-                    error: passwordError,
-                  }),
-                },
-              }}
-            />
-          </Field>
+              loading={signIn.isPending}
+              disabled={magicLink.isPending || passwordReset.isPending}
+            >
+              {t('auth:signIn.submit')}
+            </Button>
+          </Box>
 
-          <Button
-            type="submit"
-            variant="contained"
-            color="primary"
-            fullWidth
-            loading={signIn.isPending}
-            disabled={magicLink.isPending || passwordReset.isPending}
-          >
-            {t('auth:signIn.submit')}
-          </Button>
+          {!methods.data?.ssoEnforced ? (
+            <>
+              <Divider>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {t('auth:signIn.or')}
+                </Typography>
+              </Divider>
+
+              <Button
+                type="button"
+                variant="outlined"
+                color="secondary"
+                fullWidth
+                loading={magicLink.isPending}
+                loadingPosition="start"
+                disabled={signIn.isPending}
+                startIcon={<Mail size={16} aria-hidden="true" />}
+                onClick={submitMagicLink}
+              >
+                {t('auth:signIn.magicLink')}
+              </Button>
+
+              <ProviderButtons api={api} />
+            </>
+          ) : null}
         </Box>
-
-        <Divider>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('auth:signIn.or')}
-          </Typography>
-        </Divider>
-
-        <Button
-          type="button"
-          variant="outlined"
-          color="secondary"
-          fullWidth
-          loading={magicLink.isPending}
-          loadingPosition="start"
-          disabled={signIn.isPending}
-          startIcon={<Mail size={16} aria-hidden="true" />}
-          onClick={submitMagicLink}
-        >
-          {t('auth:signIn.magicLink')}
-        </Button>
-
-        <ProviderButtons api={api} />
-      </Box>
+      )}
     </AuthLayout>
   );
 }

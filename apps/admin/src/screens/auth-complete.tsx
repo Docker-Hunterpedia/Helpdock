@@ -1,11 +1,12 @@
 import { oauthProviderSchema } from '@helpdock/schemas';
 import { Box, CircularProgress, Link, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { Navigate, Link as RouterLink, useSearchParams } from 'react-router';
 import { useT } from '../app/i18n.js';
-import { ROUTES } from '../app/route-paths.js';
+import { ROUTES, safeReturnTo } from '../app/route-paths.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
+import { ssoErrorKey } from '../auth/sso-error.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { AuthLayout } from './auth-layout.tsx';
 
@@ -49,15 +50,18 @@ export function AuthComplete(): ReactNode {
     },
   });
 
+  const exchangedCode = useRef<string | null>(null);
   const { mutate } = exchange;
   useEffect(() => {
-    if (code !== null) {
+    if (code !== null && exchangedCode.current !== code) {
+      // One-time credentials must survive React's development effect replay.
+      exchangedCode.current = code;
       mutate(code);
     }
   }, [code, mutate]);
 
   if (exchange.isSuccess) {
-    return <Navigate to={ROUTES.tickets} replace />;
+    return <Navigate to={safeReturnTo(searchParams.get('returnTo'))} replace />;
   }
 
   if (challenge !== null) {
@@ -65,15 +69,26 @@ export function AuthComplete(): ReactNode {
       <Navigate
         to={ROUTES.totp}
         replace
-        state={{ challengeId: challenge, email: searchParams.get('email') ?? '' }}
+        state={{
+          challengeId: challenge,
+          email: searchParams.get('email') ?? '',
+          returnTo: safeReturnTo(searchParams.get('returnTo')),
+        }}
       />
     );
   }
 
   if (enrol !== null) {
-    return <Navigate to={ROUTES.totpEnrolment} replace state={{ challengeId: enrol }} />;
+    return (
+      <Navigate
+        to={ROUTES.totpEnrolment}
+        replace
+        state={{ challengeId: enrol, returnTo: safeReturnTo(searchParams.get('returnTo')) }}
+      />
+    );
   }
 
+  const ssoFailure = ssoErrorKey(failure);
   const failed = failure !== null || exchange.isError;
   const subtitle = provider.success
     ? t('auth:oauth.body', { provider: t(PROVIDER_LABELS[provider.data]) })
@@ -93,7 +108,11 @@ export function AuthComplete(): ReactNode {
     >
       {failed ? (
         <AlertBanner tone="danger">
-          {failure === 'no-account' ? t('auth:noAccount') : t('auth:completing.failed')}
+          {ssoFailure
+            ? t(ssoFailure)
+            : failure === 'no-account'
+              ? t('auth:noAccount')
+              : t('auth:completing.failed')}
         </AlertBanner>
       ) : (
         <Box

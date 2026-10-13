@@ -73,7 +73,8 @@ if redis.call('HGET', KEYS[1], 'currentHash') ~= ARGV[1] then
   redis.call('DEL', KEYS[1])
   return {'reused', userId}
 end
-local remaining = tonumber(redis.call('HGET', KEYS[1], 'issuedAt') or '0') + tonumber(ARGV[6]) - tonumber(ARGV[3])
+local maximum = math.min(tonumber(redis.call('HGET', KEYS[1], 'maxSeconds') or ARGV[6]), tonumber(ARGV[6]))
+local remaining = tonumber(redis.call('HGET', KEYS[1], 'issuedAt') or '0') + maximum - tonumber(ARGV[3])
 if remaining <= 0 then
   redis.call('DEL', KEYS[1])
   return {'expired', userId}
@@ -81,6 +82,16 @@ end
 redis.call('HSET', KEYS[1], 'currentHash', ARGV[2], 'lastUsedAt', ARGV[3], 'ua', ARGV[4])
 redis.call('EXPIRE', KEYS[1], math.min(tonumber(ARGV[5]), remaining))
 return {'rotated', userId}
+`;
+
+export const REGISTER_SESSION_SCRIPT = `
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  redis.call('SET', KEYS[3], '1', 'EX', ARGV[1])
+  return 0
+end
+redis.call('SADD', KEYS[2], ARGV[2])
+redis.call('EXPIRE', KEYS[2], ARGV[1])
+return 1
 `;
 
 const newToken = (): string => randomBytes(TOKEN_BYTES).toString('base64url');
@@ -117,10 +128,13 @@ export class RefreshStore {
   async createFamily({
     userId,
     userAgent,
+    maxAgeSeconds,
   }: {
     readonly userId: string;
     readonly userAgent: string | undefined;
+    readonly maxAgeSeconds?: number;
   }): Promise<IssuedRefreshToken> {
+    const maximum = Math.min(maxAgeSeconds ?? this.#lifetime.maxSeconds, this.#lifetime.maxSeconds);
     const familyId = uuidv7();
     const token = newToken();
     const now = Math.floor(Date.now() / 1000);
@@ -131,10 +145,11 @@ export class RefreshStore {
         userId,
         currentHash: hashToken(token),
         issuedAt: String(now),
+        maxSeconds: String(maximum),
         lastUsedAt: String(now),
         ua: truncateUserAgent(userAgent),
       })
-      .expire(familyKey(familyId), this.#lifetime.idleSeconds)
+      .expire(familyKey(familyId), Math.min(this.#lifetime.idleSeconds, maximum))
       .sadd(userFamiliesKey(userId), familyId)
       .expire(userFamiliesKey(userId), this.#lifetime.maxSeconds)
       .exec();
@@ -195,12 +210,17 @@ export class RefreshStore {
    * can reach a token that is already in a browser. Only the last ten minutes
    * are kept, because that is the longest an access token can still be valid.
    */
-  async registerSession(familyId: string, sessionId: string): Promise<void> {
-    await this.#redis
-      .multi()
-      .sadd(familySessionsKey(familyId), sessionId)
-      .expire(familySessionsKey(familyId), ACCESS_TOKEN_TTL_SECONDS)
-      .exec();
+  async registerSession(familyId: string, sessionId: string): Promise<boolean> {
+    const registered = await this.#redis.eval(
+      REGISTER_SESSION_SCRIPT,
+      3,
+      familyKey(familyId),
+      familySessionsKey(familyId),
+      revokedSessionKey(sessionId),
+      ACCESS_TOKEN_TTL_SECONDS,
+      sessionId,
+    );
+    return registered === 1;
   }
 
   /**
@@ -292,6 +312,20 @@ export class RefreshStore {
     }
 
     return lastActive;
+  }
+
+  async accessTokenLifetime(familyId: string): Promise<number> {
+    const [issued, maximum] = await Promise.all([
+      this.#redis.hget(familyKey(familyId), 'issuedAt'),
+      this.#redis.hget(familyKey(familyId), 'maxSeconds'),
+    ]);
+    const issuedAt = toSeconds(issued);
+    if (issuedAt === null) return 0;
+    const maxSeconds = maximum === null ? this.#lifetime.maxSeconds : toSeconds(maximum);
+    if (maxSeconds === null) return 0;
+    const remaining =
+      issuedAt + Math.min(maxSeconds, this.#lifetime.maxSeconds) - Math.floor(Date.now() / 1000);
+    return Math.max(0, Math.min(ACCESS_TOKEN_TTL_SECONDS, remaining));
   }
 
   /** The user the family belongs to, or `null` when there is no such family. */

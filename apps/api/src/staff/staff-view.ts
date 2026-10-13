@@ -52,6 +52,9 @@ export const toStaffMember = ({
   const invited = row.user.status === 'invited' && pendingInvite !== null;
 
   return {
+    source: row.membership.source,
+    ssoLinked: row.ssoLinked ?? false,
+    managedBy: row.managedBy ?? null,
     userId: row.user.id,
     name: row.user.name,
     email: row.user.email,

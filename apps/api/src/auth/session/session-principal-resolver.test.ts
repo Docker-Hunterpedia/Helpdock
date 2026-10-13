@@ -69,11 +69,12 @@ describe('SessionPrincipalResolver', () => {
   });
 
   it('refuses a session that was revoked, inside the access token lifetime', async () => {
-    const bearer = `Bearer ${await token()}`;
-    await refresh.registerSession(FAMILY_ID, SESSION_ID);
+    const { familyId } = await refresh.createFamily({ userId: USER_ID, userAgent: undefined });
+    const bearer = `Bearer ${await token({ familyId })}`;
+    await refresh.registerSession(familyId, SESSION_ID);
     await expect(resolver.resolve({ headers: { authorization: bearer } })).resolves.not.toBeNull();
 
-    await refresh.revokeFamily(FAMILY_ID);
+    await refresh.revokeFamily(familyId);
 
     await expect(resolver.resolve({ headers: { authorization: bearer } })).resolves.toBeNull();
   });

@@ -346,3 +346,13 @@ sends nothing.
 - **An account added to a second brand is not emailed about it.** The role is
   created and nothing is sent; there is no "you were added to a brand" message
   or template.
+
+## SSO-managed access
+
+The staff list marks linked identities with an SSO badge and shows the identity
+provider managing an SSO-sourced membership. That membership's role and removal
+actions are read-only in the screen: edit its provider mappings instead.
+Administrative deactivation remains available and revokes sessions immediately.
+Manual grants are never overwritten by group sync. Explicit role edits through
+the staff API convert a membership to manual ownership, so later SSO sign-ins
+leave it alone. See [staff SSO](sso.md#roles-mfa-and-enforcement).

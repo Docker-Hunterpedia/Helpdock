@@ -65,7 +65,7 @@ from the artboards listed under [Artboards to draw](#artboards-to-draw) and
 Read [AGENTS.md](../../AGENTS.md) first; its rules apply to every deliverable
 here. In particular:
 
-1. **One deliverable per pull request**, in the order of [Build order](#build-order),
+1. **Related deliverables may share a pull request** (owner approved larger PRs on 2026-10-13), in the order of [Build order](#build-order),
    each linking its GitHub issue (`Closes #n`) and following the Definition of done:
    unit tests, integration tests for anything touching Postgres, Redis, queues or
    a vendor, Playwright in `en` and `ar` for every screen, docs in the same PR.
@@ -96,10 +96,10 @@ connectors on the same SDK and **may ship after 1.0**.
 |---|---|---|---|---|---|---|
 | M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | done |
 | M11-02 | OIDC sign-in: discovery and JWKS through `safeFetch` (`customFetch`), authorization code + PKCE + `state` + `nonce`, ID token validation, claims mapping, `GET /api/auth/sso/:id/start`, `GET /api/auth/sso/:id/oidc/callback` | ADR 0026 (5) | Integration against the fake OIDC IdP: happy path, wrong nonce, replayed state, unverified email, expired token, issuer mismatch | 3 d | #184 | done |
-| M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | in review |
-| M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | planned |
-| M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | planned |
-| M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | planned |
+| M11-03 | SAML sign-in: `@node-saml/node-saml`, SP metadata, signed AuthnRequest, ACS with signed assertion required, `InResponseTo` store in Redis, audience/recipient/time checks, IdP certificate rotation (several certs), optional IdP-initiated | ADR 0026 (6) | Integration against the fake SAML IdP: happy path, unsigned assertion, wrong audience, replayed response, expired assertion, IdP-initiated off | 4 d | #185 | done |
+| M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | in review (CI pending) |
+| M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | in review (CI pending) |
+| M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | in review (CI pending) |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | planned |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | planned |
 | M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | planned |
@@ -215,6 +215,11 @@ was; the admin screens in English, with the RTL rules of DESIGN §7.
 | `Admin/Import-Run` | M11-16, M11-17 | Running import (progress per entity, live log, pause/cancel), done summary with warnings, delta-sync button, "Start SLA clocks" offer | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-FileMapper` | M11-15 | Upload, detected columns, mapping table with transforms, 20-row preview with row errors, save preset | Drawn 2026-10-13, as on the canvas |
 | `Admin/Ticket-Imported` | M11-17 | The ticket header chip "Imported from Zendesk · #1234", the `ticket.imported` activity line | Drawn 2026-10-13, as on the canvas |
+
+Additional M11-05 UI states absent from the artboards: loading/network/save
+errors, invalid form values, unsaved-test hint, blocked popup, invitation password
+form hidden under enforcement, protected preview refusal and Arabic settings.
+These use existing DESIGN components and the artboards' form/table patterns.
 
 ## Gaps accepted up front
 
@@ -590,8 +595,9 @@ beside `completeOauth`. Steps:
 
 **Enforcement.** When `sso.enforced`, `signIn` (password), `requestMagicLink`,
 `consumeMagicLink`, `completeOauth` and invite acceptance with a password refuse
-users not in `sso.breakGlassUserIds` with `sso-required` (the response carries
-the connection ids whose domains match the email, for the screen to offer).
+local methods with `sso-required`; only configured break-glass admins can use
+password plus fresh TOTP. Discovery is a separate rate-limited public route,
+not account data attached to a sign-in refusal.
 Saving `enforced: true` requires at least one enabled connection, and every
 break-glass user to be an install admin with TOTP enabled. Turning enforcement on
 does not revoke sessions; the sign-in rules apply from the next sign-in.
@@ -602,8 +608,9 @@ email's domain, or `[]`. It never says whether the account exists.
 
 **Invites.** An invited user whose email domain matches an enabled connection
 sees "Continue with <IdP>" on the invite screen; completing SSO with that email
-accepts the invite (`InviteService.accept` without a password; the membership the
-invite set stays `manual`).
+accepts the invite after required factors through `SsoIdentityService.acceptInvitation`;
+its audit and pending-token cleanup complete without setting a password. The
+invitation membership stays `manual`.
 
 `GET /api/auth/methods` gains `sso: [{ id, name }]` (enabled connections) and
 `ssoEnforced: boolean`.
@@ -650,6 +657,31 @@ code, certificate rotation. Updates: `authentication.md` (methods, enforcement),
 `staff-and-roles.md` (sources), `configuration.md` (the `sso.*` keys and their
 `HD_SSO_*` env pins), `.env.example`, `security.md` (SAML threat notes). ARCHITECTURE
 §7 gets an SSO paragraph and §1 the two library rows.
+
+### M11-04–06 implementation notes (in review; CI pending)
+
+Related deliverables share one owner-approved PR. Identity linking/JIT/sync,
+uncached enforcement/discovery, invitation completion and actor-owned protected
+previews are implemented. Settings save connection and mappings atomically using
+`POST /api/install/sso/configurations` and
+`PUT /api/install/sso/connections/:id/configuration`. Targets expose only public
+SP URLs and eligible admin/brand/department selection data. See ADR 0026 amendments.
+
+Gaps reproduced and fixed: manual staff edits retained SSO ownership; a racing
+sign-in could mint stale roles during removal; token registration could happen
+behind family revocation; configured long sessions exceeded the SSO ceiling;
+JWTs could outlive their family; React effect replay double-spent an exchange code;
+SQL lock ordering could deadlock staff edits against SSO; disabled Viewer policy
+could leave an unusable JIT account; SSO invitations retained pending links; malformed
+issuer input threw during safe validation. Regression tests cover these paths.
+Sign-in reports safe protocol error codes and preserves local return paths through
+TOTP enrolment. No new dependency or tenant table is added in this batch.
+
+Focused API tests, real Postgres/Redis integration tests, EN/AR mock and real-API
+browser tests, typecheck, lint, route validation and boundaries have passed locally.
+Broad local coverage runs were stopped to reduce owner-device memory usage; the
+final full suites and coverage gates must pass in PR CI. Do not treat the
+deliverables or exit criteria as complete until that CI evidence is available.
 
 ## M11-07 Import schema
 
@@ -1091,7 +1123,7 @@ PRD status board.
 
 - [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) — M11-02 OIDC protocol and verified identity handoff (merged).
 
-- [#211](https://github.com/Docker-Hunterpedia/Helpdock/pull/211) — M11-03 SAML protocol, browser handoff and metadata rotation (in review).
+- [#211](https://github.com/Docker-Hunterpedia/Helpdock/pull/211) — M11-03 SAML protocol, browser handoff and metadata rotation (merged).
 
 ## Supporting CI work
 

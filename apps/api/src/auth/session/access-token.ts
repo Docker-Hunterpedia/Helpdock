@@ -22,6 +22,7 @@ export interface IssueAccessTokenInput {
   readonly familyId: string;
   readonly brands: Readonly<Record<string, BrandMembership>>;
   readonly installAdmin: boolean;
+  readonly expiresInSeconds?: number;
 }
 
 export const issueAccessToken = async (
@@ -37,7 +38,9 @@ export const issueAccessToken = async (
     .setProtectedHeader({ alg: SIGNING_ALGORITHM, kid: keys.kid, typ: 'JWT' })
     .setSubject(input.userId)
     .setIssuedAt()
-    .setExpirationTime(`${ACCESS_TOKEN_TTL_SECONDS}s`)
+    .setExpirationTime(
+      `${Math.min(input.expiresInSeconds ?? ACCESS_TOKEN_TTL_SECONDS, ACCESS_TOKEN_TTL_SECONDS)}s`,
+    )
     .sign(keys.privateKey);
 
 /**

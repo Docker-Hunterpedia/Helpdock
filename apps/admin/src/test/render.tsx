@@ -1,6 +1,6 @@
 import { type RenderResult, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { type ReactNode, StrictMode } from 'react';
 import { MemoryRouter } from 'react-router';
 import type { AiApi } from '../ai/api.js';
 import { MockAiApi } from '../ai/mock-api.js';
@@ -38,6 +38,8 @@ import type { SystemApi } from '../screens/admin/system/system-api.js';
 import { fakeReportsApi } from '../screens/reports/fixtures.js';
 import type { SettingsApi } from '../settings/api.js';
 import { MockSettingsApi } from '../settings/mock-api.js';
+import type { SsoApi } from '../sso/api.js';
+import { MockSsoApi } from '../sso/mock-api.js';
 import type { StaffApi } from '../staff/api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import type { TelegramApi } from '../telegram/api.js';
@@ -48,7 +50,9 @@ import type { TicketsApi } from '../tickets/api.js';
 import { MockTicketsApi } from '../tickets/mock-api.js';
 
 export interface RenderAppOptions {
+  readonly strictMode?: boolean;
   readonly authApi?: AuthApi;
+  readonly ssoApi?: SsoApi;
   /** Defaults to a fresh fixture, so a screen that reads it always has one. */
   readonly staffApi?: StaffApi;
   readonly contactsApi?: ContactsApi;
@@ -81,6 +85,7 @@ export interface RenderAppOptions {
 export interface RenderedApp extends RenderResult {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly authApi: AuthApi;
+  readonly ssoApi: SsoApi;
   readonly staffApi: StaffApi;
   readonly contactsApi: ContactsApi;
   readonly ticketingApi: TicketingApi;
@@ -111,6 +116,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const staffApi = options.staffApi ?? new MockStaffApi();
   const authApi =
     options.authApi ?? new MockAuthApi(staffApi instanceof MockStaffApi ? staffApi : undefined);
+  const ssoApi =
+    options.ssoApi ?? new MockSsoApi(authApi instanceof MockAuthApi ? authApi : undefined);
   const contactsApi = options.contactsApi ?? new MockContactsApi();
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
@@ -133,9 +140,10 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
-  const result = render(
+  const tree = (
     <AppProviders
       authApi={authApi}
+      ssoApi={ssoApi}
       staffApi={staffApi}
       contactsApi={contactsApi}
       ticketingApi={ticketingApi}
@@ -163,13 +171,16 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       )}
     >
       {ui}
-    </AppProviders>,
+    </AppProviders>
   );
+
+  const result = render(options.strictMode ? <StrictMode>{tree}</StrictMode> : tree);
 
   return {
     ...result,
     user: userEvent.setup(),
     authApi,
+    ssoApi,
     staffApi,
     contactsApi,
     ticketingApi,

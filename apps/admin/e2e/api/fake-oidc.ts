@@ -1,5 +1,6 @@
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { idpControl } from './idp-control.js';
 
 /** Local OIDC authorization-code IdP. No request reaches a live identity provider. */
 export async function fakeOidcIdp() {
@@ -40,6 +41,10 @@ export async function fakeOidcIdp() {
     privateJwks: false,
     userInfoSubject: 'staff-1',
   };
+  const fixture = idpControl(({ subject, email, groups }) => {
+    controls.claims = { sub: subject, email, email_verified: true, name: 'JIT Person', groups };
+    controls.userInfoSubject = subject;
+  });
   let counter = 0;
   const issuer = 'http://127.0.0.1:8080';
   const json = (response: ServerResponse, status: number, body: unknown) => {
@@ -47,6 +52,7 @@ export async function fakeOidcIdp() {
     response.end(JSON.stringify(body));
   };
   const handler = async (request: IncomingMessage, response: ServerResponse) => {
+    if (await fixture.serve(request, response)) return;
     const url = new URL(request.url ?? '/', issuer);
     requests.push({ path: url.pathname, method: request.method ?? 'GET' });
     if (url.pathname === '/.well-known/openid-configuration') {
@@ -148,6 +154,7 @@ export async function fakeOidcIdp() {
   });
   return {
     issuer,
+    controlKey: fixture.key,
     controls,
     requests,
     close: async () => {

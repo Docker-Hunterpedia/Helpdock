@@ -1,9 +1,9 @@
 import { Box, Typography } from '@mui/material';
-import { Info, TriangleAlert } from 'lucide-react';
+import { Check, Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../app/tokens.js';
 
-export type AlertTone = 'danger' | 'warning' | 'info';
+export type AlertTone = 'danger' | 'warning' | 'info' | 'success';
 
 /**
  * DESIGN §6.4 Banner: status tint, border, icon, text. The icon carries the
@@ -22,7 +22,7 @@ export function AlertBanner({
   readonly children: ReactNode;
 }): ReactNode {
   const tokens = useSemanticTokens();
-  const Icon = tone === 'info' ? Info : TriangleAlert;
+  const Icon = tone === 'info' ? Info : tone === 'success' ? Check : TriangleAlert;
   const palette = {
     background: tokens[`status.${tone}.tint`],
     border: tokens[`status.${tone}`],
@@ -31,7 +31,7 @@ export function AlertBanner({
 
   return (
     <Box
-      role={tone === 'warning' ? 'status' : 'alert'}
+      role={tone === 'warning' || tone === 'success' ? 'status' : 'alert'}
       sx={{
         display: 'flex',
         gap: 2,

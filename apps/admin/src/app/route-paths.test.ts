@@ -20,6 +20,10 @@ describe('safeReturnTo', () => {
     ['an absolute url', 'https://evil.example/steal'],
     ['a protocol-relative url', '//evil.example'],
     ['a relative path', 'admin/settings'],
+    ['a backslash authority', '/\\evil.example'],
+    ['an encoded authority', '/%2f%2fevil.example'],
+    ['an encoded backslash', '/%5cevil.example'],
+    ['a control character', '/tickets\n'],
   ])('falls back to the default screen for %s', (_case, value) => {
     expect(safeReturnTo(value)).toBe(DEFAULT_SIGNED_IN_ROUTE);
   });

@@ -14,6 +14,7 @@ import { AlertBanner } from '../ui/alert-banner.tsx';
 import { PasswordField } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { AuthLayout } from './auth-layout.tsx';
+import { InviteSsoButtons } from './sso-sign-in.tsx';
 
 /**
  * `Admin/AcceptInvite`: the one screen somebody without an account ever sees.
@@ -49,6 +50,8 @@ export function AcceptInvite(): ReactNode {
   const [locale, setChosenLocale] = useState<Locale>(appLocale);
   const [errors, setErrors] = useState<{ name?: string; password?: string }>({});
   const [breached, setBreached] = useState(false);
+
+  const methods = useQuery({ queryKey: ['auth', 'methods'], queryFn: () => api.authMethods() });
 
   const invite = useQuery({
     queryKey: ['invite', token],
@@ -156,62 +159,67 @@ export function AcceptInvite(): ReactNode {
         onSubmit={submit}
         sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
       >
-        {accept.isError && !breached ? (
-          <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
+        <InviteSsoButtons email={invite.data.email} />
+        {!methods.data?.ssoEnforced ? (
+          <>
+            {accept.isError && !breached ? (
+              <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
+            ) : null}
+
+            <TextField
+              id={nameId}
+              label={t('auth:invite.nameLabel')}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+              }}
+              error={errors.name !== undefined}
+              helperText={errors.name ?? ' '}
+              slotProps={{ htmlInput: { autoComplete: 'name', maxLength: 120 } }}
+            />
+
+            <PasswordField
+              id={passwordId}
+              label={t('auth:invite.passwordLabel')}
+              value={password}
+              onChange={(value) => {
+                setPassword(value);
+                setBreached(false);
+              }}
+              hint={t('auth:invite.passwordHint', {
+                count: PASSWORD_MIN_LENGTH,
+                strength: t(`auth:invite.strength.${strength.level}`),
+              })}
+              refusal={
+                errors.password !== undefined
+                  ? { kind: 'short', message: errors.password }
+                  : breached
+                    ? { kind: 'breached' }
+                    : null
+              }
+            />
+
+            <TextField
+              id={localeId}
+              select
+              label={t('auth:invite.localeLabel')}
+              value={locale}
+              onChange={(event) => {
+                setChosenLocale(event.target.value as Locale);
+              }}
+            >
+              {SUPPORTED_LNGS.map((option) => (
+                <MenuItem key={option} value={option} lang={option}>
+                  {t(`common:language.${option}`)}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Button type="submit" variant="contained" disabled={accept.isPending}>
+              {t('auth:invite.submit')}
+            </Button>
+          </>
         ) : null}
-
-        <TextField
-          id={nameId}
-          label={t('auth:invite.nameLabel')}
-          value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-          }}
-          error={errors.name !== undefined}
-          helperText={errors.name ?? ' '}
-          slotProps={{ htmlInput: { autoComplete: 'name', maxLength: 120 } }}
-        />
-
-        <PasswordField
-          id={passwordId}
-          label={t('auth:invite.passwordLabel')}
-          value={password}
-          onChange={(value) => {
-            setPassword(value);
-            setBreached(false);
-          }}
-          hint={t('auth:invite.passwordHint', {
-            count: PASSWORD_MIN_LENGTH,
-            strength: t(`auth:invite.strength.${strength.level}`),
-          })}
-          refusal={
-            errors.password !== undefined
-              ? { kind: 'short', message: errors.password }
-              : breached
-                ? { kind: 'breached' }
-                : null
-          }
-        />
-
-        <TextField
-          id={localeId}
-          select
-          label={t('auth:invite.localeLabel')}
-          value={locale}
-          onChange={(event) => {
-            setChosenLocale(event.target.value as Locale);
-          }}
-        >
-          {SUPPORTED_LNGS.map((option) => (
-            <MenuItem key={option} value={option} lang={option}>
-              {t(`common:language.${option}`)}
-            </MenuItem>
-          ))}
-        </TextField>
-
-        <Button type="submit" variant="contained" disabled={accept.isPending}>
-          {t('auth:invite.submit')}
-        </Button>
       </Box>
     </AuthLayout>
   );

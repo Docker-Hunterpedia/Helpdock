@@ -1,6 +1,8 @@
 import { CacheProvider } from '@emotion/react';
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
 import { createHelpdockTheme, createLtrCache, createRtlCache } from '@helpdock/ui';
+import type { SsoApi } from '../sso/api.js';
+import { SsoApiProvider } from '../sso/context.tsx';
 import '@helpdock/ui/fonts.css';
 import { CssBaseline, ThemeProvider, useMediaQuery } from '@mui/material';
 import { createTheme, type Theme } from '@mui/material/styles';
@@ -147,6 +149,7 @@ export interface AppProvidersProps {
   readonly systemApi?: SystemApi;
   /** Defaults to the matching adapter. Only install Settings reads it. */
   readonly settingsApi?: SettingsApi;
+  readonly ssoApi?: SsoApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   /** Defaults to the matching adapter. Channels › Meta and a Meta ticket read it (M10). */
@@ -193,6 +196,7 @@ export function AppProviders({
   reportsApi,
   systemApi,
   settingsApi,
+  ssoApi,
   telegramApi,
   metaApi,
   assistApi,
@@ -229,6 +233,7 @@ export function AppProviders({
   const reports = reportsApi ?? fallback.reports;
   const system = systemApi ?? fallback.system;
   const settings = settingsApi ?? fallback.settings;
+  const sso = ssoApi ?? fallback.sso;
   const telegram = telegramApi ?? fallback.telegram;
   const meta = metaApi ?? fallback.meta;
   const assist = assistApi ?? fallback.assist;
@@ -310,13 +315,15 @@ export function AppProviders({
                                 <AssistApiProvider api={assist}>
                                   <ReportsApiProvider api={reports}>
                                     <SystemApiProvider api={system}>
-                                      <SettingsApiProvider api={settings}>
-                                        <NotificationsProvider api={notifications} push={push}>
-                                          <ToastProvider>
-                                            <Router>{children}</Router>
-                                          </ToastProvider>
-                                        </NotificationsProvider>
-                                      </SettingsApiProvider>
+                                      <SsoApiProvider api={sso}>
+                                        <SettingsApiProvider api={settings}>
+                                          <NotificationsProvider api={notifications} push={push}>
+                                            <ToastProvider>
+                                              <Router>{children}</Router>
+                                            </ToastProvider>
+                                          </NotificationsProvider>
+                                        </SettingsApiProvider>
+                                      </SsoApiProvider>
                                     </SystemApiProvider>
                                   </ReportsApiProvider>
                                 </AssistApiProvider>

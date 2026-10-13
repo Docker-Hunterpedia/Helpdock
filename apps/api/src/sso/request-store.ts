@@ -8,7 +8,7 @@ export const SSO_REQUEST_TTL_SECONDS = 600;
 export class SsoRequestStore<T> {
   constructor(
     private readonly redis: Redis,
-    private readonly namespace: 'oidc' | 'saml' | 'saml-pending' | 'test',
+    private readonly namespace: 'oidc' | 'saml' | 'saml-pending' | 'test' | 'test-result',
     private readonly schema: z.ZodType<T>,
   ) {}
 
@@ -21,6 +21,13 @@ export class SsoRequestStore<T> {
       'NX',
     );
     if (saved === null) throw new Error('SSO request identifier already exists');
+  }
+
+  async read(id: string): Promise<T | null> {
+    const raw = await this.redis.get(this.key(id));
+    if (raw === null) return null;
+    const parsed = this.schema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   }
 
   async consume(id: string): Promise<T | null> {

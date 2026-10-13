@@ -1,13 +1,34 @@
 import type { Env } from '@helpdock/config';
-import { Controller, Get, Inject, Param, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ZodValidationPipe } from 'nestjs-zod';
+import type { Redis } from 'ioredis';
+import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
+import { AuthFailure } from '../auth/auth-failure.js';
+import { RateLimiter, SIGN_IN_IP_RULE } from '../auth/rate-limit.js';
 import { Public } from '../auth/route-declaration.js';
-import { ENV } from '../runtime/tokens.js';
-import { OidcCallbackQueryDto, OidcStartQueryDto, SsoParamDto } from './dto.js';
+import { ENV, REDIS } from '../runtime/tokens.js';
+import {
+  OidcCallbackQueryDto,
+  OidcStartQueryDto,
+  SsoDiscoveryRequestDto,
+  SsoDiscoveryResponseDto,
+  SsoParamDto,
+} from './dto.js';
 import { OidcService } from './oidc.service.js';
 import { oidcNonceCookie } from './oidc-contracts.js';
 import { SamlService } from './saml.service.js';
+import { SsoSignInPolicy } from './sign-in-policy.js';
 import { SsoService } from './sso.service.js';
 import { SsoSessionCompletion } from './sso-session-completion.js';
 
@@ -19,7 +40,22 @@ export class SsoOidcController {
     @Inject(SsoService) private readonly sso: SsoService,
     @Inject(SsoSessionCompletion) private readonly completion: SsoSessionCompletion,
     @Inject(ENV) private readonly env: Env,
+    @Inject(SsoSignInPolicy) private readonly policy: SsoSignInPolicy,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
+
+  @Post('discover')
+  @Public()
+  @HttpCode(200)
+  @ZodSerializerDto(SsoDiscoveryResponseDto)
+  async discover(
+    @Body(new ZodValidationPipe(SsoDiscoveryRequestDto)) body: SsoDiscoveryRequestDto,
+    @Req() request: FastifyRequest,
+  ) {
+    if (!(await new RateLimiter(this.redis).consume(SIGN_IN_IP_RULE, request.ip)))
+      throw new AuthFailure('unavailable');
+    return this.policy.discover(body.email);
+  }
 
   @Get(':id/start')
   @Public()
@@ -43,8 +79,8 @@ export class SsoOidcController {
       reply.setCookie(cookie.name, result.browserNonce, cookie.attributes);
       reply.header('cache-control', 'no-store');
       await reply.redirect(result.url, 302);
-    } catch {
-      await this.completion.refuse(reply, null);
+    } catch (error) {
+      await this.completion.refuse(reply, error);
     }
   }
 

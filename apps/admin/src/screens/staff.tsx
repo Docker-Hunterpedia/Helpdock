@@ -322,6 +322,12 @@ export function StaffScreen(): ReactNode {
                   ) : null}
                 </TableCell>
                 <TableCell>
+                  {member.ssoLinked ? <Chip size="small" label={t('staff:sso.badge')} /> : null}
+                  {member.source === 'sso' ? (
+                    <Typography variant="caption">
+                      {t('staff:sso.managedBy', { provider: member.managedBy ?? '' })}
+                    </Typography>
+                  ) : null}
                   {member.installAdmin ? (
                     <Chip size="small" label={t('staff:installAdmin')} />
                   ) : (
@@ -421,6 +427,7 @@ export function StaffScreen(): ReactNode {
           : [
               <MenuItem
                 key="role"
+                disabled={menuFor?.member.source === 'sso'}
                 onClick={() => {
                   setRoleFor(menuFor?.member ?? null);
                   setMenuFor(null);
@@ -463,6 +470,7 @@ export function StaffScreen(): ReactNode {
               ),
               <MenuItem
                 key="remove"
+                disabled={menuFor?.member.source === 'sso'}
                 onClick={() => {
                   if (menuFor !== null) {
                     setConfirming({ member: menuFor.member, action: 'remove' });

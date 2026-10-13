@@ -3,9 +3,11 @@ import {
   type DbTransaction,
   type Department,
   departments,
+  ssoConnections,
   type User,
   type UserBrandRole,
   userBrandRoles,
+  userSsoIdentities,
   users,
 } from '@helpdock/db';
 import type { Locale } from '@helpdock/i18n';
@@ -33,6 +35,8 @@ import { anonymisedEmail, FORMER_STAFF_NAME } from './anonymise.js';
 export interface StaffRow {
   readonly membership: UserBrandRole;
   readonly user: User;
+  readonly ssoLinked?: boolean;
+  readonly managedBy?: string | null;
 }
 
 export class StaffRepository {
@@ -47,9 +51,15 @@ export class StaffRepository {
     const pattern = term === undefined || term === '' ? null : `%${escapeLike(term)}%`;
 
     const rows = await tx
-      .select({ membership: userBrandRoles, user: users })
+      .select({
+        membership: userBrandRoles,
+        user: users,
+        ssoLinked: sql<boolean>`exists (select 1 from ${userSsoIdentities} where ${userSsoIdentities.userId} = ${users.id})`,
+        managedBy: ssoConnections.name,
+      })
       .from(userBrandRoles)
       .innerJoin(users, eq(users.id, userBrandRoles.userId))
+      .leftJoin(ssoConnections, eq(ssoConnections.id, userBrandRoles.ssoConnectionId))
       .where(
         pattern === null
           ? undefined
@@ -65,9 +75,15 @@ export class StaffRepository {
 
   async find(tx: DbTransaction, userId: string): Promise<StaffRow | undefined> {
     const rows = await tx
-      .select({ membership: userBrandRoles, user: users })
+      .select({
+        membership: userBrandRoles,
+        user: users,
+        ssoLinked: sql<boolean>`exists (select 1 from ${userSsoIdentities} where ${userSsoIdentities.userId} = ${users.id})`,
+        managedBy: ssoConnections.name,
+      })
       .from(userBrandRoles)
       .innerJoin(users, eq(users.id, userBrandRoles.userId))
+      .leftJoin(ssoConnections, eq(ssoConnections.id, userBrandRoles.ssoConnectionId))
       .where(eq(userBrandRoles.userId, userId))
       .limit(1);
 
@@ -157,7 +173,7 @@ export class StaffRepository {
   ): Promise<void> {
     await tx
       .update(userBrandRoles)
-      .set({ role, departmentIds })
+      .set({ role, departmentIds, source: 'manual', ssoConnectionId: null })
       .where(eq(userBrandRoles.id, membershipId));
   }
 

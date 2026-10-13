@@ -72,6 +72,9 @@ export const INVITE_TOKEN_ENV = 'HD_E2E_INVITE_TOKEN';
 export const INVITEE_EMAIL = 'invitee@helpdock.test';
 /** Set when Docker is missing, so the specs skip with a reason instead of failing. */
 export const SAML_CONNECTION_ENV = 'HD_E2E_SAML_CONNECTION';
+export const OIDC_CONTROL_KEY_ENV = 'HD_E2E_OIDC_CONTROL_KEY';
+export const SAML_CONTROL_KEY_ENV = 'HD_E2E_SAML_CONTROL_KEY';
+export const SAML_CERTIFICATE_ENV = 'HD_E2E_SAML_CERTIFICATE';
 export const SSO_CONNECTION_ENV = 'HD_E2E_SSO_CONNECTION_ID';
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
 /**
@@ -255,6 +258,10 @@ export const startInstall = async (): Promise<RunningInstall> => {
       '--json',
     ]),
   ) as { userId: string; email: string; password: string; totpSecret: string; inviteToken: string };
+
+  process.env[OIDC_CONTROL_KEY_ENV] = oidc.controlKey;
+  process.env[SAML_CONTROL_KEY_ENV] = saml.controlKey;
+  process.env[SAML_CERTIFICATE_ENV] = saml.certificate;
 
   const oidcSeed = JSON.parse(
     await run(path.join(apiRoot, 'dist/seed/seed-oidc.js'), env, [seeded.userId]),

@@ -11,7 +11,9 @@ import type {
 } from '@helpdock/schemas';
 import { OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
+import type { SsoIdentityService } from '../sso/identity.service.js';
 import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
+import type { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import type { AuthAuditAction, AuthAuditTrail, SignInMethod } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
@@ -94,6 +96,8 @@ export interface SignInInput {
 }
 
 export interface AuthServiceOptions {
+  readonly sso: SsoIdentityService;
+  readonly ssoPolicy: SsoSignInPolicy;
   readonly staff: StaffRepository;
   readonly sessions: SessionService;
   readonly hasher: PasswordHasher;
@@ -123,18 +127,21 @@ export class AuthService {
 
   /** What the sign-in screen may show. Public, and the same answer for everybody. */
   async methods(): Promise<AuthMethods> {
+    const enforced = await this.#parts.ssoPolicy.enforced();
     const oauth: Record<string, boolean> = {};
     for (const provider of OAUTH_PROVIDER_IDS) {
-      oauth[provider] = await this.#parts.oauth.isEnabled(provider);
+      oauth[provider] = !enforced && (await this.#parts.oauth.isEnabled(provider));
     }
 
     return {
+      sso: await this.#parts.ssoPolicy.connections(),
+      ssoEnforced: enforced,
       password: true,
       // On whether or not SMTP is set: the worker reads the system sender when
       // it sends, so an operator who fills SMTP in later needs no restart, and
       // an answer that changed with it would tell a stranger how this install
       // is configured.
-      magicLink: true,
+      magicLink: !enforced,
       oauth: oauth as AuthMethods['oauth'],
     };
   }
@@ -146,6 +153,7 @@ export class AuthService {
   async signIn(input: SignInInput): Promise<SignInOutcome> {
     await this.#assertSignInAllowed(input.email, input.ip);
 
+    await this.#parts.ssoPolicy.assertLocal(input.email, 'password');
     const user = await this.#parts.staff.findByEmail(input.email);
 
     // The unknown-address branch still runs argon2, against a hash nobody knows
@@ -245,6 +253,7 @@ export class AuthService {
   }): Promise<IssuedSession> {
     const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
 
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
     if (match === null) {
       await this.#audit('auth.second_factor.failed', user.id, 'system', {
@@ -528,6 +537,7 @@ export class AuthService {
       return;
     }
 
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const user = await this.#parts.staff.findByEmail(email);
     if (user === undefined || !this.#isUsable(user)) {
       return;
@@ -552,6 +562,7 @@ export class AuthService {
     token: string,
     userAgent: string | undefined,
   ): Promise<SignInOutcome | null> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const payload = await this.#parts.tokens.consume(token, 'magic-link');
     if (payload === null) {
       return null;
@@ -646,6 +657,7 @@ export class AuthService {
   // ------------------------------------------------------------------
 
   async startOauth(provider: OauthProvider): Promise<{ url: string; browserNonce: string }> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     try {
       return await this.#parts.oauth.start(provider);
     } catch (error) {
@@ -679,6 +691,7 @@ export class AuthService {
       throw new AuthFailure(error instanceof OauthError ? 'no-account' : 'unavailable');
     }
 
+    await this.#parts.ssoPolicy.assertLocal(identity.email, 'oauth');
     const user = await this.#parts.staff.findByEmail(identity.email);
     if (user === undefined || !this.#isUsable(user)) {
       await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
@@ -696,25 +709,28 @@ export class AuthService {
     });
   }
 
-  /** Only an existing subject binding can sign in before M11-04 adds JIT and group sync. */
   async completeSso(
     assertion: SsoAssertion,
     userAgent: string | undefined,
   ): Promise<SignInOutcome> {
-    const verified = ssoAssertionSchema.parse(assertion);
-    const user = await this.#parts.staff.findBySsoIdentity(verified.connectionId, verified.subject);
-    if (!user || !this.#isUsable(user)) {
-      await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
-        method: 'sso',
-        reason: 'no-linked-account',
-      });
-      throw new AuthFailure('no-account');
-    }
+    const { user, idpEnforcesMfa } = await this.#parts.sso.signIn(
+      ssoAssertionSchema.parse(assertion),
+    );
+    if (idpEnforcesMfa)
+      return {
+        kind: 'session',
+        issued: await this.#openSession(user, userAgent, { method: 'sso', secondFactor: 'idp' }),
+      };
     return this.#afterFirstFactor(user, {
       method: 'sso',
+      ssoConnectionId: assertion.connectionId,
       userAgent,
       trustedDeviceCookie: undefined,
     });
+  }
+
+  async assertLocalSignInAllowed(email: string, method: string): Promise<void> {
+    await this.#parts.ssoPolicy.assertLocal(email, method);
   }
 
   // ------------------------------------------------------------------
@@ -793,14 +809,20 @@ export class AuthService {
       method,
       userAgent,
       trustedDeviceCookie,
+      ssoConnectionId,
     }: {
       readonly method: SignInMethod;
+      readonly ssoConnectionId?: string;
       readonly userAgent: string | undefined;
       readonly trustedDeviceCookie: string | undefined;
     },
   ): Promise<SignInOutcome> {
+    if (method !== 'sso') await this.#parts.ssoPolicy.assertLocal(user.email, method);
     if (user.totpEnabled) {
-      if (await this.#parts.trustedDevices.isTrusted(user.id, trustedDeviceCookie)) {
+      if (
+        !(await this.#parts.ssoPolicy.enforced()) &&
+        (await this.#parts.trustedDevices.isTrusted(user.id, trustedDeviceCookie))
+      ) {
         return {
           kind: 'session',
           issued: await this.#openSession(user, userAgent, {
@@ -816,6 +838,7 @@ export class AuthService {
           userId: user.id,
           kind: 'second-factor',
           firstFactor: method,
+          ...(ssoConnectionId === undefined ? {} : { ssoConnectionId }),
         }),
         email: user.email,
       };
@@ -830,6 +853,7 @@ export class AuthService {
           userId: user.id,
           kind: 'enrolment',
           firstFactor: method,
+          ...(ssoConnectionId === undefined ? {} : { ssoConnectionId }),
         }),
       };
     }
@@ -845,13 +869,23 @@ export class AuthService {
     userAgent: string | undefined,
     factors: { readonly method: string; readonly secondFactor: string | null },
   ): Promise<IssuedSession> {
+    if (factors.method !== 'sso') {
+      await this.#parts.ssoPolicy.assertLocal(user.email, factors.method);
+      if ((await this.#parts.ssoPolicy.enforced()) && factors.secondFactor !== 'totp')
+        throw new AuthFailure('sso-required');
+    }
     // An invited account becomes active the first time it proves an identity
     // (DOMAIN-RULES §12).
     if (user.status === 'invited') {
-      await this.#parts.staff.markActive(user.id);
+      if (factors.method === 'sso') await this.#parts.sso.acceptInvitation(user.id);
+      else await this.#parts.staff.markActive(user.id);
     }
 
-    const issued = await this.#parts.sessions.open({ userId: user.id, userAgent });
+    const issued = await this.#parts.sessions.open({
+      userId: user.id,
+      userAgent,
+      ...(factors.method === 'sso' ? { maxAgeSeconds: 12 * 3600 } : {}),
+    });
     if (issued === null) {
       // Nothing to sign in to: this account holds no role in any brand.
       await this.#audit('auth.sign_in.failed', user.id, 'system', {
@@ -967,6 +1001,15 @@ export class AuthService {
       throw new AuthFailure('challenge-expired');
     }
 
+    if (found.challenge.firstFactor === 'sso') {
+      if (!found.challenge.ssoConnectionId) throw new AuthFailure('challenge-expired');
+      await this.#parts.sso.assertLinked(user.id, found.challenge.ssoConnectionId);
+    }
+    if (found.challenge.firstFactor !== 'sso')
+      await this.#parts.ssoPolicy.assertLocal(
+        user.email,
+        found.challenge.firstFactor ?? 'password',
+      );
     return { challenge: found, user };
   }
 

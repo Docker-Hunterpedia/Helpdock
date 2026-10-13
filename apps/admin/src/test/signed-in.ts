@@ -17,6 +17,7 @@ import { MockNotificationsApi } from '../notifications/mock-api.js';
 import { HttpReportsApi } from '../reports/api.js';
 import { HttpSystemApi } from '../screens/admin/system/system-api.js';
 import { MockSettingsApi } from '../settings/mock-api.js';
+import { MockSsoApi } from '../sso/mock-api.js';
 import { MockStaffApi } from '../staff/mock-api.js';
 import { MockTelegramApi } from '../telegram/mock-api.js';
 import { MockTicketingApi } from '../ticketing/mock-api.js';
@@ -49,6 +50,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
   const ticketing = new MockTicketingApi(blockList);
 
   return {
+    sso: new MockSsoApi(auth),
     auth,
     staff,
     contacts: new MockContactsApi(),

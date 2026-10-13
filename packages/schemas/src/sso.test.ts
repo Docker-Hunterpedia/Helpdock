@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ssoConfigurationSchema,
   ssoConnectionCreateSchema,
   ssoConnectionSchema,
   ssoMappingSchema,
@@ -16,6 +17,8 @@ describe('SSO configuration boundaries', () => {
   it.each([
     'https://user:password@idp.example.com',
     'file:///etc/passwd',
+    '',
+    'not-a-url',
     'https://idp.example.com/#secret',
   ])('refuses an unsafe identity endpoint %s', (issuer) => {
     expect(
@@ -85,4 +88,20 @@ describe('SSO configuration boundaries', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it('preserves mapping priority validation when saving a whole configuration', () => {
+  const mapping = {
+    idpGroup: 'Support',
+    brandId: '00000000-0000-4000-8000-000000000001',
+    role: 'viewer',
+    departmentIds: null,
+    position: 0,
+  };
+  expect(
+    ssoConfigurationSchema.safeParse({
+      connection: oidc,
+      mappings: [mapping, { ...mapping, idpGroup: 'Leads' }],
+    }).success,
+  ).toBe(false);
 });

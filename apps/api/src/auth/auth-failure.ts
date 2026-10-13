@@ -16,6 +16,11 @@ import { HttpException, HttpStatus } from '@nestjs/common';
  */
 
 const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
+  'sso-email-unverified': HttpStatus.FORBIDDEN,
+  'sso-no-access': HttpStatus.FORBIDDEN,
+  'sso-connection-disabled': HttpStatus.FORBIDDEN,
+  'sso-required': HttpStatus.FORBIDDEN,
+  'sso-invalid-response': HttpStatus.UNAUTHORIZED,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
   'totp-mismatch': HttpStatus.UNAUTHORIZED,
   'recovery-invalid': HttpStatus.UNAUTHORIZED,
@@ -29,6 +34,11 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
 };
 
 const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
+  'sso-email-unverified': 'The identity provider did not verify an allowed email address',
+  'sso-no-access': 'This identity has no access to an active brand',
+  'sso-connection-disabled': 'This single sign-on connection is disabled',
+  'sso-required': 'Single sign-on is required',
+  'sso-invalid-response': 'The identity provider response is invalid',
   'invalid-credentials': 'That email and password do not match',
   'totp-mismatch': 'That authentication code does not match',
   'recovery-invalid': 'That recovery code is not valid or has already been used',

@@ -1,3 +1,4 @@
+import { ssoReturnToSchema } from '@helpdock/schemas';
 /** Every path in the admin app, in one place so links cannot drift. */
 export const ROUTES = {
   /** The first-run wizard. Mounted only while the install is `fresh` (M0-08). */
@@ -47,6 +48,7 @@ export const ROUTES = {
   helpCenterOpen: '/help-center/open',
   reports: '/reports',
   settings: '/admin/settings',
+  ssoConnection: '/admin/settings/sso/:id',
   /** How this brand's tickets are shaped and routed (M1-01). */
   ticketing: '/admin/ticketing',
   /** One tab of it. `/admin/ticketing` alone redirects to the first. */
@@ -202,9 +204,10 @@ export const RETURN_TO_PARAM = 'returnTo';
  * the default screen, so the parameter cannot become an open redirect.
  */
 export function safeReturnTo(value: string | null | undefined): string {
-  if (!value?.startsWith('/') || value.startsWith('//')) {
-    return DEFAULT_SIGNED_IN_ROUTE;
-  }
-
-  return value;
+  if (!value) return DEFAULT_SIGNED_IN_ROUTE;
+  const parsed = ssoReturnToSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SIGNED_IN_ROUTE;
 }
+
+export const ssoConnectionRoute = (id: string): string =>
+  `/admin/settings/sso/${encodeURIComponent(id)}`;

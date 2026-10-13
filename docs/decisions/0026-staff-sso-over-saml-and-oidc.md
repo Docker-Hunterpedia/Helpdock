@@ -188,3 +188,24 @@ returns bounded raw bytes rather than automatically decompressing responses.
   concurrent configuration change. The install-global maintenance schedule
   runs at 04:45 UTC and is registered again on worker boot; it creates no
   customer side effect or tenant-scoped outbox event.
+
+### 2026-10-13 — M11-04–06 sign-in policy and administration
+
+- Email linking and JIT run under configuration/email locks; stable subject links
+  remain authoritative. Role sync preserves manual/foreign ownership and refuses
+  conflicting provider grants. An explicit staff API role edit takes manual ownership.
+- Session minting takes a per-user shared PostgreSQL advisory lock; authority
+  changes hold its exclusive counterpart through commit and Redis revocation.
+  Atomic Redis registration refuses minting against a revoked family. SSO has a
+  twelve-hour family ceiling regardless of longer local-session configuration.
+- Break-glass means password followed by fresh TOTP. Magic links, OAuth, trusted
+  browsers and recovery codes cannot replace that second factor under enforcement.
+  IdP MFA remains an administrator-vouched policy, rather than inference from `amr`.
+- Invitation activation/audit and pending-token cleanup happen after required
+  factors. Pending local challenges recheck enforcement and linked connection status.
+- Protected install-admin test routes mint an actor-owned ten-minute preview.
+  The existing protocol round trip returns to the connection page; the callback
+  writes no identity, role or session and results are actor-bound and single-use.
+  The public `test=1` toggle stays refused.
+- The settings form saves connection and mappings in one transaction through
+  additional configuration routes, avoiding partial saves or duplicate retry creates.

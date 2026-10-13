@@ -1,3 +1,7 @@
+import { ssoReturnToSchema } from '@helpdock/schemas';
+
+export { ssoReturnToSchema } from '@helpdock/schemas';
+
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { cookieAttributes } from '../auth/session/cookies.js';
@@ -5,7 +9,8 @@ import { SSO_REQUEST_TTL_SECONDS } from './request-store.js';
 
 export const ssoAssertionSchema = z.object({
   connectionId: z.uuid(),
-  subject: z.string().min(1).max(1000),
+  connectionRevision: z.iso.datetime().optional(),
+  subject: z.string().min(1).max(300),
   email: z.email(),
   emailVerified: z.literal(true),
   name: z.string().max(300).optional(),
@@ -13,22 +18,6 @@ export const ssoAssertionSchema = z.object({
 });
 export type SsoAssertion = z.infer<typeof ssoAssertionSchema>;
 
-export const ssoReturnToSchema = z
-  .string()
-  .max(2000)
-  .default('/')
-  .refine((path) => {
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject control characters in redirect targets.
-    if (!path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f]/.test(path))
-      return false;
-    try {
-      const decoded = decodeURIComponent(path);
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject encoded control characters too.
-      return !decoded.startsWith('//') && !/[\\\u0000-\u001f]/.test(decoded);
-    } catch {
-      return false;
-    }
-  }, 'Return path must stay on this installation');
 export const oidcStartQuerySchema = z.object({
   returnTo: ssoReturnToSchema,
   test: z.literal('0').optional(),

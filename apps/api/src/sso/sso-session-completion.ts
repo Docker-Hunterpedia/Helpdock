@@ -5,13 +5,16 @@ import { AuthService } from '../auth/auth.service.js';
 import { isAuthFailure } from '../auth/auth-failure.js';
 import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { ENV } from '../runtime/tokens.js';
-import type { SsoAssertion } from './oidc-contracts.js';
+import { OidcFailure, type SsoAssertion } from './oidc-contracts.js';
+import { SamlFailure } from './saml-xml.js';
+import { SsoTestSignInService } from './test-sign-in.service.js';
 
 @Injectable()
 export class SsoSessionCompletion {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(SsoTestSignInService) private readonly tests: SsoTestSignInService,
   ) {}
 
   async signIn(
@@ -19,6 +22,12 @@ export class SsoSessionCompletion {
     flow: { assertion: SsoAssertion; returnTo: string },
     userAgent: string | undefined,
   ) {
+    const previewUrl = await this.tests.complete(flow);
+    if (previewUrl !== null) {
+      reply.header('cache-control', 'no-store');
+      reply.header('referrer-policy', 'no-referrer');
+      return reply.redirect(previewUrl, 302);
+    }
     const outcome = await this.auth.completeSso(flow.assertion, userAgent);
     if (outcome.kind === 'totp-required')
       return this.redirect(reply, {
@@ -41,7 +50,19 @@ export class SsoSessionCompletion {
   }
 
   refuse(reply: FastifyReply, error: unknown) {
-    return this.redirect(reply, { error: isAuthFailure(error) ? error.auth.code : 'unavailable' });
+    if (isAuthFailure(error)) return this.redirect(reply, { error: error.auth.code });
+    if (error instanceof OidcFailure || error instanceof SamlFailure) {
+      const known = [
+        'sso-email-unverified',
+        'sso-no-access',
+        'sso-connection-disabled',
+        'sso-required',
+      ];
+      return this.redirect(reply, {
+        error: known.includes(error.code) ? error.code : 'sso-invalid-response',
+      });
+    }
+    return this.redirect(reply, { error: 'unavailable' });
   }
   async redirect(reply: FastifyReply, params: Record<string, string>) {
     const url = new URL('/sign-in/complete', this.env.APP_URL);

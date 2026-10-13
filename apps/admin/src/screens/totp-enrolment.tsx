@@ -14,7 +14,7 @@ import { Check, Copy, Download } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
-import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../app/route-paths.js';
+import { ROUTES, safeReturnTo } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
@@ -80,7 +80,10 @@ export function TotpEnrolment(): ReactNode {
   const api = useAuthApi();
   const navigate = useNavigate();
   const setSession = useSetSession();
-  const challengeId = challengeOf(useLocation().state);
+  const location = useLocation();
+  const challengeId = challengeOf(location.state);
+  const requestedReturnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  const returnTo = safeReturnTo(typeof requestedReturnTo === 'string' ? requestedReturnTo : null);
   const tokens = useSemanticTokens();
   const codeFieldId = useId();
 
@@ -248,7 +251,7 @@ export function TotpEnrolment(): ReactNode {
               if (session !== undefined) {
                 setSession(session);
               }
-              void navigate(DEFAULT_SIGNED_IN_ROUTE, { replace: true });
+              void navigate(returnTo, { replace: true });
             }}
           >
             {t('auth:enrolment.step2.continue')}

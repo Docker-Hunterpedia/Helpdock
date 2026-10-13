@@ -90,6 +90,8 @@ export class MockAuthApi implements AuthApi {
   readonly #staff: MockStaffApi | undefined;
   #session: Session | null = null;
   #challengeCounter = 0;
+  ssoEnforced = false;
+  ssoConnections: { id: string; name: string; emailDomains: string[] }[] = [];
   #recoveryCodeUsed = false;
   /** What a real install would store as a trusted-device cookie. */
   #trustedDevice = false;
@@ -100,7 +102,26 @@ export class MockAuthApi implements AuthApi {
 
   /** Every method is on: the fixture exists to exercise every screen. */
   async authMethods(): Promise<AuthMethods> {
-    return { password: true, magicLink: true, oauth: { google: true, github: true } };
+    return {
+      sso: this.ssoConnections.map(({ id, name }) => ({ id, name })),
+      ssoEnforced: this.ssoEnforced,
+      password: true,
+      magicLink: true,
+      oauth: { google: true, github: true },
+    };
+  }
+
+  async discoverSso(email: string) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    return {
+      connections: this.ssoConnections
+        .filter((connection) => connection.emailDomains.includes(domain ?? ''))
+        .map(({ id, name }) => ({ id, name })),
+    };
+  }
+
+  ssoStartUrl(_connectionId: string, returnTo: string): string {
+    return `/sign-in/complete?${new URLSearchParams({ code: 'mock-sso', returnTo })}`;
   }
 
   async signInWithPassword(email: string, password: string): Promise<SignInResult> {

@@ -77,6 +77,9 @@ export type StaffStatus = z.infer<typeof staffStatusSchema>;
  * table could render before it knew what it was showing.
  */
 export const staffMemberSchema = z.object({
+  source: z.enum(['manual', 'sso']).optional(),
+  ssoLinked: z.boolean().optional(),
+  managedBy: z.string().nullable().optional(),
   userId: z.uuid(),
   name: z.string().min(1),
   email: z.string().min(1),

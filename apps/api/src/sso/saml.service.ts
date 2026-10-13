@@ -263,7 +263,13 @@ export class SamlService {
       throw new SamlFailure('sso-configuration-changed');
     if (request.expectedSubject && request.expectedSubject !== pending.assertion.subject)
       throw new SamlFailure('sso-subject-invalid');
-    return { assertion: pending.assertion, returnTo: request.returnTo };
+    return {
+      assertion: {
+        ...pending.assertion,
+        connectionRevision: connection.row.updatedAt.toISOString(),
+      },
+      returnTo: request.returnTo,
+    };
   }
 
   async metadata(ip: string) {

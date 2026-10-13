@@ -11,6 +11,7 @@ import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
 import { DevelopersPage } from '../screens/admin/developers/developers-page.tsx';
 import { SettingsPage } from '../screens/admin/settings/settings-page.tsx';
+import { SsoConnectionPage } from '../screens/admin/settings/sso-connection-page.tsx';
 import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
@@ -87,6 +88,7 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
           {/* M0-02: install-wide settings, with environment locks and write-only secrets. */}
           <Route path={ROUTES.settings} element={<SettingsPage />} />
+          <Route path={ROUTES.ssoConnection} element={<SsoConnectionPage />} />
           {/* M8-04. Offered to the roles holding `report:read`; the api refuses anyone else. */}
           <Route path={ROUTES.reports} element={<ReportsPage />} />
           <Route path={ROUTES.staff} element={<StaffScreen />} />

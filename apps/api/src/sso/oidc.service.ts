@@ -143,7 +143,10 @@ export class OidcService {
         nameClaim: config.nameClaim,
         groupAttribute: row.groupAttribute,
       });
-      return { assertion, returnTo: record.returnTo };
+      return {
+        assertion: { ...assertion, connectionRevision: row.updatedAt.toISOString() },
+        returnTo: record.returnTo,
+      };
     } catch (error) {
       if (error instanceof OidcFailure) {
         this.options.logger.warn(

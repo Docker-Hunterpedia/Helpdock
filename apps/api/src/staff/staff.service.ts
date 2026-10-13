@@ -18,6 +18,7 @@ import {
 import type { AuthService } from '../auth/auth.service.js';
 import type { EmailTokenStore } from '../auth/email-token.store.js';
 import { EMAIL_DISPATCH_RULE, type RateLimiter } from '../auth/rate-limit.js';
+import { lockSessionWriteAuthority } from '../auth/session/authority-lock.js';
 import type { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
 import { writeStaffAudit } from './audit.js';
@@ -215,6 +216,7 @@ export class StaffService {
     userId: string,
     request: StaffUpdateRequest,
   ): Promise<StaffMember> {
+    await lockSessionWriteAuthority(context.tx, userId);
     const row = await this.#requireMember(context, userId);
     const previous = {
       role: row.membership.role,
@@ -275,6 +277,7 @@ export class StaffService {
     userId: string,
     active: boolean,
   ): Promise<StaffMember> {
+    await lockSessionWriteAuthority(context.tx, userId);
     const row = await this.#requireMember(context, userId);
 
     // The one action here whose effect is not confined to this brand, so it
@@ -321,6 +324,7 @@ export class StaffService {
 
   /** DOMAIN-RULES §12: "the same as deactivation, scoped to that brand". */
   async removeFromBrand(context: StaffContext, userId: string): Promise<void> {
+    await lockSessionWriteAuthority(context.tx, userId);
     const row = await this.#requireMember(context, userId);
 
     this.#refuse(
@@ -532,6 +536,7 @@ export class StaffService {
   }
 
   async #requirePendingInvite(context: StaffContext, userId: string): Promise<StaffRow> {
+    await lockSessionWriteAuthority(context.tx, userId);
     const row = await this.#requireMember(context, userId);
     if (row.user.status !== 'invited') {
       throw new ConflictException('That invitation has already been accepted');

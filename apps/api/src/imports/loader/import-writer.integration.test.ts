@@ -29,12 +29,21 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { hashImportValue } from '@helpdock/importers';
+import {
+  type Connector,
+  type ConnectorContext,
+  ConnectorError,
+  hashImportValue,
+  ImportHttp,
+  ImportRateLimiter,
+  RateLimited,
+} from '@helpdock/importers';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { eq, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
@@ -42,6 +51,7 @@ import { RollupRepository } from '../../reports/rollup.repository.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
+import { runImportExtraction } from '../jobs/extract-run.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
@@ -1192,6 +1202,348 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ['staged-section', 'staged-category'],
     ]);
     await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope));
+  });
+
+  function failingExtraction(failure: Error): Connector<{ token: string }>['extract'] {
+    return () => ({
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw failure;
+        },
+      }),
+    });
+  }
+
+  function extractionHarness(runId: string, extract: Connector<{ token: string }>['extract']) {
+    // This models the normalized SDK boundary, not any vendor's HTTP protocol.
+    const controller = new AbortController();
+    const context: ConnectorContext<{ token: string }> = {
+      credentials: { token: 'secret-fixture' },
+      signal: controller.signal,
+      http: new ImportHttp({
+        hosts: ['vendor.invalid'],
+        policy: {},
+        limiter: new ImportRateLimiter({ capacity: 1, perMinute: 60 }),
+      }),
+      log: async () => {
+        throw new Error('The worker must scope and validate its own logging');
+      },
+    };
+    const connector: Connector<{ token: string }> = {
+      source: 'zendesk',
+      entities: ['group'],
+      credentialsSchema: z.strictObject({ token: z.string().min(1) }),
+      extract,
+      test: async () => ({ ok: true, account: 'fixture' }),
+      defaultMappings: () => [],
+      fetchAttachment: async () => {
+        throw new Error('Extraction cannot download attachments');
+      },
+    };
+    return {
+      deps: {
+        db: app.db,
+        connector,
+        context,
+        scope: { brandId: BRAND, runId },
+        jobId: `import.extract.${runId}`,
+      },
+      controller,
+    };
+  }
+
+  it('orchestrates extraction from a persisted cursor after pause and enters mapping only after the final page', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const harness = extractionHarness(runId, async function* (_context, _entity, cursor) {
+      if (!cursor) {
+        yield {
+          records: [{ entity: 'group', payload: { externalId: 'orchestrated-1', name: 'First' } }],
+          cursor: { after: 'first' },
+        };
+        await withSystem(app.db, BRAND, (tx) => pauseImportRun(tx, { brandId: BRAND, runId }));
+      }
+      yield {
+        records: [{ entity: 'group', payload: { externalId: 'orchestrated-2', name: 'Second' } }],
+        cursor: null,
+      };
+    });
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'stopped' });
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+    ).toHaveLength(1);
+    await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, { brandId: BRAND, runId }));
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+    ).toHaveLength(2);
+    const [done] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(done).toMatchObject({
+      status: 'awaiting_mapping',
+      claimToken: null,
+      claimedAt: null,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    expect(done?.startedAt).toBeInstanceOf(Date);
+    expect(done?.counts).toEqual({ extracted: { group: 2 } });
+  });
+
+  it('persists rate-limit delay without spending an error attempt and skips finished entities on retry', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    let limited = true;
+    const harness = extractionHarness(runId, async function* () {
+      if (limited) {
+        limited = false;
+        throw new RateLimited(60000);
+      }
+      yield {
+        records: [{ entity: 'group', payload: { externalId: 'after-limit', name: 'Resumed' } }],
+        cursor: null,
+      };
+    });
+    expect(await runImportExtraction(harness.deps)).toEqual({
+      state: 'deferred',
+      retryAfterMs: 60000,
+    });
+    const [waiting] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(waiting?.counts).toMatchObject({ retryFailures: 0 });
+    expect(waiting).toMatchObject({
+      status: 'extracting',
+      claimToken: null,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    expect(await runImportExtraction(harness.deps)).toMatchObject({ state: 'deferred' });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { brandId: BRAND, runId, phase: 'extracting' }),
+      ),
+    ).toBeNull();
+    await owner.db
+      .update(importRuns)
+      .set({ counts: { retryFailures: 0, retryAt: '2000-01-01T00:00:00.000Z' } })
+      .where(eq(importRuns.id, runId));
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
+    const [resumed] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(resumed?.counts).toEqual({ extracted: { group: 1 } });
+    expect(await owner.db.select().from(importLog).where(eq(importLog.runId, runId))).toMatchObject(
+      [{ message: 'import.rate-limited', level: 'warning' }],
+    );
+  });
+
+  it('uses the completed parent start with overlap for delta extraction and never uses another brand parent', async () => {
+    const parentId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: parentId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'completed',
+      startedBy: USER,
+      startedAt: new Date('2020-01-02T00:00:00Z'),
+    });
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      mode: 'delta',
+      parentRunId: parentId,
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    let observedSince: Date | undefined;
+    const harness = extractionHarness(runId, async function* (_context, _entity, _cursor, since) {
+      observedSince = since;
+      yield { records: [], cursor: null };
+    });
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
+    expect(observedSince?.toISOString()).toBe('2020-01-01T23:00:00.000Z');
+    expect(
+      await runImportExtraction({ ...harness.deps, scope: { brandId: OTHER_BRAND, runId } }),
+    ).toEqual({ state: 'stopped' });
+  });
+
+  it.each([
+    ['credentials-refused', new ConnectorError('credentials-refused')],
+    ['invalid-response', new ConnectorError('invalid-response')],
+    ['invalid-response', new RateLimited(Number.MAX_SAFE_INTEGER)],
+    ['execution-failed', new Error('secret-fixture must never be logged')],
+  ])(
+    'ends extraction with %s and purges credentials using a safe error code',
+    async (code, failure) => {
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'extracting',
+        startedBy: USER,
+        credentialsEncrypted: 'encrypted-fixture',
+      });
+      const harness = extractionHarness(runId, failingExtraction(failure));
+      expect(await runImportExtraction(harness.deps)).toEqual({ state: 'failed' });
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run).toMatchObject({
+        status: 'failed',
+        credentialsEncrypted: null,
+        claimToken: null,
+        error: code,
+      });
+      const logs = await owner.db.select().from(importLog).where(eq(importLog.runId, runId));
+      expect(JSON.stringify(logs)).not.toContain('secret-fixture');
+      expect(logs).toMatchObject([{ message: `import.${code}`, level: 'error' }]);
+    },
+  );
+
+  it('purges credentials after three consecutive vendor outages but retains progress for retry before that', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const harness = extractionHarness(
+      runId,
+      failingExtraction(new ConnectorError('vendor-unavailable', 503)),
+    );
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      expect(await runImportExtraction(harness.deps)).toEqual(
+        attempt < 3 ? { state: 'deferred', retryAfterMs: 5000 } : { state: 'failed' },
+      );
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run?.counts.retryFailures).toBe(attempt);
+      if (attempt < 3)
+        await owner.db
+          .update(importRuns)
+          .set({ counts: { ...run?.counts, retryAt: '2000-01-01T00:00:00.000Z' } })
+          .where(eq(importRuns.id, runId));
+    }
+    const [failed] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(failed).toMatchObject({ status: 'failed', credentialsEncrypted: null });
+  });
+
+  it('releases a shutdown claim for retry without treating interruption as failed migration', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const harness = extractionHarness(runId, async function* () {
+      yield { records: [], cursor: null };
+    });
+    harness.controller.abort();
+    expect(await runImportExtraction(harness.deps)).toEqual({
+      state: 'deferred',
+      retryAfterMs: 1000,
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({
+      status: 'extracting',
+      claimToken: null,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+  });
+
+  it('rejects unapproved connector log text without exposing credentials', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const harness = extractionHarness(runId, async function* (context) {
+      await context.log({ level: 'warning', message: 'import.secret-fixture' });
+      yield { records: [], cursor: null };
+    });
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'failed' });
+    expect(
+      JSON.stringify(await owner.db.select().from(importLog).where(eq(importLog.runId, runId))),
+    ).not.toContain('secret-fixture');
+  });
+
+  it('fails an extraction stream that ends without its final checkpoint', async () => {
+    const incompleteRun = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: incompleteRun,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const incomplete = extractionHarness(incompleteRun, async function* () {
+      yield { records: [], cursor: { page: 2 } };
+    });
+    expect(await runImportExtraction(incomplete.deps)).toEqual({ state: 'failed' });
+    const [failed] = await owner.db
+      .select()
+      .from(importRuns)
+      .where(eq(importRuns.id, incompleteRun));
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: 'invalid-response',
+      credentialsEncrypted: null,
+    });
+  });
+
+  it('logs only approved warning codes and stops requesting pages at the final cursor', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    let requestedPastEnd = false;
+    const harness = extractionHarness(runId, async function* (context) {
+      await context.log({
+        level: 'warning',
+        message: 'import.record-unavailable',
+        entity: 'group',
+        externalId: 'deleted-group',
+      });
+      yield { records: [], cursor: null };
+      requestedPastEnd = true;
+      throw new Error('A vendor should not be queried beyond the final cursor');
+    });
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
+    expect(requestedPastEnd).toBe(false);
+    const logs = await owner.db.select().from(importLog).where(eq(importLog.runId, runId));
+    expect(logs).toMatchObject([
+      {
+        level: 'warning',
+        message: 'import.record-unavailable',
+        entity: 'group',
+        externalId: 'deleted-group',
+      },
+    ]);
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

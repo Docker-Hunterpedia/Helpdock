@@ -1,6 +1,7 @@
 import { brands, type DbTransaction, importRuns, uuidv7 } from '@helpdock/db';
 import { and, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { extractionRetry } from './retry-state.js';
 
 export const importPhaseSchema = z.enum(['extracting', 'dry_run', 'loading', 'finishing']);
 export const importRunRefSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
@@ -35,9 +36,10 @@ async function activeImportBrand(tx: DbTransaction, brandId: string): Promise<bo
 async function claimableRun(
   tx: DbTransaction,
   scope: ImportRunRef & { phase: ImportClaim['phase'] },
+  now: Date,
 ): Promise<boolean> {
   const [run] = await tx
-    .select({ id: importRuns.id })
+    .select({ id: importRuns.id, counts: importRuns.counts })
     .from(importRuns)
     .where(
       and(
@@ -47,7 +49,9 @@ async function claimableRun(
       ),
     )
     .for('update');
-  return run !== undefined;
+  if (!run) return false;
+  const retry = extractionRetry(run.counts);
+  return !retry.retryAt || Date.parse(retry.retryAt) <= now.getTime();
 }
 
 async function freshBrandClaim(tx: DbTransaction, brandId: string, stale: Date): Promise<boolean> {
@@ -85,7 +89,7 @@ export async function claimImportRun(
 ): Promise<ImportClaim | null> {
   const input = importRunRefSchema.extend({ phase: importPhaseSchema }).parse(request);
   await lockImportBrand(tx, input.brandId);
-  if (!(await activeImportBrand(tx, input.brandId)) || !(await claimableRun(tx, input)))
+  if (!(await activeImportBrand(tx, input.brandId)) || !(await claimableRun(tx, input, now)))
     return null;
   const stale = new Date(now.getTime() - IMPORT_CLAIM_TIMEOUT_MS);
   if (await freshBrandClaim(tx, input.brandId, stale)) return null;
@@ -93,7 +97,11 @@ export async function claimImportRun(
   const token = uuidv7();
   await tx
     .update(importRuns)
-    .set({ claimToken: token, claimedAt: now })
+    .set({
+      claimToken: token,
+      claimedAt: now,
+      startedAt: sql`coalesce(${importRuns.startedAt}, ${now.toISOString()}::timestamptz)`,
+    })
     .where(eq(importRuns.id, input.runId));
   return { ...input, token };
 }

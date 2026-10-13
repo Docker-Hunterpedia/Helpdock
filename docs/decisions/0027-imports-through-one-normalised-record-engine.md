@@ -192,3 +192,14 @@ Pause/cancel clear the token; takeover replaces it. The previous worker loses
 write authority immediately at its next batch boundary. SQL requires complete
 claim metadata on active phases and a resumable phase on paused runs. Terminal
 runs clear claims and credentials.
+
+### 2026-10-14 — durable extraction retries and opaque adapter failures
+
+Retry deadlines and consecutive transient-failure counts live on the run, not
+only in worker memory. A 429 spends no failure attempt; a committed page resets
+the consecutive-error budget. Three consecutive vendor outages end the run,
+while a graceful worker shutdown releases its claim and keeps credentials for
+resumption. Known fatal errors and opaque adapter exceptions terminate with fixed
+error codes and purge credentials. Raw adapter error messages and vendor bodies
+are not persisted or returned; this deliberately favors credential privacy over
+exception-detail diagnostics. Connector log messages use a fixed code allow-list.

@@ -12,7 +12,10 @@ external IDs within that page are unique, and a non-final cursor must advance.
 Pages may overlap records across requests; staging upserts those records without
 counting them twice. The API page store bounds a page to 1,000 records and 50 MiB
 serialized and commits records/counts/cursor together. Vendor credentials belong only in the encrypted API run,
-never in normalized records or emitted cursor data.
+never in normalized records or emitted cursor data. Connector log messages are
+approved warning codes (`import.record-unavailable`, `import.attachment.expired`,
+`import.mapping.unknown-value`), not vendor response text. The API scopes the log
+to the run and validates each entry before storage.
 
 `ImportHttp` validates JSON output and uses `safeFetch` with exact vendor host
 allow-lists, including redirects. Callers supply the operator's network policy.

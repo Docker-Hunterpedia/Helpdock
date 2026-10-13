@@ -123,8 +123,9 @@ export async function storeImportPage(
   );
   extracted[entity] = (extracted[entity] ?? 0) + added;
   checkpoints[entity] = { cursor: page.cursor, done: page.cursor === null };
+  const { retryAt: _retryAt, retryFailures: _retryFailures, ...counts } = run.counts;
   await tx
     .update(importRuns)
-    .set({ cursors: checkpoints, counts: { ...run.counts, extracted } })
+    .set({ cursors: checkpoints, counts: { ...counts, extracted } })
     .where(eq(importRuns.id, claim.runId));
 }

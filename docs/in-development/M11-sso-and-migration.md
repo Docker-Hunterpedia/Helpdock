@@ -1121,10 +1121,40 @@ null cursor marks that entity done. A transaction stopped before commit preserve
 the previous cursor and writes no records. Raw vendor bodies are not log text.
 
 This checkpoint proves the database mechanics on real PostgreSQL and Redis.
-It does not yet provide registered BullMQ handlers, extraction orchestration,
-429 delay scheduling, mapping proposals/dry runs, load/attachment/finish jobs,
+It does not yet provide registered BullMQ handlers or Redis delay scheduling,
+mapping proposals/dry runs, load/attachment/finish jobs,
 run-control API endpoints, or the worker-kill reference acceptance test.
 Those remain required before M11-10 or the milestone is marked complete.
+
+
+### Extraction orchestration checkpoint (M11-10, in progress)
+
+`runImportExtraction` drives the normalized connector contract outside database
+transactions and stages each page inside the fenced system-job transaction.
+It checks authority before requesting another page, resumes incomplete entities
+from their saved cursor, skips completed entities, and stops at a final null
+cursor. A stream ending without that marker or cycling cursors fails closed.
+The operator's selected entities must be supported by the connector. First claim
+sets `started_at` once; delta extraction requires a completed parent in the same
+brand/source and uses its start time minus one hour.
+
+429 waits persist as `counts.retryAt` and do not increment `retryFailures`.
+Claims honor the stored deadline across worker restarts. A successful page clears
+retry metadata. Consecutive vendor outages defer for five seconds, with three
+failures ending the run and purging credentials. Invalid retry deadlines,
+credential refusals and malformed output end the run with safe codes. Opaque
+adapter exceptions also end the run with `execution-failed`; their message/body
+is never stored in the import log. Graceful shutdown releases the claim for retry
+without failing or purging a resumable run. Connector warnings use an explicit
+code allow-list and remain scoped to the current run and brand.
+
+The normalized-contract fixtures prove pause/resume, rate-limit persistence,
+error budgets, delta overlap, terminal cleanup, warning filtering and incomplete
+pagination. Forty-four focused real-Postgres/Redis integration cases pass, with
+API/root typechecks, lint and the writer boundary check. These fixtures are not
+vendor HTTP stand-ins or BullMQ worker-kill acceptance.
+Actual queue handlers/delayed-job transitions, mapping proposals, dry run,
+load/media/finish orchestration and vendor/reference/browser CI remain required.
 
 
 ### Shared HTTP security implementation notes (in progress)

@@ -8,8 +8,10 @@ import { MOCK_COLLEAGUE_ID, MockRealtimeClient } from '../../realtime/mock-clien
 import { RealtimeProvider } from '../../realtime/realtime-provider.tsx';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
+import { HOUR, NOW, testMessage, testTicket } from '../../tickets/fixtures.js';
 import { MOCK_TICKET_REFUND } from '../../tickets/mock-api.js';
-import { useTicketRoom } from './use-ticket-realtime.js';
+import { mockSlaOf } from '../../tickets/mock-sla.js';
+import { detailAfterCatchUp, useTicketRoom } from './use-ticket-realtime.js';
 
 /**
  * The collision half of the ticket room (M1-09): this browser says "replying"
@@ -83,5 +85,30 @@ describe('useTicketRoom', () => {
         JSON.stringify([{ userId: MOCK_COLLEAGUE_ID, activity: 'replying' }]),
       ),
     );
+  });
+});
+
+describe('detailAfterCatchUp', () => {
+  // #179: a note arrived over the socket, the catch-up rebuilt the cached
+  // ticket without its SLA, and the card said "No SLA policy applies" until a
+  // reload. Everything the fresh read carries has to survive the catch-up.
+  it('keeps what the fresh read says about the SLA, the survey and related tickets', () => {
+    const ticket = testTicket({
+      firstResponseDueAt: new Date(NOW + HOUR).toISOString(),
+      resolutionDueAt: new Date(NOW + 8 * HOUR).toISOString(),
+    });
+    const sla = mockSlaOf(ticket, NOW);
+    expect(sla).not.toBeNull();
+    const first = testMessage({ seq: 1 });
+    const note = testMessage({ seq: 2, kind: 'note' });
+    const held = { ticket, messages: { messages: [first], nextAfter: null }, activity: [], sla };
+    const read = { ...held, csat: null, related: [] };
+
+    const caughtUp = detailAfterCatchUp(held, read, { messages: [note], nextAfter: null }, []);
+
+    expect(caughtUp.sla).toEqual(sla);
+    expect(caughtUp.csat).toBeNull();
+    expect(caughtUp.related).toEqual([]);
+    expect(caughtUp.messages.messages.map((message) => message.seq)).toEqual([1, 2]);
   });
 });

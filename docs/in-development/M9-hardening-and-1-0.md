@@ -414,7 +414,7 @@ the one-hour target.
 
 ## Gaps carried from earlier milestones
 
-Closed, each with unit and integration tests and its guide updated (the last row after #147; the two #174 rows are admin-only and have unit and component tests):
+Closed, each with unit and integration tests and its guide updated (the last row after #147; the #174 and #179 rows are admin-only and have unit and component tests):
 
 | Gap | From | Now |
 |---|---|---|
@@ -429,6 +429,7 @@ Closed, each with unit and integration tests and its guide updated (the last row
 | Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](../completed/M7-ai.md#gaps-and-follow-ups)) |
 | Agent assist never appeared in a production build | M7 | `HttpAssistApi` built `/api/brands/…` paths on top of the transport's own `/api`, so every call went to `/api/api/…` and 404ed and the composer read assist as off. The paths now start at `/brands/`, and `apps/admin/src/assist/http-api.test.ts` drives every method through the real `HttpTransport` (#174) |
 | The collision indicator named a colleague by id for an Agent | M1 | Viewers were named from `GET /staff` alone, which an Agent cannot read. `staffName` (`apps/admin/src/screens/tickets/directory.ts`) names them as the assignee picker does: the department's `assignable` read, then the staff read, then a shortened id (#174) |
+| The SLA card said "No SLA policy applies" after a note arrived over the socket | M1, M4 | The ticket view's realtime catch-up rebuilt the cached ticket field by field and left out `sla` and `csat`, so the card lost its policy until a reload. `detailAfterCatchUp` (`apps/admin/src/screens/tickets/use-ticket-realtime.ts`) keeps everything the fresh read carries and replaces only the thread and the activity (#179) |
 
 ## Pull requests
 

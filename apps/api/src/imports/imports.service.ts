@@ -4,10 +4,12 @@ import type { Connector, ConnectorContext, ZendeskCredentials } from '@helpdock/
 import {
   type ImportConnectionRequest,
   type ImportRunCreate,
+  type ImportScope,
   importConnectionRequestSchema,
   importConnectionResultSchema,
   importRunCreateSchema,
   importRunListSchema,
+  importScopeSchema,
 } from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
@@ -15,10 +17,11 @@ import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { enqueueImportWork } from './import-events.js';
 import { importRunView } from './import-run-view.js';
 import { lockImportBrand } from './jobs/claims.js';
+import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-control.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
 import { ImportLoadError } from './loader/contracts.js';
 
-type ConnectionFactory = (request: ImportConnectionRequest) => {
+export type ImportConnectionFactory = (request: ImportConnectionRequest) => {
   connector: Connector<ZendeskCredentials>;
   context: ConnectorContext<ZendeskCredentials>;
 };
@@ -26,7 +29,7 @@ type ConnectionFactory = (request: ImportConnectionRequest) => {
 export class ImportsService {
   constructor(
     readonly keyring: Keyring,
-    readonly connection: ConnectionFactory,
+    readonly connection: ImportConnectionFactory,
   ) {}
 
   async get({ tx, brandId }: TicketingContext, runId: string) {
@@ -114,6 +117,50 @@ export class ImportsService {
       .where(and(eq(importRuns.brandId, context.brandId), eq(importRuns.id, runId)));
     await enqueueImportWork(context.tx, { brandId: context.brandId, runId, step: 'extract' });
     await this.audit(context, 'import.started', runId);
+    return this.get(context, runId);
+  }
+  async scope(context: TicketingContext, runId: string, raw: ImportScope) {
+    const scope = importScopeSchema.parse(raw);
+    await lockImportBrand(context.tx, context.brandId);
+    const run = await this.get(context, runId);
+    if (!['draft', 'connecting'].includes(run.status))
+      throw new ConflictException('import.phase-invalid');
+    await context.tx
+      .update(importRuns)
+      .set({
+        options: sql`${importRuns.options} || ${JSON.stringify(scope)}::jsonb`,
+        dryRunReport: null,
+      })
+      .where(and(eq(importRuns.brandId, context.brandId), eq(importRuns.id, runId)));
+    await this.audit(context, 'import.scope-updated', runId);
+    return this.get(context, runId);
+  }
+  async control(context: TicketingContext, runId: string, action: 'pause' | 'resume' | 'cancel') {
+    await this.get(context, runId);
+    const scope = { brandId: context.brandId, runId };
+    if (action === 'resume') {
+      const phase = await resumeImportRun(context.tx, scope);
+      if (!phase) throw new ConflictException('import.phase-invalid');
+      if (phase === 'dry_run') throw new ConflictException('import.phase-unavailable');
+      await enqueueImportWork(context.tx, {
+        ...scope,
+        step: phase === 'extracting' ? 'extract' : phase === 'finishing' ? 'finish' : 'load',
+      });
+    } else {
+      const changed = await (action === 'pause'
+        ? pauseImportRun(context.tx, scope)
+        : cancelImportRun(context.tx, scope));
+      if (!changed) throw new ConflictException('import.phase-invalid');
+    }
+    await this.audit(
+      context,
+      action === 'pause'
+        ? 'import.paused'
+        : action === 'resume'
+          ? 'import.resumed'
+          : 'import.cancelled',
+      runId,
+    );
     return this.get(context, runId);
   }
   private async audit({ tx, brandId, actor }: TicketingContext, action: string, runId: string) {

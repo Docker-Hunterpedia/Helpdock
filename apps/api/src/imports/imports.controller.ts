@@ -10,6 +10,7 @@ import {
   ImportRunListDto,
   ImportRunParamDto,
   ImportRunViewDto,
+  ImportScopeDto,
 } from './dto.js';
 import { ImportsService } from './imports.service.js';
 
@@ -52,5 +53,35 @@ export class ImportsController {
   @ZodSerializerDto(ImportRunViewDto)
   extract(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
     return this.imports.extract(requireTicketingContext(), runId);
+  }
+  @Put(':runId/scope')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  scope(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Body(new ZodValidationPipe(ImportScopeDto)) body: ImportScopeDto,
+  ) {
+    return this.imports.scope(requireTicketingContext(), runId, body);
+  }
+  @Post(':runId/pause')
+  @HttpCode(200)
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  pause(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.control(requireTicketingContext(), runId, 'pause');
+  }
+  @Post(':runId/resume')
+  @HttpCode(200)
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  resume(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.control(requireTicketingContext(), runId, 'resume');
+  }
+  @Post(':runId/cancel')
+  @HttpCode(200)
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  cancel(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.control(requireTicketingContext(), runId, 'cancel');
   }
 }

@@ -2324,10 +2324,32 @@ re-exported by the SDK so admin/API/connector boundaries share one contract.
 
 Real PostgreSQL/Redis/vendor-stand-in coverage exercises those transitions, secret
 non-disclosure, cross-brand reads, delta mismatch and rollback. Shared schema and
-public-view unit tests pass. Full authenticated HTTP permission/CSRF coverage and
-browser flows remain pending; the service-level integration is not that proof.
-Scope/mapping/dry-run/start/control/log routes and the UI remain unfinished.
+public-view unit tests pass. The subsequent HTTP/control checkpoint covers real staff authentication and permissions; browser flows remain pending.
+Date filtering, mapping/dry-run/start/log routes and the UI remain unfinished.
 See the current [import guide](../guides/importing.md). M11-10/16 remain in progress.
+
+### Authenticated HTTP, scope and controls checkpoint (M11-10/16, in progress)
+
+Real password/TOTP sessions now exercise all nine registered import routes with
+Postgres/Redis and the Zendesk stand-in. Anonymous requests are 401; Agent, Team
+Leader and Viewer sessions are 403. A brand Admin cannot use another brand's
+routes or read a foreign run through their own brand. The staff resolver reads
+Bearer tokens, so cross-origin requests carrying only cookies do not authorize
+writes. No development-principal header is used in this suite.
+
+PUT scope accepts unique, nonempty entity lists and rebuildAllReports before
+extraction; reconnection preserves those options and run responses include only
+that public scope. Pause revokes the worker lease; resume atomically requests the
+appropriate existing phase; cancel clears credentials and ownership. Invalid
+transitions return conflict. A dry-run resume currently conflicts and rolls back
+until its consumer is implemented, rather than releasing a run with no job.
+Cancellation stops further processing without deleting already imported history.
+
+Shared scope schemas and HTTP tests cover malformed input, frozen scope,
+secret-free responses, lease revocation, resume outbox requests, credential purge
+and repeated starts. Date-range filtering, pagination, mapping/dry-run/start/log
+routes, dry-run recovery and browser flows remain unfinished. M11-10/16 remain
+in progress.
 
 ## M11-13 Freshdesk connector
 

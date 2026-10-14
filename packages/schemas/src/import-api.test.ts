@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { importConnectionRequestSchema, importRunCreateSchema } from './import-api.js';
+import {
+  importConnectionRequestSchema,
+  importRunCreateSchema,
+  importScopeSchema,
+} from './import-api.js';
 
 it.each([
   { source: 'zendesk', mode: 'delta' },
@@ -33,3 +37,10 @@ it('accepts exact destinations and refuses credential injection into the account
     }).success,
   ).toBe(false);
 });
+
+it.each([{ entities: [] }, { entities: ['ticket', 'ticket'] }, { entities: ['unknown'] }])(
+  'refuses an empty, duplicate or unknown extraction scope %j',
+  ({ entities }) => {
+    expect(importScopeSchema.safeParse({ entities }).success).toBe(false);
+  },
+);

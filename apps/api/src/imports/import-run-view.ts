@@ -1,5 +1,9 @@
 import type { importRuns } from '@helpdock/db';
-import { importProgressCountsSchema, importRunViewSchema } from '@helpdock/schemas';
+import {
+  importProgressCountsSchema,
+  importRunViewSchema,
+  importScopeSchema,
+} from '@helpdock/schemas';
 
 /** Only public counters are serialized; worker leases, errors and credential envelopes stay internal. */
 export function importRunView(run: typeof importRuns.$inferSelect) {
@@ -16,6 +20,10 @@ export function importRunView(run: typeof importRuns.$inferSelect) {
     parentRunId: run.parentRunId,
     status: run.status,
     hasCredentials: run.credentialsEncrypted !== null,
+    scope: importScopeSchema.parse({
+      entities: run.options.entities,
+      rebuildAllReports: run.options.rebuildAllReports,
+    }),
     createdAt: run.createdAt.toISOString(),
     startedAt: run.startedAt?.toISOString() ?? null,
     finishedAt: run.finishedAt?.toISOString() ?? null,

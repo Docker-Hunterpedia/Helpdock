@@ -41,6 +41,18 @@ export const importProgressCountsSchema = z.partialRecord(
   importEntitySchema,
   z.int().nonnegative(),
 );
+export const importScopeSchema = z.strictObject({
+  entities: z
+    .array(importEntitySchema)
+    .min(1)
+    .max(importEntitySchema.options.length)
+    .default([...importEntitySchema.options])
+    .refine((entities) => new Set(entities).size === entities.length, {
+      message: 'import.entities-duplicate',
+    }),
+  rebuildAllReports: z.boolean().default(false),
+});
+export type ImportScope = z.infer<typeof importScopeSchema>;
 export const importRunViewSchema = z.strictObject({
   id: z.uuid(),
   brandId: z.uuid(),
@@ -62,6 +74,7 @@ export const importRunViewSchema = z.strictObject({
     'cancelled',
   ]),
   hasCredentials: z.boolean(),
+  scope: importScopeSchema,
   createdAt: z.iso.datetime(),
   startedAt: z.iso.datetime().nullable(),
   finishedAt: z.iso.datetime().nullable(),

@@ -2414,6 +2414,25 @@ reference-cycle issue. No domain rows or jobs are created. The dry-run consumer,
 report, destination validation, availability and preview UI remain unfinished;
 these checks alone do not approve loading. M11-10/16 remain in progress.
 
+### Read-only live mapping destination checks (M11-10/16, in progress)
+
+Preflight now checks individual confirmed mapping destinations without creating
+staff or fields: statuses/tags must exist in the brand; teams must belong to the
+selected department; existing staff must have a non-Viewer membership and not be
+deactivated. Invited staff require same-brand departments and a validated staged
+agent with an email. Field destinations must match their source entity; known
+field bindings cannot be redirected, new definitions cannot collide with an
+existing key, and a single new field requires available capacity.
+
+Real database coverage verifies missing/foreign destinations, department/team
+mismatch, explicit tag skips, Viewer refusal, invited-agent prerequisites, field
+entity mismatch, key collision and safe reuse of an existing source field binding.
+User and field row revisions remain unchanged and no outbox work is created.
+Whole-plan field creation capacity/duplicate checks, ticket-specific staff department
+eligibility, custom value validation, contact identity planning and the complete
+dry-run consumer/report/UI remain pending. Individual target checks do not approve
+a run; M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

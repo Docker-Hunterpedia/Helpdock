@@ -83,3 +83,5 @@ Expose guarded mapping confirmation and paged input fingerprints; invalidate ear
 Share staged integrity checks between ticket loading and read-only preflight, and validate account-scoped historical dependencies without creating domain rows or jobs.
 
 Detect cyclic staged knowledge ancestry and translation dependencies during read-only preflight.
+
+Add read-only checks of live mapping destinations, eligible staff and safe field bindings before import provisioning.

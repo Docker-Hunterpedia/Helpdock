@@ -76,3 +76,9 @@ these structural checks do not authorize loading.
 Staged category, section and translation cycles are structural blockers, including
 cycles reached through an otherwise valid prefix. Live destination hierarchy and
 complete dry-run approval are still pending.
+
+Individual live mapping destinations are checked for brand ownership, eligible
+staff membership, department/team consistency and field binding/key conflicts.
+Those checks provision no users or fields. Validation of the complete creation
+plan, ticket department eligibility, custom values and contact identity choices
+still belongs to the pending full dry-run engine.

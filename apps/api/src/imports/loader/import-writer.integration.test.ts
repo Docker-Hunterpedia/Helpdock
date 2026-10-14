@@ -32,6 +32,7 @@ import {
   reportDaily,
   runMigrations,
   tags,
+  teams,
   ticketActivity,
   ticketMessages,
   ticketParticipants,
@@ -55,7 +56,12 @@ import {
 } from '@helpdock/importers';
 import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importLoadJob, JOB_DEFINITIONS } from '@helpdock/jobs';
-import { importEntitySchema, importRecordSchema, ticketCcSchema } from '@helpdock/schemas';
+import {
+  importEntitySchema,
+  importMappingSchema,
+  importRecordSchema,
+  ticketCcSchema,
+} from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { Queue, Worker } from 'bullmq';
@@ -113,6 +119,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
@@ -6055,6 +6062,220 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('checks live mapping destinations without provisioning users or fields or crossing brands', async () => {
+    const runId = uuidv7();
+    const scope = { brandId: BRAND, runId, source: 'zendesk' as const };
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', startedBy: USER });
+    const check = (mapping: Parameters<typeof validateImportMappingTarget>[2]) =>
+      withSystem(app.db, BRAND, (tx) => validateImportMappingTarget(tx, scope, mapping));
+    expect(
+      await check({ kind: 'status', externalValue: 'open', target: { statusId: STATUS } }),
+    ).toBeNull();
+    expect(
+      await check({ kind: 'status', externalValue: 'missing', target: { statusId: uuidv7() } }),
+    ).toBe('target-missing');
+    expect(
+      await check({
+        kind: 'group',
+        externalValue: 'support',
+        target: { departmentId: DEPARTMENT, teamId: null },
+      }),
+    ).toBeNull();
+    expect(
+      await check({
+        kind: 'group',
+        externalValue: 'foreign',
+        target: { departmentId: OTHER_DEPARTMENT, teamId: null },
+      }),
+    ).toBe('target-missing');
+    const secondDepartment = uuidv7();
+    const teamId = uuidv7();
+    const tagId = uuidv7();
+    await owner.db
+      .insert(departments)
+      .values({ id: secondDepartment, brandId: BRAND, name: 'Preflight second department' });
+    await owner.db.insert(teams).values({
+      id: teamId,
+      brandId: BRAND,
+      departmentId: secondDepartment,
+      name: 'Preflight team',
+    });
+    await owner.db.insert(tags).values({ id: tagId, brandId: BRAND, name: 'Preflight-only-tag' });
+    expect(
+      await check({
+        kind: 'group',
+        externalValue: 'team',
+        target: { departmentId: DEPARTMENT, teamId },
+      }),
+    ).toBe('target-invalid');
+    expect(
+      await check({
+        kind: 'group',
+        externalValue: 'team',
+        target: { departmentId: secondDepartment, teamId },
+      }),
+    ).toBeNull();
+    expect(await check({ kind: 'tag', externalValue: 'tag', target: { tagId } })).toBeNull();
+    expect(
+      await check({ kind: 'tag', externalValue: 'missing', target: { tagId: uuidv7() } }),
+    ).toBe('target-missing');
+    expect(await check({ kind: 'tag', externalValue: 'skip', target: { tagId: null } })).toBeNull();
+    expect(
+      await check({
+        kind: 'agent',
+        externalValue: 'existing',
+        target: { kind: 'existing', userId: USER },
+      }),
+    ).toBeNull();
+    await owner.db
+      .update(userBrandRoles)
+      .set({ role: 'viewer' })
+      .where(and(eq(userBrandRoles.brandId, BRAND), eq(userBrandRoles.userId, USER)));
+    try {
+      expect(
+        await check({
+          kind: 'agent',
+          externalValue: 'viewer',
+          target: { kind: 'existing', userId: USER },
+        }),
+      ).toBe('target-invalid');
+    } finally {
+      await owner.db
+        .update(userBrandRoles)
+        .set({ role: 'agent' })
+        .where(and(eq(userBrandRoles.brandId, BRAND), eq(userBrandRoles.userId, USER)));
+    }
+    expect(
+      await check({
+        kind: 'agent',
+        externalValue: 'invite',
+        target: { kind: 'invited', departmentIds: [DEPARTMENT] },
+      }),
+    ).toBe('source-missing');
+    const agent = {
+      externalId: 'invite',
+      kind: 'agent',
+      name: 'New agent',
+      active: true,
+      email: 'new-preflight-agent@example.test',
+    };
+    const field = {
+      externalId: 'new-field',
+      target: 'ticket',
+      key: 'legacy',
+      label: 'Legacy',
+      type: 'text',
+    };
+    await owner.db.insert(importRecords).values([
+      {
+        brandId: BRAND,
+        runId,
+        entity: 'user',
+        externalId: agent.externalId,
+        payload: agent,
+        payloadHash: hashImportValue(agent),
+      },
+      {
+        brandId: BRAND,
+        runId,
+        entity: 'field',
+        externalId: field.externalId,
+        payload: field,
+        payloadHash: hashImportValue(field),
+      },
+    ]);
+    const collisionFieldId = uuidv7();
+    await owner.db.insert(customFieldDefs).values({
+      id: collisionFieldId,
+      brandId: BRAND,
+      target: 'ticket',
+      key: 'preflight_collision',
+      label: 'Existing field',
+      type: 'text',
+    });
+    const usersBefore = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`,
+    );
+    const fieldsBefore = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM custom_field_defs ORDER BY id`,
+    );
+    expect(
+      await check({
+        kind: 'agent',
+        externalValue: 'invite',
+        target: { kind: 'invited', departmentIds: [DEPARTMENT] },
+      }),
+    ).toBeNull();
+    expect(
+      await check({
+        kind: 'agent',
+        externalValue: 'invite',
+        target: { kind: 'invited', departmentIds: [OTHER_DEPARTMENT] },
+      }),
+    ).toBe('target-missing');
+    const definition = {
+      target: 'ticket' as const,
+      key: 'new_preflight_field',
+      label: 'New field',
+      type: 'text' as const,
+      required: false,
+      agentVisible: true,
+      options: [],
+    };
+    const parsedMapping = importMappingSchema.parse({
+      kind: 'field',
+      externalValue: 'new-field',
+      target: { kind: 'create', definition },
+    });
+    expect(await check(parsedMapping)).toBeNull();
+    expect(
+      await check(
+        importMappingSchema.parse({
+          kind: 'field',
+          externalValue: 'new-field',
+          target: { kind: 'create', definition: { ...definition, target: 'contact' } },
+        }),
+      ),
+    ).toBe('target-invalid');
+    expect(
+      await check(
+        importMappingSchema.parse({
+          kind: 'field',
+          externalValue: 'new-field',
+          target: { kind: 'create', definition: { ...definition, key: 'preflight_collision' } },
+        }),
+      ),
+    ).toBe('target-invalid');
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: '0'.repeat(64),
+      entity: 'field',
+      externalId: 'new-field',
+      helpdockId: collisionFieldId,
+      payloadHash: 'f'.repeat(64),
+    });
+    expect(await check(parsedMapping)).toBeNull();
+    expect(
+      await check({
+        kind: 'field',
+        externalValue: 'new-field',
+        target: { kind: 'existing', fieldId: uuidv7() },
+      }),
+    ).toBe('target-invalid');
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`),
+    ).toEqual(usersBefore);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM custom_field_defs ORDER BY id`,
+      ),
+    ).toEqual(fieldsBefore);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

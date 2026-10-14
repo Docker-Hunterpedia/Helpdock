@@ -2473,6 +2473,26 @@ invitation reuse; user/ticket revisions remain unchanged and no outbox work is
 created. Custom values, contact planning, duplicate planned invitations and the
 complete dry-run consumer/report/UI remain unfinished. M11-09/10/16 stay in progress.
 
+### Complete invitation email plan preflight (M11-10/16, in progress)
+
+Preflight now checks proposed new invitations together using the same normalized
+email spelling as staff loading. Duplicate new invitation addresses, including
+case-only differences, block every affected source agent. Reused same-account
+identities create no user and do not reserve a changed source email. Missing or
+non-agent invitation data remains invalid even when a binding is reused.
+
+The read-only adapter validates requested source user records in 500-ID batches,
+looks up only matching brand/vendor/account bindings and retains just ID/kind/email
+metadata for the complete-plan check. Issue results contain source IDs and safe
+codes, not email addresses. No invitation token, user, membership, mail or queue
+work is created.
+
+Pure tests cover duplicates, reuse and invalid source data. Real Postgres/Redis
+coverage splits a duplicate across rows 0 and 500, proves another account's binding
+cannot exempt it, verifies same-account reuse and unchanged user revisions, and
+asserts no outbox events. Value validation, contact planning and the complete
+dry-run consumer/report/preview UI remain unfinished; M11-10/16 stay in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

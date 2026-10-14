@@ -121,6 +121,7 @@ import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-co
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
+import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
@@ -6065,6 +6066,76 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('rejects duplicate planned invitation emails across batches while honoring only same-account reuse', async () => {
+    const runId = uuidv7();
+    const key = sourceAccountKey({ source: 'zendesk', verifiedAccount: 'invite-plan-account' });
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      startedBy: USER,
+      sourceAccountKey: key,
+    });
+    const scope = { brandId: BRAND, runId, source: 'zendesk' as const };
+    const people = Array.from({ length: 501 }, (_, index) => ({
+      externalId: `invite-plan-${index}`,
+      kind: 'agent' as const,
+      active: true,
+      name: `Agent ${index}`,
+      email: index === 500 ? 'PLAN-0@EXAMPLE.TEST' : `plan-${index}@example.test`,
+    }));
+    await owner.db.insert(importRecords).values(
+      people.map((payload) => ({
+        brandId: BRAND,
+        runId,
+        entity: 'user' as const,
+        externalId: payload.externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })),
+    );
+    const mappings = people.map((person) =>
+      importMappingSchema.parse({
+        kind: 'agent',
+        externalValue: person.externalId,
+        target: { kind: 'invited', departmentIds: [DEPARTMENT] },
+      }),
+    );
+    const validate = () =>
+      withSystem(app.db, BRAND, (tx) => validateImportInvitationPlan(tx, scope, mappings));
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`,
+    );
+    expect(await validate()).toEqual([
+      { externalId: 'invite-plan-0', code: 'invite-email-duplicate' },
+      { externalId: 'invite-plan-500', code: 'invite-email-duplicate' },
+    ]);
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: 'a'.repeat(64),
+      entity: 'user',
+      externalId: 'invite-plan-0',
+      helpdockId: USER,
+      payloadHash: 'e'.repeat(64),
+    });
+    expect(await validate()).toHaveLength(2);
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: key,
+      entity: 'user',
+      externalId: 'invite-plan-0',
+      helpdockId: USER,
+      payloadHash: 'e'.repeat(64),
+    });
+    expect(await validate()).toEqual([]);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`),
+    ).toEqual(before);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

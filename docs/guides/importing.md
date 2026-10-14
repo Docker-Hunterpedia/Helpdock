@@ -94,3 +94,8 @@ rule as loading. New invitations must include the ticket department; reused
 invitations cannot widen an existing membership. A new invitation colliding with
 an existing email is blocked and must be mapped explicitly. These checks create no
 users or jobs; the complete dry-run workflow is still under development.
+
+The invitation plan also rejects case-insensitive duplicate emails among new
+source agents, including duplicates in separate validation batches. Same-account
+reused identities create no new invitation; another account’s binding cannot
+exempt a duplicate. These read-only checks are not yet a complete dry-run workflow.

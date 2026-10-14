@@ -2115,10 +2115,40 @@ and attachments for two accounts with identical native IDs, an unchanged repeat,
 active/staged binding refusal, mismatched delta parents and a cross-account article
 dependency. Two unit cases cover stable account hashing and malformed input;
 32 database schema cases and 11 migration cases pass. Connection/API/manual-file
-flows still need to invoke binding before extraction/loading. A separate remaining
-message gap was identified: imported RFC Message-IDs still share the live-email
-unique index. That must be resolved without discarding the original headers before
-account isolation or the milestone can be marked complete.
+flows still need to invoke binding before extraction/loading. The next checkpoint resolves the identified RFC collision without discarding
+original headers. Connection/UI binding and the full milestone acceptance remain
+required before account isolation is complete.
+
+### Historical mail identity and threading (M11-07/09, in progress)
+
+The two-account RFC collision was reproduced first: a second native message failed
+against `ticket_messages_external_key`. Migration `0065_import_message_identity`
+adds a nullable source-account marker, backfills known imported messages and their
+same-brand copy chains, and limits live external-ID uniqueness to unmarked rows.
+A separate lookup index covers historical reference reads. Original RFC IDs stay
+in `external_message_id`; the import ledger remains the native idempotency key.
+Old copies with missing headers remain missing; the migration does not guess or
+restore potentially erased metadata. New split copies preserve the import marker,
+original historical RFC ID and existing email metadata.
+
+Live inbound deduplication ignores historical rows. Thread lookup considers public
+email only, prefers Helpdock delivery IDs over live received IDs and historical
+IDs, and resolves a historical ID only when it names one ticket. A known ambiguous
+reference prevents fallback to a subject ticket number; unknown IDs still allow
+normal fallback. Participant checks remain mandatory. Outbound references exclude
+private notes. Imported Message-IDs reject empty values, NULs and line breaks,
+including a trailing newline.
+
+The writer suite passes 120 real PostgreSQL/Redis cases, including identical RFC
+IDs across accounts and retained live uniqueness. Seven focused unit/schema cases
+cover header validation and deterministic reference resolution. Three real email
+API cases on PostgreSQL/Redis/Mailpit prove live delivery/deduplication, ambiguous
+history with a valid subject token, live-reference preference and verified sent
+mail winning over conflicting imported history. Twelve migration cases include
+an upgrade-shaped backfill of roots/copies and live uniqueness after the change.
+The existing 25-case merge/split API suite passes, and three focused provenance
+cases additionally prove copied original email metadata. Queue/API/import UI and
+the remaining milestone acceptance are still unfinished.
 
 ## M11-13 Freshdesk connector
 
@@ -2247,7 +2277,7 @@ PRD status board.
 
 ## Pull requests
 
-- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–23 migration work in progress (draft; paused at the owner's request, not ready to merge).
+- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–23 migration work in progress (draft; work continuing, not ready to merge).
 
 - [#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212) — M11-04–06 staff SSO integration, bilingual administration and setup guides (merged; all PR checks passed).
 

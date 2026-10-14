@@ -3511,6 +3511,10 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       input.authors.customer = { kind: 'contact', id: contact.id };
       const message = input.messages[0];
       if (!message) throw new Error('Missing namespace message');
+      message.email = {
+        messageId: 'same-native-message@namespace.example',
+        from: 'historical@namespace.example',
+      };
       message.attachments = [
         {
           externalId: 'namespace-file',
@@ -3554,6 +3558,28 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         .from(ticketMessages)
         .where(inArray(ticketMessages.ticketId, [one.ticketId, two.ticketId])),
     ).toHaveLength(4);
+    const historicalHeaders = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.externalMessageId, 'same-native-message@namespace.example'));
+    expect(historicalHeaders).toHaveLength(2);
+    expect(new Set(historicalHeaders.map((row) => row.importSourceAccountKey)).size).toBe(2);
+    const historical = historicalHeaders[0];
+    if (!historical) throw new Error('Missing historical header');
+    const liveCopy = {
+      ...historical,
+      id: uuidv7(),
+      seq: historical.seq + 100,
+      importSourceAccountKey: null,
+    };
+    await owner.db.insert(ticketMessages).values(liveCopy);
+    await expect(
+      owner.db
+        .insert(ticketMessages)
+        .values({ ...liveCopy, id: uuidv7(), seq: historical.seq + 101 }),
+    ).rejects.toMatchObject({
+      cause: { code: '23505', constraint_name: 'ticket_messages_external_key' },
+    });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

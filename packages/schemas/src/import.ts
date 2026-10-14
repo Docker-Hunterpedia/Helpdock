@@ -188,7 +188,12 @@ export const importMessageSchema = z
     via: shortText.optional(),
     email: z
       .strictObject({
-        messageId: z.string().max(998).optional(),
+        messageId: z
+          .string()
+          .min(1)
+          .max(998)
+          .refine((id) => !id.includes('\r') && !id.includes('\n') && !id.includes('\u0000'))
+          .optional(),
         from: z.email().optional(),
         to: emails.optional(),
         cc: emails.optional(),

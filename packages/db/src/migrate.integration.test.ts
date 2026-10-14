@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import postgres from 'postgres';
@@ -77,6 +78,7 @@ const MIGRATION_TAGS = [
   '0062_imported_section_ancestry',
   '0063_import_record_load_receipts',
   '0064_import_source_accounts',
+  '0065_import_message_identity',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -158,6 +160,58 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
+  });
+
+  it('backfills imported message and copy provenance while retaining live RFC uniqueness', async () => {
+    const url = await migrated('import_message_upgrade');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      await owner`ALTER TABLE ticket_messages DROP COLUMN import_source_account_key CASCADE`;
+      await owner`DROP INDEX ticket_messages_reference_idx`;
+      await owner`CREATE UNIQUE INDEX ticket_messages_external_key ON ticket_messages(brand_id, channel, external_message_id) WHERE external_message_id IS NOT NULL`;
+      const [brand] =
+        await owner`INSERT INTO brands(id, name, prefix) VALUES (gen_random_uuid(), 'Header upgrade', 'REF') RETURNING id`;
+      const [department] =
+        await owner`INSERT INTO departments(id, brand_id, name) VALUES (gen_random_uuid(), ${brand?.id}, 'Support') RETURNING id`;
+      const [status] =
+        await owner`INSERT INTO ticket_statuses(id, brand_id, name, system_state, color) VALUES (gen_random_uuid(), ${brand?.id}, 'Open', 'open', 'info') RETURNING id`;
+      const [ticket] =
+        await owner`INSERT INTO tickets(id, brand_id, department_id, number, prefix, subject, status_id, channel)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, 1, 'REF', 'Historical mail', ${status?.id}, 'email') RETURNING id`;
+      const [message] =
+        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 1, 'public', 'system', '<p>History</p>', 'History', 'email', 'original@vendor') RETURNING id`;
+      const [copy] =
+        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, copied_from_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 2, 'public', 'system', '<p>History</p>', 'History', 'email', ${message?.id}) RETURNING id`;
+      await owner`INSERT INTO import_external_ids(brand_id, source, source_account_key, entity, external_id, helpdock_id, payload_hash)
+        VALUES (${brand?.id}, 'zendesk', ${'a'.repeat(64)}, 'message', 'native-root', ${message?.id}, ${'b'.repeat(64)})`;
+      const migration = readFileSync(
+        new URL('../drizzle/0065_import_message_identity.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint')) {
+        if (statement.trim()) await owner.unsafe(statement);
+      }
+      const historical =
+        await owner`SELECT id, external_message_id, import_source_account_key FROM ticket_messages WHERE id IN (${message?.id}, ${copy?.id}) ORDER BY seq`;
+      expect(historical).toEqual([
+        {
+          id: message?.id,
+          external_message_id: 'original@vendor',
+          import_source_account_key: 'a'.repeat(64),
+        },
+        { id: copy?.id, external_message_id: null, import_source_account_key: 'a'.repeat(64) },
+      ]);
+      await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 3, 'public', 'system', '<p>Live</p>', 'Live', 'email', 'original@vendor')`;
+      await expect(owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 4, 'public', 'system', '<p>Duplicate</p>', 'Duplicate', 'email', 'original@vendor')`).rejects.toMatchObject(
+        { code: '23505' },
+      );
+    } finally {
+      await owner.end();
+    }
   });
 
   it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {

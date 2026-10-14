@@ -235,6 +235,14 @@ The principle: **an identifier someone types is a hint, not proof.** Access to h
 An inbound email is attached to an existing ticket only if **both** hold:
 
 1. A thread hint matches: `In-Reply-To` or any `References` id equals a message id Helpdock sent or received on that ticket, **or** the subject contains the brand's `[PREFIX-N]` token.
+   For imported history, duplicate RFC IDs can name multiple tickets. Real Helpdock
+   deliveries take precedence, followed by live received email. A historical ID
+   threads only when it names one ticket. If no ID resolves and a known historical
+   ID is ambiguous, create a new ticket rather than falling back to a subject
+   token that may reuse an old vendor number. Unknown IDs still permit subject
+   token fallback. Imported RFC IDs are retained as history and do not participate
+   in live delivery deduplication.
+
 2. The sender address is a participant of that ticket (§2.5), compared case-insensitively on the normalised address.
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.

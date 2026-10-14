@@ -445,3 +445,17 @@ they are not silently attributed to an account. New connection and manual-file
 flows must bind an account namespace before extraction/loading. Delta binding
 requires a completed parent in the same brand, vendor and namespace. Binding may
 change only before records exist, and cannot change active or terminal runs.
+
+### 2026-10-14 — historical RFC headers are not live delivery keys
+
+Preserve original RFC Message-IDs on imported messages, but mark their source
+account with a nullable `ticket_messages.import_source_account_key`. The live
+external-ID unique index excludes historical rows; native import identity remains
+in the account-scoped ledger. Migration backfills known imported messages and
+message copies. Split copies retain the marker and original historical mail
+headers. Inbound email deduplication checks live rows only. Thread lookup prefers
+real Helpdock deliveries, then live received email; a historical reference is used
+only when it identifies one ticket. Ambiguous history never chooses an arbitrary
+ticket, and a known ambiguous reference prevents fallback to a possibly reused
+subject ticket number. Ordinary participant authorization still applies. Reject line breaks
+and NULs in imported Message-IDs at the normalized boundary.

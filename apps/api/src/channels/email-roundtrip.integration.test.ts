@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
+  brands,
   createDb,
   type DbHandle,
   departments,
@@ -12,6 +13,7 @@ import {
   outbox,
   ticketMessages,
   ticketSlaClocks,
+  tickets,
   withSystem,
 } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
@@ -480,6 +482,115 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
     expect(await mailpitMessages()).toEqual([]);
   });
 
+  it('deduplicates live deliveries independently of identical historical Message-IDs', async () => {
+    await setAcknowledgment(false);
+    const message = {
+      from: { address: 'archive-dedupe@example.com' },
+      subject: 'Historical email',
+      text: 'Original history',
+      messageId: '<shared-import@example.com>',
+    };
+    await receive(message);
+    const historical = await messageOf('shared-import@example.com');
+    await owner.db
+      .update(ticketMessages)
+      .set({ importSourceAccountKey: 'a'.repeat(64) })
+      .where(eq(ticketMessages.id, historical.id));
+    expect(await receive({ ...message, text: 'New live delivery' })).toBe('accepted');
+    const rows = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.externalMessageId, 'shared-import@example.com'));
+    expect(rows).toHaveLength(2);
+    expect(rows.filter((row) => row.importSourceAccountKey === null)).toHaveLength(1);
+    expect(await receive({ ...message, text: 'Repeated live delivery' })).toBe('duplicate');
+    expect(
+      await owner.db
+        .select()
+        .from(ticketMessages)
+        .where(eq(ticketMessages.externalMessageId, 'shared-import@example.com')),
+    ).toHaveLength(2);
+  });
+
+  it('does not choose an arbitrary ticket for an ambiguous historical reference and prefers a live reference', async () => {
+    await setAcknowledgment(false);
+    const sender = { address: 'archive-routing@example.com' };
+    await receive({
+      from: sender,
+      subject: 'First history',
+      text: 'First',
+      messageId: '<archive-first@example.com>',
+    });
+    await receive({
+      from: sender,
+      subject: 'Second history',
+      text: 'Second',
+      messageId: '<archive-second@example.com>',
+    });
+    const first = await messageOf('archive-first@example.com');
+    const second = await messageOf('archive-second@example.com');
+    await owner.db
+      .update(ticketMessages)
+      .set({
+        importSourceAccountKey: 'b'.repeat(64),
+        externalMessageId: 'ambiguous-history@example.com',
+      })
+      .where(eq(ticketMessages.id, first.id));
+    await owner.db
+      .update(ticketMessages)
+      .set({
+        importSourceAccountKey: 'c'.repeat(64),
+        externalMessageId: 'ambiguous-history@example.com',
+      })
+      .where(eq(ticketMessages.id, second.id));
+    const [brand] = await owner.db
+      .select({ prefix: brands.prefix })
+      .from(brands)
+      .where(eq(brands.id, seeded.brandId));
+    const [named] = await owner.db
+      .select({ number: tickets.number })
+      .from(tickets)
+      .where(eq(tickets.id, first.ticketId));
+    if (!brand || !named) throw new Error('Missing historical subject token');
+    expect(
+      await receive({
+        from: sender,
+        subject: `Re: [${brand.prefix}-${named.number}] old history`,
+        text: 'Which conversation?',
+        messageId: '<archive-new@example.com>',
+        inReplyTo: '<ambiguous-history@example.com>',
+      }),
+    ).toBe('accepted');
+    const incoming = await messageOf('archive-new@example.com');
+    expect([first.ticketId, second.ticketId]).not.toContain(incoming.ticketId);
+    await receive({
+      from: sender,
+      subject: 'Live conversation',
+      text: 'Live',
+      messageId: '<ambiguous-history@example.com>',
+    });
+    const [live] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(
+        and(
+          eq(ticketMessages.externalMessageId, 'ambiguous-history@example.com'),
+          sql`${ticketMessages.importSourceAccountKey} IS NULL`,
+        ),
+      );
+    if (!live) throw new Error('Missing live reference');
+    expect(
+      await receive({
+        from: sender,
+        subject: 'Re: live',
+        text: 'Reply',
+        messageId: '<archive-live-reply@example.com>',
+        inReplyTo: '<ambiguous-history@example.com>',
+      }),
+    ).toBe('accepted');
+    expect((await messageOf('archive-live-reply@example.com')).ticketId).toBe(live.ticketId);
+  });
+
   it('threads the customer’s reply to the agent’s email onto the same ticket (M2 exit criterion 1)', async () => {
     await setAcknowledgment(false);
 
@@ -506,6 +617,18 @@ describe.skipIf(!hasDocker)('inbound and outbound email together', () => {
     expect((await mailpitHeaders(sent?.ID ?? ''))['In-Reply-To']).toEqual([
       '<invoice-1@example.com>',
     ]);
+
+    await receive({
+      from: { address: 'omar@example.com' },
+      subject: 'Unrelated imported history',
+      text: 'Other history',
+      messageId: '<forged-import-history@example.com>',
+    });
+    const historical = await messageOf('forged-import-history@example.com');
+    await owner.db
+      .update(ticketMessages)
+      .set({ importSourceAccountKey: 'd'.repeat(64), externalMessageId: sent?.MessageID ?? null })
+      .where(eq(ticketMessages.id, historical.id));
 
     // 3. The customer answers that email. The subject carries no ticket
     //    number, so only the headers can thread it.

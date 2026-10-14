@@ -59,3 +59,5 @@ Include pending import credential envelopes in master-key rotation while preserv
 Rebuild imported report history in resumable local-day chunks and atomically complete runs with credential purge and an audit record. Reindex changed imported help-center versions through a bounded run event; preserve draft visibility and avoid reindex events for unchanged repeat imports.
 
 Namespace imported native IDs by verified vendor account, keeping tickets, contacts, attachments and dependency references from different accounts separate and rejecting mismatched delta parents.
+
+Preserve historical RFC Message-IDs without colliding with live-email deduplication. Refuse ambiguous imported thread references, prefer verified Helpdock/live references, reject header injection characters, and retain historical mail provenance in split copies.

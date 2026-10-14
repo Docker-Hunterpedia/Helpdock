@@ -817,6 +817,24 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
             .update(ticketMessages)
             .set({
               authorDisplay,
+              ...(origin === 'import'
+                ? {
+                    importSourceAccountKey: 'e'.repeat(64),
+                    externalMessageId: 'split-original@example.com',
+                    email: {
+                      from: { address: 'historical@example.com', name: null },
+                      to: [],
+                      cc: [],
+                      date: '2019-01-01T00:00:00Z',
+                      quotedHtml: null,
+                      remoteImages: [],
+                      remoteImagePolicy: 'block',
+                      inlineAttachmentIds: [],
+                      authFailed: false,
+                      mismatch: null,
+                    },
+                  }
+                : {}),
               ...(authorDisplay === null
                 ? {}
                 : { authorType: 'system' as const, authorId: 'import:historical-agent' }),
@@ -854,6 +872,15 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
         );
         expect(stored?.copiedFromMessageId).toBe(second.id);
         expect(stored?.authorDisplay).toBe(authorDisplay);
+        expect(stored?.importSourceAccountKey).toBe(origin === 'import' ? 'e'.repeat(64) : null);
+        expect(stored?.externalMessageId).toBe(
+          origin === 'import' ? 'split-original@example.com' : null,
+        );
+        if (origin === 'import')
+          expect(stored?.email).toMatchObject({
+            from: { address: 'historical@example.com' },
+            date: '2019-01-01T00:00:00Z',
+          });
 
         // The copy shares the object and is authorised through the new ticket.
         const copied = copy?.attachments[0]?.id ?? '';

@@ -42,10 +42,14 @@ Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one alr
 
 ## What happens to a message
 
-1. **Duplicates** are recognised by `Message-ID` and dropped.
+1. **Duplicates** of live email are recognised by `Message-ID` and dropped. Imported historical IDs do not suppress new live deliveries.
 2. **Automated mail** — `Auto-Submitted`, `Precedence: bulk/list/junk`, mailing-list headers, out-of-office markers, `noreply@`-style senders — never opens a ticket unless its address is in the mailbox's **Automated senders that may open tickets** list. It is logged.
 3. **Blocked senders** (Ticketing › Spam) are dropped and counted.
 4. **Threading** (DOMAIN-RULES §4.3). A message joins an existing ticket only when it references it — by `In-Reply-To`/`References` naming a message Helpdock received or sent on the ticket (an agent's emailed reply or an auto-reply counts), or the brand's `[HD-1042]` token in the subject — **and** the sender is a participant: the ticket's contact, a CC, or staff on the ticket. Anyone else gets a new ticket in the same department with the note "Referenced HD-1042 but sender is not a participant", from which an agent can open or merge.
+   Migration support is in development. If an imported Message-ID names multiple
+   tickets, Helpdock starts a new ticket rather than guessing; a subject token does
+   not override that ambiguity. Verified Helpdock delivery IDs and live received
+   email take precedence over imported history.
 5. **The body** is sanitised (no scripts, forms or styles), the quoted history is folded behind "Show quoted text", inline images become the message's attachments, and other attachments go through the media pipeline like any upload.
 6. **Remote images** are never in the stored body. With **Block until an agent loads them** the email card shows how many and from where; **Load images** fetches them through Helpdock's proxy. With **Load through the Helpdock image proxy** they load at once. Either way the server fetches them, re-encodes them, and the sender never sees an agent's address or browser.
 7. **SPF or DKIM failures** reported by your receiving server open the ticket in Spam when the mailbox's switch is on.

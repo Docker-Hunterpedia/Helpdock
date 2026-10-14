@@ -6,7 +6,7 @@ import {
 } from '@helpdock/channels';
 import { type Db, type DbTransaction, mailboxes, ticketMessages } from '@helpdock/db';
 import type { InboundParseOutcome } from '@helpdock/schemas';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { emailReceivedEventSchema, enqueueEmailReceived } from '../../email/email-events.js';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { isSenderBlocked } from '../../ticketing/sender-gate.js';
@@ -209,6 +209,7 @@ export class InboundEmailService {
           eq(ticketMessages.brandId, brandId),
           eq(ticketMessages.channel, 'email'),
           eq(ticketMessages.externalMessageId, externalId),
+          isNull(ticketMessages.importSourceAccountKey),
         ),
       )
       .limit(1);

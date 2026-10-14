@@ -5,7 +5,7 @@ import type { ImportMessage } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importEmailMeta } from './email-meta.js';
-import { importedIdentity, rememberImported } from './external-ids.js';
+import { importedIdentity, importSourceAccountKey, rememberImported } from './external-ids.js';
 import {
   loadImportedAttachment,
   lockImportedAttachments,
@@ -48,6 +48,7 @@ async function insertImportedMessage(
     bodyText: messageBody.text,
     channel: input.resolved.channel,
     externalMessageId: message.email?.messageId ?? null,
+    importSourceAccountKey: await importSourceAccountKey(tx, input),
     email: importEmailMeta(message),
     createdAt: new Date(message.createdAt),
   });
@@ -89,6 +90,7 @@ async function updateImportedMessage(
       bodyText: messageBody.text,
       email: importEmailMeta(message),
       externalMessageId: message.email?.messageId ?? null,
+      importSourceAccountKey: await importSourceAccountKey(tx, input),
       createdAt: new Date(message.createdAt),
     })
     .where(and(eq(ticketMessages.id, messageId), eq(ticketMessages.brandId, input.brandId)));

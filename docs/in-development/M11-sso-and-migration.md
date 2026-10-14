@@ -2247,6 +2247,26 @@ Consumer cases prove 503/429 budget handling, terminal credential purge and inva
 retry dates. Expired URL refresh, production registration, knowledge-image/file
 orchestration, API/UI and complete acceptance remain unfinished.
 
+### Zendesk attachment refresh contract recheck (M11-12; 2026-10-14)
+
+Official [Attachments API](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket-attachments/)
+confirms agent-authenticated `GET /api/v2/attachments/{attachment_id}`, using the
+integer ID supplied by comments, returns `attachment.id`, file_name, content_type,
+size and content_url. This is the metadata resource for refreshing a stale URL.
+The [URL-property guidance](https://developer.zendesk.com/documentation/api-basics/best-practices/working-with-url-properties/)
+explicitly permits externally hosted content_url assets and requires avoiding
+credential disclosure. The [secure-download guide](https://developer.zendesk.com/documentation/ticketing/managing-tickets/accessing-end-user-uploaded-attachments/)
+describes authenticating the account URL and following its temporary redirect.
+The newer [Attachment Content API](https://developer.zendesk.com/api-reference/attachments/content/)
+describes tokenized content and redirects for expired/used tokens; it does not
+promise that every external CDN uses that behavior. A stale external URL may fail
+and must be refreshed through the account API, with a bounded retry.
+
+The stand-in now implements the documented Show Attachment response, mandatory
+account authentication and missing-resource 404s. Existing secure redirect/CDN
+controls remain. Connector refresh implementation follows this contract; retries
+must never loop or send account credentials to a non-account origin.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

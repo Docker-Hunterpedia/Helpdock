@@ -28,7 +28,7 @@ export type ZendeskFixture = z.input<typeof fixtureSchema>;
 type ZendeskRow = z.infer<typeof rowSchema>;
 type DatedRow = z.infer<typeof datedRowSchema>;
 type CursorState = { entity: string; since: number; offset: number };
-type Media = { bytes: Buffer; expiresAt: number };
+type Media = { bytes: Buffer; expiresAt: number; fileName?: string; contentType?: string };
 
 /** Documented Support/Guide contracts, checked 2026-10-14; synthetic data only. */
 export class FakeZendesk {
@@ -59,8 +59,16 @@ export class FakeZendesk {
     this.options.now += z.number().int().positive().parse(seconds);
   }
 
-  addAttachment(id: string, bytes: Buffer): string {
-    this.media.set(id, { bytes: Buffer.from(bytes), expiresAt: Number.POSITIVE_INFINITY });
+  addAttachment(
+    id: string,
+    bytes: Buffer,
+    metadata: { fileName?: string; contentType?: string } = {},
+  ): string {
+    this.media.set(id, {
+      bytes: Buffer.from(bytes),
+      expiresAt: Number.POSITIVE_INFINITY,
+      ...metadata,
+    });
     return `${this.server.root}/attachments/token/${encodeURIComponent(id)}/file`;
   }
 
@@ -73,6 +81,26 @@ export class FakeZendesk {
     if (authorization !== this.options.authorization)
       return { status: 401, json: { error: 'Invalid credentials' } };
     if (url.pathname.startsWith('/attachments/token/')) return this.secureAttachment(url);
+    const attachmentMatch = /^\/api\/v2\/attachments\/(\d+)(?:\.json)?$/.exec(url.pathname);
+    if (attachmentMatch) {
+      const id = attachmentMatch[1] ?? '';
+      const media = this.media.get(id);
+      return media
+        ? {
+            status: 200,
+            json: {
+              attachment: {
+                id: Number(id),
+                file_name: media.fileName ?? `${id}.bin`,
+                content_type: media.contentType ?? 'application/octet-stream',
+                size: media.bytes.length,
+                content_url: `${this.server.root}/attachments/token/${id}/file`,
+                url: `${this.server.root}/api/v2/attachments/${id}`,
+              },
+            },
+          }
+        : this.notFound();
+    }
     if (url.pathname === '/api/v2/users/me.json')
       return { status: 200, json: { user: { id: 301, name: 'Migration admin', role: 'admin' } } };
     const userMatch = /^\/api\/v2\/users\/(\d+)\.json$/.exec(url.pathname);

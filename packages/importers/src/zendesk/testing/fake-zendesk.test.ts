@@ -268,3 +268,33 @@ it('resolves authenticated attachment redirects without credentials on the CDN a
   });
   expect((await http.request(original, auth)).body.toString()).toBe('historical attachment');
 });
+
+it('serves the documented authenticated Show Attachment resource for refreshing content URLs', async () => {
+  const url = fake.addAttachment('498483', Buffer.from('historical attachment'), {
+    fileName: 'receipt.pdf',
+    contentType: 'application/pdf',
+  });
+  const schema = z.object({
+    attachment: z.object({
+      id: z.number(),
+      file_name: z.string(),
+      content_type: z.string(),
+      size: z.number(),
+      content_url: z.url(),
+    }),
+  });
+  const resource = await http.json(`${fake.server.root}/api/v2/attachments/498483`, schema, auth);
+  expect(resource.attachment).toEqual({
+    id: 498483,
+    file_name: 'receipt.pdf',
+    content_type: 'application/pdf',
+    size: 21,
+    content_url: url,
+  });
+  await expect(
+    http.json(`${fake.server.root}/api/v2/attachments/498483`, schema),
+  ).rejects.toMatchObject({ code: 'credentials-refused' });
+  await expect(
+    http.json(`${fake.server.root}/api/v2/attachments/999999`, schema, auth),
+  ).rejects.toMatchObject({ code: 'record-unavailable' });
+});

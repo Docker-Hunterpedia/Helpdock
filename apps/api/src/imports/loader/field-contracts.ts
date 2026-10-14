@@ -1,8 +1,4 @@
-import {
-  customFieldCreateRequestSchema,
-  importFieldSchema,
-  importSourceSchema,
-} from '@helpdock/schemas';
+import { importFieldSchema, importFieldTargetSchema, importSourceSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 
 export const fieldLoadSchema = z
@@ -11,14 +7,7 @@ export const fieldLoadSchema = z
     runId: z.uuid(),
     source: importSourceSchema,
     record: importFieldSchema,
-    mapping: z.discriminatedUnion('kind', [
-      z.strictObject({ kind: z.literal('existing'), fieldId: z.uuid() }),
-      z.strictObject({
-        kind: z.literal('create'),
-        definition: customFieldCreateRequestSchema.strict(),
-      }),
-      z.strictObject({ kind: z.literal('skip') }),
-    ]),
+    mapping: importFieldTargetSchema,
   })
   .refine(
     (input) =>

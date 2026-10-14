@@ -1,5 +1,27 @@
 import { expect, it } from 'vitest';
-import { findImportWriterViolations } from './check-import-writer.ts';
+import {
+  findImportLifecycleViolations,
+  findImportWriterViolations,
+} from './check-import-writer.ts';
+
+it.each([
+  "import { TicketsService as Hidden } from '../tickets/tickets.service.js';",
+  'ReplyDeliveryHook.onReply(context);',
+  'globalThis.fetch(url);',
+  'enqueueContactCreated(tx, profile);',
+  "const hidden = await import('../tickets/tickets.service.js');",
+])('refuses forbidden hooks outside the writer, including jobs/connectors: %s', (source) => {
+  expect(findImportLifecycleViolations(source).length).toBeGreaterThan(0);
+});
+
+it('permits the reviewed outbox scheduling mechanism and safe HTTP client outside the writer', () => {
+  expect(
+    findImportLifecycleViolations(
+      "await enqueueOutbox(tx, event); await safeFetch(url); // TicketsService\nconst body = 'fetch';",
+    ),
+  ).toEqual([]);
+  expect(findImportWriterViolations('enqueueOutbox(tx, event);').length).toBeGreaterThan(0);
+});
 
 it.each([
   "import { TicketsService as Hidden } from '../../tickets/tickets.service.js';",

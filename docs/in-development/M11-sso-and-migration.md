@@ -1262,6 +1262,44 @@ from `@helpdock/importers/testing`, never bundled into the runtime): HTTP server
 like `FakeGraph`, seeded from the reference dataset in each vendor's own JSON shape,
 with controls for 429, 5xx, expired attachment URLs and a "changed since" delta.
 
+### Loading checkpoint (M11-09/10, in progress; 2026-10-14)
+
+`loadStagedTicket` owns one fenced transaction checkpoint. It verifies the staged
+ticket's brand, run, source and payload hash, compares the complete message/rating
+set with the supplied mapped input, and checks standalone attachment references
+against their message. Domain rows, child record IDs/statuses and `counts.loaded`
+commit together. A rolled-back worker transaction leaves the source records
+staged; retrying a committed checkpoint adds no messages or counts. Pause and
+claim replacement revoke the old worker before domain writes.
+
+Thread comparisons use maps keyed by source IDs. Child markers update in groups of
+1,000 instead of one pair of queries per record. A database-side size check
+rejects staged thread payloads exceeding 50 MiB before reading those payloads
+into the worker; it measures expanded JSON text, including TOAST-compressed
+values. This is a blocking `thread-too-large` error, never a partial thread.
+The mapper/dry run must surface this same limit before execution.
+
+Two repeat/delta gaps were reproduced and fixed: deleted or purged ticket
+targets were reported as unchanged, and changed source subjects were not applied.
+Target availability is now checked under a row lock, including repeat checkpoint
+reads. Delta subject updates retain the original creation date. The focused
+writer/checkpoint suite passes 58 cases on real PostgreSQL/Redis. This does not
+prove worker process termination/restart: the new rollback case simulates loss
+before commit. Actual queue wiring, mapping resolution, other entity phases,
+attachment jobs, finalization and browser/reference-dataset acceptance remain
+incomplete.
+
+Shared `importMappingSchema`/`importMappingsSchema` now validate the seven mapping
+kinds, reusing the writer's staff/field targets. Targets reject extra privilege
+or secret fields; same-kind source values cannot be mapped twice. An empty group
+value represents an explicit destination for source tickets with no group.
+Eight focused schema cases and ten existing staff/field contract cases pass.
+Saving/proposing mappings and dry-run validation are not implemented yet.
+The build guard also scans the import jobs and SDK for live lifecycle hooks,
+direct `fetch`, `require` and dynamic module loading; writer dependency checks
+remain stricter and forbid even outbox scheduling in the transaction-only writer.
+Eighteen guard cases pass. Queue orchestration may use the reviewed outbox path.
+
 ### M11-11 implementation notes (in progress)
 
 `@helpdock/importers` contains the typed connector contract, a non-blocking token

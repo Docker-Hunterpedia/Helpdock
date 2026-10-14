@@ -19,6 +19,7 @@ import { loadImportedCategory, loadImportedSection } from './load-taxonomy.js';
 import {
   createImportedTicket,
   importedTicketChanges,
+  requireImportedTicket,
   updateImportedTicket,
 } from './load-ticket.js';
 import { validateTicketMappings } from './mapping-scope.js';
@@ -66,6 +67,7 @@ export class ImportWriter {
       authors: input.authors,
     });
     const existing = await importedIdentity(tx, input, 'ticket', input.record.externalId);
+    if (existing) await requireImportedTicket(tx, input, existing.helpdockId);
     if (existing?.payloadHash === payloadHash)
       return { ticketId: existing.helpdockId, outcome: 'unchanged', messages: 0 };
     input.resolved.custom = await validatedImportedCustom(tx, {

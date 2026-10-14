@@ -107,6 +107,28 @@ export function findImportWriterViolations(source: string): string[] {
   return [...violations];
 }
 
+/** Extraction/finish may use the outbox; no import layer may invoke live ticket hooks or direct fetch. */
+export function findImportLifecycleViolations(source: string): string[] {
+  const violations = new Set<string>();
+  const tokens = tokenize(source, 'import.ts');
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (!token) continue;
+    if (
+      token.kind === SyntaxKind.ImportKeyword &&
+      tokens[index + 1]?.kind === SyntaxKind.OpenParenToken
+    )
+      violations.add('dynamic import lifecycle module loading is forbidden');
+    if (
+      token.kind === SyntaxKind.Identifier &&
+      token.text !== 'enqueueOutbox' &&
+      (FORBIDDEN_IDENTIFIERS.has(token.text) || token.text === 'require')
+    )
+      violations.add(`forbidden import lifecycle symbol: ${token.text}`);
+  }
+  return [...violations];
+}
+
 async function writerFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -119,16 +141,23 @@ async function writerFiles(directory: string): Promise<string[]> {
 
 async function checkWriter(): Promise<void> {
   const files = await writerFiles(path.resolve('apps/api/src/imports/loader'));
+  const imports = [
+    ...(await writerFiles(path.resolve('apps/api/src/imports'))),
+    ...(await writerFiles(path.resolve('packages/importers/src'))),
+  ];
   const failures: string[] = [];
   for (const file of files)
     for (const violation of findImportWriterViolations(await readFile(file, 'utf8')))
+      failures.push(`${path.relative(process.cwd(), file)}: ${violation}`);
+  for (const file of imports)
+    for (const violation of findImportLifecycleViolations(await readFile(file, 'utf8')))
       failures.push(`${path.relative(process.cwd(), file)}: ${violation}`);
   if (failures.length) {
     process.stderr.write(`${failures.join('\n')}\n`);
     process.exitCode = 1;
   } else
     process.stdout.write(
-      `import writer: ${files.length} files checked, no live-ticket hooks or unreviewed dependencies\n`,
+      `import writer: ${files.length} strict writer files and ${imports.length} import lifecycle files checked\n`,
     );
 }
 

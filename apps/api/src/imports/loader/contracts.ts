@@ -67,7 +67,8 @@ export class ImportLoadError extends Error {
       | 'mapping-invalid'
       | 'author-unmapped'
       | 'target-unavailable'
-      | 'duplicate-source-message',
+      | 'duplicate-source-message'
+      | 'thread-too-large',
   ) {
     super(code);
     this.name = 'ImportLoadError';

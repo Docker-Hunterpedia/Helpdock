@@ -67,6 +67,7 @@ import { createTranscriptionHandler } from '../../transcription/transcription-ev
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
@@ -148,6 +149,86 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   let redis: Redis;
   const writer = new ImportWriter();
 
+  async function stagedTicketScenario(externalId: string) {
+    const input = request(externalId);
+    input.runId = uuidv7();
+    const rating = {
+      externalId: `rating-${externalId}`,
+      ticketExternalId: externalId,
+      rating: 5,
+      ratedAt: '2019-01-03T00:00:00Z',
+    };
+    input.csat = [rating];
+    const attachment = {
+      externalId: `file-${externalId}`,
+      fileName: 'history.pdf',
+      contentType: 'application/pdf',
+      url: 'https://vendor.example/history.pdf',
+    };
+    const message = input.messages[0];
+    if (!message) throw new Error('Missing checkpoint message fixture');
+    message.attachments.push(attachment);
+    await owner.db.insert(importRuns).values({
+      id: input.runId,
+      brandId: BRAND,
+      source: input.source,
+      status: 'loading',
+      startedBy: USER,
+    });
+    const [record] = await owner.db
+      .insert(importRecords)
+      .values({
+        brandId: BRAND,
+        runId: input.runId,
+        entity: 'ticket',
+        externalId,
+        payload: input.record,
+        payloadHash: hashImportValue(input.record),
+      })
+      .returning({ id: importRecords.id });
+    await owner.db.insert(importRecords).values(
+      input.messages.map((message) => ({
+        brandId: BRAND,
+        runId: input.runId,
+        entity: 'message' as const,
+        externalId: message.externalId,
+        parentExternalId: externalId,
+        payload: message,
+        payloadHash: hashImportValue(message),
+      })),
+    );
+    const sourceAttachment = {
+      ...attachment,
+      ticketExternalId: externalId,
+      messageExternalId: message.externalId,
+    };
+    await owner.db.insert(importRecords).values([
+      {
+        brandId: BRAND,
+        runId: input.runId,
+        entity: 'attachment',
+        externalId: attachment.externalId,
+        parentExternalId: externalId,
+        payload: sourceAttachment,
+        payloadHash: hashImportValue(sourceAttachment),
+      },
+      {
+        brandId: BRAND,
+        runId: input.runId,
+        entity: 'csat',
+        externalId: rating.externalId,
+        parentExternalId: externalId,
+        payload: rating,
+        payloadHash: hashImportValue(rating),
+      },
+    ]);
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId: input.runId, phase: 'loading' }),
+    );
+    if (!record || !claim) throw new Error('Unable to stage checkpoint fixture');
+    return { input, claim, recordId: record.id };
+  }
+
   beforeAll(async () => {
     postgres = await startPostgres();
     redisContainer = await startRedis();
@@ -215,6 +296,167 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await redis?.quit();
     await redisContainer?.stop();
     await postgres?.stop();
+  });
+
+  it('commits staged ticket/thread progress atomically and resumes after a rolled-back worker transaction', async () => {
+    const scenario = await stagedTicketScenario('checkpoint-crash');
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await loadStagedTicket(tx, scenario);
+        throw new Error('simulated worker termination before commit');
+      }),
+    ).rejects.toThrow('simulated worker termination');
+    let rows = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.runId, scenario.input.runId));
+    expect(rows.every((row) => row.status === 'staged' && row.helpdockId === null)).toBe(true);
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, scenario.input.record.externalId)),
+    ).toEqual([]);
+    const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+    expect(loaded).toMatchObject({ state: 'loaded', outcome: 'created', messages: 2 });
+    rows = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.runId, scenario.input.runId));
+    expect(rows.every((row) => row.status === 'loaded' && row.helpdockId !== null)).toBe(true);
+    const [run] = await owner.db
+      .select()
+      .from(importRuns)
+      .where(eq(importRuns.id, scenario.input.runId));
+    expect(run?.counts).toEqual({ loaded: { ticket: 1, message: 2, attachment: 1, csat: 1 } });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario))).toEqual({
+      state: 'already_loaded',
+      ticketId: loaded.ticketId,
+    });
+    expect([
+      ...(await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
+      )),
+    ]).toEqual([...before]);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId)))[0]
+        ?.counts,
+    ).toEqual(run?.counts);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db
+      .update(tickets)
+      .set({ deletedAt: new Date() })
+      .where(eq(tickets.id, loaded.ticketId));
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+  });
+
+  it.each(['omitted message', 'changed message', 'different source'])(
+    'refuses a checkpoint with %s before writing domain records',
+    async (scenarioName) => {
+      const scenario = await stagedTicketScenario(`checkpoint-${scenarioName}`);
+      if (scenarioName === 'omitted message') scenario.input.messages.pop();
+      if (scenarioName === 'changed message' && scenario.input.messages[0])
+        scenario.input.messages[0].bodyHtml = '<p>Altered history</p>';
+      if (scenarioName === 'different source') scenario.input.source = 'freshdesk';
+      await expect(
+        withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+      expect(
+        await owner.db
+          .select()
+          .from(importExternalIds)
+          .where(eq(importExternalIds.externalId, scenario.input.record.externalId)),
+      ).toEqual([]);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId)))[0]
+          ?.counts,
+      ).toEqual({});
+    },
+  );
+
+  it('fences a paused or replaced load worker before any ticket writes', async () => {
+    const scenario = await stagedTicketScenario('checkpoint-paused');
+    const scope = { brandId: BRAND, runId: scenario.input.runId };
+    expect(await withSystem(app.db, BRAND, (tx) => pauseImportRun(tx, scope))).toBe(true);
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+    expect(await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, scope))).toBe('loading');
+    const replacement = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'loading' }),
+    );
+    if (!replacement) throw new Error('Unable to reclaim resumed run');
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        loadStagedTicket(tx, { ...scenario, claim: replacement }),
+      ),
+    ).toMatchObject({ state: 'loaded', messages: 2 });
+  });
+
+  it('refuses a thread over the materialization budget before reading its full payloads into the worker', async () => {
+    const scenario = await stagedTicketScenario('checkpoint-oversized');
+    await owner.db.execute(sql`INSERT INTO import_records (id, brand_id, run_id, entity, external_id, parent_external_id, payload, payload_hash)
+      SELECT gen_random_uuid(), ${BRAND}, ${scenario.input.runId}, 'message', 'oversized-' || n, ${scenario.input.record.externalId},
+        jsonb_build_object('externalId', 'oversized-' || n, 'ticketExternalId', ${scenario.input.record.externalId}::text,
+          'authorKind', 'customer', 'public', true, 'bodyHtml', repeat('x', 2097152),
+          'createdAt', '2019-01-01T00:00:00Z', 'attachments', '[]'::jsonb), repeat('0', 64)
+      FROM generate_series(1, 26) AS n`);
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ code: 'thread-too-large' });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, scenario.input.record.externalId)),
+    ).toEqual([]);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId)))[0]
+        ?.counts,
+    ).toEqual({});
+  });
+
+  it.each(['soft deleted', 'purged'])(
+    'refuses to silently reuse a %s imported ticket on repeat or delta',
+    async (mode) => {
+      const input = request(`unavailable-target-${mode}`);
+      const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+      if (mode === 'purged') await owner.db.delete(tickets).where(eq(tickets.id, loaded.ticketId));
+      else
+        await owner.db
+          .update(tickets)
+          .set({ deletedAt: new Date() })
+          .where(eq(tickets.id, loaded.ticketId));
+      await expect(
+        withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input)),
+      ).rejects.toMatchObject({ code: 'target-unavailable' });
+      input.record.updatedAt = '2020-01-01T00:00:00Z';
+      await expect(
+        withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input)),
+      ).rejects.toMatchObject({ code: 'target-unavailable' });
+    },
+  );
+
+  it('updates a source subject on delta while retaining the original creation date', async () => {
+    const input = request('subject-delta');
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    input.record.subject = 'Changed source subject';
+    input.record.updatedAt = '2020-01-01T00:00:00Z';
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'updated',
+      messages: 0,
+    });
+    const [ticket] = await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId));
+    expect(ticket?.subject).toBe(input.record.subject);
+    expect(ticket?.createdAt.toISOString()).toBe('2019-01-01T00:00:00.000Z');
   });
 
   it('preserves mapped tags and CC identities, repeats without writes and replaces source tags on delta', async () => {

@@ -232,3 +232,17 @@ Transcription also checks origin at both subscription and worker execution.
 Preserving attachment origin and historical author display names through ticket
 splits closes supporting issue #214 without changing ordinary split permissions
 or download authorization.
+
+### 2026-10-14 — atomic ticket checkpoints and bounded thread materialization
+
+One ticket's domain writes, staged message/rating/attachment pointers and loaded
+counters commit in the same fenced transaction. A checkpoint cannot omit or
+alter staged thread records. Child pointers are updated in 1,000-record groups.
+Before materializing a thread, measure its expanded staged JSON in PostgreSQL;
+more than 50 MiB is blocked, with no partial load. Preview and dry-run validation
+must apply the same bound. This protects worker memory without silently discarding
+history; it is separate from the attachment byte limits.
+
+Repeated and delta imports refuse deleted/purged local ticket targets instead of
+reporting a dangling source pointer as success or reviving deleted data. Changed
+source subjects participate in delta updates; creation dates remain original.

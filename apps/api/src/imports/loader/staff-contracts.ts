@@ -1,4 +1,4 @@
-import { importSourceSchema, importUserSchema } from '@helpdock/schemas';
+import { importSourceSchema, importStaffTargetSchema, importUserSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 
 export const staffLoadSchema = z
@@ -7,18 +7,7 @@ export const staffLoadSchema = z
     runId: z.uuid(),
     source: importSourceSchema,
     record: importUserSchema,
-    mapping: z.discriminatedUnion('kind', [
-      z.strictObject({ kind: z.literal('existing'), userId: z.uuid() }),
-      z.strictObject({
-        kind: z.literal('invited'),
-        departmentIds: z
-          .array(z.uuid())
-          .min(1)
-          .max(1000)
-          .refine((ids) => new Set(ids).size === ids.length),
-      }),
-      z.strictObject({ kind: z.literal('name') }),
-    ]),
+    mapping: importStaffTargetSchema,
   })
   .refine(
     (input) =>

@@ -937,6 +937,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         ratedAt: '2019-01-04T10:00:00Z',
         closedAt: '2019-01-03T00:00:00Z',
         comment: 'Original answer',
+        sourceDetails: { api: 'legacy', score: 'good', ratedAtBasis: 'source-created-at' },
       },
       {
         externalId: 'rating-b',
@@ -951,6 +952,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .from(csatResponses)
       .where(eq(csatResponses.ticketId, loaded.ticketId));
     expect(before).toHaveLength(2);
+    expect(before.find((row) => row.importedExternalId === 'rating-a')?.importedDetails).toEqual({
+      api: 'legacy',
+      score: 'good',
+      ratedAtBasis: 'source-created-at',
+    });
     expect(before.find((row) => row.importedExternalId === 'rating-b')?.closedAt).toBeNull();
     for (const row of before) {
       expect(row.ratedAt?.toISOString()).toBe('2019-01-04T10:00:00.000Z');
@@ -993,6 +999,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     if (!firstRating) throw new Error('Missing rating fixture');
     firstRating.rating = 4;
     firstRating.comment = 'Corrected answer';
+    firstRating.sourceDetails = {
+      api: 'legacy',
+      score: 'good',
+      reason: 'Corrected source metadata',
+    };
     await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
     const changed = await owner.db
       .select()
@@ -1003,6 +1014,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       id: before.find((row) => row.importedExternalId === 'rating-a')?.id,
       rating: 4,
       comment: 'Corrected answer',
+      importedDetails: { api: 'legacy', score: 'good', reason: 'Corrected source metadata' },
     });
     expect(await owner.db.select().from(outbox)).toEqual([]);
     expect(await redis.dbsize()).toBe(0);
@@ -1989,12 +2001,21 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           field: 3,
           tag: 1,
           activity: 2,
+          csat: 3,
         },
       });
       expect(run?.cursors).toMatchObject({
         ticket: { done: true, deltaCursor: { after: expect.any(String) } },
         contact: { done: true },
       });
+      expect(
+        (await owner.db.select().from(importLog).where(eq(importLog.runId, runId))).sort(
+          (first, second) => first.message.localeCompare(second.message),
+        ),
+      ).toMatchObject([
+        { level: 'warning', entity: 'csat', message: 'import.csat.scale-normalized' },
+        { level: 'warning', entity: 'csat', message: 'import.csat.timestamp-inferred' },
+      ]);
       expect(await owner.db.select().from(outbox)).toEqual([]);
       expect(await redis.dbsize()).toBe(0);
     } finally {

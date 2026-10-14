@@ -36,6 +36,7 @@ export const csatSurveyRow = (overrides: Partial<CsatResponse> = {}): CsatRespon
   closedAt: CSAT_NOW,
   importedSource: null,
   importedExternalId: null,
+  importedDetails: null,
   tokenHash: 'not-a-real-hash',
   expiresAt: new Date(CSAT_NOW.getTime() + 30 * 86_400_000),
   sentAt: null,

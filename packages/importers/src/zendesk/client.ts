@@ -43,8 +43,23 @@ export class ZendeskClient {
       level: 'warning',
       entity: 'field',
       externalId,
-      message:
-        'Source field cannot be represented without losing validation or relationship semantics; extraction stopped.',
+      message: 'import.field.unsupported-semantics',
+    });
+  }
+
+  warnLegacyCsatTimestamp(): Promise<void> {
+    return this.context.log({
+      level: 'warning',
+      entity: 'csat',
+      message: 'import.csat.timestamp-inferred',
+    });
+  }
+
+  warnSurveyScaleNormalization(): Promise<void> {
+    return this.context.log({
+      level: 'warning',
+      entity: 'csat',
+      message: 'import.csat.scale-normalized',
     });
   }
 

@@ -207,6 +207,7 @@ export const importCsatSchema = z.strictObject({
   comment: body.optional(),
   ratedAt: instant,
   closedAt: instant.optional(),
+  sourceDetails: custom.optional(),
 });
 export const importActivitySchema = z.strictObject({
   externalId,

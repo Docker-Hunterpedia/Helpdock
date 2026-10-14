@@ -38,6 +38,7 @@ const survey = (overrides: Partial<CsatResponse> = {}): CsatResponse => ({
   closedAt: NOW,
   importedSource: null,
   importedExternalId: null,
+  importedDetails: null,
   tokenHash: hashCsatToken(signedUnder(CURRENT)),
   expiresAt: new Date(NOW.getTime() + 86_400_000),
   sentAt: null,

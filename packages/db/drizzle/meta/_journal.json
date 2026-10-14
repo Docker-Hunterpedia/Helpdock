@@ -414,6 +414,13 @@
       "when": 1791938323465,
       "tag": "0060_imported_participant_source",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791943126149,
+      "tag": "0061_imported_csat_details",
+      "breakpoints": true
     }
   ]
 }

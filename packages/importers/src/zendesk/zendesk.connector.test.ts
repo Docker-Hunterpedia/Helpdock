@@ -430,6 +430,165 @@ it('uses the terminal ticket watermark to revisit changed audit history on delta
   ]);
 });
 
+it('imports only answered legacy CSAT with original score, reason, actors and explicit date provenance', async () => {
+  fake.replaceFixture({ ...zendeskCoreFixture, survey_responses: [] });
+  const warnings: Parameters<typeof context.log>[0][] = [];
+  context.log = async (entry) => {
+    warnings.push(entry);
+  };
+  const pages = await collectPages(connector.extract(context, 'csat', null));
+  expect(pages.flatMap((page) => page.records)).toMatchObject([
+    {
+      entity: 'csat',
+      payload: {
+        externalId: 'legacy:1401',
+        rating: 5,
+        ratedAt: '2020-01-03T10:00:00Z',
+        sourceDetails: {
+          score: 'good',
+          updatedAt: '2020-01-04T10:00:00Z',
+          ratedAtBasis: 'source-created-at',
+          assigneeExternalId: '301',
+        },
+      },
+    },
+    {
+      entity: 'csat',
+      payload: {
+        externalId: 'legacy:1402',
+        rating: 1,
+        comment: 'Original negative feedback',
+        sourceDetails: { reason: 'Took too long', scale: ['bad', 'good'] },
+      },
+    },
+  ]);
+  expect(warnings).toMatchObject([{ level: 'warning', entity: 'csat' }]);
+});
+
+it('resumes all CSAT pages and rescans old ratings on delta to retain later corrections', async () => {
+  const original = zendeskCoreFixture.satisfaction_ratings?.[0];
+  if (!original) throw new Error('Missing source rating');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    survey_responses: [],
+    satisfaction_ratings: Array.from({ length: 101 }, (_, index) => ({
+      ...original,
+      id: 2000 + index,
+    })),
+  });
+  const iterator = connector.extract(context, 'csat', null)[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing rating checkpoint');
+  await iterator.return?.(undefined);
+  const resumed = await collectPages(connector.extract(context, 'csat', first.value.cursor));
+  expect(resumed.flatMap((page) => page.records)).toMatchObject([
+    { payload: { externalId: 'legacy:2100' } },
+  ]);
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    survey_responses: [],
+    satisfaction_ratings: [
+      { ...original, comment: 'Corrected old feedback', updated_at: '2026-10-14T00:00:00Z' },
+    ],
+  });
+  const delta = await collectPages(
+    connector.extract(context, 'csat', null, new Date('2026-10-13T00:00:00Z')),
+  );
+  expect(delta.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: 'legacy:1401',
+        comment: 'Corrected old feedback',
+        sourceDetails: { updatedAt: '2026-10-14T00:00:00Z' },
+      },
+    },
+  ]);
+  expect(
+    fake.server.calls
+      .filter((call) => call.path === '/api/v2/satisfaction_ratings.json')
+      .every((call) => !Object.hasOwn(call.query, 'start_time')),
+  ).toBe(true);
+});
+
+it('extracts modern survey answers with original rating, full answer provenance and native answer dates', async () => {
+  const pages = await collectPages(connector.extract(context, 'csat', null));
+  const records = pages
+    .flatMap((page) => page.records)
+    .filter((record) => record.payload.externalId.startsWith('survey:'));
+  expect(records).toMatchObject([
+    {
+      entity: 'csat',
+      payload: {
+        externalId: 'survey:survey-1501:rating-question',
+        ticketExternalId: '101',
+        rating: 5,
+        comment: 'Original survey feedback',
+        ratedAt: '2024-08-14T12:00:00Z',
+        sourceDetails: {
+          originalRating: 4,
+          ratingNormalization: 'category-endpoints',
+          ratingCategory: 'good',
+          ratedAtBasis: 'answer-created-at',
+          answers: [
+            { type: 'rating_scale', rating: 4 },
+            { type: 'open_ended', value: 'Original survey feedback' },
+          ],
+        },
+      },
+    },
+  ]);
+});
+
+it('resumes modern survey cursors without restarting the completed legacy phase', async () => {
+  const original = zendeskCoreFixture.survey_responses?.[0];
+  if (!original) throw new Error('Missing source survey');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    satisfaction_ratings: [],
+    survey_responses: Array.from({ length: 101 }, (_, index) => ({
+      ...original,
+      id: `survey-${index}`,
+    })),
+  });
+  const iterator = connector.extract(context, 'csat', null)[Symbol.asyncIterator]();
+  await iterator.next();
+  const firstSurveyPage = await iterator.next();
+  if (firstSurveyPage.done || !firstSurveyPage.value.cursor)
+    throw new Error('Missing survey checkpoint');
+  await iterator.return?.(undefined);
+  fake.server.calls.length = 0;
+  const resumed = await collectPages(
+    connector.extract(context, 'csat', firstSurveyPage.value.cursor),
+  );
+  expect(resumed.flatMap((page) => page.records)).toMatchObject([
+    { payload: { externalId: 'survey:survey-100:rating-question' } },
+  ]);
+  expect(fake.server.calls.every((call) => call.path === '/api/v2/guide/survey_responses')).toBe(
+    true,
+  );
+});
+
+it('refuses ambiguous ticket associations instead of attributing a survey answer to the wrong ticket', async () => {
+  const original = zendeskCoreFixture.survey_responses?.[0];
+  if (!original) throw new Error('Missing source survey');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    satisfaction_ratings: [],
+    survey_responses: [
+      {
+        ...original,
+        subjects: [
+          { id: '101', type: 'ticket', zrn: 'zen:ticket:101' },
+          { id: '102', type: 'ticket', zrn: 'zen:ticket:102' },
+        ],
+      },
+    ],
+  });
+  await expect(collectPages(connector.extract(context, 'csat', null))).rejects.toMatchObject({
+    code: 'invalid-response',
+  });
+});
+
 it('downloads stable Support attachment URLs without credentials reaching the redirected CDN', async () => {
   const url = fake.addAttachment('receipt', Buffer.from('original attachment'));
   const downloaded = await connector.fetchAttachment(context, {

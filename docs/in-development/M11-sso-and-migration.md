@@ -1417,11 +1417,19 @@ stand-in tests do not prove access or completeness for a real account.
   Priority `low/normal/high/urgent` suggests low/medium/high/urgent; null needs
   a visible default. Preserve raw `via.channel`; unknown values require mapping.
   Do not create an on-hold tag as a substitute for state.
-- **CSAT:** `/api/v2/satisfaction_ratings.json` is paginated. Native scores
+- **CSAT:** `/api/v2/satisfaction_ratings.json` is the paginated legacy API. Native scores
   `offered/unoffered/good/bad`: only good/bad are answers. Helpdock conversion
   5/1 is not the source scale. Preserve source dates, comment and native value;
   date filters are rating bounds, not a universal updated-since guarantee.
   [Ratings](https://developer.zendesk.com/api-reference/ticketing/ticket-management/satisfaction_ratings/).
+  The current survey API is `GET /api/v2/guide/survey_responses`, with cursor
+  pagination and ticket subjects expressed as `zen:ticket:{id}`. CSAT rating
+  answers identify `question.sub_type=customer_satisfaction`; other questions
+  are not CSAT. Preserve all answer types, native rating/category and answer dates.
+  Creation-time filters cannot prove updated-since coverage; rescan for deltas.
+  The official list examples contain a duplicated `/api/v2/` in some generated
+  snippets; use the declared endpoint and subject-filter example above.
+  Checked 2026-10-14: [survey responses](https://developer.zendesk.com/api-reference/ticketing/ticket-management/csat_survey_responses/).
 - **Throttle:** generic exports 10/min (30 High Volume), user cursor 20/60.
   Use conservative account/endpoint buckets and runtime rate/remaining/reset
   headers; 429 uses `Retry-After` seconds. [Rate limits](https://developer.zendesk.com/api-reference/introduction/rate-limits/).
@@ -1570,6 +1578,39 @@ and confirms an empty outbox. This is extraction/staging evidence, not full
 end-to-end import acceptance. CSAT, Guide, deleted/archive reconciliation, source
 binding, mapping-aware unsupported-field preservation and all previously listed
 acceptance requirements remain unfinished. M11-12 remains in progress.
+
+### Zendesk satisfaction extraction and provenance checkpoint (in progress)
+
+The adapter now advertises eleven entities, including `csat`. Extraction visits
+legacy satisfaction ratings, then current survey responses, with separate
+continuations so resume does not restart a completed phase. Both APIs rescan on
+delta because their documented creation-time filters cannot guarantee edits to
+older answers. Offered/unoffered legacy rows are not answers. Survey responses
+without a ticket subject are outside ticket CSAT; multiple ticket subjects or
+inconsistent ticket resource names fail rather than guessing ownership.
+
+Legacy good/bad map to 5/1 with the original score, reason, actor IDs and creation/
+update dates preserved. Source creation time supplies the reporting timestamp,
+with explicit `ratedAtBasis` and an `import.csat.timestamp-inferred` warning;
+the API does not expose an explicit submission timestamp. Current surveys use
+the CSAT answer's original creation time and map bad/neutral/good categories to
+1/3/5. The original numeric rating, category, question definitions, all answer
+types and update dates remain in provenance. `import.csat.scale-normalized`
+warns that a normalized score is not the original scale.
+
+Normalized CSAT now accepts private `sourceDetails`; migration
+`0061_imported_csat_details` retains it in `csat_responses.imported_details` after
+staging is purged. Repeat loads leave it unchanged; deltas update it on the same
+answer row. Imported answers remain expired and excluded from live survey lookup.
+Adapter warnings use approved safe log keys; arbitrary prose cannot bypass the
+worker's log boundary. Unsupported field warnings now follow the same contract.
+
+Twenty connector HTTP cases and all 75 writer integration cases pass. Real
+PostgreSQL/Redis extraction stages two legacy answers and a current survey answer,
+persists both warning keys and leaves the outbox empty. Guide extraction,
+deleted/archive reconciliation, source binding, capability preflight, complete
+mapping/dry-run UI and full reference-dataset acceptance remain unfinished.
+M11-12 remains in progress.
 
 ## M11-13 Freshdesk connector
 

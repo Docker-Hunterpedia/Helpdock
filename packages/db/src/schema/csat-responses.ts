@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   check,
   index,
+  jsonb,
   pgTable,
   smallint,
   text,
@@ -57,6 +58,7 @@ export const csatResponses = pgTable(
     closedAt: timestamp('closed_at', { withTimezone: true }),
     importedSource: importSourceEnum('imported_source'),
     importedExternalId: varchar('imported_external_id', { length: 200 }),
+    importedDetails: jsonb('imported_details').$type<Record<string, unknown>>(),
     /** SHA-256 of the token, hex. */
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

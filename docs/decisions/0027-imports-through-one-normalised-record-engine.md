@@ -313,3 +313,19 @@ fingerprint and offset. On resume, a changed page is refused before completed
 profiles are skipped. Cursor state contains a fingerprint and traversal position,
 not emails, identity values or credentials. All subsequent authenticated
 pagination must stay on the expected source origin and endpoint.
+
+### 2026-10-14 — source satisfaction provenance
+
+Retain normalized CSAT `sourceDetails` in a private nullable JSON column on
+`csat_responses`, so staging purge does not discard native scores, scale semantics,
+answer metadata, source actor IDs or timestamp provenance. Historical repeats
+are inert; source deltas update the same answer and provenance together.
+
+Zendesk legacy good/bad map to 5/1. Creation time is a documented source field,
+not a proven submission time, so record the timestamp basis and emit a safe
+warning. Current survey CSAT categories map bad/neutral/good to 1/3/5 while
+preserving original numeric ratings, question definitions and every answer type.
+Emit a normalization warning rather than presenting that conversion as the source
+scale. Both APIs rescan on delta because creation-time filters do not prove that
+old edits are included. API availability/completeness must be established before
+approving a run; a failed endpoint is not a successful empty export.

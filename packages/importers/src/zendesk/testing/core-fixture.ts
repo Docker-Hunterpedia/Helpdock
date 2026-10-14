@@ -60,6 +60,67 @@ export const zendeskCoreFixture: ZendeskFixture = {
     },
   ],
   groups: [{ id: 501, name: 'Original support team' }],
+  satisfaction_ratings: [
+    {
+      id: 1401,
+      ticket_id: 101,
+      score: 'good',
+      comment: 'Original positive feedback',
+      created_at: '2020-01-03T10:00:00Z',
+      updated_at: '2020-01-04T10:00:00Z',
+      assignee_id: 301,
+      group_id: 501,
+      requester_id: 201,
+    },
+    {
+      id: 1402,
+      ticket_id: 101,
+      score: 'bad',
+      comment: 'Original negative feedback',
+      reason: 'Took too long',
+      created_at: '2020-01-05T10:00:00Z',
+      updated_at: '2020-01-05T10:00:00Z',
+      assignee_id: 301,
+      group_id: 501,
+      requester_id: 201,
+    },
+    {
+      id: 1403,
+      ticket_id: 101,
+      score: 'offered',
+      created_at: '2020-01-06T10:00:00Z',
+      updated_at: '2020-01-06T10:00:00Z',
+    },
+  ],
+  survey_responses: [
+    {
+      id: 'survey-1501',
+      responder_id: 201,
+      subjects: [{ id: '101', type: 'ticket', zrn: 'zen:ticket:101' }],
+      survey: { id: 'survey-definition', version: 3, state: 'enabled' },
+      answers: [
+        {
+          type: 'rating_scale',
+          rating: 4,
+          rating_category: 'good',
+          question: {
+            id: 'rating-question',
+            type: 'rating_scale_numeric',
+            sub_type: 'customer_satisfaction',
+          },
+          created_at: '2024-08-14T12:00:00Z',
+          updated_at: '2024-08-15T12:00:00Z',
+        },
+        {
+          type: 'open_ended',
+          value: 'Original survey feedback',
+          question: { id: 'comment-question', type: 'open_ended' },
+          created_at: '2024-08-14T12:00:00Z',
+          updated_at: '2024-08-14T12:00:00Z',
+        },
+      ],
+    },
+  ],
   audits: {
     '101': [
       {

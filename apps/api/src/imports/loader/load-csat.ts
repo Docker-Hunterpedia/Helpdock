@@ -13,6 +13,7 @@ function importedAnswer(rating: ImportCsat) {
     ratedAt: new Date(rating.ratedAt),
     closedAt: rating.closedAt ? new Date(rating.closedAt) : null,
     sentAt: new Date(rating.ratedAt),
+    importedDetails: rating.sourceDetails ?? null,
   };
 }
 

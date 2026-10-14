@@ -13,6 +13,7 @@ const fixtureSchema = z.strictObject({
   organization_fields: z.array(rowSchema).default([]),
   custom_statuses: z.array(rowSchema).default([]),
   satisfaction_ratings: z.array(datedRowSchema).default([]),
+  survey_responses: z.array(z.looseObject({ id: z.string().min(1) })).default([]),
   categories: z.array(rowSchema).default([]),
   sections: z.array(rowSchema).default([]),
   articles: z.array(datedRowSchema).default([]),
@@ -85,6 +86,16 @@ export class FakeZendesk {
     if (exportMatch) return this.cursorExport(url, exportMatch[1] ?? '');
     if (url.pathname === '/api/v2/incremental/organizations.json')
       return this.organizationExport(url);
+    if (url.pathname === '/api/v2/guide/survey_responses') {
+      const response = this.cursorCollectionPage(
+        url,
+        'survey_responses',
+        this.fixture.survey_responses,
+      );
+      if (response.status !== 200) return response;
+      const json = response.json as { meta: unknown; survey_responses: unknown };
+      return { status: 200, json: { meta: json.meta, survey_responses: json.survey_responses } };
+    }
     return this.collection(url);
   }
 
@@ -256,7 +267,7 @@ export class FakeZendesk {
     return this.cursorCollectionPage(url, 'comments', rows);
   }
 
-  private cursorCollectionPage(url: URL, entity: string, rows: ZendeskRow[]): VendorAnswer {
+  private cursorCollectionPage(url: URL, entity: string, rows: readonly unknown[]): VendorAnswer {
     const size = Number(url.searchParams.get('page[size]') ?? this.options.pageSize ?? 100);
     const after = url.searchParams.get('page[after]');
     const cursor = after ? this.cursors.get(after) : undefined;

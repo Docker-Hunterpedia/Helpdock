@@ -28,6 +28,7 @@ export async function matchImportedContact(
     identifiers: Identifiers;
     knownTarget?: Contact;
     originalContactId?: string;
+    readOnly?: boolean;
   },
 ) {
   const { input, identifiers } = options;
@@ -53,13 +54,14 @@ export async function matchImportedContact(
   if (options.knownTarget) candidates.add(options.knownTarget.id);
   if (candidates.size > 1) throw new ImportLoadError('identity-ambiguous');
   const existingId = [...candidates][0];
-  const [existing] = existingId
-    ? await tx
-        .select()
-        .from(contacts)
-        .where(and(eq(contacts.id, existingId), eq(contacts.brandId, input.brandId)))
-        .for('update')
-    : [];
+  let existing: Contact | undefined;
+  if (existingId) {
+    const query = tx
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.id, existingId), eq(contacts.brandId, input.brandId)));
+    [existing] = await (options.readOnly ? query : query.for('update'));
+  }
   if (existingId && (!existing || existing.anonymisedAt || existing.mergedIntoId))
     throw new ImportLoadError('target-unavailable');
   if (

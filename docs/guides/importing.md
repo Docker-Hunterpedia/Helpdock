@@ -104,3 +104,9 @@ Custom value preflight uses the same conversion, required-field and choice rules
 as loading against existing or proposed definitions. Unknown source keys and
 invalid values are blocked; only confirmed skips remove values. Projections create
 no definitions and do not yet constitute the complete dry-run approval workflow.
+
+Contact planning uses normalized identifiers to show create/link/update/unchanged
+outcomes. Multiple existing identity matches block the plan; imports do not merge
+people automatically. Local names, company links and verification are preserved
+when linking, and source values are shown separately. Complete cross-source
+contact planning and the dry-run UI remain under development.

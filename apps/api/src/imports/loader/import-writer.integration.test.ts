@@ -120,6 +120,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { previewImportedContact } from '../preflight/contact-plan.js';
 import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
@@ -6068,6 +6069,133 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('plans contact creation, reuse and ambiguity with loader matching while leaving profiles and verification unchanged', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Contact preview brand', prefix: 'CPL' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const input = contactLoadSchema.parse({
+      brandId,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'contact-preview',
+        name: 'Source person',
+        emails: ['PERSON@EXAMPLE.TEST'],
+        phones: ['not a phone'],
+        custom: {},
+      },
+      accountId: null,
+      custom: {},
+    });
+    const preview = () => withSystem(app.db, brandId, (tx) => previewImportedContact(tx, input));
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId}`,
+    );
+    expect(await preview()).toEqual({
+      action: 'create',
+      contactId: null,
+      accountId: null,
+      sourceAccountId: null,
+      name: 'Source person',
+      sourceName: 'Source person',
+      identifiers: [{ kind: 'email', value: 'person@example.test' }],
+      refusedPhones: 1,
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId}`,
+      ),
+    ).toEqual(before);
+    const first = uuidv7();
+    const second = uuidv7();
+    await owner.db.insert(contacts).values([
+      { id: first, brandId, name: 'Local person' },
+      { id: second, brandId, name: 'Different person' },
+    ]);
+    await owner.db.insert(contactIdentities).values([
+      {
+        brandId,
+        contactId: first,
+        kind: 'email',
+        value: 'person@example.test',
+        verified: false,
+        source: 'agent',
+      },
+      {
+        brandId,
+        contactId: second,
+        kind: 'email',
+        value: 'second@example.test',
+        verified: true,
+        source: 'agent',
+      },
+    ]);
+    const localCompany = uuidv7();
+    const sourceCompany = uuidv7();
+    await owner.db.insert(accounts).values([
+      { id: localCompany, brandId, name: 'Local company' },
+      { id: sourceCompany, brandId, name: 'Source company' },
+    ]);
+    await owner.db.update(contacts).set({ accountId: localCompany }).where(eq(contacts.id, first));
+    const profiles = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId} ORDER BY id`,
+    );
+    const identities = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contact_identities WHERE brand_id = ${brandId} ORDER BY id`,
+    );
+    expect(await preview()).toMatchObject({
+      action: 'link',
+      contactId: first,
+      name: 'Local person',
+      sourceName: 'Source person',
+    });
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        previewImportedContact(tx, { ...input, accountId: sourceCompany }),
+      ),
+    ).toMatchObject({
+      action: 'link',
+      contactId: first,
+      accountId: localCompany,
+      sourceAccountId: sourceCompany,
+    });
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        previewImportedContact(tx, {
+          ...input,
+          record: { ...input.record, emails: ['person@example.test', 'second@example.test'] },
+        }),
+      ),
+    ).rejects.toThrow('identity-ambiguous');
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId} ORDER BY id`,
+      ),
+    ).toEqual(profiles);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contact_identities WHERE brand_id = ${brandId} ORDER BY id`,
+      ),
+    ).toEqual(identities);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
+    expect(await withSystem(app.db, brandId, (tx) => writer.contact(tx, input))).toMatchObject({
+      id: first,
+      outcome: 'linked',
+    });
+    expect(await preview()).toMatchObject({ action: 'unchanged', contactId: first });
+    const updated = { ...input, record: { ...input.record, description: 'New source detail' } };
+    expect(
+      await withSystem(app.db, brandId, (tx) => previewImportedContact(tx, updated)),
+    ).toMatchObject({ action: 'update', contactId: first });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

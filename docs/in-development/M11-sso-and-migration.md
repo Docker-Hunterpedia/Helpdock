@@ -2510,6 +2510,26 @@ Contact identity planning, media availability and complete dry-run orchestration
 report and preview UI remain unfinished. These projections alone do not approve
 loading; M11-10/16 remain in progress.
 
+### Read-only contact identity planning (M11-10/16, in progress)
+
+Preflight now uses the loader's normalized email/phone matching and stable source
+merge-pointer resolution to plan create/link/update/unchanged contact outcomes.
+The shared matcher retains row locking for loading and offers a read-only path
+for preflight. It allocates no contact IDs and does not change profiles, identities
+or verification. Conflicting identity candidates block rather than suggesting an
+automatic merge. Invalid phone counts are retained for the eventual report.
+
+The plan distinguishes local display name/company from supplied source values,
+because import linking preserves local names and company relationships. Exact
+repeat input uses the same payload hash as loading and reports unchanged.
+Real database coverage verifies create and reuse, ambiguous identity refusal,
+unchanged profile/identity revisions, local/source company distinctions, loader
+link parity and subsequent unchanged/update outcomes, with no outbox work.
+
+Planning across multiple new source contacts, source organization creation links,
+media availability and complete dry-run consumer/report/UI remain pending. These
+contact plans alone do not approve loading; M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

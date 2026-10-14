@@ -93,3 +93,5 @@ Share ticket-assignee department eligibility between loading and preflight, and 
 Validate duplicate new invitation emails across the complete import plan with account-scoped reuse and no provisioning side effects.
 
 Project custom values against existing and proposed field definitions using the loader’s validation rules without creating fields.
+
+Plan contact identity reuse and ambiguity through the loader’s matching rules without locks, profile changes or verification upgrades.

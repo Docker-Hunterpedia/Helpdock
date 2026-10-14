@@ -1,5 +1,5 @@
 import type { SafeFetchInit } from '@helpdock/net';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { ConnectorContext } from '../connector.js';
 import { ConnectorError } from '../errors.js';
 import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.js';
@@ -7,6 +7,7 @@ import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.j
 export class ZendeskClient {
   readonly origin: string;
   private readonly authorization: string;
+  private readonly authorRoles = new Map<number, 'agent' | 'customer'>();
 
   constructor(
     private readonly context: ConnectorContext<ZendeskCredentials>,
@@ -37,6 +38,16 @@ export class ZendeskClient {
     return this.context.http.json(this.url(path, query), schema, this.init());
   }
 
+  warnUnsupportedField(externalId: string): Promise<void> {
+    return this.context.log({
+      level: 'warning',
+      entity: 'field',
+      externalId,
+      message:
+        'Source field cannot be represented without losing validation or relationship semantics; extraction stopped.',
+    });
+  }
+
   nextOffset(nextPage: string | null, path: string, current: number): number | null {
     if (nextPage === null) return null;
     const address = new URL(nextPage);
@@ -51,5 +62,39 @@ export class ZendeskClient {
     )
       throw new ConnectorError('invalid-response');
     return page;
+  }
+
+  async authorKind(userId: number): Promise<'agent' | 'customer'> {
+    const cached = this.authorRoles.get(userId);
+    if (cached) return cached;
+    const response = await this.json(
+      `/api/v2/users/${userId}.json`,
+      z.object({
+        user: z.object({ id: z.int().positive(), role: z.enum(['end-user', 'agent', 'admin']) }),
+      }),
+    );
+    if (response.user.id !== userId) throw new ConnectorError('invalid-response');
+    const kind = response.user.role === 'end-user' ? 'customer' : 'agent';
+    if (this.authorRoles.size >= 128) this.authorRoles.clear();
+    this.authorRoles.set(userId, kind);
+    return kind;
+  }
+
+  nextCommentCursor(
+    nextPage: string | null,
+    path: string,
+    after: string | null | undefined,
+  ): string {
+    if (!nextPage || !after) throw new ConnectorError('invalid-response');
+    const address = new URL(nextPage);
+    if (
+      address.origin !== this.origin ||
+      address.pathname !== path ||
+      address.username ||
+      address.password ||
+      address.searchParams.get('page[after]') !== after
+    )
+      throw new ConnectorError('invalid-response');
+    return after;
   }
 }

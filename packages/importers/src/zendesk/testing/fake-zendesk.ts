@@ -74,6 +74,11 @@ export class FakeZendesk {
     if (url.pathname.startsWith('/attachments/token/')) return this.secureAttachment(url);
     if (url.pathname === '/api/v2/users/me.json')
       return { status: 200, json: { user: { id: 301, name: 'Migration admin', role: 'admin' } } };
+    const userMatch = /^\/api\/v2\/users\/(\d+)\.json$/.exec(url.pathname);
+    if (userMatch) {
+      const user = this.fixture.users.find((candidate) => String(candidate.id) === userMatch[1]);
+      return user ? { status: 200, json: { user } } : this.notFound();
+    }
     const exportMatch = /^\/api\/v2\/incremental\/(tickets|users)\/cursor\.json$/.exec(
       url.pathname,
     );
@@ -222,7 +227,10 @@ export class FakeZendesk {
       '/api/v2/help_center/user_segments.json': ['user_segments', this.fixture.user_segments],
     } satisfies Record<string, readonly [string, ZendeskRow[]]>;
     const collection = entities[url.pathname as keyof typeof entities];
-    return collection ? this.offsetPage(url, collection[0], collection[1]) : this.notFound();
+    if (!collection) return this.notFound();
+    return url.searchParams.has('page[size]')
+      ? this.cursorCollectionPage(url, collection[0], collection[1])
+      : this.offsetPage(url, collection[0], collection[1]);
   }
 
   private offsetPage(url: URL, entity: string, rows: ZendeskRow[]): VendorAnswer {
@@ -245,6 +253,10 @@ export class FakeZendesk {
   }
 
   private commentPage(url: URL, rows: ZendeskRow[]): VendorAnswer {
+    return this.cursorCollectionPage(url, 'comments', rows);
+  }
+
+  private cursorCollectionPage(url: URL, entity: string, rows: ZendeskRow[]): VendorAnswer {
     const size = Number(url.searchParams.get('page[size]') ?? this.options.pageSize ?? 100);
     const after = url.searchParams.get('page[after]');
     const cursor = after ? this.cursors.get(after) : undefined;
@@ -259,7 +271,7 @@ export class FakeZendesk {
     return {
       status: 200,
       json: {
-        comments: rows.slice(offset, offset + size),
+        [entity]: rows.slice(offset, offset + size),
         meta: { has_more: hasMore, after_cursor: token, before_cursor: null },
         links: { next: hasMore ? next.href : null, prev: null },
       },

@@ -92,3 +92,26 @@ export const zendeskListEnvelopeSchema = z.looseObject({
   next_page: z.url().nullable(),
   count: z.int().nonnegative().optional(),
 });
+
+export const zendeskAttachmentSchema = z.looseObject({
+  id,
+  file_name: z.string().min(1),
+  content_url: z.url(),
+  content_type: z.string().optional(),
+  size: z.int().nonnegative().optional(),
+});
+export const zendeskCommentSchema = z.looseObject({
+  id,
+  author_id: id,
+  public: z.boolean(),
+  created_at: instant,
+  html_body: z.string().nullish(),
+  body: z.string().nullish(),
+  plain_body: z.string().nullish(),
+  attachments: z.array(zendeskAttachmentSchema).max(1000),
+});
+export const zendeskCommentPageSchema = z.looseObject({
+  comments: z.array(zendeskCommentSchema).max(100),
+  meta: z.object({ has_more: z.boolean(), after_cursor: z.string().nullable().optional() }),
+  links: z.object({ next: z.url().nullable() }),
+});

@@ -60,6 +60,47 @@ export const zendeskCoreFixture: ZendeskFixture = {
     },
   ],
   groups: [{ id: 501, name: 'Original support team' }],
+  ticket_fields: [
+    { id: 1, title: 'Status', type: 'status' },
+    {
+      id: 801,
+      title: 'Region',
+      type: 'tagger',
+      custom_field_options: [{ name: 'North', value: 'north' }],
+    },
+  ],
+  user_fields: [{ id: 801, key: 'plan', title: 'Plan', type: 'text' }],
+  organization_fields: [{ id: 801, key: 'region', title: 'Region', type: 'text' }],
+  comments: {
+    '101': [
+      {
+        id: 901,
+        author_id: 201,
+        public: true,
+        html_body: '<p>Original question</p>',
+        body: 'Original question',
+        created_at: '2020-01-01T10:00:00Z',
+        attachments: [
+          {
+            id: 1101,
+            file_name: 'receipt.pdf',
+            content_type: 'application/pdf',
+            size: 100,
+            content_url: 'https://demo.zendesk.com/attachments/token/synthetic/receipt.pdf',
+          },
+        ],
+      },
+      {
+        id: 902,
+        author_id: 301,
+        public: false,
+        html_body: '<p>Private note</p>',
+        body: 'Private note',
+        created_at: '2020-01-02T10:00:00Z',
+        attachments: [],
+      },
+    ],
+  },
   identities: {
     '201': [
       {

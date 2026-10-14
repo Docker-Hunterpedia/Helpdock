@@ -13,11 +13,24 @@ import {
   exportZendeskTickets,
   exportZendeskUsers,
 } from './core-export.js';
+import { exportZendeskFields } from './fields-export.js';
+import { exportZendeskTags } from './tags-export.js';
+import { exportZendeskThread } from './threads-export.js';
 
 export class ZendeskConnector implements Connector<ZendeskCredentials> {
   readonly source = 'zendesk' as const;
   readonly credentialsSchema = zendeskCredentialsSchema;
-  readonly entities = ['ticket', 'user', 'organization', 'group', 'contact'] as const;
+  readonly entities = [
+    'ticket',
+    'user',
+    'organization',
+    'group',
+    'contact',
+    'message',
+    'attachment',
+    'field',
+    'tag',
+  ] as const;
 
   constructor(private readonly options: { apiRoot?: string } = {}) {}
 
@@ -58,6 +71,13 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
         return exportZendeskGroups(client, cursor);
       case 'contact':
         return exportZendeskContacts(client, cursor, since);
+      case 'field':
+        return exportZendeskFields(client, cursor);
+      case 'tag':
+        return exportZendeskTags(client, cursor, since);
+      case 'message':
+      case 'attachment':
+        return exportZendeskThread(client, { mode: entity, cursor, since });
       default:
         throw new ConnectorError('invalid-response');
     }

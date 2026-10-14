@@ -1458,7 +1458,8 @@ stand-in tests do not prove access or completeness for a real account.
 `@helpdock/importers/testing`, covers cursor/time exports, paged collections,
 comments/audits, Guide translation/read-segment separation, temporary media
 redirects, delta, 429 and 5xx. Six local HTTP tests pass through the real safe
-client. This checkpoint does not include an extraction adapter, real-account
+client. This first stand-in checkpoint did not include an extraction adapter (see
+the subsequent adapter checkpoints below), real-account
 proof, archive-comment equivalence, full source audit loading or 500-ticket
 acceptance. Those remain required before completing this deliverable.
 
@@ -1484,11 +1485,64 @@ creation dates remain unchanged, and incomplete source dates stay in provenance.
 
 Six local HTTP connector tests and a real PostgreSQL/Redis staging case pass.
 The full writer suite passes 75 cases, including private profile metadata and
-unverified imported addresses. This adapter currently advertises only those
-five implemented entities. Threads, audits, attachments extraction, fields,
-tags, CSAT and Guide traversal remain required, along with source-account
+unverified imported addresses. At the core-only checkpoint, the adapter advertised
+those five implemented entities. Subsequent thread/field/tag progress is recorded
+below. Audits, CSAT and Guide traversal remain required, along with source-account
 binding, completeness reporting, preflight capability checks and full/delta
 reference-dataset/browser acceptance. M11-12 is not complete.
+
+### Zendesk comment and attachment extraction checkpoint (in progress)
+
+The adapter now advertises `message` and `attachment` in addition to its five
+core entities. It walks ticket export cursors and every comment cursor page,
+preserving public/private flags, source authors, original dates, HTML/plain text
+and attachment IDs/names/types/sizes/URLs. A source description is not emitted as
+a duplicate first reply. Empty plain-text bodies remain valid for attachment-only
+comments. Read-only user detail resolves customer/staff authors, with at most
+128 cached actor IDs in one extraction. Missing actors currently block extraction
+rather than silently assigning their replies to another person.
+
+Each comment commits a continuation containing traversal offsets and page
+fingerprints, not bodies, identities or credentials. Resume refuses changed source
+pages before skipping previously staged replies. Authenticated comment pagination
+must match the source origin, ticket endpoint and returned cursor. Message and
+attachment entity checkpoints retain their own final ticket-export watermark.
+
+Eight local HTTP connector cases pass, including a 101-comment paginated thread
+and pause/resume with changed-page refusal. The real PostgreSQL/Redis staging case
+now verifies two replies and their standalone attachment records. Source audit
+conversion, deleted/archive reconciliation, field/tag/CSAT/Guide traversal and
+all previous end-to-end acceptance remain required. This checkpoint does not
+complete M11-12.
+
+### Zendesk field and historical-tag checkpoint (in progress)
+
+The adapter currently advertises nine entities: ticket, user, organization, group,
+contact, message, attachment, field and tag. Field definitions traverse cursor
+pages for all three source scopes. Ticket definitions use numeric keys matching
+ticket custom values; contact/company definitions retain source keys. External
+field IDs include their scope so equal IDs in different collections cannot
+overwrite each other. Choice values and labels remain distinct. Known ticket
+system fields are handled by ticket mapping rather than duplicated as custom fields.
+
+Text, textarea, integer/decimal, date, checkbox, dropdown/tagger and multiselect
+definitions normalize to supported types. Relationship, regular-expression,
+currency and other unsupported definitions stop extraction with an import-log
+warning; they are not silently converted to text. A mapping-aware preservation
+path for these definitions remains required before connector completion.
+
+Historical tags come from ticket exports, with bounded per-page deduplication and
+the same terminal delta watermark. The account tag-list endpoint is not a complete
+historical source. Official contracts checked on 2026-10-14:
+[ticket fields](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_fields/),
+[user fields](https://developer.zendesk.com/api-reference/ticketing/users/user_fields/),
+[organization fields](https://developer.zendesk.com/api-reference/ticketing/organizations/organization_fields/)
+and [tags](https://developer.zendesk.com/api-reference/ticketing/ticket-management/tags/).
+
+Eleven local HTTP connector cases and the focused real PostgreSQL/Redis staging
+case pass, covering field pagination/resume, scope collisions, unsupported field
+refusal and historical tags. Audits, CSAT, Guide, account binding, complete mapping
+and the full acceptance requirements remain unfinished. M11-12 remains in progress.
 
 ## M11-13 Freshdesk connector
 

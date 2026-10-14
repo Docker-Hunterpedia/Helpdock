@@ -97,6 +97,36 @@ it('converts core export data without granting source roles or dropping CC refer
       },
     },
   ]);
+  expect(captured.message?.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: '901',
+        authorKind: 'customer',
+        public: true,
+        createdAt: '2020-01-01T10:00:00Z',
+        attachments: [{ externalId: '1101', fileName: 'receipt.pdf' }],
+      },
+    },
+    {
+      payload: {
+        externalId: '902',
+        authorKind: 'agent',
+        public: false,
+        createdAt: '2020-01-02T10:00:00Z',
+      },
+    },
+  ]);
+  expect(captured.attachment?.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: '1101',
+        ticketExternalId: '101',
+        messageExternalId: '901',
+        fileName: 'receipt.pdf',
+        size: 100,
+      },
+    },
+  ]);
   expect(connector.defaultMappings(captured.ticket?.[0]?.records ?? [])).toEqual([
     { kind: 'priority', externalValue: 'normal', target: { priority: 'medium' } },
     { kind: 'channel', externalValue: 'email', target: { channel: 'email' } },
@@ -133,6 +163,56 @@ it('traverses ticket cursor pages and continues from the final vendor watermark 
   ]);
 });
 
+it('traverses all comment pages including empty attachment-only bodies and retains a thread delta watermark', async () => {
+  const original = zendeskCoreFixture.comments?.['101']?.[0];
+  if (!original) throw new Error('Missing source comment fixture');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    comments: {
+      '101': Array.from({ length: 101 }, (_, index) => ({
+        ...original,
+        id: 901 + index,
+        html_body: null,
+        body: '',
+        plain_body: '',
+        public: index % 2 === 0,
+      })),
+    },
+  });
+  const pages = await collectPages(connector.extract(context, 'message', null));
+  const records = pages.flatMap((page) => page.records);
+  expect(records).toHaveLength(101);
+  expect(records[100]).toMatchObject({
+    entity: 'message',
+    payload: { externalId: '1001', bodyText: '', attachments: [{ externalId: '1101' }] },
+  });
+  expect(pages.at(-1)).toMatchObject({
+    cursor: null,
+    deltaCursor: { mode: 'message', tickets: { after: expect.any(String) } },
+  });
+  expect(fake.server.calls.filter((call) => call.path === '/api/v2/users/201.json')).toHaveLength(
+    1,
+  );
+});
+
+it('resumes a thread after its committed reply and refuses changed history before skipping that reply', async () => {
+  const iterator = connector.extract(context, 'message', null)[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing thread checkpoint');
+  await iterator.return?.(undefined);
+  const resumed = await collectPages(connector.extract(context, 'message', first.value.cursor));
+  expect(
+    resumed.flatMap((page) => page.records.map((record) => record.payload.externalId)),
+  ).toEqual(['902']);
+  const comments = (zendeskCoreFixture.comments?.['101'] ?? []).map((comment) =>
+    comment.id === 901 ? { ...comment, html_body: '<p>Redacted</p>' } : comment,
+  );
+  fake.replaceFixture({ ...zendeskCoreFixture, comments: { '101': comments } });
+  await expect(
+    collectPages(connector.extract(context, 'message', first.value.cursor)),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
 it('resumes a contact checkpoint without repeating hydrated contacts and refuses changed source pages', async () => {
   const iterator = connector.extract(context, 'contact', null)[Symbol.asyncIterator]();
   const first = await iterator.next();
@@ -165,6 +245,71 @@ it('rejects untrusted pagination origins before sending source credentials to an
     code: 'invalid-response',
   });
   expect(fake.server.calls).toHaveLength(1);
+});
+
+it('exports every field page with separate source scopes and stable keys matching ticket and profile values', async () => {
+  const fields = Array.from({ length: 101 }, (_, index) => ({
+    id: 1000 + index,
+    title: `Field ${index}`,
+    type: 'text',
+  }));
+  fake.replaceFixture({ ...zendeskCoreFixture, ticket_fields: fields });
+  const pages = await collectPages(connector.extract(context, 'field', null));
+  const records = pages.flatMap((page) => page.records);
+  expect(records).toHaveLength(103);
+  expect(records[100]).toEqual({
+    entity: 'field',
+    payload: {
+      externalId: 'ticket:1100',
+      target: 'ticket',
+      key: '1100',
+      label: 'Field 100',
+      type: 'text',
+    },
+  });
+  expect(records[101]).toMatchObject({
+    payload: { externalId: 'contact:801', key: 'plan', target: 'contact' },
+  });
+  expect(records[102]).toMatchObject({
+    payload: { externalId: 'organization:801', key: 'region', target: 'organization' },
+  });
+  const first = pages[0];
+  if (!first?.cursor) throw new Error('Missing field checkpoint');
+  const resumed = await collectPages(connector.extract(context, 'field', first.cursor));
+  expect(resumed.flatMap((page) => page.records)).toEqual(records.slice(100));
+});
+
+it('refuses unsupported relationship fields instead of silently converting references into text', async () => {
+  const warnings: Parameters<typeof context.log>[0][] = [];
+  context.log = async (entry) => {
+    warnings.push(entry);
+  };
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    user_fields: [{ id: 900, key: 'manager', title: 'Manager', type: 'lookup' }],
+  });
+  await expect(collectPages(connector.extract(context, 'field', null))).rejects.toMatchObject({
+    code: 'invalid-response',
+  });
+  expect(warnings).toMatchObject([
+    { level: 'warning', entity: 'field', externalId: 'contact:900' },
+  ]);
+});
+
+it('discovers historical tags from tickets instead of the limited popular-tag endpoint', async () => {
+  const original = zendeskCoreFixture.tickets?.[0];
+  if (!original) throw new Error('Missing source ticket');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    tickets: [{ ...original, tags: ['old-2019', 'old-2019', 'migration'] }],
+  });
+  const pages = await collectPages(connector.extract(context, 'tag', null));
+  expect(pages.flatMap((page) => page.records)).toEqual([
+    { entity: 'tag', payload: { externalId: 'old-2019', name: 'old-2019' } },
+    { entity: 'tag', payload: { externalId: 'migration', name: 'migration' } },
+  ]);
+  expect(pages.at(-1)).toMatchObject({ cursor: null, deltaCursor: { after: expect.any(String) } });
+  expect(fake.server.calls.some((call) => call.path === '/api/v2/tags.json')).toBe(false);
 });
 
 it('downloads stable Support attachment URLs without credentials reaching the redirected CDN', async () => {

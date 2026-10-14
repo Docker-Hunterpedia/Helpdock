@@ -17,3 +17,7 @@ Preserve source ticket audit events with their original dates, actors and change
 Retain final vendor watermarks for delta extraction and preserve CC relationships supplied as source user IDs. Reconcile import-owned CCs without removing manual participants, and validate required fields for imported email-only contacts.
 
 Add initial Zendesk core exports and resumable contact hydration. Preserve native profile notes, descriptions, dates and identity provenance without granting verification or staff access from vendor data.
+
+Extract paged Zendesk public replies, private notes and attachment references with original authors/dates and resumable thread checkpoints.
+
+Extract Zendesk ticket, contact and company field definitions with separate source scopes, and discover historical tags from ticket exports rather than the limited popular-tag listing.

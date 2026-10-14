@@ -1967,7 +1967,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       });
       const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
       expect(run?.counts).toEqual({
-        extracted: { ticket: 1, user: 3, organization: 1, group: 1, contact: 3 },
+        extracted: {
+          ticket: 1,
+          user: 3,
+          organization: 1,
+          group: 1,
+          contact: 3,
+          message: 2,
+          attachment: 1,
+          field: 3,
+          tag: 1,
+        },
       });
       expect(run?.cursors).toMatchObject({
         ticket: { done: true, deltaCursor: { after: expect.any(String) } },

@@ -33,3 +33,5 @@ Retain nested source section ancestry and bilingual breadcrumb names within the 
 Checkpoint profile, field and prepared knowledge loads atomically with progress and resolved-request fingerprints. Reject changed mappings on resume, validate target availability, and follow manual contact merges without duplicating progress.
 
 Validate source-to-destination custom-field mappings before profile loads. Preserve confirmed values and explicit clears, and reject unknown, ambiguous or substituted field data.
+
+Resolve ticket routing from confirmed status, department, priority, channel, staff and tag mappings. Require explicit defaults for missing source values and preserve requester/CC links through source identities.

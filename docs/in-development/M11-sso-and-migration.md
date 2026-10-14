@@ -1719,6 +1719,33 @@ This does not complete field mapping: proposal generation, option-label/value
 mapping, dry-run integration, ticket assembly, ordered phases and the mapping UI
 remain required. M11-11 remains in progress.
 
+### Confirmed ticket-routing mapping checkpoint (in progress)
+
+`selectTicketMappings` now resolves exact source status, group, priority, channel,
+agent and tag values from confirmed mappings. Missing group/priority/channel
+values use an explicitly confirmed empty-key mapping; they do not silently pick
+a brand default. Unconfirmed values block loading. Duplicate source tags share
+one destination/skip decision, and missing assignees remain unassigned.
+
+`resolveTicketMappings` combines those decisions with loaded staff/contact
+identities and the shared custom-field compiler. Requester and CC references
+follow source contact pointers through manual merges. Existing staff mappings
+must match their loaded source pointer; name-only mappings produce no assignee
+account. The normal scoped mapping checks still validate status, department,
+team and staff access before any ticket domain writes.
+
+`loadMappedStagedTicket` renews the loading claim and supplies the derived routing
+to the atomic ticket/thread checkpoint. Thread, authors and attachment preparation
+remain caller responsibilities; this is not the complete assembly worker.
+
+Seven selection unit cases and all 81 writer integration cases pass. The real
+PostgreSQL/Redis case refuses a foreign-brand status, then loads confirmed
+priority/channel/department, requester and identity-only CC values; a repeat
+increments nothing and the outbox remains empty. Author assembly, original
+name-only assignee provenance, full staff/reference checkpoints, media fetching,
+ordered phases, dry-run integration and the admin UI remain required. M11-10 and
+M11-11 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

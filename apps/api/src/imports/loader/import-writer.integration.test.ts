@@ -72,6 +72,7 @@ import { createTranscriptionHandler } from '../../transcription/transcription-ev
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
@@ -2972,6 +2973,109 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(
       (await owner.db.select().from(contacts).where(eq(contacts.id, loaded.id)))[0],
     ).toMatchObject({ custom: { tier: 'gold' } });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('loads a staged ticket from confirmed mappings and rejects a foreign-brand status before writing', async () => {
+    const scenario = await stagedTicketScenario('mapped-routing');
+    const cc = uuidv7();
+    await owner.db.insert(contacts).values({ id: cc, brandId: BRAND, name: 'Mapped CC' });
+    await owner.db.insert(importExternalIds).values([
+      {
+        brandId: BRAND,
+        source: 'zendesk',
+        entity: 'contact',
+        externalId: 'mapped-requester',
+        helpdockId: CONTACT,
+        payloadHash: 'a'.repeat(64),
+      },
+      {
+        brandId: BRAND,
+        source: 'zendesk',
+        entity: 'contact',
+        externalId: 'mapped-cc',
+        helpdockId: cc,
+        payloadHash: 'b'.repeat(64),
+      },
+    ]);
+    scenario.input.record.requesterExternalId = 'mapped-requester';
+    scenario.input.record.ccExternalIds = ['mapped-cc'];
+    await owner.db
+      .update(importRecords)
+      .set({ payload: scenario.input.record, payloadHash: hashImportValue(scenario.input.record) })
+      .where(eq(importRecords.id, scenario.recordId));
+    const foreignStatus = uuidv7();
+    await owner.db.insert(ticketStatuses).values({
+      id: foreignStatus,
+      brandId: OTHER_BRAND,
+      name: 'Foreign mapped status',
+      systemState: 'open',
+      color: 'info',
+    });
+    await owner.db.insert(importMappings).values([
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'status',
+        externalValue: 'open',
+        target: { statusId: foreignStatus },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'group',
+        externalValue: '',
+        target: { departmentId: DEPARTMENT, teamId: null },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'priority',
+        externalValue: '',
+        target: { priority: 'medium' },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'channel',
+        externalValue: '',
+        target: { channel: 'api' },
+      },
+    ]);
+    const { resolved: _resolved, ...input } = scenario.input;
+    const checkpoint = { claim: scenario.claim, recordId: scenario.recordId, input };
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadMappedStagedTicket(tx, checkpoint)),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (
+        await owner.db.select().from(importRecords).where(eq(importRecords.id, scenario.recordId))
+      )[0]?.status,
+    ).toBe('staged');
+    await owner.db
+      .update(importMappings)
+      .set({ target: { statusId: STATUS } })
+      .where(and(eq(importMappings.runId, input.runId), eq(importMappings.kind, 'status')));
+    const loaded = await withSystem(app.db, BRAND, (tx) => loadMappedStagedTicket(tx, checkpoint));
+    expect(
+      (await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId)))[0],
+    ).toMatchObject({
+      statusId: STATUS,
+      departmentId: DEPARTMENT,
+      priority: 'medium',
+      channel: 'api',
+      assigneeId: null,
+      contactId: CONTACT,
+    });
+    expect(await withSystem(app.db, BRAND, (tx) => loadMappedStagedTicket(tx, checkpoint))).toEqual(
+      { state: 'already_loaded', ticketId: loaded.ticketId },
+    );
+    expect(
+      await owner.db
+        .select()
+        .from(ticketParticipants)
+        .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
+    ).toMatchObject([{ contactId: cc, source: 'import', address: null }]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

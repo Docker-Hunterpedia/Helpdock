@@ -60,6 +60,7 @@ import {
   importEntitySchema,
   importMappingSchema,
   importRecordSchema,
+  MAX_CUSTOM_FIELDS_PER_TARGET,
   ticketCcSchema,
 } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -119,6 +120,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
@@ -6062,6 +6064,89 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('validates aggregate field capacity and duplicate keys with account-scoped reuse without creating definitions', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    const key = sourceAccountKey({ source: 'zendesk', verifiedAccount: 'field-plan-account' });
+    await owner.db.insert(brands).values({ id: brandId, name: 'Field plan brand', prefix: 'FPL' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER, sourceAccountKey: key });
+    await owner.db.insert(customFieldDefs).values(
+      Array.from({ length: MAX_CUSTOM_FIELDS_PER_TARGET - 1 }, (_, index) => ({
+        brandId,
+        target: 'ticket' as const,
+        key: `plan_existing_${index}`,
+        label: `Existing ${index}`,
+        type: 'text' as const,
+      })),
+    );
+    const [existing] = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(and(eq(customFieldDefs.brandId, brandId), eq(customFieldDefs.key, 'plan_existing_0')));
+    if (!existing) throw new Error('Missing field plan fixture');
+    const scope = { brandId, runId, source: 'zendesk' as const };
+    const mapping = (externalValue: string, key: string) =>
+      importMappingSchema.parse({
+        kind: 'field',
+        externalValue,
+        target: { kind: 'create', definition: { target: 'ticket', key, label: key, type: 'text' } },
+      });
+    const mappings = [mapping('one', 'plan_one'), mapping('two', 'plan_two')];
+    const validate = () =>
+      withSystem(app.db, brandId, (tx) => validateImportFieldPlan(tx, scope, mappings));
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId} ORDER BY id`,
+    );
+    expect(await validate()).toEqual([
+      { externalId: 'one', code: 'field-capacity' },
+      { externalId: 'two', code: 'field-capacity' },
+    ]);
+    await owner.db.insert(importExternalIds).values({
+      brandId,
+      source: 'zendesk',
+      sourceAccountKey: 'a'.repeat(64),
+      entity: 'field',
+      externalId: 'one',
+      helpdockId: existing.id,
+      payloadHash: 'b'.repeat(64),
+    });
+    expect(await validate()).toEqual([
+      { externalId: 'one', code: 'field-capacity' },
+      { externalId: 'two', code: 'field-capacity' },
+    ]);
+    await owner.db.insert(importExternalIds).values({
+      brandId,
+      source: 'zendesk',
+      sourceAccountKey: key,
+      entity: 'field',
+      externalId: 'one',
+      helpdockId: existing.id,
+      payloadHash: 'b'.repeat(64),
+    });
+    expect(await validate()).toEqual([]);
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        validateImportFieldPlan(tx, scope, [
+          mapping('three', 'shared_plan'),
+          mapping('four', 'shared_plan'),
+        ]),
+      ),
+    ).toEqual([
+      { externalId: 'three', code: 'field-key-conflict' },
+      { externalId: 'three', code: 'field-capacity' },
+      { externalId: 'four', code: 'field-key-conflict' },
+      { externalId: 'four', code: 'field-capacity' },
+    ]);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId} ORDER BY id`,
+      ),
+    ).toEqual(before);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

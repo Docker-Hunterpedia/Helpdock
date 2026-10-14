@@ -2433,6 +2433,26 @@ eligibility, custom value validation, contact identity planning and the complete
 dry-run consumer/report/UI remain pending. Individual target checks do not approve
 a run; M11-10/16 remain in progress.
 
+### Whole field creation/binding plan preflight (M11-10/16, in progress)
+
+Preflight now evaluates field mappings together before provisioning. It rejects
+duplicate destination keys across new and reused/existing destinations, collisions
+with existing keys, and a set of additions exceeding MAX_CUSTOM_FIELDS_PER_TARGET
+for ticket/contact/account independently. Known bindings do not consume new slots;
+a deleted/wrong-entity binding or an attempted redirect is blocked.
+
+The database adapter reads only the current brand's definitions and queries needed
+source field bindings in 500-ID chunks under the same vendor/account namespace as
+loading. It does not allocate IDs, create definitions or modify existing fields.
+Pure cases cover duplicates, aggregate capacity, namespace separation and binding
+conflicts. Real database coverage uses a nearly full field target, proves another
+account's binding cannot free a slot, checks same-account reuse and duplicate
+plans, and asserts unchanged field revisions and no outbox events.
+
+Ticket-specific department checks, field/custom value validation, contact planning
+and complete dry-run orchestration/report/UI remain unfinished. These plan checks
+alone do not approve loading; M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

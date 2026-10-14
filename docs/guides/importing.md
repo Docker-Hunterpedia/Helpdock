@@ -82,3 +82,9 @@ staff membership, department/team consistency and field binding/key conflicts.
 Those checks provision no users or fields. Validation of the complete creation
 plan, ticket department eligibility, custom values and contact identity choices
 still belongs to the pending full dry-run engine.
+
+Field mappings are also evaluated as a complete plan: duplicate destinations and
+combined additions over the per-target limit are blocked before creation. Reused
+bindings count only in the same brand/vendor/account; deleted bindings and
+redirects are refused. Complete value/contact validation and dry-run approval
+remain pending.

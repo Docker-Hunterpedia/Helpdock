@@ -85,3 +85,5 @@ Share staged integrity checks between ticket loading and read-only preflight, an
 Detect cyclic staged knowledge ancestry and translation dependencies during read-only preflight.
 
 Add read-only checks of live mapping destinations, eligible staff and safe field bindings before import provisioning.
+
+Validate complete field creation plans for shared destination keys, combined capacity and immutable account-scoped reuse without provisioning.

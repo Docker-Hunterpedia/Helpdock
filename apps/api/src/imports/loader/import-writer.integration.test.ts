@@ -122,6 +122,7 @@ import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
 import { validateContactIdentityPlan } from '../preflight/contact-identity-plan.js';
 import { previewImportedContact } from '../preflight/contact-plan.js';
+import { previewImportedContactSource } from '../preflight/contact-source-plan.js';
 import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
@@ -6071,6 +6072,136 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('previews a contact with a proposed company without allocating IDs and rejects missing company references', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Source plan', prefix: 'SPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const organization = organizationLoadSchema.parse({
+      brandId,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'source-company',
+        name: 'Proposed company',
+        domains: ['planned.test'],
+        custom: {},
+      },
+      custom: {},
+    }).record;
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: 'organization',
+      externalId: organization.externalId,
+      payload: organization,
+      payloadHash: hashImportValue(organization),
+    });
+    const input = contactLoadSchema.parse({
+      brandId,
+      runId,
+      source: 'zendesk',
+      accountId: null,
+      custom: {},
+      record: {
+        externalId: 'source-person',
+        name: 'Source person',
+        emails: ['source@planned.test'],
+        phones: [],
+        organizationExternalId: organization.externalId,
+        custom: {},
+      },
+    });
+    const request = {
+      brandId,
+      runId,
+      source: input.source,
+      record: input.record,
+      defaultCallingCode: '',
+    };
+    const preview = () =>
+      withSystem(app.db, brandId, (tx) => previewImportedContactSource(tx, request));
+    expect(await preview()).toMatchObject({
+      action: 'create',
+      contactId: null,
+      accountId: null,
+      organization: {
+        action: 'create',
+        accountId: null,
+        externalId: organization.externalId,
+        name: organization.name,
+      },
+    });
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId))).toEqual([]);
+    const accountId = uuidv7();
+    const localAccountId = uuidv7();
+    const contactId = uuidv7();
+    await owner.db.insert(accounts).values([
+      { id: accountId, brandId, name: 'Linked company', domain: 'planned.test' },
+      { id: localAccountId, brandId, name: 'Local company' },
+    ]);
+    await owner.db
+      .insert(contacts)
+      .values({ id: contactId, brandId, name: 'Local person', accountId: localAccountId });
+    await owner.db.insert(contactIdentities).values({
+      brandId,
+      contactId,
+      kind: 'email',
+      value: 'source@planned.test',
+      verified: false,
+      source: 'agent',
+    });
+    const before = await owner.db.execute(
+      sql`SELECT xmin::text AS revision FROM contacts WHERE id = ${contactId}`,
+    );
+    expect(await preview()).toMatchObject({
+      action: 'link',
+      contactId,
+      accountId: localAccountId,
+      sourceAccountId: accountId,
+      name: 'Local person',
+      organization: { action: 'link', accountId, name: 'Linked company' },
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT xmin::text AS revision FROM contacts WHERE id = ${contactId}`,
+      ),
+    ).toEqual(before);
+    await owner.db
+      .delete(importRecords)
+      .where(and(eq(importRecords.brandId, brandId), eq(importRecords.runId, runId)));
+    await owner.db.insert(importExternalIds).values({
+      brandId,
+      source: 'zendesk',
+      entity: 'organization',
+      externalId: organization.externalId,
+      helpdockId: accountId,
+      payloadHash: hashImportValue(organization),
+    });
+    expect(await preview()).toMatchObject({
+      accountId: localAccountId,
+      sourceAccountId: accountId,
+      organization: { action: 'reuse', accountId, name: 'Linked company' },
+    });
+    await owner.db
+      .update(importRuns)
+      .set({ sourceAccountKey: 'a'.repeat(64) })
+      .where(eq(importRuns.id, runId));
+    await expect(preview()).rejects.toMatchObject({ code: 'target-unavailable' });
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        previewImportedContactSource(tx, {
+          ...request,
+          record: { ...request.record, organizationExternalId: 'missing-company' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

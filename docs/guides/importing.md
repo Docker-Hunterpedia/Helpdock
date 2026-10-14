@@ -119,5 +119,8 @@ and the review UI remain under development.
 
 Organization planning uses the loader’s normalized domains and imported aliases
 to show create/link/update/unchanged outcomes without creating companies. Ambiguous
-company matches are blocked and local names are preserved. Contact links to newly
-planned organizations and the complete dry-run workflow remain under development.
+company matches are blocked and local names are preserved. Contact previews include
+a separate source-company plan, including companies that would be created. They
+preserve existing local company links and refuse missing company references or
+references belonging to another source account. The complete dry-run workflow
+and its review UI remain under development.

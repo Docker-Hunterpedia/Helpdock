@@ -2563,10 +2563,25 @@ value exclusion. Real database coverage proves new-company planning, local domai
 and imported-alias reuse, conflicting company refusal, unchanged company revisions,
 loader link parity and unchanged/update plans, with no outbox work.
 
-Contact references to newly planned organizations, cross-source organization
-collisions, media availability and full dry-run consumer/report/preview UI remain
+Cross-source organization collisions, media availability and full dry-run consumer/report/preview UI remain
 unfinished. These organization plans alone do not approve loading; M11-09/10/16
 remain in progress.
+
+### Contact and source-company projection (M11-10/16, in progress)
+
+Contact preflight now resolves its source organization from validated staged
+records or the same vendor/account identity namespace. A proposed company is
+shown as a separate source plan with no allocated ID; existing local contact
+names and company links stay intact. Company and contact custom values use the
+shared projections, including required-field checks when creation is planned.
+Missing or unavailable company references stop the preview.
+
+Real Postgres/Redis coverage proves proposed-company previews create no companies
+or contacts, live-domain linking preserves local contact revisions, delta reuse
+works without a staged company, another source-account binding is refused, and
+no outbox work is emitted. The writer integration suite passes 145 tests.
+This is preflight groundwork; the full dry-run job, approval report and bilingual
+review UI remain unfinished.
 
 ## M11-13 Freshdesk connector
 

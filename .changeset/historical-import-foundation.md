@@ -61,3 +61,5 @@ Rebuild imported report history in resumable local-day chunks and atomically com
 Namespace imported native IDs by verified vendor account, keeping tickets, contacts, attachments and dependency references from different accounts separate and rejecting mismatched delta parents.
 
 Preserve historical RFC Message-IDs without colliding with live-email deduplication. Refuse ambiguous imported thread references, prefer verified Helpdock/live references, reject header injection characters, and retain historical mail provenance in split copies.
+
+Define strict import phase jobs and schedule work through validated transactional outbox requests, with stable delayed delivery IDs and safeguards for paused, unbound or mismatched-account runs.

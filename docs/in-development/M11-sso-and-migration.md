@@ -2150,6 +2150,30 @@ The existing 25-case merge/split API suite passes, and three focused provenance
 cases additionally prove copied original email metadata. Queue/API/import UI and
 the remaining milestone acceptance are still unfinished.
 
+### Typed import jobs and transactional work requests (M11-10, in progress)
+
+The job registry now declares `import.extract`, `import.load`, `import.attachments`
+and `import.finish` on queue import, with strict brand/run-only payloads and the
+normal bounded retry/retention profile. `enqueueImportWork` writes an
+`import.work_requested` outbox row in the caller's phase-change transaction.
+Its validated step and optional ISO `notBefore` never carry vendor credentials.
+
+The worker registers a scheduling subscriber and closes its queue with the other
+handler resources. The subscriber checks the live phase and active brand, refuses
+unbound namespaces or mismatched delta parents, computes the remaining delay and
+uses a stable phase/run/outbox job ID. Redelivery is a BullMQ duplicate rather than
+another attempt. Paused/cancelled requests are ignored when handled. Extraction's
+parent lookup now checks the account key as well as brand/vendor/completed state.
+
+The writer integration suite passes 122 cases. A real Redis/BullMQ case proves
+transaction rollback, delayed job creation, stable redelivery, zero initial attempts,
+pause handling and foreign-brand refusal. Another case refuses unbound and
+cross-account delta scheduling. Job-registry/payload unit tests pass 84 cases; five producer/subscriber boundary
+cases reject malformed requests and credential-bearing payloads before I/O. Eight
+worker startup cases and API/root typechecks pass.
+The import consumer, connection factory and resumable phase scheduling remain to
+be wired; no complete worker or process-kill acceptance is claimed yet.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

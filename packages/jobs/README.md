@@ -322,3 +322,17 @@ brand's rows.
 pnpm --filter @helpdock/jobs test
 pnpm test:integration packages/jobs     # needs Docker
 ```
+
+## Import scheduling (M11, in development)
+
+`import.extract`, `import.load`, `import.attachments` and `import.finish` are
+registered on the `import` queue with strict `{ brandId, runId }` payloads.
+Credentials remain encrypted on the run and never enter a job payload.
+
+Import phase changes enqueue `import.work_requested` in their transaction. The
+outbox handler validates the request, checks the active phase/account binding and
+uses a job ID derived from the phase, run and outbox ID. An optional ISO
+`notBefore` becomes a delay; redelivery uses the same job ID. Paused, cancelled or
+otherwise stale requests add no work when handled. Import consumer/connection
+wiring remains in development; these definitions and the bridge alone do not
+provide the complete migration worker.

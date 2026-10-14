@@ -52,9 +52,11 @@ import {
   ZendeskConnector,
 } from '@helpdock/importers';
 import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
+import { importLoadJob } from '@helpdock/jobs';
 import { importEntitySchema, importRecordSchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
+import { Queue } from 'bullmq';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
@@ -75,6 +77,7 @@ import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js'
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
+import { createImportWorkHandler, enqueueImportWork } from '../import-events.js';
 import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { completeImportRun } from '../jobs/complete-run.js';
@@ -3708,6 +3711,104 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         ?.status,
     ).toBe('staged');
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('refuses queued work for unbound namespaces and mismatched delta accounts', async () => {
+    const unbound = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: unbound,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        enqueueImportWork(tx, { brandId: BRAND, runId: unbound, step: 'load' }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    const parent = await boundAccountRun('queue-parent');
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed', finishedAt: new Date() })
+      .where(eq(importRuns.id, parent.runId));
+    const other = await boundAccountRun('queue-other');
+    await owner.db
+      .update(importRuns)
+      .set({ mode: 'delta', parentRunId: parent.runId })
+      .where(eq(importRuns.id, other.runId));
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        enqueueImportWork(tx, { brandId: BRAND, runId: other.runId, step: 'load' }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('schedules import work transactionally with delayed, idempotent BullMQ delivery and ignores stale paused events', async () => {
+    const run = await boundAccountRun('queue-account');
+    const scope = { brandId: BRAND, runId: run.runId, step: 'load' as const };
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await enqueueImportWork(tx, scope);
+        throw new Error('queue request rollback');
+      }),
+    ).rejects.toThrow('queue request rollback');
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    const notBefore = new Date(Date.now() + 60000).toISOString();
+    const eventId = await withSystem(app.db, BRAND, (tx) =>
+      enqueueImportWork(tx, { ...scope, notBefore }),
+    );
+    const [event] = await owner.db.select().from(outbox).where(eq(outbox.id, eventId));
+    if (!event) throw new Error('Missing work event');
+    const connection = redis.duplicate({ maxRetriesPerRequest: null });
+    const queue = new Queue(`m11-import-${uuidv7()}`, { connection });
+    const handler = createImportWorkHandler({
+      add: async (_step, payload, jobId, delay) => {
+        await queue.add(importLoadJob.name, payload, { ...importLoadJob.options, jobId, delay });
+      },
+    });
+    const deliver = () =>
+      withSystem(app.db, BRAND, (tx) =>
+        handler({
+          tx,
+          brandId: BRAND,
+          event: event.event,
+          payload: event.payload,
+          outboxId: eventId,
+          log: silentJobLogger,
+        }),
+      );
+    try {
+      await deliver();
+      await deliver();
+      const jobs = await queue.getJobs(['delayed', 'waiting']);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]?.data).toEqual({ brandId: BRAND, runId: run.runId });
+      expect(jobs[0]?.id).toBe(`import.load.${run.runId}.${eventId}`);
+      expect(jobs[0]?.attemptsMade).toBe(0);
+      expect(jobs[0]?.opts.delay).toBeGreaterThan(0);
+      expect(await jobs[0]?.getState()).toBe('delayed');
+      await withSystem(app.db, BRAND, (tx) =>
+        pauseImportRun(tx, { brandId: BRAND, runId: run.runId }),
+      );
+      await queue.obliterate({ force: true });
+      await deliver();
+      expect(await queue.getJobs(['delayed', 'waiting'])).toEqual([]);
+      await expect(
+        withSystem(app.db, BRAND, (tx) => enqueueImportWork(tx, scope)),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+      await expect(
+        withSystem(app.db, OTHER_BRAND, (tx) =>
+          enqueueImportWork(tx, { ...scope, brandId: OTHER_BRAND }),
+        ),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    } finally {
+      await queue.obliterate({ force: true });
+      await queue.close();
+      await connection.quit();
+      await owner.db.delete(outbox).where(eq(outbox.id, eventId));
+    }
   });
 
   async function historicalReportScenario(prefix: string, rebuildAllReports = true) {

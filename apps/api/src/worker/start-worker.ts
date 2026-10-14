@@ -24,6 +24,10 @@ import {
   helpCenterPublishDueSweepJob,
   helpCenterSearchReindexJob,
   helpCenterSearchReindexSweepJob,
+  importAttachmentsJob,
+  importExtractJob,
+  importFinishJob,
+  importLoadJob,
   type JobLogger,
   knowledgeConfigureJob,
   knowledgeEmbedJob,
@@ -123,6 +127,7 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { registerImportEventHandlers } from '../imports/import-events.js';
 import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
 import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
@@ -559,6 +564,23 @@ export const workerDependencies: WorkerDependencies = {
     // needs a producer. It is the one outbox handler that adds a job, and it
     // may: it runs after the confirm committed, and `jobId = attachmentId`
     // makes a redelivery a no-op (`media/attachment-events.ts`).
+    const imports = new Queue(QUEUE_NAMES.import, { connection: redis });
+    const importDefinitions = {
+      extract: importExtractJob,
+      load: importLoadJob,
+      attachments: importAttachmentsJob,
+      finish: importFinishJob,
+    };
+    registerImportEventHandlers({
+      add: async (step, payload, jobId, delay) => {
+        const definition = importDefinitions[step];
+        await imports.add(definition.name, definition.schema.parse(payload), {
+          ...definition.options,
+          jobId,
+          delay,
+        });
+      },
+    });
     const media = new Queue(QUEUE_NAMES.media, { connection: redis });
     registerAttachmentEventHandlers({
       broadcast,
@@ -784,6 +806,7 @@ export const workerDependencies: WorkerDependencies = {
 
     return {
       close: async () => {
+        await imports.close();
         await media.close();
         await knowledge.close();
         await assignment.close();

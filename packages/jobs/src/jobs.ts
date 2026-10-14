@@ -1488,7 +1488,45 @@ export const samlMetadataRefreshJob = defineJob({
 });
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
+/** Import phases checkpoint their own short transactions; job payloads contain no credentials. */
+export const importRunPayloadSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
+export type ImportRunPayload = z.infer<typeof importRunPayloadSchema>;
+const importRetryOptions: JobsOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1000 },
+  removeOnComplete: { age: 86400, count: 1000 },
+  removeOnFail: 1000,
+};
+export const importExtractJob = defineJob({
+  name: 'import.extract',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importLoadJob = defineJob({
+  name: 'import.load',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importAttachmentsJob = defineJob({
+  name: 'import.attachments',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importFinishJob = defineJob({
+  name: 'import.finish',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+
 export const JOB_DEFINITIONS = Object.freeze({
+  [importExtractJob.name]: importExtractJob,
+  [importLoadJob.name]: importLoadJob,
+  [importAttachmentsJob.name]: importAttachmentsJob,
+  [importFinishJob.name]: importFinishJob,
   [samlMetadataRefreshJob.name]: samlMetadataRefreshJob,
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,

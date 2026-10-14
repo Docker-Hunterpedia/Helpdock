@@ -90,6 +90,7 @@ class ExtractionSession<Credentials> {
             eq(importRuns.id, run.parentRunId ?? ''),
             eq(importRuns.brandId, run.brandId),
             eq(importRuns.source, run.source),
+            eq(importRuns.sourceAccountKey, run.sourceAccountKey),
             eq(importRuns.status, 'completed'),
           ),
         ),

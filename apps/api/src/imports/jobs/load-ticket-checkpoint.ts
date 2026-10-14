@@ -40,7 +40,11 @@ async function stagedTicket(tx: DbTransaction, claim: ImportClaim, recordId: str
   return row;
 }
 
-async function ticketChildren(tx: DbTransaction, claim: ImportClaim, externalId: string) {
+export async function stagedTicketChildren(
+  tx: DbTransaction,
+  claim: ImportClaim,
+  externalId: string,
+) {
   const filter = and(
     eq(importRecords.brandId, claim.brandId),
     eq(importRecords.runId, claim.runId),
@@ -56,10 +60,26 @@ async function ticketChildren(tx: DbTransaction, claim: ImportClaim, externalId:
   if (!footprint) throw new ImportLoadError('target-unavailable');
   if (BigInt(footprint.bytes) > BigInt(MAX_STAGED_THREAD_BYTES))
     throw new ImportLoadError('thread-too-large');
-  return tx.select().from(importRecords).where(filter).for('update');
+  return tx
+    .select()
+    .from(importRecords)
+    .where(filter)
+    .orderBy(importRecords.entity, importRecords.externalId, importRecords.id)
+    .for('update');
 }
 
 function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
+  for (const child of children) {
+    const parsed = importRecordSchema.parse({ entity: child.entity, payload: child.payload });
+    if (
+      !['staged', 'loaded'].includes(child.status) ||
+      parsed.payload.externalId !== child.externalId ||
+      hashImportValue(parsed.payload) !== child.payloadHash ||
+      ('ticketExternalId' in parsed.payload &&
+        parsed.payload.ticketExternalId !== input.record.externalId)
+    )
+      throw new ImportLoadError('mapping-invalid');
+  }
   const supplied = { message: input.messages, csat: input.csat, activity: input.activities };
   for (const entity of ['message', 'csat', 'activity'] as const) {
     const expected = supplied[entity];
@@ -188,7 +208,7 @@ export async function loadStagedTicket(
     return { state: 'already_loaded' as const, ticketId: row.helpdockId };
   }
   if (row.status !== 'staged') throw new ImportLoadError('mapping-invalid');
-  const children = await ticketChildren(tx, claim, row.externalId);
+  const children = await stagedTicketChildren(tx, claim, row.externalId);
   validateStagedThread(children, input);
   const loaded = await writer.ticket(tx, input);
   await markTicketChildren(tx, input, children);

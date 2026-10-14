@@ -72,6 +72,7 @@ import { createTranscriptionHandler } from '../../transcription/transcription-ev
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
@@ -3076,6 +3077,112 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         .from(ticketParticipants)
         .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
     ).toMatchObject([{ contactId: cc, source: 'import', address: null }]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('assembles staged history and confirmed authors without caller-supplied thread data', async () => {
+    const scenario = await stagedTicketScenario('assembled-history');
+    const user = { externalId: 'oldagent', kind: 'agent', name: 'Original agent', active: false };
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: scenario.input.runId,
+      entity: 'user',
+      externalId: 'oldagent',
+      payload: user,
+      payloadHash: hashImportValue(user),
+    });
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      entity: 'contact',
+      externalId: 'customer',
+      helpdockId: CONTACT,
+      payloadHash: 'a'.repeat(64),
+    });
+    await owner.db.insert(importMappings).values([
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'status',
+        externalValue: 'open',
+        target: { statusId: STATUS },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'group',
+        externalValue: '',
+        target: { departmentId: DEPARTMENT, teamId: null },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'priority',
+        externalValue: '',
+        target: { priority: 'medium' },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'channel',
+        externalValue: '',
+        target: { channel: 'api' },
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        kind: 'agent',
+        externalValue: 'oldagent',
+        target: { kind: 'name' },
+      },
+    ]);
+    const checkpoint = { claim: scenario.claim, recordId: scenario.recordId };
+    const loaded = await withSystem(app.db, BRAND, (tx) =>
+      loadAssembledStagedTicket(tx, checkpoint),
+    );
+    expect(loaded).toMatchObject({ state: 'loaded', messages: 2 });
+    const thread = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId))
+      .orderBy(ticketMessages.seq);
+    expect(thread).toMatchObject([
+      { kind: 'public', authorType: 'contact', authorId: CONTACT },
+      { kind: 'note', authorType: 'system', authorDisplay: 'Original agent' },
+    ]);
+    expect(
+      await withSystem(app.db, BRAND, (tx) => loadAssembledStagedTicket(tx, checkpoint)),
+    ).toEqual({ state: 'already_loaded', ticketId: loaded.ticketId });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('refuses a failed staged child before loading or reporting a complete ticket', async () => {
+    const scenario = await stagedTicketScenario('failed-child-history');
+    await owner.db
+      .update(importRecords)
+      .set({ status: 'failed', error: 'import.record-unavailable' })
+      .where(
+        and(eq(importRecords.runId, scenario.input.runId), eq(importRecords.entity, 'message')),
+      );
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(
+          and(
+            eq(importExternalIds.entity, 'ticket'),
+            eq(importExternalIds.externalId, scenario.input.record.externalId),
+          ),
+        ),
+    ).toEqual([]);
+    expect(
+      (
+        await owner.db.select().from(importRecords).where(eq(importRecords.id, scenario.recordId))
+      )[0]?.status,
+    ).toBe('staged');
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

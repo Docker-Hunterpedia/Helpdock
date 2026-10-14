@@ -1746,6 +1746,35 @@ name-only assignee provenance, full staff/reference checkpoints, media fetching,
 ordered phases, dry-run integration and the admin UI remain required. M11-10 and
 M11-11 remain in progress.
 
+### Staged thread and author assembly checkpoint (in progress)
+
+`loadAssembledStagedTicket` reads the source ticket and every staged child under
+the loading claim, using the shared 50 MiB thread-footprint guard before decoding
+the children. It validates source hashes, IDs and parent references, gathers
+messages/ratings/activity, resolves authors, then invokes confirmed routing and
+the atomic ticket checkpoint. Child query ordering is deterministic for stable
+resume receipts. No caller-supplied message list is needed.
+
+Customer authors resolve through loaded source contact pointers and manual
+merges. Staff authors require confirmed existing/invited/name-only mappings;
+name-only authors use validated staged source-user names without creating an
+account. Missing references or contradictory customer/staff kinds fail rather
+than guessing identity. Assignee references participate in author preparation
+so name-only historical assignee display can be retained.
+
+A failing integration test demonstrated that the previous ticket checkpoint
+could load failed child rows and mark their history complete. Both assembly and
+the direct checkpoint now reject failed/skipped children, invalid hashes and
+inconsistent parent references before domain writes. Four author-kind unit cases
+and all 83 writer integration cases pass, including complete staged-thread
+assembly, private name-only notes, unchanged resume and failed-child refusal.
+
+This is transaction and metadata-loading evidence, not physical attachment-byte
+or process-kill acceptance. Referenced-user hydration on deltas, staff/reference
+checkpoints, media preparation, ordered phases, finish/report jobs, dry-run and
+admin UI integration remain required. Missing staged name-only user data currently
+blocks assembly; it is not silently replaced or added to accepted gaps.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

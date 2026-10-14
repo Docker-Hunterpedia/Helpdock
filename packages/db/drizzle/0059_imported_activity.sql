@@ -1,0 +1,1 @@
+ALTER TYPE "public"."import_entity" ADD VALUE 'activity';

@@ -45,7 +45,7 @@ async function ticketChildren(tx: DbTransaction, claim: ImportClaim, externalId:
     eq(importRecords.brandId, claim.brandId),
     eq(importRecords.runId, claim.runId),
     eq(importRecords.parentExternalId, externalId),
-    inArray(importRecords.entity, ['message', 'csat', 'attachment']),
+    inArray(importRecords.entity, ['message', 'csat', 'attachment', 'activity']),
   );
   const [footprint] = await tx
     .select({
@@ -60,8 +60,9 @@ async function ticketChildren(tx: DbTransaction, claim: ImportClaim, externalId:
 }
 
 function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
-  for (const entity of ['message', 'csat'] as const) {
-    const expected = entity === 'message' ? input.messages : input.csat;
+  const supplied = { message: input.messages, csat: input.csat, activity: input.activities };
+  for (const entity of ['message', 'csat', 'activity'] as const) {
+    const expected = supplied[entity];
     const rows = children.filter((row) => row.entity === entity);
     if (
       rows.length !== expected.length ||
@@ -98,7 +99,7 @@ function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
 }
 
 async function markTicketChildren(tx: DbTransaction, input: TicketLoad, children: StagedRow[]) {
-  for (const entity of ['message', 'csat', 'attachment'] as const) {
+  for (const entity of ['message', 'csat', 'attachment', 'activity'] as const) {
     const rows = children.filter((row) => row.entity === entity);
     for (let offset = 0; offset < rows.length; offset += 1000)
       await markChildBatch(tx, input, entity, rows.slice(offset, offset + 1000));
@@ -108,7 +109,7 @@ async function markTicketChildren(tx: DbTransaction, input: TicketLoad, children
 async function markChildBatch(
   tx: DbTransaction,
   input: TicketLoad,
-  entity: 'message' | 'csat' | 'attachment',
+  entity: 'message' | 'csat' | 'attachment' | 'activity',
   rows: StagedRow[],
 ) {
   const identities = await tx

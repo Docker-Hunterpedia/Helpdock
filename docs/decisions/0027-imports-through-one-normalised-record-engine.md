@@ -264,3 +264,19 @@ temporary CDN URLs; validate every hop, strip credentials across origins and
 refresh from the stable source URL on expiry. Do not substitute Support tokens
 for Sunshine Conversations credentials. Official sources and remaining gaps are
 dated and linked in the M11-12 section of the milestone plan.
+
+### 2026-10-14 — preserve source activity without replay
+
+The normalized engine adds `activity` alongside messages. Source audits and
+timeline events are neither public replies nor executable local mutations.
+Preserve their source ID, author, action, before/after values, details and date
+in department-scoped `ticket_activity`, using the fixed inert action
+`ticket.imported.event`. Store the original action as source metadata. No new
+tenant table is required; `import_entity` gains the new discriminator so bundle,
+staging, source identity and progress records share one validated contract.
+
+Source activity checkpoints commit with their ticket. Stable external IDs make
+repeats no-ops and allow source event changes/redactions to update the same row.
+Keep historical name-only authors without creating staff access. This closes
+the plan's missing representation for audit history; it does not replay source
+automation or replace the import-time administrative audit entry.

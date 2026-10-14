@@ -25,6 +25,7 @@ export const importEntitySchema = z.enum([
   'category',
   'section',
   'article',
+  'activity',
 ]);
 export type ImportSource = z.infer<typeof importSourceSchema>;
 export type ImportEntity = z.infer<typeof importEntitySchema>;
@@ -187,6 +188,17 @@ export const importCsatSchema = z.strictObject({
   ratedAt: instant,
   closedAt: instant.optional(),
 });
+export const importActivitySchema = z.strictObject({
+  externalId,
+  ticketExternalId: externalId,
+  authorExternalId: externalId.optional(),
+  authorKind: z.enum(['agent', 'customer', 'system']),
+  action: z.string().min(1).max(300),
+  from: custom.optional(),
+  to: custom.optional(),
+  details: custom.optional(),
+  createdAt: instant,
+});
 export const importCategorySchema = z
   .strictObject({
     externalId,
@@ -235,11 +247,13 @@ export const importRecordSchema = z.discriminatedUnion('entity', [
   z.strictObject({ entity: z.literal('category'), payload: importCategorySchema }),
   z.strictObject({ entity: z.literal('section'), payload: importSectionSchema }),
   z.strictObject({ entity: z.literal('article'), payload: importArticleSchema }),
+  z.strictObject({ entity: z.literal('activity'), payload: importActivitySchema }),
 ]);
 export type ImportRecord = z.infer<typeof importRecordSchema>;
 export type ImportTicket = z.infer<typeof importTicketSchema>;
 export type ImportCsat = z.infer<typeof importCsatSchema>;
 export type ImportMessage = z.infer<typeof importMessageSchema>;
+export type ImportActivity = z.infer<typeof importActivitySchema>;
 export type ImportAttachmentRef = z.infer<typeof importAttachmentRefSchema>;
 
 export const importManifestSchema = z.strictObject({

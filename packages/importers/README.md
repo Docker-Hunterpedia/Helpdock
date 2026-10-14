@@ -34,7 +34,10 @@ URLs from message hashes and keeps body/attachment identity changes meaningful.
 ## Import bundle version 1
 
 A ZIP contains `manifest.json`, singular entity files such as `ticket.ndjson` and
-`message.ndjson`, and optional members under `attachments/`. Each NDJSON line is
+`message.ndjson`, and optional members under `attachments/`. Historical audit
+events use `activity.ndjson`: source ID, parent ticket ID, author reference/kind,
+action, optional before/after/details objects and original creation time. These
+are inert history; they never replay the source action in Helpdock. Each NDJSON line is
 the entity's payload, without an extra `{ entity, payload }` envelope. The manifest
 has `format: "helpdock-import"`, `version: 1`, a supported source, an ISO export
 time and per-entity counts. Record times require an explicit timezone offset.

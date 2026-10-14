@@ -573,6 +573,7 @@ export const importEntityEnum = pgEnum('import_entity', [
   'category',
   'section',
   'article',
+  'activity',
 ]);
 export const importRecordStatusEnum = pgEnum('import_record_status', [
   'staged',

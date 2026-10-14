@@ -11,3 +11,5 @@ Process shared historical attachments without live events or AI transcription, a
 Commit historical ticket/thread progress atomically, retain changed source subjects on delta, and refuse deleted migration targets rather than reporting them as imported.
 
 Invalidate previous dry-run approval when import mappings change, and refuse mapping edits during active or terminal import phases.
+
+Preserve source ticket audit events with their original dates, actors and changes as inert imported activity, including idempotent repeat and delta checkpoints.

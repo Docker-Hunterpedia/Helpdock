@@ -101,11 +101,11 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | done |
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
-| M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
+| M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
 | M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
 | M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
-| M11-12 | Zendesk connector: API token or OAuth; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | planned |
+| M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
 | M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
 | M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | planned |
 | M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | planned |
@@ -820,6 +820,8 @@ importMessageSchema     { externalId, ticketExternalId, authorExternalId?, autho
                           email?: { messageId?, from?, to?: string[], cc?: string[] }, attachments: importAttachmentRefSchema[] }
 importAttachmentRefSchema { externalId, fileName, contentType?, size?, url?: string, bundlePath?: string }
 importCsatSchema        { externalId, ticketExternalId, rating: 1|2|3|4|5, comment?, ratedAt }
+importActivitySchema    { externalId, ticketExternalId, authorExternalId?, authorKind: 'agent'|'customer'|'system', action,
+                          from?: Record<string, unknown>, to?: Record<string, unknown>, details?: Record<string, unknown>, createdAt }
 importCategorySchema / importSectionSchema { externalId, parentExternalId?, names: { en?, ar? }, descriptions?: { en?, ar? } }
 importArticleSchema     { externalId, sectionExternalId, locale: 'en'|'ar', title, bodyHtml, description?, draft: boolean, internal: boolean, createdAt, updatedAt, translationOf? }
 ```
@@ -1112,6 +1114,27 @@ were dropped. The real-API merge/split suite reproduced the channel/import
 failures first and passes 25 cases after preserving both fields. This fix belongs
 to the owner's single remaining-M11 PR. Import attachment-fetch jobs, orchestration
 and connector/browser acceptance remain incomplete.
+
+### Historical source activity checkpoint (M11-08/09/10, in progress)
+
+The original thirteen-entity model could not represent source audit events.
+`activity` is now a fourteenth normalized entity, accepted by the bundle/staging
+boundaries and the database enum (migration `0059_imported_activity.sql`). It
+preserves source event IDs, actor references, action names, before/after values,
+details and original dates. The writer stores these as inert
+`ticket.imported.event` activity rows; the original action is metadata and is
+never dispatched through lifecycle hooks. Shared author resolution retains
+name-only staff and checks mapped staff/contact brand membership.
+
+Stable activity IDs participate in the source identity ledger and ticket hash.
+Repeated imports write nothing; a changed source event updates its original
+activity row without duplicating it or replaying the action. Staged activities
+participate in the same fenced ticket transaction, thread-size bound and loaded
+counters as messages/ratings/attachments; omitted history is refused. Four
+focused real PostgreSQL/Redis cases cover historical dates, authors, inertness,
+repeat/delta, invalid authors/parents and staged checkpoints. Boundary unit cases
+cover parent association, duplicate event IDs and inert actor/event values. Connector audit conversion,
+imported-event presentation and complete end-to-end acceptance remain pending.
 
 ## M11-10 Import jobs
 

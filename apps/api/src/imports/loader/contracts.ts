@@ -1,4 +1,5 @@
 import {
+  importActivitySchema,
   importCsatSchema,
   importMessageSchema,
   importSourceSchema,
@@ -21,6 +22,7 @@ export const ticketLoadSchema = z
     record: importTicketSchema,
     messages: z.array(importMessageSchema).max(100000),
     csat: z.array(importCsatSchema).max(10000).default([]),
+    activities: z.array(importActivitySchema).max(100000).default([]),
     authors: z.record(z.string().max(200), authorSchema),
     resolved: z.strictObject({
       statusId: z.uuid(),
@@ -40,7 +42,8 @@ export const ticketLoadSchema = z
   .refine(
     (input) =>
       input.messages.every((message) => message.ticketExternalId === input.record.externalId) &&
-      input.csat.every((rating) => rating.ticketExternalId === input.record.externalId),
+      input.csat.every((rating) => rating.ticketExternalId === input.record.externalId) &&
+      input.activities.every((activity) => activity.ticketExternalId === input.record.externalId),
     { path: ['messages'], message: 'A thread or rating belongs to another source ticket' },
   );
 export const mappedTicketLoadSchema = ticketLoadSchema
@@ -48,7 +51,9 @@ export const mappedTicketLoadSchema = ticketLoadSchema
     (input) =>
       new Set(input.resolved.tags.map((mapping) => mapping.externalValue)).size ===
         input.resolved.tags.length &&
-      new Set(input.csat.map((rating) => rating.externalId)).size === input.csat.length,
+      new Set(input.csat.map((rating) => rating.externalId)).size === input.csat.length &&
+      new Set(input.activities.map((activity) => activity.externalId)).size ===
+        input.activities.length,
     { message: 'Duplicate tag mappings or source rating IDs' },
   )
   .refine(

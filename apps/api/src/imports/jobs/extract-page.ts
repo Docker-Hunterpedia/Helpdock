@@ -23,6 +23,7 @@ function parentExternalId(record: ImportRecord): string | null {
     case 'message':
     case 'attachment':
     case 'csat':
+    case 'activity':
       return record.payload.ticketExternalId;
     case 'article':
       return record.payload.sectionExternalId;

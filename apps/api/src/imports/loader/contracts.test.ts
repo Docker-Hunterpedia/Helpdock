@@ -103,4 +103,22 @@ it('requires an explicit tag decision and refuses conflicting mappings or duplic
     ratedAt: '2020-01-02T00:00:00Z',
   });
   expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
+  input.csat = [];
+  input.activities = [
+    {
+      externalId: 'event',
+      ticketExternalId: 'other',
+      authorKind: 'system',
+      action: 'status.changed',
+      createdAt: '2020-01-02T00:00:00Z',
+    },
+  ];
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
+  const sourceEvent = input.activities[0];
+  if (!sourceEvent) throw new Error('Expected source activity fixture');
+  const corrected = { ...sourceEvent, ticketExternalId: 'a' };
+  input.activities = [corrected];
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(true);
+  input.activities.push(corrected);
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
 });

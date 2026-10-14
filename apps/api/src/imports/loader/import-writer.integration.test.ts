@@ -28,6 +28,7 @@ import {
   reportDaily,
   runMigrations,
   tags,
+  ticketActivity,
   ticketMessages,
   ticketParticipants,
   ticketStatuses,
@@ -401,6 +402,152 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(
       (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0],
     ).toMatchObject({ status: 'ready', dryRunReport: { approved: true } });
+  });
+
+  it('retains source audit dates, actors and changes without executing events, and updates the same event on delta', async () => {
+    const input = request('source-audit-history');
+    input.activities = [
+      {
+        externalId: 'source-status-event',
+        ticketExternalId: input.record.externalId,
+        authorExternalId: 'oldagent',
+        authorKind: 'agent',
+        action: 'status.changed',
+        from: { status: 'open' },
+        to: { status: 'pending' },
+        details: { auditId: '1001' },
+        createdAt: '2019-01-02T00:00:00+03:00',
+      },
+      {
+        externalId: 'source-assignee-event',
+        ticketExternalId: input.record.externalId,
+        authorExternalId: 'staff',
+        authorKind: 'agent',
+        action: 'assignee.changed',
+        from: { assigneeId: null },
+        to: { assigneeId: '301' },
+        createdAt: '2019-01-02T00:00:00Z',
+      },
+    ];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const history = await owner.db
+      .select()
+      .from(ticketActivity)
+      .where(eq(ticketActivity.ticketId, loaded.ticketId));
+    const sourceEvents = history.filter((event) => event.action === 'ticket.imported.event');
+    expect(sourceEvents).toHaveLength(2);
+    expect(sourceEvents.find((event) => event.actorType === 'system')).toMatchObject({
+      from: { status: 'open' },
+      createdAt: new Date('2019-01-01T21:00:00Z'),
+      to: {
+        changes: { status: 'pending' },
+        sourceEvent: {
+          action: 'status.changed',
+          authorDisplay: 'Original agent',
+          details: { auditId: '1001' },
+        },
+      },
+    });
+    expect(sourceEvents.find((event) => event.actorType === 'staff')).toMatchObject({
+      actorId: USER,
+    });
+    const before = [
+      ...(await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_activity WHERE ticket_id = ${loaded.ticketId}`,
+      )),
+    ];
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect([
+      ...(await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_activity WHERE ticket_id = ${loaded.ticketId}`,
+      )),
+    ]).toEqual(before);
+    const originalId = sourceEvents.find((event) => event.actorType === 'system')?.id;
+    const sourceEvent = input.activities[0];
+    if (!originalId || !sourceEvent) throw new Error('Expected historical source event');
+    input.activities[0] = {
+      ...sourceEvent,
+      to: { status: '[redacted]' },
+      details: { redacted: true },
+    };
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db.select().from(ticketActivity).where(eq(ticketActivity.id, originalId)),
+    ).toMatchObject([
+      { to: { changes: { status: '[redacted]' }, sourceEvent: { details: { redacted: true } } } },
+    ]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.keys('bull:import:*')).toEqual([]);
+  });
+
+  it.each([
+    { author: 'oldagent', failure: { name: 'ZodError' } },
+    { author: 'missing-agent', failure: { code: 'author-unmapped' } },
+  ])(
+    'refuses an invalid audit with $author before domain rows survive',
+    async ({ author, failure }) => {
+      const input = request(`invalid-source-audit-${author}`);
+      input.activities = [
+        {
+          externalId: `event-${author}`,
+          ticketExternalId: author === 'oldagent' ? 'wrong-ticket' : input.record.externalId,
+          authorExternalId: author,
+          authorKind: 'agent',
+          action: 'status.changed',
+          createdAt: '2019-01-02T00:00:00Z',
+        },
+      ];
+      await expect(
+        withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input)),
+      ).rejects.toMatchObject(failure);
+      expect(
+        await owner.db
+          .select()
+          .from(importExternalIds)
+          .where(eq(importExternalIds.externalId, input.record.externalId)),
+      ).toEqual([]);
+    },
+  );
+
+  it('includes staged audit events in the fenced thread checkpoint and refuses omitted history', async () => {
+    const scenario = await stagedTicketScenario('checkpoint-source-audit');
+    const event = {
+      externalId: 'checkpoint-event',
+      ticketExternalId: scenario.input.record.externalId,
+      authorKind: 'system' as const,
+      action: 'status.changed',
+      to: { status: 'pending' },
+      createdAt: '2019-01-02T00:00:00Z',
+    };
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: scenario.input.runId,
+      entity: 'activity',
+      externalId: event.externalId,
+      parentExternalId: event.ticketExternalId,
+      payload: event,
+      payloadHash: hashImportValue(event),
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario)),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    scenario.input.activities = [event];
+    expect(await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario))).toMatchObject({
+      state: 'loaded',
+    });
+    const [run] = await owner.db
+      .select()
+      .from(importRuns)
+      .where(eq(importRuns.id, scenario.input.runId));
+    expect(run?.counts).toMatchObject({ loaded: { activity: 1 } });
+    const [record] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.externalId, event.externalId));
+    expect(record).toMatchObject({ status: 'loaded' });
+    expect(record?.helpdockId).not.toBeNull();
   });
 
   it('commits staged ticket/thread progress atomically and resumes after a rolled-back worker transaction', async () => {

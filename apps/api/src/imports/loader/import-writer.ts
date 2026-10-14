@@ -6,6 +6,7 @@ import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import type { FieldLoad } from './field-contracts.js';
 import type { ArticleLoad, CategoryLoad, SectionLoad } from './knowledge-contracts.js';
+import { loadImportedActivities } from './load-activities.js';
 import { loadImportedArticle } from './load-articles.js';
 import { loadImportedContact } from './load-contacts.js';
 import { loadImportedCsat } from './load-csat.js';
@@ -63,6 +64,7 @@ export class ImportWriter {
       ticket: input.record,
       messages: input.messages.map(importMessageHash),
       csat: input.csat,
+      activities: input.activities,
       resolved: input.resolved,
       authors: input.authors,
     });
@@ -82,6 +84,7 @@ export class ImportWriter {
     if (existing) await updateImportedTicket(tx, { input, ticketId, changes });
     else await createImportedTicket(tx, { input, ticketId, changes });
     const appended = await loadImportedMessages(tx, input, ticketId);
+    await loadImportedActivities(tx, input, ticketId);
     await loadImportedTags(tx, input, ticketId);
     await loadImportedParticipants(tx, input, ticketId);
     await loadImportedCsat(tx, input, ticketId);

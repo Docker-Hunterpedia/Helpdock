@@ -1,47 +1,17 @@
 import { sanitizeMessageBody } from '@helpdock/channels';
-import { contacts, type DbTransaction, ticketMessages, userBrandRoles, uuidv7 } from '@helpdock/db';
+import { type DbTransaction, ticketMessages, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import type { ImportMessage } from '@helpdock/schemas';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importEmailMeta } from './email-meta.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import { loadImportedAttachment, lockImportedAttachments } from './load-attachments.js';
+import { importedAuthor } from './load-authors.js';
 
 function plainHtml(text: string): string {
   const escaped = text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   return `<p>${escaped.replaceAll(/\r?\n/g, '<br>')}</p>`;
-}
-
-async function messageAuthor(tx: DbTransaction, input: TicketLoad, message: ImportMessage) {
-  const author =
-    message.authorExternalId === undefined ? undefined : input.authors[message.authorExternalId];
-  if (!author) {
-    if (message.authorKind !== 'system') throw new ImportLoadError('author-unmapped');
-    return { authorType: 'system' as const, authorId: null, authorDisplay: null };
-  }
-  if (
-    (message.authorKind === 'customer' && author.kind !== 'contact') ||
-    (message.authorKind === 'agent' && author.kind === 'contact') ||
-    (author.kind === 'name' && message.authorKind !== 'agent')
-  )
-    throw new ImportLoadError('mapping-invalid');
-  if (author.kind === 'name')
-    return { authorType: 'system' as const, authorId: null, authorDisplay: author.name };
-  const matches =
-    author.kind === 'staff'
-      ? await tx
-          .select({ id: userBrandRoles.userId })
-          .from(userBrandRoles)
-          .where(
-            and(eq(userBrandRoles.brandId, input.brandId), eq(userBrandRoles.userId, author.id)),
-          )
-      : await tx
-          .select({ id: contacts.id })
-          .from(contacts)
-          .where(and(eq(contacts.brandId, input.brandId), eq(contacts.id, author.id)));
-  if (!matches.length) throw new ImportLoadError('mapping-invalid');
-  return { authorType: author.kind, authorId: author.id, authorDisplay: null };
 }
 
 /** Download URLs expire and change independently of the historical message. */
@@ -59,7 +29,7 @@ async function insertImportedMessage(
   options: { input: TicketLoad; message: ImportMessage; ticketId: string; sequence: number },
 ): Promise<void> {
   const { input, message } = options;
-  const author = await messageAuthor(tx, input, message);
+  const author = await importedAuthor(tx, input, message);
   const messageBody = sanitizeMessageBody(message.bodyHtml ?? plainHtml(message.bodyText ?? ''));
   const messageId = uuidv7();
   await tx.insert(ticketMessages).values({

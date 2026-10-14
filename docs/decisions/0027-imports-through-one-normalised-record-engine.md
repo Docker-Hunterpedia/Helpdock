@@ -297,3 +297,19 @@ participants. Known source email can fill an imported null address, while manual
 addresses remain untouched. Email-only contact creation must validate required
 fields. These changes replace the earlier additive-only CC delta behaviour and
 close source relationship omissions without introducing delivery side effects.
+
+### 2026-10-14 — profile provenance and resumable contact hydration
+
+Normalized contacts retain native identity type/value/verification-method metadata
+privately, alongside notes, descriptions and original profile dates. This does
+not turn vendor verification into Helpdock verification or reinterpret foreign
+social identifiers as trusted channel identities. Contact erasure clears the
+existing private imported-details column. Organizations likewise retain source
+descriptions and dates. New profiles can use complete original date pairs;
+existing local profile dates are preserved.
+
+Zendesk contact hydration checkpoints one profile at a time with a source-page
+fingerprint and offset. On resume, a changed page is refused before completed
+profiles are skipped. Cursor state contains a fingerprint and traversal position,
+not emails, identity values or credentials. All subsequent authenticated
+pagination must stay on the expected source origin and endpoint.

@@ -1462,6 +1462,34 @@ client. This checkpoint does not include an extraction adapter, real-account
 proof, archive-comment equivalence, full source audit loading or 500-ticket
 acceptance. Those remain required before completing this deliverable.
 
+### Zendesk core extraction checkpoint (in progress)
+
+`ZendeskConnector` now implements ticket/user cursor exports, organization time
+exports, group pagination and contact hydration through user identities. Credentials
+use a strict OAuth/API-token discriminant and validated subdomain. Pagination
+links must match the source origin and endpoint before another authenticated
+request is made. Ticket CC user references and custom status category/ID pairs
+remain explicit rather than becoming guessed emails or standard statuses.
+Known priority/channel values produce mapping proposals; status, group and
+other proposals remain required.
+
+Contacts checkpoint individually. A resumed contact page compares its validated
+source payload fingerprint before skipping completed profiles; changed pages
+fail rather than silently skipping updated data. All identity pages are read.
+Native identity kinds and verification methods are retained as private source
+metadata; they never verify a Helpdock identity or grant staff permissions.
+Contact/company notes, descriptions and known original profile dates are
+preserved. New profiles use complete source date pairs; existing local profile
+creation dates remain unchanged, and incomplete source dates stay in provenance.
+
+Six local HTTP connector tests and a real PostgreSQL/Redis staging case pass.
+The full writer suite passes 75 cases, including private profile metadata and
+unverified imported addresses. This adapter currently advertises only those
+five implemented entities. Threads, audits, attachments extraction, fields,
+tags, CSAT and Guide traversal remain required, along with source-account
+binding, completeness reporting, preflight capability checks and full/delta
+reference-dataset/browser acceptance. M11-12 is not complete.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

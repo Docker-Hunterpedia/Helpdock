@@ -80,6 +80,9 @@ export const importOrganizationSchema = z.strictObject({
   name,
   domains: z.array(z.string().max(253)).max(100),
   notes: body.optional(),
+  description: body.optional(),
+  createdAt: instant.optional(),
+  updatedAt: instant.optional(),
   custom,
 });
 export const importContactSchema = z.strictObject({
@@ -92,6 +95,22 @@ export const importContactSchema = z.strictObject({
   timezone: z.string().max(100).optional(),
   externalRef: shortText.optional(),
   custom,
+  notes: body.optional(),
+  description: body.optional(),
+  createdAt: instant.optional(),
+  updatedAt: instant.optional(),
+  sourceIdentities: z
+    .array(
+      z.strictObject({
+        externalId,
+        type: z.string().min(1).max(100),
+        value: z.string().max(8192),
+        primary: z.boolean().optional(),
+        verificationMethod: z.string().max(100).optional(),
+      }),
+    )
+    .max(1000)
+    .optional(),
 });
 export const importGroupSchema = z.strictObject({ externalId, name });
 export const importTagSchema = z.strictObject({ externalId, name: z.string().min(1).max(80) });

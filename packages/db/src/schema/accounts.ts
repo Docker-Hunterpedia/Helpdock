@@ -26,7 +26,13 @@ export const accounts = pgTable(
     brandId: uuid('brand_id')
       .notNull()
       .references(() => brands.id, { onDelete: 'cascade' }),
-    importedDetails: jsonb('imported_details').$type<{ domains: string[]; notes: string | null }>(),
+    importedDetails: jsonb('imported_details').$type<{
+      domains: string[];
+      notes: string | null;
+      description?: string | null;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }>(),
     name: text('name').notNull(),
     /** Lower-cased email domain, for example `acme.example`. */
     domain: text('domain'),

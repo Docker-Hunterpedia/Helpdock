@@ -38,6 +38,9 @@ export default defineConfig({
               new URL('packages/config/src/index.ts', import.meta.url),
             ),
             '@helpdock/db': fileURLToPath(new URL('packages/db/src/index.ts', import.meta.url)),
+            '@helpdock/importers/testing': fileURLToPath(
+              new URL('packages/importers/src/testing.ts', import.meta.url),
+            ),
             '@helpdock/importers': fileURLToPath(
               new URL('packages/importers/src/index.ts', import.meta.url),
             ),

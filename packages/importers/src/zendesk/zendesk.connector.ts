@@ -1,0 +1,107 @@
+import { Readable } from 'node:stream';
+import type { ImportAttachmentRef, ImportEntity, ImportRecord } from '@helpdock/schemas';
+import { importAttachmentRefSchema } from '@helpdock/schemas';
+import { z } from 'zod';
+import type { Connector, ConnectorContext, ImportCursor, ProposedMapping } from '../connector.js';
+import { ConnectorError } from '../errors.js';
+import { ZendeskClient } from './client.js';
+import { exportZendeskContacts } from './contacts-export.js';
+import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.js';
+import {
+  exportZendeskGroups,
+  exportZendeskOrganizations,
+  exportZendeskTickets,
+  exportZendeskUsers,
+} from './core-export.js';
+
+export class ZendeskConnector implements Connector<ZendeskCredentials> {
+  readonly source = 'zendesk' as const;
+  readonly credentialsSchema = zendeskCredentialsSchema;
+  readonly entities = ['ticket', 'user', 'organization', 'group', 'contact'] as const;
+
+  constructor(private readonly options: { apiRoot?: string } = {}) {}
+
+  async test(context: ConnectorContext<ZendeskCredentials>) {
+    const client = new ZendeskClient(context, this.options.apiRoot);
+    try {
+      const response = await client.json(
+        '/api/v2/users/me.json',
+        z.object({ user: z.object({ role: z.string() }) }),
+      );
+      return response.user.role === 'admin'
+        ? { ok: true as const, account: context.credentials.subdomain }
+        : { ok: false as const, reason: 'credentials-refused' as const };
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      return {
+        ok: false as const,
+        reason: error.code === 'record-unavailable' ? ('invalid-response' as const) : error.code,
+      };
+    }
+  }
+
+  extract(
+    context: ConnectorContext<ZendeskCredentials>,
+    entity: ImportEntity,
+    cursor: ImportCursor | null,
+    since?: Date,
+  ) {
+    const client = new ZendeskClient(context, this.options.apiRoot);
+    switch (entity) {
+      case 'ticket':
+        return exportZendeskTickets(client, cursor, since);
+      case 'user':
+        return exportZendeskUsers(client, cursor, since);
+      case 'organization':
+        return exportZendeskOrganizations(client, cursor, since);
+      case 'group':
+        return exportZendeskGroups(client, cursor);
+      case 'contact':
+        return exportZendeskContacts(client, cursor, since);
+      default:
+        throw new ConnectorError('invalid-response');
+    }
+  }
+
+  async fetchAttachment(
+    context: ConnectorContext<ZendeskCredentials>,
+    request: ImportAttachmentRef,
+  ) {
+    const ref = importAttachmentRefSchema.parse(request);
+    if (!ref.url) throw new ConnectorError('invalid-response');
+    const client = new ZendeskClient(context, this.options.apiRoot);
+    const address = new URL(ref.url);
+    const response = await context.http.request(
+      ref.url,
+      address.origin === client.origin ? client.init() : { signal: context.signal },
+    );
+    const contentType = response.headers['content-type'];
+    return {
+      stream: Readable.from(response.body),
+      size: response.body.length,
+      ...(typeof contentType === 'string' ? { contentType } : {}),
+    };
+  }
+
+  defaultMappings(sample: readonly ImportRecord[]): ProposedMapping[] {
+    const priorities = { low: 'low', normal: 'medium', high: 'high', urgent: 'urgent' };
+    const channels = { email: 'email', web: 'form', api: 'api', chat: 'chat' };
+    const mappings = new Map<string, ProposedMapping>();
+    for (const record of sample) {
+      if (record.entity !== 'ticket') continue;
+      for (const [kind, choices, source] of [
+        ['priority', priorities, record.payload.priority],
+        ['channel', channels, record.payload.channel],
+      ] as const) {
+        if (source === undefined || !Object.hasOwn(choices, source)) continue;
+        const target = choices[source as keyof typeof choices];
+        mappings.set(`${kind}:${source}`, {
+          kind,
+          externalValue: source,
+          target: { [kind]: target },
+        });
+      }
+    }
+    return [...mappings.values()];
+  }
+}

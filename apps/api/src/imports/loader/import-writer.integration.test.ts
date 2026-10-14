@@ -47,7 +47,9 @@ import {
   ImportHttp,
   ImportRateLimiter,
   RateLimited,
+  ZendeskConnector,
 } from '@helpdock/importers';
+import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importEntitySchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
@@ -1911,6 +1913,73 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     };
   }
 
+  it('stages Zendesk core exports through documented HTTP shapes with real PostgreSQL and Redis', async () => {
+    const fake = new FakeZendesk(zendeskCoreFixture, {
+      authorization: 'Bearer synthetic-token',
+      now: Date.parse('2026-10-14T00:00:00Z') / 1000,
+    });
+    await fake.server.start();
+    try {
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'extracting',
+        startedBy: USER,
+      });
+      const connector = new ZendeskConnector({ apiRoot: fake.server.root });
+      const context = {
+        credentials: { auth: 'oauth' as const, subdomain: 'demo', accessToken: 'synthetic-token' },
+        signal: new AbortController().signal,
+        log: async () => {},
+        http: new ImportHttp({
+          hosts: ['127.0.0.1'],
+          limiter: new ImportRateLimiter({ capacity: 100, perMinute: 1000 }),
+          policy: {
+            allowedPorts: [Number(new URL(fake.server.root).port)],
+            allowCidrs: ['127.0.0.1/32'],
+          },
+        }),
+      };
+      expect(
+        await runImportExtraction({
+          db: app.db,
+          connector,
+          context,
+          scope: { brandId: BRAND, runId },
+          jobId: `zendesk.${runId}`,
+        }),
+      ).toEqual({ state: 'awaiting_mapping' });
+      const rows = await owner.db
+        .select()
+        .from(importRecords)
+        .where(eq(importRecords.runId, runId));
+      expect(rows.filter((row) => row.entity === 'ticket')).toMatchObject([
+        { payload: { externalId: '101', ccExternalIds: ['202'], status: 'pending:701' } },
+      ]);
+      expect(rows.filter((row) => row.entity === 'contact')).toHaveLength(3);
+      expect(
+        rows.find((row) => row.entity === 'contact' && row.externalId === '201')?.payload,
+      ).toMatchObject({
+        emails: ['customer@example.invalid', 'secondary@example.invalid'],
+        sourceIdentities: [{ verificationMethod: 'full' }, {}, { type: 'twitter' }],
+      });
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run?.counts).toEqual({
+        extracted: { ticket: 1, user: 3, organization: 1, group: 1, contact: 3 },
+      });
+      expect(run?.cursors).toMatchObject({
+        ticket: { done: true, deltaCursor: { after: expect.any(String) } },
+        contact: { done: true },
+      });
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await redis.dbsize()).toBe(0);
+    } finally {
+      await fake.server.close();
+    }
+  });
+
   it('orchestrates extraction from a persisted cursor after pause and enters mapping only after the final page', async () => {
     const runId = uuidv7();
     await owner.db.insert(importRuns).values({
@@ -2513,6 +2582,81 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         .where(eq(importExternalIds.externalId, 'missing-section')),
     ).toEqual([]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('retains original profile dates, notes, descriptions and native verification provenance without granting verification', async () => {
+    const record = {
+      externalId: 'source-profile-metadata',
+      name: 'Original profile',
+      emails: ['profile-metadata@example.invalid'],
+      phones: [],
+      custom: {},
+      createdAt: '2010-01-01T00:00:00Z',
+      updatedAt: '2020-01-01T00:00:00Z',
+      notes: 'Original contact note',
+      description: 'Original contact description',
+      sourceIdentities: [
+        {
+          externalId: 'email-1',
+          type: 'email',
+          value: 'profile-metadata@example.invalid',
+          verificationMethod: 'full',
+        },
+        { externalId: 'social-1', type: 'twitter', value: 'original-handle' },
+      ],
+    };
+    const input = contactLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      accountId: null,
+      custom: {},
+      record,
+    });
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.contact(tx, input));
+    const [profile] = await owner.db.select().from(contacts).where(eq(contacts.id, loaded.id));
+    expect(profile).toMatchObject({
+      createdAt: new Date(record.createdAt),
+      updatedAt: new Date(record.updatedAt),
+      importedDetails: {
+        notes: record.notes,
+        description: record.description,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        sourceIdentities: record.sourceIdentities,
+      },
+    });
+    expect(
+      await owner.db
+        .select()
+        .from(contactIdentities)
+        .where(eq(contactIdentities.contactId, loaded.id)),
+    ).toMatchObject([{ verified: false, source: 'import' }]);
+    const organization = organizationLoadSchema.parse({
+      brandId: BRAND,
+      runId: RUN,
+      source: 'zendesk',
+      custom: {},
+      record: {
+        externalId: 'source-company-metadata',
+        name: 'Original company',
+        domains: [],
+        custom: {},
+        description: 'Native company description',
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      },
+    });
+    const company = await withSystem(app.db, BRAND, (tx) => writer.organization(tx, organization));
+    expect(await owner.db.select().from(accounts).where(eq(accounts.id, company.id))).toMatchObject(
+      [
+        {
+          createdAt: new Date(record.createdAt),
+          updatedAt: new Date(record.updatedAt),
+          importedDetails: { description: 'Native company description' },
+        },
+      ],
+    );
   });
 
   it('loads companies with all domains/notes, links through a secondary domain and writes nothing on repeat', async () => {

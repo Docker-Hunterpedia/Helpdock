@@ -75,8 +75,12 @@ export async function loadImportedOrganization(
   });
   const id = linked?.id ?? uuidv7();
   const importedDetails = {
+    ...linked?.importedDetails,
     domains: [...new Set([...(linked?.importedDetails?.domains ?? []), ...domains])],
     notes: input.record.notes ?? linked?.importedDetails?.notes ?? null,
+    ...(input.record.description === undefined ? {} : { description: input.record.description }),
+    ...(input.record.createdAt === undefined ? {} : { createdAt: input.record.createdAt }),
+    ...(input.record.updatedAt === undefined ? {} : { updatedAt: input.record.updatedAt }),
   };
   if (linked) {
     await tx.update(accounts).set({ importedDetails }).where(eq(accounts.id, id));
@@ -95,6 +99,12 @@ export async function loadImportedOrganization(
       domain: domains[0] ?? null,
       custom: input.custom,
       importedDetails,
+      ...(input.record.createdAt === undefined
+        ? {}
+        : { createdAt: new Date(input.record.createdAt) }),
+      ...(input.record.updatedAt === undefined || input.record.createdAt === undefined
+        ? {}
+        : { updatedAt: new Date(input.record.updatedAt) }),
     });
   await rememberImported(tx, {
     brandId: input.brandId,

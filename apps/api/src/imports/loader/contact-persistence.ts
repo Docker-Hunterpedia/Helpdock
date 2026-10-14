@@ -25,6 +25,12 @@ export async function createImportedContact(
     custom: input.custom,
     externalId: input.record.externalRef ?? null,
     ...importedContactValues(input),
+    ...(input.record.createdAt === undefined
+      ? {}
+      : { createdAt: new Date(input.record.createdAt) }),
+    ...(input.record.updatedAt === undefined || input.record.createdAt === undefined
+      ? {}
+      : { updatedAt: new Date(input.record.updatedAt) }),
   });
 }
 export async function updateImportedContactDetails(

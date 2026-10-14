@@ -49,6 +49,17 @@ export const contacts = pgTable(
       phones: string[];
       locale: string | null;
       timezone: string | null;
+      notes?: string;
+      description?: string;
+      createdAt?: string;
+      updatedAt?: string;
+      sourceIdentities?: Array<{
+        externalId: string;
+        type: string;
+        value: string;
+        primary?: boolean | undefined;
+        verificationMethod?: string | undefined;
+      }>;
     }>(),
     name: text('name').notNull(),
     locale: localeEnum('locale'),

@@ -2018,8 +2018,8 @@ now also lives in the `.env.example` comments used by the generator.
 
 `runImportAttachmentBatch` downloads at most four pending staged attachment
 records per invocation, with network/storage work outside transactions and the
-existing fenced publication path. Downloads currently run sequentially; bounded
-parallel downloads and queue registration remain required. Repeating while media
+existing fenced publication path. Downloads now run with a four-file concurrency bound; production
+queue registration remains required. Repeating while media
 processing is pending performs no additional vendor fetch. A lost or paused claim
 returns stopped and cannot authorize the next phase.
 
@@ -2201,7 +2201,7 @@ This consumer accepts a connector resolver and article preparation dependency;
 production connector/worker registration remains unfinished. Article preparation
 is required rather than silently dropping remote images. Recovery after a process
 is killed between a domain batch and its continuation request still requires the
-recovery scheduler and actual process-kill acceptance test. Media 5xx/expired URL
+recovery scheduler and actual process-kill acceptance test. Expired URL
 handling and the complete factory/preparation/API/UI path remain to be completed.
 
 ### Recovery scheduling checkpoint (M11-10, in progress)
@@ -2224,6 +2224,28 @@ paused-run exclusion and that a replacement worker's fresh claim is retained.
 This simulates lease expiry; an actual killed-process test remains required.
 Production connector/consumer registration, article preparation, complete retry
 handling, API/UI and the rest of the milestone remain unfinished.
+
+### Bounded parallel media and vendor retry budget (M11-10, in progress)
+
+The attachment batch now starts at most four pending downloads together and drains
+all promises before returning or propagating failure. Successful files retain
+processing state when another file fails; the next batch selects only pending
+files. No worker authority is released while a started download is still running.
+
+Transient vendor-unavailable errors in queued phases use a three-consecutive-error
+budget. The first two failures log safe warnings and request delayed retries;
+the third stores the failure count, fails the run and purges credentials through
+the existing terminal checkpoint. A 429 logs a safe rate-limit warning and retains
+both credentials and the existing outage count. Successful continuation resets
+the outage budget. Unrepresentable retry dates fail as invalid-response rather
+than leaving a held claim. Extraction retains its existing retry budget path.
+
+The writer suite passes 130 real PostgreSQL/Redis cases. Local Zendesk HTTP/storage
+cases prove four concurrent files, full draining after a mixed failure, preserved
+successful rows, retry of only the failed file, and no refetch while processing.
+Consumer cases prove 503/429 budget handling, terminal credential purge and invalid
+retry dates. Expired URL refresh, production registration, knowledge-image/file
+orchestration, API/UI and complete acceptance remain unfinished.
 
 ## M11-13 Freshdesk connector
 

@@ -54,10 +54,14 @@ export async function runImportAttachmentBatch<Credentials>(
       `),
       );
     });
-    for (const record of selected) {
-      await downloadStagedImportAttachment(deps, { claim: parsed.claim, recordId: record.id });
-      processed++;
-    }
+    // Drain every in-flight download before releasing authority or reporting failure.
+    const downloads = await Promise.allSettled(
+      selected.map((record) =>
+        downloadStagedImportAttachment(deps, { claim: parsed.claim, recordId: record.id }),
+      ),
+    );
+    processed = downloads.filter((download) => download.status === 'fulfilled').length;
+    for (const download of downloads) if (download.status === 'rejected') throw download.reason;
     const claim = await inRun((tx) => beginImportFinishing(tx, parsed.claim));
     return resultSchema.parse(
       claim ? { state: 'finishing', claim, processed } : { state: 'awaiting_media', processed },

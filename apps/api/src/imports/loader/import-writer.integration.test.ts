@@ -3824,6 +3824,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         claimToken: null,
         claimedAt: null,
         credentialsEncrypted: 'synthetic-envelope',
+        counts: { retryFailures: 2 },
       })
       .where(eq(importRuns.id, scenario.input.runId));
     await owner.db.insert(importExternalIds).values({
@@ -3922,7 +3923,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         (
           await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId))
         )[0],
-      ).toMatchObject({ credentialsEncrypted: null, claimToken: null });
+      ).toMatchObject({
+        credentialsEncrypted: null,
+        claimToken: null,
+        counts: { retryFailures: 0 },
+      });
       const [pointer] = await owner.db
         .select()
         .from(importExternalIds)
@@ -4095,6 +4100,113 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       (await owner.db.select().from(importRuns).where(eq(importRuns.id, paused.runId)))[0]?.status,
     ).toBe('paused');
     await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${expired.runId}`);
+  });
+
+  it('retries transient vendor outages twice, preserves the budget across 429, then purges credentials on the third outage', async () => {
+    const run = await boundAccountRun('vendor-outage-budget');
+    await owner.db
+      .update(importRuns)
+      .set({ credentialsEncrypted: 'synthetic-envelope' })
+      .where(eq(importRuns.id, run.runId));
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-outage-'));
+    let error: Error = new ConnectorError('vendor-unavailable', 503);
+    try {
+      const processor = createImportProcessor({
+        db: app.db,
+        storage: new FakeStorage(dir),
+        resolve: async () => {
+          throw error;
+        },
+      });
+      const job = {
+        name: 'import.attachments',
+        data: { brandId: BRAND, runId: run.runId },
+        id: 'vendor-outage-fixture',
+      };
+      const expireRetry = async () => {
+        const [stored] = await owner.db
+          .select()
+          .from(importRuns)
+          .where(eq(importRuns.id, run.runId));
+        const { retryAt: _retryAt, ...counts } = stored?.counts ?? {};
+        await owner.db.update(importRuns).set({ counts }).where(eq(importRuns.id, run.runId));
+        await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${run.runId}`);
+      };
+      await processor(job);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
+      ).toMatchObject({
+        status: 'loading',
+        credentialsEncrypted: 'synthetic-envelope',
+        counts: { retryFailures: 1 },
+      });
+      await expireRetry();
+      error = new RateLimited(60000);
+      await processor(job);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0]?.counts
+          .retryFailures,
+      ).toBe(1);
+      await expireRetry();
+      error = new ConnectorError('vendor-unavailable', 503);
+      await processor(job);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0]?.counts
+          .retryFailures,
+      ).toBe(2);
+      await expireRetry();
+      await processor(job);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
+      ).toMatchObject({
+        status: 'failed',
+        error: 'vendor-unavailable',
+        credentialsEncrypted: null,
+        counts: { retryFailures: 3 },
+      });
+      expect(
+        (await owner.db.select().from(importLog).where(eq(importLog.runId, run.runId))).map(
+          (row) => row.level,
+        ),
+      ).toEqual(['warning', 'warning', 'warning', 'error']);
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses an unrepresentable vendor retry deadline without leaving credentials or a held claim', async () => {
+    const run = await boundAccountRun('invalid-vendor-delay');
+    await owner.db
+      .update(importRuns)
+      .set({ credentialsEncrypted: 'synthetic-envelope' })
+      .where(eq(importRuns.id, run.runId));
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-delay-'));
+    try {
+      const processor = createImportProcessor({
+        db: app.db,
+        storage: new FakeStorage(dir),
+        resolve: async () => {
+          throw new RateLimited(Number.MAX_SAFE_INTEGER);
+        },
+      });
+      await processor({
+        name: 'import.attachments',
+        data: { brandId: BRAND, runId: run.runId },
+        id: 'invalid-delay-fixture',
+      });
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
+      ).toMatchObject({
+        status: 'failed',
+        error: 'invalid-response',
+        credentialsEncrypted: null,
+        claimToken: null,
+      });
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   async function historicalReportScenario(prefix: string, rebuildAllReports = true) {
@@ -5941,6 +6053,115 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       },
     };
   }
+
+  it.each(['success', 'failure'] as const)(
+    'drains four concurrent downloads when the batch has %s',
+    async (mode) => {
+      const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+      await fake.server.start();
+      const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-parallel-'));
+      try {
+        const bytes = Buffer.from('%PDF-1.7\nConcurrent history');
+        const urls = Array.from({ length: 4 }, (_, index) =>
+          fake.addAttachment(`parallel-${index}`, bytes),
+        );
+        const scenario = await stagedTicketScenario(`parallel-history-${mode}`, urls[0]);
+        const message = scenario.input.messages[0];
+        if (!message) throw new Error('Missing parallel message');
+        const originalRef = message.attachments[0];
+        if (!originalRef) throw new Error('Missing parallel reference');
+        message.attachments = urls.map((url, index) => ({
+          ...originalRef,
+          externalId: index === 0 ? originalRef.externalId : `parallel-file-${mode}-${index}`,
+          url,
+        }));
+        await owner.db
+          .update(importRecords)
+          .set({ payload: message, payloadHash: hashImportValue(message) })
+          .where(
+            and(
+              eq(importRecords.runId, scenario.input.runId),
+              eq(importRecords.entity, 'message'),
+              eq(importRecords.externalId, message.externalId),
+            ),
+          );
+        for (const ref of message.attachments.slice(1)) {
+          const payload = {
+            ...ref,
+            ticketExternalId: scenario.input.record.externalId,
+            messageExternalId: message.externalId,
+          };
+          await owner.db.insert(importRecords).values({
+            brandId: BRAND,
+            runId: scenario.input.runId,
+            entity: 'attachment',
+            externalId: ref.externalId,
+            parentExternalId: scenario.input.record.externalId,
+            payload,
+            payloadHash: hashImportValue(payload),
+          });
+        }
+        const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+        const storage = new FakeStorage(dir);
+        const deps = downloadHarness(fake, storage);
+        let active = 0;
+        let maximum = 0;
+        let arrived = 0;
+        let release = () => {};
+        const barrier = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const fetchAttachment = deps.connector.fetchAttachment.bind(deps.connector);
+        deps.connector.fetchAttachment = async (context, ref) => {
+          active++;
+          arrived++;
+          maximum = Math.max(maximum, active);
+          if (arrived === 4) release();
+          try {
+            await Promise.race([barrier, waitForQueue(1000)]);
+            if (mode === 'failure' && ref.externalId === originalRef.externalId)
+              throw new ConnectorError('vendor-unavailable', 503);
+            return await fetchAttachment(context, ref);
+          } finally {
+            active--;
+          }
+        };
+        const batch = runImportAttachmentBatch(deps, { claim: scenario.claim });
+        if (mode === 'failure')
+          await expect(batch).rejects.toMatchObject({ code: 'vendor-unavailable' });
+        else expect(await batch).toEqual({ state: 'awaiting_media', processed: 4 });
+        expect(maximum).toBe(4);
+        expect(active).toBe(0);
+        const rows = await owner.db
+          .select()
+          .from(attachments)
+          .where(eq(attachments.ticketId, loaded.ticketId));
+        expect(rows).toHaveLength(4);
+        expect(rows.filter((row) => row.status === 'processing')).toHaveLength(
+          mode === 'failure' ? 3 : 4,
+        );
+        if (mode === 'failure') {
+          deps.connector.fetchAttachment = fetchAttachment;
+          expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+            state: 'awaiting_media',
+            processed: 1,
+          });
+        }
+        const calls = fake.server.calls.length;
+        expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+          state: 'awaiting_media',
+          processed: 0,
+        });
+        expect(fake.server.calls).toHaveLength(calls);
+        const events = await owner.db.select().from(outbox);
+        expect(events.filter((event) => event.event === 'attachment.uploaded')).toHaveLength(4);
+        for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+      } finally {
+        await fake.server.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.each(['pdf', 'image'] as const)(
     'downloads a staged Zendesk $0 through safe HTTP, stores it and queues silent processing once',

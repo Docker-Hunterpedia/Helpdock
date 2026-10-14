@@ -11,6 +11,7 @@ export async function continueImportWork(
     claim: ImportClaim;
     step: 'extract' | 'load' | 'attachments' | 'finish';
     delayMs?: number;
+    preserveFailures?: boolean;
   },
 ) {
   const { claim, step } = request;
@@ -29,7 +30,11 @@ export async function continueImportWork(
     .set({
       claimToken: null,
       claimedAt: null,
-      counts: { ...counts, ...(notBefore ? { retryAt: notBefore } : {}) },
+      counts: {
+        ...counts,
+        ...(!request.preserveFailures ? { retryFailures: 0 } : {}),
+        ...(notBefore ? { retryAt: notBefore } : {}),
+      },
     })
     .where(predicate);
   await enqueueImportWork(tx, {
@@ -53,6 +58,7 @@ export async function failImportWork(tx: DbTransaction, claim: ImportClaim, code
       'credentials-refused',
       'invalid-response',
       'execution-failed',
+      'vendor-unavailable',
       'article-preparation-required',
     ])
     .parse(code);
@@ -82,5 +88,44 @@ export async function failImportWork(tx: DbTransaction, claim: ImportClaim, code
     runId: claim.runId,
     level: 'error',
     message: `import.${safeCode}`,
+  });
+}
+
+/** Vendor outages get three consecutive attempts; 429 waits do not spend this budget. */
+export async function deferImportVendorFailure(
+  tx: DbTransaction,
+  request: {
+    claim: ImportClaim;
+    step: 'extract' | 'load' | 'attachments' | 'finish';
+  },
+) {
+  await renewImportClaim(tx, request.claim);
+  const predicate = and(
+    eq(importRuns.brandId, request.claim.brandId),
+    eq(importRuns.id, request.claim.runId),
+  );
+  const [run] = await tx.select({ counts: importRuns.counts }).from(importRuns).where(predicate);
+  if (!run) throw new Error('import.run-missing');
+  const failures =
+    z
+      .int()
+      .min(0)
+      .max(3)
+      .parse(run.counts.retryFailures ?? 0) + 1;
+  await tx
+    .update(importRuns)
+    .set({ counts: { ...run.counts, retryFailures: failures } })
+    .where(predicate);
+  if (failures >= 3) return failImportWork(tx, request.claim, 'vendor-unavailable');
+  await tx.insert(importLog).values({
+    brandId: request.claim.brandId,
+    runId: request.claim.runId,
+    level: 'warning',
+    message: 'import.vendor-unavailable',
+  });
+  await continueImportWork(tx, {
+    ...request,
+    delayMs: 1000 * 2 ** (failures - 1),
+    preserveFailures: true,
   });
 }

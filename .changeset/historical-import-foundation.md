@@ -67,3 +67,5 @@ Define strict import phase jobs and schedule work through validated transactiona
 Consume validated import phase jobs with fenced claim release/continuations, credential-retaining rate-limit deferral, and safe terminal failure logs, audit and credential purge.
 
 Schedule recovery for abandoned import work without replacing fresh claims or resuming paused runs, respecting retry deadlines and throttling duplicate requests.
+
+Download up to four historical attachments concurrently, drain partial-failure batches before retry, and preserve successful files. Retry transient vendor outages with a bounded budget without spending it on 429 waits, resetting it after successful continuation.

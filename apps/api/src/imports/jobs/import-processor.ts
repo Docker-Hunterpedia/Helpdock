@@ -1,4 +1,4 @@
-import type { Db, DbTransaction } from '@helpdock/db';
+import { type Db, type DbTransaction, importLog } from '@helpdock/db';
 import type { Connector, ConnectorContext } from '@helpdock/importers';
 import { ConnectorError, RateLimited } from '@helpdock/importers';
 import {
@@ -16,7 +16,7 @@ import { enqueueImportWork, importWorkRunnable } from '../import-events.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { runImportAttachmentBatch } from './attachment-batch.js';
 import { claimImportRun, type ImportClaim, ImportClaimLost, type ImportRunRef } from './claims.js';
-import { continueImportWork, failImportWork } from './continuation.js';
+import { continueImportWork, deferImportVendorFailure, failImportWork } from './continuation.js';
 import { runImportExtraction } from './extract-run.js';
 import { extractionRun } from './extract-state.js';
 import { runImportFinishBatch } from './finish-batch.js';
@@ -106,10 +106,27 @@ class ImportExecution<C> {
     step: 'extract' | 'load' | 'attachments' | 'finish',
   ) {
     if (error instanceof ImportClaimLost) return;
-    if (error instanceof RateLimited)
-      return this.inRun((tx) =>
-        continueImportWork(tx, { claim, step, delayMs: error.retryAfterMs }),
-      );
+    if (error instanceof RateLimited) {
+      const deadline = new Date(Date.now() + error.retryAfterMs);
+      if (!Number.isFinite(deadline.getTime()) || deadline.getUTCFullYear() > 9999)
+        return this.inRun((tx) => failImportWork(tx, claim, 'invalid-response'));
+      return this.inRun(async (tx) => {
+        await continueImportWork(tx, {
+          claim,
+          step,
+          delayMs: error.retryAfterMs,
+          preserveFailures: true,
+        });
+        await tx.insert(importLog).values({
+          brandId: claim.brandId,
+          runId: claim.runId,
+          level: 'warning',
+          message: 'import.rate-limited',
+        });
+      });
+    }
+    if (error instanceof ConnectorError && error.code === 'vendor-unavailable')
+      return this.inRun((tx) => deferImportVendorFailure(tx, { claim, step }));
     const code =
       error instanceof ImportLoadError
         ? error.code

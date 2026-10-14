@@ -914,8 +914,10 @@ event `help_center.imported { brandId, articleIds }` at the end, handled by the
 search reindex and knowledge re-chunk subscribers and **not** by webhooks.
 
 **Reports**: after the last ticket, `rebuild-reports.ts` calls
-`RollupRepository.rebuild` over `[min(createdAt), max(closedAt))` in 31-day chunks
-(capped at 400 days unless the run's option `rebuildAllReports` is set).
+`RollupRepository.rebuild` from the earliest loaded ticket creation day through
+the brand's current local day in inclusive 31-day chunks (capped at 400 days unless
+the run's option `rebuildAllReports` is set). The range extends through today because
+imported open tickets affect subsequent backlog snapshots; see ADR 0027's report-range amendment.
 
 **Tests**: unit for each mapper; integration with the 500-ticket reference bundle
 (`packages/importers/fixtures/reference/`): counts, threads in order, authors,
@@ -2033,6 +2035,31 @@ missing-media refusal. Existing fake-Zendesk PDF/image cases now exercise batch
 download, wait without refetching, media processing, phase advancement and stale
 claim refusal. The rollback writer test now scopes its source-ID assertion to its
 own ticket and messages instead of matching unrelated fixture IDs by substring.
+
+### Resumable historical report rebuild (M11-09/10, in progress)
+
+`rebuildImportReportsBatch` rebuilds one inclusive local-day chunk of at most 31
+days per fenced finishing transaction. Report rows and `counts.importReports`
+advance together; rollback preserves both the previous cursor and previous rows.
+The range is derived from same-brand loaded ticket targets, refuses missing or
+foreign targets, and extends through the current local day for backlog snapshots.
+A run without loaded tickets has no report range. `rebuildAllReports` opts into
+history beyond the default 400-day window; clipping adds one safe warning code
+`import.reports.history-clipped` when the first chunk commits.
+
+The checkpoint freezes timezone and the SLA reopen metric choice; changing either
+mid-backfill is refused rather than mixing report grains. Committed retries
+continue at the next local day. Once the report cursor is complete, retrying
+performs no report-row rewrite. This step leaves the run finishing and retains
+credentials until the final completion transaction.
+
+Four unit cases cover the 400-day policy, empty/recent ranges, month boundaries,
+future dates and invalid checkpoints. The real PostgreSQL/Redis writer suite
+passes 114 cases, with new isolated-brand report cases proving original creation,
+name-only staff response and closure dates, three resumed chunks, rollback,
+completed retries, pause/configuration fencing, clipping warnings and foreign
+pointer refusal. Registered finish jobs, reindexing, audit and terminal credential
+purge remain unfinished.
 
 ## M11-13 Freshdesk connector
 

@@ -407,3 +407,14 @@ customer pointer already exists as a contact, and group targets can be either
 departments or teams. Staff user records retain their existing identity handling.
 Contact aliases retain the original source pointer while validating the surviving
 contact after manual merges, preserving existing merge undo semantics.
+
+### 2026-10-14 — report ranges include subsequent backlog days
+
+The milestone's proposed range ending at the last closure omitted the days on
+which imported open tickets contribute to backlog. Rebuild from the earliest
+loaded ticket creation day through the brand's current local day, in inclusive
+31-day transactions. Keep the existing 400-day default and explicit
+`rebuildAllReports` opt-in. Persist the next day with each chunk's rows so retries
+resume rather than restarting. Freeze the local timezone and SLA reopen metric
+choice for that checkpoint; refuse configuration changes mid-backfill rather than
+mixing report grains. A completed report checkpoint does not repeat row writes.

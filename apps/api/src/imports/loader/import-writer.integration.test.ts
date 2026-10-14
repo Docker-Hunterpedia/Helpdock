@@ -84,6 +84,7 @@ import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
+import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
@@ -3455,6 +3456,185 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       articles.every((record) => record.status === 'staged' && record.helpdockId === null),
     ).toBe(true);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  async function historicalReportScenario(prefix: string, rebuildAllReports = true) {
+    const brandId = uuidv7();
+    const departmentId = uuidv7();
+    const statusId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Historical report fixture', prefix, timezone: 'UTC' });
+    await owner.db.insert(departments).values({ id: departmentId, brandId, name: 'Historical' });
+    await owner.db
+      .insert(ticketStatuses)
+      .values({ id: statusId, brandId, name: 'Closed', systemState: 'closed', color: 'info' });
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+      options: { rebuildAllReports },
+      credentialsEncrypted: 'synthetic-envelope',
+    });
+    const input = request(`report-${prefix}`);
+    input.brandId = brandId;
+    input.runId = runId;
+    input.resolved = {
+      ...input.resolved,
+      departmentId,
+      statusId,
+      assigneeId: null,
+      contactId: null,
+    };
+    input.record.status = 'closed';
+    input.record.closedAt = '2019-01-03T00:00:00Z';
+    input.authors = { oldagent: { kind: 'name', name: 'Historical agent' } };
+    input.messages = [
+      {
+        ...input.messages[0],
+        externalId: `reply-${prefix}`,
+        ticketExternalId: input.record.externalId,
+        authorExternalId: 'oldagent',
+        authorKind: 'agent',
+        public: true,
+        bodyText: 'Historical reply',
+        createdAt: '2019-01-02T00:00:00Z',
+        attachments: [],
+      },
+    ];
+    const loaded = await withSystem(app.db, brandId, (tx) => writer.ticket(tx, input));
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: 'ticket',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+      status: 'loaded',
+      helpdockId: loaded.ticketId,
+    });
+    await owner.db.update(importRuns).set({ status: 'finishing' }).where(eq(importRuns.id, runId));
+    const claim = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { brandId, runId, phase: 'finishing' }),
+    );
+    if (!claim) throw new Error('Missing report claim');
+    return { claim, ticketId: loaded.ticketId, runId, brandId };
+  }
+
+  it('rebuilds original report days in resumable chunks and leaves completion cleanup to the finish step', async () => {
+    const scenario = await historicalReportScenario('RPA');
+    const now = new Date('2019-03-05T12:00:00Z');
+    const next = () =>
+      withSystem(app.db, scenario.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, scenario.claim, now),
+      );
+    expect(await next()).toMatchObject({
+      state: 'more',
+      progress: { from: '2019-01-01', next: '2019-02-01', clipped: false },
+    });
+    const reports = await owner.db
+      .select()
+      .from(reportDaily)
+      .where(eq(reportDaily.brandId, scenario.brandId));
+    expect(reports.find((row) => row.day === '2019-01-01')?.created).toBe(1);
+    expect(reports.find((row) => row.day === '2019-01-02')).toMatchObject({
+      firstResponseMs: [86400000],
+    });
+    expect(reports.find((row) => row.day === '2019-01-03')?.resolved).toBe(1);
+    expect(await next()).toMatchObject({ state: 'more', progress: { next: '2019-03-04' } });
+    expect(await next()).toMatchObject({ state: 'reports_complete', progress: { next: null } });
+    const revisions = await owner.db.execute(
+      sql`SELECT day, xmin::text AS revision FROM report_daily WHERE brand_id = ${scenario.brandId} ORDER BY day`,
+    );
+    expect(await next()).toMatchObject({ state: 'reports_complete' });
+    expect(
+      await owner.db.execute(
+        sql`SELECT day, xmin::text AS revision FROM report_daily WHERE brand_id = ${scenario.brandId} ORDER BY day`,
+      ),
+    ).toEqual(revisions);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.runId)))[0],
+    ).toMatchObject({
+      status: 'finishing',
+      credentialsEncrypted: 'synthetic-envelope',
+      finishedAt: null,
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('rolls back report rows and cursor together, and refuses a paused worker or changed report grain', async () => {
+    const scenario = await historicalReportScenario('RPB');
+    const now = new Date('2019-03-05T12:00:00Z');
+    await expect(
+      withSystem(app.db, scenario.brandId, async (tx) => {
+        await rebuildImportReportsBatch(tx, scenario.claim, now);
+        throw new Error('interrupted report chunk');
+      }),
+    ).rejects.toThrow('interrupted report chunk');
+    expect(
+      await owner.db.select().from(reportDaily).where(eq(reportDaily.brandId, scenario.brandId)),
+    ).toEqual([]);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.runId)))[0]
+        ?.counts,
+    ).toEqual({});
+    await withSystem(app.db, scenario.brandId, (tx) =>
+      rebuildImportReportsBatch(tx, scenario.claim, now),
+    );
+    await owner.db
+      .update(brands)
+      .set({ timezone: 'Asia/Riyadh' })
+      .where(eq(brands.id, scenario.brandId));
+    await expect(
+      withSystem(app.db, scenario.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, scenario.claim, now),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await withSystem(app.db, scenario.brandId, (tx) =>
+      pauseImportRun(tx, { brandId: scenario.brandId, runId: scenario.runId }),
+    );
+    await expect(
+      withSystem(app.db, scenario.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, scenario.claim, now),
+      ),
+    ).rejects.toThrow('import.claim-lost');
+  });
+
+  it('records one clipping warning and prevents historical report targets crossing brands', async () => {
+    const scenario = await historicalReportScenario('RPC', false);
+    const now = new Date('2026-10-14T12:00:00Z');
+    expect(
+      await withSystem(app.db, scenario.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, scenario.claim, now),
+      ),
+    ).toMatchObject({
+      state: 'more',
+      progress: { from: '2025-09-10', next: '2025-10-11', clipped: true },
+    });
+    await withSystem(app.db, scenario.brandId, (tx) =>
+      rebuildImportReportsBatch(tx, scenario.claim, now),
+    );
+    expect(
+      (await owner.db.select().from(importLog).where(eq(importLog.runId, scenario.runId))).map(
+        (row) => row.message,
+      ),
+    ).toEqual(['import.reports.history-clipped']);
+    const foreign = await historicalReportScenario('RPD');
+    await owner.db
+      .update(importRecords)
+      .set({ helpdockId: scenario.ticketId })
+      .where(eq(importRecords.runId, foreign.runId));
+    await expect(
+      withSystem(app.db, foreign.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, foreign.claim, now),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(
+      await owner.db.select().from(reportDaily).where(eq(reportDaily.brandId, foreign.brandId)),
+    ).toEqual([]);
   });
 
   it.each(['pending', 'processing', 'ready', 'rejected', 'infected'] as const)(

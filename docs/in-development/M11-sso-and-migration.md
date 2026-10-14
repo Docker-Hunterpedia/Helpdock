@@ -2086,6 +2086,8 @@ PRD status board.
 
 ## Pull requests
 
+- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–23 migration work in progress (draft; paused at the owner's request, not ready to merge).
+
 - [#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212) — M11-04–06 staff SSO integration, bilingual administration and setup guides (merged; all PR checks passed).
 
 - [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) — M11-01 SSO configuration foundation (merged).

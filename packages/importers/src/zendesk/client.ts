@@ -63,6 +63,15 @@ export class ZendeskClient {
     });
   }
 
+  warnGuideReadership(externalId: string): Promise<void> {
+    return this.context.log({
+      level: 'warning',
+      entity: 'article',
+      externalId,
+      message: 'import.knowledge.readership-restricted',
+    });
+  }
+
   nextOffset(nextPage: string | null, path: string, current: number): number | null {
     if (nextPage === null) return null;
     const address = new URL(nextPage);

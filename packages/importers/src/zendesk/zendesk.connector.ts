@@ -15,6 +15,7 @@ import {
 } from './core-export.js';
 import { exportZendeskCsat } from './csat-export.js';
 import { exportZendeskFields } from './fields-export.js';
+import { exportZendeskGuide } from './guide-export.js';
 import { exportZendeskTags } from './tags-export.js';
 import { exportZendeskThread } from './threads-export.js';
 
@@ -33,6 +34,9 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
     'tag',
     'activity',
     'csat',
+    'category',
+    'section',
+    'article',
   ] as const;
 
   constructor(private readonly options: { apiRoot?: string } = {}) {}
@@ -80,6 +84,10 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
         return exportZendeskTags(client, cursor, since);
       case 'csat':
         return exportZendeskCsat(client, cursor);
+      case 'category':
+      case 'section':
+      case 'article':
+        return exportZendeskGuide(client, entity, cursor);
       case 'message':
       case 'attachment':
       case 'activity':

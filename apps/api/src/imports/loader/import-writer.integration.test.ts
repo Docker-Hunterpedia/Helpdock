@@ -1973,6 +1973,30 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       expect(rows.filter((row) => row.entity === 'contact')).toHaveLength(3);
       expect(
         rows
+          .filter((row) => row.entity === 'article')
+          .sort((first, second) => first.externalId.localeCompare(second.externalId)),
+      ).toMatchObject([
+        {
+          externalId: 'article:1603',
+          payload: {
+            locale: 'en',
+            bodyHtml: '<p>Original English content</p>',
+            draft: false,
+            internal: false,
+          },
+        },
+        {
+          externalId: 'article:1603:ar',
+          payload: {
+            locale: 'ar',
+            bodyHtml: '<p>المحتوى العربي الأصلي</p>',
+            draft: true,
+            internal: false,
+          },
+        },
+      ]);
+      expect(
+        rows
           .filter((row) => row.entity === 'activity')
           .sort((first, second) => first.externalId.localeCompare(second.externalId)),
       ).toMatchObject([
@@ -2002,6 +2026,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           tag: 1,
           activity: 2,
           csat: 3,
+          category: 1,
+          section: 1,
+          article: 2,
         },
       });
       expect(run?.cursors).toMatchObject({

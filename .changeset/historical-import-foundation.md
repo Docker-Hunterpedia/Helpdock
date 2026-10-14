@@ -25,3 +25,5 @@ Extract Zendesk ticket, contact and company field definitions with separate sour
 Extract historical Zendesk audit changes and notification records as inert activity with original dates and actors, resumable pagination and changed-history delta watermarks.
 
 Extract Zendesk legacy and current survey satisfaction answers. Preserve native scores, answer metadata and timestamp provenance after staging purge, with explicit warnings for normalization and inferred legacy timestamps.
+
+Extract bilingual Zendesk Guide taxonomy and article translations with original dates and separate draft/readership states. Restricted or unknown readership stays internal with a warning.

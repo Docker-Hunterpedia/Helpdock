@@ -589,6 +589,103 @@ it('refuses ambiguous ticket associations instead of attributing a survey answer
   });
 });
 
+it('preserves bilingual Guide taxonomy and each translation draft state without treating editorial permissions as readership', async () => {
+  const categories = await collectPages(connector.extract(context, 'category', null));
+  const sections = await collectPages(connector.extract(context, 'section', null));
+  const articles = await collectPages(connector.extract(context, 'article', null));
+  expect(categories.flatMap((page) => page.records)).toEqual([
+    {
+      entity: 'category',
+      payload: {
+        externalId: 'category:1601',
+        names: { en: 'Documentation', ar: 'التوثيق' },
+        descriptions: { en: 'Original category', ar: 'وصف التصنيف' },
+      },
+    },
+  ]);
+  expect(sections.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: 'section:1602',
+        parentExternalId: 'category:1601',
+        names: { en: 'Getting started', ar: 'البدء' },
+      },
+    },
+  ]);
+  expect(articles.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: 'article:1603',
+        locale: 'en',
+        draft: false,
+        internal: false,
+        bodyHtml: '<p>Original English content</p>',
+        createdAt: '2020-01-01T00:00:00Z',
+      },
+    },
+    {
+      payload: {
+        externalId: 'article:1603:ar',
+        locale: 'ar',
+        draft: true,
+        internal: false,
+        bodyHtml: '<p>المحتوى العربي الأصلي</p>',
+        translationOf: 'article:1603',
+        createdAt: '2020-01-02T00:00:00Z',
+      },
+    },
+  ]);
+});
+
+it.each(['restricted', 'unknown'] as const)(
+  'keeps %s Guide readership internal and persists a warning instead of publishing it',
+  async (readership) => {
+    const original = zendeskCoreFixture.articles?.[0];
+    if (!original) throw new Error('Missing source article');
+    const article = { ...original };
+    if (readership === 'unknown') delete article.user_segment_id;
+    else article.user_segment_id = 800;
+    fake.replaceFixture({ ...zendeskCoreFixture, articles: [article] });
+    const warnings: Parameters<typeof context.log>[0][] = [];
+    context.log = async (entry) => {
+      warnings.push(entry);
+    };
+    const pages = await collectPages(connector.extract(context, 'article', null));
+    expect(pages.flatMap((page) => page.records)).toHaveLength(2);
+    expect(
+      pages
+        .flatMap((page) => page.records)
+        .every((record) => record.entity === 'article' && record.payload.internal),
+    ).toBe(true);
+    expect(warnings).toEqual([
+      {
+        level: 'warning',
+        entity: 'article',
+        externalId: 'article:1603',
+        message: 'import.knowledge.readership-restricted',
+      },
+    ]);
+  },
+);
+
+it('resumes a committed Guide article without repeating translations and refuses a changed source page', async () => {
+  const iterator = connector.extract(context, 'article', null)[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing Guide checkpoint');
+  await iterator.return?.(undefined);
+  const resumed = await collectPages(connector.extract(context, 'article', first.value.cursor));
+  expect(resumed.flatMap((page) => page.records)).toEqual([]);
+  const original = zendeskCoreFixture.articles?.[0];
+  if (!original) throw new Error('Missing source article');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    articles: [{ ...original, updated_at: '2026-10-14T00:00:00Z' }],
+  });
+  await expect(
+    collectPages(connector.extract(context, 'article', first.value.cursor)),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
 it('downloads stable Support attachment URLs without credentials reaching the redirected CDN', async () => {
   const url = fake.addAttachment('receipt', Buffer.from('original attachment'));
   const downloaded = await connector.fetchAttachment(context, {

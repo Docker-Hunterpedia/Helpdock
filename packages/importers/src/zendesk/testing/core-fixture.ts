@@ -60,6 +60,75 @@ export const zendeskCoreFixture: ZendeskFixture = {
     },
   ],
   groups: [{ id: 501, name: 'Original support team' }],
+  categories: [
+    { id: 1601, name: 'Documentation', locale: 'en-us', description: 'Original category' },
+  ],
+  sections: [{ id: 1602, category_id: 1601, name: 'Getting started', locale: 'en-us' }],
+  articles: [
+    {
+      id: 1603,
+      section_id: 1602,
+      source_locale: 'en-us',
+      draft: false,
+      user_segment_id: null,
+      permission_group_id: 999,
+      updated_at: '2020-01-04T00:00:00Z',
+    },
+  ],
+  translations: {
+    'categories:1601': [
+      {
+        id: 1701,
+        source_id: 1601,
+        source_type: 'Category',
+        locale: 'en-us',
+        title: 'Documentation',
+        body: 'Original category',
+      },
+      {
+        id: 1702,
+        source_id: 1601,
+        source_type: 'category',
+        locale: 'ar',
+        title: 'التوثيق',
+        body: 'وصف التصنيف',
+      },
+    ],
+    'sections:1602': [
+      {
+        id: 1703,
+        source_id: 1602,
+        source_type: 'Section',
+        locale: 'en-us',
+        title: 'Getting started',
+      },
+      { id: 1704, source_id: 1602, source_type: 'section', locale: 'ar', title: 'البدء' },
+    ],
+    'articles:1603': [
+      {
+        id: 1705,
+        source_id: 1603,
+        source_type: 'Article',
+        locale: 'en-us',
+        title: 'First steps',
+        body: '<p>Original English content</p>',
+        draft: false,
+        created_at: '2020-01-01T00:00:00Z',
+        updated_at: '2020-01-04T00:00:00Z',
+      },
+      {
+        id: 1706,
+        source_id: 1603,
+        source_type: 'article',
+        locale: 'ar',
+        title: 'الخطوات الأولى',
+        body: '<p>المحتوى العربي الأصلي</p>',
+        draft: true,
+        created_at: '2020-01-02T00:00:00Z',
+        updated_at: '2020-01-03T00:00:00Z',
+      },
+    ],
+  },
   satisfaction_ratings: [
     {
       id: 1401,

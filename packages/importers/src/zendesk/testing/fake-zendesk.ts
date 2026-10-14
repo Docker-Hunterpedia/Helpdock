@@ -196,7 +196,7 @@ export class FakeZendesk {
 
   private collection(url: URL): VendorAnswer {
     const child =
-      /^\/api\/v2\/(tickets|users|help_center\/articles)\/(\d+)\/(comments|audits|identities|translations|attachments)\.json$/.exec(
+      /^\/api\/v2\/(tickets|users|help_center\/(?:articles|categories|sections))\/(\d+)\/(comments|audits|identities|translations|attachments)\.json$/.exec(
         url.pathname,
       );
     if (child) {
@@ -207,7 +207,9 @@ export class FakeZendesk {
           ? ['comments', 'audits']
           : parent === 'users'
             ? ['identities']
-            : ['translations', 'article_attachments'];
+            : parent === 'help_center/articles'
+              ? ['translations', 'article_attachments']
+              : ['translations'];
       if (!entity || !allowed.includes(entity)) return this.notFound();
       const children = {
         comments: this.fixture.comments,
@@ -216,7 +218,11 @@ export class FakeZendesk {
         translations: this.fixture.translations,
         article_attachments: this.fixture.article_attachments,
       };
-      const rows = children[entity as keyof typeof children][child[2] ?? ''];
+      const keyedTranslations =
+        entity === 'translations' && parent?.startsWith('help_center/')
+          ? this.fixture.translations[`${parent.slice('help_center/'.length)}:${child[2]}`]
+          : undefined;
+      const rows = keyedTranslations ?? children[entity as keyof typeof children][child[2] ?? ''];
       if (!rows) return this.notFound();
       return entity === 'comments'
         ? this.commentPage(url, rows)

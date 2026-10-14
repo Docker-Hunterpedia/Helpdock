@@ -1612,6 +1612,43 @@ deleted/archive reconciliation, source binding, capability preflight, complete
 mapping/dry-run UI and full reference-dataset acceptance remain unfinished.
 M11-12 remains in progress.
 
+### Zendesk Guide extraction checkpoint (in progress)
+
+The adapter now advertises all fourteen normalized entities. Guide extraction
+reads category, section and article collections and each item's paginated
+translations. Category/section IDs have explicit prefixes, preserving their
+parent references without collisions. Supported English/Arabic translations
+retain names/descriptions, article bodies, original translation dates and
+individual draft states. The source-locale article is the primary identity;
+other supported translations point to it through `translationOf`.
+
+Readership uses `user_segment_id(s)`, not `permission_group_id`. Restricted or
+unknown readership imports as internal with a safe
+`import.knowledge.readership-restricted` warning. Editorial permission groups
+alone do not make public content internal. Each hydrated item checkpoints against
+its source collection page fingerprint; resume refuses a changed page before
+skipping previously extracted items. Guide deltas currently rescan collections.
+Contracts checked 2026-10-14:
+[categories](https://developer.zendesk.com/api-reference/help_center/help-center-api/categories/),
+[sections](https://developer.zendesk.com/api-reference/help_center/help-center-api/sections/),
+[articles](https://developer.zendesk.com/api-reference/help_center/help-center-api/articles/)
+and [translations](https://developer.zendesk.com/api-reference/help_center/help-center-api/translations/).
+
+Twenty-four connector HTTP cases pass, including public/restricted/unknown
+readership and source-page resume. The focused PostgreSQL/Redis staging test
+retains bilingual taxonomy and both article translations, with an empty outbox.
+These are extraction/staging checks; image fetch/rewrite and final knowledge
+loading are not proven by them.
+
+Nested sections currently fail extraction rather than losing their hierarchy:
+the existing section loader requires a category parent. Unsupported locales,
+multiple variants collapsing to the same en/ar locale, and an unsupported or
+missing primary source-locale translation also fail instead of silently dropping
+content. These require mapping/completeness handling before connector completion;
+they are not added to the accepted-gaps table. Article attachment discovery,
+source binding, capability preflight, deleted/archive reconciliation and full
+reference-dataset/browser acceptance also remain unfinished. M11-12 remains in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

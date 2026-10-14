@@ -49,6 +49,7 @@ const logSchema = z.strictObject({
     'import.field.unsupported-semantics',
     'import.csat.timestamp-inferred',
     'import.csat.scale-normalized',
+    'import.knowledge.readership-restricted',
   ]),
   entity: importEntitySchema.optional(),
   externalId: z.string().max(200).optional(),

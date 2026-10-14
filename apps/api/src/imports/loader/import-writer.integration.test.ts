@@ -4668,53 +4668,81 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     }
   });
 
-  it('keeps refused vendor attachment bytes out of storage and records a safe placeholder warning', async () => {
-    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
-    await fake.server.start();
-    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-refused-download-'));
-    try {
-      const url = fake.addAttachment('invalid-pdf', Buffer.from('<html>expired login page</html>'));
-      const scenario = await stagedTicketScenario('refused-source-file', url);
-      await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
-      const [record] = await owner.db
-        .select()
-        .from(importRecords)
-        .where(
-          and(
-            eq(importRecords.runId, scenario.input.runId),
-            eq(importRecords.entity, 'attachment'),
-          ),
+  it.each(['present', 'purged during fetch'] as const)(
+    'refuses unsafe vendor bytes with a $0 target without reporting a missing placeholder',
+    async (mode) => {
+      const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+      await fake.server.start();
+      const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-refused-download-'));
+      try {
+        const url = fake.addAttachment(
+          'invalid-pdf',
+          Buffer.from('<html>expired login page</html>'),
         );
-      if (!record) throw new Error('Missing staged attachment');
-      const storage = new FakeStorage(dir);
-      const result = await downloadStagedImportAttachment(downloadHarness(fake, storage), {
-        claim: scenario.claim,
-        recordId: record.id,
-      });
-      expect(result.state).toBe('rejected');
-      const [row] = await owner.db
-        .select()
-        .from(attachments)
-        .where(eq(attachments.id, result.attachmentId));
-      if (!row) throw new Error('Missing refused attachment');
-      expect(row).toMatchObject({ status: 'rejected', rejectReason: 'mime_mismatch' });
-      expect(await storage.head(row.s3Key)).toBeUndefined();
-      const warnings = await owner.db
-        .select()
-        .from(importLog)
-        .where(eq(importLog.runId, scenario.input.runId));
-      expect(warnings).toMatchObject([{ message: 'import.attachment.rejected', level: 'warning' }]);
-      expect(JSON.stringify(warnings)).not.toContain('synthetic-token');
-      expect(JSON.stringify(warnings)).not.toContain(url);
-      const events = await owner.db.select().from(outbox);
-      expect(events.every((event) => event.event === 'media.objects.purge')).toBe(true);
-      for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
-      expect(await redis.dbsize()).toBe(0);
-    } finally {
-      await fake.server.close();
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
+        const scenario = await stagedTicketScenario(`refused-source-file-${mode}`, url);
+        await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+        const [record] = await owner.db
+          .select()
+          .from(importRecords)
+          .where(
+            and(
+              eq(importRecords.runId, scenario.input.runId),
+              eq(importRecords.entity, 'attachment'),
+            ),
+          );
+        if (!record) throw new Error('Missing staged attachment');
+        const storage = new FakeStorage(dir);
+        const deps = downloadHarness(fake, storage);
+        if (mode === 'purged during fetch') {
+          const fetchAttachment = deps.connector.fetchAttachment.bind(deps.connector);
+          deps.connector.fetchAttachment = async (context, ref) => {
+            const downloaded = await fetchAttachment(context, ref);
+            if (!record.helpdockId) throw new Error('Missing loaded attachment pointer');
+            await owner.db.delete(attachments).where(eq(attachments.id, record.helpdockId));
+            return downloaded;
+          };
+          await expect(
+            downloadStagedImportAttachment(deps, { claim: scenario.claim, recordId: record.id }),
+          ).rejects.toMatchObject({ code: 'target-unavailable' });
+          expect(
+            await owner.db
+              .select()
+              .from(importLog)
+              .where(eq(importLog.runId, scenario.input.runId)),
+          ).toEqual([]);
+        } else {
+          const result = await downloadStagedImportAttachment(deps, {
+            claim: scenario.claim,
+            recordId: record.id,
+          });
+          expect(result.state).toBe('rejected');
+          const [row] = await owner.db
+            .select()
+            .from(attachments)
+            .where(eq(attachments.id, result.attachmentId));
+          if (!row) throw new Error('Missing refused attachment');
+          expect(row).toMatchObject({ status: 'rejected', rejectReason: 'mime_mismatch' });
+          expect(await storage.head(row.s3Key)).toBeUndefined();
+          const warnings = await owner.db
+            .select()
+            .from(importLog)
+            .where(eq(importLog.runId, scenario.input.runId));
+          expect(warnings).toMatchObject([
+            { message: 'import.attachment.rejected', level: 'warning' },
+          ]);
+          expect(JSON.stringify(warnings)).not.toContain('synthetic-token');
+          expect(JSON.stringify(warnings)).not.toContain(url);
+        }
+        const events = await owner.db.select().from(outbox);
+        expect(events.every((event) => event.event === 'media.objects.purge')).toBe(true);
+        for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+        expect(await redis.dbsize()).toBe(0);
+      } finally {
+        await fake.server.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('processes a shared imported image once, updates all historical copies and emits nothing', async () => {
     const input = request('processed-import-asset');

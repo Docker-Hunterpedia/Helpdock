@@ -200,7 +200,7 @@ export async function downloadStagedImportAttachment<Credentials>(
     }
     await inRun(async (tx) => {
       await renewImportClaim(tx, parsed.claim);
-      await tx
+      const rejected = await tx
         .update(attachments)
         .set({ status: 'rejected', rejectReason: error.reason, processedAt: new Date() })
         .where(
@@ -210,7 +210,10 @@ export async function downloadStagedImportAttachment<Credentials>(
             eq(attachments.s3Key, snapshot.key),
             eq(attachments.status, 'pending'),
           ),
-        );
+        )
+        .returning({ id: attachments.id });
+      if (!rejected.some((row) => row.id === snapshot.row.id))
+        throw new ImportLoadError('target-unavailable');
       await tx.insert(importLog).values({
         brandId: parsed.claim.brandId,
         runId: parsed.claim.runId,

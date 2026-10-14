@@ -51,3 +51,5 @@ Apply source message edits, redactions and confirmed author corrections to exist
 Reconcile source attachment additions/removals on message deltas, preserve shared files and manual uploads, and queue last-link object cleanup transactionally. Changed native file metadata receives a fresh pending object.
 
 Prepare bounded, MIME-validated imported file downloads with temporary-file cleanup. Fence attachment storage attempts and queue silent processing only under a live claim; derive media variants beside the stored object key.
+
+Refuse an attachment rejection receipt when its local target disappeared during the vendor download.

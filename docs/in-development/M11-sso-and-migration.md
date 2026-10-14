@@ -1930,6 +1930,35 @@ vendor or S3 deployment run. Import queue/module wiring, rate-limit orchestratio
 bundle bytes, knowledge image preparation, finish/report jobs, API/UI and full
 reference/process-kill acceptance remain required. M11-09/10/12 stay in progress.
 
+### Pause checkpoint — 2026-10-14
+
+The owner requested a draft PR now and will resume later. The combined PR's
+intended scope remains M11-07 through M11-23; no incomplete deliverable or exit
+criterion is marked done. The current work is not ready to merge.
+
+The latest attachment regression reproduced a false rejected-placeholder result
+when the target was purged during vendor fetching. Rejection now checks that the
+selected target was actually updated before logging or returning a placeholder.
+The present-target and purged-target integration cases cover both outcomes.
+
+`jobs/load-batch.ts` is saved as work in progress. It selects metadata, prepared
+articles (including primary-before-translation dependencies), and assembled
+tickets with separate record transactions and claim checks. It returns explicit
+article/reference preparation boundaries and distinguishes domain records loaded
+from run completion. It has no dedicated runtime coverage yet and is not wired
+into the queue. Resume by adding batch-driver integration tests and completing
+reference/media/finish orchestration; do not treat this draft driver as verified.
+
+Remaining work includes immutable source-account binding; referenced user/ticket
+hydration for deltas; bundle and knowledge image preparation; queue definitions,
+handlers, module wiring and report finalization; mapping proposals and dry run;
+CSV mapping/presets; the seven remaining researched vendor connectors/stand-ins;
+admin API and EN/AR import screens, imported-ticket UI, guides and cutover docs.
+The final full import-path review, 500-ticket datasets, actual process-kill tests,
+browser/axe checks and aggregate CI/coverage gates remain required. Real-vendor
+and live-deployment validation are also unproven. Local research artifacts under
+`reports/` and `research_notes/` are retained outside the committed PR.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

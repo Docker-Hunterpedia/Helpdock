@@ -2375,6 +2375,30 @@ duplicate refusal and obsolete report invalidation. The three-ticket/contact
 preview, attachment availability, semantic validation and approval enforcement
 remain unfinished. M11-10/16 remain in progress.
 
+### Read-only staged integrity and reference checks (M11-09/10/16, in progress)
+
+Preflight now has pure staged-record validation and source-dependency collection,
+plus a read-only database reference checker. Staged IDs, normalized payload hashes,
+status and staging parent must agree. Staging and preflight share one SDK parent
+function, including section/category and translation/section distinctions. The
+assembled-ticket loader uses the same staged integrity check for tickets and children.
+
+Reference checks distinguish staff/customer/system authors; missing non-system
+authors fail rather than receiving a guessed person. They check source ticket,
+message, contact, organization and knowledge dependencies. Delta fallback uses only
+the same brand/vendor/account identity ledger. Self-parent references, corrupted
+staged dependencies, attachment/message ticket disagreement and mismatched inline
+attachment metadata are blocking structural issues. Shared attachment references
+remain valid when metadata agrees. These functions create no domain rows or jobs.
+
+Unit coverage exercises author kinds, missing authors, Arabic translation dependencies,
+parent grouping and tampered staged fields. Real Postgres/Redis coverage proves
+account isolation, corrupt/mismatched dependencies, self-parent refusal, unchanged
+ticket revisions and no outbox events. The full loader integration suite passes
+with the shared validation. The dry-run consumer/report, live destination validation,
+hierarchy cycles, attachment availability and three-ticket/contact previews remain
+unfinished. These checks alone do not approve a run; M11-09/10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

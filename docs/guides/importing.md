@@ -65,3 +65,10 @@ snapshot, not a validation result or authorization to start loading. It does not
 fetch attachments or create contacts, tickets, staff or fields. The pending dry-run
 validator must verify actual payload integrity, relationships, destination targets
 and completeness before approving a report.
+
+The read-only preflight foundation checks staged IDs/hashes/parents and required
+source relationships. Prior identities may satisfy delta references only within
+the same brand, vendor and verified account. Corrupted or missing references and
+mismatched attachment parents/metadata block validation. The complete dry-run
+consumer, destination checks, availability report and UI remain under development;
+these structural checks do not authorize loading.

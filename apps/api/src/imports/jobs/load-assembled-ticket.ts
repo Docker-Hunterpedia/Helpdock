@@ -1,10 +1,9 @@
 import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
-import { hashImportValue } from '@helpdock/importers';
-import { importRecordSchema } from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { ImportLoadError } from '../loader/contracts.js';
 import { resolveThreadAuthors } from '../loader/resolve-thread-authors.js';
+import { validatedStagedRecord } from '../preflight/staged-record.js';
 import {
   type ImportClaim,
   ImportClaimLost,
@@ -40,25 +39,15 @@ export async function loadAssembledStagedTicket(
     .from(importRuns)
     .where(and(eq(importRuns.id, claim.runId), eq(importRuns.brandId, claim.brandId)));
   if (!row || !run) throw new ImportLoadError('target-unavailable');
-  const native = importRecordSchema.parse({ entity: 'ticket', payload: row.payload });
-  if (
-    native.entity !== 'ticket' ||
-    native.payload.externalId !== row.externalId ||
-    hashImportValue(native.payload) !== row.payloadHash
-  )
-    throw new ImportLoadError('mapping-invalid');
+  const native = validatedStagedRecord(row);
+  if (native.entity !== 'ticket') throw new ImportLoadError('mapping-invalid');
   const children = await stagedTicketChildren(tx, claim, row.externalId);
   const messages = [];
   const csat = [];
   const activities = [];
   for (const child of children) {
     if (!['staged', 'loaded'].includes(child.status)) throw new ImportLoadError('mapping-invalid');
-    const parsed = importRecordSchema.parse({ entity: child.entity, payload: child.payload });
-    if (
-      parsed.payload.externalId !== child.externalId ||
-      hashImportValue(parsed.payload) !== child.payloadHash
-    )
-      throw new ImportLoadError('mapping-invalid');
+    const parsed = validatedStagedRecord(child);
     if (
       'ticketExternalId' in parsed.payload &&
       parsed.payload.ticketExternalId !== native.payload.externalId

@@ -1,11 +1,6 @@
 import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
-import { ConnectorError, hashImportValue } from '@helpdock/importers';
-import {
-  type ImportEntity,
-  type ImportRecord,
-  importEntitySchema,
-  importRecordSchema,
-} from '@helpdock/schemas';
+import { ConnectorError, hashImportValue, importRecordParent } from '@helpdock/importers';
+import { type ImportEntity, importEntitySchema, importRecordSchema } from '@helpdock/schemas';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ImportClaim, ImportClaimLost, renewImportClaim } from './claims.js';
@@ -36,24 +31,6 @@ const checkpointSchema = z
   );
 export const extractionCheckpointsSchema = z.partialRecord(importEntitySchema, checkpointSchema);
 const extractedCountsSchema = z.partialRecord(importEntitySchema, z.int().nonnegative());
-
-function parentExternalId(record: ImportRecord): string | null {
-  switch (record.entity) {
-    case 'message':
-    case 'attachment':
-    case 'csat':
-    case 'activity':
-      return record.payload.ticketExternalId;
-    case 'article':
-      return record.payload.sectionExternalId;
-    case 'section':
-      return record.payload.parentExternalId;
-    case 'category':
-      return record.payload.parentExternalId ?? null;
-    default:
-      return null;
-  }
-}
 
 function validatedPage(entity: ImportEntity, request: unknown) {
   const page = pageSchema.parse(z.json().parse(request));
@@ -96,7 +73,7 @@ async function upsertExtractedRecords(
         runId: claim.runId,
         entity: record.entity,
         externalId: record.payload.externalId,
-        parentExternalId: parentExternalId(record),
+        parentExternalId: importRecordParent(record),
         payload: record.payload,
         payloadHash: hashImportValue(record.payload),
       })),

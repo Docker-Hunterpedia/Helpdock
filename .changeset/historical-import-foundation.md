@@ -79,3 +79,5 @@ Add guarded staff import draft, connection and extraction endpoints with shared 
 Add guarded import entity/report scope and pause/resume/cancel controls; prove staff role and brand isolation with real authenticated HTTP sessions.
 
 Expose guarded mapping confirmation and paged input fingerprints; invalidate earlier dry-run reports when mappings change.
+
+Share staged integrity checks between ticket loading and read-only preflight, and validate account-scoped historical dependencies without creating domain rows or jobs.

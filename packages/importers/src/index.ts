@@ -5,5 +5,6 @@ export * from './hash.js';
 export * from './http.js';
 export * from './ndjson.js';
 export * from './rate-limiter.js';
+export * from './record-parent.js';
 export { type ZendeskCredentials, zendeskCredentialsSchema } from './zendesk/contracts.js';
 export * from './zendesk/zendesk.connector.js';

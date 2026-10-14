@@ -113,6 +113,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { validateImportReferences } from '../preflight/record-references.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -6054,6 +6055,168 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('validates historical references without writes and refuses another source account or mismatched attachment parent', async () => {
+    const scenario = await stagedTicketScenario('preflight-references');
+    const scope = { brandId: BRAND, runId: scenario.input.runId, source: 'zendesk' as const };
+    const key = sourceAccountKey({ source: 'zendesk', verifiedAccount: 'reference-account' });
+    await owner.db
+      .update(importRuns)
+      .set({ sourceAccountKey: key })
+      .where(eq(importRuns.id, scope.runId));
+    const message = scenario.input.messages.find((row) => row.authorKind === 'customer');
+    if (!message) throw new Error('Missing customer source message');
+    const native = importRecordSchema.parse({ entity: 'message', payload: message });
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: 'a'.repeat(64),
+      entity: 'contact',
+      externalId: 'customer',
+      helpdockId: CONTACT,
+      payloadHash: 'c'.repeat(64),
+    });
+    const missing = await withSystem(app.db, BRAND, (tx) =>
+      validateImportReferences(tx, scope, native),
+    );
+    expect(missing).toEqual([
+      {
+        code: 'reference-missing',
+        reference: { entity: 'contact', externalId: 'customer', relation: 'author' },
+      },
+    ]);
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: key,
+      entity: 'contact',
+      externalId: 'customer',
+      helpdockId: CONTACT,
+      payloadHash: 'c'.repeat(64),
+    });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`,
+    );
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, native)),
+    ).toEqual([]);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`),
+    ).toEqual(before);
+    const [file] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, scope.runId), eq(importRecords.entity, 'attachment')));
+    if (!file) throw new Error('Missing attachment fixture');
+    const attachment = importRecordSchema.parse({ entity: 'attachment', payload: file.payload });
+    if (attachment.entity !== 'attachment') throw new Error('Invalid attachment fixture');
+    const [parent] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(
+        and(
+          eq(importRecords.runId, scope.runId),
+          eq(importRecords.entity, 'message'),
+          eq(importRecords.externalId, attachment.payload.messageExternalId ?? ''),
+        ),
+      );
+    if (!parent) throw new Error('Missing attachment parent message');
+    const changed = { ...parent.payload, ticketExternalId: 'other-ticket' };
+    await owner.db
+      .update(importRecords)
+      .set({
+        payload: changed,
+        payloadHash: hashImportValue(changed),
+        parentExternalId: 'other-ticket',
+      })
+      .where(eq(importRecords.id, parent.id));
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, attachment)),
+    ).toEqual([
+      {
+        code: 'reference-parent-mismatch',
+        reference: { entity: 'message', externalId: parent.externalId, relation: 'message' },
+      },
+    ]);
+    await owner.db
+      .update(importRecords)
+      .set({ payloadHash: 'd'.repeat(64) })
+      .where(eq(importRecords.id, parent.id));
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, attachment)),
+    ).toEqual([
+      {
+        code: 'reference-invalid',
+        reference: { entity: 'message', externalId: parent.externalId, relation: 'message' },
+      },
+    ]);
+    await owner.db
+      .update(importRecords)
+      .set({
+        payload: parent.payload,
+        payloadHash: parent.payloadHash,
+        parentExternalId: parent.parentExternalId,
+      })
+      .where(eq(importRecords.id, parent.id));
+    const author = {
+      externalId: 'oldagent',
+      kind: 'customer',
+      name: 'Incorrect source author kind',
+      active: true,
+    };
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: scope.runId,
+      entity: 'user',
+      externalId: 'oldagent',
+      payload: author,
+      payloadHash: hashImportValue(author),
+    });
+    const original = importRecordSchema.parse({ entity: 'message', payload: parent.payload });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, original)),
+    ).toEqual([
+      {
+        code: 'reference-invalid',
+        reference: { entity: 'user', externalId: 'oldagent', relation: 'author' },
+      },
+    ]);
+    const wrongFile = { ...file.payload, fileName: 'different-file.pdf' };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: wrongFile, payloadHash: hashImportValue(wrongFile) })
+      .where(eq(importRecords.id, file.id));
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, original)),
+    ).toEqual([
+      {
+        code: 'reference-invalid',
+        reference: { entity: 'user', externalId: 'oldagent', relation: 'author' },
+      },
+      {
+        code: 'reference-invalid',
+        reference: { entity: 'attachment', externalId: file.externalId, relation: 'attachment' },
+      },
+    ]);
+    const self = importRecordSchema.parse({
+      entity: 'category',
+      payload: { externalId: 'self', parentExternalId: 'self', names: { en: 'Invalid ancestry' } },
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, self)),
+    ).toEqual([
+      {
+        code: 'reference-self',
+        reference: { entity: 'category', externalId: 'self', relation: 'category-parent' },
+      },
+    ]);
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) =>
+        validateImportReferences(tx, { ...scope, brandId: OTHER_BRAND }, native),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

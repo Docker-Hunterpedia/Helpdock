@@ -99,3 +99,8 @@ The invitation plan also rejects case-insensitive duplicate emails among new
 source agents, including duplicates in separate validation batches. Same-account
 reused identities create no new invitation; another account’s binding cannot
 exempt a duplicate. These read-only checks are not yet a complete dry-run workflow.
+
+Custom value preflight uses the same conversion, required-field and choice rules
+as loading against existing or proposed definitions. Unknown source keys and
+invalid values are blocked; only confirmed skips remove values. Projections create
+no definitions and do not yet constitute the complete dry-run approval workflow.

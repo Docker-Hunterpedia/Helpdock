@@ -120,6 +120,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
@@ -130,6 +131,7 @@ import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
 import { articleLoadSchema, categoryLoadSchema, sectionLoadSchema } from './knowledge-contracts.js';
 import { contactLoadSchema, organizationLoadSchema } from './profile-contracts.js';
+import { resolveImportedCustom } from './resolve-custom-fields.js';
 import { staffLoadSchema } from './staff-contracts.js';
 
 const BRAND = uuidv7();
@@ -6066,6 +6068,121 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('previews mapped custom values before field creation using exactly the subsequent loader rules', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Custom preview brand', prefix: 'CPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const scope = { brandId, runId, source: 'zendesk' as const };
+    const source = {
+      externalId: 'amount-field',
+      target: 'ticket' as const,
+      key: 'vendor_amount',
+      label: 'Amount',
+      type: 'number' as const,
+    };
+    const ignored = {
+      externalId: 'ignored-field',
+      target: 'ticket' as const,
+      key: 'vendor_ignored',
+      label: 'Ignored',
+      type: 'text' as const,
+    };
+    await owner.db.insert(importRecords).values(
+      [source, ignored].map((payload) => ({
+        brandId,
+        runId,
+        entity: 'field' as const,
+        externalId: payload.externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })),
+    );
+    const mapping = importMappingSchema.parse({
+      kind: 'field',
+      externalValue: source.externalId,
+      target: {
+        kind: 'create',
+        definition: {
+          target: 'ticket',
+          key: 'amount',
+          label: 'Amount',
+          type: 'number',
+          required: true,
+        },
+      },
+    });
+    if (mapping.kind !== 'field') throw new Error('Invalid field fixture');
+    await owner.db.insert(importMappings).values([
+      { brandId, runId, kind: 'field', externalValue: source.externalId, target: mapping.target },
+      {
+        brandId,
+        runId,
+        kind: 'field',
+        externalValue: ignored.externalId,
+        target: { kind: 'skip' },
+      },
+    ]);
+    const request = {
+      ...scope,
+      target: 'ticket' as const,
+      operation: 'create' as const,
+      custom: { vendor_amount: '12.5', vendor_ignored: 'Original ignored value' },
+    };
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId}`,
+    );
+    const preview = await withSystem(app.db, brandId, (tx) => previewImportedCustom(tx, request));
+    expect(preview).toEqual({ amount: 12.5 });
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        previewImportedCustom(tx, { ...request, custom: { vendor_amount: 'not a number' } }),
+      ),
+    ).rejects.toBeInstanceOf(z.ZodError);
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        previewImportedCustom(tx, { ...request, custom: { unknown: 1 } }),
+      ),
+    ).rejects.toThrow('mapping-invalid');
+    await expect(
+      withSystem(app.db, brandId, (tx) => previewImportedCustom(tx, { ...request, custom: {} })),
+    ).rejects.toBeInstanceOf(z.ZodError);
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        previewImportedCustom(tx, { ...request, operation: 'patch', custom: {} }),
+      ),
+    ).toEqual({});
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId}`,
+      ),
+    ).toEqual(before);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
+    await withSystem(app.db, brandId, (tx) =>
+      writer.field(tx, { ...scope, record: source, mapping: mapping.target }),
+    );
+    expect(await withSystem(app.db, brandId, (tx) => resolveImportedCustom(tx, request))).toEqual(
+      preview,
+    );
+    const afterCreation = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId}`,
+    );
+    expect(await withSystem(app.db, brandId, (tx) => previewImportedCustom(tx, request))).toEqual(
+      preview,
+    );
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM custom_field_defs WHERE brand_id = ${brandId}`,
+      ),
+    ).toEqual(afterCreation);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

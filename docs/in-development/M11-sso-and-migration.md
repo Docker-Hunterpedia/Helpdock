@@ -2493,6 +2493,23 @@ cannot exempt it, verifies same-account reuse and unchanged user revisions, and
 asserts no outbox events. Value validation, contact planning and the complete
 dry-run consumer/report/preview UI remain unfinished; M11-10/16 stay in progress.
 
+### Read-only custom value projection (M11-10/16, in progress)
+
+Preflight now resolves source fields against confirmed mappings, existing definitions
+and proposed new definitions without creating fields or allocating destination IDs.
+It reuses mappedImportedCustom, the loader's normal conversion/required/choice rules.
+Known field bindings select the real existing definition; redirected/deleted bindings,
+wrong entity targets, ambiguous keys and unconfirmed source values are blocked.
+Only an explicit skip removes a source value. Patch previews use partial validation.
+
+Real Postgres/Redis coverage projects a required numeric field before creation,
+rejects invalid/unknown/missing values, accepts a partial patch and proves unchanged
+field revisions and no outbox work. It then creates the field through the loader
+and proves identical projected values before/after creation and no preview mutations.
+Contact identity planning, media availability and complete dry-run orchestration,
+report and preview UI remain unfinished. These projections alone do not approve
+loading; M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

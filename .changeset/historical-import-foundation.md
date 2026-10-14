@@ -91,3 +91,5 @@ Validate complete field creation plans for shared destination keys, combined cap
 Share ticket-assignee department eligibility between loading and preflight, and check invitation collisions and reused staff scope without provisioning.
 
 Validate duplicate new invitation emails across the complete import plan with account-scoped reuse and no provisioning side effects.
+
+Project custom values against existing and proposed field definitions using the loader’s validation rules without creating fields.

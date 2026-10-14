@@ -368,5 +368,17 @@ They retain their local message ID and sequence. Sanitization still runs before
 writes, and source receipts update in the same transaction. The import never
 uses reply delivery to apply a correction. Download-URL rotation does not change
 the message fingerprint. Attachment membership changes must reconcile media
-before the corresponding source receipt can be acknowledged; the current loader
-refuses those changes until that phase is implemented.
+before the corresponding source receipt can be acknowledged; the attachment reconciliation amendment below defines that transaction.
+
+### Source attachment reconciliation and cleanup
+
+Source attachment membership is reconciled in the same transaction as message
+corrections. The writer may call the reviewed `enqueueObjectPurge` helper for
+removed source-owned links, creating only `media.objects.purge` maintenance
+events. It still cannot enqueue delivery events or invoke live ticket hooks.
+Ordinary uploads are preserved, and shared bytes are deleted only after the last
+link disappears. Changed native file metadata uses a fresh pending object so old
+historical links retain their bytes. A brand/source advisory lock serializes
+shared-asset changes across tickets. Download-URL rotation does not replace an
+asset. This supersedes the temporary refusal of attachment membership changes in
+the source-message edit checkpoint; physical downloading remains a separate job.

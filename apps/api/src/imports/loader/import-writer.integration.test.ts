@@ -802,13 +802,19 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     ).toHaveLength(1);
     source.attachments = [];
     source.bodyHtml = '<p>Changed with removed attachment</p>';
-    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
-      { code: 'mapping-invalid' },
-    );
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
     expect(
       (await owner.db.select().from(ticketMessages).where(eq(ticketMessages.id, before.id)))[0]
         ?.bodyText,
-    ).toBe('[redacted]');
+    ).toBe('Changed with removed attachment');
+    expect(
+      await owner.db.select().from(attachments).where(eq(attachments.messageId, before.id)),
+    ).toEqual([]);
+    const cleanup = await owner.db.select().from(outbox);
+    expect(cleanup).toHaveLength(1);
+    expect(cleanup[0]?.event).toBe('media.objects.purge');
+    if (!cleanup[0]) throw new Error('Missing durable media cleanup');
+    await owner.db.delete(outbox).where(eq(outbox.id, cleanup[0].id));
     expect(await owner.db.select().from(outbox)).toEqual([]);
     expect(await redis.dbsize()).toBe(0);
   });
@@ -4246,6 +4252,149 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       outcome: 'unchanged',
       messages: 0,
     });
+  });
+
+  it('reconciles shared historical attachment links atomically and preserves ordinary uploads', async () => {
+    const input = request('reconciled-shared-files');
+    const ref = {
+      externalId: 'reconciled-shared-file',
+      url: 'https://vendor.invalid/shared-file',
+      fileName: 'history.pdf',
+      contentType: 'application/pdf',
+      size: 10,
+    };
+    for (const message of input.messages) message.attachments = [{ ...ref }];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const files = await owner.db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    const original = files.find((file) => file.copiedFromAttachmentId === null);
+    if (!original?.messageId) throw new Error('Missing source attachment');
+    const manualId = uuidv7();
+    await owner.db.insert(attachments).values({
+      id: manualId,
+      brandId: BRAND,
+      ticketId: loaded.ticketId,
+      departmentId: DEPARTMENT,
+      messageId: original.messageId,
+      uploaderType: 'staff',
+      uploaderId: USER,
+      s3Key: `brands/${BRAND}/manual/${manualId}/original`,
+      originalName: 'manual.pdf',
+      mime: 'application/pdf',
+      size: 10,
+      kind: 'file',
+      status: 'ready',
+    });
+    const source = input.messages.find((message) => message.createdAt === '2019-01-01T00:00:00Z');
+    if (!source) throw new Error('Missing original source message');
+    source.attachments = [];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(
+      await owner.db.select().from(attachments).where(eq(attachments.id, original.id)),
+    ).toEqual([]);
+    source.attachments = [{ ...ref }];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const restored = await owner.db
+      .select()
+      .from(attachments)
+      .where(and(eq(attachments.ticketId, loaded.ticketId), eq(attachments.origin, 'import')));
+    expect(restored).toHaveLength(2);
+    expect(restored.every((file) => file.s3Key === original.s3Key)).toBe(true);
+    for (const message of input.messages) message.attachments = [];
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await writer.ticket(tx, input);
+        throw new Error('reconciliation interrupted');
+      }),
+    ).rejects.toThrow('reconciliation interrupted');
+    expect(
+      await owner.db
+        .select()
+        .from(attachments)
+        .where(and(eq(attachments.ticketId, loaded.ticketId), eq(attachments.origin, 'import'))),
+    ).toHaveLength(2);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db.select().from(attachments).where(eq(attachments.ticketId, loaded.ticketId)),
+    ).toMatchObject([{ id: manualId, origin: 'upload' }]);
+    const cleanup = await owner.db.select().from(outbox);
+    expect(cleanup).toHaveLength(1);
+    expect(cleanup[0]).toMatchObject({
+      event: 'media.objects.purge',
+      brandId: BRAND,
+      payload: { keys: expect.arrayContaining([original.s3Key]) },
+    });
+    const cleanupId = cleanup[0]?.id;
+    if (!cleanupId) throw new Error('Missing durable cleanup');
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+      messages: 0,
+    });
+    expect(await owner.db.select().from(outbox)).toHaveLength(1);
+    await owner.db.delete(outbox).where(eq(outbox.id, cleanupId));
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('allocates a fresh pending object for changed source file metadata without overwriting another historical link', async () => {
+    const input = request('changed-source-file');
+    const ref = {
+      externalId: 'changed-file-metadata',
+      fileName: 'old.pdf',
+      size: 10,
+      contentType: 'application/pdf',
+      url: 'https://vendor.invalid/changed-file',
+    };
+    for (const message of input.messages) message.attachments = [{ ...ref }];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const originalFiles = await owner.db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    const original = originalFiles.find((file) => file.copiedFromAttachmentId === null);
+    if (!original) throw new Error('Missing source object');
+    await owner.db
+      .update(attachments)
+      .set({ status: 'ready', processedAt: new Date() })
+      .where(eq(attachments.id, original.id));
+    const source = input.messages[0];
+    if (!source) throw new Error('Missing source note');
+    source.attachments = [{ ...ref, fileName: 'corrected.pdf', size: 20 }];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const files = await owner.db
+      .select()
+      .from(attachments)
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    expect(files).toHaveLength(2);
+    expect(files.find((file) => file.originalName === 'corrected.pdf')).toMatchObject({
+      status: 'pending',
+      size: 20,
+      copiedFromAttachmentId: null,
+      processedAt: null,
+    });
+    expect(files.find((file) => file.originalName === 'corrected.pdf')?.s3Key).not.toBe(
+      original.s3Key,
+    );
+    expect(files.find((file) => file.id === original.id)).toMatchObject({
+      status: 'ready',
+      size: 10,
+    });
+    const revisions = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+      messages: 0,
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
+      ),
+    ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
   it('processes a shared imported image once, updates all historical copies and emits nothing', async () => {

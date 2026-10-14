@@ -47,3 +47,5 @@ Select staged metadata in dependency order and refuse unresolved parents or cycl
 Refuse repeated or delta imports whose historical message targets have been purged, rather than reporting incomplete local history as unchanged.
 
 Apply source message edits, redactions and confirmed author corrections to existing historical rows without appending or delivering replies.
+
+Reconcile source attachment additions/removals on message deltas, preserve shared files and manual uploads, and queue last-link object cleanup transactionally. Changed native file metadata receives a fresh pending object.

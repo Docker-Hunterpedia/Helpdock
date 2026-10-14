@@ -1,20 +1,26 @@
 import { attachments, type DbTransaction, importExternalIds, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import { type ImportAttachmentRef, type ImportMessage, safeFileName } from '@helpdock/schemas';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { attachmentKey } from '../../media/keys.js';
-import { ImportLoadError, type TicketLoad } from './contracts.js';
+import { enqueueObjectPurge } from '../../media/object-purge.js';
+import type { TicketLoad } from './contracts.js';
 import { importedIdentity } from './external-ids.js';
 
-/** Acquire all shared asset locks in one order so concurrent ticket transactions cannot deadlock. */
+/** Shared assets span tickets; serialize their reconciliation within one brand/source. */
 export async function lockImportedAttachments(tx: DbTransaction, input: TicketLoad): Promise<void> {
-  const ids = new Set(
-    input.messages.flatMap((message) => message.attachments.map((ref) => ref.externalId)),
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:assets`}, 18))`,
   );
-  for (const id of [...ids].sort())
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:${id}`}, 18))`,
-    );
+}
+
+function attachmentFingerprint(ref: ImportAttachmentRef): string {
+  return hashImportValue({
+    externalId: ref.externalId,
+    fileName: ref.fileName,
+    size: ref.size ?? null,
+    contentType: ref.contentType ?? null,
+  });
 }
 
 export async function loadImportedAttachment(
@@ -26,15 +32,43 @@ export async function loadImportedAttachment(
     createdAt: string;
     ref: ImportAttachmentRef;
   },
-): Promise<void> {
+): Promise<string> {
   const { input, ref } = options;
+  const payloadHash = attachmentFingerprint(ref);
   const known = await importedIdentity(tx, input, 'attachment', ref.externalId);
-  const [original] = known
-    ? await tx
-        .select()
-        .from(attachments)
-        .where(and(eq(attachments.id, known.helpdockId), eq(attachments.brandId, input.brandId)))
-    : [];
+  const [original] =
+    known?.payloadHash === payloadHash
+      ? await tx
+          .select()
+          .from(attachments)
+          .where(
+            and(
+              eq(attachments.brandId, input.brandId),
+              eq(attachments.origin, 'import'),
+              or(
+                eq(attachments.id, known.helpdockId),
+                eq(attachments.copiedFromAttachmentId, known.helpdockId),
+              ),
+            ),
+          )
+          .orderBy(attachments.id)
+          .limit(1)
+      : [];
+  if (original) {
+    const [linked] = await tx
+      .select({ id: attachments.id })
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.brandId, input.brandId),
+          eq(attachments.messageId, options.messageId),
+          eq(attachments.origin, 'import'),
+          eq(attachments.s3Key, original.s3Key),
+        ),
+      )
+      .limit(1);
+    if (linked) return linked.id;
+  }
   const attachmentId = uuidv7();
   await tx.insert(attachments).values({
     id: attachmentId,
@@ -63,14 +97,8 @@ export async function loadImportedAttachment(
     processedAt: original?.processedAt ?? null,
     createdAt: new Date(options.createdAt),
   });
-  if (original) return;
+  if (original) return attachmentId;
   // A file purged with its old ticket may be re-fetched for a new delta message.
-  const payloadHash = hashImportValue({
-    externalId: ref.externalId,
-    fileName: ref.fileName,
-    size: ref.size ?? null,
-    contentType: ref.contentType ?? null,
-  });
   await tx
     .insert(importExternalIds)
     .values({
@@ -90,15 +118,28 @@ export async function loadImportedAttachment(
       ],
       set: { helpdockId: attachmentId, payloadHash },
     });
+  return attachmentId;
 }
 
-/** Do not acknowledge changed attachment membership before the media reconciliation phase exists. */
-export async function requireUnchangedMessageAttachments(
+/** Reconcile only source-owned links; shared objects and ordinary uploads remain available. */
+export async function reconcileImportedMessageAttachments(
   tx: DbTransaction,
   input: TicketLoad,
+  ticketId: string,
   messageId: string,
   message: ImportMessage,
 ): Promise<void> {
+  const retained = new Set<string>();
+  for (const ref of message.attachments)
+    retained.add(
+      await loadImportedAttachment(tx, {
+        input,
+        ticketId,
+        messageId,
+        createdAt: message.createdAt,
+        ref,
+      }),
+    );
   const rows = await tx
     .select()
     .from(attachments)
@@ -108,23 +149,18 @@ export async function requireUnchangedMessageAttachments(
         eq(attachments.messageId, messageId),
         eq(attachments.origin, 'import'),
       ),
-    );
-  if (rows.length !== message.attachments.length) throw new ImportLoadError('mapping-invalid');
-  for (const ref of message.attachments) {
-    const pointer = await importedIdentity(tx, input, 'attachment', ref.externalId);
-    const fingerprint = hashImportValue({
-      externalId: ref.externalId,
-      fileName: ref.fileName,
-      size: ref.size ?? null,
-      contentType: ref.contentType ?? null,
-    });
-    if (
-      !pointer ||
-      pointer.payloadHash !== fingerprint ||
-      !rows.some(
-        (row) => row.id === pointer.helpdockId || row.copiedFromAttachmentId === pointer.helpdockId,
-      )
     )
-      throw new ImportLoadError('mapping-invalid');
-  }
+    .for('update');
+  const removed = rows.filter((row) => !retained.has(row.id));
+  if (!removed.length) return;
+  await enqueueObjectPurge(tx, input.brandId, removed);
+  await tx.delete(attachments).where(
+    and(
+      eq(attachments.brandId, input.brandId),
+      inArray(
+        attachments.id,
+        removed.map((row) => row.id),
+      ),
+    ),
+  );
 }

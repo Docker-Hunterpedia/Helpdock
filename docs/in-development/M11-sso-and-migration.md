@@ -102,7 +102,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
-| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
+| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded`, `media.objects.purge` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
 | M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
@@ -878,7 +878,8 @@ crash loses at most one ticket and a resume repeats it safely:
 6. Attachment refs become `attachments` rows `status 'pending'`, `origin 'import'`,
    `uploader_type 'system'`, with the fetch deferred to `import.attachments`
    (M11-10), which uploads and then writes outbox `attachment.uploaded` (the
-   only outbox event of the ticket path; processing, not outbound).
+   processing event of the ticket path, not outbound delivery). Source attachment
+   removals also enqueue `media.objects.purge` through the reviewed cleanup helper.
 7. `INSERT import_external_ids` for the ticket and each message.
 
 **What is never called**: `TicketsService.create/addMessage`, `TicketLifecycleHooks`
@@ -1360,8 +1361,9 @@ checks, semantic target validation, mapping proposals and dry-run generation
 remain required before the wizard can use it.
 The build guard also scans the import jobs and SDK for live lifecycle hooks,
 direct `fetch`, `require` and dynamic module loading; writer dependency checks
-remain stricter and forbid even outbox scheduling in the transaction-only writer.
-Eighteen guard cases pass. Queue orchestration may use the reviewed outbox path.
+remain stricter and forbid direct outbox scheduling in the writer. The reviewed
+`enqueueObjectPurge` helper is the sole cleanup exception for removed source files.
+Twenty-one guard cases pass. Queue orchestration may use the reviewed outbox path.
 
 ### M11-11 implementation notes (in progress)
 
@@ -1863,13 +1865,32 @@ and email metadata remain authoritative, and no reply delivery is invoked.
 Rotating download URLs do not count as attachment changes.
 
 Existing imported attachment membership and native metadata are checked before
-editing a message. Changes to attachments currently raise `mapping-invalid`
-without committing the body or ticket receipt; media reconciliation must replace
-this temporary restriction before M11 can be completed. It is not an accepted
-scope gap. The integration case covers edits, sanitization, redaction, corrected
+editing a message. The initial edit checkpoint refused attachment changes with `mapping-invalid`.
+The reconciliation checkpoint below supersedes that temporary restriction. The integration case covers edits, sanitization, redaction, corrected
 historical names, stable sequence/date, rotating URLs, no duplicate attachment,
 unchanged-repeat row revisions and rollback on attachment removal. All 91 writer
 integration cases pass with real PostgreSQL/Redis, no outbox or Redis writes.
+
+### Source attachment reconciliation checkpoint (M11-09/10, in progress)
+
+Source message deltas now add/remove imported attachment links in the message
+transaction. Existing links are reused; removed links leave ordinary uploads
+untouched. Removing the final link queues `media.objects.purge` through the
+existing transactional cleanup helper. Shared objects survive while another row
+names them, including a historical copy whose original row has been removed.
+A changed native filename/type/size receives a fresh pending object instead of
+reusing processed bytes. Rotating download URLs remain irrelevant to identity.
+A brand/source asset lock serializes reconciliation across ticket transactions.
+
+The structural guard allows only `enqueueObjectPurge` from the media cleanup
+module; direct outbox scheduling, other exports, namespace imports and live ticket
+hooks remain forbidden. All 21 guard cases and 93 PostgreSQL/Redis writer cases
+pass. The integration cases cover final-link cleanup, shared-link retention and
+restoration, rollback of links plus cleanup, preservation of ordinary uploads,
+changed metadata and repeat no-ops. Cleanup assertions permit only the storage
+purge event; no notification or delivery event is created. This is link and queue
+evidence: vendor-to-storage downloads, full worker orchestration and end-to-end
+reference acceptance remain unfinished.
 
 ## M11-13 Freshdesk connector
 

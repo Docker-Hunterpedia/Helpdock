@@ -9,7 +9,7 @@ import { importedIdentity, rememberImported } from './external-ids.js';
 import {
   loadImportedAttachment,
   lockImportedAttachments,
-  requireUnchangedMessageAttachments,
+  reconcileImportedMessageAttachments,
 } from './load-attachments.js';
 import { importedAuthor } from './load-authors.js';
 
@@ -74,8 +74,9 @@ async function updateImportedMessage(
   input: TicketLoad,
   message: ImportMessage,
   messageId: string,
+  ticketId: string,
 ): Promise<void> {
-  await requireUnchangedMessageAttachments(tx, input, messageId, message);
+  await reconcileImportedMessageAttachments(tx, input, ticketId, messageId, message);
   const author = await importedAuthor(tx, input, message);
   const messageBody = sanitizeMessageBody(message.bodyHtml ?? plainHtml(message.bodyText ?? ''));
   await tx
@@ -153,7 +154,7 @@ export async function loadImportedMessages(
         target.authorId !== author.authorId ||
         target.authorDisplay !== author.authorDisplay
       )
-        await updateImportedMessage(tx, input, message, existing.helpdockId);
+        await updateImportedMessage(tx, input, message, existing.helpdockId, ticketId);
       continue;
     }
     sequence += 1;

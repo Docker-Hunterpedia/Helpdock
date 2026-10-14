@@ -32,6 +32,8 @@ it.each([
   "export * from '@helpdock/importers';",
   "import { publishVersion } from '../../help-center/help-center.repository.js';",
   "import { ObjectStorage } from '../../media/keys.js';",
+  "import { registerObjectPurgeHandler } from '../../media/object-purge.js';",
+  "import * as purge from '../../media/object-purge.js';",
   "const hook = await import('../hooks.js');",
   'globalThis.fetch(url);',
   'enqueueContactCreated(tx, person);',
@@ -44,4 +46,15 @@ it('allows reviewed pure dependencies and does not mistake historical text or co
       "import { sanitizeMessageBody } from '@helpdock/channels'; import { hashImportValue as hash } from '@helpdock/importers'; import { HelpCenterRepository } from '../../help-center/help-center.repository.js'; import { resolveSlug } from '../../help-center/slugs.js'; import { attachmentKey } from '../../media/keys.js'; import { tickets } from '@helpdock/db'; // TicketsService is never called\nconst body = 'fetch';",
     ),
   ).toEqual([]);
+});
+
+it('allows only the reviewed transactional file cleanup helper within the writer', () => {
+  expect(
+    findImportWriterViolations(
+      "import { enqueueObjectPurge as cleanup } from '../../media/object-purge.js'; await cleanup(tx, brandId, removed);",
+    ),
+  ).toEqual([]);
+  expect(
+    findImportWriterViolations("import { enqueueOutbox } from '@helpdock/jobs';").length,
+  ).toBeGreaterThan(0);
 });

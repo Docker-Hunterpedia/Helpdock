@@ -6,6 +6,7 @@ const ALLOWED_MODULES = new Set([
   '../../help-center/help-center.repository.js',
   '../../help-center/slugs.js',
   '../../media/keys.js',
+  '../../media/object-purge.js',
   '@helpdock/channels',
   '@helpdock/db',
   '@helpdock/importers',
@@ -27,6 +28,7 @@ const REVIEWED_EXPORTS = new Map([
   ['../../help-center/help-center.repository.js', new Set(['HelpCenterRepository'])],
   ['../../help-center/slugs.js', new Set(['resolveSlug'])],
   ['../../media/keys.js', new Set(['attachmentKey'])],
+  ['../../media/object-purge.js', new Set(['enqueueObjectPurge'])],
 ]);
 const FORBIDDEN_IDENTIFIERS = new Set([
   'TicketsService',

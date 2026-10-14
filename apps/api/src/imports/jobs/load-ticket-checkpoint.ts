@@ -182,6 +182,7 @@ export async function loadStagedTicket(
   )
     throw new ImportLoadError('mapping-invalid');
   if (row.status === 'loaded') {
+    if (row.loadHash !== hashImportValue(input)) throw new ImportLoadError('mapping-invalid');
     if (!row.helpdockId) throw new ImportLoadError('target-unavailable');
     await requireImportedTicket(tx, input, row.helpdockId);
     return { state: 'already_loaded' as const, ticketId: row.helpdockId };
@@ -193,7 +194,12 @@ export async function loadStagedTicket(
   await markTicketChildren(tx, input, children);
   await tx
     .update(importRecords)
-    .set({ status: 'loaded', helpdockId: loaded.ticketId, error: null })
+    .set({
+      status: 'loaded',
+      helpdockId: loaded.ticketId,
+      loadHash: hashImportValue(input),
+      error: null,
+    })
     .where(eq(importRecords.id, row.id));
   await loadProgress(tx, claim, [row, ...children]);
   return { state: 'loaded' as const, ...loaded };

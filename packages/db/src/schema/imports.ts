@@ -104,6 +104,7 @@ export const importRecords = pgTable(
     parentExternalId: varchar('parent_external_id', { length: 200 }),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     payloadHash: char('payload_hash', { length: 64 }).notNull(),
+    loadHash: char('load_hash', { length: 64 }),
     status: importRecordStatusEnum('status').notNull().default('staged'),
     helpdockId: uuid('helpdock_id'),
     error: text('error'),

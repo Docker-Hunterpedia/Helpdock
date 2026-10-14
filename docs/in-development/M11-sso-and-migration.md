@@ -1672,6 +1672,31 @@ contract unit cases and 25 connector HTTP cases also pass. This resolves the
 extraction/direct-loader nesting gap; it does not prove the still-unfinished full
 load runner, media preparation, completeness UI or reference-dataset acceptance.
 
+### Shared record-loading checkpoint (in progress)
+
+`loadStagedRecord` now fences field, organization, contact, category, section and
+prepared-article writes with the loading claim. It locks and validates the staged
+record, verifies source/run/brand and normalized payload hashes, then commits
+the domain result, staged status, target pointer and progress together. Explicit
+field skips count separately. This complements the existing ticket/thread
+checkpoint; it is not yet a complete ordered worker.
+
+Migration `0063_import_record_load_receipts` adds `import_records.load_hash` for
+the resolved load request. Completed records refuse a different request on
+resume, including changed field mappings. Ticket checkpoints also save and
+validate this receipt, refusing changed resolved priorities after commit. A
+repeat checks that its source pointer and target still exist; contact pointers
+follow manual merges while remaining stable in staging. Article target checks
+also require the imported locale version. Counts do not increment on a repeat.
+
+All 79 writer integration cases pass, including simulated transaction loss before
+commit, knowledge resume, deleted-target refusal, explicit skip, changed-mapping
+refusal and contact-merge resume. The transaction-loss test is not an actual
+worker-process-kill acceptance test. Root/API typechecks and structural import
+checks pass. Mapping assembly, phase ordering, staff/reference checkpoints,
+media preparation, finish/report jobs, dry-run approval and the full worker/API/UI
+acceptance remain unfinished. M11-09 and M11-10 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

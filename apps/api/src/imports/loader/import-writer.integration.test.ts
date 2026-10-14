@@ -72,6 +72,7 @@ import { createTranscriptionHandler } from '../../transcription/transcription-ev
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
@@ -591,6 +592,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       state: 'already_loaded',
       ticketId: loaded.ticketId,
     });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        loadStagedTicket(tx, {
+          ...scenario,
+          input: {
+            ...scenario.input,
+            resolved: { ...scenario.input.resolved, priority: 'urgent' },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
     expect([
       ...(await owner.db.execute(
         sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
@@ -2661,6 +2673,182 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('commits staged knowledge, load receipts and counts together and validates the target on resume', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const input = categoryLoadSchema.parse({
+      brandId: BRAND,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'checkpoint-category',
+        names: { en: 'Checkpoint', ar: 'نقطة الاستئناف' },
+      },
+    });
+    const recordId = uuidv7();
+    await owner.db.insert(importRecords).values({
+      id: recordId,
+      brandId: BRAND,
+      runId,
+      entity: 'category',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    const operation = { entity: 'category' as const, input };
+    const categoriesBefore = await owner.db.select().from(hcCategories).orderBy(hcCategories.id);
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await loadStagedRecord(tx, { claim, recordId, operation });
+        throw new Error('Simulated transaction loss');
+      }),
+    ).rejects.toThrow('Simulated transaction loss');
+    expect(await owner.db.select().from(hcCategories).orderBy(hcCategories.id)).toEqual(
+      categoriesBefore,
+    );
+    expect(
+      (await owner.db.select().from(importRecords).where(eq(importRecords.id, recordId)))[0],
+    ).toMatchObject({ status: 'staged', helpdockId: null, loadHash: null });
+    const loaded = await withSystem(app.db, BRAND, (tx) =>
+      loadStagedRecord(tx, { claim, recordId, operation }),
+    );
+    expect(loaded).toMatchObject({ state: 'loaded', outcome: 'created' });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => loadStagedRecord(tx, { claim, recordId, operation })),
+    ).toEqual({ state: 'already_done', id: loaded.id });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ loaded: { category: 1 } });
+    if (!loaded.id) throw new Error('Missing loaded category');
+    await owner.db.delete(hcCategories).where(eq(hcCategories.id, loaded.id));
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedRecord(tx, { claim, recordId, operation })),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('checkpoints an explicit field skip once and refuses changed mapping receipts on resume', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const input = fieldLoadSchema.parse({
+      brandId: BRAND,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'skipped-field',
+        target: 'ticket',
+        key: 'old',
+        label: 'Old',
+        type: 'text',
+      },
+      mapping: { kind: 'skip' },
+    });
+    const recordId = uuidv7();
+    await owner.db.insert(importRecords).values({
+      id: recordId,
+      brandId: BRAND,
+      runId,
+      entity: 'field',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    const operation = { entity: 'field' as const, input };
+    expect(
+      await withSystem(app.db, BRAND, (tx) => loadStagedRecord(tx, { claim, recordId, operation })),
+    ).toMatchObject({ state: 'skipped', id: null });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => loadStagedRecord(tx, { claim, recordId, operation })),
+    ).toEqual({ state: 'already_done', id: null });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        loadStagedRecord(tx, {
+          claim,
+          recordId,
+          operation: {
+            entity: 'field',
+            input: { ...input, mapping: { kind: 'existing', fieldId: uuidv7() } },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ skipped: { field: 1 } });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('resumes a staged contact through a manual merge while keeping its stable source pointer', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const input = contactLoadSchema.parse({
+      brandId: BRAND,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'checkpoint-contact',
+        name: 'Imported customer',
+        emails: ['checkpoint@example.invalid'],
+        phones: [],
+        custom: {},
+      },
+      accountId: null,
+      custom: {},
+    });
+    const recordId = uuidv7();
+    await owner.db.insert(importRecords).values({
+      id: recordId,
+      brandId: BRAND,
+      runId,
+      entity: 'contact',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    const operation = { entity: 'contact' as const, input };
+    const loaded = await withSystem(app.db, BRAND, (tx) =>
+      loadStagedRecord(tx, { claim, recordId, operation }),
+    );
+    const originalId = loaded.id;
+    if (!originalId) throw new Error('Missing imported contact');
+    const survivor = uuidv7();
+    await owner.db.insert(contacts).values({ id: survivor, brandId: BRAND, name: 'Survivor' });
+    await withSystem(app.db, BRAND, async (tx) => {
+      const merges = new ContactMergesRepository();
+      await merges.moveIdentities(tx, { from: originalId, to: survivor });
+      await merges.markMerged(tx, originalId, survivor);
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => loadStagedRecord(tx, { claim, recordId, operation })),
+    ).toEqual({ state: 'already_done', id: survivor });
+    expect(
+      (await owner.db.select().from(importRecords).where(eq(importRecords.id, recordId)))[0]
+        ?.helpdockId,
+    ).toBe(loaded.id);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ loaded: { contact: 1 } });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

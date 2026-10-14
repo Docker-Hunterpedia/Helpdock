@@ -344,3 +344,18 @@ includes its parent's source hash, allowing source parent renames to update the
 breadcrumb on delta. The shared breadcrumb formatter preserves existing category
 behaviour and never manufactures a missing child locale. Flat section hashes
 retain their prior shape.
+
+### 2026-10-14 — atomic resolved-load receipts
+
+Persist a hash of each resolved record-load request beside its staged checkpoint.
+Native payload identity alone cannot detect a changed mapping or prepared body
+when resuming a completed record. The load receipt, domain write, target pointer,
+status and progress commit in the same fenced transaction. Refuse a changed
+receipt rather than silently treating it as completed. Explicit field skips
+receive a receipt and their own progress counter.
+
+Apply the receipt to ticket/thread checkpoints as well. Resume validates source
+identity and target availability. A contact's stable source pointer can follow a
+manual merge to its current profile without rewriting the original staging
+pointer; an article requires the imported locale version as well as its parent
+article. These checkpoints do not replace the ordered runner or dry-run approval.

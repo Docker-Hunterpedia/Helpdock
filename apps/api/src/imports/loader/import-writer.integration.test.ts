@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as waitForQueue } from 'node:timers/promises';
+import { createKeyring, encryptSecret } from '@helpdock/config';
 import {
   accounts,
   attachments,
@@ -80,8 +81,14 @@ import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
 import { createImportWorkHandler, enqueueImportWork } from '../import-events.js';
 import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
-import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
+import {
+  claimImportRun,
+  IMPORT_CLAIM_TIMEOUT_MS,
+  ImportClaimLost,
+  renewImportClaim,
+} from '../jobs/claims.js';
 import { completeImportRun } from '../jobs/complete-run.js';
+import { createImportConnectorRuntime } from '../jobs/connector-runtime.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
@@ -100,7 +107,7 @@ import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
-import { bindImportSourceAccount } from '../jobs/source-account.js';
+import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -3817,14 +3824,18 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
 
   it('consumes staged history through real Redis phase jobs to terminal credential purge', async () => {
     const scenario = await mappedHistoryScenario('queued-history');
-    const key = 'f'.repeat(64);
+    const key = sourceAccountKey({ source: 'zendesk', verifiedAccount: 'demo' });
+    const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 14).toString('base64') });
     await owner.db
       .update(importRuns)
       .set({
         sourceAccountKey: key,
         claimToken: null,
         claimedAt: null,
-        credentialsEncrypted: 'synthetic-envelope',
+        credentialsEncrypted: encryptSecret(
+          JSON.stringify({ auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' }),
+          keyring,
+        ),
         counts: { retryFailures: 2 },
       })
       .where(eq(importRuns.id, scenario.input.runId));
@@ -3867,7 +3878,16 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const processor = createImportProcessor({
       db: app.db,
       storage,
-      resolve: async () => downloadHarness(fake, storage),
+      resolve: createImportConnectorRuntime(
+        { db: app.db, keyring, allowCidrs: [] },
+        {
+          apiRoot: fake.server.root,
+          policy: {
+            allowedPorts: [Number(new URL(fake.server.root).port)],
+            allowCidrs: ['127.0.0.1/32'],
+          },
+        },
+      ),
     });
     const worker = new Worker(queueName, processor, {
       connection: workerConnection,
@@ -6030,6 +6050,103 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('loads encrypted runtime credentials only for the bound account and enforces exact download hosts', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    try {
+      const scenario = await stagedTicketScenario('runtime-account');
+      const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 13).toString('base64') });
+      const credentials = { auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' };
+      const key = sourceAccountKey({ source: 'zendesk', verifiedAccount: 'demo' });
+      await owner.db
+        .update(importRuns)
+        .set({
+          sourceAccountKey: key,
+          credentialsEncrypted: encryptSecret(JSON.stringify(credentials), keyring),
+          options: { downloadHosts: ['cdn.zendesk.test'] },
+        })
+        .where(eq(importRuns.id, scenario.input.runId));
+      const resolve = createImportConnectorRuntime(
+        { db: app.db, keyring, allowCidrs: [] },
+        {
+          apiRoot: fake.server.root,
+          policy: {
+            allowedPorts: [Number(new URL(fake.server.root).port)],
+            allowCidrs: ['127.0.0.1/32'],
+            lookup: async () => [{ address: '127.0.0.1', family: 4 }],
+          },
+        },
+      );
+      const scope = { brandId: BRAND, runId: scenario.input.runId };
+      const runtime = await resolve(scope);
+      const url = fake.addAttachment('684', Buffer.from('runtime bytes'));
+      const downloaded = await runtime.connector.fetchAttachment(runtime.context, {
+        externalId: '684',
+        fileName: 'receipt.txt',
+        url,
+      });
+      const chunks: Buffer[] = [];
+      for await (const chunk of downloaded.stream) chunks.push(Buffer.from(chunk));
+      expect(Buffer.concat(chunks).toString()).toBe('runtime bytes');
+      const before = fake.server.calls.length;
+      await expect(
+        runtime.context.http.request('https://other.example/secret'),
+      ).rejects.toMatchObject({ code: 'host-not-allowed' });
+      expect(fake.server.calls).toHaveLength(before);
+      await expect(
+        runtime.context.log({ level: 'warning', message: 'synthetic-token' }),
+      ).rejects.toBeInstanceOf(z.ZodError);
+      expect(
+        await owner.db.select().from(importLog).where(eq(importLog.runId, scope.runId)),
+      ).toEqual([]);
+      await owner.db
+        .update(importRuns)
+        .set({
+          credentialsEncrypted: encryptSecret(
+            JSON.stringify({ ...credentials, subdomain: 'other' }),
+            keyring,
+          ),
+        })
+        .where(eq(importRuns.id, scope.runId));
+      await expect(resolve(scope)).rejects.toMatchObject({ code: 'credentials-refused' });
+      await expect(resolve({ ...scope, brandId: uuidv7() })).rejects.toMatchObject({
+        code: 'credentials-refused',
+      });
+      await owner.db
+        .update(importRuns)
+        .set({ credentialsEncrypted: 'invalid-envelope' })
+        .where(eq(importRuns.id, scope.runId));
+      await expect(resolve(scope)).rejects.toMatchObject({
+        code: 'credentials-refused',
+        message: 'credentials-refused',
+      });
+      await owner.db
+        .update(importRuns)
+        .set({ credentialsEncrypted: encryptSecret(JSON.stringify(credentials), keyring) })
+        .where(eq(importRuns.id, scope.runId));
+      for (const host of ['*.zendesk.com', 'https://cdn.zendesk.test', 'cdn.zendesk.test:443']) {
+        await owner.db
+          .update(importRuns)
+          .set({ options: { downloadHosts: [host] } })
+          .where(eq(importRuns.id, scope.runId));
+        await expect(resolve(scope)).rejects.toBeInstanceOf(z.ZodError);
+      }
+      await owner.db
+        .update(importRuns)
+        .set({ status: 'paused', pausedFrom: 'loading', claimToken: null, claimedAt: null })
+        .where(eq(importRuns.id, scope.runId));
+      await expect(
+        runtime.context.log({ level: 'warning', message: 'import.record-unavailable' }),
+      ).rejects.toBeInstanceOf(ImportClaimLost);
+      expect(
+        await owner.db.select().from(importLog).where(eq(importLog.runId, scope.runId)),
+      ).toEqual([]);
+      expect(fake.server.calls).toHaveLength(before);
+    } finally {
+      await fake.server.close();
+    }
   });
 
   function downloadHarness(fake: FakeZendesk, storage: FakeStorage) {

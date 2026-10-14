@@ -77,6 +77,11 @@ const harness = (): Harness => {
         started.installSmtp = installSmtp;
         return { close: async () => void calls.push('outbound.close') };
       },
+      createImportWorker: ({ redis }) => {
+        calls.push('import.create');
+        expect(redis).toBe(connection);
+        return { close: async () => void calls.push('import.close') };
+      },
       createMediaWorker: ({ redis }) => {
         calls.push('media.create');
         expect(redis).toBe(connection);
@@ -157,6 +162,7 @@ describe('startWorker', () => {
       'handlers.register',
       'worker.create',
       'outbound.create',
+      'import.create',
       'media.create',
       'assignment.create',
       'maintenance.create',
@@ -246,6 +252,7 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'outbound.close',
+      'import.close',
       'media.close',
       'assignment.close',
       'maintenance.close',
@@ -274,6 +281,7 @@ describe('startWorker', () => {
       'relay.stop',
       'worker.close',
       'outbound.close',
+      'import.close',
       'media.close',
       'assignment.close',
       'maintenance.close',

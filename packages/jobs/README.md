@@ -342,3 +342,18 @@ provide the complete migration worker.
 for eligible active runs with absent or expired claims, respects retry deadlines
 and never replaces a fresh worker. It closes the committed-batch/continuation
 crash gap; actual process-kill acceptance remains part of the M11 release checks.
+
+## Historical import consumer
+
+The API worker starts the `import` consumer at concurrency one, handling
+`import.extract`, `import.load`, `import.attachments` and `import.finish`.
+Phase continuations are transactional `import.work_requested` events; pause,
+cancel and expired claims are checked before each fenced batch. On shutdown the
+consumer drains before media workers, queue producers and the Redis connection.
+The minute-based `import.recover` maintenance job recovers abandoned eligible work.
+
+Zendesk runtime credentials are decrypted only under the run's brand context and
+must match its verified source account. Additional attachment hosts are exact
+`options.downloadHosts` entries, checked on every safeFetch hop; API credentials
+never accompany cross-origin attachment requests. Other vendor factories and
+file/article preparation remain under development in M11.

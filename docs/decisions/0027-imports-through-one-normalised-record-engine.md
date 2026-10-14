@@ -475,3 +475,25 @@ for transactional start/continuation/recovery scheduling. It carries only phase,
 run and optional delay, with the brand in the envelope. It has no customer, rule,
 AI or webhook subscriber. Silent-import acceptance includes this control event
 beside the already allowed media processing/cleanup and help-center reindex events.
+
+### 2026-10-14 — exact per-run attachment destinations
+
+The runtime derives the vendor API host from validated credentials. Vendor
+attachment content URLs may point to external hosts, so `import_runs.options`
+includes `downloadHosts`: at most 32 exact lowercase hostnames, with no URL,
+port or wildcard. The connection/dry-run UI must show and confirm these hosts
+before work starts; an unknown redirect remains a blocking completeness error
+until its host is approved. This extends the documented vendor host list without
+trusting arbitrary redirect destinations. Every hop still passes safeFetch DNS/IP
+checks and account credentials are stripped on cross-origin redirects. Production
+restricts destination ports to 443; internal CIDR exceptions continue to require operator configuration.
+
+The initial runtime supports Zendesk; other source factories are added with their
+verified connectors. Unsupported sources fail rather than selecting a fallback.
+A bounded process-local account token bucket survives job continuations, but is
+not a distributed cross-install rate limiter and resets on process restart.
+
+The Zendesk runtime starts conservatively with ten local tokens at 60 requests
+per minute. A local exhaustion delay refills the burst rather than only one
+token: resumed pages may need to re-read their parent and hydrate a child before
+writing the next cursor. Vendor Retry-After continues to take precedence.

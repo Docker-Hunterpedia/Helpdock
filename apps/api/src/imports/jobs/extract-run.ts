@@ -20,6 +20,7 @@ import {
   importRunRefSchema,
   renewImportClaim,
 } from './claims.js';
+import { importConnectorLogSchema } from './connector-log.js';
 import { extractionCheckpointsSchema, storeImportPage } from './extract-page.js';
 import {
   completeExtraction,
@@ -41,20 +42,6 @@ type ExtractionDependencies<Credentials> = {
   jobId: string;
   claim?: ImportClaim;
 };
-const logSchema = z.strictObject({
-  level: z.enum(['info', 'warning', 'error']),
-  message: z.enum([
-    'import.record-unavailable',
-    'import.attachment.expired',
-    'import.mapping.unknown-value',
-    'import.field.unsupported-semantics',
-    'import.csat.timestamp-inferred',
-    'import.csat.scale-normalized',
-    'import.knowledge.readership-restricted',
-  ]),
-  entity: importEntitySchema.optional(),
-  externalId: z.string().max(200).optional(),
-});
 
 class ExtractionSession<Credentials> {
   readonly scope: ImportRunRef;
@@ -69,7 +56,7 @@ class ExtractionSession<Credentials> {
       ...this.deps.context,
       credentials: this.deps.connector.credentialsSchema.parse(this.deps.context.credentials),
       log: async (entry) => {
-        const parsed = logSchema.parse(entry);
+        const parsed = importConnectorLogSchema.parse(entry);
         await this.inRun(async (tx) => {
           await renewImportClaim(tx, claim);
           await tx.insert(importLog).values({ ...parsed, ...this.scope });

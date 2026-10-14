@@ -2278,6 +2278,32 @@ covers expired URLs through storage and deleted files through placeholders;
 connector tests cover bounded retries, ID mismatch and redirect credential
 stripping. This checkpoint does not complete M11-10 or M11-12.
 
+### Production consumer registration checkpoint (M11-10/11, in progress)
+
+The worker now registers an import BullMQ consumer at concurrency one and closes
+it before media and queue producers during shutdown. The connector runtime reads
+one run under its brand/system context, decrypts its AES-GCM credential envelope,
+validates credentials and refuses a different bound source account before HTTP.
+Zendesk is registered; remaining connector factories are pending alongside those
+connectors. Unsupported sources fail explicitly.
+
+The account API hostname is derived from validated credentials; additional
+attachment destinations come from `options.downloadHosts` (at most 32 exact
+lowercase hosts). SafeFetch checks every redirect against that list and retains
+DNS/IP checks. Production restricts destination ports to 443 with the existing operator CIDR
+exceptions. A bounded account token bucket retains local budgets across
+continuations; process restart resets it. When locally exhausted, the runtime
+waits for its ten-token burst to refill at 60 requests/minute, allowing resumed
+pages to re-read their parent and child before their next cursor checkpoint.
+Connector logging shares the extraction
+code allow-list so vendor bodies, URLs and credentials cannot become log text.
+
+Tests cover worker startup/shutdown and real PostgreSQL/Redis runtime account
+binding, cross-brand refusal, corrupted encryption, download-host refusal and
+attachment bytes. Connection API/UI host approval, article preparation, file
+source orchestration and the other vendors remain unfinished. This does not
+complete M11-10 or M11-11.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

@@ -15,13 +15,22 @@ export class ImportRateLimiter {
   #blockedUntil = 0;
 
   constructor(
-    private readonly options: { capacity: number; perMinute: number; now?: () => number },
+    private readonly options: {
+      capacity: number;
+      perMinute: number;
+      /** Resumed pages may need several HTTP calls before reaching their next durable cursor. */
+      resumeTokens?: number;
+      now?: () => number;
+    },
   ) {
     if (
       !Number.isFinite(options.capacity) ||
       options.capacity < 1 ||
       !Number.isFinite(options.perMinute) ||
-      options.perMinute <= 0
+      options.perMinute <= 0 ||
+      !Number.isFinite(options.resumeTokens ?? 1) ||
+      (options.resumeTokens ?? 1) < 1 ||
+      (options.resumeTokens ?? 1) > options.capacity
     )
       throw new RangeError('Rate budgets must be positive');
     this.#tokens = options.capacity;
@@ -38,7 +47,12 @@ export class ImportRateLimiter {
     this.#updatedAt = now;
     if (this.#tokens < 1)
       throw new RateLimited(
-        Math.max(1, Math.ceil(((1 - this.#tokens) * 60000) / this.options.perMinute)),
+        Math.max(
+          1,
+          Math.ceil(
+            (((this.options.resumeTokens ?? 1) - this.#tokens) * 60000) / this.options.perMinute,
+          ),
+        ),
       );
     this.#tokens -= 1;
   }

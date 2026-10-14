@@ -131,6 +131,8 @@ import {
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
 import { registerImportEventHandlers } from '../imports/import-events.js';
+import { createImportConnectorRuntime } from '../imports/jobs/connector-runtime.js';
+import { createImportProcessor } from '../imports/jobs/import-processor.js';
 import { recoverImportWork } from '../imports/jobs/recover.js';
 import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
 import { readOAuthApps } from '../knowledge/credentials.js';
@@ -263,6 +265,7 @@ export interface WorkerDependencies {
     env: WorkerEnv;
     installSmtp: InstallSmtp;
   }): Closable;
+  createImportWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M1-07's `assignment.offline_unassign` consumer: the auto-unassign timer firing. */
@@ -911,6 +914,25 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
+  createImportWorker: ({ redis, db, log, env }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.import,
+      createImportProcessor({
+        db,
+        storage: storageFor(env),
+        resolve: createImportConnectorRuntime({
+          db,
+          keyring: createKeyring(env),
+          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+        }),
+      }),
+      { connection: redis, concurrency: 1 },
+    );
+    worker.on('failed', (job) =>
+      log.error({ job: job?.name, jobId: job?.id }, 'import job failed'),
+    );
+    return worker;
+  },
   createMediaWorker: ({ redis, db, log, env }) => {
     const storage = storageFor(env);
     const attachments = createJobProcessor(
@@ -1553,6 +1575,7 @@ export const startWorker = ({
   });
   const worker = deps.createEventWorker({ redis: connection, db, log, env });
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
+  const imports = deps.createImportWorker({ redis: connection, db, log, env });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({
@@ -1592,6 +1615,7 @@ export const startWorker = ({
     // After the event worker, because that is what adds media jobs: closing the
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.
+    await imports.close();
     await media.close();
     await assignment.close();
     await maintenance.close();

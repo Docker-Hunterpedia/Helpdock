@@ -25,3 +25,19 @@ it('refills tokens without blocking and preserves a vendor-imposed pause', () =>
   now = 6000;
   expect(() => limiter.reserve()).not.toThrow();
 });
+
+it('refills a resume burst so repeated page hydration can reach its next durable cursor', () => {
+  let now = 0;
+  const limiter = new ImportRateLimiter({
+    capacity: 3,
+    perMinute: 60,
+    resumeTokens: 3,
+    now: () => now,
+  });
+  for (let i = 0; i < 3; i++) limiter.reserve();
+  expect(() => limiter.reserve()).toThrow(expect.objectContaining({ retryAfterMs: 3000 }));
+  now = 3000;
+  // A resumed page reads the collection, its child details and the final record before checkpointing.
+  for (let i = 0; i < 3; i++) expect(() => limiter.reserve()).not.toThrow();
+  expect(() => limiter.reserve()).toThrow(expect.objectContaining({ retryAfterMs: 3000 }));
+});

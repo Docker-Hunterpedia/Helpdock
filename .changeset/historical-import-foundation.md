@@ -71,3 +71,5 @@ Schedule recovery for abandoned import work without replacing fresh claims or re
 Download up to four historical attachments concurrently, drain partial-failure batches before retry, and preserve successful files. Retry transient vendor outages with a bounded budget without spending it on 429 waits, resetting it after successful continuation.
 
 Refresh expired Zendesk attachment links once through authenticated metadata, and retain named placeholders for unavailable imported files.
+
+Register the production import worker and validate encrypted Zendesk account credentials and exact per-run attachment destinations.

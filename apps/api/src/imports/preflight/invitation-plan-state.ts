@@ -1,6 +1,7 @@
 import { type DbTransaction, importExternalIds, importRecords } from '@helpdock/db';
 import { type ImportMapping, importMappingsSchema } from '@helpdock/schemas';
 import { and, eq, inArray } from 'drizzle-orm';
+import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportScope, importSourceAccountKey } from '../loader/external-ids.js';
 import { type InvitationPlanIssue, validateInvitationPlan } from './invitation-plan.js';
 import { validatedStagedRecord } from './staged-record.js';
@@ -51,7 +52,14 @@ export async function validateImportInvitationPlan(
         issues.push({ externalId, code: 'invite-source-invalid' });
         continue;
       }
-      const source = validatedStagedRecord(row);
+      let source: ReturnType<typeof validatedStagedRecord>;
+      try {
+        source = validatedStagedRecord(row);
+      } catch (error) {
+        if (!(error instanceof ImportLoadError)) throw error;
+        issues.push({ externalId, code: 'invite-source-invalid' });
+        continue;
+      }
       if (source.entity !== 'user') {
         issues.push({ externalId, code: 'invite-source-invalid' });
         continue;

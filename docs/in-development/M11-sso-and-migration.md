@@ -2621,6 +2621,26 @@ Queue/HTTP dry-run entry points, whole-plan phases, media/completeness checks,
 live-target approval freshness and the complete user-facing report remain
 unfinished; this batch is not yet exposed as a complete dry-run workflow.
 
+### Mapping-plan dry-run phase (M11-10/16, in progress)
+
+After scanning records, the durable dry-run batch now checks confirmed mappings
+against live brand destinations and evaluates combined field additions/bindings
+and staff invitations. It stores separate mapping counts and safe plan issues,
+with at most 100 samples. Malformed mappings or corrupt invitation source records
+produce blocking codes; unexpected database errors still propagate. Duplicate
+invitation diagnostics include source IDs, never email values.
+
+The internal phase advances to `plans_checked` only after rechecking the staged
+input fingerprint. It stays in `dry_run`, creates no fields or memberships, sends
+no invitations and does not authorize loading. Repeating this phase preserves
+the existing counts/report. Real Postgres/Redis coverage combines missing live
+status, duplicate proposed field keys, duplicate invitation emails and a corrupt
+agent, proving all seven diagnostics, unchanged user revisions, no new field
+definitions and no outbox work. The writer suite passes 150 tests.
+
+Complete contact/company collision phases, media/completeness checks, live-target
+approval freshness, job/HTTP entry points and the review UI remain unfinished.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

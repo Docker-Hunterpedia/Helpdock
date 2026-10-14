@@ -135,3 +135,10 @@ last committed cursor. A pause invalidates the old worker's authority; staged
 input changes invalidate the scan. Finishing these checks alone does not make a
 run ready. Dry-run entry points and the complete approval report are still under
 development.
+
+The internal dry run also checks live mapping destinations and combined field and
+invitation plans. Duplicate destination keys and invitation emails block the plan;
+diagnostics identify source records without exposing invitation email values.
+These checks create no fields or memberships and send no invitations. Contact and
+company collision checks, media completeness and final approval still need to be
+connected before the dry-run workflow is available.

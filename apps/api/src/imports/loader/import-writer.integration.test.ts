@@ -6129,11 +6129,122 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     });
     expect(run?.status).toBe('dry_run');
     expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
-      state: 'records_checked',
+      state: 'plans_checked',
     });
     const [repeated] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
-    expect(repeated?.dryRunReport).toEqual(run?.dryRunReport);
+    expect(repeated?.dryRunReport).toMatchObject({
+      checked: 2,
+      mappingsChecked: 0,
+      planIssueCount: 0,
+    });
+    expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
+      state: 'plans_checked',
+    });
+    const [final] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(final?.dryRunReport).toEqual(repeated?.dryRunReport);
     expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('checkpoints mapping, field and invitation conflicts without provisioning or approving loading', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'dry_run', startedBy: USER });
+    const people = ['a', 'b', 'corrupt'].map((externalId) => ({
+      externalId,
+      kind: 'agent' as const,
+      name: 'Source agent',
+      active: true,
+      email: externalId === 'b' ? 'DUPLICATE@PLAN.TEST' : 'duplicate@plan.test',
+    }));
+    const fields = ['one', 'two'].map((externalId) => ({
+      externalId,
+      target: 'ticket' as const,
+      key: externalId,
+      label: externalId,
+      type: 'text' as const,
+    }));
+    await owner.db.insert(importRecords).values([
+      ...people.map((payload) => ({
+        brandId: BRAND,
+        runId,
+        entity: 'user' as const,
+        externalId: payload.externalId,
+        payload,
+        payloadHash: payload.externalId === 'corrupt' ? 'e'.repeat(64) : hashImportValue(payload),
+      })),
+      ...fields.map((payload) => ({
+        brandId: BRAND,
+        runId,
+        entity: 'field' as const,
+        externalId: payload.externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })),
+    ]);
+    const mappings = [
+      ...people.map((person) =>
+        importMappingSchema.parse({
+          kind: 'agent',
+          externalValue: person.externalId,
+          target: { kind: 'invited', departmentIds: [DEPARTMENT] },
+        }),
+      ),
+      ...fields.map((field) =>
+        importMappingSchema.parse({
+          kind: 'field',
+          externalValue: field.externalId,
+          target: {
+            kind: 'create',
+            definition: { target: 'ticket', key: 'plan_shared_key', label: 'Shared', type: 'text' },
+          },
+        }),
+      ),
+      importMappingSchema.parse({
+        kind: 'status',
+        externalValue: 'missing-status',
+        target: { statusId: uuidv7() },
+      }),
+    ];
+    await owner.db
+      .insert(importMappings)
+      .values(mappings.map((mapping) => ({ brandId: BRAND, runId, ...mapping })));
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`,
+    );
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing mapping plan claim');
+    const deps = { db: app.db, jobId: 'dry-run-plans' };
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'records_checked' });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'plans_checked' });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run?.status).toBe('dry_run');
+    expect(run?.dryRunReport).toMatchObject({
+      mappingsChecked: 6,
+      planIssueCount: 7,
+      planIssues: expect.arrayContaining([
+        { area: 'mapping', externalId: 'missing-status', code: 'target-missing' },
+        { area: 'mapping', externalId: 'corrupt', code: 'mapping-invalid' },
+        { area: 'field', externalId: 'one', code: 'field-key-conflict' },
+        { area: 'field', externalId: 'two', code: 'field-key-conflict' },
+        { area: 'invitation', externalId: 'a', code: 'invite-email-duplicate' },
+        { area: 'invitation', externalId: 'b', code: 'invite-email-duplicate' },
+        { area: 'invitation', externalId: 'corrupt', code: 'invite-source-invalid' },
+      ]),
+    });
+    expect(JSON.stringify(run?.dryRunReport)).not.toContain('duplicate@plan.test');
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`),
+    ).toEqual(before);
+    expect(
+      await owner.db
+        .select()
+        .from(customFieldDefs)
+        .where(eq(customFieldDefs.key, 'plan_shared_key')),
+    ).toEqual([]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

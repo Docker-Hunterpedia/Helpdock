@@ -1294,7 +1294,15 @@ kinds, reusing the writer's staff/field targets. Targets reject extra privilege
 or secret fields; same-kind source values cannot be mapped twice. An empty group
 value represents an explicit destination for source tickets with no group.
 Eight focused schema cases and ten existing staff/field contract cases pass.
-Saving/proposing mappings and dry-run validation are not implemented yet.
+`saveImportMappings` replaces the list in batches of 1,000 under the same brand
+and run locks used by worker controls. Only `awaiting_mapping` and `ready` runs
+are editable. Every save clears `dryRunReport` and returns the run to
+`awaiting_mapping`; empty lists clear all mappings. Invalid duplicate input,
+foreign-brand requests and transaction rollback preserve the previous list and
+report. Six focused real PostgreSQL/Redis cases cover these behaviours.
+This transaction helper is not yet exposed through the admin API. Permission
+checks, semantic target validation, mapping proposals and dry-run generation
+remain required before the wizard can use it.
 The build guard also scans the import jobs and SDK for live lifecycle hooks,
 direct `fetch`, `require` and dynamic module loading; writer dependency checks
 remain stricter and forbid even outbox scheduling in the transaction-only writer.

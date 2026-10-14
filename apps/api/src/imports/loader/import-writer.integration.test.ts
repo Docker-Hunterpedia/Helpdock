@@ -20,6 +20,7 @@ import {
   hcSections,
   importExternalIds,
   importLog,
+  importMappings,
   importRecords,
   importRuns,
   outbox,
@@ -69,6 +70,7 @@ import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
+import { saveImportMappings } from '../jobs/save-mappings.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -296,6 +298,109 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await redis?.quit();
     await redisContainer?.stop();
     await postgres?.stop();
+  });
+
+  it('replaces mappings in bounded batches and invalidates the previous dry-run approval', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'ready',
+      startedBy: USER,
+      dryRunReport: { approved: true },
+    });
+    await owner.db.insert(importMappings).values({
+      brandId: BRAND,
+      runId,
+      kind: 'status',
+      externalValue: 'old',
+      target: { statusId: STATUS },
+    });
+    const proposed = Array.from({ length: 1001 }, (_, index) => ({
+      kind: 'status' as const,
+      externalValue: `source-${index}`,
+      target: { statusId: STATUS },
+    }));
+    await withSystem(app.db, BRAND, (tx) =>
+      saveImportMappings(tx, { brandId: BRAND, runId }, proposed),
+    );
+    const stored = await owner.db
+      .select()
+      .from(importMappings)
+      .where(eq(importMappings.runId, runId));
+    expect(stored).toHaveLength(1001);
+    expect(new Set(stored.map((mapping) => mapping.externalValue))).toEqual(
+      new Set(proposed.map((mapping) => mapping.externalValue)),
+    );
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({ status: 'awaiting_mapping', dryRunReport: null });
+    await withSystem(app.db, BRAND, (tx) => saveImportMappings(tx, { brandId: BRAND, runId }, []));
+    expect(
+      await owner.db.select().from(importMappings).where(eq(importMappings.runId, runId)),
+    ).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it.each(['dry_run', 'loading', 'paused', 'completed'] as const)(
+    'refuses mapping changes while a run is %s',
+    async (status) => {
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status,
+        startedBy: USER,
+        pausedFrom: status === 'paused' ? 'loading' : null,
+      });
+      await expect(
+        withSystem(app.db, BRAND, (tx) => saveImportMappings(tx, { brandId: BRAND, runId }, [])),
+      ).rejects.toMatchObject({ code: 'run-not-editable' });
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.status,
+      ).toBe(status);
+    },
+  );
+
+  it('retains mappings and their approval after rollback, duplicate input or a foreign-brand request', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'ready',
+      startedBy: USER,
+      dryRunReport: { approved: true },
+    });
+    const mapping = {
+      kind: 'status' as const,
+      externalValue: 'open',
+      target: { statusId: STATUS },
+    };
+    await owner.db.insert(importMappings).values({ brandId: BRAND, runId, ...mapping });
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await saveImportMappings(tx, { brandId: BRAND, runId }, []);
+        throw new Error('transaction interrupted');
+      }),
+    ).rejects.toThrow('transaction interrupted');
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        saveImportMappings(tx, { brandId: BRAND, runId }, [mapping, mapping]),
+      ),
+    ).rejects.toThrow('A source value has more than one mapping');
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) =>
+        saveImportMappings(tx, { brandId: OTHER_BRAND, runId }, []),
+      ),
+    ).rejects.toMatchObject({ code: 'run-unavailable' });
+    expect(
+      await owner.db.select().from(importMappings).where(eq(importMappings.runId, runId)),
+    ).toMatchObject([mapping]);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0],
+    ).toMatchObject({ status: 'ready', dryRunReport: { approved: true } });
   });
 
   it('commits staged ticket/thread progress atomically and resumes after a rolled-back worker transaction', async () => {

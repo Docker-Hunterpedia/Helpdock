@@ -5,7 +5,7 @@ import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { attachmentKey } from '../../media/keys.js';
 import { enqueueObjectPurge } from '../../media/object-purge.js';
 import type { TicketLoad } from './contracts.js';
-import { importedIdentity } from './external-ids.js';
+import { importedIdentity, importSourceAccountKey } from './external-ids.js';
 
 /** Shared assets span tickets; serialize their reconciliation within one brand/source. */
 export async function lockImportedAttachments(
@@ -107,6 +107,7 @@ export async function loadImportedAttachment(
     .values({
       brandId: input.brandId,
       source: input.source,
+      sourceAccountKey: await importSourceAccountKey(tx, input),
       entity: 'attachment',
       externalId: ref.externalId,
       helpdockId: attachmentId,
@@ -116,6 +117,7 @@ export async function loadImportedAttachment(
       target: [
         importExternalIds.brandId,
         importExternalIds.source,
+        importExternalIds.sourceAccountKey,
         importExternalIds.entity,
         importExternalIds.externalId,
       ],

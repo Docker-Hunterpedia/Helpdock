@@ -4,6 +4,7 @@ import { importAttachmentSchema, importEntitySchema, importRecordSchema } from '
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { ImportLoadError, type TicketLoad, ticketLoadSchema } from '../loader/contracts.js';
+import { importSourceAccountKey } from '../loader/external-ids.js';
 import { ImportWriter } from '../loader/import-writer.js';
 import { requireImportedTicket } from '../loader/load-ticket.js';
 import {
@@ -139,6 +140,7 @@ async function markChildBatch(
       and(
         eq(importExternalIds.brandId, input.brandId),
         eq(importExternalIds.source, input.source),
+        eq(importExternalIds.sourceAccountKey, await importSourceAccountKey(tx, input)),
         eq(importExternalIds.entity, entity),
         inArray(
           importExternalIds.externalId,

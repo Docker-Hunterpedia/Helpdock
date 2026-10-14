@@ -70,6 +70,7 @@ export async function loadImportedContact(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'contact',
     externalId: input.record.externalId,
     helpdockId: known?.helpdockId ?? id,

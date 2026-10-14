@@ -176,6 +176,7 @@ export async function loadImportedArticle(tx: DbTransaction, request: ArticleLoa
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'article',
     externalId: input.record.externalId,
     helpdockId: article.id,

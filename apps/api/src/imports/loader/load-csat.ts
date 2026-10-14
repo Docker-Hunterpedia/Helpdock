@@ -75,6 +75,7 @@ export async function loadImportedCsat(
     await rememberImported(tx, {
       brandId: input.brandId,
       source: input.source,
+      runId: input.runId,
       entity: 'csat',
       externalId: rating.externalId,
       helpdockId: id,

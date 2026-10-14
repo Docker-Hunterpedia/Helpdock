@@ -109,6 +109,7 @@ export async function loadImportedOrganization(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'organization',
     externalId: input.record.externalId,
     helpdockId: id,

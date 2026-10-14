@@ -62,6 +62,7 @@ async function insertImportedMessage(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'message',
     externalId: message.externalId,
     helpdockId: messageId,
@@ -94,6 +95,7 @@ async function updateImportedMessage(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'message',
     externalId: message.externalId,
     helpdockId: messageId,

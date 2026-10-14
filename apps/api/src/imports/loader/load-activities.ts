@@ -53,6 +53,7 @@ async function loadActivity(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'activity',
     externalId: event.externalId,
     helpdockId: activityId,

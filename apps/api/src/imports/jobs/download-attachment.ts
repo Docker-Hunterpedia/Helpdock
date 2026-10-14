@@ -65,7 +65,7 @@ async function reserveDownload(tx: DbTransaction, request: Request, source: stri
   )
     throw new ImportLoadError('mapping-invalid');
   const { ticketExternalId: _ticket, messageExternalId: _message, ...ref } = native.payload;
-  const scope = { brandId: claim.brandId, source: run.source };
+  const scope = { brandId: claim.brandId, runId: claim.runId, source: run.source };
   const pointer = await importedIdentity(tx, scope, 'attachment', ref.externalId);
   const hash = importAttachmentHash(ref);
   if (!pointer || pointer.payloadHash !== hash) throw new ImportLoadError('mapping-invalid');

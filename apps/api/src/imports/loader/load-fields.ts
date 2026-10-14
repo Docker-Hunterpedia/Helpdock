@@ -98,6 +98,7 @@ export async function loadImportedField(tx: DbTransaction, request: FieldLoad) {
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'field',
     externalId: input.record.externalId,
     helpdockId: id,

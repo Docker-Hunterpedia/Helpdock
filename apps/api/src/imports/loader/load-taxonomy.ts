@@ -104,6 +104,7 @@ export async function loadImportedCategory(tx: DbTransaction, request: CategoryL
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'category',
     externalId: input.record.externalId,
     helpdockId: id,
@@ -175,6 +176,7 @@ export async function loadImportedSection(tx: DbTransaction, request: SectionLoa
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'section',
     externalId: input.record.externalId,
     helpdockId: id,

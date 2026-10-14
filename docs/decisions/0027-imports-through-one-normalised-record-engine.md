@@ -429,3 +429,19 @@ and limits bodies buffered by knowledge conversion. Article load checkpoints
 record whether any version changed; unchanged repeat imports emit no event.
 Completion, event, audit and credential purge share a transaction. Search, page
 cache and knowledge subscribers handle the event; it has no webhook subscription.
+
+### 2026-10-14 — vendor account namespaces
+
+A vendor name alone does not identify the source: two Zendesk accounts can both
+contain ticket 42. Add a SHA-256 `source_account_key` to runs and the external-ID
+ledger, and include it in that ledger's primary key. Derive it from the vendor and
+its verified canonical account identifier, not from credentials, so credential
+rotation does not change identity. Resolve the namespace from the run inside the
+writer rather than trusting a client-supplied key. Dependency selectors, thread
+receipts and attachment identity lookups use that same namespace.
+
+Pre-existing unbound runs and ledger rows retain a reserved all-zero namespace;
+they are not silently attributed to an account. New connection and manual-file
+flows must bind an account namespace before extraction/loading. Delta binding
+requires a completed parent in the same brand, vendor and namespace. Binding may
+change only before records exist, and cannot change active or terminal runs.

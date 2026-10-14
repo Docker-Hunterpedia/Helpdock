@@ -73,6 +73,7 @@ async function nextRecord(tx: DbTransaction, request: z.infer<typeof requestSche
           AND parent.external_id = r.payload->>'translationOf' AND parent.status = 'loaded')
           OR EXISTS (SELECT 1 FROM import_external_ids pointer JOIN import_runs run ON run.id = r.run_id
             AND run.brand_id = r.brand_id WHERE pointer.brand_id = r.brand_id AND pointer.source = run.source
+            AND pointer.source_account_key = run.source_account_key
             AND pointer.entity = 'article' AND pointer.external_id = r.payload->>'translationOf'))
       ))
     ORDER BY r.id LIMIT 1

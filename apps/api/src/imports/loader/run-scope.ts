@@ -2,7 +2,7 @@ import { brands, type DbTransaction, importRuns } from '@helpdock/db';
 import { and, eq } from 'drizzle-orm';
 import { ImportLoadError } from './contracts.js';
 import type { ImportScope } from './external-ids.js';
-export type ImportRunScope = ImportScope & { runId: string };
+export type ImportRunScope = ImportScope;
 
 export async function requireLoadingRun(tx: DbTransaction, scope: ImportRunScope): Promise<void> {
   const [run] = await tx

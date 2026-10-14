@@ -129,6 +129,7 @@ export async function loadImportedStaff(
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,
+    runId: input.runId,
     entity: 'user',
     externalId: input.record.externalId,
     helpdockId: id,

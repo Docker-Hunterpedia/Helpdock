@@ -703,6 +703,7 @@ suite.
 import_runs
   id uuid pk, brand_id
   source import_source not null        -- zendesk | freshdesk | zohodesk | helpscout | intercom | gorgias | zammad | front | file
+  source_account_key char(64) not null -- verified account namespace; all-zero reserved for pre-existing unbound data
   mode import_mode not null            -- full | delta
   parent_run_id uuid null              -- the full run a delta continues
   status import_status not null        -- draft | connecting | extracting | awaiting_mapping | dry_run | ready | loading | finishing | completed | failed | cancelled | paused
@@ -739,9 +740,10 @@ import_mappings
 
 import_external_ids                    -- permanent; makes every run idempotent and deltas possible
   brand_id, source import_source, entity import_entity, external_id varchar(200),
+  source_account_key char(64) not null,
   helpdock_id uuid not null, source_url text null, source_number varchar(50) null,
   payload_hash char(64) not null, imported_at timestamptz
-  primary key (brand_id, source, entity, external_id)
+  primary key (brand_id, source, source_account_key, entity, external_id)
   index (brand_id, entity, helpdock_id)
 
 import_log
@@ -2091,6 +2093,32 @@ subscriber unit tests and the strict event-payload schema test cover registratio
 and input rejection. These primitives are not yet registered as BullMQ import
 handlers or exposed through the import API/UI; worker-kill and 500-ticket acceptance
 remain required.
+
+### Source-account identity checkpoint (M11-07/09/10, in progress)
+
+Migration `0064_import_source_accounts` adds `source_account_key` to runs and the
+external-ID ledger, validates lowercase SHA-256 shape, and extends the ledger's
+primary key. Pre-existing rows retain a reserved all-zero namespace; no old data
+is guessed to belong to a particular account. The migration adds columns before
+replacing the primary key and uses an explicit short constraint name.
+
+`bindImportSourceAccount` hashes the vendor and its verified canonical account
+identifier, excluding credentials. Only draft/connecting runs can bind; binding
+a different account after staging or during an active phase is refused. A delta
+must bind to its completed same-brand/vendor/account parent. The writer derives
+the namespace from the run for all identity reads and writes. Attachment upserts,
+thread child receipts and SQL dependency selectors use the same key, so native
+IDs from another account cannot satisfy a source dependency or overwrite targets.
+
+The real PostgreSQL/Redis writer suite covers distinct tickets, messages, contacts
+and attachments for two accounts with identical native IDs, an unchanged repeat,
+active/staged binding refusal, mismatched delta parents and a cross-account article
+dependency. Two unit cases cover stable account hashing and malformed input;
+32 database schema cases and 11 migration cases pass. Connection/API/manual-file
+flows still need to invoke binding before extraction/loading. A separate remaining
+message gap was identified: imported RFC Message-IDs still share the live-email
+unique index. That must be resolved without discarding the original headers before
+account isolation or the milestone can be marked complete.
 
 ## M11-13 Freshdesk connector
 

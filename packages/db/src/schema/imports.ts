@@ -37,6 +37,9 @@ export const importRuns = pgTable(
       .notNull()
       .references(() => brands.id, { onDelete: 'cascade' }),
     source: importSourceEnum('source').notNull(),
+    sourceAccountKey: char('source_account_key', { length: 64 })
+      .notNull()
+      .default('0000000000000000000000000000000000000000000000000000000000000000'),
     mode: importModeEnum('mode').notNull().default('full'),
     parentRunId: uuid('parent_run_id'),
     status: importStatusEnum('status').notNull().default('draft'),
@@ -61,6 +64,7 @@ export const importRuns = pgTable(
     pausedFrom: importStatusEnum('paused_from'),
   },
   (table) => [
+    check('import_runs_account_key_shape', sql`${table.sourceAccountKey} ~ '^[0-9a-f]{64}$'`),
     unique('import_runs_brand_id_key').on(table.brandId, table.id),
     foreignKey({
       columns: [table.brandId, table.parentRunId],
@@ -148,6 +152,9 @@ export const importExternalIds = pgTable(
       .notNull()
       .references(() => brands.id, { onDelete: 'cascade' }),
     source: importSourceEnum('source').notNull(),
+    sourceAccountKey: char('source_account_key', { length: 64 })
+      .notNull()
+      .default('0000000000000000000000000000000000000000000000000000000000000000'),
     entity: importEntityEnum('entity').notNull(),
     externalId: varchar('external_id', { length: 200 }).notNull(),
     helpdockId: uuid('helpdock_id').notNull(),
@@ -157,7 +164,20 @@ export const importExternalIds = pgTable(
     importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    primaryKey({ columns: [table.brandId, table.source, table.entity, table.externalId] }),
+    primaryKey({
+      name: 'import_external_ids_pk',
+      columns: [
+        table.brandId,
+        table.source,
+        table.sourceAccountKey,
+        table.entity,
+        table.externalId,
+      ],
+    }),
+    check(
+      'import_external_ids_account_key_shape',
+      sql`${table.sourceAccountKey} ~ '^[0-9a-f]{64}$'`,
+    ),
     check('import_external_ids_hash_shape', sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
     index('import_external_ids_helpdock_idx').on(table.brandId, table.entity, table.helpdockId),
     index('import_external_ids_number_idx').on(table.brandId, table.sourceNumber),

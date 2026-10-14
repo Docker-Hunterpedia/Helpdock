@@ -13,7 +13,12 @@ import { loadPreparedStagedRecord } from './load-prepared-record.js';
 const selectedSchema = z.array(z.object({ id: z.uuid() })).max(1);
 
 /** Select a ready pre-media record in SQL, so blocked rows do not hide later ready parents. */
-async function readyMetadata(tx: DbTransaction, claim: ImportClaim, source: string) {
+async function readyMetadata(
+  tx: DbTransaction,
+  claim: ImportClaim,
+  source: string,
+  sourceAccountKey: string,
+) {
   const rows = await tx.execute(sql`
     SELECT r.id FROM import_records r
     WHERE r.brand_id = ${claim.brandId}::uuid AND r.run_id = ${claim.runId}::uuid
@@ -39,7 +44,7 @@ async function readyMetadata(tx: DbTransaction, claim: ImportClaim, source: stri
                 AND parent.run_id = r.run_id AND parent.entity::text = dependency.entity
                 AND parent.external_id = dependency.external_id AND parent.status = 'loaded')
               OR EXISTS (SELECT 1 FROM import_external_ids pointer WHERE pointer.brand_id = r.brand_id
-                AND pointer.source::text = ${source} AND pointer.entity::text = dependency.entity
+                AND pointer.source::text = ${source} AND pointer.source_account_key = ${sourceAccountKey} AND pointer.entity::text = dependency.entity
                 AND pointer.external_id = dependency.external_id)
             )
           )
@@ -69,7 +74,10 @@ export async function loadNextStagedMetadata(
   if (claim.phase !== 'loading') throw new ImportClaimLost();
   await renewImportClaim(tx, claim);
   const predicate = and(eq(importRuns.id, claim.runId), eq(importRuns.brandId, claim.brandId));
-  const [run] = await tx.select({ source: importRuns.source }).from(importRuns).where(predicate);
+  const [run] = await tx
+    .select({ source: importRuns.source, sourceAccountKey: importRuns.sourceAccountKey })
+    .from(importRuns)
+    .where(predicate);
   if (!run) throw new ImportClaimLost();
   const failed = await tx
     .select({ id: importRecords.id })
@@ -83,7 +91,7 @@ export async function loadNextStagedMetadata(
     )
     .limit(1);
   if (failed.length) throw new ImportLoadError('mapping-invalid');
-  const selected = await readyMetadata(tx, claim, run.source);
+  const selected = await readyMetadata(tx, claim, run.source, run.sourceAccountKey);
   if (selected) {
     const loaded = await loadPreparedStagedRecord(tx, { ...parsed, recordId: selected.id });
     return { state: 'loaded' as const, recordId: selected.id, id: loaded.id };

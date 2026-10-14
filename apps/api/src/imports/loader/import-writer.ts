@@ -98,6 +98,7 @@ export class ImportWriter {
     await rememberImported(tx, {
       brandId: input.brandId,
       source: input.source,
+      runId: input.runId,
       entity: 'ticket',
       externalId: input.record.externalId,
       helpdockId: ticketId,

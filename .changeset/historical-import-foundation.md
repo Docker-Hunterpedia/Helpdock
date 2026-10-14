@@ -57,3 +57,5 @@ Refuse an attachment rejection receipt when its local target disappeared during 
 Include pending import credential envelopes in master-key rotation while preserving worker fencing nonces.
 
 Rebuild imported report history in resumable local-day chunks and atomically complete runs with credential purge and an audit record. Reindex changed imported help-center versions through a bounded run event; preserve draft visibility and avoid reindex events for unchanged repeat imports.
+
+Namespace imported native IDs by verified vendor account, keeping tickets, contacts, attachments and dependency references from different accounts separate and rejecting mismatched delta parents.

@@ -94,6 +94,7 @@ import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
+import { bindImportSourceAccount } from '../jobs/source-account.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -3462,6 +3463,224 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(
       articles.every((record) => record.status === 'staged' && record.helpdockId === null),
     ).toBe(true);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  async function boundAccountRun(account: string) {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'connecting',
+      startedBy: USER,
+    });
+    const key = await withSystem(app.db, BRAND, (tx) =>
+      bindImportSourceAccount(tx, { brandId: BRAND, runId, verifiedAccount: account }),
+    );
+    await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
+    return { runId, key };
+  }
+
+  it('separates identical ticket, message, contact and attachment IDs across accounts and reuses the original namespace on repeats', async () => {
+    const results = [];
+    for (const account of ['account-one', 'account-two', 'account-one']) {
+      const run = await boundAccountRun(account);
+      const scope = { brandId: BRAND, runId: run.runId, source: 'zendesk' as const };
+      const contact = await withSystem(app.db, BRAND, (tx) =>
+        writer.contact(
+          tx,
+          contactLoadSchema.parse({
+            ...scope,
+            record: {
+              externalId: 'namespace-customer',
+              name: account,
+              emails: [`${account}@namespace.example`],
+              phones: [],
+              custom: {},
+            },
+            accountId: null,
+            custom: {},
+          }),
+        ),
+      );
+      const input = request('namespace-ticket');
+      input.runId = run.runId;
+      input.record.subject = `${account} history`;
+      input.resolved.contactId = contact.id;
+      input.authors.customer = { kind: 'contact', id: contact.id };
+      const message = input.messages[0];
+      if (!message) throw new Error('Missing namespace message');
+      message.attachments = [
+        {
+          externalId: 'namespace-file',
+          fileName: `${account}.pdf`,
+          url: `https://vendor.example/${account}.pdf`,
+          contentType: 'application/pdf',
+        },
+      ];
+      const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+      results.push({ ...run, ...loaded, contactId: contact.id });
+    }
+    const [one, two, repeated] = results;
+    if (!one || !two || !repeated) throw new Error('Missing account outcomes');
+    expect(one.key).not.toBe(two.key);
+    expect(one.ticketId).not.toBe(two.ticketId);
+    expect(one.contactId).not.toBe(two.contactId);
+    expect(repeated).toMatchObject({
+      key: one.key,
+      ticketId: one.ticketId,
+      contactId: one.contactId,
+      outcome: 'unchanged',
+    });
+    expect(
+      (await owner.db.select().from(tickets).where(eq(tickets.id, one.ticketId)))[0]?.subject,
+    ).toBe('account-one history');
+    const pointers = await owner.db
+      .select()
+      .from(importExternalIds)
+      .where(
+        and(
+          eq(importExternalIds.brandId, BRAND),
+          eq(importExternalIds.externalId, 'namespace-file'),
+        ),
+      );
+    expect(pointers).toHaveLength(2);
+    expect(new Set(pointers.map((row) => row.sourceAccountKey)).size).toBe(2);
+    expect(new Set(pointers.map((row) => row.helpdockId)).size).toBe(2);
+    expect(
+      await owner.db
+        .select()
+        .from(ticketMessages)
+        .where(inArray(ticketMessages.ticketId, [one.ticketId, two.ticketId])),
+    ).toHaveLength(4);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('refuses rebinding active or staged runs and verifies delta parent account identity', async () => {
+    const original = await boundAccountRun('delta-account-one');
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        bindImportSourceAccount(tx, {
+          brandId: BRAND,
+          runId: original.runId,
+          verifiedAccount: 'delta-account-two',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed', finishedAt: new Date() })
+      .where(eq(importRuns.id, original.runId));
+    const deltaId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: deltaId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'connecting',
+      mode: 'delta',
+      parentRunId: original.runId,
+      startedBy: USER,
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        bindImportSourceAccount(tx, {
+          brandId: BRAND,
+          runId: deltaId,
+          verifiedAccount: 'delta-account-two',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        bindImportSourceAccount(tx, {
+          brandId: BRAND,
+          runId: deltaId,
+          verifiedAccount: 'delta-account-one',
+        }),
+      ),
+    ).toBe(original.key);
+    const stagedId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: stagedId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'connecting',
+      startedBy: USER,
+    });
+    const payload = { externalId: 'already-extracted', name: 'Group' };
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: stagedId,
+      entity: 'group',
+      externalId: payload.externalId,
+      payload,
+      payloadHash: hashImportValue(payload),
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        bindImportSourceAccount(tx, {
+          brandId: BRAND,
+          runId: stagedId,
+          verifiedAccount: 'another-account',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, stagedId)))[0]
+        ?.sourceAccountKey,
+    ).toBe('0'.repeat(64));
+  });
+
+  it('does not satisfy article dependencies from another account namespace', async () => {
+    const original = await stagedKnowledgeBatch('account-parent');
+    await runImportLoadBatch(
+      {
+        db: app.db,
+        jobId: 'import.account.parent',
+        prepareArticle: async ({ record }) => record.bodyHtml,
+      },
+      { claim: original.claim },
+    );
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed', claimToken: null, claimedAt: null, finishedAt: new Date() })
+      .where(eq(importRuns.id, original.runId));
+    const bound = await boundAccountRun('different-knowledge-account');
+    const record = importRecordSchema.parse({
+      entity: 'article',
+      payload: {
+        externalId: 'cross-account-translation',
+        translationOf: 'account-parent-primary',
+        sectionExternalId: 'account-parent-section',
+        locale: 'ar',
+        title: 'مقال',
+        bodyHtml: '<p>محتوى</p>',
+        draft: true,
+        internal: true,
+        createdAt: '2020-01-01T00:00:00Z',
+        updatedAt: '2020-01-02T00:00:00Z',
+      },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: bound.runId,
+      entity: record.entity,
+      externalId: record.payload.externalId,
+      payload: record.payload,
+      payloadHash: hashImportValue(record.payload),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId: bound.runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing cross-account claim');
+    await expect(
+      runImportLoadBatch({ db: app.db, jobId: 'import.account.dependency' }, { claim }),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(importRecords).where(eq(importRecords.runId, bound.runId)))[0]
+        ?.status,
+    ).toBe('staged');
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

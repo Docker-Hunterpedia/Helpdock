@@ -53,7 +53,7 @@ async function customerTarget(tx: DbTransaction, claim: ImportClaim, record: Cus
   if (!run) throw new ImportClaimLost();
   const pointer = await importedIdentity(
     tx,
-    { brandId: claim.brandId, source: run.source },
+    { brandId: claim.brandId, runId: claim.runId, source: run.source },
     'contact',
     record.payload.externalId,
   );

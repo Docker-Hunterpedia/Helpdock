@@ -2583,6 +2583,23 @@ no outbox work is emitted. The writer integration suite passes 145 tests.
 This is preflight groundwork; the full dry-run job, approval report and bilingual
 review UI remain unfinished.
 
+### Paged staged-record preflight (M11-10/16, in progress)
+
+The read-only record scanner now applies staged integrity, reference/hierarchy,
+ticket-routing and custom-value checks together with contact/company projections.
+It validates the run's brand and source, scans in entity/source-ID order with a
+continuation cursor, and checks 25 records by default (at most 50 per call).
+Results include the full issue count and at most 100 safe code/source-ID samples;
+provider payloads and exception messages are not returned. Reference failures are
+retained even when profile planning also fails. Unexpected database failures
+propagate rather than becoming a successful report.
+
+Real database tests prove continuation across a malformed row, end-of-scan
+behavior, wrong-source refusal, preserved reference errors, unchanged staging
+revisions and no profile or outbox writes. This scanner does not approve loading:
+whole-plan validation, media checks, durable dry-run job/report state, approval
+freshness and the review UI still need orchestration. M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

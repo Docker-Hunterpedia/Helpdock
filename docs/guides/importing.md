@@ -124,3 +124,8 @@ a separate source-company plan, including companies that would be created. They
 preserve existing local company links and refuse missing company references or
 references belonging to another source account. The complete dry-run workflow
 and its review UI remain under development.
+
+Staged-record preflight scans in bounded pages and reports safe source-record IDs
+and error codes for integrity, references, routing and profile-value failures.
+It changes neither staged statuses nor destination profiles. These page checks
+are part of the dry-run foundation; they do not authorize starting an import.

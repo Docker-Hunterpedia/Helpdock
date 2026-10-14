@@ -128,6 +128,7 @@ import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { previewImportedOrganization } from '../preflight/organization-plan.js';
+import { validateImportRecordPage } from '../preflight/record-page.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
@@ -6072,6 +6073,120 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('paginates preflight across malformed staged rows without changing profiles or staging', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Paged preflight', prefix: 'PPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    for (const externalId of ['a', 'b', 'c']) {
+      const record = organizationLoadSchema.parse({
+        brandId,
+        runId,
+        source: 'zendesk',
+        custom: {},
+        record: { externalId, name: 'Source company', domains: [], custom: {} },
+      }).record;
+      await owner.db.insert(importRecords).values({
+        brandId,
+        runId,
+        entity: 'organization',
+        externalId,
+        payload: record,
+        payloadHash: externalId === 'b' ? 'f'.repeat(64) : hashImportValue(record),
+      });
+    }
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${runId} ORDER BY id`,
+    );
+    const scope = { brandId, runId, source: 'zendesk' as const, batchSize: 1 };
+    const first = await withSystem(app.db, brandId, (tx) => validateImportRecordPage(tx, scope));
+    expect(first).toEqual({
+      checked: 1,
+      issueCount: 0,
+      issues: [],
+      next: { entity: 'organization', externalId: 'a' },
+    });
+    const second = await withSystem(app.db, brandId, (tx) =>
+      validateImportRecordPage(tx, { ...scope, after: first.next }),
+    );
+    expect(second).toEqual({
+      checked: 1,
+      issueCount: 1,
+      issues: [{ entity: 'organization', externalId: 'b', code: 'mapping-invalid' }],
+      next: { entity: 'organization', externalId: 'b' },
+    });
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        validateImportRecordPage(tx, { ...scope, after: second.next }),
+      ),
+    ).toEqual({ checked: 1, issueCount: 0, issues: [], next: null });
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        validateImportRecordPage(tx, { ...scope, source: 'freshdesk' }),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${runId} ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('retains missing-reference errors when contact profile planning also fails', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Reference preflight', prefix: 'RPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const record = contactLoadSchema.parse({
+      brandId,
+      runId,
+      source: 'zendesk',
+      accountId: null,
+      custom: {},
+      record: {
+        externalId: 'person',
+        name: 'Source person',
+        emails: [],
+        phones: [],
+        organizationExternalId: 'missing-company',
+        custom: {},
+      },
+    }).record;
+    await owner.db
+      .insert(importRecords)
+      .values({
+        brandId,
+        runId,
+        entity: 'contact',
+        externalId: record.externalId,
+        payload: record,
+        payloadHash: hashImportValue(record),
+      });
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        validateImportRecordPage(tx, { brandId, runId, source: 'zendesk' }),
+      ),
+    ).toEqual({
+      checked: 1,
+      issueCount: 2,
+      next: null,
+      issues: [
+        { entity: 'contact', externalId: 'person', code: 'reference-missing' },
+        { entity: 'contact', externalId: 'person', code: 'target-unavailable' },
+      ],
+    });
+    expect(await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId))).toEqual([]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

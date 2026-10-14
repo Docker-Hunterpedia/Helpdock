@@ -1,8 +1,9 @@
-import { type Db, type DbTransaction, importRuns } from '@helpdock/db';
+import { type Db, type DbTransaction, importRecords, importRuns } from '@helpdock/db';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { ImportLoadError } from '../loader/contracts.js';
+import { validateImportIdentityPlan } from '../preflight/identity-plan-state.js';
 import {
   importMappingPlanIssueSchema,
   validateImportMappingPlan,
@@ -22,8 +23,14 @@ const requestSchema = z.strictObject({
   defaultCallingCode: callingCodeSchema.default(''),
 });
 const checkpointSchema = z.strictObject({
-  version: z.literal(1),
-  phase: z.enum(['records', 'records_checked', 'plans_checked', 'invalidated']),
+  version: z.literal(2),
+  phase: z.enum([
+    'records',
+    'records_checked',
+    'plans_checked',
+    'identities_checked',
+    'invalidated',
+  ]),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   defaultCallingCode: callingCodeSchema,
   after: importRecordCursorSchema.nullable(),
@@ -33,9 +40,18 @@ const checkpointSchema = z.strictObject({
   mappingsChecked: z.int().nonnegative().default(0),
   planIssueCount: z.int().nonnegative().default(0),
   planIssues: z.array(importMappingPlanIssueSchema).max(100).default([]),
+  identityIssueCount: z.int().nonnegative().default(0),
+  identityIssues: z.array(importRecordIssueSchema).max(100).default([]),
 });
 const resultSchema = z.strictObject({
-  state: z.enum(['more', 'records_checked', 'plans_checked', 'invalidated', 'stopped']),
+  state: z.enum([
+    'more',
+    'records_checked',
+    'plans_checked',
+    'identities_checked',
+    'invalidated',
+    'stopped',
+  ]),
 });
 
 async function storeCheckpoint(
@@ -69,9 +85,31 @@ export async function runImportDryRunRecordBatch(
       const predicate = and(eq(importRuns.brandId, claim.brandId), eq(importRuns.id, claim.runId));
       const [run] = await tx.select().from(importRuns).where(predicate);
       if (!run) throw new ImportClaimLost();
+      if (
+        run.dryRunReport &&
+        z.object({ version: z.literal(1) }).safeParse(run.dryRunReport).success
+      ) {
+        await tx
+          .update(importRuns)
+          .set({
+            dryRunReport: null,
+            status: 'awaiting_mapping',
+            claimToken: null,
+            claimedAt: null,
+          })
+          .where(predicate);
+        return resultSchema.parse({ state: 'invalidated' });
+      }
+      if (!run.dryRunReport)
+        await tx
+          .update(importRecords)
+          .set({ dryRunIdentity: null })
+          .where(
+            and(eq(importRecords.brandId, claim.brandId), eq(importRecords.runId, claim.runId)),
+          );
       const prior = checkpointSchema.parse(
         run.dryRunReport ?? {
-          version: 1,
+          version: 2,
           phase: 'records',
           fingerprint: await importInputFingerprint(tx, scope),
           defaultCallingCode: request.defaultCallingCode,
@@ -83,6 +121,24 @@ export async function runImportDryRunRecordBatch(
       );
       if (prior.defaultCallingCode !== request.defaultCallingCode)
         throw new ImportLoadError('mapping-invalid');
+      if (prior.phase === 'plans_checked') {
+        const identities = await validateImportIdentityPlan(tx, { ...scope, source: run.source });
+        const phase =
+          (await importInputFingerprint(tx, scope)) === prior.fingerprint
+            ? 'identities_checked'
+            : 'invalidated';
+        await storeCheckpoint(
+          tx,
+          claim,
+          checkpointSchema.parse({
+            ...prior,
+            phase,
+            identityIssueCount: identities.issueCount,
+            identityIssues: identities.issues,
+          }),
+        );
+        return resultSchema.parse({ state: phase });
+      }
       if (prior.phase === 'records_checked') {
         const plan = await validateImportMappingPlan(tx, { ...scope, source: run.source });
         const phase =
@@ -108,6 +164,19 @@ export async function runImportDryRunRecordBatch(
         batchSize: request.batchSize,
         defaultCallingCode: prior.defaultCallingCode,
       });
+      for (const planned of page.identityPlans) {
+        await tx
+          .update(importRecords)
+          .set({ dryRunIdentity: planned.projection })
+          .where(
+            and(
+              eq(importRecords.brandId, claim.brandId),
+              eq(importRecords.runId, claim.runId),
+              eq(importRecords.id, planned.recordId),
+              eq(importRecords.payloadHash, planned.projection.inputHash),
+            ),
+          );
+      }
       const phase = page.next
         ? 'records'
         : (await importInputFingerprint(tx, scope)) === prior.fingerprint

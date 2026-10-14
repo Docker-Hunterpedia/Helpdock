@@ -12,6 +12,11 @@ import { ImportLoadError } from '../loader/contracts.js';
 import type { ImportScope } from '../loader/external-ids.js';
 import { previewImportedContactSource } from './contact-source-plan.js';
 import { previewImportedCustom } from './custom-values.js';
+import {
+  contactIdentityProjection,
+  importIdentityProjectionSchema,
+  organizationIdentityProjection,
+} from './identity-projection.js';
 import { previewImportedOrganization } from './organization-plan.js';
 import { validateImportReferences } from './record-references.js';
 import { validatedStagedRecord } from './staged-record.js';
@@ -38,21 +43,29 @@ const pageSchema = z.strictObject({
   issueCount: z.int().nonnegative(),
   issues: z.array(importRecordIssueSchema).max(100),
   next: importRecordCursorSchema.nullable(),
+  identityPlans: z
+    .array(z.strictObject({ recordId: z.uuid(), projection: importIdentityProjectionSchema }))
+    .max(50),
 });
 type Mapping = z.infer<typeof importMappingSchema>;
 
 async function profileIssues(
   tx: DbTransaction,
-  scope: ImportScope,
-  record: ImportRecord,
-  defaultCallingCode: string,
+  request: {
+    scope: ImportScope;
+    record: ImportRecord;
+    defaultCallingCode: string;
+    inputHash: string;
+  },
 ) {
+  const { scope, record, defaultCallingCode, inputHash } = request;
   if (record.entity === 'contact') {
-    await previewImportedContactSource(tx, {
+    const plan = await previewImportedContactSource(tx, {
       ...scope,
       record: record.payload,
       defaultCallingCode,
     });
+    return contactIdentityProjection({ externalId: record.payload.externalId, inputHash, plan });
   } else if (record.entity === 'organization') {
     const custom = await previewImportedCustom(tx, {
       ...scope,
@@ -72,7 +85,13 @@ async function profileIssues(
         custom: record.payload.custom,
         operation: 'create',
       });
+    return organizationIdentityProjection({
+      externalId: record.payload.externalId,
+      inputHash,
+      plan,
+    });
   }
+  return null;
 }
 
 async function recordIssues(
@@ -99,11 +118,18 @@ async function recordIssues(
         operation: 'patch',
       });
     }
-    await profileIssues(tx, scope, record, defaultCallingCode);
-    return codes;
+    const projection = await profileIssues(tx, {
+      scope,
+      record,
+      defaultCallingCode,
+      inputHash: row.payloadHash,
+    });
+    return { codes, projection };
   } catch (error) {
-    if (error instanceof ImportLoadError) return [...codes, error.code];
-    if (error instanceof z.ZodError) return [...codes, 'mapping-invalid'];
+    if (error instanceof ImportLoadError)
+      return { codes: [...codes, error.code], projection: null };
+    if (error instanceof z.ZodError)
+      return { codes: [...codes, 'mapping-invalid'], projection: null };
     throw error;
   }
 }
@@ -160,8 +186,15 @@ export async function validateImportRecordPage(
   const issues: z.infer<typeof importRecordIssueSchema>[] = [];
   let issueCount = 0;
   const page = rows.slice(0, batchSize);
+  const identityPlans: z.infer<typeof pageSchema>['identityPlans'] = [];
   for (const row of page) {
-    const codes = await recordIssues(tx, { scope, row, mappings, defaultCallingCode });
+    const { codes, projection } = await recordIssues(tx, {
+      scope,
+      row,
+      mappings,
+      defaultCallingCode,
+    });
+    if (projection) identityPlans.push({ recordId: row.id, projection });
     issueCount += codes.length;
     for (const code of codes)
       if (issues.length < 100)
@@ -172,6 +205,7 @@ export async function validateImportRecordPage(
     checked: page.length,
     issueCount,
     issues,
+    identityPlans,
     next:
       rows.length > batchSize && last ? { entity: last.entity, externalId: last.externalId } : null,
   });

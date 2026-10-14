@@ -2641,6 +2641,34 @@ definitions and no outbox work. The writer suite passes 150 tests.
 Complete contact/company collision phases, media/completeness checks, live-target
 approval freshness, job/HTTP entry points and the review UI remain unfinished.
 
+### Durable contact/company identity collision checks (M11-07/10/16, in progress)
+
+Migration `0066_import_dry_run_identity` adds a nullable identity projection to
+the existing FORCE-RLS `import_records` table; no new tenant table is introduced.
+Read-only record pages return bounded projections for successful contact/company
+plans. The dry-run worker commits these with its cursor and resets prior projections
+when starting a fresh scan. Projections contain the source payload hash, proposed
+destination and hashed normalized claims, never readable email/phone/domain values.
+The design is recorded in ADR 0027's identity-claim amendment.
+
+After mapping checks, Postgres groups claims by entity within the current brand/run.
+Distinct destinations sharing a claim flag every participating source exactly once;
+aliases targeting the same existing profile remain allowed. Unchanged receipts
+add no claims. The report stores the full affected-source count with at most 100
+samples and advances only to internal `identities_checked`, without approving loading.
+Internal checkpoint version 2 invalidates prior version-1 scans, which did not
+persist identity claims; those runs return to mapping review instead of treating
+missing projections as a successful collision check.
+
+Unit tests cover canonical claim hashing, source-independent claims, existing-target
+aliases and unchanged-receipt omission. Real database tests cover contact/company
+conflicts across separately committed pages, fresh-scan reset and existing-target
+aliases, compact projections without readable identities, full counts above the
+sample limit and source mismatch refusal. Validation passes 153 writer integration
+tests, two focused projection unit tests and all 887 RLS isolation tests.
+Media/completeness checks, live-target
+approval freshness, entry points and the review UI remain unfinished.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

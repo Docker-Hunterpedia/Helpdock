@@ -139,6 +139,14 @@ development.
 The internal dry run also checks live mapping destinations and combined field and
 invitation plans. Duplicate destination keys and invitation emails block the plan;
 diagnostics identify source records without exposing invitation email values.
-These checks create no fields or memberships and send no invitations. Contact and
-company collision checks, media completeness and final approval still need to be
+These checks create no fields or memberships and send no invitations. Media
+completeness and final approval still need to be
 connected before the dry-run workflow is available.
+
+The internal identity phase now detects contact/company collisions across scan
+pages. Different proposed destinations sharing an email, phone or domain require
+review; source aliases already targeting one existing profile are permitted.
+Reports include the total affected sources with up to 100 samples. Compact hashed
+claims stay in protected staging so the worker does not hold the complete profile
+graph in memory. Media completeness, final approval and the review UI still remain
+under development.

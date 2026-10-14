@@ -497,3 +497,23 @@ The Zendesk runtime starts conservatively with ten local tokens at 60 requests
 per minute. A local exhaustion delay refills the burst rather than only one
 token: resumed pages may need to re-read their parent and hydrate a child before
 writing the next cursor. Vendor Retry-After continues to take precedence.
+
+### 2026-10-14 — durable identity claims for dry-run collision checks
+
+Add nullable `import_records.dry_run_identity` to the existing brand-scoped,
+FORCE-RLS staging table. Each successful contact/company preflight stores a
+versioned projection: the staged payload hash, a proposed destination identifier
+(`new:<source-ID hash>` or `existing:<local UUID>`) and hashes of normalized identity
+claims. Contacts claim normalized email/phone values; companies claim normalized
+domains. An unchanged import receipt adds no claims because the loader adds no
+identities for it. The projection contains no readable email, phone or domain.
+
+Commit these projections with each record-scan checkpoint. Reset them when a new
+scan starts. Compare claims in Postgres across the current brand/run and entity,
+considering only projections matching their staged payload hash. A claim pointing
+at multiple proposed destinations blocks all participating source records; aliases
+pointing at one existing destination are allowed. Return the complete affected
+source count with at most 100 samples, without reading the complete identity graph
+into worker memory. This changes only staging; it does not merge people/companies
+or approve loading. Final approval must still validate input and live-target
+freshness, media completeness and the other dry-run checks.

@@ -109,6 +109,7 @@ export const importRecords = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     payloadHash: char('payload_hash', { length: 64 }).notNull(),
     loadHash: char('load_hash', { length: 64 }),
+    dryRunIdentity: jsonb('dry_run_identity').$type<Record<string, unknown>>(),
     status: importRecordStatusEnum('status').notNull().default('staged'),
     helpdockId: uuid('helpdock_id'),
     error: text('error'),

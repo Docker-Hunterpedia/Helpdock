@@ -126,6 +126,7 @@ import { previewImportedContact } from '../preflight/contact-plan.js';
 import { previewImportedContactSource } from '../preflight/contact-source-plan.js';
 import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
+import { validateImportIdentityPlan } from '../preflight/identity-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { previewImportedOrganization } from '../preflight/organization-plan.js';
@@ -6138,12 +6139,198 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       planIssueCount: 0,
     });
     expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
-      state: 'plans_checked',
+      state: 'identities_checked',
     });
     const [final] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
-    expect(final?.dryRunReport).toEqual(repeated?.dryRunReport);
+    expect(final?.dryRunReport).toMatchObject({ checked: 2, identityIssueCount: 0 });
+    expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
+      state: 'identities_checked',
+    });
+    const [terminal] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(terminal?.dryRunReport).toEqual(final?.dryRunReport);
     expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('finds contact and company collisions across committed dry-run pages while permitting aliases to existing profiles', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Identity plan', prefix: 'IPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+    for (const externalId of ['a', 'b']) {
+      const company = organizationLoadSchema.parse({
+        brandId,
+        runId,
+        source: 'zendesk',
+        custom: {},
+        record: { externalId, name: 'Company', domains: [' SHARED.TEST '], custom: {} },
+      }).record;
+      const person = contactLoadSchema.parse({
+        brandId,
+        runId,
+        source: 'zendesk',
+        custom: {},
+        accountId: null,
+        record: {
+          externalId,
+          name: 'Person',
+          emails: ['PERSON@SHARED.TEST'],
+          phones: [],
+          custom: {},
+        },
+      }).record;
+      await owner.db.insert(importRecords).values([
+        {
+          brandId,
+          runId,
+          entity: 'organization',
+          externalId,
+          payload: company,
+          payloadHash: hashImportValue(company),
+        },
+        {
+          brandId,
+          runId,
+          entity: 'contact',
+          externalId,
+          payload: person,
+          payloadHash: hashImportValue(person),
+        },
+      ]);
+    }
+    const claim = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing identity plan claim');
+    const deps = { db: app.db, jobId: 'dry-run-identities' };
+    for (let page = 0; page < 3; page++)
+      expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
+        state: 'more',
+      });
+    expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
+      state: 'records_checked',
+    });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'plans_checked' });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({
+      state: 'identities_checked',
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run?.dryRunReport).toMatchObject({
+      identityIssueCount: 4,
+      identityIssues: [
+        { entity: 'contact', externalId: 'a', code: 'contact-plan-ambiguous' },
+        { entity: 'contact', externalId: 'b', code: 'contact-plan-ambiguous' },
+        { entity: 'organization', externalId: 'a', code: 'organization-plan-ambiguous' },
+        { entity: 'organization', externalId: 'b', code: 'organization-plan-ambiguous' },
+      ],
+    });
+    const projections = await owner.db
+      .select({ projection: importRecords.dryRunIdentity })
+      .from(importRecords)
+      .where(eq(importRecords.runId, runId));
+    expect(projections).toHaveLength(4);
+    expect(JSON.stringify(projections)).not.toMatch(/person@shared\.test|shared\.test/i);
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId))).toEqual([]);
+    const accountId = uuidv7();
+    const contactId = uuidv7();
+    await owner.db
+      .insert(accounts)
+      .values({ id: accountId, brandId, name: 'Local company', domain: 'shared.test' });
+    await owner.db.insert(contacts).values({ id: contactId, brandId, name: 'Local person' });
+    await owner.db.insert(contactIdentities).values({
+      brandId,
+      contactId,
+      kind: 'email',
+      value: 'person@shared.test',
+      source: 'agent',
+      verified: false,
+    });
+    await owner.db.update(importRuns).set({ dryRunReport: null }).where(eq(importRuns.id, runId));
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'records_checked' });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'plans_checked' });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({
+      state: 'identities_checked',
+    });
+    const [linked] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(linked?.dryRunReport).toMatchObject({
+      checked: 4,
+      identityIssueCount: 0,
+      identityIssues: [],
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('invalidates old dry-run checkpoints that never persisted identity projections', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'dry_run',
+      startedBy: USER,
+      dryRunReport: { version: 1, phase: 'plans_checked' },
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing old checkpoint claim');
+    expect(
+      await runImportDryRunRecordBatch({ db: app.db, jobId: 'old-dry-run' }, { claim }),
+    ).toEqual({ state: 'invalidated' });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({
+      status: 'awaiting_mapping',
+      dryRunReport: null,
+      claimToken: null,
+      claimedAt: null,
+    });
+  });
+
+  it('counts all identity collision sources while returning at most one hundred samples', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', startedBy: USER });
+    await owner.db.insert(importRecords).values(
+      Array.from({ length: 102 }, (_, index) => {
+        const payload = {
+          externalId: `sample-${index}`,
+          name: 'Company',
+          domains: ['shared.test'],
+          custom: {},
+        };
+        const payloadHash = hashImportValue(payload);
+        return {
+          brandId: BRAND,
+          runId,
+          entity: 'organization' as const,
+          externalId: payload.externalId,
+          payload,
+          payloadHash,
+          dryRunIdentity: {
+            version: 1,
+            inputHash: payloadHash,
+            destination: `new:${payload.externalId}`,
+            claims: [hashImportValue({ domain: 'shared.test' })],
+          },
+        };
+      }),
+    );
+    const report = await withSystem(app.db, BRAND, (tx) =>
+      validateImportIdentityPlan(tx, { brandId: BRAND, runId, source: 'zendesk' }),
+    );
+    expect(report.issueCount).toBe(102);
+    expect(report.issues).toHaveLength(100);
+    expect(new Set(report.issues.map((issue) => issue.externalId)).size).toBe(100);
+    expect(report.issues.every((issue) => issue.code === 'organization-plan-ambiguous')).toBe(true);
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        validateImportIdentityPlan(tx, { brandId: BRAND, runId, source: 'freshdesk' }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
   });
 
   it('checkpoints mapping, field and invitation conflicts without provisioning or approving loading', async () => {
@@ -6328,6 +6515,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const scope = { brandId, runId, source: 'zendesk' as const, batchSize: 1 };
     const first = await withSystem(app.db, brandId, (tx) => validateImportRecordPage(tx, scope));
     expect(first).toEqual({
+      identityPlans: expect.any(Array),
       checked: 1,
       issueCount: 0,
       issues: [],
@@ -6337,6 +6525,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       validateImportRecordPage(tx, { ...scope, after: first.next }),
     );
     expect(second).toEqual({
+      identityPlans: expect.any(Array),
       checked: 1,
       issueCount: 1,
       issues: [{ entity: 'organization', externalId: 'b', code: 'mapping-invalid' }],
@@ -6346,7 +6535,13 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       await withSystem(app.db, brandId, (tx) =>
         validateImportRecordPage(tx, { ...scope, after: second.next }),
       ),
-    ).toEqual({ checked: 1, issueCount: 0, issues: [], next: null });
+    ).toEqual({
+      checked: 1,
+      issueCount: 0,
+      issues: [],
+      next: null,
+      identityPlans: expect.any(Array),
+    });
     await expect(
       withSystem(app.db, brandId, (tx) =>
         validateImportRecordPage(tx, { ...scope, source: 'freshdesk' }),
@@ -6398,6 +6593,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         validateImportRecordPage(tx, { brandId, runId, source: 'zendesk' }),
       ),
     ).toEqual({
+      identityPlans: expect.any(Array),
       checked: 1,
       issueCount: 2,
       next: null,

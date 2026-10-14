@@ -1,9 +1,9 @@
-import { Readable } from 'node:stream';
 import type { ImportAttachmentRef, ImportEntity, ImportRecord } from '@helpdock/schemas';
 import { importAttachmentRefSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { Connector, ConnectorContext, ImportCursor, ProposedMapping } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import { fetchZendeskAttachment } from './attachment-fetch.js';
 import { ZendeskClient } from './client.js';
 import { exportZendeskContacts } from './contacts-export.js';
 import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.js';
@@ -102,19 +102,8 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
     request: ImportAttachmentRef,
   ) {
     const ref = importAttachmentRefSchema.parse(request);
-    if (!ref.url) throw new ConnectorError('invalid-response');
     const client = new ZendeskClient(context, this.options.apiRoot);
-    const address = new URL(ref.url);
-    const response = await context.http.request(
-      ref.url,
-      address.origin === client.origin ? client.init() : { signal: context.signal },
-    );
-    const contentType = response.headers['content-type'];
-    return {
-      stream: Readable.from(response.body),
-      size: response.body.length,
-      ...(typeof contentType === 'string' ? { contentType } : {}),
-    };
+    return fetchZendeskAttachment(context, client, ref);
   }
 
   defaultMappings(sample: readonly ImportRecord[]): ProposedMapping[] {

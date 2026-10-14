@@ -8,7 +8,12 @@ import {
   importRuns,
   uuidv7,
 } from '@helpdock/db';
-import { type Connector, type ConnectorContext, hashImportValue } from '@helpdock/importers';
+import {
+  type Connector,
+  type ConnectorContext,
+  ConnectorError,
+  hashImportValue,
+} from '@helpdock/importers';
 import { importRecordSchema } from '@helpdock/schemas';
 import { and, eq, or } from 'drizzle-orm';
 import { z } from 'zod';
@@ -183,7 +188,8 @@ export async function downloadStagedImportAttachment<Credentials>(
       },
     );
   } catch (error) {
-    if (!(error instanceof PolicyRefusal)) {
+    const unavailable = error instanceof ConnectorError && error.code === 'record-unavailable';
+    if (!(error instanceof PolicyRefusal) && !unavailable) {
       // A revoked upload can finish after the next attempt's cleanup. Queue its key again,
       // while preserving any attempt still named by a live attachment row.
       await inRun((tx) =>
@@ -202,7 +208,11 @@ export async function downloadStagedImportAttachment<Credentials>(
       await renewImportClaim(tx, parsed.claim);
       const rejected = await tx
         .update(attachments)
-        .set({ status: 'rejected', rejectReason: error.reason, processedAt: new Date() })
+        .set({
+          status: 'rejected',
+          rejectReason: error instanceof PolicyRefusal ? error.reason : 'object_missing',
+          processedAt: new Date(),
+        })
         .where(
           and(
             eq(attachments.brandId, parsed.claim.brandId),
@@ -220,7 +230,7 @@ export async function downloadStagedImportAttachment<Credentials>(
         entity: 'attachment',
         externalId: snapshot.ref.externalId,
         level: 'warning',
-        message: 'import.attachment.rejected',
+        message: unavailable ? 'import.attachment.unavailable' : 'import.attachment.rejected',
       });
     });
     return resultSchema.parse({ state: 'rejected', attachmentId: snapshot.row.id });

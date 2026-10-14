@@ -185,6 +185,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     externalId: string,
     attachmentUrl = 'https://vendor.example/history.pdf',
     attachmentMime = 'application/pdf',
+    attachmentExternalId = `file-${externalId}`,
   ) {
     const input = request(externalId);
     input.runId = uuidv7();
@@ -196,7 +197,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     };
     input.csat = [rating];
     const attachment = {
-      externalId: `file-${externalId}`,
+      externalId: attachmentExternalId,
       fileName: 'history.pdf',
       contentType: attachmentMime,
       url: attachmentUrl,
@@ -6162,6 +6163,124 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       }
     },
   );
+
+  it('refreshes expired Zendesk media during a staged import and stores the original bytes once', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-refresh-'));
+    try {
+      const storage = new FakeStorage(dir);
+      const deps = downloadHarness(fake, storage);
+      const bytes = Buffer.from('%PDF-1.7\nExpired historical receipt');
+      const stable = fake.addAttachment('498483', bytes);
+      const initial = await deps.context.http.request(stable, {
+        headers: { authorization: 'Bearer synthetic-token' },
+      });
+      fake.expireDownloads();
+      const scenario = await stagedTicketScenario(
+        'expired-vendor-media',
+        initial.url,
+        'application/pdf',
+        '498483',
+      );
+      const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+        state: 'awaiting_media',
+        processed: 1,
+      });
+      const [row] = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.ticketId, loaded.ticketId));
+      if (!row) throw new Error('Missing refreshed attachment');
+      expect(row).toMatchObject({
+        status: 'processing',
+        originalName: 'history.pdf',
+        size: bytes.length,
+      });
+      expect(await storage.read(row.s3Key)).toEqual(bytes);
+      expect(
+        fake.server.calls.filter((call) => call.path === '/api/v2/attachments/498483'),
+      ).toHaveLength(1);
+      expect(
+        fake.server.calls
+          .filter((call) => call.path.startsWith('/cdn/'))
+          .every((call) => !call.authenticated),
+      ).toBe(true);
+      const calls = fake.server.calls.length;
+      expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+        state: 'awaiting_media',
+        processed: 0,
+      });
+      expect(fake.server.calls).toHaveLength(calls);
+      const events = await owner.db.select().from(outbox);
+      expect(events.filter((event) => event.event === 'attachment.uploaded')).toHaveLength(1);
+      expect(
+        events.every((event) =>
+          ['attachment.uploaded', 'media.objects.purge'].includes(event.event),
+        ),
+      ).toBe(true);
+      for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('retains a rejected placeholder when the vendor attachment is deleted and never fetches it again', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-missing-'));
+    try {
+      const scenario = await stagedTicketScenario(
+        'deleted-vendor-file',
+        `${fake.server.root}/missing-file`,
+      );
+      const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      const [record] = await owner.db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.runId, scenario.input.runId),
+            eq(importRecords.entity, 'attachment'),
+          ),
+        );
+      if (!record) throw new Error('Missing deleted attachment record');
+      const deps = downloadHarness(fake, new FakeStorage(dir));
+      const result = await downloadStagedImportAttachment(deps, {
+        claim: scenario.claim,
+        recordId: record.id,
+      });
+      expect(result.state).toBe('rejected');
+      expect(
+        (
+          await owner.db.select().from(attachments).where(eq(attachments.id, result.attachmentId))
+        )[0],
+      ).toMatchObject({
+        ticketId: loaded.ticketId,
+        status: 'rejected',
+        rejectReason: 'object_missing',
+        originalName: 'history.pdf',
+      });
+      expect(
+        (
+          await owner.db.select().from(importLog).where(eq(importLog.runId, scenario.input.runId))
+        ).map((row) => row.message),
+      ).toEqual(['import.attachment.unavailable']);
+      const calls = fake.server.calls.length;
+      expect(
+        await downloadStagedImportAttachment(deps, { claim: scenario.claim, recordId: record.id }),
+      ).toEqual(result);
+      expect(fake.server.calls).toHaveLength(calls);
+      const events = await owner.db.select().from(outbox);
+      expect(events.every((event) => event.event === 'media.objects.purge')).toBe(true);
+      for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it.each(['pdf', 'image'] as const)(
     'downloads a staged Zendesk $0 through safe HTTP, stores it and queues silent processing once',

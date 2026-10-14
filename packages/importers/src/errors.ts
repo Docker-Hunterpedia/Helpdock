@@ -9,6 +9,7 @@ export class RateLimited extends Error {
 
 /** Safe keys only: provider response bodies and credential-bearing URLs never become import log text. */
 export class ConnectorError extends Error {
+  readonly responseOrigin: string | undefined;
   constructor(
     readonly code:
       | 'credentials-refused'
@@ -16,8 +17,11 @@ export class ConnectorError extends Error {
       | 'invalid-response'
       | 'record-unavailable',
     readonly status?: number,
+    /** Sanitized final origin only; never a credential-bearing request URL. */
+    responseOrigin?: string,
   ) {
     super(code);
     this.name = 'ConnectorError';
+    this.responseOrigin = responseOrigin === undefined ? undefined : new URL(responseOrigin).origin;
   }
 }

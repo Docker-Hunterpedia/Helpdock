@@ -36,9 +36,13 @@ export class ImportHttp {
       throw new RateLimited(delay);
     }
     if ([401, 403].includes(response.status))
-      throw new ConnectorError('credentials-refused', response.status);
+      throw new ConnectorError(
+        'credentials-refused',
+        response.status,
+        new URL(response.url).origin,
+      );
     if ([404, 410].includes(response.status))
-      throw new ConnectorError('record-unavailable', response.status);
+      throw new ConnectorError('record-unavailable', response.status, new URL(response.url).origin);
     if (response.status >= 500) throw new ConnectorError('vendor-unavailable', response.status);
     if (response.status < 200 || response.status >= 300)
       throw new ConnectorError('invalid-response', response.status);

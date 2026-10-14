@@ -737,3 +737,82 @@ it('propagates rate limits and transient errors instead of yielding successful e
     retryAfterMs: 34000,
   });
 });
+
+it('refreshes an expired CDN URL by numeric attachment ID without leaking account credentials', async () => {
+  const stable = fake.addAttachment('498483', Buffer.from('refreshed history'));
+  const initial = await context.http.request(stable, {
+    headers: { authorization: 'Bearer synthetic-token' },
+  });
+  fake.expireDownloads();
+  const result = await connector.fetchAttachment(context, {
+    externalId: '498483',
+    fileName: 'receipt.pdf',
+    url: initial.url,
+  });
+  const chunks: Buffer[] = [];
+  for await (const chunk of result.stream) chunks.push(Buffer.from(chunk));
+  expect(Buffer.concat(chunks).toString()).toBe('refreshed history');
+  expect(
+    fake.server.calls.filter((call) => call.path === '/api/v2/attachments/498483'),
+  ).toHaveLength(1);
+  expect(
+    fake.server.calls
+      .filter((call) => call.path.startsWith('/cdn/'))
+      .every((call) => !call.authenticated),
+  ).toBe(true);
+});
+
+it('does not turn account authorization failure into a refresh loop', async () => {
+  const stable = fake.addAttachment('498485', Buffer.from('denied history'));
+  fake.server.failNext({ path: '/attachments/token/498485/file', status: 403 });
+  await expect(
+    connector.fetchAttachment(context, {
+      externalId: '498485',
+      fileName: 'receipt.pdf',
+      url: stable,
+    }),
+  ).rejects.toMatchObject({ code: 'credentials-refused' });
+  expect(fake.server.calls.some((call) => call.path.startsWith('/api/v2/attachments/'))).toBe(
+    false,
+  );
+});
+
+it('bounds refresh to one lookup when an attachment is deleted or its replacement remains unavailable', async () => {
+  const stable = fake.addAttachment('498486', Buffer.from('missing history'));
+  fake.server.failNext({ path: '/attachments/token/498486/file', status: 404 });
+  fake.server.failNext({ path: '/attachments/token/498486/file', status: 410 });
+  await expect(
+    connector.fetchAttachment(context, {
+      externalId: '498486',
+      fileName: 'receipt.pdf',
+      url: stable,
+    }),
+  ).rejects.toMatchObject({ code: 'record-unavailable' });
+  expect(
+    fake.server.calls.filter((call) => call.path === '/api/v2/attachments/498486'),
+  ).toHaveLength(1);
+  await expect(
+    connector.fetchAttachment(context, {
+      externalId: '999999',
+      fileName: 'deleted.pdf',
+      url: `${fake.server.root}/missing-file`,
+    }),
+  ).rejects.toMatchObject({ code: 'record-unavailable' });
+});
+
+it('rejects attachment metadata for another native ID', async () => {
+  fake.server.failNext({
+    path: '/api/v2/attachments/498487',
+    status: 200,
+    json: {
+      attachment: { id: 1, file_name: 'wrong.pdf', content_url: `${fake.server.root}/wrong` },
+    },
+  });
+  await expect(
+    connector.fetchAttachment(context, {
+      externalId: '498487',
+      fileName: 'receipt.pdf',
+      url: `${fake.server.root}/missing-file`,
+    }),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});

@@ -2264,8 +2264,19 @@ and must be refreshed through the account API, with a bounded retry.
 
 The stand-in now implements the documented Show Attachment response, mandatory
 account authentication and missing-resource 404s. Existing secure redirect/CDN
-controls remain. Connector refresh implementation follows this contract; retries
-must never loop or send account credentials to a non-account origin.
+controls remain. The connector now refreshes a failed external download once through authenticated
+Show Attachment metadata, validates the returned native ID, and downloads the
+fresh content_url without account credentials on external origins. Account-origin
+401/403 failures remain credential errors; 429 and vendor failures retain the
+normal retry behavior. Only the final response origin is retained in transport
+errors, excluding paths, queries and credentials.
+
+A missing or permanently unavailable attachment retains its original-name
+placeholder with `object_missing` and one `import.attachment.unavailable` warning.
+Repeated processing does not fetch or warn again. PostgreSQL/Redis integration
+covers expired URLs through storage and deleted files through placeholders;
+connector tests cover bounded retries, ID mismatch and redirect credential
+stripping. This checkpoint does not complete M11-10 or M11-12.
 
 ## M11-13 Freshdesk connector
 

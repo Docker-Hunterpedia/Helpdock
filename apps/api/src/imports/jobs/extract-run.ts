@@ -39,6 +39,7 @@ type ExtractionDependencies<Credentials> = {
   context: ConnectorContext<Credentials>;
   scope: ImportRunRef;
   jobId: string;
+  claim?: ImportClaim;
 };
 const logSchema = z.strictObject({
   level: z.enum(['info', 'warning', 'error']),
@@ -218,9 +219,16 @@ export async function runImportExtraction<Credentials>(
   const retryAt = extractionRetry(run.counts).retryAt;
   const delay = retryAt ? Date.parse(retryAt) - Date.now() : 0;
   if (delay > 0) return { state: 'deferred', retryAfterMs: delay };
-  const claim = await session.inRun((tx) =>
-    claimImportRun(tx, { ...session.scope, phase: 'extracting' }),
-  );
+  const claim =
+    deps.claim ??
+    (await session.inRun((tx) => claimImportRun(tx, { ...session.scope, phase: 'extracting' })));
+  if (
+    claim &&
+    (claim.phase !== 'extracting' ||
+      claim.brandId !== session.scope.brandId ||
+      claim.runId !== session.scope.runId)
+  )
+    throw new ImportClaimLost();
   if (!claim) return { state: 'deferred', retryAfterMs: 30000 };
   try {
     if (run.source !== deps.connector.source) throw new ConnectorError('invalid-response');

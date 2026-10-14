@@ -333,6 +333,7 @@ Import phase changes enqueue `import.work_requested` in their transaction. The
 outbox handler validates the request, checks the active phase/account binding and
 uses a job ID derived from the phase, run and outbox ID. An optional ISO
 `notBefore` becomes a delay; redelivery uses the same job ID. Paused, cancelled or
-otherwise stale requests add no work when handled. Import consumer/connection
-wiring remains in development; these definitions and the bridge alone do not
+otherwise stale requests add no work when handled. The import consumer dispatches phase drivers and publishes fenced continuation
+requests; production connector/connection and worker registration remain in
+development; these definitions and the bridge alone do not
 provide the complete migration worker.

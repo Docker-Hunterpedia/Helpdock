@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as waitForQueue } from 'node:timers/promises';
 import {
   accounts,
   attachments,
@@ -52,11 +53,11 @@ import {
   ZendeskConnector,
 } from '@helpdock/importers';
 import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
-import { importLoadJob } from '@helpdock/jobs';
+import { importLoadJob, JOB_DEFINITIONS } from '@helpdock/jobs';
 import { importEntitySchema, importRecordSchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { Queue } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
@@ -86,6 +87,7 @@ import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { runImportFinishBatch } from '../jobs/finish-batch.js';
 import { beginImportFinishing } from '../jobs/finish-readiness.js';
+import { createImportProcessor } from '../jobs/import-processor.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { runImportLoadBatch } from '../jobs/load-batch.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
@@ -3808,6 +3810,236 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       await queue.close();
       await connection.quit();
       await owner.db.delete(outbox).where(eq(outbox.id, eventId));
+    }
+  });
+
+  it('consumes staged history through real Redis phase jobs to terminal credential purge', async () => {
+    const scenario = await mappedHistoryScenario('queued-history');
+    const key = 'f'.repeat(64);
+    await owner.db
+      .update(importRuns)
+      .set({
+        sourceAccountKey: key,
+        claimToken: null,
+        claimedAt: null,
+        credentialsEncrypted: 'synthetic-envelope',
+      })
+      .where(eq(importRuns.id, scenario.input.runId));
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: key,
+      entity: 'contact',
+      externalId: 'customer',
+      helpdockId: CONTACT,
+      payloadHash: 'a'.repeat(64),
+    });
+    await owner.db
+      .delete(importRecords)
+      .where(
+        and(eq(importRecords.runId, scenario.input.runId), eq(importRecords.entity, 'attachment')),
+      );
+    const messages = await owner.db
+      .select()
+      .from(importRecords)
+      .where(
+        and(eq(importRecords.runId, scenario.input.runId), eq(importRecords.entity, 'message')),
+      );
+    for (const row of messages) {
+      const payload = { ...row.payload, attachments: [] };
+      await owner.db
+        .update(importRecords)
+        .set({ payload, payloadHash: hashImportValue(payload) })
+        .where(eq(importRecords.id, row.id));
+    }
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-queue-'));
+    const storage = new FakeStorage(dir);
+    const producerConnection = redis.duplicate({ maxRetriesPerRequest: null });
+    const workerConnection = redis.duplicate({ maxRetriesPerRequest: null });
+    const queueName = `m11-phases-${uuidv7()}`;
+    const queue = new Queue(queueName, { connection: producerConnection });
+    const failures: string[] = [];
+    const processor = createImportProcessor({
+      db: app.db,
+      storage,
+      resolve: async () => downloadHarness(fake, storage),
+    });
+    const worker = new Worker(queueName, processor, {
+      connection: workerConnection,
+      concurrency: 1,
+    });
+    worker.on('failed', (_job, error) => failures.push(error.message));
+    const delivered = new Set<string>();
+    const bridge = createImportWorkHandler({
+      add: async (step, payload, jobId, delay) => {
+        const definition = JOB_DEFINITIONS[`import.${step}`];
+        await queue.add(definition.name, payload, { ...definition.options, jobId, delay });
+      },
+    });
+    try {
+      await withSystem(app.db, BRAND, (tx) =>
+        enqueueImportWork(tx, { brandId: BRAND, runId: scenario.input.runId, step: 'load' }),
+      );
+      const deadline = Date.now() + 15000;
+      let status = '';
+      while (Date.now() < deadline) {
+        const events = await owner.db
+          .select()
+          .from(outbox)
+          .where(
+            and(
+              eq(outbox.event, 'import.work_requested'),
+              sql`${outbox.payload}->>'runId' = ${scenario.input.runId}`,
+            ),
+          );
+        for (const event of events)
+          if (!delivered.has(event.id)) {
+            await withSystem(app.db, BRAND, (tx) =>
+              bridge({
+                tx,
+                brandId: BRAND,
+                event: event.event,
+                payload: event.payload,
+                outboxId: event.id,
+                log: silentJobLogger,
+              }),
+            );
+            delivered.add(event.id);
+          }
+        status =
+          (
+            await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId))
+          )[0]?.status ?? '';
+        if (status === 'completed' || status === 'failed') break;
+        await waitForQueue(20);
+      }
+      expect(failures).toEqual([]);
+      expect(status).toBe('completed');
+      expect(
+        (
+          await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId))
+        )[0],
+      ).toMatchObject({ credentialsEncrypted: null, claimToken: null });
+      const [pointer] = await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(
+          and(
+            eq(importExternalIds.sourceAccountKey, key),
+            eq(importExternalIds.entity, 'ticket'),
+            eq(importExternalIds.externalId, 'queued-history'),
+          ),
+        );
+      if (!pointer) throw new Error('Missing queued historical ticket');
+      expect(
+        await owner.db
+          .select()
+          .from(ticketMessages)
+          .where(eq(ticketMessages.ticketId, pointer.helpdockId)),
+      ).toHaveLength(2);
+      expect(
+        await owner.db.select().from(outbox).where(sql`${outbox.event} <> 'import.work_requested'`),
+      ).toEqual([]);
+      expect(fake.server.calls).toEqual([]);
+    } finally {
+      await worker.close();
+      await queue.obliterate({ force: true });
+      await queue.close();
+      await workerConnection.quit();
+      await producerConnection.quit();
+      await owner.db
+        .delete(outbox)
+        .where(sql`${outbox.payload}->>'runId' = ${scenario.input.runId}`);
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('defers rate-limited phase jobs without terminal failure or credential purge', async () => {
+    const run = await boundAccountRun('queue-rate-limit');
+    await owner.db
+      .update(importRuns)
+      .set({ credentialsEncrypted: 'synthetic-envelope' })
+      .where(eq(importRuns.id, run.runId));
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-rate-'));
+    try {
+      const processor = createImportProcessor({
+        db: app.db,
+        storage: new FakeStorage(dir),
+        resolve: async () => {
+          throw new RateLimited(60000);
+        },
+      });
+      await processor({
+        name: 'import.attachments',
+        data: { brandId: BRAND, runId: run.runId },
+        id: 'rate-limited-fixture',
+      });
+      const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId));
+      expect(stored).toMatchObject({
+        status: 'loading',
+        claimToken: null,
+        credentialsEncrypted: 'synthetic-envelope',
+        finishedAt: null,
+      });
+      expect(Date.parse(String(stored?.counts.retryAt))).toBeGreaterThan(Date.now() + 50000);
+      const events = await owner.db.select().from(outbox);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.payload).toMatchObject({
+        step: 'attachments',
+        runId: run.runId,
+        notBefore: stored?.counts.retryAt,
+      });
+      expect(JSON.stringify(events)).not.toContain('synthetic-envelope');
+      await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${run.runId}`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('ends opaque phase failures with safe logs, one audit and credential purge', async () => {
+    const run = await boundAccountRun('queue-opaque-failure');
+    await owner.db
+      .update(importRuns)
+      .set({ credentialsEncrypted: 'synthetic-envelope' })
+      .where(eq(importRuns.id, run.runId));
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-failure-'));
+    try {
+      const processor = createImportProcessor({
+        db: app.db,
+        storage: new FakeStorage(dir),
+        resolve: async () => {
+          throw new Error('provider body contains private-token-fixture');
+        },
+      });
+      const job = {
+        name: 'import.attachments',
+        data: { brandId: BRAND, runId: run.runId },
+        id: 'opaque-failure-fixture',
+      };
+      await processor(job);
+      await processor(job);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
+      ).toMatchObject({
+        status: 'failed',
+        error: 'execution-failed',
+        credentialsEncrypted: null,
+        claimToken: null,
+      });
+      const logs = await owner.db.select().from(importLog).where(eq(importLog.runId, run.runId));
+      expect(logs.map((row) => row.message)).toEqual(['import.execution-failed']);
+      const audits = await owner.db
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.targetId, run.runId), eq(auditLog.action, 'import.failed')));
+      expect(audits).toHaveLength(1);
+      expect(JSON.stringify({ logs, audits })).not.toContain('private-token-fixture');
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 

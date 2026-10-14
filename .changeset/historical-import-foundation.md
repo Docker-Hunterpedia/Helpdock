@@ -63,3 +63,5 @@ Namespace imported native IDs by verified vendor account, keeping tickets, conta
 Preserve historical RFC Message-IDs without colliding with live-email deduplication. Refuse ambiguous imported thread references, prefer verified Helpdock/live references, reject header injection characters, and retain historical mail provenance in split copies.
 
 Define strict import phase jobs and schedule work through validated transactional outbox requests, with stable delayed delivery IDs and safeguards for paused, unbound or mismatched-account runs.
+
+Consume validated import phase jobs with fenced claim release/continuations, credential-retaining rate-limit deferral, and safe terminal failure logs, audit and credential purge.

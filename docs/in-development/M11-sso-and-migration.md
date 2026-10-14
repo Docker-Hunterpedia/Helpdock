@@ -2174,6 +2174,36 @@ worker startup cases and API/root typechecks pass.
 The import consumer, connection factory and resumable phase scheduling remain to
 be wired; no complete worker or process-kill acceptance is claimed yet.
 
+### Queue consumer and phase continuations (M11-10, in progress)
+
+`createImportProcessor` validates queue payloads before I/O, checks current
+phase/brand/account eligibility, claims the run and dispatches to extraction,
+loading, attachment or finish drivers. Extraction may consume the already-fenced
+claim so the consumer does not compete with itself for ownership. Load batches
+request more load work or attachments; settled attachments move to finishing;
+report chunks request further finish work until terminal cleanup.
+
+`continueImportWork` commits claim release and the next outbox request together.
+Rate-limit deferral retains credentials, stores its retry deadline and publishes
+a delayed phase request without failing the run. Known loader failures retain
+safe codes; opaque exceptions become execution-failed. Terminal consumer failure
+purges credentials/ownership and writes one safe import.failed log and audit.
+Paused/replaced workers cannot publish continuation or failure checkpoints.
+
+The writer suite passes 125 real PostgreSQL/Redis cases. A real BullMQ worker
+consumes staged history across load, attachments and report/finish jobs to
+completion, retaining both messages and purging credentials. Focused cases prove
+rate-limit claim release/deadlines and credential retention, terminal retries,
+safe exception handling and exactly one failure audit. Two consumer boundary
+unit cases reject malformed payloads and unrelated job names before I/O.
+
+This consumer accepts a connector resolver and article preparation dependency;
+production connector/worker registration remains unfinished. Article preparation
+is required rather than silently dropping remote images. Recovery after a process
+is killed between a domain batch and its continuation request still requires the
+recovery scheduler and actual process-kill acceptance test. Media 5xx/expired URL
+handling and the complete factory/preparation/API/UI path remain to be completed.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

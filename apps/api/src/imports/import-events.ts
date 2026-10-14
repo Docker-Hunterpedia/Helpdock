@@ -36,7 +36,12 @@ const phases = {
 } as const;
 type Step = z.infer<typeof stepSchema>;
 
-async function runnable(tx: DbTransaction, brandId: string, runId: string, step: Step) {
+export async function importWorkRunnable(
+  tx: DbTransaction,
+  brandId: string,
+  runId: string,
+  step: Step,
+) {
   const [run] = await tx
     .select({ id: importRuns.id })
     .from(importRuns)
@@ -60,7 +65,7 @@ async function runnable(tx: DbTransaction, brandId: string, runId: string, step:
 /** Start/resume/continuation callers enqueue in the same transaction as their phase checkpoint. */
 export async function enqueueImportWork(tx: DbTransaction, request: z.infer<typeof requestSchema>) {
   const { brandId, ...payload } = requestSchema.parse(request);
-  if (!(await runnable(tx, brandId, payload.runId, payload.step)))
+  if (!(await importWorkRunnable(tx, brandId, payload.runId, payload.step)))
     throw new ImportLoadError('mapping-invalid');
   return enqueueOutbox(tx, { brandId, event: IMPORT_WORK_REQUESTED_EVENT, payload });
 }
@@ -74,7 +79,7 @@ export const createImportWorkHandler =
   (queue: ImportWorkQueue, now = () => new Date()): OutboxEventHandler =>
   async ({ tx, brandId, payload, outboxId }) => {
     const work = payloadSchema.parse(payload);
-    if (!(await runnable(tx, brandId, work.runId, work.step))) return;
+    if (!(await importWorkRunnable(tx, brandId, work.runId, work.step))) return;
     const definition = definitions[work.step];
     const job = definition.schema.parse({ brandId, runId: work.runId });
     const delay = work.notBefore ? Math.max(0, Date.parse(work.notBefore) - now().getTime()) : 0;

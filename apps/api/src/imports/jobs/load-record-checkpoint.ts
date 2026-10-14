@@ -1,6 +1,6 @@
 import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { importEntitySchema, importRecordSchema } from '@helpdock/schemas';
+import { importRecordSchema } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { importedContactTarget } from '../loader/contact-target.js';
@@ -17,12 +17,8 @@ import { requireImportedStaffTarget } from '../loader/load-staff.js';
 import { contactLoadSchema, organizationLoadSchema } from '../loader/profile-contracts.js';
 import { resolveImportedCustom } from '../loader/resolve-custom-fields.js';
 import { staffLoadSchema } from '../loader/staff-contracts.js';
-import {
-  type ImportClaim,
-  ImportClaimLost,
-  importClaimSchema,
-  renewImportClaim,
-} from './claims.js';
+import { ImportClaimLost, importClaimSchema, renewImportClaim } from './claims.js';
+import { recordLoadProgress } from './record-load-progress.js';
 
 const operationSchema = z.discriminatedUnion('entity', [
   z.strictObject({ entity: z.literal('field'), input: fieldLoadSchema }),
@@ -123,25 +119,6 @@ async function requireLoadedTarget(tx: DbTransaction, operation: Operation, id: 
   return id;
 }
 
-async function recordProgress(
-  tx: DbTransaction,
-  claim: ImportClaim,
-  entity: Operation['entity'],
-  status: 'loaded' | 'skipped',
-) {
-  const predicate = and(eq(importRuns.id, claim.runId), eq(importRuns.brandId, claim.brandId));
-  const [run] = await tx.select({ counts: importRuns.counts }).from(importRuns).where(predicate);
-  if (!run) throw new ImportClaimLost();
-  const counts = z
-    .partialRecord(importEntitySchema, z.int().nonnegative())
-    .parse(run.counts[status] ?? {});
-  counts[entity] = (counts[entity] ?? 0) + 1;
-  await tx
-    .update(importRuns)
-    .set({ counts: { ...run.counts, [status]: counts } })
-    .where(predicate);
-}
-
 /** Source validation, domain writes, mapping receipt and progress commit under one worker claim. */
 export async function loadStagedRecord(tx: DbTransaction, request: RecordCheckpointRequest) {
   const { claim, recordId, operation } = requestSchema.parse(request);
@@ -185,6 +162,6 @@ export async function loadStagedRecord(tx: DbTransaction, request: RecordCheckpo
     .update(importRecords)
     .set({ status, helpdockId: loaded.id, loadHash, error: null })
     .where(predicate);
-  await recordProgress(tx, claim, operation.entity, status);
+  await recordLoadProgress(tx, claim, operation.entity, status);
   return { state: status, ...loaded };
 }

@@ -395,3 +395,15 @@ finishing after earlier cleanup requests cleanup again, while keys still named
 by rows remain protected. Derived variants follow the stored object folder,
 rather than rebuilding it from the logical attachment ID. Policy refusals keep
 an explicit rejected placeholder and a safe warning, without processing events.
+
+### 2026-10-14 — reference-only receipts
+
+Customer user records alias imported contacts rather than creating staff users.
+Group and tag records resolve confirmed run mappings rather than creating
+departments, teams or tags. Their staged receipts retain the resolved target and
+a hash of the payload and selection, with atomic progress and validated retries.
+They do not create global `import_external_ids` entries for these aliases: a
+customer pointer already exists as a contact, and group targets can be either
+departments or teams. Staff user records retain their existing identity handling.
+Contact aliases retain the original source pointer while validating the surviving
+contact after manual merges, preserving existing merge undo semantics.

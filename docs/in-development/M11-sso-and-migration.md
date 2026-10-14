@@ -1985,6 +1985,30 @@ These fixes address the inspected CI failures; aggregate CI and coverage require
 a new run and are not claimed green. The original 1.0 and extra-connector scope,
 remaining deliverables and exit criteria stay open.
 
+### Reference loading checkpoint (M11-09/10, in progress)
+
+The batch driver now consumes reference-only customer users, groups and tags.
+Customer users resolve the source contact pointer and validate the surviving
+contact after a manual merge; they never create staff accounts or roles. Groups
+resolve confirmed department/team mappings. Tags resolve confirmed tag mappings
+by source label; an explicit null target records a skip. Missing mappings,
+foreign-brand targets, erased contacts and changed retry selections fail rather
+than reporting completed records.
+
+Reference receipts, their selection hashes and progress counters commit in the
+same fenced transaction. A committed retry validates the target without adding
+counts. Reference rows do not add global user/group/tag pointers: contacts already
+carry the customer identity, and confirmed run mappings carry routing/tag targets.
+This avoids confusing customer references with staff users or departments with
+teams. See ADR 0027's reference-receipt amendment.
+
+The writer integration suite passes 105 cases on real PostgreSQL and Redis,
+including customer account isolation, reference retries, explicit tag skips,
+foreign department refusal and unresolved/orphan record failures. Domain-record
+completion still leaves the run loading; media processing and finalization remain
+required. CI found a generated configuration-guide mismatch; the rotation note
+now also lives in the `.env.example` comments used by the generator.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

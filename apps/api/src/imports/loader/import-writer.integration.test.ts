@@ -80,6 +80,7 @@ import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
 import { loadNextStagedMetadata } from '../jobs/load-next-metadata.js';
 import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
+import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
@@ -3454,6 +3455,149 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
+  it('loads customer user references through contacts without creating staff or replaying counts', async () => {
+    const runId = uuidv7();
+    const externalId = 'reference-customer';
+    const contactId = uuidv7();
+    await owner.db
+      .insert(contacts)
+      .values({ id: contactId, brandId: BRAND, name: 'Reference customer' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      entity: 'contact',
+      externalId,
+      helpdockId: contactId,
+      payloadHash: 'a'.repeat(64),
+    });
+    const payload = { externalId, kind: 'customer', name: 'Historical customer', active: true };
+    const [record] = await owner.db
+      .insert(importRecords)
+      .values({
+        brandId: BRAND,
+        runId,
+        entity: 'user',
+        externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })
+      .returning({ id: importRecords.id });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim || !record) throw new Error('Missing customer reference');
+    const usersBefore = await owner.db.select().from(users);
+    const rolesBefore = await owner.db.select().from(userBrandRoles);
+    expect(
+      await runImportLoadBatch({ db: app.db, jobId: 'import.reference.customer' }, { claim }),
+    ).toEqual({ state: 'records_loaded', processed: 1 });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        loadStagedReference(tx, { claim, recordId: record.id }),
+      ),
+    ).toEqual({ state: 'already_done', id: contactId });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ loaded: { user: 1 } });
+    expect(await owner.db.select().from(users)).toEqual(usersBefore);
+    expect(await owner.db.select().from(userBrandRoles)).toEqual(rolesBefore);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db
+      .update(contacts)
+      .set({ anonymisedAt: new Date() })
+      .where(eq(contacts.id, contactId));
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedReference(tx, { claim, recordId: record.id })),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+  });
+
+  it('checkpoints mapped group and explicit tag skips once without creating domain rows', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    const records = [
+      importRecordSchema.parse({
+        entity: 'group',
+        payload: { externalId: '42', name: 'Legacy support' },
+      }),
+      importRecordSchema.parse({
+        entity: 'tag',
+        payload: { externalId: '77', name: 'legacy-label' },
+      }),
+    ];
+    const staged = await owner.db
+      .insert(importRecords)
+      .values(
+        records.map((record) => ({
+          brandId: BRAND,
+          runId,
+          entity: record.entity,
+          externalId: record.payload.externalId,
+          payload: record.payload,
+          payloadHash: hashImportValue(record.payload),
+        })),
+      )
+      .returning({ id: importRecords.id, entity: importRecords.entity });
+    await owner.db.insert(importMappings).values([
+      {
+        brandId: BRAND,
+        runId,
+        kind: 'group',
+        externalValue: '42',
+        target: { departmentId: DEPARTMENT, teamId: null },
+      },
+      {
+        brandId: BRAND,
+        runId,
+        kind: 'tag',
+        externalValue: 'legacy-label',
+        target: { tagId: null },
+      },
+    ]);
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing reference claim');
+    const departmentsBefore = await owner.db.select().from(departments);
+    const tagsBefore = await owner.db.select().from(tags);
+    expect(
+      await runImportLoadBatch({ db: app.db, jobId: 'import.reference.batch' }, { claim }),
+    ).toEqual({ state: 'records_loaded', processed: 2 });
+    for (const record of staged) {
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          loadStagedReference(tx, { claim, recordId: record.id }),
+        ),
+      ).toEqual({ state: 'already_done', id: record.entity === 'group' ? DEPARTMENT : null });
+    }
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ loaded: { group: 1 }, skipped: { tag: 1 } });
+    expect(await owner.db.select().from(departments)).toEqual(departmentsBefore);
+    expect(await owner.db.select().from(tags)).toEqual(tagsBefore);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db
+      .update(importMappings)
+      .set({ target: { departmentId: OTHER_DEPARTMENT, teamId: null } })
+      .where(and(eq(importMappings.runId, runId), eq(importMappings.kind, 'group')));
+    const group = staged.find((row) => row.entity === 'group');
+    if (!group) throw new Error('Missing group receipt');
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadStagedReference(tx, { claim, recordId: group.id })),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({ loaded: { group: 1 }, skipped: { tag: 1 } });
+  });
+
   it.each(['group', 'message'] as const)(
     'keeps unresolved $0 records out of the completed-record boundary',
     async (entity) => {
@@ -3497,13 +3641,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       );
       if (!claim || !staged) throw new Error('Missing boundary fixture');
       const batch = runImportLoadBatch({ db: app.db, jobId: 'import.batch.reference' }, { claim });
-      if (entity === 'group')
-        expect(await batch).toEqual({
-          state: 'reference_required',
-          recordId: staged.id,
-          processed: 0,
-        });
-      else await expect(batch).rejects.toMatchObject({ code: 'mapping-invalid' });
+      await expect(batch).rejects.toMatchObject({ code: 'mapping-invalid' });
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0],
       ).toMatchObject({ status: 'loading', counts: {} });

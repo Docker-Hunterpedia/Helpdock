@@ -9,6 +9,7 @@ import { type ImportClaim, ImportClaimLost, importClaimSchema } from './claims.j
 import { loadAssembledStagedTicket } from './load-assembled-ticket.js';
 import { loadNextStagedMetadata } from './load-next-metadata.js';
 import { loadPreparedStagedRecord } from './load-prepared-record.js';
+import { loadStagedReference } from './load-reference.js';
 
 const requestSchema = z.strictObject({
   claim: importClaimSchema,
@@ -34,7 +35,7 @@ const resultSchema = z.discriminatedUnion('state', [
     processed: z.int().nonnegative(),
   }),
   z.strictObject({
-    state: z.enum(['article_required', 'reference_required']),
+    state: z.literal('article_required'),
     processed: z.int().nonnegative(),
     recordId: z.uuid(),
   }),
@@ -117,7 +118,8 @@ async function nextRecord(tx: DbTransaction, request: z.infer<typeof requestSche
   if (!remaining) return { state: 'records_loaded' as const };
   if (!['group', 'tag', 'user'].includes(remaining.entity))
     throw new ImportLoadError('mapping-invalid');
-  return { state: 'reference_required' as const, recordId: remaining.id };
+  await loadStagedReference(tx, { claim, recordId: remaining.id });
+  return { state: 'processed' as const };
 }
 
 /** Commits each record separately. Domain rows being loaded does not finish media or the run. */

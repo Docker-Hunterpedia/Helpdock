@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { importEntitySchema, importSourceSchema } from './import.js';
+import { importMappingsSchema } from './import-mappings.js';
 
 export const importRunParamSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
 export const importBrandParamSchema = z.strictObject({ brandId: z.uuid() });
@@ -92,3 +93,10 @@ export const importConnectionResultSchema = z.strictObject({
 export type ImportRunView = z.infer<typeof importRunViewSchema>;
 export type ImportRunCreate = z.infer<typeof importRunCreateSchema>;
 export type ImportConnectionRequest = z.infer<typeof importConnectionRequestSchema>;
+
+export const importMappingsRequestSchema = z.strictObject({ mappings: importMappingsSchema });
+export const importMappingsViewSchema = z.strictObject({
+  mappings: importMappingsSchema,
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type ImportMappingsRequest = z.infer<typeof importMappingsRequestSchema>;

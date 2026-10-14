@@ -99,6 +99,7 @@ import { runImportExtraction } from '../jobs/extract-run.js';
 import { runImportFinishBatch } from '../jobs/finish-batch.js';
 import { beginImportFinishing } from '../jobs/finish-readiness.js';
 import { createImportProcessor } from '../jobs/import-processor.js';
+import { importInputFingerprint } from '../jobs/input-fingerprint.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { runImportLoadBatch } from '../jobs/load-batch.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
@@ -6054,6 +6055,99 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('fingerprints staged inputs across pages without writing domain rows or changing source records', async () => {
+    const ticketsBefore = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`,
+    );
+    const scenario = await stagedTicketScenario('input-snapshot');
+    const scope = { brandId: BRAND, runId: scenario.input.runId };
+    const extra = Array.from({ length: 501 }, (_, index) => {
+      const payload = { externalId: `snapshot-tag-${index}`, name: `Tag ${index}` };
+      return {
+        ...scope,
+        entity: 'tag' as const,
+        externalId: payload.externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      };
+    });
+    await owner.db.insert(importRecords).values(extra);
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${scope.runId} ORDER BY id`,
+    );
+    const first = await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope));
+    expect(await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope))).toBe(first);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${scope.runId} ORDER BY id`,
+      ),
+    ).toEqual(before);
+    const [last] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(
+        and(eq(importRecords.runId, scope.runId), eq(importRecords.externalId, 'snapshot-tag-99')),
+      );
+    if (!last) throw new Error('Missing last-page snapshot record');
+    const changed = { ...last.payload, name: 'Corrected source tag' };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: changed, payloadHash: hashImportValue(changed) })
+      .where(eq(importRecords.id, last.id));
+    const second = await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope));
+    expect(second).not.toBe(first);
+    await owner.db
+      .update(importRuns)
+      .set({ counts: { retryFailures: 2 } })
+      .where(eq(importRuns.id, scope.runId));
+    expect(await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope))).toBe(second);
+    await owner.db.insert(importMappings).values({
+      ...scope,
+      kind: 'priority',
+      externalValue: 'normal',
+      target: { priority: 'normal' },
+    });
+    const third = await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope));
+    expect(third).not.toBe(second);
+    await owner.db.insert(importMappings).values(
+      Array.from({ length: 501 }, (_, index) => ({
+        ...scope,
+        kind: 'tag' as const,
+        externalValue: `snapshot-map-${index}`,
+        target: { tagId: null },
+      })),
+    );
+    const fourth = await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope));
+    expect(fourth).not.toBe(third);
+    await owner.db
+      .update(importMappings)
+      .set({ target: { tagId: uuidv7() } })
+      .where(
+        and(
+          eq(importMappings.runId, scope.runId),
+          eq(importMappings.externalValue, 'snapshot-map-99'),
+        ),
+      );
+    const fifth = await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope));
+    expect(fifth).not.toBe(fourth);
+    await owner.db
+      .update(importRuns)
+      .set({ options: { rebuildAllReports: true } })
+      .where(eq(importRuns.id, scope.runId));
+    expect(await withSystem(app.db, BRAND, (tx) => importInputFingerprint(tx, scope))).not.toBe(
+      third,
+    );
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) =>
+        importInputFingerprint(tx, { ...scope, brandId: OTHER_BRAND }),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`),
+    ).toEqual(ticketsBefore);
   });
 
   it('creates and tests a write-only connection, binds its account and starts extraction through the outbox atomically', async () => {

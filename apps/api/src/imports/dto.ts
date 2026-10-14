@@ -2,6 +2,8 @@ import {
   importBrandParamSchema,
   importConnectionRequestSchema,
   importConnectionResultSchema,
+  importMappingsRequestSchema,
+  importMappingsViewSchema,
   importRunCreateSchema,
   importRunListSchema,
   importRunParamSchema,
@@ -18,3 +20,6 @@ export class ImportRunListDto extends createZodDto(importRunListSchema) {}
 export class ImportConnectionResultDto extends createZodDto(importConnectionResultSchema) {}
 
 export class ImportScopeDto extends createZodDto(importScopeSchema) {}
+
+export class ImportMappingsRequestDto extends createZodDto(importMappingsRequestSchema) {}
+export class ImportMappingsViewDto extends createZodDto(importMappingsViewSchema) {}

@@ -149,6 +149,8 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ['POST', `${root()}/${id}/pause`, undefined],
       ['POST', `${root()}/${id}/resume`, undefined],
       ['POST', `${root()}/${id}/cancel`, undefined],
+      ['GET', `${root()}/${id}/mappings`, undefined],
+      ['PUT', `${root()}/${id}/mappings`, { mappings: [] }],
     ] as const;
     for (const [method, url, body] of routes) {
       expect((await call(method, url, undefined, body)).statusCode).toBe(401);
@@ -299,5 +301,38 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${run.id}`),
     ).toEqual([]);
     expect((await call('POST', `${root()}/${run.id}/cancel`, adminToken)).statusCode).toBe(200);
+  });
+  it('confirms mappings atomically, returns their input fingerprint and clears obsolete dry-run approval', async () => {
+    const created = await call('POST', root(), adminToken, { source: 'zendesk' });
+    expect(created.statusCode).toBe(201);
+    const run = created.json<ImportRunView>();
+    expect(
+      (await call('PUT', `${root()}/${run.id}/mappings`, adminToken, { mappings: [] })).statusCode,
+    ).toBe(409);
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'ready', dryRunReport: { approved: true } })
+      .where(eq(importRuns.id, run.id));
+    const mappings = [
+      { kind: 'priority', externalValue: 'urgent', target: { priority: 'urgent' } },
+    ];
+    const confirmed = await call('PUT', `${root()}/${run.id}/mappings`, adminToken, { mappings });
+    expect(confirmed.statusCode).toBe(200);
+    const result = confirmed.json<{ mappings: unknown[]; fingerprint: string }>();
+    expect(result.mappings).toEqual(mappings);
+    expect(result.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    const read = await call('GET', `${root()}/${run.id}/mappings`, adminToken);
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toEqual(result);
+    const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect(stored).toMatchObject({ status: 'awaiting_mapping', dryRunReport: null });
+    expect(
+      (
+        await call('PUT', `${root()}/${run.id}/mappings`, adminToken, {
+          mappings: [...mappings, ...mappings],
+        })
+      ).statusCode,
+    ).toBe(400);
+    expect((await call('GET', `${root()}/${run.id}/mappings`, adminToken)).json()).toEqual(result);
   });
 });

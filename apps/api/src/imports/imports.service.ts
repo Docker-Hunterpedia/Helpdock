@@ -1,23 +1,34 @@
 import { encryptSecret, type Keyring } from '@helpdock/config';
-import { auditLog, importRuns } from '@helpdock/db';
+import { auditLog, importMappings, importRuns } from '@helpdock/db';
 import type { Connector, ConnectorContext, ZendeskCredentials } from '@helpdock/importers';
 import {
   type ImportConnectionRequest,
+  type ImportMappingsRequest,
   type ImportRunCreate,
   type ImportScope,
   importConnectionRequestSchema,
   importConnectionResultSchema,
+  importMappingsRequestSchema,
+  importMappingsViewSchema,
   importRunCreateSchema,
   importRunListSchema,
   importScopeSchema,
 } from '@helpdock/schemas';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import { roleHasPermission } from '../auth/permissions.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { enqueueImportWork } from './import-events.js';
 import { importRunView } from './import-run-view.js';
 import { lockImportBrand } from './jobs/claims.js';
+import { importInputFingerprint } from './jobs/input-fingerprint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-control.js';
+import { ImportMappingEditError, saveImportMappings } from './jobs/save-mappings.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
 import { ImportLoadError } from './loader/contracts.js';
 
@@ -162,6 +173,45 @@ export class ImportsService {
       runId,
     );
     return this.get(context, runId);
+  }
+  async mappings(context: TicketingContext, runId: string) {
+    await lockImportBrand(context.tx, context.brandId);
+    const run = await this.get(context, runId);
+    if (!['awaiting_mapping', 'ready'].includes(run.status))
+      throw new ConflictException('import.phase-invalid');
+    const rows = await context.tx
+      .select({
+        kind: importMappings.kind,
+        externalValue: importMappings.externalValue,
+        target: importMappings.target,
+      })
+      .from(importMappings)
+      .where(and(eq(importMappings.brandId, context.brandId), eq(importMappings.runId, runId)))
+      .orderBy(importMappings.kind, importMappings.externalValue);
+    return importMappingsViewSchema.parse({
+      mappings: rows,
+      fingerprint: await importInputFingerprint(context.tx, { brandId: context.brandId, runId }),
+    });
+  }
+  async confirmMappings(context: TicketingContext, runId: string, raw: ImportMappingsRequest) {
+    const input = importMappingsRequestSchema.parse(raw);
+    if (
+      input.mappings.some(
+        (mapping) => mapping.kind === 'agent' && mapping.target.kind === 'invited',
+      ) &&
+      !roleHasPermission(context.actor.role, 'staff:manage')
+    )
+      throw new ForbiddenException('import.staff-permission-required');
+    await this.get(context, runId);
+    try {
+      await saveImportMappings(context.tx, { brandId: context.brandId, runId }, input.mappings);
+    } catch (error) {
+      if (error instanceof ImportMappingEditError)
+        throw new ConflictException('import.phase-invalid');
+      throw error;
+    }
+    await this.audit(context, 'import.mappings-confirmed', runId);
+    return this.mappings(context, runId);
   }
   private async audit({ tx, brandId, actor }: TicketingContext, action: string, runId: string) {
     await tx.insert(auditLog).values({

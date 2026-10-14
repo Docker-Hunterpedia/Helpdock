@@ -2351,6 +2351,30 @@ and repeated starts. Date-range filtering, pagination, mapping/dry-run/start/log
 routes, dry-run recovery and browser flows remain unfinished. M11-10/16 remain
 in progress.
 
+### Mapping confirmation and input snapshot (M11-10/16, in progress)
+
+GET/PUT mappings now return confirmed mappings and an input fingerprint. Both
+routes require brand:manage; invited-agent confirmation also checks staff:manage.
+The existing replacement engine validates unique kind/source keys, batches writes,
+returns ready runs to awaiting_mapping and removes obsolete dry-run reports.
+Automatic proposals remain pending; GET currently returns confirmed mappings only.
+
+The fingerprint holds the brand lock and scans metadata in 500-row pages ordered
+by existing run/entity/external-ID and run/kind/external-value indexes. It covers
+source/account/mode/parent/options and staged IDs, parents, hashes, status and
+mapping targets. Retry/lease progress and credentials are excluded. It returns only
+a SHA-256 value, never source payloads or secrets. This is an input snapshot;
+payload/hash integrity, relationships, live target state and completeness still
+need the read-only dry-run validator. No approval/start route is added yet.
+
+Real database coverage changes records and mappings beyond the first page,
+verifies stable repeated reads and retry-metadata exclusion, refuses another
+brand, and proves unchanged source-row/ticket revisions and no outbox events.
+Real-session HTTP coverage checks all eleven registered routes, mapping replacement,
+duplicate refusal and obsolete report invalidation. The three-ticket/contact
+preview, attachment availability, semantic validation and approval enforcement
+remain unfinished. M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

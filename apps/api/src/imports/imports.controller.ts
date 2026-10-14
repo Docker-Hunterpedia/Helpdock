@@ -6,6 +6,8 @@ import {
   ImportBrandParamDto,
   ImportConnectionRequestDto,
   ImportConnectionResultDto,
+  ImportMappingsRequestDto,
+  ImportMappingsViewDto,
   ImportRunCreateDto,
   ImportRunListDto,
   ImportRunParamDto,
@@ -83,5 +85,20 @@ export class ImportsController {
   @ZodSerializerDto(ImportRunViewDto)
   cancel(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
     return this.imports.control(requireTicketingContext(), runId, 'cancel');
+  }
+  @Get(':runId/mappings')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingsViewDto)
+  mappings(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.mappings(requireTicketingContext(), runId);
+  }
+  @Put(':runId/mappings')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingsViewDto)
+  confirmMappings(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Body(new ZodValidationPipe(ImportMappingsRequestDto)) body: ImportMappingsRequestDto,
+  ) {
+    return this.imports.confirmMappings(requireTicketingContext(), runId, body);
   }
 }

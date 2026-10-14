@@ -22,6 +22,8 @@ validated with Zod and included in the generated OpenAPI document.
 | POST | `/:runId/pause` | Revoke an active worker claim and retain credentials |
 | POST | `/:runId/resume` | Resume extraction/loading/finishing with a transactional work request |
 | POST | `/:runId/cancel` | Stop further work and purge credentials |
+| GET | `/:runId/mappings` | Confirmed mappings and their current input fingerprint |
+| PUT | `/:runId/mappings` | Replace confirmed mappings and invalidate an older dry-run report |
 
 Only the Zendesk factory is currently registered. A connection request has
 `credentials` and `downloadHosts`. OAuth credentials contain `auth: "oauth"`,
@@ -42,8 +44,24 @@ with its state change, and eventually stops at `awaiting_mapping`.
 
 Scope updates accept nonempty, unique `entities` and `rebuildAllReports`; saved
 scope appears in run reads. Connection updates preserve it. Scope is frozen once
-extraction starts. Date-range filtering, mapping, dry-run and load approval are
-pending. Resume of a paused dry-run is refused until its consumer is implemented.
+extraction starts. Date-range filtering, automatic mapping proposals, dry-run and load approval are
+pending. Mapping confirmation is available after extraction; automatic mapping
+proposals and the read-only dry-run validator are still pending. Resume of a paused dry-run is refused until its consumer is implemented.
 Cancel does not remove history already imported. Imports preserve original history through the direct writer and must not
 send customer communications or start SLA timers. The completed cutover runbook
 and vendor-specific acceptance evidence will be added with those workflows.
+
+## Mapping confirmation checkpoint
+
+PUT mappings takes `{ "mappings": [...] }`, with the documented status, priority,
+channel, group, agent, field and tag target shapes from the shared import schemas.
+Each kind/source-value pair is unique. Invited-agent mappings additionally require
+`staff:manage`. Saving from awaiting_mapping or ready returns to awaiting_mapping
+and clears the previous dry-run report. Edits during extraction/loading are refused.
+
+The returned fingerprint covers the run's source account/options, staged record
+identifiers/hashes/parents/status and confirmed mappings. It is a paged metadata
+snapshot, not a validation result or authorization to start loading. It does not
+fetch attachments or create contacts, tickets, staff or fields. The pending dry-run
+validator must verify actual payload integrity, relationships, destination targets
+and completeness before approving a report.

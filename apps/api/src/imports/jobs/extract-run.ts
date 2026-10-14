@@ -72,11 +72,14 @@ class ExtractionSession<Credentials> {
       },
     };
   }
-  async since(run: typeof importRuns.$inferSelect): Promise<Date | undefined> {
-    if (run.mode !== 'delta') return undefined;
+  async delta(run: typeof importRuns.$inferSelect): Promise<{
+    since: Date | undefined;
+    cursors: z.infer<typeof extractionCheckpointsSchema>;
+  }> {
+    if (run.mode !== 'delta') return { since: undefined, cursors: {} };
     const [parent] = await this.inRun((tx) =>
       tx
-        .select({ startedAt: importRuns.startedAt })
+        .select({ startedAt: importRuns.startedAt, cursors: importRuns.cursors })
         .from(importRuns)
         .where(
           and(
@@ -88,7 +91,10 @@ class ExtractionSession<Credentials> {
         ),
     );
     if (!parent?.startedAt) throw new ConnectorError('invalid-response');
-    return new Date(parent.startedAt.getTime() - 3600000);
+    return {
+      since: new Date(parent.startedAt.getTime() - 3600000),
+      cursors: extractionCheckpointsSchema.parse(parent.cursors),
+    };
   }
   async *pages(
     claim: ImportClaim,
@@ -118,7 +124,7 @@ class ExtractionSession<Credentials> {
     claim: ImportClaim,
     context: ConnectorContext<Credentials>,
     entity: z.infer<typeof importEntitySchema>,
-    since: Date | undefined,
+    delta: { since: Date | undefined; deltaCursor: ImportCursor | undefined },
   ): Promise<void> {
     const run = await this.inRun(async (tx) => {
       await renewImportClaim(tx, claim);
@@ -133,8 +139,8 @@ class ExtractionSession<Credentials> {
     let done = false;
     for await (const page of this.pages(claim, context, {
       entity,
-      cursor: previous?.cursor ?? null,
-      since,
+      cursor: previous?.cursor ?? delta.deltaCursor ?? null,
+      since: delta.since,
     })) {
       context.signal.throwIfAborted();
       if (done || (page.cursor !== null && seen.has(hashImportValue(page.cursor))))
@@ -213,11 +219,15 @@ export async function runImportExtraction<Credentials>(
   if (!claim) return { state: 'deferred', retryAfterMs: 30000 };
   try {
     if (run.source !== deps.connector.source) throw new ConnectorError('invalid-response');
-    const available = z.array(importEntitySchema).min(1).max(13).parse(deps.connector.entities);
+    const available = z
+      .array(importEntitySchema)
+      .min(1)
+      .max(importEntitySchema.options.length)
+      .parse(deps.connector.entities);
     const selected = z
       .array(importEntitySchema)
       .min(1)
-      .max(13)
+      .max(importEntitySchema.options.length)
       .parse(run.options.entities ?? available);
     if (
       new Set(selected).size !== selected.length ||
@@ -225,8 +235,12 @@ export async function runImportExtraction<Credentials>(
     )
       throw new ConnectorError('invalid-response');
     const context = session.context(claim);
-    const since = await session.since(run);
-    for (const entity of selected) await session.entity(claim, context, entity, since);
+    const delta = await session.delta(run);
+    for (const entity of selected)
+      await session.entity(claim, context, entity, {
+        since: delta.since,
+        deltaCursor: delta.cursors[entity]?.deltaCursor,
+      });
     await session.inRun((tx) => completeExtraction(tx, claim));
     return { state: 'awaiting_mapping' };
   } catch (error) {

@@ -813,7 +813,7 @@ importGroupSchema       { externalId, name }
 importFieldSchema       { externalId, target: 'ticket'|'contact'|'organization', key, label, type: 'text'|'textarea'|'number'|'date'|'checkbox'|'select'|'multiselect', options?: {value,label}[] }
 importTicketSchema      { externalId, number?: string, subject, status: string, priority?: string, channel?: string,
                           requesterExternalId?, assigneeExternalId?, groupExternalId?, organizationExternalId?,
-                          ccEmails: string[], tags: string[], custom: Record<string, unknown>,
+                          ccEmails: string[], ccExternalIds?: string[], tags: string[], custom: Record<string, unknown>,
                           createdAt, updatedAt, solvedAt?, closedAt?, sourceUrl? }
 importMessageSchema     { externalId, ticketExternalId, authorExternalId?, authorKind: 'agent'|'customer'|'system',
                           public: boolean, bodyHtml?, bodyText?, createdAt, via?: string,
@@ -987,7 +987,8 @@ mapping keys. Brand ownership is checked before tagging; source tag changes
 replace the selection without recreating tags that remain. CC addresses are
 normalized and deduplicated, reuse their brand's identities without changing
 verification, exclude the requester, and create unverified import contacts when
-needed. Deltas add new CCs and retain existing participants.
+needed. Deltas reconcile source-owned CCs while retaining manually added participants
+(see the source-identity CC checkpoint below).
 
 Migration `0056_imported_csat` separates historical ratings from live surveys
 using source/external-ID provenance. It preserves original rating times, permits
@@ -1136,6 +1137,23 @@ repeat/delta, invalid authors/parents and staged checkpoints. Boundary unit case
 cover parent association, duplicate event IDs and inert actor/event values. Connector audit conversion,
 imported-event presentation and complete end-to-end acceptance remain pending.
 
+### Source-identity CC checkpoint (M11-08/09, in progress)
+
+Tickets can retain `ccExternalIds` when a vendor returns user references instead
+of email addresses. Each requires an explicit `resolved.ccContacts` mapping;
+missing, duplicate or unexpected mappings are refused. Targets must be active
+same-brand contacts, not erased or merged profiles. Identity-only CCs retain a
+null address; no email is invented. Participant provenance gains `import` in the
+database and public response schema (migration `0060_imported_participant_source.sql`).
+Email-derived imported CCs use this provenance too. An available source email can
+fill an imported participant's missing address. Delta replaces only source-owned
+CC membership; manually added participants and their addresses remain intact.
+Creating an email-only contact validates required custom fields rather than
+bypassing contact rules. Three real PostgreSQL/Redis cases cover source IDs,
+foreign targets, repeat/no-write, email completion, delta/manual preservation and
+required-field rollback. This prepares source relationship conversion; vendor
+hydration and the wizard's completeness presentation remain unimplemented.
+
 ## M11-10 Import jobs
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,
@@ -1264,21 +1282,35 @@ New workspace `packages/importers` (`@helpdock/importers`), depending on
 
 ```ts
 export interface Connector<Credentials> {
-  readonly source: ImportSource;
+  readonly source: Exclude<ImportSource, 'file'>;
   readonly credentialsSchema: z.ZodType<Credentials>;
   readonly entities: readonly ImportEntity[];            // what this source can export
-  test(ctx: ConnectorContext<Credentials>): Promise<{ ok: true; account: string } | { ok: false; reason: ConnectorRefusal }>;
-  extract(ctx, entity: ImportEntity, cursor: Cursor | null, since?: Date): AsyncIterable<{ records: ImportRecord[]; cursor: Cursor | null }>;
-  fetchAttachment(ctx, ref: ImportAttachmentRef): Promise<{ stream: Readable; contentType?: string; size?: number }>;
-  defaultMappings(sample: StagedSample): ProposedMappings;
+  test(ctx: ConnectorContext<Credentials>): Promise<{ ok: true; account: string } | { ok: false; reason: 'credentials-refused' | 'vendor-unavailable' | 'invalid-response' }>;
+  extract(ctx: ConnectorContext<Credentials>, entity: ImportEntity, cursor: ImportCursor | null, since?: Date): AsyncIterable<ImportPage>;
+  fetchAttachment(ctx: ConnectorContext<Credentials>, ref: ImportAttachmentRef): Promise<{ stream: Readable; contentType?: string; size?: number }>;
+  defaultMappings(sample: readonly ImportRecord[]): ProposedMapping[];
 }
 ```
 
 `ConnectorContext` carries the decrypted credentials, an `http` client (safeFetch
-with `policies.importer`: the vendor's host allow-list, 30 s total, 50 MB for
-attachments, redirects re-validated), a `rateLimiter` (token bucket per run, and
-`Retry-After` → `RateLimited`), a logger that writes `import_log`, and an abort
+with the vendor's host allow-list, 30 s total and a hard 50 MiB response cap,
+redirects re-validated). The HTTP client owns its token bucket and maps
+`Retry-After` to `RateLimited`; the context also carries a run-scoped logger and an abort
 signal.
+
+### Durable delta watermark checkpoint (M11-10/11, in progress)
+
+The SDK separates the current run's continuation (`cursor`) from the next delta's
+vendor watermark (`deltaCursor`). A final page has `cursor: null` and may retain a
+`deltaCursor`, committed with its records/counts. Non-final watermarks and
+inconsistent persisted done/cursor states are rejected. Delta extraction reads
+the completed same-brand/same-vendor parent's entity watermark; a resumed child
+uses its own committed continuation first. The parent's start-minus-one-hour
+timestamp remains a reconciliation fallback for connectors without watermarks.
+Three focused real PostgreSQL/Redis cases and three boundary cases pass.
+Entity bounds now derive from the shared enum, including activity, instead of a
+stale hard-coded thirteen. Source-account binding and complete vendor traversal
+remain required before this mechanism is exposed through the migration wizard.
 
 **Stand-ins** (`packages/importers/src/<vendor>/testing/fake-<vendor>.ts`, exported
 from `@helpdock/importers/testing`, never bundled into the runtime): HTTP servers

@@ -10,11 +10,30 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ImportClaim, ImportClaimLost, renewImportClaim } from './claims.js';
 
-const pageSchema = z.strictObject({
-  records: z.array(importRecordSchema).max(1000),
-  cursor: z.record(z.string().max(200), z.json()).nullable(),
-});
-const checkpointSchema = z.strictObject({ cursor: pageSchema.shape.cursor, done: z.boolean() });
+const cursorSchema = z.record(z.string().max(200), z.json());
+const pageSchema = z
+  .strictObject({
+    records: z.array(importRecordSchema).max(1000),
+    cursor: cursorSchema.nullable(),
+    deltaCursor: cursorSchema.optional(),
+  })
+  .refine((page) => page.deltaCursor === undefined || page.cursor === null, {
+    message: 'A delta watermark belongs only to the final page',
+  });
+const checkpointSchema = z
+  .strictObject({
+    cursor: cursorSchema.nullable(),
+    done: z.boolean(),
+    deltaCursor: cursorSchema.optional(),
+  })
+  .refine(
+    (checkpoint) =>
+      checkpoint.done === (checkpoint.cursor === null) &&
+      (checkpoint.deltaCursor === undefined || checkpoint.done),
+    {
+      message: 'Continuation and delta watermark must match the entity completion state',
+    },
+  );
 export const extractionCheckpointsSchema = z.partialRecord(importEntitySchema, checkpointSchema);
 const extractedCountsSchema = z.partialRecord(importEntitySchema, z.int().nonnegative());
 
@@ -123,7 +142,11 @@ export async function storeImportPage(
     run.counts.extracted === undefined ? {} : run.counts.extracted,
   );
   extracted[entity] = (extracted[entity] ?? 0) + added;
-  checkpoints[entity] = { cursor: page.cursor, done: page.cursor === null };
+  checkpoints[entity] = {
+    cursor: page.cursor,
+    done: page.cursor === null,
+    ...(page.deltaCursor === undefined ? {} : { deltaCursor: page.deltaCursor }),
+  };
   const { retryAt: _retryAt, retryFailures: _retryFailures, ...counts } = run.counts;
   await tx
     .update(importRuns)

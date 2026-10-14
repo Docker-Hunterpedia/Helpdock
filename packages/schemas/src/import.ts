@@ -125,6 +125,7 @@ export const importTicketSchema = z
     groupExternalId: externalId.optional(),
     organizationExternalId: externalId.optional(),
     ccEmails: emails,
+    ccExternalIds: z.array(externalId).max(100).optional(),
     tags: z.array(z.string().max(200)).max(1000),
     custom,
     createdAt: instant,

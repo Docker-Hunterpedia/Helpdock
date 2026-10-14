@@ -10,7 +10,12 @@ import type { ImportHttp } from './http.js';
 
 type JsonValue = z.infer<ReturnType<typeof z.json>>;
 export type ImportCursor = Record<string, JsonValue>;
-export type ImportPage = { records: ImportRecord[]; cursor: ImportCursor | null };
+export type ImportPage = {
+  records: ImportRecord[];
+  cursor: ImportCursor | null;
+  /** Final vendor watermark for the next delta; distinct from the current run's continuation. */
+  deltaCursor?: ImportCursor;
+};
 export type ProposedMapping = {
   kind: 'status' | 'priority' | 'group' | 'agent' | 'field' | 'tag' | 'channel';
   externalValue: string;

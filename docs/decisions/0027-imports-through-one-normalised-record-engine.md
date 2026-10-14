@@ -280,3 +280,20 @@ repeats no-ops and allow source event changes/redactions to update the same row.
 Keep historical name-only authors without creating staff access. This closes
 the plan's missing representation for audit history; it does not replay source
 automation or replace the import-time administrative audit entry.
+
+### 2026-10-14 — terminal watermarks and source CC ownership
+
+SDK pages may retain a final `deltaCursor` alongside `cursor: null`. Commit it
+with the final page; only completed, same-brand/same-vendor parent runs supply
+initial delta watermarks. Current child continuations take priority on resume.
+The date overlap remains a fallback/reconciliation input, not a substitute for
+the vendor's durable cursor. Source-account binding is still a required invariant.
+
+Normalized tickets retain vendor CC user IDs through `ccExternalIds`, with
+explicit contact mappings required before load. Identity-only participants use
+null addresses rather than invented email. Add `import` participant provenance
+so a source delta can remove stale source-owned CCs without removing manual
+participants. Known source email can fill an imported null address, while manual
+addresses remain untouched. Email-only contact creation must validate required
+fields. These changes replace the earlier additive-only CC delta behaviour and
+close source relationship omissions without introducing delivery side effects.

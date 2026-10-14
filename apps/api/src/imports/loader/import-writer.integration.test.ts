@@ -48,6 +48,7 @@ import {
   ImportRateLimiter,
   RateLimited,
 } from '@helpdock/importers';
+import { importEntitySchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { eq, isNotNull, sql } from 'drizzle-orm';
@@ -709,6 +710,153 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const [ticket] = await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId));
     expect(ticket?.subject).toBe(input.record.subject);
     expect(ticket?.createdAt.toISOString()).toBe('2019-01-01T00:00:00.000Z');
+  });
+
+  it('retains a source CC identity without inventing an email, refuses missing/foreign mappings and repeats without writes', async () => {
+    const ccId = uuidv7();
+    const foreignId = uuidv7();
+    await owner.db.insert(contacts).values([
+      { id: ccId, brandId: BRAND, name: 'Original CC' },
+      { id: foreignId, brandId: OTHER_BRAND, name: 'Other brand' },
+    ]);
+    const input = request('cc-source-id');
+    input.record.ccExternalIds = ['vendor-cc'];
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toThrow(
+      'Every source CC',
+    );
+    input.resolved.ccContacts = [{ externalId: 'vendor-cc', contactId: foreignId }];
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'target-unavailable' },
+    );
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(eq(importExternalIds.externalId, input.record.externalId)),
+    ).toEqual([]);
+    input.resolved.ccContacts = [{ externalId: 'vendor-cc', contactId: ccId }];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [participant] = await owner.db
+      .select()
+      .from(ticketParticipants)
+      .where(eq(ticketParticipants.ticketId, loaded.ticketId));
+    expect(participant).toMatchObject({ contactId: ccId, address: null, source: 'import' });
+    expect(ticketCcSchema.parse({ ...participant, name: 'Original CC' })).toMatchObject({
+      source: 'import',
+      address: null,
+    });
+    const before = [
+      ...(await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_participants WHERE ticket_id = ${loaded.ticketId}`,
+      )),
+    ];
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect([
+      ...(await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_participants WHERE ticket_id = ${loaded.ticketId}`,
+      )),
+    ]).toEqual(before);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+  });
+
+  it('fills an imported CC email when it becomes known and removes source-owned CCs on delta while retaining manual participants', async () => {
+    const ccId = uuidv7();
+    const manualId = uuidv7();
+    await owner.db.insert(contacts).values([
+      { id: ccId, brandId: BRAND, name: 'Source CC' },
+      { id: manualId, brandId: BRAND, name: 'Manual CC' },
+    ]);
+    const input = request('cc-reconcile');
+    input.record.ccExternalIds = ['cc-user'];
+    input.resolved.ccContacts = [{ externalId: 'cc-user', contactId: ccId }];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    await owner.db.insert(contactIdentities).values({
+      brandId: BRAND,
+      contactId: ccId,
+      kind: 'email',
+      value: 'known-cc@example.invalid',
+      source: 'import',
+      verified: false,
+    });
+    input.record.ccEmails = ['known-cc@example.invalid'];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db
+        .select()
+        .from(ticketParticipants)
+        .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
+    ).toMatchObject([{ contactId: ccId, address: 'known-cc@example.invalid', source: 'import' }]);
+    await owner.db.insert(ticketParticipants).values({
+      brandId: BRAND,
+      departmentId: DEPARTMENT,
+      ticketId: loaded.ticketId,
+      contactId: manualId,
+      address: null,
+      source: 'agent',
+      addedBy: USER,
+    });
+    input.record.ccEmails = [];
+    input.record.ccExternalIds = [];
+    input.resolved.ccContacts = [];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      await owner.db
+        .select()
+        .from(ticketParticipants)
+        .where(eq(ticketParticipants.ticketId, loaded.ticketId)),
+    ).toMatchObject([{ contactId: manualId, source: 'agent' }]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('does not create an email-only CC that bypasses required contact fields', async () => {
+    const brandId = uuidv7();
+    const departmentId = uuidv7();
+    const statusId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Required CC fields', prefix: 'REQ' });
+    await owner.db.insert(departments).values({ id: departmentId, brandId, name: 'Support' });
+    await owner.db.insert(ticketStatuses).values({
+      id: statusId,
+      brandId,
+      name: 'Open',
+      systemState: 'open',
+      isDefault: true,
+      color: 'info',
+    });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'loading', startedBy: USER });
+    await owner.db.insert(customFieldDefs).values({
+      brandId,
+      target: 'contact',
+      key: 'account_reference',
+      label: 'Account reference',
+      type: 'text',
+      required: true,
+    });
+    const input = request('cc-required-field');
+    input.brandId = brandId;
+    input.runId = runId;
+    input.resolved = {
+      ...input.resolved,
+      departmentId,
+      statusId,
+      contactId: null,
+      assigneeId: null,
+    };
+    input.messages = [];
+    input.authors = {};
+    input.record.ccEmails = ['required-cc@example.invalid'];
+    await expect(
+      withSystem(app.db, brandId, (tx) => writer.ticket(tx, input)),
+    ).rejects.toMatchObject({ name: 'ZodError' });
+    expect(await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(tickets).where(eq(tickets.brandId, brandId))).toEqual([]);
   });
 
   it('preserves mapped tags and CC identities, repeats without writes and replaces source tags on delta', async () => {
@@ -1615,6 +1763,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     for (const page of [
       { records: [group], cursor: { page: 2 } },
       { records: [group, group], cursor: { page: 3 } },
+      { records: [group], cursor: { page: 3 }, deltaCursor: { after: 'premature' } },
       { records: [{ entity: 'group', payload: { externalId: 'bad' } }], cursor: { page: 3 } },
       {
         records: [{ entity: 'tag', payload: { externalId: 'tag', name: 'Tag' } }],
@@ -1855,37 +2004,67 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     );
   });
 
-  it('uses the completed parent start with overlap for delta extraction and never uses another brand parent', async () => {
-    const parentId = uuidv7();
+  it.each([null, { after: 'committed-source-watermark' }])(
+    'uses a completed parent watermark %j with date overlap and refuses another brand parent',
+    async (watermark) => {
+      const parentId = uuidv7();
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: parentId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'completed',
+        startedBy: USER,
+        startedAt: new Date('2020-01-02T00:00:00Z'),
+        cursors: watermark ? { group: { cursor: null, done: true, deltaCursor: watermark } } : {},
+      });
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        mode: 'delta',
+        parentRunId: parentId,
+        status: 'extracting',
+        startedBy: USER,
+        credentialsEncrypted: 'encrypted-fixture',
+      });
+      let observedSince: Date | undefined;
+      let observedCursor: unknown;
+      const harness = extractionHarness(runId, async function* (_context, _entity, cursor, since) {
+        observedSince = since;
+        observedCursor = cursor;
+        yield { records: [], cursor: null, deltaCursor: { after: 'next-watermark' } };
+      });
+      expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
+      expect(observedSince?.toISOString()).toBe('2020-01-01T23:00:00.000Z');
+      expect(observedCursor).toEqual(watermark);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.cursors,
+      ).toEqual({ group: { cursor: null, done: true, deltaCursor: { after: 'next-watermark' } } });
+      expect(
+        await runImportExtraction({ ...harness.deps, scope: { brandId: OTHER_BRAND, runId } }),
+      ).toEqual({ state: 'stopped' });
+    },
+  );
+
+  it('extracts every normalized entity including activity without a stale thirteen-entity cap', async () => {
     const runId = uuidv7();
-    await owner.db.insert(importRuns).values({
-      id: parentId,
-      brandId: BRAND,
-      source: 'zendesk',
-      status: 'completed',
-      startedBy: USER,
-      startedAt: new Date('2020-01-02T00:00:00Z'),
-    });
     await owner.db.insert(importRuns).values({
       id: runId,
       brandId: BRAND,
       source: 'zendesk',
-      mode: 'delta',
-      parentRunId: parentId,
       status: 'extracting',
       startedBy: USER,
-      credentialsEncrypted: 'encrypted-fixture',
     });
-    let observedSince: Date | undefined;
-    const harness = extractionHarness(runId, async function* (_context, _entity, _cursor, since) {
-      observedSince = since;
+    const harness = extractionHarness(runId, async function* () {
       yield { records: [], cursor: null };
     });
-    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'awaiting_mapping' });
-    expect(observedSince?.toISOString()).toBe('2020-01-01T23:00:00.000Z');
-    expect(
-      await runImportExtraction({ ...harness.deps, scope: { brandId: OTHER_BRAND, runId } }),
-    ).toEqual({ state: 'stopped' });
+    const connector = { ...harness.deps.connector, entities: [...importEntitySchema.options] };
+    expect(await runImportExtraction({ ...harness.deps, connector })).toEqual({
+      state: 'awaiting_mapping',
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(Object.keys(run?.cursors ?? {}).sort()).toEqual([...importEntitySchema.options].sort());
   });
 
   it.each([

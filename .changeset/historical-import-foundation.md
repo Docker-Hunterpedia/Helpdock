@@ -13,3 +13,5 @@ Commit historical ticket/thread progress atomically, retain changed source subje
 Invalidate previous dry-run approval when import mappings change, and refuse mapping edits during active or terminal import phases.
 
 Preserve source ticket audit events with their original dates, actors and changes as inert imported activity, including idempotent repeat and delta checkpoints.
+
+Retain final vendor watermarks for delta extraction and preserve CC relationships supplied as source user IDs. Reconcile import-owned CCs without removing manual participants, and validate required fields for imported email-only contacts.

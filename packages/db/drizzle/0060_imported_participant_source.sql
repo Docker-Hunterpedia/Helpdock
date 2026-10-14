@@ -1,0 +1,1 @@
+ALTER TYPE "public"."ticket_participant_source" ADD VALUE 'import';

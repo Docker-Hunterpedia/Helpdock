@@ -45,7 +45,7 @@ it('refuses a staged message belonging to another source ticket before loading',
   expect(ticketLoadSchema.safeParse(input).success).toBe(true);
 });
 
-it('requires an explicit tag decision and refuses conflicting mappings or duplicate ratings', () => {
+it('requires complete tag and CC decisions and refuses conflicting mappings or duplicate history IDs', () => {
   const input = ticketLoadSchema.parse({
     brandId: uuidv7(),
     runId: uuidv7(),
@@ -120,5 +120,12 @@ it('requires an explicit tag decision and refuses conflicting mappings or duplic
   input.activities = [corrected];
   expect(mappedTicketLoadSchema.safeParse(input).success).toBe(true);
   input.activities.push(corrected);
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
+  input.activities = [];
+  input.record.ccExternalIds = ['source-cc'];
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
+  input.resolved.ccContacts = [{ externalId: 'source-cc', contactId: uuidv7() }];
+  expect(mappedTicketLoadSchema.safeParse(input).success).toBe(true);
+  input.resolved.ccContacts.push({ externalId: 'not-requested', contactId: uuidv7() });
   expect(mappedTicketLoadSchema.safeParse(input).success).toBe(false);
 });

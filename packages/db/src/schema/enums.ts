@@ -73,6 +73,7 @@ export const ticketParticipantSourceEnum = pgEnum('ticket_participant_source', [
   'agent',
   'email',
   'merge',
+  'import',
 ]);
 
 /** What became of a possible-duplicate suggestion (DOMAIN-RULES §4.4). */

@@ -9,6 +9,10 @@ being implemented; this foundation alone does not import a brand.
 identifier. The API must stage a page and its next cursor atomically. A final null
 cursor ends that entity's extraction. A page contains only the entity requested;
 external IDs within that page are unique, and a non-final cursor must advance.
+An optional `deltaCursor` on the final page retains the vendor watermark for the
+next delta; it is committed with that page and never used to continue the finished
+entity. A child delta starts from the parent's watermark when supplied; resumed
+extraction uses its own continuation. Non-final watermarks are rejected.
 Pages may overlap records across requests; staging upserts those records without
 counting them twice. The API page store bounds a page to 1,000 records and 50 MiB
 serialized and commits records/counts/cursor together. Vendor credentials belong only in the encrypted API run,
@@ -41,6 +45,10 @@ are inert history; they never replay the source action in Helpdock. Each NDJSON 
 the entity's payload, without an extra `{ entity, payload }` envelope. The manifest
 has `format: "helpdock-import"`, `version: 1`, a supported source, an ISO export
 time and per-entity counts. Record times require an explicit timezone offset.
+
+Ticket `ccExternalIds` retain vendor contact references separately from
+`ccEmails`. The loader requires contact mappings for every referenced CC,
+including contacts with no email, and never silently drops an unresolved identity.
 
 ```ts
 import { readImportBundle } from '@helpdock/importers';

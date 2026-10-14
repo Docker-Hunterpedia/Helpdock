@@ -32,6 +32,10 @@ export const ticketLoadSchema = z
       channel: ticketChannelSchema,
       assigneeId: z.uuid().nullable(),
       contactId: z.uuid().nullable(),
+      ccContacts: z
+        .array(z.strictObject({ externalId: z.string().min(1).max(200), contactId: z.uuid() }))
+        .max(100)
+        .default([]),
       tags: z
         .array(z.strictObject({ externalValue: z.string().max(200), tagId: z.uuid().nullable() }))
         .max(1000)
@@ -47,6 +51,21 @@ export const ticketLoadSchema = z
     { path: ['messages'], message: 'A thread or rating belongs to another source ticket' },
   );
 export const mappedTicketLoadSchema = ticketLoadSchema
+  .refine(
+    (input) =>
+      new Set(input.resolved.ccContacts.map((mapping) => mapping.externalId)).size ===
+        input.resolved.ccContacts.length &&
+      input.resolved.ccContacts.every((mapping) =>
+        (input.record.ccExternalIds ?? []).includes(mapping.externalId),
+      ) &&
+      (input.record.ccExternalIds ?? []).every((id) =>
+        input.resolved.ccContacts.some((mapping) => mapping.externalId === id),
+      ),
+    {
+      path: ['resolved', 'ccContacts'],
+      message: 'Every source CC identity requires a contact mapping',
+    },
+  )
   .refine(
     (input) =>
       new Set(input.resolved.tags.map((mapping) => mapping.externalValue)).size ===

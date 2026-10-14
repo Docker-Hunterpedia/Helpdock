@@ -129,3 +129,9 @@ Staged-record preflight scans in bounded pages and reports safe source-record ID
 and error codes for integrity, references, routing and profile-value failures.
 It changes neither staged statuses nor destination profiles. These page checks
 are part of the dry-run foundation; they do not authorize starting an import.
+
+The internal record scan stores progress between batches and resumes from its
+last committed cursor. A pause invalidates the old worker's authority; staged
+input changes invalidate the scan. Finishing these checks alone does not make a
+run ready. Dry-run entry points and the complete approval report are still under
+development.

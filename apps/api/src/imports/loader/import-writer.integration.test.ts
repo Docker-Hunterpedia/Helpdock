@@ -101,6 +101,7 @@ import {
   createZendeskImportConnection,
 } from '../jobs/connector-runtime.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
+import { runImportDryRunRecordBatch } from '../jobs/dry-run-records.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { runImportFinishBatch } from '../jobs/finish-batch.js';
@@ -6074,6 +6075,116 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('resumes dry-run record checkpoints after pause without duplicating counts or writing profiles', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Dry run resume', prefix: 'DRR' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+    for (const externalId of ['a', 'b']) {
+      const record = organizationLoadSchema.parse({
+        brandId,
+        runId,
+        source: 'zendesk',
+        custom: {},
+        record: { externalId, name: 'Source company', domains: [], custom: {} },
+      }).record;
+      await owner.db.insert(importRecords).values({
+        brandId,
+        runId,
+        entity: 'organization',
+        externalId,
+        payload: record,
+        payloadHash: hashImportValue(record),
+      });
+    }
+    const scope = { brandId, runId };
+    const claim = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing dry-run claim');
+    const deps = { db: app.db, jobId: 'dry-run-resume' };
+    expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
+      state: 'more',
+    });
+    await withSystem(app.db, brandId, (tx) => pauseImportRun(tx, scope));
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'stopped' });
+    await withSystem(app.db, brandId, (tx) => resumeImportRun(tx, scope));
+    const resumed = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'dry_run' }),
+    );
+    if (!resumed) throw new Error('Missing resumed dry-run claim');
+    expect(await runImportDryRunRecordBatch(deps, { claim: resumed, batchSize: 1 })).toEqual({
+      state: 'records_checked',
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run?.dryRunReport).toMatchObject({
+      phase: 'records_checked',
+      checked: 2,
+      issueCount: 0,
+      issues: [],
+    });
+    expect(run?.status).toBe('dry_run');
+    expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
+      state: 'records_checked',
+    });
+    const [repeated] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(repeated?.dryRunReport).toEqual(run?.dryRunReport);
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('invalidates a dry-run record checkpoint if staged inputs change between pages', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Dry run drift', prefix: 'DRD' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+    const records = ['a', 'b'].map(
+      (externalId) =>
+        organizationLoadSchema.parse({
+          brandId,
+          runId,
+          source: 'zendesk',
+          custom: {},
+          record: { externalId, name: 'Source company', domains: [], custom: {} },
+        }).record,
+    );
+    await owner.db.insert(importRecords).values(
+      records.map((record) => ({
+        brandId,
+        runId,
+        entity: 'organization' as const,
+        externalId: record.externalId,
+        payload: record,
+        payloadHash: hashImportValue(record),
+      })),
+    );
+    const claim = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing drift claim');
+    const deps = { db: app.db, jobId: 'dry-run-drift' };
+    expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
+      state: 'more',
+    });
+    const changed = { ...records[0], name: 'Changed company' };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: changed, payloadHash: hashImportValue(changed) })
+      .where(and(eq(importRecords.runId, runId), eq(importRecords.externalId, 'a')));
+    expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
+      state: 'invalidated',
+    });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({ status: 'awaiting_mapping', claimToken: null, claimedAt: null });
+    expect(run?.dryRunReport).toMatchObject({ phase: 'invalidated', checked: 2 });
+    expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'stopped' });
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
   });
 
   it('paginates preflight across malformed staged rows without changing profiles or staging', async () => {

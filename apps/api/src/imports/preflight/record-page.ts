@@ -17,25 +17,27 @@ import { validateImportReferences } from './record-references.js';
 import { validatedStagedRecord } from './staged-record.js';
 import { validateImportTicketRouting } from './ticket-routing.js';
 
-const cursorSchema = z.strictObject({
+export const importRecordCursorSchema = z.strictObject({
   entity: importEntitySchema,
   externalId: z.string().min(1).max(200),
 });
 const requestSchema = importRunRefSchema.extend({
   source: importSourceSchema,
-  after: cursorSchema.nullable().default(null),
+  after: importRecordCursorSchema.nullable().default(null),
   batchSize: z.int().min(1).max(50).default(25),
   defaultCallingCode: z
     .string()
     .regex(/^\d{0,4}$/)
     .default(''),
 });
-const issueSchema = cursorSchema.extend({ code: z.string().min(1).max(100) });
+export const importRecordIssueSchema = importRecordCursorSchema.extend({
+  code: z.string().min(1).max(100),
+});
 const pageSchema = z.strictObject({
   checked: z.int().nonnegative().max(50),
   issueCount: z.int().nonnegative(),
-  issues: z.array(issueSchema).max(100),
-  next: cursorSchema.nullable(),
+  issues: z.array(importRecordIssueSchema).max(100),
+  next: importRecordCursorSchema.nullable(),
 });
 type Mapping = z.infer<typeof importMappingSchema>;
 
@@ -155,7 +157,7 @@ export async function validateImportRecordPage(
     )
     .orderBy(importRecords.entity, importRecords.externalId)
     .limit(batchSize + 1);
-  const issues: z.infer<typeof issueSchema>[] = [];
+  const issues: z.infer<typeof importRecordIssueSchema>[] = [];
   let issueCount = 0;
   const page = rows.slice(0, batchSize);
   for (const row of page) {

@@ -2600,6 +2600,27 @@ revisions and no profile or outbox writes. This scanner does not approve loading
 whole-plan validation, media checks, durable dry-run job/report state, approval
 freshness and the review UI still need orchestration. M11-10/16 remain in progress.
 
+### Durable record-scan checkpoints (M11-10/16, in progress)
+
+The dry-run record batch now commits its cursor, checked/issue counts and bounded
+samples atomically in `import_runs.dry_run_report`. Each batch renews the existing
+brand/run claim and validates both request and checkpoint through Zod. Pausing or
+replacing the worker claim fences the old worker; a resumed worker continues from
+the stored cursor. Repeating the final record-scan batch does not add counts again.
+The default calling code is fixed for the scan.
+
+Staged-input fingerprints are captured at the beginning and compared after the
+last page. A changed input returns the run to `awaiting_mapping`, marks its
+checkpoint invalidated and releases the claim. An unchanged scan reaches only
+the internal `records_checked` phase; it does not mark the run ready or authorize
+loading. Real database coverage proves pause/resume, stale-worker refusal,
+idempotent scan completion, input-drift invalidation and no destination writes.
+The writer integration suite passes 149 tests.
+
+Queue/HTTP dry-run entry points, whole-plan phases, media/completeness checks,
+live-target approval freshness and the complete user-facing report remain
+unfinished; this batch is not yet exposed as a complete dry-run workflow.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

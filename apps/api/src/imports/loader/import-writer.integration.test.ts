@@ -6163,16 +6163,14 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         custom: {},
       },
     }).record;
-    await owner.db
-      .insert(importRecords)
-      .values({
-        brandId,
-        runId,
-        entity: 'contact',
-        externalId: record.externalId,
-        payload: record,
-        payloadHash: hashImportValue(record),
-      });
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: 'contact',
+      externalId: record.externalId,
+      payload: record,
+      payloadHash: hashImportValue(record),
+    });
     expect(
       await withSystem(app.db, brandId, (tx) =>
         validateImportRecordPage(tx, { brandId, runId, source: 'zendesk' }),

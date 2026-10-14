@@ -1697,6 +1697,28 @@ checks pass. Mapping assembly, phase ordering, staff/reference checkpoints,
 media preparation, finish/report jobs, dry-run approval and the full worker/API/UI
 acceptance remain unfinished. M11-09 and M11-10 remain in progress.
 
+### Custom-field value mapping checkpoint (in progress)
+
+`mappedImportedCustom` translates source field keys into confirmed destination
+keys, then applies the existing custom-field coercion, option and required-value
+rules. It preserves explicit null clears for patch requests. Only confirmed
+skips discard values; unknown keys, duplicate source keys and multiple source
+fields targeting one destination key fail rather than silently overwriting data.
+
+`resolveImportedCustom` reads the run's staged field definitions and confirmed
+field mappings under the loading scope. It validates staged field hashes, source
+identity pointers and same-brand/target destination definitions. Create mappings
+must already have a loaded field identity. Contact/company record checkpoints
+compare the supplied resolved values to this compiler before writing, refusing
+substituted values even when they would fit the destination field's options.
+
+Five compiler unit cases and all 80 writer integration cases pass. The real
+PostgreSQL/Redis case maps a native contact key into the brand's existing `tier`
+field, rejects a substituted value before load, and leaves the outbox empty.
+This does not complete field mapping: proposal generation, option-label/value
+mapping, dry-run integration, ticket assembly, ordered phases and the mapping UI
+remain required. M11-11 remains in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

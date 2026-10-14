@@ -53,7 +53,7 @@ import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importEntitySchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -2849,6 +2849,129 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(
       (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
     ).toEqual({ loaded: { contact: 1 } });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('resolves staged field mappings before loading a contact and refuses a different resolved value', async () => {
+    const runId = uuidv7();
+    const scope = { brandId: BRAND, runId, source: 'zendesk' as const };
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const [destination] = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(
+        and(
+          eq(customFieldDefs.brandId, BRAND),
+          eq(customFieldDefs.target, 'contact'),
+          eq(customFieldDefs.key, 'tier'),
+        ),
+      );
+    if (!destination) throw new Error('Missing destination field');
+    const fieldInput = fieldLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'contact:compiler-field',
+        target: 'contact',
+        key: 'native_tier',
+        label: 'Historical tier',
+        type: 'select',
+        options: [{ value: 'gold', label: 'Gold' }],
+      },
+      mapping: { kind: 'existing', fieldId: destination.id },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId,
+      entity: 'field',
+      externalId: fieldInput.record.externalId,
+      payload: fieldInput.record,
+      payloadHash: hashImportValue(fieldInput.record),
+    });
+    await owner.db.insert(importMappings).values({
+      brandId: BRAND,
+      runId,
+      kind: 'field',
+      externalValue: fieldInput.record.externalId,
+      target: fieldInput.mapping,
+    });
+    await withSystem(app.db, BRAND, (tx) => writer.field(tx, fieldInput));
+    const input = contactLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'compiled-contact',
+        name: 'Mapped customer',
+        emails: ['compiled@example.invalid'],
+        phones: [],
+        custom: { native_tier: 'gold' },
+      },
+      custom: { tier: 'gold' },
+      accountId: null,
+    });
+    const recordId = uuidv7();
+    await owner.db.insert(importRecords).values({
+      id: recordId,
+      brandId: BRAND,
+      runId,
+      entity: 'contact',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        loadStagedRecord(tx, {
+          claim,
+          recordId,
+          operation: { entity: 'contact', input: { ...input, custom: { tier: 'silver' } } },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await owner.db
+      .update(importMappings)
+      .set({
+        target: {
+          kind: 'create',
+          definition: {
+            target: 'ticket',
+            key: 'wrong_target',
+            label: 'Wrong target',
+            type: 'text',
+          },
+        },
+      })
+      .where(
+        and(
+          eq(importMappings.runId, runId),
+          eq(importMappings.externalValue, fieldInput.record.externalId),
+        ),
+      );
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        loadStagedRecord(tx, { claim, recordId, operation: { entity: 'contact', input } }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await owner.db
+      .update(importMappings)
+      .set({ target: fieldInput.mapping })
+      .where(
+        and(
+          eq(importMappings.runId, runId),
+          eq(importMappings.externalValue, fieldInput.record.externalId),
+        ),
+      );
+    const loaded = await withSystem(app.db, BRAND, (tx) =>
+      loadStagedRecord(tx, { claim, recordId, operation: { entity: 'contact', input } }),
+    );
+    if (!loaded.id) throw new Error('Missing compiled contact');
+    expect(
+      (await owner.db.select().from(contacts).where(eq(contacts.id, loaded.id)))[0],
+    ).toMatchObject({ custom: { tier: 'gold' } });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

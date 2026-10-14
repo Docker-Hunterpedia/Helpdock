@@ -14,6 +14,7 @@ import {
   sectionLoadSchema,
 } from '../loader/knowledge-contracts.js';
 import { contactLoadSchema, organizationLoadSchema } from '../loader/profile-contracts.js';
+import { resolveImportedCustom } from '../loader/resolve-custom-fields.js';
 import {
   type ImportClaim,
   ImportClaimLost,
@@ -60,6 +61,19 @@ function writeRecord(tx: DbTransaction, operation: Operation) {
     case 'article':
       return writer.article(tx, operation.input);
   }
+}
+
+async function validateResolvedCustom(tx: DbTransaction, operation: Operation) {
+  if (operation.entity !== 'organization' && operation.entity !== 'contact') return;
+  const input = operation.input;
+  const compiled = await resolveImportedCustom(tx, {
+    ...input,
+    target: operation.entity === 'organization' ? 'account' : 'contact',
+    custom: input.record.custom,
+    operation: 'patch',
+  });
+  if (hashImportValue(compiled) !== hashImportValue(input.custom))
+    throw new ImportLoadError('mapping-invalid');
 }
 
 async function requireLoadedTarget(tx: DbTransaction, operation: Operation, id: string | null) {
@@ -148,6 +162,7 @@ export async function loadStagedRecord(tx: DbTransaction, request: RecordCheckpo
     return { state: 'already_done' as const, id };
   }
   if (row.status !== 'staged') throw new ImportLoadError('mapping-invalid');
+  await validateResolvedCustom(tx, operation);
   const loaded = await writeRecord(tx, operation);
   const status = loaded.id === null ? ('skipped' as const) : ('loaded' as const);
   await tx

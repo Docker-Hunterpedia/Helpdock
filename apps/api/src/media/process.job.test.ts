@@ -21,7 +21,7 @@ import { createMediaProcessor, type ProcessOutcome } from './process.job.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 const ATTACHMENT = '01937f5e-7e53-7000-8000-00000000000c';
-const KEY = 'brands/a/tickets/b/c/original';
+const KEY = `brands/${BRAND}/tickets/${attachmentRow().ticketId}/${ATTACHMENT}/original`;
 
 /** A real JPEG with a real EXIF block, so "EXIF is stripped" is a real claim. */
 let jpegWithExif: Buffer;
@@ -64,16 +64,18 @@ const process = async (options: {
   tools?: ReturnType<typeof fakeTools>;
   status?: 'pending' | 'processing' | 'ready';
   origin?: 'upload' | 'channel' | 'import';
+  s3Key?: string;
 }): Promise<Harness> => {
   const storage = new FakeStorage(await mkdtemp(path.join(tmpdir(), 'helpdock-bucket-')));
-  await storage.put(KEY, options.bytes);
+  const key = options.s3Key ?? KEY;
+  await storage.put(key, options.bytes);
 
   const kind = options.kind ?? 'image';
   const state = {
     row: attachmentRow({
       id: ATTACHMENT,
       brandId: BRAND,
-      s3Key: KEY,
+      s3Key: key,
       kind,
       mime: options.mime ?? 'image/png',
       status: options.status ?? 'processing',
@@ -135,6 +137,19 @@ describe('images', () => {
       expect(metadata.exif, variant).toBeUndefined();
       expect(metadata.icc, variant).toBeUndefined();
     }
+  });
+
+  it('writes variants beside the stored source key when an import attempt uses a different object folder', async () => {
+    const folder = `brands/${BRAND}/tickets/${attachmentRow().ticketId}/01937f5e-7e53-7000-8000-0000000000ff/`;
+    const result = await process({ bytes: pngBytes, origin: 'import', s3Key: `${folder}original` });
+    expect(result.status).toBe('ready');
+    for (const variant of ['webp', 'thumb320', 'thumb960']) {
+      expect(
+        (await sharp(await result.storage.read(`${folder}${variant}`)).metadata()).format,
+      ).toBe('webp');
+    }
+    expect(result.storage.removed).toContain(`${folder}original`);
+    expect(result.outbox).toEqual([]);
   });
 
   it('caps the long edge at 2048 and sizes the thumbnails at 320 and 960', async () => {

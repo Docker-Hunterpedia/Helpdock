@@ -1892,6 +1892,44 @@ purge event; no notification or delivery event is created. This is link and queu
 evidence: vendor-to-storage downloads, full worker orchestration and end-to-end
 reference acceptance remain unfinished.
 
+### Attachment download and processing checkpoint (M11-10, in progress)
+
+`downloadStagedImportAttachment` reads a loaded, hash-validated attachment record
+and its same-brand source pointer under the loading claim. It reserves a fresh
+object key shared by the asset's pending links, then downloads through the
+connector and uploads through `ObjectStorage` outside database transactions.
+Only a live claim may commit `processing` and `attachment.uploaded`. A repeat of
+an already processing/settled asset returns its actual state without another
+vendor request. Policy refusals retain a rejected placeholder and the safe
+`import.attachment.rejected` warning; no source URL, credential or vendor body is
+included. Other failures propagate for orchestration to retry.
+
+`withPreparedImportFile` writes to an exclusive temporary directory, counts actual
+bytes, limits the download to 50 MiB and the largest brand media cap, and bounds
+it to 30 seconds or caller cancellation. It checks magic bytes against supported
+source MIME claims, otherwise detects a supported family, then applies the brand
+policy to the detected kind/type/size. It closes invalid streams and removes
+local files on success or failure. No source filename reaches a filesystem path.
+This stage does not replace sharp re-encoding or configured antivirus scanning.
+
+Attempt-specific keys prevent revoked workers from overwriting resumed uploads.
+Old keys are queued for transactional object cleanup; a stale upload that finishes
+after earlier cleanup schedules cleanup again, without deleting keys still named
+by attachment rows. Media variants now use the stored object's folder, fixing a
+regression where attempt-specific image variants were written somewhere the
+normal download path could not find them. The storage double now physically
+removes files, rather than only recording deletion calls.
+
+All 97 writer integration cases pass, including actual Zendesk-stand-in PDF/image
+downloads through safe HTTP, credential-free CDN redirects, filesystem storage,
+WebP processing, repeat no-ops, pause/resume with a late upload, old-attempt cleanup,
+and unsafe response rejection without processing events. All 47 focused file/media
+unit cases pass, including the failing-before-fix variant-location regression.
+These are PostgreSQL/Redis, local HTTP and filesystem-storage results, not a live
+vendor or S3 deployment run. Import queue/module wiring, rate-limit orchestration,
+bundle bytes, knowledge image preparation, finish/report jobs, API/UI and full
+reference/process-kill acceptance remain required. M11-09/10/12 stay in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

@@ -8,13 +8,16 @@ import type { TicketLoad } from './contracts.js';
 import { importedIdentity } from './external-ids.js';
 
 /** Shared assets span tickets; serialize their reconciliation within one brand/source. */
-export async function lockImportedAttachments(tx: DbTransaction, input: TicketLoad): Promise<void> {
+export async function lockImportedAttachments(
+  tx: DbTransaction,
+  input: Pick<TicketLoad, 'brandId' | 'source'>,
+): Promise<void> {
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:assets`}, 18))`,
   );
 }
 
-function attachmentFingerprint(ref: ImportAttachmentRef): string {
+export function importAttachmentHash(ref: ImportAttachmentRef): string {
   return hashImportValue({
     externalId: ref.externalId,
     fileName: ref.fileName,
@@ -34,7 +37,7 @@ export async function loadImportedAttachment(
   },
 ): Promise<string> {
   const { input, ref } = options;
-  const payloadHash = attachmentFingerprint(ref);
+  const payloadHash = importAttachmentHash(ref);
   const known = await importedIdentity(tx, input, 'attachment', ref.externalId);
   const [original] =
     known?.payloadHash === payloadHash

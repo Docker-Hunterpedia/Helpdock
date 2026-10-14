@@ -15,7 +15,7 @@ import sharp, { type Metadata, type Sharp } from 'sharp';
 import { enqueueAttachmentReady } from './attachment-events.js';
 import { readContentPolicy } from './content-policy.js';
 import { MediaToolError, type MediaTools } from './ffmpeg.js';
-import { attachmentKey } from './keys.js';
+import { objectKeyBeside } from './keys.js';
 import { bytesMatchMime, MAGIC_BYTES_PROBE } from './magic-bytes.js';
 import { MediaRepository } from './media.repository.js';
 import type { FileScanner } from './scanner.js';
@@ -360,10 +360,7 @@ const uploadVariant =
     const { size } = await stat(file);
 
     await storage.upload({
-      key: attachmentKey(
-        { brandId: row.brandId, ticketId: row.ticketId, attachmentId: row.id },
-        variant,
-      ),
+      key: objectKeyBeside(row.s3Key, variant),
       path: file,
       // Always explicit: an object stored with the bucket's default type is an
       // object a browser sniffs, and a sniffing browser is how a download

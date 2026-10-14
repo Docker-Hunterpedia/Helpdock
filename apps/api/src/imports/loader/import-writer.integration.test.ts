@@ -63,6 +63,7 @@ import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
 import { objectKeyBeside } from '../../media/keys.js';
 import { MediaRepository } from '../../media/media.repository.js';
+import { createObjectPurgeHandler } from '../../media/object-purge.js';
 import { createMediaProcessor } from '../../media/process.job.js';
 import { RollupRepository } from '../../reports/rollup.repository.js';
 import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js';
@@ -70,6 +71,7 @@ import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install
 import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
+import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
@@ -160,7 +162,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   let redis: Redis;
   const writer = new ImportWriter();
 
-  async function stagedTicketScenario(externalId: string) {
+  async function stagedTicketScenario(
+    externalId: string,
+    attachmentUrl = 'https://vendor.example/history.pdf',
+    attachmentMime = 'application/pdf',
+  ) {
     const input = request(externalId);
     input.runId = uuidv7();
     const rating = {
@@ -173,8 +179,8 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const attachment = {
       externalId: `file-${externalId}`,
       fileName: 'history.pdf',
-      contentType: 'application/pdf',
-      url: 'https://vendor.example/history.pdf',
+      contentType: attachmentMime,
+      url: attachmentUrl,
     };
     const message = input.messages[0];
     if (!message) throw new Error('Missing checkpoint message fixture');
@@ -4395,6 +4401,319 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  function downloadHarness(fake: FakeZendesk, storage: FakeStorage) {
+    return {
+      db: app.db,
+      storage,
+      jobId: 'import.download.fixture',
+      connector: new ZendeskConnector({ apiRoot: fake.server.root }),
+      context: {
+        credentials: { auth: 'oauth' as const, subdomain: 'demo', accessToken: 'synthetic-token' },
+        signal: new AbortController().signal,
+        log: async () => {},
+        http: new ImportHttp({
+          hosts: ['127.0.0.1', 'cdn.zendesk.test'],
+          limiter: new ImportRateLimiter({ capacity: 100, perMinute: 1000 }),
+          policy: {
+            allowedPorts: [Number(new URL(fake.server.root).port)],
+            allowCidrs: ['127.0.0.1/32'],
+            lookup: async () => [{ address: '127.0.0.1', family: 4 }],
+          },
+        }),
+      },
+    };
+  }
+
+  it.each(['pdf', 'image'] as const)(
+    'downloads a staged Zendesk $0 through safe HTTP, stores it and queues silent processing once',
+    async (format) => {
+      const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+      await fake.server.start();
+      const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-download-'));
+      const storage = new FakeStorage(dir);
+      const bytes =
+        format === 'pdf'
+          ? Buffer.from('%PDF-1.7\nHistorical attachment')
+          : await sharp({ create: { width: 16, height: 16, channels: 3, background: '#ffffff' } })
+              .png()
+              .toBuffer();
+      const mime = format === 'pdf' ? 'application/pdf' : 'image/png';
+      try {
+        const url = fake.addAttachment('source-file', bytes);
+        const scenario = await stagedTicketScenario(
+          `downloaded-source-attachment-${format}`,
+          url,
+          mime,
+        );
+        await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+        const [record] = await owner.db
+          .select()
+          .from(importRecords)
+          .where(
+            and(
+              eq(importRecords.runId, scenario.input.runId),
+              eq(importRecords.entity, 'attachment'),
+            ),
+          );
+        if (!record) throw new Error('Missing staged attachment');
+        const deps = downloadHarness(fake, storage);
+        const request = { claim: scenario.claim, recordId: record.id };
+        const downloaded = await downloadStagedImportAttachment(deps, request);
+        expect(downloaded.state).toBe('downloaded');
+        const [row] = await owner.db
+          .select()
+          .from(attachments)
+          .where(eq(attachments.id, downloaded.attachmentId));
+        if (!row) throw new Error('Missing downloaded attachment');
+        expect(row).toMatchObject({
+          origin: 'import',
+          status: 'processing',
+          size: bytes.length,
+          mime,
+          kind: format === 'pdf' ? 'file' : 'image',
+        });
+        expect(await storage.read(row.s3Key)).toEqual(bytes);
+        const calls = fake.server.calls.length;
+        expect(await downloadStagedImportAttachment(deps, request)).toEqual({
+          state: 'processing',
+          attachmentId: row.id,
+        });
+        expect(fake.server.calls).toHaveLength(calls);
+        expect(
+          fake.server.calls
+            .filter((call) => call.path.startsWith('/cdn/'))
+            .every((call) => !call.authenticated),
+        ).toBe(true);
+        const events = await owner.db.select().from(outbox);
+        expect(events.filter((event) => event.event === 'attachment.uploaded')).toHaveLength(1);
+        expect(
+          events.every((event) =>
+            ['attachment.uploaded', 'media.objects.purge'].includes(event.event),
+          ),
+        ).toBe(true);
+        const processor = createMediaProcessor({
+          storage,
+          tools: fakeTools(),
+          scanner: undefined,
+        });
+        await withSystem(app.db, BRAND, (tx) =>
+          processor.run({
+            payload: { brandId: BRAND, attachmentId: row.id },
+            tx,
+            log: silentJobLogger,
+          }),
+        );
+        expect(
+          (await owner.db.select().from(attachments).where(eq(attachments.id, row.id)))[0]?.status,
+        ).toBe('ready');
+        if (format === 'image') {
+          expect(
+            (await sharp(await storage.read(objectKeyBeside(row.s3Key, 'webp'))).metadata()).format,
+          ).toBe('webp');
+          expect(await storage.head(row.s3Key)).toBeUndefined();
+        }
+        expect(await owner.db.select().from(outbox)).toHaveLength(events.length);
+        for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+        expect(await redis.dbsize()).toBe(0);
+      } finally {
+        await fake.server.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('fences a download paused during storage upload and resumes on a separate object key', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-fenced-download-'));
+    const bytes = Buffer.from('%PDF-1.7\nClaim fenced history');
+    let releaseStaleUpload = () => {};
+    let staleCheck: Promise<unknown> | undefined;
+    try {
+      const url = fake.addAttachment('fenced-file', bytes);
+      const scenario = await stagedTicketScenario('fenced-source-download', url);
+      await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      const [record] = await owner.db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.runId, scenario.input.runId),
+            eq(importRecords.entity, 'attachment'),
+          ),
+        );
+      if (!record) throw new Error('Missing staged attachment');
+      class PausingStorage extends FakeStorage {
+        pauseNext = true;
+        signalPaused: () => void = () => {};
+        releaseUpload: () => void = () => {};
+        readonly paused = new Promise<void>((resolve) => {
+          this.signalPaused = resolve;
+        });
+        readonly released = new Promise<void>((resolve) => {
+          this.releaseUpload = resolve;
+        });
+        override async upload(options: Parameters<FakeStorage['upload']>[0]) {
+          if (this.pauseNext) {
+            this.pauseNext = false;
+            await withSystem(app.db, BRAND, (tx) =>
+              pauseImportRun(tx, {
+                brandId: BRAND,
+                runId: scenario.input.runId,
+              }),
+            );
+            this.signalPaused();
+            await this.released;
+          }
+          await super.upload(options);
+        }
+      }
+      const storage = new PausingStorage(dir);
+      releaseStaleUpload = storage.releaseUpload;
+      const deps = downloadHarness(fake, storage);
+      const stale = expect(
+        downloadStagedImportAttachment(deps, {
+          claim: scenario.claim,
+          recordId: record.id,
+        }),
+      ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+      staleCheck = stale;
+      await storage.paused;
+      const [pending] = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.id, record.helpdockId ?? ''));
+      if (!pending) throw new Error('Missing fenced attachment');
+      expect(pending.status).toBe('pending');
+      expect(
+        (await owner.db.select().from(outbox)).every(
+          (event) => event.event === 'media.objects.purge',
+        ),
+      ).toBe(true);
+      await withSystem(app.db, BRAND, (tx) =>
+        resumeImportRun(tx, { brandId: BRAND, runId: scenario.input.runId }),
+      );
+      const claim = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, {
+          brandId: BRAND,
+          runId: scenario.input.runId,
+          phase: 'loading',
+        }),
+      );
+      if (!claim) throw new Error('Missing resumed claim');
+      expect(
+        await downloadStagedImportAttachment(deps, { claim, recordId: record.id }),
+      ).toMatchObject({ state: 'downloaded', attachmentId: pending.id });
+      const [processed] = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.id, pending.id));
+      if (!processed) throw new Error('Missing resumed attachment');
+      expect(processed.status).toBe('processing');
+      expect(processed.s3Key).not.toBe(pending.s3Key);
+      expect(await storage.read(processed.s3Key)).toEqual(bytes);
+      const beforeLateUpload = await owner.db.select().from(outbox);
+      expect(
+        beforeLateUpload.filter((event) => event.event === 'attachment.uploaded'),
+      ).toHaveLength(1);
+      for (const event of beforeLateUpload.filter(
+        (event) => event.event === 'media.objects.purge',
+      )) {
+        await withSystem(app.db, BRAND, (tx) =>
+          createObjectPurgeHandler(storage)({
+            brandId: BRAND,
+            outboxId: event.id,
+            event: event.event,
+            payload: event.payload,
+            tx,
+            log: silentJobLogger,
+          }),
+        );
+        await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+      }
+      expect(await storage.head(pending.s3Key)).toBeUndefined();
+      storage.releaseUpload();
+      await stale;
+      const events = await owner.db.select().from(outbox);
+      expect(events.filter((event) => event.event === 'attachment.uploaded')).toHaveLength(1);
+      expect(
+        events
+          .filter((event) => event.event === 'media.objects.purge')
+          .flatMap((event) => event.payload.keys),
+      ).toContain(pending.s3Key);
+      for (const event of events) {
+        if (event.event === 'media.objects.purge')
+          await withSystem(app.db, BRAND, (tx) =>
+            createObjectPurgeHandler(storage)({
+              brandId: BRAND,
+              outboxId: event.id,
+              event: event.event,
+              payload: event.payload,
+              tx,
+              log: silentJobLogger,
+            }),
+          );
+        await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+      }
+      expect(await storage.head(pending.s3Key)).toBeUndefined();
+      expect(await storage.read(processed.s3Key)).toEqual(bytes);
+      expect(await redis.dbsize()).toBe(0);
+    } finally {
+      releaseStaleUpload();
+      await staleCheck?.catch(() => {});
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps refused vendor attachment bytes out of storage and records a safe placeholder warning', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-import-refused-download-'));
+    try {
+      const url = fake.addAttachment('invalid-pdf', Buffer.from('<html>expired login page</html>'));
+      const scenario = await stagedTicketScenario('refused-source-file', url);
+      await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      const [record] = await owner.db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.runId, scenario.input.runId),
+            eq(importRecords.entity, 'attachment'),
+          ),
+        );
+      if (!record) throw new Error('Missing staged attachment');
+      const storage = new FakeStorage(dir);
+      const result = await downloadStagedImportAttachment(downloadHarness(fake, storage), {
+        claim: scenario.claim,
+        recordId: record.id,
+      });
+      expect(result.state).toBe('rejected');
+      const [row] = await owner.db
+        .select()
+        .from(attachments)
+        .where(eq(attachments.id, result.attachmentId));
+      if (!row) throw new Error('Missing refused attachment');
+      expect(row).toMatchObject({ status: 'rejected', rejectReason: 'mime_mismatch' });
+      expect(await storage.head(row.s3Key)).toBeUndefined();
+      const warnings = await owner.db
+        .select()
+        .from(importLog)
+        .where(eq(importLog.runId, scenario.input.runId));
+      expect(warnings).toMatchObject([{ message: 'import.attachment.rejected', level: 'warning' }]);
+      expect(JSON.stringify(warnings)).not.toContain('synthetic-token');
+      expect(JSON.stringify(warnings)).not.toContain(url);
+      const events = await owner.db.select().from(outbox);
+      expect(events.every((event) => event.event === 'media.objects.purge')).toBe(true);
+      for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+      expect(await redis.dbsize()).toBe(0);
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('processes a shared imported image once, updates all historical copies and emits nothing', async () => {

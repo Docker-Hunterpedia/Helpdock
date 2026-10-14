@@ -49,3 +49,5 @@ Refuse repeated or delta imports whose historical message targets have been purg
 Apply source message edits, redactions and confirmed author corrections to existing historical rows without appending or delivering replies.
 
 Reconcile source attachment additions/removals on message deltas, preserve shared files and manual uploads, and queue last-link object cleanup transactionally. Changed native file metadata receives a fresh pending object.
+
+Prepare bounded, MIME-validated imported file downloads with temporary-file cleanup. Fence attachment storage attempts and queue silent processing only under a live claim; derive media variants beside the stored object key.

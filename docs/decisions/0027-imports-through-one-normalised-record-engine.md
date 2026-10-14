@@ -382,3 +382,16 @@ historical links retain their bytes. A brand/source advisory lock serializes
 shared-asset changes across tickets. Download-URL rotation does not replace an
 asset. This supersedes the temporary refusal of attachment membership changes in
 the source-message edit checkpoint; physical downloading remains a separate job.
+
+### Fenced physical attachment uploads
+
+Reserve a fresh server-generated object key for each pending attachment download
+attempt under the import loading claim. Shared pending links switch together;
+network and object upload run outside the transaction. Only the live claim may
+publish `attachment.uploaded` and mark the asset processing. Resumed attempts use
+a different key, so a revoked in-flight upload cannot overwrite their bytes.
+Old attempt keys use the transactional object cleanup helper. A stale upload
+finishing after earlier cleanup requests cleanup again, while keys still named
+by rows remain protected. Derived variants follow the stored object folder,
+rather than rebuilding it from the logical attachment ID. Policy refusals keep
+an explicit rejected placeholder and a safe warning, without processing events.

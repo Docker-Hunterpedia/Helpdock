@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Attachment as AttachmentRow, DbTransaction } from '@helpdock/db';
 import type { JobLogger } from '@helpdock/jobs';
@@ -87,6 +87,7 @@ export class FakeStorage implements ObjectStorage {
 
   async remove(key: string): Promise<void> {
     this.removed.push(key);
+    await rm(this.#path(key), { force: true });
   }
 
   /** What is in the bucket at a key, for a suite that wants to look at bytes. */

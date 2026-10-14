@@ -75,6 +75,7 @@ import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
+import { runImportLoadBatch } from '../jobs/load-batch.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
 import { loadNextStagedMetadata } from '../jobs/load-next-metadata.js';
 import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
@@ -3191,8 +3192,8 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
-  it('assembles staged history and confirmed authors without caller-supplied thread data', async () => {
-    const scenario = await stagedTicketScenario('assembled-history');
+  async function mappedHistoryScenario(externalId: string) {
+    const scenario = await stagedTicketScenario(externalId);
     const user = { externalId: 'oldagent', kind: 'agent', name: 'Original agent', active: false };
     await owner.db.insert(importRecords).values({
       brandId: BRAND,
@@ -3202,14 +3203,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       payload: user,
       payloadHash: hashImportValue(user),
     });
-    await owner.db.insert(importExternalIds).values({
-      brandId: BRAND,
-      source: 'zendesk',
-      entity: 'contact',
-      externalId: 'customer',
-      helpdockId: CONTACT,
-      payloadHash: 'a'.repeat(64),
-    });
+    await owner.db
+      .insert(importExternalIds)
+      .values({
+        brandId: BRAND,
+        source: 'zendesk',
+        entity: 'contact',
+        externalId: 'customer',
+        helpdockId: CONTACT,
+        payloadHash: 'a'.repeat(64),
+      })
+      .onConflictDoNothing();
     await owner.db.insert(importMappings).values([
       {
         brandId: BRAND,
@@ -3247,6 +3251,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         target: { kind: 'name' },
       },
     ]);
+    return scenario;
+  }
+
+  it('assembles staged history and confirmed authors without caller-supplied thread data', async () => {
+    const scenario = await mappedHistoryScenario('assembled-history');
     const checkpoint = { claim: scenario.claim, recordId: scenario.recordId };
     const loaded = await withSystem(app.db, BRAND, (tx) =>
       loadAssembledStagedTicket(tx, checkpoint),
@@ -3266,6 +3275,245 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     ).toEqual({ state: 'already_loaded', ticketId: loaded.ticketId });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
+
+  it('drives separate staff and ticket batches from staged history without finishing pending media', async () => {
+    const scenario = await mappedHistoryScenario('batched-history');
+    const deps = { db: app.db, jobId: 'import.load.batch.fixture' };
+    const command = { claim: scenario.claim, batchSize: 1 };
+    expect(await runImportLoadBatch(deps, command)).toEqual({ state: 'more', processed: 1 });
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(
+          and(
+            eq(importExternalIds.entity, 'ticket'),
+            eq(importExternalIds.externalId, scenario.input.record.externalId),
+          ),
+        ),
+    ).toEqual([]);
+    expect(await runImportLoadBatch(deps, command)).toEqual({ state: 'more', processed: 1 });
+    expect(await runImportLoadBatch(deps, command)).toEqual({
+      state: 'records_loaded',
+      processed: 0,
+    });
+    const [run] = await owner.db
+      .select()
+      .from(importRuns)
+      .where(eq(importRuns.id, scenario.input.runId));
+    expect(run).toMatchObject({
+      status: 'loading',
+      counts: { loaded: { user: 1, ticket: 1, message: 2, attachment: 1, csat: 1 } },
+    });
+    const [pointer] = await owner.db
+      .select()
+      .from(importExternalIds)
+      .where(
+        and(
+          eq(importExternalIds.brandId, BRAND),
+          eq(importExternalIds.entity, 'ticket'),
+          eq(importExternalIds.externalId, scenario.input.record.externalId),
+        ),
+      );
+    if (!pointer) throw new Error('Missing batched ticket');
+    expect(
+      await owner.db.select().from(attachments).where(eq(attachments.ticketId, pointer.helpdockId)),
+    ).toMatchObject([{ status: 'pending' }]);
+    const revisions = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${pointer.helpdockId}`,
+    );
+    expect(await runImportLoadBatch(deps, command)).toEqual({
+      state: 'records_loaded',
+      processed: 0,
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${pointer.helpdockId}`,
+      ),
+    ).toEqual(revisions);
+    await withSystem(app.db, BRAND, (tx) =>
+      pauseImportRun(tx, { brandId: BRAND, runId: scenario.input.runId }),
+    );
+    expect(await runImportLoadBatch(deps, command)).toEqual({ state: 'stopped', processed: 0 });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  async function stagedKnowledgeBatch(prefix: string) {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const article = {
+      externalId: `${prefix}-primary`,
+      sectionExternalId: `${prefix}-section`,
+      locale: 'en',
+      title: 'Original article',
+      bodyHtml: '<p>Original knowledge</p>',
+      draft: true,
+      internal: true,
+      createdAt: '2020-01-01T00:00:00Z',
+      updatedAt: '2020-01-02T00:00:00Z',
+    };
+    const records = [
+      {
+        entity: 'article',
+        payload: {
+          ...article,
+          externalId: `${prefix}-translation`,
+          translationOf: article.externalId,
+          locale: 'ar',
+          title: 'المقال الأصلي',
+        },
+      },
+      { entity: 'article', payload: article },
+      {
+        entity: 'section',
+        payload: {
+          externalId: `${prefix}-section`,
+          parentExternalId: `${prefix}-category`,
+          names: { en: 'Section' },
+        },
+      },
+      {
+        entity: 'category',
+        payload: { externalId: `${prefix}-category`, names: { en: 'Category' } },
+      },
+    ].map((record) => importRecordSchema.parse(record));
+    for (const record of records)
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId,
+        entity: record.entity,
+        externalId: record.payload.externalId,
+        payload: record.payload,
+        payloadHash: hashImportValue(record.payload),
+      });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing knowledge batch claim');
+    return { claim, runId, records };
+  }
+
+  it('prepares knowledge outside record transactions and loads a reversed translation after its primary', async () => {
+    const scenario = await stagedKnowledgeBatch('batch-knowledge');
+    const order: string[] = [];
+    const deps = {
+      db: app.db,
+      jobId: 'import.batch.knowledge',
+      prepareArticle: async ({ record }: { record: { externalId: string; bodyHtml: string } }) => {
+        order.push(record.externalId);
+        return record.bodyHtml;
+      },
+    };
+    expect(await runImportLoadBatch(deps, { claim: scenario.claim })).toEqual({
+      state: 'records_loaded',
+      processed: 4,
+    });
+    expect(order).toEqual(['batch-knowledge-primary', 'batch-knowledge-translation']);
+    const staged = await owner.db
+      .select()
+      .from(importRecords)
+      .where(eq(importRecords.runId, scenario.runId));
+    expect(staged.every((record) => record.status === 'loaded')).toBe(true);
+    const articles = staged.filter((record) => record.entity === 'article');
+    expect(new Set(articles.map((record) => record.helpdockId)).size).toBe(1);
+    expect(await runImportLoadBatch(deps, { claim: scenario.claim })).toEqual({
+      state: 'records_loaded',
+      processed: 0,
+    });
+    expect(order).toHaveLength(2);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('stops at article preparation and rechecks the claim before committing externally prepared content', async () => {
+    const scenario = await stagedKnowledgeBatch('batch-pause');
+    const deps = { db: app.db, jobId: 'import.batch.pause' };
+    const awaiting = await runImportLoadBatch(deps, { claim: scenario.claim });
+    expect(awaiting).toMatchObject({ state: 'article_required', processed: 2 });
+    const result = await runImportLoadBatch(
+      {
+        ...deps,
+        prepareArticle: async ({ record }) => {
+          await withSystem(app.db, BRAND, (tx) =>
+            pauseImportRun(tx, { brandId: BRAND, runId: scenario.runId }),
+          );
+          return record.bodyHtml;
+        },
+      },
+      { claim: scenario.claim },
+    );
+    expect(result).toEqual({ state: 'stopped', processed: 0 });
+    const articles = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, scenario.runId), eq(importRecords.entity, 'article')));
+    expect(
+      articles.every((record) => record.status === 'staged' && record.helpdockId === null),
+    ).toBe(true);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it.each(['group', 'message'] as const)(
+    'keeps unresolved $0 records out of the completed-record boundary',
+    async (entity) => {
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'loading',
+        startedBy: USER,
+      });
+      const record = importRecordSchema.parse(
+        entity === 'group'
+          ? { entity, payload: { externalId: 'batch-reference-group', name: 'Original group' } }
+          : {
+              entity,
+              payload: {
+                externalId: 'batch-orphan-message',
+                ticketExternalId: 'absent-ticket',
+                authorKind: 'system',
+                public: true,
+                bodyText: 'Unattached history',
+                createdAt: '2020-01-01T00:00:00Z',
+                attachments: [],
+              },
+            },
+      );
+      const [staged] = await owner.db
+        .insert(importRecords)
+        .values({
+          brandId: BRAND,
+          runId,
+          entity: record.entity,
+          externalId: record.payload.externalId,
+          payload: record.payload,
+          payloadHash: hashImportValue(record.payload),
+        })
+        .returning({ id: importRecords.id });
+      const claim = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+      );
+      if (!claim || !staged) throw new Error('Missing boundary fixture');
+      const batch = runImportLoadBatch({ db: app.db, jobId: 'import.batch.reference' }, { claim });
+      if (entity === 'group')
+        expect(await batch).toEqual({
+          state: 'reference_required',
+          recordId: staged.id,
+          processed: 0,
+        });
+      else await expect(batch).rejects.toMatchObject({ code: 'mapping-invalid' });
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0],
+      ).toMatchObject({ status: 'loading', counts: {} });
+      expect(
+        (await owner.db.select().from(importRecords).where(eq(importRecords.id, staged.id)))[0]
+          ?.status,
+      ).toBe('staged');
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
 
   it.each(['existing', 'invited', 'name'] as const)(
     'checkpoints %s staff mappings once without invitation delivery',

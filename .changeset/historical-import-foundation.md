@@ -53,3 +53,5 @@ Reconcile source attachment additions/removals on message deltas, preserve share
 Prepare bounded, MIME-validated imported file downloads with temporary-file cleanup. Fence attachment storage attempts and queue silent processing only under a live claim; derive media variants beside the stored object key.
 
 Refuse an attachment rejection receipt when its local target disappeared during the vendor download.
+
+Include pending import credential envelopes in master-key rotation while preserving worker fencing nonces.

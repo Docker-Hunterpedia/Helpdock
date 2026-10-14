@@ -1945,8 +1945,9 @@ The present-target and purged-target integration cases cover both outcomes.
 articles (including primary-before-translation dependencies), and assembled
 tickets with separate record transactions and claim checks. It returns explicit
 article/reference preparation boundaries and distinguishes domain records loaded
-from run completion. It has no dedicated runtime coverage yet and is not wired
-into the queue. Resume by adding batch-driver integration tests and completing
+from run completion. At the pause checkpoint it had no dedicated runtime coverage and was not wired
+into the queue. The resumed verification below supersedes the coverage limitation;
+queue wiring remains unfinished. Resume by adding batch-driver integration tests and completing
 reference/media/finish orchestration; do not treat this draft driver as verified.
 
 Remaining work includes immutable source-account binding; referenced user/ticket
@@ -1958,6 +1959,31 @@ The final full import-path review, 500-ticket datasets, actual process-kill test
 browser/axe checks and aggregate CI/coverage gates remain required. Real-vendor
 and live-deployment validation are also unproven. Local research artifacts under
 `reports/` and `research_notes/` are retained outside the committed PR.
+
+### Resumed batch verification and CI inventory fixes (M11-07/09/10, in progress)
+
+The batch driver now has five real PostgreSQL/Redis integration cases. They prove
+staff-before-ticket loading across separate bounded batches, primary-before-
+translation ordering, pause checks after external article preparation, repeat
+no-ops, explicit unresolved-reference boundaries and refusal of orphan history.
+Domain-record completion leaves the run `loading` with attachment processing
+still pending. All 103 writer integration cases pass. Reference checkpointing,
+physical knowledge preparation, queue wiring and finalization remain required.
+
+CI run `38509308134` exposed stale schema/migration/queue inventories and missing
+import credential coverage in master-key rotation. The inventories now include
+migrations 0059–0063, the six import tables, the bigint import-log key exception
+and the fourteenth queue. `import_runs.credentials_encrypted` participates in
+rotation; `claim_token` is explicitly classified as an unencrypted worker fencing
+nonce. The new real-PostgreSQL rotation case proves a new key alone decrypts the
+pending credential, the nonce/status stay unchanged and a repeat rotates nothing.
+All 35 focused database unit cases, 18 migration/key-rotation integration cases
+and 23 observability integration cases pass. The generated migration metadata was
+formatted for CI with unchanged parsed JSON content.
+
+These fixes address the inspected CI failures; aggregate CI and coverage require
+a new run and are not claimed green. The original 1.0 and extra-connector scope,
+remaining deliverables and exit criteria stay open.
 
 ## M11-13 Freshdesk connector
 

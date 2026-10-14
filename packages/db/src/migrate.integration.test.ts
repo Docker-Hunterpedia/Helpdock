@@ -71,6 +71,11 @@ const MIGRATION_TAGS = [
   '0056_imported_csat',
   '0057_import_worker_claims',
   '0058_imported_knowledge_metadata',
+  '0059_imported_activity',
+  '0060_imported_participant_source',
+  '0061_imported_csat_details',
+  '0062_imported_section_ancestry',
+  '0063_import_record_load_receipts',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

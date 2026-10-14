@@ -34,6 +34,7 @@ export const ENVELOPE_COLUMNS: readonly EnvelopeColumn[] = [
   { table: 'webhooks', column: 'secret' },
   { table: 'knowledge_sources', column: 'config_encrypted' },
   { table: 'sso_connections', column: 'secret_encrypted' },
+  { table: 'import_runs', column: 'credentials_encrypted' },
 ];
 
 /**
@@ -41,6 +42,11 @@ export const ENVELOPE_COLUMNS: readonly EnvelopeColumn[] = [
  * reason. A hash cannot be re-encrypted and needs no key to be checked.
  */
 export const NOT_ENVELOPE_COLUMNS: readonly (EnvelopeColumn & { readonly reason: string })[] = [
+  {
+    table: 'import_runs',
+    column: 'claim_token',
+    reason: 'worker ownership nonce for fencing; not an encrypted credential',
+  },
   {
     table: 'users',
     column: 'password_hash',

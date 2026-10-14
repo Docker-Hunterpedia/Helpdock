@@ -43,3 +43,5 @@ Checkpoint existing, invited and name-only staff mappings with import progress. 
 Build field, profile, staff and knowledge load operations directly from staged source records and confirmed mappings. Resolve company links and require prepared article content before committing it.
 
 Select staged metadata in dependency order and refuse unresolved parents or cycles instead of reporting the loading phase as finished.
+
+Refuse repeated or delta imports whose historical message targets have been purged, rather than reporting incomplete local history as unchanged.

@@ -716,6 +716,28 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     },
   );
 
+  it('refuses a purged historical message on both unchanged repeats and changed deltas', async () => {
+    const input = request('purged-message-history');
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [message] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId));
+    if (!message) throw new Error('Missing imported message');
+    await owner.db.delete(ticketMessages).where(eq(ticketMessages.id, message.id));
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'target-unavailable' },
+    );
+    input.record.subject = 'Changed after purge';
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'target-unavailable' },
+    );
+    expect(
+      (await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId)))[0]?.subject,
+    ).toBe('Original ticket');
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
   it('updates a source subject on delta while retaining the original creation date', async () => {
     const input = request('subject-delta');
     const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));

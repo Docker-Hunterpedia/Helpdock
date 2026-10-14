@@ -11,7 +11,11 @@ import { loadImportedArticle } from './load-articles.js';
 import { loadImportedContact } from './load-contacts.js';
 import { loadImportedCsat } from './load-csat.js';
 import { loadImportedField } from './load-fields.js';
-import { importMessageHash, loadImportedMessages } from './load-messages.js';
+import {
+  importMessageHash,
+  loadImportedMessages,
+  requireImportedMessageTargets,
+} from './load-messages.js';
 import { loadImportedOrganization } from './load-organizations.js';
 import { loadImportedParticipants } from './load-participants.js';
 import { loadImportedStaff } from './load-staff.js';
@@ -69,7 +73,10 @@ export class ImportWriter {
       authors: input.authors,
     });
     const existing = await importedIdentity(tx, input, 'ticket', input.record.externalId);
-    if (existing) await requireImportedTicket(tx, input, existing.helpdockId);
+    if (existing) {
+      await requireImportedTicket(tx, input, existing.helpdockId);
+      await requireImportedMessageTargets(tx, input, existing.helpdockId);
+    }
     if (existing?.payloadHash === payloadHash)
       return { ticketId: existing.helpdockId, outcome: 'unchanged', messages: 0 };
     input.resolved.custom = await validatedImportedCustom(tx, {

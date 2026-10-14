@@ -1835,6 +1835,23 @@ leaves the run in `loading`: articles, media, tickets, reference rows, finalizat
 source-account binding and API/UI acceptance remain required. This checkpoint
 does not complete M11-09 or M11-10.
 
+### Missing historical message target regression (M11-09, in progress)
+
+A source message receipt could survive removal of its local message. The writer
+previously returned `unchanged` for a repeated ticket, or skipped the missing
+message on a changed delta. `requireImportedMessageTargets` now validates and
+locks existing message targets before the ticket fingerprint shortcut; the
+message-loading path performs the same check. Missing rows raise
+`target-unavailable`, and a receipt pointing at a different ticket raises
+`duplicate-source-message`. The caller's transaction rolls back domain changes.
+
+The new regression failed with the previous `unchanged` result before the fix.
+All 90 PostgreSQL/Redis writer integration cases now pass, including unchanged
+repeat and changed-delta refusal, preserved ticket subject and an empty outbox.
+Typecheck and the import structural guard pass. Source message edits/redactions,
+attachment-byte preparation and the complete delta/reference acceptance remain
+unfinished; this fixes missing local message targets only.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

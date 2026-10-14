@@ -2,7 +2,7 @@ import { sanitizeMessageBody } from '@helpdock/channels';
 import { type DbTransaction, ticketMessages, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import type { ImportMessage } from '@helpdock/schemas';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importEmailMeta } from './email-meta.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
@@ -65,6 +65,33 @@ async function insertImportedMessage(
   });
 }
 
+async function requireImportedMessageTarget(
+  tx: DbTransaction,
+  input: TicketLoad,
+  messageId: string,
+  ticketId: string,
+): Promise<void> {
+  const [target] = await tx
+    .select({ ticketId: ticketMessages.ticketId })
+    .from(ticketMessages)
+    .where(and(eq(ticketMessages.id, messageId), eq(ticketMessages.brandId, input.brandId)))
+    .for('update');
+  if (!target) throw new ImportLoadError('target-unavailable');
+  if (target.ticketId !== ticketId) throw new ImportLoadError('duplicate-source-message');
+}
+
+/** Validate source receipts before the ticket fingerprint can short-circuit a repeat. */
+export async function requireImportedMessageTargets(
+  tx: DbTransaction,
+  input: TicketLoad,
+  ticketId: string,
+): Promise<void> {
+  for (const message of input.messages) {
+    const existing = await importedIdentity(tx, input, 'message', message.externalId);
+    if (existing) await requireImportedMessageTarget(tx, input, existing.helpdockId, ticketId);
+  }
+}
+
 export async function loadImportedMessages(
   tx: DbTransaction,
   input: TicketLoad,
@@ -82,12 +109,7 @@ export async function loadImportedMessages(
   )) {
     const existing = await importedIdentity(tx, input, 'message', message.externalId);
     if (existing) {
-      const [target] = await tx
-        .select({ ticketId: ticketMessages.ticketId })
-        .from(ticketMessages)
-        .where(eq(ticketMessages.id, existing.helpdockId));
-      if (target && target.ticketId !== ticketId)
-        throw new ImportLoadError('duplicate-source-message');
+      await requireImportedMessageTarget(tx, input, existing.helpdockId, ticketId);
       continue;
     }
     sequence += 1;

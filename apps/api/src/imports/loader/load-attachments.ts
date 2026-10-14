@@ -1,9 +1,9 @@
 import { attachments, type DbTransaction, importExternalIds, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { type ImportAttachmentRef, safeFileName } from '@helpdock/schemas';
+import { type ImportAttachmentRef, type ImportMessage, safeFileName } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
 import { attachmentKey } from '../../media/keys.js';
-import type { TicketLoad } from './contracts.js';
+import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importedIdentity } from './external-ids.js';
 
 /** Acquire all shared asset locks in one order so concurrent ticket transactions cannot deadlock. */
@@ -90,4 +90,41 @@ export async function loadImportedAttachment(
       ],
       set: { helpdockId: attachmentId, payloadHash },
     });
+}
+
+/** Do not acknowledge changed attachment membership before the media reconciliation phase exists. */
+export async function requireUnchangedMessageAttachments(
+  tx: DbTransaction,
+  input: TicketLoad,
+  messageId: string,
+  message: ImportMessage,
+): Promise<void> {
+  const rows = await tx
+    .select()
+    .from(attachments)
+    .where(
+      and(
+        eq(attachments.brandId, input.brandId),
+        eq(attachments.messageId, messageId),
+        eq(attachments.origin, 'import'),
+      ),
+    );
+  if (rows.length !== message.attachments.length) throw new ImportLoadError('mapping-invalid');
+  for (const ref of message.attachments) {
+    const pointer = await importedIdentity(tx, input, 'attachment', ref.externalId);
+    const fingerprint = hashImportValue({
+      externalId: ref.externalId,
+      fileName: ref.fileName,
+      size: ref.size ?? null,
+      contentType: ref.contentType ?? null,
+    });
+    if (
+      !pointer ||
+      pointer.payloadHash !== fingerprint ||
+      !rows.some(
+        (row) => row.id === pointer.helpdockId || row.copiedFromAttachmentId === pointer.helpdockId,
+      )
+    )
+      throw new ImportLoadError('mapping-invalid');
+  }
 }

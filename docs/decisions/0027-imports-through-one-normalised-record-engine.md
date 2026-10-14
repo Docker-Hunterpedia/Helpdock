@@ -359,3 +359,14 @@ identity and target availability. A contact's stable source pointer can follow a
 manual merge to its current profile without rewriting the original staging
 pointer; an article requires the imported locale version as well as its parent
 article. These checkpoints do not replace the ordered runner or dry-run approval.
+
+### Imported message source corrections
+
+Imported source messages are updated in place when their source body, public/note
+state, email metadata or date changes, or a confirmed author mapping is corrected.
+They retain their local message ID and sequence. Sanitization still runs before
+writes, and source receipts update in the same transaction. The import never
+uses reply delivery to apply a correction. Download-URL rotation does not change
+the message fingerprint. Attachment membership changes must reconcile media
+before the corresponding source receipt can be acknowledged; the current loader
+refuses those changes until that phase is implemented.

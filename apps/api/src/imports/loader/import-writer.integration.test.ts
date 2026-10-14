@@ -738,6 +738,81 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
+  it('updates edited and redacted source message bodies in place without sending or appending history', async () => {
+    const input = request('edited-message-history');
+    const source = input.messages[0];
+    if (!source) throw new Error('Missing historical note');
+    source.attachments = [
+      {
+        externalId: 'edited-history-file',
+        fileName: 'history.pdf',
+        size: 10,
+        contentType: 'application/pdf',
+        url: 'https://vendor.invalid/old',
+      },
+    ];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [before] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(and(eq(ticketMessages.ticketId, loaded.ticketId), eq(ticketMessages.kind, 'note')));
+    if (!before) throw new Error('Missing historical note');
+    source.bodyHtml = '<p>Corrected note</p><script>bad()</script>';
+    const sourceFile = source.attachments[0];
+    if (!sourceFile) throw new Error('Missing historical attachment');
+    sourceFile.url = 'https://vendor.invalid/refreshed';
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'updated',
+      messages: 0,
+    });
+    const [edited] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.id, before.id));
+    expect(edited).toMatchObject({
+      id: before.id,
+      seq: before.seq,
+      createdAt: before.createdAt,
+      bodyText: 'Corrected note',
+      kind: 'note',
+      authorDisplay: 'Original agent',
+    });
+    expect(edited?.bodyHtml).not.toContain('<script');
+    input.authors.oldagent = { kind: 'name', name: 'Corrected historical name' };
+    source.bodyHtml = '<p>[redacted]</p>';
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      (await owner.db.select().from(ticketMessages).where(eq(ticketMessages.id, before.id)))[0]
+        ?.bodyText,
+    ).toBe('[redacted]');
+    const revisions = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+      messages: 0,
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
+      ),
+    ).toEqual(revisions);
+    expect(
+      await owner.db.select().from(attachments).where(eq(attachments.messageId, before.id)),
+    ).toHaveLength(1);
+    source.attachments = [];
+    source.bodyHtml = '<p>Changed with removed attachment</p>';
+    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
+      { code: 'mapping-invalid' },
+    );
+    expect(
+      (await owner.db.select().from(ticketMessages).where(eq(ticketMessages.id, before.id)))[0]
+        ?.bodyText,
+    ).toBe('[redacted]');
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(await redis.dbsize()).toBe(0);
+  });
+
   it('updates a source subject on delta while retaining the original creation date', async () => {
     const input = request('subject-delta');
     const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));

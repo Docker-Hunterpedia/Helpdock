@@ -6,7 +6,11 @@ import { and, eq, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importEmailMeta } from './email-meta.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
-import { loadImportedAttachment, lockImportedAttachments } from './load-attachments.js';
+import {
+  loadImportedAttachment,
+  lockImportedAttachments,
+  requireUnchangedMessageAttachments,
+} from './load-attachments.js';
 import { importedAuthor } from './load-authors.js';
 
 function plainHtml(text: string): string {
@@ -65,19 +69,51 @@ async function insertImportedMessage(
   });
 }
 
+async function updateImportedMessage(
+  tx: DbTransaction,
+  input: TicketLoad,
+  message: ImportMessage,
+  messageId: string,
+): Promise<void> {
+  await requireUnchangedMessageAttachments(tx, input, messageId, message);
+  const author = await importedAuthor(tx, input, message);
+  const messageBody = sanitizeMessageBody(message.bodyHtml ?? plainHtml(message.bodyText ?? ''));
+  await tx
+    .update(ticketMessages)
+    .set({
+      ...author,
+      kind: message.public ? 'public' : 'note',
+      bodyHtml: messageBody.html,
+      bodyText: messageBody.text,
+      email: importEmailMeta(message),
+      externalMessageId: message.email?.messageId ?? null,
+      createdAt: new Date(message.createdAt),
+    })
+    .where(and(eq(ticketMessages.id, messageId), eq(ticketMessages.brandId, input.brandId)));
+  await rememberImported(tx, {
+    brandId: input.brandId,
+    source: input.source,
+    entity: 'message',
+    externalId: message.externalId,
+    helpdockId: messageId,
+    payloadHash: importMessageHash(message),
+  });
+}
+
 async function requireImportedMessageTarget(
   tx: DbTransaction,
   input: TicketLoad,
   messageId: string,
   ticketId: string,
-): Promise<void> {
+) {
   const [target] = await tx
-    .select({ ticketId: ticketMessages.ticketId })
+    .select()
     .from(ticketMessages)
     .where(and(eq(ticketMessages.id, messageId), eq(ticketMessages.brandId, input.brandId)))
     .for('update');
   if (!target) throw new ImportLoadError('target-unavailable');
   if (target.ticketId !== ticketId) throw new ImportLoadError('duplicate-source-message');
+  return target;
 }
 
 /** Validate source receipts before the ticket fingerprint can short-circuit a repeat. */
@@ -109,7 +145,15 @@ export async function loadImportedMessages(
   )) {
     const existing = await importedIdentity(tx, input, 'message', message.externalId);
     if (existing) {
-      await requireImportedMessageTarget(tx, input, existing.helpdockId, ticketId);
+      const target = await requireImportedMessageTarget(tx, input, existing.helpdockId, ticketId);
+      const author = await importedAuthor(tx, input, message);
+      if (
+        existing.payloadHash !== importMessageHash(message) ||
+        target.authorType !== author.authorType ||
+        target.authorId !== author.authorId ||
+        target.authorDisplay !== author.authorDisplay
+      )
+        await updateImportedMessage(tx, input, message, existing.helpdockId);
       continue;
     }
     sequence += 1;

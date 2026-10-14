@@ -1852,6 +1852,25 @@ Typecheck and the import structural guard pass. Source message edits/redactions,
 attachment-byte preparation and the complete delta/reference acceptance remain
 unfinished; this fixes missing local message targets only.
 
+### Source message edit checkpoint (M11-09, in progress)
+
+A changed source message previously altered the ticket receipt without updating
+the historical body. The regression reproduced the stale private note before the
+fix. The loader now sanitizes and updates the same message row and its source
+receipt when its payload changes; confirmed author corrections also refresh that
+row. Sequence and message identity remain stable, source dates/public-note state
+and email metadata remain authoritative, and no reply delivery is invoked.
+Rotating download URLs do not count as attachment changes.
+
+Existing imported attachment membership and native metadata are checked before
+editing a message. Changes to attachments currently raise `mapping-invalid`
+without committing the body or ticket receipt; media reconciliation must replace
+this temporary restriction before M11 can be completed. It is not an accepted
+scope gap. The integration case covers edits, sanitization, redaction, corrected
+historical names, stable sequence/date, rotating URLs, no duplicate attachment,
+unchanged-repeat row revisions and rollback on attachment removal. All 91 writer
+integration cases pass with real PostgreSQL/Redis, no outbox or Redis writes.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

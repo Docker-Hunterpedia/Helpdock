@@ -45,3 +45,5 @@ Build field, profile, staff and knowledge load operations directly from staged s
 Select staged metadata in dependency order and refuse unresolved parents or cycles instead of reporting the loading phase as finished.
 
 Refuse repeated or delta imports whose historical message targets have been purged, rather than reporting incomplete local history as unchanged.
+
+Apply source message edits, redactions and confirmed author corrections to existing historical rows without appending or delivering replies.

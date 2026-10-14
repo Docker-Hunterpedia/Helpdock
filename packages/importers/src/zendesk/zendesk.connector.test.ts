@@ -312,6 +312,124 @@ it('discovers historical tags from tickets instead of the limited popular-tag en
   expect(fake.server.calls.some((call) => call.path === '/api/v2/tags.json')).toBe(false);
 });
 
+it('retains source changes and historical notifications as inert activity without duplicating comments', async () => {
+  const pages = await collectPages(connector.extract(context, 'activity', null));
+  expect(pages.flatMap((page) => page.records)).toMatchObject([
+    {
+      entity: 'activity',
+      payload: {
+        externalId: '1201:1202',
+        ticketExternalId: '101',
+        authorExternalId: '301',
+        authorKind: 'agent',
+        action: 'zendesk.Change',
+        from: { field: 'status', value: 'open' },
+        to: { field: 'status', value: 'pending' },
+        createdAt: '2020-01-02T10:00:00Z',
+        details: { metadata: { custom: { time_spent: '3m22s' } } },
+      },
+    },
+    {
+      entity: 'activity',
+      payload: {
+        externalId: '1201:1203',
+        action: 'zendesk.Notification',
+        details: { event: { body: 'Original notification' } },
+      },
+    },
+  ]);
+  expect(fake.server.calls.every((call) => call.method === 'GET')).toBe(true);
+});
+
+it('resumes audit history across all pages and refuses changes to a committed audit page', async () => {
+  const original = zendeskCoreFixture.audits?.['101']?.[0];
+  if (!original) throw new Error('Missing source audit');
+  const audits = Array.from({ length: 101 }, (_, index) => ({ ...original, id: 2000 + index }));
+  fake.replaceFixture({ ...zendeskCoreFixture, audits: { '101': audits } });
+  const iterator = connector.extract(context, 'activity', null)[Symbol.asyncIterator]();
+  const first = await iterator.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing audit checkpoint');
+  await iterator.return?.(undefined);
+  const resumed = await collectPages(connector.extract(context, 'activity', first.value.cursor));
+  expect(resumed.flatMap((page) => page.records)).toHaveLength(200);
+  expect(resumed.at(-1)).toMatchObject({
+    cursor: null,
+    deltaCursor: { mode: 'activity', tickets: { after: expect.any(String) } },
+  });
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    audits: {
+      '101': audits.map((audit, index) =>
+        index === 0 ? { ...audit, metadata: { custom: { redacted: true } } } : audit,
+      ),
+    },
+  });
+  await expect(
+    collectPages(connector.extract(context, 'activity', first.value.cursor)),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
+it('accepts an unpaginated archived audit response exceeding one hundred rows without truncation', async () => {
+  const original = zendeskCoreFixture.audits?.['101']?.[0];
+  if (!original) throw new Error('Missing source audit');
+  fake.server.failNext({
+    path: '/api/v2/tickets/101/audits.json',
+    status: 200,
+    json: {
+      audits: Array.from({ length: 101 }, (_, index) => ({
+        ...original,
+        id: 2000 + index,
+        author_id: null,
+      })),
+      next_page: null,
+    },
+  });
+  const pages = await collectPages(connector.extract(context, 'activity', null));
+  expect(pages.flatMap((page) => page.records)).toHaveLength(202);
+  expect(pages[0]?.records[0]).toMatchObject({ payload: { authorKind: 'system' } });
+});
+
+it('uses the terminal ticket watermark to revisit changed audit history on delta', async () => {
+  const full = await collectPages(connector.extract(context, 'activity', null));
+  const watermark = full.at(-1)?.deltaCursor;
+  const ticket = zendeskCoreFixture.tickets?.[0];
+  const audit = zendeskCoreFixture.audits?.['101']?.[0];
+  if (!watermark || !ticket || !audit) throw new Error('Missing source delta fixture');
+  fake.advanceTime(120);
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    tickets: [{ ...ticket, updated_at: '2026-10-14T00:00:10Z' }],
+    audits: {
+      '101': [
+        {
+          ...audit,
+          events: [
+            {
+              id: 1301,
+              type: 'Change',
+              field_name: 'assignee_id',
+              previous_value: null,
+              value: 301,
+            },
+          ],
+          created_at: '2026-10-14T00:00:10Z',
+        },
+      ],
+    },
+  });
+  const delta = await collectPages(connector.extract(context, 'activity', watermark));
+  expect(delta.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: '1201:1301',
+        from: { field: 'assignee_id', value: null },
+        to: { field: 'assignee_id', value: 301 },
+        createdAt: '2026-10-14T00:00:10Z',
+      },
+    },
+  ]);
+});
+
 it('downloads stable Support attachment URLs without credentials reaching the redirected CDN', async () => {
   const url = fake.addAttachment('receipt', Buffer.from('original attachment'));
   const downloaded = await connector.fetchAttachment(context, {

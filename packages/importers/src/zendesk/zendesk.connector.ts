@@ -30,6 +30,7 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
     'attachment',
     'field',
     'tag',
+    'activity',
   ] as const;
 
   constructor(private readonly options: { apiRoot?: string } = {}) {}
@@ -77,6 +78,7 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
         return exportZendeskTags(client, cursor, since);
       case 'message':
       case 'attachment':
+      case 'activity':
         return exportZendeskThread(client, { mode: entity, cursor, since });
       default:
         throw new ConnectorError('invalid-response');

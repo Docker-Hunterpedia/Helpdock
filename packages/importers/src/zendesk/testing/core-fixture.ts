@@ -60,6 +60,29 @@ export const zendeskCoreFixture: ZendeskFixture = {
     },
   ],
   groups: [{ id: 501, name: 'Original support team' }],
+  audits: {
+    '101': [
+      {
+        id: 1201,
+        ticket_id: 101,
+        author_id: 301,
+        created_at: '2020-01-02T10:00:00Z',
+        events: [
+          { id: 901, type: 'Comment', body: 'Private note', public: false },
+          {
+            id: 1202,
+            type: 'Change',
+            field_name: 'status',
+            previous_value: 'open',
+            value: 'pending',
+          },
+          { id: 1203, type: 'Notification', body: 'Original notification', subject: 'Updated' },
+        ],
+        metadata: { custom: { time_spent: '3m22s' } },
+        via: { channel: 'web' },
+      },
+    ],
+  },
   ticket_fields: [
     { id: 1, title: 'Status', type: 'status' },
     {

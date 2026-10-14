@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { ticketAudits } from './audits-export.js';
 import type { ZendeskClient } from './client.js';
 import {
   type zendeskAttachmentSchema,
@@ -13,15 +14,22 @@ import {
 } from './contracts.js';
 
 const threadCursorSchema = z.strictObject({
-  mode: z.enum(['message', 'attachment']),
+  mode: z.enum(['message', 'attachment', 'activity']),
   tickets: zendeskCursorSchema,
   ticketOffset: z.int().nonnegative().default(0),
   ticketFingerprint: z.string().optional(),
   commentAfter: z.string().optional(),
   commentOffset: z.int().nonnegative().default(0),
   commentFingerprint: z.string().optional(),
+  audit: z
+    .strictObject({
+      page: z.int().positive(),
+      offset: z.int().nonnegative(),
+      fingerprint: z.string().optional(),
+    })
+    .optional(),
 });
-type ThreadCursor = z.infer<typeof threadCursorSchema>;
+export type ThreadCursor = z.infer<typeof threadCursorSchema>;
 
 function attachmentRef(attachment: z.infer<typeof zendeskAttachmentSchema>) {
   return {
@@ -78,7 +86,7 @@ function cursorJson(cursor: ThreadCursor): ImportCursor {
 
 async function* ticketComments(
   client: ZendeskClient,
-  state: ThreadCursor,
+  state: ThreadCursor & { mode: 'message' | 'attachment' },
   ticketId: number,
 ): AsyncGenerator<ImportPage> {
   const path = `/api/v2/tickets/${ticketId}/comments.json`;
@@ -98,7 +106,11 @@ async function* ticketComments(
       const comment = page.comments[index];
       if (!comment) throw new ConnectorError('invalid-response');
       yield {
-        records: await commentRecords(client, { mode: state.mode, ticketId, comment }),
+        records: await commentRecords(client, {
+          mode: state.mode,
+          ticketId,
+          comment,
+        }),
         cursor: cursorJson({
           ...checkpoint,
           commentOffset: index + 1,
@@ -118,7 +130,7 @@ async function* ticketComments(
 export async function* exportZendeskThread(
   client: ZendeskClient,
   request: {
-    mode: 'message' | 'attachment';
+    mode: 'message' | 'attachment' | 'activity';
     cursor: ImportCursor | null;
     since: Date | undefined;
   },
@@ -153,7 +165,8 @@ export async function* exportZendeskThread(
       const ticket = batch.tickets[index];
       if (!ticket) throw new ConnectorError('invalid-response');
       const state = { ...checkpoint, ticketOffset: index, ticketFingerprint: fingerprint };
-      yield* ticketComments(client, state, ticket.id);
+      if (request.mode === 'activity') yield* ticketAudits(client, state, ticket.id);
+      else yield* ticketComments(client, { ...state, mode: request.mode }, ticket.id);
       checkpoint = {
         mode: request.mode,
         tickets: checkpoint.tickets,

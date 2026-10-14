@@ -1960,6 +1960,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ]);
       expect(rows.filter((row) => row.entity === 'contact')).toHaveLength(3);
       expect(
+        rows
+          .filter((row) => row.entity === 'activity')
+          .sort((first, second) => first.externalId.localeCompare(second.externalId)),
+      ).toMatchObject([
+        {
+          externalId: '1201:1202',
+          payload: { action: 'zendesk.Change', createdAt: '2020-01-02T10:00:00Z' },
+        },
+        { externalId: '1201:1203', payload: { action: 'zendesk.Notification' } },
+      ]);
+      expect(
         rows.find((row) => row.entity === 'contact' && row.externalId === '201')?.payload,
       ).toMatchObject({
         emails: ['customer@example.invalid', 'secondary@example.invalid'],
@@ -1977,6 +1988,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           attachment: 1,
           field: 3,
           tag: 1,
+          activity: 2,
         },
       });
       expect(run?.cursors).toMatchObject({

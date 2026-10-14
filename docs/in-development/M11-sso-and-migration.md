@@ -1544,6 +1544,33 @@ case pass, covering field pagination/resume, scope collisions, unsupported field
 refusal and historical tags. Audits, CSAT, Guide, account binding, complete mapping
 and the full acceptance requirements remain unfinished. M11-12 remains in progress.
 
+### Zendesk historical audit checkpoint (in progress)
+
+The adapter now extracts `activity` alongside its previous nine entities. It
+reads each ticket's `/api/v2/tickets/{id}/audits.json`, with offset pagination,
+per-audit checkpoints, page fingerprints and a final ticket-export watermark for
+delta. Archived audit responses can exceed 100 rows; the adapter retains the
+whole response within the SDK's HTTP byte limit rather than truncating it.
+
+Change events retain source fields and before/after values, including explicit
+nulls. Other historical events, including notifications, retain their native event
+payload as inert activity. Audit dates, actor references, source channel and
+metadata remain available. Comment/voice-comment audit events are excluded from
+activity because replies are extracted separately. Missing/system audit authors
+remain system actors; positive user IDs resolve through the read-only user API.
+An audit naming another ticket is rejected. No source mutation or notification
+send occurs. Contracts checked 2026-10-14:
+[ticket audits](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_audits/)
+and [audit events](https://developer.zendesk.com/documentation/ticketing/reference-guides/ticket-audit-events-reference/).
+
+Fifteen connector HTTP cases pass, including audit pagination/resume, changed-page
+refusal, an unpaginated 101-audit response and changed-history delta. The focused
+PostgreSQL/Redis staging test retains the fixture's two non-comment activity rows
+and confirms an empty outbox. This is extraction/staging evidence, not full
+end-to-end import acceptance. CSAT, Guide, deleted/archive reconciliation, source
+binding, mapping-aware unsupported-field preservation and all previously listed
+acceptance requirements remain unfinished. M11-12 remains in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

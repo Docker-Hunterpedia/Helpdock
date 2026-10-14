@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { importAttachmentsJob, importExtractJob, importFinishJob, importLoadJob } from './jobs.js';
+import {
+  importAttachmentsJob,
+  importExtractJob,
+  importFinishJob,
+  importLoadJob,
+  importRecoverJob,
+} from './jobs.js';
 
 describe('import job boundaries', () => {
+  it('keeps the global recovery tick free of tenant IDs and credentials', () => {
+    expect(importRecoverJob.schema.parse({})).toEqual({});
+    expect(importRecoverJob.schema.safeParse({ credentials: 'secret' }).success).toBe(false);
+    expect(
+      importRecoverJob.schema.safeParse({ brandId: '0192c3f0-0000-7000-8000-00000000000a' })
+        .success,
+    ).toBe(false);
+  });
   it.each([importExtractJob, importLoadJob, importAttachmentsJob, importFinishJob])(
     '%s accepts only run and brand IDs',
     (job) => {

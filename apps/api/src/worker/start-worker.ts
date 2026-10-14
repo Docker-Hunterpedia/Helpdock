@@ -24,10 +24,12 @@ import {
   helpCenterPublishDueSweepJob,
   helpCenterSearchReindexJob,
   helpCenterSearchReindexSweepJob,
+  IMPORT_RECOVERY_CRON,
   importAttachmentsJob,
   importExtractJob,
   importFinishJob,
   importLoadJob,
+  importRecoverJob,
   type JobLogger,
   knowledgeConfigureJob,
   knowledgeEmbedJob,
@@ -47,6 +49,7 @@ import {
   type OutboxRelay,
   outboxEventJob,
   outboxJobOrderingKeys,
+  parseJobPayloadOrFail,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -128,6 +131,7 @@ import {
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
 import { registerImportEventHandlers } from '../imports/import-events.js';
+import { recoverImportWork } from '../imports/jobs/recover.js';
 import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
 import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
@@ -978,6 +982,7 @@ export const workerDependencies: WorkerDependencies = {
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
       { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
       { job: samlMetadataRefreshJob, cron: SAML_METADATA_REFRESH_CRON },
+      { job: importRecoverJob, cron: IMPORT_RECOVERY_CRON },
     ]) {
       maintenance
         .upsertJobScheduler(
@@ -1064,6 +1069,11 @@ export const workerDependencies: WorkerDependencies = {
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
+        if (job.name === importRecoverJob.name) {
+          parseJobPayloadOrFail(importRecoverJob, job.data);
+          await recoverImportWork({ db, jobId: job.id ?? importRecoverJob.name });
+          return;
+        }
         // Retention fails a job it does not know, so it stays last.
         await (stats(job) ?? purge(job) ?? metaHealth(job) ?? samlMetadata(job) ?? retention(job));
       },

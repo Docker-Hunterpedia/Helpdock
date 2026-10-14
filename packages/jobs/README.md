@@ -337,3 +337,8 @@ otherwise stale requests add no work when handled. The import consumer dispatche
 requests; production connector/connection and worker registration remain in
 development; these definitions and the bridge alone do not
 provide the complete migration worker.
+
+`import.recover` runs every minute on maintenance. It requests checkpointed work
+for eligible active runs with absent or expired claims, respects retry deadlines
+and never replaces a fresh worker. It closes the committed-batch/continuation
+crash gap; actual process-kill acceptance remains part of the M11 release checks.

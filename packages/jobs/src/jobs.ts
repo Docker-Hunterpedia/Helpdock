@@ -1521,8 +1521,21 @@ export const importFinishJob = defineJob({
   schema: importRunPayloadSchema,
   options: importRetryOptions,
 });
+export const IMPORT_RECOVERY_CRON = '* * * * *';
+export const importRecoverJob = defineJob({
+  name: 'import.recover',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.strictObject({}),
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  },
+});
 
 export const JOB_DEFINITIONS = Object.freeze({
+  [importRecoverJob.name]: importRecoverJob,
   [importExtractJob.name]: importExtractJob,
   [importLoadJob.name]: importLoadJob,
   [importAttachmentsJob.name]: importAttachmentsJob,

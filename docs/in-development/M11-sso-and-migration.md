@@ -102,7 +102,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
-| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `attachment.uploaded`, `media.objects.purge` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
+| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `attachment.uploaded`, `media.objects.purge` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
 | M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
@@ -2203,6 +2203,27 @@ is required rather than silently dropping remote images. Recovery after a proces
 is killed between a domain batch and its continuation request still requires the
 recovery scheduler and actual process-kill acceptance test. Media 5xx/expired URL
 handling and the complete factory/preparation/API/UI path remain to be completed.
+
+### Recovery scheduling checkpoint (M11-10, in progress)
+
+`import.recover` is registered as a strict empty-payload maintenance job, scheduled
+every minute on worker boot. It lists active brands through the existing global
+brand helper, then handles tenant runs in their own system transactions. Under the
+brand claim/control lock, it selects at most 100 eligible runs: bound account,
+active extracting/loading/finishing state, absent/expired ownership, due vendor
+retry and no recovery request in the preceding minute. It clears only expired
+ownership, records recoveryRequestedAt and enqueues a phase request atomically.
+Loading recovery restarts the checkpointed load driver, which leads to attachments
+when records are complete. Fresh workers, paused runs and future retry deadlines
+are left alone. The internal work-request event is explicitly included in silent
+import acceptance and ADR 0027; it has no customer/rule/AI/webhook subscriber.
+
+The writer suite passes 126 real PostgreSQL/Redis cases. An isolated-brand recovery
+case proves expired-token fencing, repeat-sweep cooldown, delayed retry exclusion,
+paused-run exclusion and that a replacement worker's fresh claim is retained.
+This simulates lease expiry; an actual killed-process test remains required.
+Production connector/consumer registration, article preparation, complete retry
+handling, API/UI and the rest of the milestone remain unfinished.
 
 ## M11-13 Freshdesk connector
 

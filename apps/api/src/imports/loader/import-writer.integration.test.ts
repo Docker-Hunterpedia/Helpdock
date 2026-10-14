@@ -97,6 +97,7 @@ import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
+import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount } from '../jobs/source-account.js';
@@ -3471,17 +3472,17 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
-  async function boundAccountRun(account: string) {
+  async function boundAccountRun(account: string, brandId = BRAND) {
     const runId = uuidv7();
     await owner.db.insert(importRuns).values({
       id: runId,
-      brandId: BRAND,
+      brandId: brandId,
       source: 'zendesk',
       status: 'connecting',
       startedBy: USER,
     });
-    const key = await withSystem(app.db, BRAND, (tx) =>
-      bindImportSourceAccount(tx, { brandId: BRAND, runId, verifiedAccount: account }),
+    const key = await withSystem(app.db, brandId, (tx) =>
+      bindImportSourceAccount(tx, { brandId: brandId, runId, verifiedAccount: account }),
     );
     await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
     return { runId, key };
@@ -4041,6 +4042,59 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('recovers expired import claims once per minute and fences the old worker without touching fresh or paused runs', async () => {
+    const recoveryBrand = uuidv7();
+    await owner.db.insert(brands).values({ id: recoveryBrand, name: 'Recovery', prefix: 'RCR' });
+    const expired = await boundAccountRun('recovery-expired', recoveryBrand);
+    const claim = await withSystem(app.db, recoveryBrand, (tx) =>
+      claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing recovery claim');
+    await owner.db
+      .update(importRuns)
+      .set({ claimedAt: new Date(Date.now() - IMPORT_CLAIM_TIMEOUT_MS - 1000) })
+      .where(eq(importRuns.id, expired.runId));
+    const waiting = await boundAccountRun('recovery-waiting', recoveryBrand);
+    await owner.db
+      .update(importRuns)
+      .set({ counts: { retryAt: new Date(Date.now() + 3600000).toISOString() } })
+      .where(eq(importRuns.id, waiting.runId));
+    const paused = await boundAccountRun('recovery-paused', recoveryBrand);
+    await withSystem(app.db, recoveryBrand, (tx) =>
+      pauseImportRun(tx, { brandId: recoveryBrand, runId: paused.runId }),
+    );
+    const now = new Date();
+    expect(
+      await withSystem(app.db, recoveryBrand, (tx) => recoverBrandImports(tx, recoveryBrand, now)),
+    ).toBe(1);
+    expect(
+      await withSystem(app.db, recoveryBrand, (tx) => recoverBrandImports(tx, recoveryBrand, now)),
+    ).toBe(0);
+    await expect(
+      withSystem(app.db, recoveryBrand, (tx) => renewImportClaim(tx, claim)),
+    ).rejects.toThrow('import.claim-lost');
+    const events = await owner.db.select().from(outbox);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toEqual({ runId: expired.runId, step: 'load' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, expired.runId)))[0]?.counts,
+    ).toMatchObject({ recoveryRequestedAt: now.toISOString() });
+    const replacement = await withSystem(app.db, recoveryBrand, (tx) =>
+      claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase: 'loading' }),
+    );
+    if (!replacement) throw new Error('Missing replacement recovery claim');
+    expect(replacement.token).not.toBe(claim.token);
+    expect(
+      await withSystem(app.db, recoveryBrand, (tx) =>
+        recoverBrandImports(tx, recoveryBrand, new Date(now.getTime() + 61000)),
+      ),
+    ).toBe(0);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, paused.runId)))[0]?.status,
+    ).toBe('paused');
+    await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${expired.runId}`);
   });
 
   async function historicalReportScenario(prefix: string, rebuildAllReports = true) {

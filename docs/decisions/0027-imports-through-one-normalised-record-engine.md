@@ -459,3 +459,19 @@ only when it identifies one ticket. Ambiguous history never chooses an arbitrary
 ticket, and a known ambiguous reference prevents fallback to a possibly reused
 subject ticket number. Ordinary participant authorization still applies. Reject line breaks
 and NULs in imported Message-IDs at the normalized boundary.
+
+### 2026-10-14 — recover abandoned phase requests
+
+A worker can die after a domain batch commits but before it publishes continuation.
+An import recovery sweep runs every minute on maintenance, outside the potentially
+busy import queue. It reads active brands globally, then reads/writes runs only in
+brand system transactions under the same lock as controls and claim renewal.
+Recover extracting/loading/finishing runs only when unclaimed or older than the
+30-minute lease; respect retry deadlines and a one-minute request cooldown. Resume
+loading first because its record checkpoints safely lead back to attachments.
+
+`import.work_requested` is an additional internal control outbox event, necessary
+for transactional start/continuation/recovery scheduling. It carries only phase,
+run and optional delay, with the brand in the envelope. It has no customer, rule,
+AI or webhook subscriber. Silent-import acceptance includes this control event
+beside the already allowed media processing/cleanup and help-center reindex events.

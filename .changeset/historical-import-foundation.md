@@ -41,3 +41,5 @@ Assemble ticket history and confirmed authors from staged records. Preserve name
 Checkpoint existing, invited and name-only staff mappings with import progress. Name-only history creates no account, and invited staff receive no invitation delivery or activation during import.
 
 Build field, profile, staff and knowledge load operations directly from staged source records and confirmed mappings. Resolve company links and require prepared article content before committing it.
+
+Select staged metadata in dependency order and refuse unresolved parents or cycles instead of reporting the loading phase as finished.

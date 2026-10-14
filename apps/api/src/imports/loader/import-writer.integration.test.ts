@@ -74,6 +74,7 @@ import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
+import { loadNextStagedMetadata } from '../jobs/load-next-metadata.js';
 import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
@@ -3386,6 +3387,155 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       },
     });
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('selects ready metadata parents even when children were staged first and stops only at the metadata boundary', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const records = [
+      {
+        entity: 'contact',
+        payload: {
+          externalId: 'ordered-contact',
+          name: 'Ordered contact',
+          organizationExternalId: 'ordered-org',
+          emails: ['ordered@example.invalid'],
+          phones: [],
+          custom: {},
+        },
+      },
+      {
+        entity: 'organization',
+        payload: {
+          externalId: 'ordered-org',
+          name: 'Ordered company',
+          domains: [],
+          custom: { source_region: 'North' },
+        },
+      },
+      {
+        entity: 'field',
+        payload: {
+          externalId: 'ordered-field',
+          target: 'organization',
+          key: 'source_region',
+          label: 'Region',
+          type: 'text',
+        },
+      },
+      {
+        entity: 'section',
+        payload: {
+          externalId: 'ordered-child-section',
+          parentExternalId: 'ordered-category',
+          parentSectionExternalId: 'ordered-parent-section',
+          names: { en: 'Child' },
+        },
+      },
+      {
+        entity: 'section',
+        payload: {
+          externalId: 'ordered-parent-section',
+          parentExternalId: 'ordered-category',
+          names: { en: 'Parent' },
+        },
+      },
+      {
+        entity: 'category',
+        payload: {
+          externalId: 'ordered-category',
+          parentExternalId: 'ordered-root',
+          names: { en: 'Nested' },
+        },
+      },
+      { entity: 'category', payload: { externalId: 'ordered-root', names: { en: 'Root' } } },
+    ].map((record) => importRecordSchema.parse(record));
+    const sourceIds = new Map<string, string>();
+    for (const record of records) {
+      const id = uuidv7();
+      sourceIds.set(id, record.payload.externalId);
+      await owner.db.insert(importRecords).values({
+        id,
+        brandId: BRAND,
+        runId,
+        entity: record.entity,
+        externalId: record.payload.externalId,
+        payload: record.payload,
+        payloadHash: hashImportValue(record.payload),
+      });
+    }
+    await owner.db.insert(importMappings).values({
+      brandId: BRAND,
+      runId,
+      kind: 'field',
+      externalValue: 'ordered-field',
+      target: {
+        kind: 'create',
+        definition: { target: 'account', key: 'ordered_region', label: 'Region', type: 'text' },
+      },
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    const order = [];
+    for (let index = 0; index < records.length; index++) {
+      const loaded = await withSystem(app.db, BRAND, (tx) => loadNextStagedMetadata(tx, { claim }));
+      if (loaded.state !== 'loaded') throw new Error('Metadata finished early');
+      order.push(sourceIds.get(loaded.recordId));
+    }
+    expect(order).toEqual([
+      'ordered-field',
+      'ordered-org',
+      'ordered-contact',
+      'ordered-root',
+      'ordered-category',
+      'ordered-parent-section',
+      'ordered-child-section',
+    ]);
+    expect(await withSystem(app.db, BRAND, (tx) => loadNextStagedMetadata(tx, { claim }))).toEqual({
+      state: 'metadata_done',
+    });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.status,
+    ).toBe('loading');
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('refuses a metadata cycle instead of treating unready records as a finished phase', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    for (const [externalId, parentExternalId] of [
+      ['cycle-a', 'cycle-b'],
+      ['cycle-b', 'cycle-a'],
+    ]) {
+      const record = importRecordSchema.parse({
+        entity: 'category',
+        payload: { externalId, parentExternalId, names: { en: externalId } },
+      });
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId,
+        entity: 'category',
+        externalId: record.payload.externalId,
+        payload: record.payload,
+        payloadHash: hashImportValue(record.payload),
+      });
+    }
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    await expect(
+      withSystem(app.db, BRAND, (tx) => loadNextStagedMetadata(tx, { claim })),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({});
   });
 
   it('refuses a failed staged child before loading or reporting a complete ticket', async () => {

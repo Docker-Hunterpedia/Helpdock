@@ -1817,6 +1817,24 @@ selection, reference-only rows, prepared media storage, phase/finish orchestrati
 source-account binding, dry-run/API/UI integration and full acceptance still remain
 required. M11-09 and M11-10 remain in progress.
 
+### Metadata dependency selection checkpoint (in progress)
+
+`loadNextStagedMetadata` selects a ready staged record under the loading claim.
+Fields finish before profiles; companies precede their contacts, and knowledge
+categories/sections precede their children. Selection filters dependencies before
+limiting the query, so an earlier blocked child cannot hide a later ready parent.
+A pending parent in the current run takes precedence over an older source pointer.
+Cycles or missing dependencies raise `mapping-invalid`; failed staged rows also
+block loading. The selector uses the existing prepared-operation checkpoint for
+writes and progress.
+
+The PostgreSQL/Redis integration cases stage children before parents, verify
+field/company/contact and nested taxonomy load order, and reject a category cycle
+without progress. All 89 writer integration cases pass. Reaching `metadata_done`
+leaves the run in `loading`: articles, media, tickets, reference rows, finalization,
+source-account binding and API/UI acceptance remain required. This checkpoint
+does not complete M11-09 or M11-10.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

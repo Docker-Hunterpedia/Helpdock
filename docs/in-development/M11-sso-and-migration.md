@@ -2009,6 +2009,31 @@ completion still leaves the run loading; media processing and finalization remai
 required. CI found a generated configuration-guide mismatch; the rotation note
 now also lives in the `.env.example` comments used by the generator.
 
+### Attachment batch and finalization boundary (M11-10, in progress)
+
+`runImportAttachmentBatch` downloads at most four pending staged attachment
+records per invocation, with network/storage work outside transactions and the
+existing fenced publication path. Downloads currently run sequentially; bounded
+parallel downloads and queue registration remain required. Repeating while media
+processing is pending performs no additional vendor fetch. A lost or paused claim
+returns stopped and cannot authorize the next phase.
+
+`beginImportFinishing` checks all staged records and source-owned physical media
+before atomically moving the live claim from loading to finishing. Pending or
+processing files keep the run loading. Missing media fails with target-unavailable;
+ready, rejected and infected files are settled outcomes. Rejection remains a
+placeholder outcome, not proof that the file was imported successfully. Original
+source pointers can resolve a surviving copied attachment after its root link was
+removed. The boundary emits no outbox event and does not mark the run completed.
+Report rebuilds, the single help-center reindex event, completion audit and terminal
+credential purge remain required.
+
+Real PostgreSQL/Redis cases cover every media state, a transaction rollback and
+missing-media refusal. Existing fake-Zendesk PDF/image cases now exercise batch
+download, wait without refetching, media processing, phase advancement and stale
+claim refusal. The rollback writer test now scopes its source-ID assertion to its
+own ticket and messages instead of matching unrelated fixture IDs by substring.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

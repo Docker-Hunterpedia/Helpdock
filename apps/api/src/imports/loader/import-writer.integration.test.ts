@@ -53,7 +53,7 @@ import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importEntitySchema, importRecordSchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -70,10 +70,12 @@ import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js'
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
+import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { beginImportFinishing } from '../jobs/finish-readiness.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { runImportLoadBatch } from '../jobs/load-batch.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
@@ -3455,6 +3457,69 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
+  it.each(['pending', 'processing', 'ready', 'rejected', 'infected'] as const)(
+    'only advances import finalization once attachment status %s is settled',
+    async (status) => {
+      const scenario = await stagedTicketScenario(`finish-media-${status}`);
+      expect(
+        await withSystem(app.db, BRAND, (tx) => beginImportFinishing(tx, scenario.claim)),
+      ).toBeNull();
+      const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      await owner.db
+        .update(attachments)
+        .set({ status })
+        .where(eq(attachments.ticketId, loaded.ticketId));
+      const next = await withSystem(app.db, BRAND, (tx) =>
+        beginImportFinishing(tx, scenario.claim),
+      );
+      const settled = ['ready', 'rejected', 'infected'].includes(status);
+      expect(next).toEqual(settled ? { ...scenario.claim, phase: 'finishing' } : null);
+      expect(
+        (
+          await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId))
+        )[0],
+      ).toMatchObject({
+        status: settled ? 'finishing' : 'loading',
+        claimToken: scenario.claim.token,
+        finishedAt: null,
+      });
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      if (next) {
+        await expect(
+          withSystem(app.db, BRAND, (tx) => renewImportClaim(tx, scenario.claim)),
+        ).rejects.toThrow('import.claim-lost');
+        await withSystem(app.db, BRAND, (tx) => renewImportClaim(tx, next));
+      }
+    },
+  );
+
+  it('refuses missing imported media and rolls back the finalization boundary atomically', async () => {
+    const scenario = await stagedTicketScenario('finish-rollback');
+    const loaded = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+    await owner.db
+      .update(attachments)
+      .set({ status: 'ready' })
+      .where(eq(attachments.ticketId, loaded.ticketId));
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await beginImportFinishing(tx, scenario.claim);
+        throw new Error('finish rollback');
+      }),
+    ).rejects.toThrow('finish rollback');
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId)))[0]
+        ?.status,
+    ).toBe('loading');
+    await owner.db.delete(attachments).where(eq(attachments.ticketId, loaded.ticketId));
+    await expect(
+      withSystem(app.db, BRAND, (tx) => beginImportFinishing(tx, scenario.claim)),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.input.runId)))[0]
+        ?.status,
+    ).toBe('loading');
+  });
+
   it('loads customer user references through contacts without creating staff or replaying counts', async () => {
     const runId = uuidv7();
     const externalId = 'reference-customer';
@@ -4846,8 +4911,12 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         if (!record) throw new Error('Missing staged attachment');
         const deps = downloadHarness(fake, storage);
         const request = { claim: scenario.claim, recordId: record.id };
+        expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+          state: 'awaiting_media',
+          processed: 1,
+        });
         const downloaded = await downloadStagedImportAttachment(deps, request);
-        expect(downloaded.state).toBe('downloaded');
+        expect(downloaded.state).toBe('processing');
         const [row] = await owner.db
           .select()
           .from(attachments)
@@ -4862,6 +4931,10 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         });
         expect(await storage.read(row.s3Key)).toEqual(bytes);
         const calls = fake.server.calls.length;
+        expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+          state: 'awaiting_media',
+          processed: 0,
+        });
         expect(await downloadStagedImportAttachment(deps, request)).toEqual({
           state: 'processing',
           attachmentId: row.id,
@@ -4900,6 +4973,15 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           ).toBe('webp');
           expect(await storage.head(row.s3Key)).toBeUndefined();
         }
+        expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+          state: 'finishing',
+          processed: 0,
+          claim: { ...scenario.claim, phase: 'finishing' },
+        });
+        expect(await runImportAttachmentBatch(deps, { claim: scenario.claim })).toEqual({
+          state: 'stopped',
+          processed: 0,
+        });
         expect(await owner.db.select().from(outbox)).toHaveLength(events.length);
         for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
         expect(await redis.dbsize()).toBe(0);
@@ -5317,10 +5399,20 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await expect(
       withSystem(app.db, BRAND, (tx) => writer.ticket(tx, payload)),
     ).rejects.toMatchObject({ code: 'author-unmapped' });
-    const rows = await owner.db.execute(
-      sql`SELECT count(*)::int AS total FROM import_external_ids WHERE external_id LIKE '%rollback%'`,
-    );
-    expect(rows[0]?.total).toBe(0);
+    const rows = await owner.db
+      .select()
+      .from(importExternalIds)
+      .where(
+        and(
+          eq(importExternalIds.brandId, payload.brandId),
+          eq(importExternalIds.source, payload.source),
+          inArray(importExternalIds.externalId, [
+            payload.record.externalId,
+            ...payload.messages.map((message) => message.externalId),
+          ]),
+        ),
+      );
+    expect(rows).toEqual([]);
   });
 
   it('refuses a department from another brand before writing any history', async () => {

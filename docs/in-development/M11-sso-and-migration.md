@@ -1775,6 +1775,27 @@ checkpoints, media preparation, ordered phases, finish/report jobs, dry-run and
 admin UI integration remain required. Missing staged name-only user data currently
 blocks assembly; it is not silently replaced or added to accepted gaps.
 
+### Resumable staff checkpoint (in progress)
+
+The shared record checkpoint now accepts confirmed staff mappings for staged
+`user` records. Existing/invited staff commit their source pointer, load receipt,
+staged target and progress with the domain work. Name-only staff commit a loaded
+history checkpoint with a null account ID; this is not counted as a skipped
+person or implemented by creating a dummy user.
+
+Resume validates existing/invited staff through the same membership/status/
+department checks as the staff writer, then leaves domain rows and counters
+unchanged. Name-only resume validates its immutable load receipt and preserves
+the staged source name for thread assembly. Invitation delivery, tokens and
+activation remain outside import; invited people stay invited.
+
+All 86 writer integration cases pass, including existing/invited/name-only
+checkpoint/resume paths. The cases verify one progress increment, no added user
+for existing/name-only choices, one invited user for the invited choice, and an
+empty outbox/Redis. This extends the existing silent-staff coverage; it does not
+complete reference checkpoints, phase orchestration, delta-author hydration,
+physical media preparation or the import UI.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

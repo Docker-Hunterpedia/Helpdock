@@ -19,7 +19,11 @@ type StaffOutcome = {
   outcome: 'created' | 'linked' | 'unchanged' | 'name';
 };
 
-async function existingStaff(tx: DbTransaction, input: StaffLoad, userId: string): Promise<void> {
+export async function requireImportedStaffTarget(
+  tx: DbTransaction,
+  input: StaffLoad,
+  userId: string,
+): Promise<void> {
   const [member] = await tx
     .select({
       role: userBrandRoles.role,
@@ -118,7 +122,7 @@ export async function loadImportedStaff(
   if (known && explicitId && known.helpdockId !== explicitId)
     throw new ImportLoadError('mapping-invalid');
   const targetId = known?.helpdockId ?? explicitId;
-  if (targetId) await existingStaff(tx, input, targetId);
+  if (targetId) await requireImportedStaffTarget(tx, input, targetId);
   if (known?.payloadHash === payloadHash)
     return { author: { kind: 'staff', id: known.helpdockId }, outcome: 'unchanged' };
   const id = targetId ?? (await createImportedStaff(tx, input));

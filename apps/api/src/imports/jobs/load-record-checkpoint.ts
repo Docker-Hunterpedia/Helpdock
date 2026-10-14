@@ -13,8 +13,10 @@ import {
   categoryLoadSchema,
   sectionLoadSchema,
 } from '../loader/knowledge-contracts.js';
+import { requireImportedStaffTarget } from '../loader/load-staff.js';
 import { contactLoadSchema, organizationLoadSchema } from '../loader/profile-contracts.js';
 import { resolveImportedCustom } from '../loader/resolve-custom-fields.js';
+import { staffLoadSchema } from '../loader/staff-contracts.js';
 import {
   type ImportClaim,
   ImportClaimLost,
@@ -29,6 +31,7 @@ const operationSchema = z.discriminatedUnion('entity', [
   z.strictObject({ entity: z.literal('category'), input: categoryLoadSchema }),
   z.strictObject({ entity: z.literal('section'), input: sectionLoadSchema }),
   z.strictObject({ entity: z.literal('article'), input: articleLoadSchema }),
+  z.strictObject({ entity: z.literal('user'), input: staffLoadSchema }),
 ]);
 const requestSchema = z.strictObject({
   claim: importClaimSchema,
@@ -46,7 +49,7 @@ const tables = {
   article: 'hc_articles',
 } as const;
 
-function writeRecord(tx: DbTransaction, operation: Operation) {
+async function writeRecord(tx: DbTransaction, operation: Operation) {
   switch (operation.entity) {
     case 'field':
       return writer.field(tx, operation.input);
@@ -60,6 +63,13 @@ function writeRecord(tx: DbTransaction, operation: Operation) {
       return writer.section(tx, operation.input);
     case 'article':
       return writer.article(tx, operation.input);
+    case 'user': {
+      const loaded = await writer.staff(tx, operation.input);
+      return {
+        id: loaded.author.kind === 'staff' ? loaded.author.id : null,
+        outcome: loaded.outcome,
+      };
+    }
   }
 }
 
@@ -78,6 +88,7 @@ async function validateResolvedCustom(tx: DbTransaction, operation: Operation) {
 
 async function requireLoadedTarget(tx: DbTransaction, operation: Operation, id: string | null) {
   if (id === null) {
+    if (operation.entity === 'user' && operation.input.mapping.kind === 'name') return null;
     if (operation.entity !== 'field' || operation.input.mapping.kind !== 'skip')
       throw new ImportLoadError('target-unavailable');
     return null;
@@ -95,6 +106,10 @@ async function requireLoadedTarget(tx: DbTransaction, operation: Operation, id: 
     return sourceTarget.id;
   }
   if (pointer.helpdockId !== id) throw new ImportLoadError('target-unavailable');
+  if (entity === 'user') {
+    await requireImportedStaffTarget(tx, input, id);
+    return id;
+  }
   const rows = await tx.execute(
     sql`SELECT id FROM ${sql.identifier(tables[entity])} WHERE id = ${id}::uuid AND brand_id = ${input.brandId}::uuid`,
   );
@@ -164,7 +179,8 @@ export async function loadStagedRecord(tx: DbTransaction, request: RecordCheckpo
   if (row.status !== 'staged') throw new ImportLoadError('mapping-invalid');
   await validateResolvedCustom(tx, operation);
   const loaded = await writeRecord(tx, operation);
-  const status = loaded.id === null ? ('skipped' as const) : ('loaded' as const);
+  const status =
+    operation.entity === 'field' && loaded.id === null ? ('skipped' as const) : ('loaded' as const);
   await tx
     .update(importRecords)
     .set({ status, helpdockId: loaded.id, loadHash, error: null })

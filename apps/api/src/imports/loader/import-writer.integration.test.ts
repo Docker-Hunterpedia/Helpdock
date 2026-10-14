@@ -3156,6 +3156,79 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
+  it.each(['existing', 'invited', 'name'] as const)(
+    'checkpoints %s staff mappings once without invitation delivery',
+    async (kind) => {
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'loading',
+        startedBy: USER,
+      });
+      const input = staffLoadSchema.parse({
+        brandId: BRAND,
+        runId,
+        source: 'zendesk',
+        record: {
+          externalId: `checkpoint-staff-${kind}`,
+          kind: 'agent',
+          name: 'Historical staff',
+          active: false,
+          email: `checkpoint-staff-${kind}@example.invalid`,
+        },
+        mapping:
+          kind === 'existing'
+            ? { kind, userId: USER }
+            : kind === 'invited'
+              ? { kind, departmentIds: [DEPARTMENT] }
+              : { kind },
+      });
+      const recordId = uuidv7();
+      await owner.db.insert(importRecords).values({
+        id: recordId,
+        brandId: BRAND,
+        runId,
+        entity: 'user',
+        externalId: input.record.externalId,
+        payload: input.record,
+        payloadHash: hashImportValue(input.record),
+      });
+      const before = await owner.db.select({ id: users.id }).from(users).orderBy(users.id);
+      const claim = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+      );
+      if (!claim) throw new Error('Missing loading claim');
+      const operation = { entity: 'user' as const, input };
+      const loaded = await withSystem(app.db, BRAND, (tx) =>
+        loadStagedRecord(tx, { claim, recordId, operation }),
+      );
+      expect(loaded.state).toBe('loaded');
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          loadStagedRecord(tx, { claim, recordId, operation }),
+        ),
+      ).toEqual({ state: 'already_done', id: loaded.id });
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+      ).toEqual({ loaded: { user: 1 } });
+      const after = await owner.db.select({ id: users.id }).from(users).orderBy(users.id);
+      if (kind === 'invited') {
+        expect(after).toHaveLength(before.length + 1);
+        if (!loaded.id) throw new Error('Missing invited user');
+        expect(
+          (await owner.db.select().from(users).where(eq(users.id, loaded.id)))[0],
+        ).toMatchObject({ status: 'invited' });
+      } else {
+        expect(after).toEqual(before);
+        expect(loaded.id).toBe(kind === 'name' ? null : USER);
+      }
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await redis.dbsize()).toBe(0);
+    },
+  );
+
   it('refuses a failed staged child before loading or reporting a complete ticket', async () => {
     const scenario = await stagedTicketScenario('failed-child-history');
     await owner.db

@@ -88,3 +88,9 @@ combined additions over the per-target limit are blocked before creation. Reused
 bindings count only in the same brand/vendor/account; deleted bindings and
 redirects are refused. Complete value/contact validation and dry-run approval
 remain pending.
+
+Ticket routing checks the selected staff member's department access using the same
+rule as loading. New invitations must include the ticket department; reused
+invitations cannot widen an existing membership. A new invitation colliding with
+an existing email is blocked and must be mapped explicitly. These checks create no
+users or jobs; the complete dry-run workflow is still under development.

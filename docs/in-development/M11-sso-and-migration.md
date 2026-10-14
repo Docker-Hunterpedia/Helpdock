@@ -2453,6 +2453,26 @@ Ticket-specific department checks, field/custom value validation, contact planni
 and complete dry-run orchestration/report/UI remain unfinished. These plan checks
 alone do not approve loading; M11-10/16 remain in progress.
 
+### Ticket routing and invitation preflight (M11-09/10/16, in progress)
+
+Read-only ticket routing now selects the same confirmed status/group/priority/channel,
+agent and tag mappings as loading and verifies live selected destinations. Existing
+and reused invited assignees must be active/invited non-Viewers eligible for the
+selected department. New invitations must include that department. A shared pure
+eligibility rule is used in both preflight and the loader.
+
+Individual staff target validation also refuses redirecting a known source binding,
+checks all departments of reused invitations, and checks new invitation email
+collisions against install-wide case-insensitive user uniqueness without returning
+any matching user/brand. It does not create a user or widen a membership.
+
+Unit cases cover eligible active/invited staff, missing/deactivated/Viewer membership
+and department scope. Real database coverage checks ticket department mismatch,
+missing mappings, new invitation scope, existing-email collision and same-source
+invitation reuse; user/ticket revisions remain unchanged and no outbox work is
+created. Custom values, contact planning, duplicate planned invitations and the
+complete dry-run consumer/report/UI remain unfinished. M11-09/10/16 stay in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

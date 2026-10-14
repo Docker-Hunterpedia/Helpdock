@@ -87,3 +87,5 @@ Detect cyclic staged knowledge ancestry and translation dependencies during read
 Add read-only checks of live mapping destinations, eligible staff and safe field bindings before import provisioning.
 
 Validate complete field creation plans for shared destination keys, combined capacity and immutable account-scoped reuse without provisioning.
+
+Share ticket-assignee department eligibility between loading and preflight, and check invitation collisions and reused staff scope without provisioning.

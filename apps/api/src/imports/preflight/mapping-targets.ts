@@ -6,17 +6,19 @@ import {
   tags,
   teams,
   ticketStatuses,
-  userBrandRoles,
   users,
 } from '@helpdock/db';
 import {
   type ImportMapping,
   importMappingSchema,
   MAX_CUSTOM_FIELDS_PER_TARGET,
+  normaliseEmail,
 } from '@helpdock/schemas';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { importAssigneeEligible } from '../loader/assignee-eligibility.js';
 import { type ImportScope, importedIdentity } from '../loader/external-ids.js';
 import { fieldLoadSchema } from '../loader/field-contracts.js';
+import { importedStaffMembership } from '../loader/staff-membership.js';
 import { validatedStagedRecord } from './staged-record.js';
 
 export type MappingTargetIssue = 'target-missing' | 'target-invalid' | 'source-missing';
@@ -87,17 +89,10 @@ async function validateStaffTarget(
   mapping: Extract<ImportMapping, { kind: 'agent' }>,
 ): Promise<MappingTargetIssue | null> {
   if (mapping.target.kind === 'name') return null;
+  const known = await importedIdentity(tx, scope, 'user', mapping.externalValue);
   if (mapping.target.kind === 'existing') {
-    const [member] = await tx
-      .select({ role: userBrandRoles.role, status: users.status })
-      .from(userBrandRoles)
-      .innerJoin(users, eq(users.id, userBrandRoles.userId))
-      .where(
-        and(
-          eq(userBrandRoles.brandId, scope.brandId),
-          eq(userBrandRoles.userId, mapping.target.userId),
-        ),
-      );
+    if (known && known.helpdockId !== mapping.target.userId) return 'target-invalid';
+    const member = await importedStaffMembership(tx, scope.brandId, mapping.target.userId);
     return !member
       ? 'target-missing'
       : member.role === 'viewer' || member.status === 'deactivated'
@@ -127,9 +122,23 @@ async function validateStaffTarget(
     );
   if (!row) return 'source-missing';
   const source = validatedStagedRecord(row);
-  return source.entity !== 'user' || source.payload.kind !== 'agent' || !source.payload.email
-    ? 'target-invalid'
-    : null;
+  if (source.entity !== 'user' || source.payload.kind !== 'agent' || !source.payload.email)
+    return 'target-invalid';
+  if (known) {
+    const member = await importedStaffMembership(tx, scope.brandId, known.helpdockId);
+    return mapping.target.departmentIds.every((id) => importAssigneeEligible(member, id))
+      ? null
+      : 'target-invalid';
+  }
+  const email = normaliseEmail(source.payload.email);
+  if (!email.ok) return 'target-invalid';
+  // Install-wide uniqueness only: like invited staff insertion, disclose no matching user or brand.
+  const [collision] = await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email.value}`)
+    .limit(1);
+  return collision ? 'target-invalid' : null;
 }
 
 async function validateFieldTarget(

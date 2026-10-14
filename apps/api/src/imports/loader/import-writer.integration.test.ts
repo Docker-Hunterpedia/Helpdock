@@ -123,6 +123,7 @@ import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-accoun
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { validateImportReferences } from '../preflight/record-references.js';
+import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -6064,6 +6065,93 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('preflights ticket department eligibility and invitation collisions without changing staff or ticket rows', async () => {
+    const scenario = await stagedTicketScenario('routing-preflight');
+    const scope = { brandId: BRAND, runId: scenario.input.runId, source: 'zendesk' as const };
+    const record = { ...scenario.input.record, assigneeExternalId: 'routing-assignee' };
+    const base = [
+      { kind: 'status', externalValue: 'open', target: { statusId: STATUS } },
+      { kind: 'group', externalValue: '', target: { departmentId: DEPARTMENT, teamId: null } },
+      { kind: 'priority', externalValue: '', target: { priority: 'medium' } },
+      { kind: 'channel', externalValue: '', target: { channel: 'api' } },
+    ].map((mapping) => importMappingSchema.parse(mapping));
+    const assigned = (target: unknown) => [
+      ...base,
+      importMappingSchema.parse({ kind: 'agent', externalValue: 'routing-assignee', target }),
+    ];
+    const check = (mappings: ReturnType<typeof assigned>) =>
+      withSystem(app.db, BRAND, (tx) => validateImportTicketRouting(tx, scope, record, mappings));
+    const departmentId = uuidv7();
+    await owner.db
+      .insert(departments)
+      .values({ id: departmentId, brandId: BRAND, name: 'Routing preflight other' });
+    expect(await check(assigned({ kind: 'existing', userId: USER }))).toBeNull();
+    const otherGroup = assigned({ kind: 'existing', userId: USER }).map((mapping) =>
+      mapping.kind === 'group'
+        ? importMappingSchema.parse({ ...mapping, target: { departmentId, teamId: null } })
+        : mapping,
+    );
+    expect(await check(otherGroup)).toBe('assignee-department');
+    expect(await check(base)).toBe('mapping-invalid');
+    const payload = {
+      externalId: 'routing-assignee',
+      kind: 'agent',
+      name: 'Routing agent',
+      active: true,
+      email: 'routing-new-agent@example.test',
+    };
+    const [row] = await owner.db
+      .insert(importRecords)
+      .values({
+        brandId: BRAND,
+        runId: scope.runId,
+        entity: 'user',
+        externalId: payload.externalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })
+      .returning();
+    if (!row) throw new Error('Missing routing agent');
+    expect(await check(assigned({ kind: 'invited', departmentIds: [DEPARTMENT] }))).toBeNull();
+    expect(await check(assigned({ kind: 'invited', departmentIds: [departmentId] }))).toBe(
+      'assignee-department',
+    );
+    const collision = { ...payload, email: 'IMPORTER@EXAMPLE.COM' };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: collision, payloadHash: hashImportValue(collision) })
+      .where(eq(importRecords.id, row.id));
+    expect(await check(assigned({ kind: 'invited', departmentIds: [DEPARTMENT] }))).toBe(
+      'mapping-invalid',
+    );
+    await owner.db.insert(importExternalIds).values({
+      brandId: BRAND,
+      source: 'zendesk',
+      sourceAccountKey: '0'.repeat(64),
+      entity: 'user',
+      externalId: payload.externalId,
+      helpdockId: USER,
+      payloadHash: 'd'.repeat(64),
+    });
+    const beforeUsers = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`,
+    );
+    const beforeTickets = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`,
+    );
+    expect(await check(assigned({ kind: 'invited', departmentIds: [DEPARTMENT] }))).toBeNull();
+    expect(
+      await check(assigned({ kind: 'invited', departmentIds: [DEPARTMENT, departmentId] })),
+    ).toBe('mapping-invalid');
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM users ORDER BY id`),
+    ).toEqual(beforeUsers);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`),
+    ).toEqual(beforeTickets);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

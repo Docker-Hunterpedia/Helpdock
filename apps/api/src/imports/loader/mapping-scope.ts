@@ -8,6 +8,7 @@ import {
   users,
 } from '@helpdock/db';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { importAssigneeEligible } from './assignee-eligibility.js';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 
 /** Foreign keys alone do not prove that a mapping target belongs to this brand. */
@@ -54,7 +55,11 @@ export async function validateTicketMappings(
   }
   if (resolved.assigneeId) {
     const [membership] = await tx
-      .select({ role: userBrandRoles.role, departments: userBrandRoles.departmentIds })
+      .select({
+        role: userBrandRoles.role,
+        status: users.status,
+        departmentIds: userBrandRoles.departmentIds,
+      })
       .from(userBrandRoles)
       .innerJoin(users, eq(users.id, userBrandRoles.userId))
       .where(
@@ -64,11 +69,7 @@ export async function validateTicketMappings(
           inArray(users.status, ['active', 'invited']),
         ),
       );
-    if (
-      !membership ||
-      membership.role === 'viewer' ||
-      (membership.departments !== null && !membership.departments.includes(resolved.departmentId))
-    )
+    if (!importAssigneeEligible(membership, resolved.departmentId))
       throw new ImportLoadError('mapping-invalid');
   }
   return status.state;

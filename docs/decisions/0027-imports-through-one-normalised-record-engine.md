@@ -246,3 +246,21 @@ history; it is separate from the attachment byte limits.
 Repeated and delta imports refuse deleted/purged local ticket targets instead of
 reporting a dangling source pointer as success or reviving deleted data. Changed
 source subjects participate in delta updates; creation dates remain original.
+
+### 2026-10-14 — verified Zendesk traversal, ACLs and media
+
+Use returned ticket/user cursor checkpoints and organization time checkpoints;
+the original start-minus-one-hour delta proposal is a reconciliation overlap.
+Ticket exports explicitly request all Support ticket types and retain deletion
+tombstones. Hydrate per-ticket audits because account-wide audits omit archives.
+Complete archived-comment equivalence and child-only redaction coverage are not
+established by the docs; preflight/dry run must expose missing or unknown coverage.
+
+Prefer OAuth, following current deprecation/distribution guidance. Guide editorial
+permission groups are not read ACLs: preserve draft state separately from user
+segments, default unrepresentable restricted readership to internal with a warning,
+and never publish it by approximation. Support-authenticated media can redirect to
+temporary CDN URLs; validate every hop, strip credentials across origins and
+refresh from the stable source URL on expiry. Do not substitute Support tokens
+for Sunshine Conversations credentials. Official sources and remaining gaps are
+dated and linked in the M11-12 section of the milestone plan.

@@ -1319,36 +1319,93 @@ pending; this deliverable is not complete.
 
 ## M11-12 Zendesk connector
 
-*First task: confirm everything below against developer.zendesk.com and fix this
-section.*
+**Official contracts checked 2026-10-14.** Documentation establishes API contracts;
+stand-in tests do not prove access or completeness for a real account.
 
-- **Auth**: API token (`{email}/token:{token}` basic) or OAuth access token;
-  credentials `{ subdomain, email, apiToken } | { subdomain, accessToken }`. Hosts:
-  `{subdomain}.zendesk.com` only.
-- **Tickets**: incremental cursor export
-  `GET /api/v2/incremental/tickets/cursor.json?start_time=<unix>&exclude_deleted=true`
-  (start_time ≥ 1 min ago for the first call; follow `after_cursor` until
-  `end_of_stream`). Rate limit about 10 requests/min (30 with High Volume) —
-  *verify*. Includes archived tickets.
-- **Comments**: `GET /api/v2/tickets/{id}/comments.json` (cursor pagination,
-  `page[size]=100`): `public`, `author_id`, `html_body`, `created_at`, `via`,
-  `attachments[]` (`content_url`, `file_name`, `content_type`, `size`). Archived
-  tickets' comments are still served — *verify*.
-- **Users**: `GET /api/v2/incremental/users/cursor.json`; `role` end-user → customer,
-  agent/admin → agent. **Organisations**: `GET /api/v2/incremental/organizations.json`.
-  **Groups** `GET /api/v2/groups`, **ticket fields** `GET /api/v2/ticket_fields`,
-  **user/organization fields** likewise.
-- **CSAT**: `GET /api/v2/satisfaction_ratings` (`good`/`bad` → 5/1, with comment).
-- **Help Center**: `/api/v2/help_center/categories`, `/sections`, `/articles`
-  with `/translations` for `en-us`/`ar` locales; draft and permission group →
-  `internal`.
-- **Default mappings**: status `new`/`open` → Open, `pending` → Awaiting customer,
-  `hold` → Open + tag `on-hold` (or a custom status if the brand has one named
-  "On hold"), `solved` and `closed` → Closed; priority `low|normal|high|urgent` →
-  low/medium/high/urgent; `via.channel` `email|web|api|chat|…` → email/form/api/chat/manual.
-- **Attachments**: `content_url` fetched with the same auth when "Secure downloads"
-  is on.
-- **Delta**: `start_time` = parent run start − 1 h.
+- **Auth/access:** prefer OAuth Bearer. Current [authentication guidance](https://developer.zendesk.com/api-reference/introduction/security-and-auth/)
+  deprecates API-token authentication and requires global OAuth for distributed
+  integrations, with an internal-use exception. Legacy Basic
+  `{email}/token:{apiToken}` is a labelled compatibility mode. Exports require
+  an admin; authentication alone is insufficient. Per-ticket audits require
+  global OAuth `read`, not `tickets:read` or `auditlogs:read`. Probe each selected
+  capability; missing mandatory history blocks extraction.
+- **Tickets/users:** `/api/v2/incremental/tickets/cursor.json` and
+  `/api/v2/incremental/users/cursor.json`: first Unix `start_time` is older than
+  one minute, then follow `after_cursor`/`after_url` until `end_of_stream`.
+  Retain the final cursor for delta. Explicitly use `support_type_scope=all`
+  for tickets, retaining deletion tombstones. The last minute is excluded;
+  archived tickets are included. Organizations use
+  `/api/v2/incremental/organizations.json` with `end_time`/`next_page` and stable-ID
+  deduplication. [Exports](https://developer.zendesk.com/api-reference/ticketing/ticket-management/incremental_exports/).
+- **Threads:** `/api/v2/tickets/{id}/comments.json?page[size]=100` and per-ticket
+  `/audits.json`; traverse every page. Keep `public`, `author_id`, `html_body`,
+  original dates and attachments (`id`, `content_url`, `file_name`, `content_type`,
+  `size`, `inline`). Description duplicates the first comment, not another message.
+  Global audits omit archives; per-ticket audits include them. Archived-comment
+  equivalence remains unverified and must appear as a capability gap.
+  [Comments](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/),
+  [audits](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_audits/).
+- **Profiles/definitions:** paginate `/api/v2/groups.json`, `/ticket_fields.json`,
+  `/user_fields.json`, `/organization_fields.json`, `/custom_statuses.json`;
+  fetch user `/identities.json` for secondary email/phone identities. Keep
+  inactive definitions and raw custom values. User role end-user is a customer;
+  agent/admin is staff, never permission to grant a target role automatically.
+  [Groups](https://developer.zendesk.com/api-reference/ticketing/groups/groups/),
+  [ticket fields](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_fields/),
+  [user fields](https://developer.zendesk.com/api-reference/ticketing/users/user_fields/),
+  [organization fields](https://developer.zendesk.com/api-reference/ticketing/organizations/organization_fields/),
+  [custom statuses](https://developer.zendesk.com/api-reference/ticketing/tickets/custom_ticket_statuses/),
+  [identities](https://developer.zendesk.com/api-reference/ticketing/users/user_identities/).
+- **Default proposals:** status `new/open` suggests open, `pending` awaiting
+  customer, `hold` on-hold, `solved/closed` closed; resolve actual brand status
+  IDs with confirmation. Custom status categories require their definitions.
+  Priority `low/normal/high/urgent` suggests low/medium/high/urgent; null needs
+  a visible default. Preserve raw `via.channel`; unknown values require mapping.
+  Do not create an on-hold tag as a substitute for state.
+- **CSAT:** `/api/v2/satisfaction_ratings.json` is paginated. Native scores
+  `offered/unoffered/good/bad`: only good/bad are answers. Helpdock conversion
+  5/1 is not the source scale. Preserve source dates, comment and native value;
+  date filters are rating bounds, not a universal updated-since guarantee.
+  [Ratings](https://developer.zendesk.com/api-reference/ticketing/ticket-management/satisfaction_ratings/).
+- **Throttle:** generic exports 10/min (30 High Volume), user cursor 20/60.
+  Use conservative account/endpoint buckets and runtime rate/remaining/reset
+  headers; 429 uses `Retry-After` seconds. [Rate limits](https://developer.zendesk.com/api-reference/introduction/rate-limits/).
+- **Guide:** categories, sections, articles and user segments under
+  `/api/v2/help_center/`; each article's translations and attachments. Sections
+  may nest; enumerate actual locales. Draft is independent from readership:
+  `user_segment_id(s)` is the read ACL, `permission_group_id` is editorial.
+  Unrepresentable restricted readership defaults to internal with a warning,
+  never public. Unsupported locales appear as explicit dry-run omissions.
+  [Articles](https://developer.zendesk.com/api-reference/help_center/help-center-api/articles/),
+  [translations](https://developer.zendesk.com/api-reference/help_center/help-center-api/translations/),
+  [segments](https://developer.zendesk.com/api-reference/help_center/help-center-api/user_segments/),
+  [article attachments](https://developer.zendesk.com/api-reference/help_center/help-center-api/article_attachments/).
+- **Media:** secure Support URLs can redirect 302 to temporary CDN URLs; expiry
+  is unspecified. Refresh from the stable source URL on expiration. Authenticate
+  only the verified source origin; every hop uses `safeFetch` and a curated host
+  policy. Third-party and Sunshine media auth is not interchangeable with Support
+  auth. Log inaccessible, expired or malware-blocked files; never bypass controls.
+  [Secure download](https://developer.zendesk.com/documentation/ticketing/managing-tickets/accessing-end-user-uploaded-attachments/),
+  [attachments](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket-attachments/),
+  [messaging media](https://developer.zendesk.com/documentation/zendesk-web-widget-sdks/messaging_private_attachments/).
+- **Deletion/delta:** resume returned cursors/time checkpoints; overlap supplements
+  them. Hydrate changed ticket children and reconcile edits/redactions. Deleted
+  content has finite retention; redacted content is irrecoverable. Do not infer
+  deletion from an absent page or resurrect it. Definitions/Guide need independent
+  relists/checkpoints. Child-only redaction coverage and Guide tombstones remain
+  unverified; disclose them. [Incremental workflow](https://developer.zendesk.com/documentation/api-basics/working-with-data/using-the-incremental-export-api/).
+- **Source identity:** no immutable Support-account ID was established from
+  [account settings](https://developer.zendesk.com/api-reference/ticketing/account-configuration/account_settings/).
+  A local immutable source binding must distinguish accounts; canonical domain
+  changes require explicit rebinding. User/brand IDs are not account identity.
+
+**Stand-in checkpoint (in progress):** `FakeZendesk`, exported only through
+`@helpdock/importers/testing`, covers cursor/time exports, paged collections,
+comments/audits, Guide translation/read-segment separation, temporary media
+redirects, delta, 429 and 5xx. Six local HTTP tests pass through the real safe
+client. This checkpoint does not include an extraction adapter, real-account
+proof, archive-comment equivalence, full source audit loading or 500-ticket
+acceptance. Those remain required before completing this deliverable.
 
 ## M11-13 Freshdesk connector
 

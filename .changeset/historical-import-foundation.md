@@ -95,3 +95,5 @@ Validate duplicate new invitation emails across the complete import plan with ac
 Project custom values against existing and proposed field definitions using the loader’s validation rules without creating fields.
 
 Plan contact identity reuse and ambiguity through the loader’s matching rules without locks, profile changes or verification upgrades.
+
+Detect conflicting contact identifier claims across the proposed import while allowing aliases of one existing local person.

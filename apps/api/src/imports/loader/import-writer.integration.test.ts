@@ -120,6 +120,7 @@ import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import { validateContactIdentityPlan } from '../preflight/contact-identity-plan.js';
 import { previewImportedContact } from '../preflight/contact-plan.js';
 import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
@@ -6069,6 +6070,71 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('blocks implicit merging of newly planned source contacts but permits shared existing identity targets', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Contact collision plan', prefix: 'CCP' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const inputs = ['source-one', 'source-two'].map((externalId) =>
+      contactLoadSchema.parse({
+        brandId,
+        runId,
+        source: 'zendesk',
+        record: {
+          externalId,
+          name: externalId,
+          emails: ['same-person@example.test'],
+          phones: [],
+          custom: {},
+        },
+        accountId: null,
+        custom: {},
+      }),
+    );
+    const plans = async () => {
+      const result = [];
+      for (const input of inputs)
+        result.push({
+          externalId: input.record.externalId,
+          ...(await withSystem(app.db, brandId, (tx) => previewImportedContact(tx, input))),
+        });
+      return result;
+    };
+    expect(validateContactIdentityPlan(await plans())).toEqual([
+      { externalId: 'source-one', code: 'contact-plan-ambiguous' },
+      { externalId: 'source-two', code: 'contact-plan-ambiguous' },
+    ]);
+    expect(await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId))).toEqual([]);
+    const contactId = uuidv7();
+    await owner.db.insert(contacts).values({ id: contactId, brandId, name: 'Existing person' });
+    await owner.db.insert(contactIdentities).values({
+      brandId,
+      contactId,
+      kind: 'email',
+      value: 'same-person@example.test',
+      verified: false,
+      source: 'agent',
+    });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId}`,
+    );
+    const linked = await plans();
+    expect(linked.every((plan) => plan.action === 'link' && plan.contactId === contactId)).toBe(
+      true,
+    );
+    expect(validateContactIdentityPlan(linked)).toEqual([]);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId}`,
+      ),
+    ).toEqual(before);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

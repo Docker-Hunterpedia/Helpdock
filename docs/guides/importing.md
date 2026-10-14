@@ -110,3 +110,9 @@ outcomes. Multiple existing identity matches block the plan; imports do not merg
 people automatically. Local names, company links and verification are preserved
 when linking, and source values are shown separately. Complete cross-source
 contact planning and the dry-run UI remain under development.
+
+When distinct newly proposed contacts share a normalized identifier, preflight
+requires review rather than implicitly combining their histories. Source aliases
+may still link to the same existing local person. Unchanged receipts add nothing
+and do not claim historical identifiers again. Complete dry-run orchestration
+and the review UI remain under development.

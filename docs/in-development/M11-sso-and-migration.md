@@ -2530,6 +2530,25 @@ Planning across multiple new source contacts, source organization creation links
 media availability and complete dry-run consumer/report/UI remain pending. These
 contact plans alone do not approve loading; M11-10/16 remain in progress.
 
+### Contact identity collisions across the plan (M11-10/16, in progress)
+
+Preflight now compares normalized identifier claims across projected contact
+outcomes. Different proposed new contacts sharing an identifier are blocking
+contact-plan-ambiguous issues, rather than allowing sequential creation/reuse to
+implicitly combine their histories. Overlapping identifier chains mark every
+participant once. Source aliases already linking to the same existing local contact
+are allowed; unchanged receipts reserve no historical identifiers because loading
+adds nothing for those receipts. Issue output contains source IDs and safe codes,
+not the conflicting email/phone values.
+
+Pure tests cover new conflicts, shared existing targets, unchanged receipts and
+transitive overlaps. Real database coverage proves that two new source people
+produce a conflict without creating a contact, then permits both aliases when a
+local identity already exists, with unchanged profile revisions and no outbox work.
+Planned organization resolution, media checks and complete dry-run consumer/report/
+preview UI remain unfinished. These plan checks alone do not approve loading;
+M11-10/16 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

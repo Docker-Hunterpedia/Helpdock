@@ -2396,8 +2396,23 @@ parent grouping and tampered staged fields. Real Postgres/Redis coverage proves
 account isolation, corrupt/mismatched dependencies, self-parent refusal, unchanged
 ticket revisions and no outbox events. The full loader integration suite passes
 with the shared validation. The dry-run consumer/report, live destination validation,
-hierarchy cycles, attachment availability and three-ticket/contact previews remain
+mixed staged/live hierarchy validation, attachment availability and three-ticket/contact previews remain
 unfinished. These checks alone do not approve a run; M11-09/10/16 remain in progress.
+
+### Staged hierarchy cycle preflight (M11-10/16, in progress)
+
+Read-only reference validation now walks staged category parents, section ancestry
+and translation chains iteratively. It detects cycles reached through a valid
+prefix as well as direct loops, without imposing an arbitrary source depth cutoff.
+Missing staged ancestors remain the responsibility of dependency/live-target
+validation; mixed staged/live destination hierarchy validation is still pending.
+
+Unit cases cover a prefix entering a cycle, a 2,000-record rooted chain, missing
+staged ancestry, section cycles and translation cycles. The real database reference
+case verifies that a valid root leading into a multi-record loop is a blocking
+reference-cycle issue. No domain rows or jobs are created. The dry-run consumer,
+report, destination validation, availability and preview UI remain unfinished;
+these checks alone do not approve loading. M11-10/16 remain in progress.
 
 ## M11-13 Freshdesk connector
 

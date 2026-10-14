@@ -6212,6 +6212,32 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         reference: { entity: 'category', externalId: 'self', relation: 'category-parent' },
       },
     ]);
+    const hierarchy = [
+      { externalId: 'cycle-root', parentExternalId: 'cycle-a', names: { en: 'Root' } },
+      { externalId: 'cycle-a', parentExternalId: 'cycle-b', names: { en: 'A' } },
+      { externalId: 'cycle-b', parentExternalId: 'cycle-c', names: { en: 'B' } },
+      { externalId: 'cycle-c', parentExternalId: 'cycle-b', names: { en: 'C' } },
+    ];
+    await owner.db.insert(importRecords).values(
+      hierarchy.map((payload) => ({
+        brandId: BRAND,
+        runId: scope.runId,
+        entity: 'category' as const,
+        externalId: payload.externalId,
+        parentExternalId: payload.parentExternalId,
+        payload,
+        payloadHash: hashImportValue(payload),
+      })),
+    );
+    const root = importRecordSchema.parse({ entity: 'category', payload: hierarchy[0] });
+    expect(
+      await withSystem(app.db, BRAND, (tx) => validateImportReferences(tx, scope, root)),
+    ).toEqual([
+      {
+        code: 'reference-cycle',
+        reference: { entity: 'category', externalId: 'cycle-a', relation: 'category-parent' },
+      },
+    ]);
     await expect(
       withSystem(app.db, OTHER_BRAND, (tx) =>
         validateImportReferences(tx, { ...scope, brandId: OTHER_BRAND }, native),

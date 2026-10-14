@@ -81,3 +81,5 @@ Add guarded import entity/report scope and pause/resume/cancel controls; prove s
 Expose guarded mapping confirmation and paged input fingerprints; invalidate earlier dry-run reports when mappings change.
 
 Share staged integrity checks between ticket loading and read-only preflight, and validate account-scoped historical dependencies without creating domain rows or jobs.
+
+Detect cyclic staged knowledge ancestry and translation dependencies during read-only preflight.

@@ -72,3 +72,7 @@ the same brand, vendor and verified account. Corrupted or missing references and
 mismatched attachment parents/metadata block validation. The complete dry-run
 consumer, destination checks, availability report and UI remain under development;
 these structural checks do not authorize loading.
+
+Staged category, section and translation cycles are structural blockers, including
+cycles reached through an otherwise valid prefix. Live destination hierarchy and
+complete dry-run approval are still pending.

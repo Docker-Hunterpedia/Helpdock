@@ -2198,7 +2198,7 @@ safe exception handling and exactly one failure audit. Two consumer boundary
 unit cases reject malformed payloads and unrelated job names before I/O.
 
 This consumer accepts a connector resolver and article preparation dependency;
-production connector/worker registration remains unfinished. Article preparation
+production connector/worker registration was pending at that checkpoint; the subsequent production consumer checkpoint registers Zendesk. Article preparation
 is required rather than silently dropping remote images. Recovery after a process
 is killed between a domain batch and its continuation request still requires the
 recovery scheduler and actual process-kill acceptance test. Expired URL
@@ -2222,7 +2222,7 @@ The writer suite passes 126 real PostgreSQL/Redis cases. An isolated-brand recov
 case proves expired-token fencing, repeat-sweep cooldown, delayed retry exclusion,
 paused-run exclusion and that a replacement worker's fresh claim is retained.
 This simulates lease expiry; an actual killed-process test remains required.
-Production connector/consumer registration, article preparation, complete retry
+Additional connector factories, article preparation, complete retry
 handling, API/UI and the rest of the milestone remain unfinished.
 
 ### Bounded parallel media and vendor retry budget (M11-10, in progress)
@@ -2303,6 +2303,31 @@ binding, cross-brand refusal, corrupted encryption, download-host refusal and
 attachment bytes. Connection API/UI host approval, article preparation, file
 source orchestration and the other vendors remain unfinished. This does not
 complete M11-10 or M11-11.
+
+### Staff connection API checkpoint (M11-10/16, in progress)
+
+The API registers ImportsModule and five `brand:manage` routes: list/create/get
+runs, PUT connection and POST extract. Shared Zod DTOs define HTTP input and
+output/OpenAPI. Read models select only public IDs/state/dates, a credentials-set
+boolean and extracted/loaded/skipped counters; credential envelopes, worker
+claims, cursors, options and internal errors never appear in those responses.
+The newest 100 runs are returned; cursor pagination remains to be added.
+
+The Zendesk connection test uses the same transport construction as the worker.
+Only successful verification binds the source account, encrypts credentials and
+moves the draft to connecting. Delta parents must be completed, same-brand,
+same-source and same verified account; mismatch is a safe conflict response.
+Starting extraction commits status, audit and import.work_requested together.
+Repeated starts are refused. Failed tests and rolled-back starts leave no partial
+credentials or jobs. Zendesk credentials now live in packages/schemas and are
+re-exported by the SDK so admin/API/connector boundaries share one contract.
+
+Real PostgreSQL/Redis/vendor-stand-in coverage exercises those transitions, secret
+non-disclosure, cross-brand reads, delta mismatch and rollback. Shared schema and
+public-view unit tests pass. Full authenticated HTTP permission/CSRF coverage and
+browser flows remain pending; the service-level integration is not that proof.
+Scope/mapping/dry-run/start/control/log routes and the UI remain unfinished.
+See the current [import guide](../guides/importing.md). M11-10/16 remain in progress.
 
 ## M11-13 Freshdesk connector
 

@@ -73,3 +73,5 @@ Download up to four historical attachments concurrently, drain partial-failure b
 Refresh expired Zendesk attachment links once through authenticated metadata, and retain named placeholders for unavailable imported files.
 
 Register the production import worker and validate encrypted Zendesk account credentials and exact per-run attachment destinations.
+
+Add guarded staff import draft, connection and extraction endpoints with shared input/output schemas, write-only credentials and verified delta account binding.

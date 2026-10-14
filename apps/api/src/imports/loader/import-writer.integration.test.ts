@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as waitForQueue } from 'node:timers/promises';
-import { createKeyring, encryptSecret } from '@helpdock/config';
+import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import {
   accounts,
   attachments,
@@ -80,6 +80,7 @@ import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install
 import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
 import { createImportWorkHandler, enqueueImportWork } from '../import-events.js';
+import { ImportsService } from '../imports.service.js';
 import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
 import {
   claimImportRun,
@@ -88,7 +89,10 @@ import {
   renewImportClaim,
 } from '../jobs/claims.js';
 import { completeImportRun } from '../jobs/complete-run.js';
-import { createImportConnectorRuntime } from '../jobs/connector-runtime.js';
+import {
+  createImportConnectorRuntime,
+  createZendeskImportConnection,
+} from '../jobs/connector-runtime.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
@@ -6050,6 +6054,150 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('creates and tests a write-only connection, binds its account and starts extraction through the outbox atomically', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    try {
+      const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 17).toString('base64') });
+      const service = new ImportsService(keyring, (request) =>
+        createZendeskImportConnection({
+          ...request,
+          limiter: new ImportRateLimiter({ capacity: 10, perMinute: 1000 }),
+          allowCidrs: [],
+          log: async () => {},
+          transport: {
+            apiRoot: fake.server.root,
+            policy: {
+              allowedPorts: [Number(new URL(fake.server.root).port)],
+              allowCidrs: ['127.0.0.1/32'],
+            },
+          },
+        }),
+      );
+      const inBrand = <T>(work: (context: Parameters<ImportsService['get']>[0]) => Promise<T>) =>
+        withSystem(app.db, BRAND, (tx) =>
+          work({
+            tx,
+            brandId: BRAND,
+            actor: { userId: USER, role: 'admin', departmentIds: 'all' },
+          }),
+        );
+      const created = await inBrand((context) =>
+        service.create(context, { source: 'zendesk', mode: 'full' }),
+      );
+      expect(created).toMatchObject({
+        status: 'draft',
+        hasCredentials: false,
+        counts: { extracted: {}, loaded: {}, skipped: {} },
+      });
+      const connection = {
+        credentials: { auth: 'oauth' as const, subdomain: 'demo', accessToken: 'synthetic-token' },
+        downloadHosts: ['cdn.zendesk.test'],
+      };
+      await expect(
+        inBrand((context) =>
+          service.connect(context, created.id, {
+            ...connection,
+            credentials: { ...connection.credentials, accessToken: 'wrong-token' },
+          }),
+        ),
+      ).rejects.toThrow('import.credentials-refused');
+      expect(await inBrand((context) => service.get(context, created.id))).toMatchObject({
+        status: 'draft',
+        hasCredentials: false,
+      });
+      const parentId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: parentId,
+        brandId: BRAND,
+        source: 'zendesk',
+        mode: 'full',
+        status: 'completed',
+        startedBy: USER,
+        sourceAccountKey: sourceAccountKey({
+          source: 'zendesk',
+          verifiedAccount: 'different-account',
+        }),
+      });
+      const delta = await inBrand((context) =>
+        service.create(context, { source: 'zendesk', mode: 'delta', parentRunId: parentId }),
+      );
+      await expect(
+        inBrand((context) => service.connect(context, delta.id, connection)),
+      ).rejects.toThrow('import.account-mismatch');
+      expect(await inBrand((context) => service.get(context, delta.id))).toMatchObject({
+        status: 'draft',
+        hasCredentials: false,
+      });
+      const connected = await inBrand((context) =>
+        service.connect(context, created.id, connection),
+      );
+      expect(connected).toMatchObject({
+        account: 'demo',
+        run: { status: 'connecting', hasCredentials: true },
+      });
+      const [stored] = await owner.db
+        .select()
+        .from(importRuns)
+        .where(eq(importRuns.id, created.id));
+      if (!stored?.credentialsEncrypted) throw new Error('Missing encrypted connection');
+      expect(JSON.parse(decryptSecret(stored.credentialsEncrypted, keyring))).toEqual(
+        connection.credentials,
+      );
+      expect(stored.sourceAccountKey).toBe(
+        sourceAccountKey({ source: 'zendesk', verifiedAccount: 'demo' }),
+      );
+      expect(JSON.stringify(connected)).not.toContain('synthetic-token');
+      expect(connected.run).not.toHaveProperty('credentialsEncrypted');
+      const listed = await inBrand((context) => service.list(context));
+      expect(listed.runs.some((run) => run.id === created.id)).toBe(true);
+      expect(JSON.stringify(listed)).not.toContain('synthetic-token');
+      await expect(
+        withSystem(app.db, OTHER_BRAND, (tx) =>
+          service.get(
+            {
+              tx,
+              brandId: OTHER_BRAND,
+              actor: { userId: USER, role: 'admin', departmentIds: 'all' },
+            },
+            created.id,
+          ),
+        ),
+      ).rejects.toThrow('import.run-not-found');
+      await expect(
+        inBrand(async (context) => {
+          await service.extract(context, created.id);
+          throw new Error('rollback extraction');
+        }),
+      ).rejects.toThrow('rollback extraction');
+      expect(await inBrand((context) => service.get(context, created.id))).toMatchObject({
+        status: 'connecting',
+      });
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await inBrand((context) => service.extract(context, created.id))).toMatchObject({
+        status: 'extracting',
+        hasCredentials: true,
+      });
+      await expect(inBrand((context) => service.extract(context, created.id))).rejects.toThrow(
+        'import.phase-invalid',
+      );
+      const events = await owner.db.select().from(outbox);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        event: 'import.work_requested',
+        payload: { runId: created.id, step: 'extract' },
+      });
+      expect(
+        JSON.stringify(
+          await owner.db.select().from(auditLog).where(eq(auditLog.targetId, created.id)),
+        ),
+      ).not.toContain('synthetic-token');
+      for (const event of events) await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+    } finally {
+      await fake.server.close();
+    }
   });
 
   it('loads encrypted runtime credentials only for the bound account and enforces exact download hosts', async () => {

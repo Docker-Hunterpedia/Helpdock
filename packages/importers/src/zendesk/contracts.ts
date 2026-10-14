@@ -4,17 +4,8 @@ const id = z.int().positive();
 const instant = z.iso.datetime({ offset: true });
 const nullId = id.nullish();
 const fields = z.record(z.string(), z.json()).nullish();
-const subdomain = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/);
-export const zendeskCredentialsSchema = z.discriminatedUnion('auth', [
-  z.strictObject({ auth: z.literal('oauth'), subdomain, accessToken: z.string().min(1).max(8192) }),
-  z.strictObject({
-    auth: z.literal('api_token'),
-    subdomain,
-    email: z.email(),
-    apiToken: z.string().min(1).max(8192),
-  }),
-]);
-export type ZendeskCredentials = z.infer<typeof zendeskCredentialsSchema>;
+
+export { type ZendeskCredentials, zendeskCredentialsSchema } from '@helpdock/schemas';
 
 export const zendeskTicketSchema = z.looseObject({
   id,

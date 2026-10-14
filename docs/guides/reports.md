@@ -90,6 +90,12 @@ messages do not count as agent replies, and a name-only author does not get an
 invented staff account or per-agent workload row. Historical ratings count on
 their original rating day; they are separate from live surveys.
 
+The import report rebuild is also in development. It works in resumable 31-day
+chunks through the brand's current local day, so imported open tickets contribute
+to later backlog snapshots. The default window is 400 days; `rebuildAllReports`
+opts into older history. A clipped rebuild records a warning. This backend work
+does not yet expose the import wizard or its report option.
+
 Only a ticket's **initial** clocks count, unless the brand turns on "count
 reopens" (`slaCountReopens`, Ticketing › SLAs): then a reopened ticket's
 next-response clock counts as a response and its later resolution clocks as

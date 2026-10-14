@@ -418,3 +418,14 @@ loaded ticket creation day through the brand's current local day, in inclusive
 resume rather than restarting. Freeze the local timezone and SLA reopen metric
 choice for that checkpoint; refuse configuration changes mid-backfill rather than
 mixing report grains. A completed report checkpoint does not repeat row writes.
+
+### 2026-10-14 — one bounded help-center import event
+
+Use `help_center.imported { runId }`, with the brand in the outbox envelope,
+instead of placing every article ID in a single queue payload. Retained staged
+receipts supply distinct article targets in keyset pages of ten, joining the
+same-brand article table and skipping deleted targets. This keeps the event small
+and limits bodies buffered by knowledge conversion. Article load checkpoints
+record whether any version changed; unchanged repeat imports emit no event.
+Completion, event, audit and credential purge share a transaction. Search, page
+cache and knowledge subscribers handle the event; it has no webhook subscription.

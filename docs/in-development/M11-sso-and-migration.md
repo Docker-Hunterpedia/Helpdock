@@ -910,7 +910,8 @@ service, to avoid per-article events); slugs through `resolveSlug`; article imag
 fetched (`safeFetch`) into `hc_media` and `img src` rewritten to
 `hcMediaPath(brandId, mediaId)` before `sanitizeArticleHtml`; published versions
 written with `published_*` and `published_at` = source `updatedAt`. One outbox
-event `help_center.imported { brandId, articleIds }` at the end, handled by the
+event `help_center.imported { runId }` at the end when article versions changed,
+with the brand in the outbox envelope, handled by the
 search reindex and knowledge re-chunk subscribers and **not** by webhooks.
 
 **Reports**: after the last ticket, `rebuild-reports.ts` calls
@@ -2060,6 +2061,36 @@ name-only staff response and closure dates, three resumed chunks, rollback,
 completed retries, pause/configuration fencing, clipping warnings and foreign
 pointer refusal. Registered finish jobs, reindexing, audit and terminal credential
 purge remain unfinished.
+
+### Completion transaction and help-center subscribers (M11-09/10, in progress)
+
+`runImportFinishBatch` combines the last report chunk and `completeImportRun` in
+one brand transaction. Completion requires settled records/media and a complete
+report checkpoint. It writes one `import.completed` audit, nulls credentials and
+worker claim fields, sets the finish time and changes status to completed.
+Retries return already-completed without another audit or event. Pause/replacement
+still revokes worker authority before a nonterminal completion.
+
+Article checkpoints set `counts.knowledgeChanged` only when the writer creates or
+updates a version. Completion emits a single `help_center.imported { runId }`
+outbox event only for such runs. Unchanged repeat imports emit none. The payload
+uses the retained run rather than an unbounded array of article IDs; see ADR 0027.
+Default handling validates the payload, page-cache handling invalidates the brand,
+and search/knowledge subscribers read distinct same-brand imported article targets
+in keyset pages of ten. Deleted targets are skipped through the article join.
+Published en/ar versions are indexed and converted to knowledge documents;
+draft versions schedule no embeddings. Existing knowledge queue behavior only
+schedules embeddings when chunks were written. This event is not registered with
+the webhook subscriber.
+
+The writer suite passes 117 real PostgreSQL/Redis cases. New cases prove the
+credential/audit/event rollback, terminal retries, no event on unchanged imports,
+original report completion, brand isolation, ten-plus-two article pages, en/ar
+search/knowledge output and no repeated embedding scheduling. Focused help-center
+subscriber unit tests and the strict event-payload schema test cover registration
+and input rejection. These primitives are not yet registered as BullMQ import
+handlers or exposed through the import API/UI; worker-kill and 500-ticket acceptance
+remain required.
 
 ## M11-13 Freshdesk connector
 

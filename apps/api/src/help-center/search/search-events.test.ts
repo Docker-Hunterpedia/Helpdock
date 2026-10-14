@@ -7,6 +7,7 @@ import {
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
 } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
@@ -16,6 +17,7 @@ import {
   articleChangedHandler,
   brandChangedHandler,
   createSearchKnowledgeProcessor,
+  importedArticlesHandler,
   registerSearchEventHandlers,
   SEARCH_SUBSCRIBER,
 } from './search-events.js';
@@ -30,7 +32,7 @@ const brandsDb = (ids: readonly string[]): Db =>
   }) as unknown as Db;
 
 describe('the search subscriber (M5-05)', () => {
-  it('subscribes to the three help center events under its own name', () => {
+  it('subscribes to live and imported help center events under its own name', () => {
     const register = vi.fn();
 
     registerSearchEventHandlers({ register });
@@ -39,6 +41,7 @@ describe('the search subscriber (M5-05)', () => {
       [HC_ARTICLE_CHANGED_EVENT, articleChangedHandler, SEARCH_SUBSCRIBER],
       [HC_STRUCTURE_CHANGED_EVENT, brandChangedHandler, SEARCH_SUBSCRIBER],
       [HC_ACCESS_CHANGED_EVENT, brandChangedHandler, SEARCH_SUBSCRIBER],
+      [HC_IMPORTED_EVENT, importedArticlesHandler, SEARCH_SUBSCRIBER],
     ]);
   });
 

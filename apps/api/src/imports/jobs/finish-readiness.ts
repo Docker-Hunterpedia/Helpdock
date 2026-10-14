@@ -24,6 +24,24 @@ export async function beginImportFinishing(tx: DbTransaction, request: ImportCla
   const claim = importClaimSchema.parse(request);
   if (claim.phase !== 'loading') throw new ImportClaimLost();
   await renewImportClaim(tx, claim);
+  const readiness = await readImportFinishReadiness(tx, claim);
+  if (readiness.media_missing) throw new ImportLoadError('target-unavailable');
+  if (readiness.records_pending || readiness.media_pending) return null;
+  await tx
+    .update(importRuns)
+    .set({ status: 'finishing' })
+    .where(
+      and(
+        eq(importRuns.brandId, claim.brandId),
+        eq(importRuns.id, claim.runId),
+        eq(importRuns.claimToken, claim.token),
+        eq(importRuns.status, 'loading'),
+      ),
+    );
+  return importClaimSchema.parse({ ...claim, phase: 'finishing' });
+}
+
+export async function readImportFinishReadiness(tx: DbTransaction, claim: ImportClaim) {
   const [readiness] = readinessSchema.parse(
     await tx.execute(sql`
     SELECT
@@ -41,18 +59,5 @@ export async function beginImportFinishing(tx: DbTransaction, request: ImportCla
   `),
   );
   if (!readiness) throw new ImportClaimLost();
-  if (readiness.media_missing) throw new ImportLoadError('target-unavailable');
-  if (readiness.records_pending || readiness.media_pending) return null;
-  await tx
-    .update(importRuns)
-    .set({ status: 'finishing' })
-    .where(
-      and(
-        eq(importRuns.brandId, claim.brandId),
-        eq(importRuns.id, claim.runId),
-        eq(importRuns.claimToken, claim.token),
-        eq(importRuns.status, 'loading'),
-      ),
-    );
-  return importClaimSchema.parse({ ...claim, phase: 'finishing' });
+  return readiness;
 }

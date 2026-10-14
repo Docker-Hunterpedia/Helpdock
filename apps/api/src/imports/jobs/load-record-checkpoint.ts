@@ -162,6 +162,11 @@ export async function loadStagedRecord(tx: DbTransaction, request: RecordCheckpo
     .update(importRecords)
     .set({ status, helpdockId: loaded.id, loadHash, error: null })
     .where(predicate);
-  await recordLoadProgress(tx, claim, operation.entity, status);
+  await recordLoadProgress(tx, {
+    claim,
+    entity: operation.entity,
+    status,
+    knowledgeChanged: operation.entity === 'article' && loaded.outcome !== 'unchanged',
+  });
   return { state: status, ...loaded };
 }

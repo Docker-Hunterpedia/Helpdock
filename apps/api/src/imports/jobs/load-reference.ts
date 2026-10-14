@@ -159,6 +159,6 @@ export async function loadStagedReference(
     .update(importRecords)
     .set({ status, helpdockId: target.id, loadHash, error: null })
     .where(predicate);
-  await recordLoadProgress(tx, claim, record.entity, status);
+  await recordLoadProgress(tx, { claim, entity: record.entity, status });
   return resultSchema.parse({ state: status, id: target.id });
 }

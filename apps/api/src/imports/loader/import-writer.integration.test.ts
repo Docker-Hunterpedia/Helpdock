@@ -17,12 +17,14 @@ import {
   hcArticleVersions,
   hcCategories,
   hcMedia,
+  hcSearchDocuments,
   hcSections,
   importExternalIds,
   importLog,
   importMappings,
   importRecords,
   importRuns,
+  knowledgeDocuments,
   outbox,
   reportAgentDaily,
   reportDaily,
@@ -61,6 +63,9 @@ import { z } from 'zod';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
+import { forEachImportedArticleBatch } from '../../help-center/imported-articles.js';
+import { importedArticlesHandler } from '../../help-center/search/search-events.js';
+import { createArticleKnowledgeHandlers } from '../../knowledge/knowledge-events.js';
 import { objectKeyBeside } from '../../media/keys.js';
 import { MediaRepository } from '../../media/media.repository.js';
 import { createObjectPurgeHandler } from '../../media/object-purge.js';
@@ -72,9 +77,11 @@ import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
 import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
 import { claimImportRun, IMPORT_CLAIM_TIMEOUT_MS, renewImportClaim } from '../jobs/claims.js';
+import { completeImportRun } from '../jobs/complete-run.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { runImportFinishBatch } from '../jobs/finish-batch.js';
 import { beginImportFinishing } from '../jobs/finish-readiness.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { runImportLoadBatch } from '../jobs/load-batch.js';
@@ -3637,6 +3644,251 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     ).toEqual([]);
   });
 
+  it('finishes only after all report chunks and purges credentials exactly once', async () => {
+    const scenario = await historicalReportScenario('RPE');
+    const now = new Date('2019-03-05T12:00:00Z');
+    const deps = { db: app.db, jobId: 'import.finish.fixture' };
+    expect(await runImportFinishBatch(deps, scenario.claim, now)).toEqual({ state: 'more' });
+    expect(await runImportFinishBatch(deps, scenario.claim, now)).toEqual({ state: 'more' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.runId)))[0]
+        ?.credentialsEncrypted,
+    ).toBe('synthetic-envelope');
+    expect(await runImportFinishBatch(deps, scenario.claim, now)).toEqual({ state: 'completed' });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.runId)))[0],
+    ).toMatchObject({
+      status: 'completed',
+      credentialsEncrypted: null,
+      claimToken: null,
+      claimedAt: null,
+      finishedAt: now,
+    });
+    expect(await runImportFinishBatch(deps, scenario.claim, now)).toEqual({
+      state: 'already_completed',
+    });
+    const audits = await owner.db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.action, 'import.completed'), eq(auditLog.targetId, scenario.runId)));
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.meta).toEqual({ source: 'zendesk', mode: 'full' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('rolls back completion, credential purge, audit and the single import event together', async () => {
+    const scenario = await stagedKnowledgeBatch('completion-knowledge');
+    const deps = {
+      db: app.db,
+      jobId: 'import.finish.knowledge',
+      prepareArticle: async ({ record }: { record: { bodyHtml: string } }) => record.bodyHtml,
+    };
+    await runImportLoadBatch(deps, { claim: scenario.claim });
+    await owner.db
+      .update(importRuns)
+      .set({ credentialsEncrypted: 'synthetic-envelope' })
+      .where(eq(importRuns.id, scenario.runId));
+    const claim = await withSystem(app.db, BRAND, (tx) => beginImportFinishing(tx, scenario.claim));
+    if (!claim) throw new Error('Missing finishing claim');
+    await expect(withSystem(app.db, BRAND, (tx) => completeImportRun(tx, claim))).rejects.toThrow();
+    await withSystem(app.db, BRAND, (tx) => rebuildImportReportsBatch(tx, claim));
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await completeImportRun(tx, claim);
+        throw new Error('completion rollback');
+      }),
+    ).rejects.toThrow('completion rollback');
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, scenario.runId)))[0],
+    ).toMatchObject({
+      status: 'finishing',
+      credentialsEncrypted: 'synthetic-envelope',
+      finishedAt: null,
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    expect(
+      await owner.db
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.action, 'import.completed'), eq(auditLog.targetId, scenario.runId))),
+    ).toEqual([]);
+    expect(await runImportFinishBatch(deps, claim)).toEqual({ state: 'completed' });
+    expect(await runImportFinishBatch(deps, claim)).toEqual({ state: 'already_completed' });
+    const events = await owner.db.select().from(outbox);
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    if (!event) throw new Error('Missing import event');
+    expect(event).toMatchObject({
+      brandId: BRAND,
+      event: 'help_center.imported',
+      payload: { runId: scenario.runId },
+    });
+    const ids: string[] = [];
+    await withSystem(app.db, BRAND, (tx) =>
+      forEachImportedArticleBatch(tx, { brandId: BRAND, runId: scenario.runId }, async (batch) => {
+        ids.push(...batch);
+      }),
+    );
+    expect(ids).toHaveLength(1);
+    let embeddings = 0;
+    const handler = createArticleKnowledgeHandlers({
+      addEmbed: async () => {
+        embeddings++;
+      },
+    }).imported;
+    await withSystem(app.db, BRAND, async (tx) => {
+      const context = {
+        tx,
+        brandId: BRAND,
+        event: event.event,
+        payload: event.payload,
+        outboxId: event.id,
+        log: silentJobLogger,
+      };
+      await importedArticlesHandler(context);
+      await handler(context);
+      await importedArticlesHandler(context);
+      await handler(context);
+    });
+    expect(embeddings).toBe(0);
+    const [quiet] =
+      await owner.db.execute(sql`SELECT (SELECT count(*) FROM ai_calls WHERE brand_id = ${BRAND})::int AS ai,
+      (SELECT count(*) FROM webhook_deliveries WHERE brand_id = ${BRAND})::int AS webhooks`);
+    expect(quiet).toMatchObject({ ai: 0, webhooks: 0 });
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) =>
+        forEachImportedArticleBatch(
+          tx,
+          { brandId: OTHER_BRAND, runId: scenario.runId },
+          async () => {},
+        ),
+      ),
+    ).rejects.toThrow('import.event-run-unavailable');
+    await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+    const repeated = await stagedKnowledgeBatch('completion-knowledge');
+    await runImportLoadBatch(deps, { claim: repeated.claim });
+    const repeatedClaim = await withSystem(app.db, BRAND, (tx) =>
+      beginImportFinishing(tx, repeated.claim),
+    );
+    if (!repeatedClaim) throw new Error('Missing repeated finishing claim');
+    expect(await runImportFinishBatch(deps, repeatedClaim)).toEqual({ state: 'completed' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('pages imported article targets and reindexes published en/ar versions without repeating embedding work', async () => {
+    const scenario = await stagedKnowledgeBatch('published-completion');
+    const rows = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, scenario.runId), eq(importRecords.entity, 'article')));
+    for (const row of rows) {
+      const native = importRecordSchema.parse({ entity: 'article', payload: row.payload });
+      if (native.entity !== 'article') throw new Error('Missing native article');
+      const payload = { ...native.payload, draft: false, internal: false };
+      await owner.db
+        .update(importRecords)
+        .set({ payload, payloadHash: hashImportValue(payload) })
+        .where(eq(importRecords.id, row.id));
+    }
+    await runImportLoadBatch(
+      {
+        db: app.db,
+        jobId: 'import.published.load',
+        prepareArticle: async ({ record }) => record.bodyHtml,
+      },
+      { claim: scenario.claim },
+    );
+    const [loaded] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, scenario.runId), eq(importRecords.entity, 'article')))
+      .limit(1);
+    if (!loaded?.helpdockId) throw new Error('Missing article target');
+    const [original] = await owner.db
+      .select()
+      .from(hcArticles)
+      .where(eq(hcArticles.id, loaded.helpdockId));
+    if (!original) throw new Error('Missing original article');
+    for (let index = 0; index < 11; index++) {
+      const id = uuidv7();
+      await owner.db.insert(hcArticles).values({
+        id,
+        brandId: BRAND,
+        sectionId: original.sectionId,
+        slug: `pagination-fixture-${index}`,
+      });
+      const payload = { ...loaded.payload, externalId: `pagination-${index}` };
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId: scenario.runId,
+        entity: 'article',
+        externalId: `pagination-${index}`,
+        payload,
+        payloadHash: hashImportValue(payload),
+        status: 'loaded',
+        helpdockId: id,
+      });
+    }
+    const claim = await withSystem(app.db, BRAND, (tx) => beginImportFinishing(tx, scenario.claim));
+    if (!claim) throw new Error('Missing published finishing claim');
+    expect(
+      await runImportFinishBatch({ db: app.db, jobId: 'import.published.finish' }, claim),
+    ).toEqual({ state: 'completed' });
+    const [event] = await owner.db.select().from(outbox);
+    if (!event) throw new Error('Missing published import event');
+    const pages: string[][] = [];
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        forEachImportedArticleBatch(tx, { brandId: BRAND, runId: scenario.runId }, async (ids) => {
+          pages.push(ids);
+        }),
+      ),
+    ).toBe(12);
+    expect(pages.map((page) => page.length)).toEqual([10, 2]);
+    expect(new Set(pages.flat()).size).toBe(12);
+    let embeddings = 0;
+    const knowledge = createArticleKnowledgeHandlers({
+      addEmbed: async () => {
+        embeddings++;
+      },
+    }).imported;
+    const deliver = () =>
+      withSystem(app.db, BRAND, async (tx) => {
+        const context = {
+          tx,
+          brandId: BRAND,
+          event: event.event,
+          payload: event.payload,
+          outboxId: event.id,
+          log: silentJobLogger,
+        };
+        await importedArticlesHandler(context);
+        await knowledge(context);
+      });
+    await deliver();
+    const indexed = await owner.db
+      .select()
+      .from(hcSearchDocuments)
+      .where(eq(hcSearchDocuments.articleId, original.id));
+    expect(indexed.map((row) => row.locale).sort()).toEqual(['ar', 'en']);
+    expect(
+      await owner.db
+        .select()
+        .from(knowledgeDocuments)
+        .where(eq(knowledgeDocuments.articleId, original.id)),
+    ).toHaveLength(2);
+    expect(embeddings).toBe(1);
+    await deliver();
+    expect(embeddings).toBe(1);
+    expect(
+      await owner.db
+        .select()
+        .from(hcSearchDocuments)
+        .where(eq(hcSearchDocuments.articleId, original.id)),
+    ).toEqual(indexed);
+    await owner.db.delete(outbox).where(eq(outbox.id, event.id));
+  });
+
   it.each(['pending', 'processing', 'ready', 'rejected', 'infected'] as const)(
     'only advances import finalization once attachment status %s is settled',
     async (status) => {
@@ -4125,6 +4377,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         section: 1,
         article: 1,
       },
+      knowledgeChanged: true,
     });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });

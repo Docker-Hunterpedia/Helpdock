@@ -1,9 +1,10 @@
 import { accounts, type DbTransaction, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ImportLoadError } from './contracts.js';
 import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
+import { importedOrganizationDomains, matchImportedOrganization } from './organization-matching.js';
 import {
   type OrganizationLoad,
   organizationLoadSchema,
@@ -12,12 +13,6 @@ import {
 import { profileWarning } from './profile-warnings.js';
 import { requireLoadingRun } from './run-scope.js';
 
-function sourceDomains(record: OrganizationLoad['record']): string[] {
-  return [...new Set(record.domains.map((domain) => domain.trim().toLowerCase()))].filter(
-    (domain) => domain !== '',
-  );
-}
-
 /** Does not merge accounts or rename an existing local company. */
 export async function loadImportedOrganization(
   tx: DbTransaction,
@@ -25,7 +20,7 @@ export async function loadImportedOrganization(
 ): Promise<ProfileOutcome> {
   const input = organizationLoadSchema.parse(request);
   await requireLoadingRun(tx, input);
-  const domains = sourceDomains(input.record);
+  const domains = importedOrganizationDomains(input.record);
   const lockKeys = [
     `organization:${input.record.externalId}`,
     ...domains.map((domain) => `domain:${domain}`),
@@ -44,29 +39,7 @@ export async function loadImportedOrganization(
     : [];
   if (known && !knownAccount) throw new ImportLoadError('target-unavailable');
   if (known?.payloadHash === payloadHash) return { id: known.helpdockId, outcome: 'unchanged' };
-  const matches = domains.length
-    ? await tx
-        .select()
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.brandId, input.brandId),
-            or(
-              inArray(accounts.domain, domains),
-              sql`(${accounts.importedDetails}->'domains') ?| ARRAY[${sql.join(
-                domains.map((domain) => sql`${domain}`),
-                sql`, `,
-              )}]::text[]`,
-            ),
-          ),
-        )
-    : [];
-  if (new Set(matches.map((account) => account.id)).size > 1)
-    throw new ImportLoadError('identity-ambiguous');
-  const linked = knownAccount ?? matches[0];
-  if (known && !linked) throw new ImportLoadError('target-unavailable');
-  if (linked && matches.some((account) => account.id !== linked.id))
-    throw new ImportLoadError('identity-ambiguous');
+  const linked = await matchImportedOrganization(tx, input, domains, known?.helpdockId);
   input.custom = await validatedImportedCustom(tx, {
     brandId: input.brandId,
     target: 'account',

@@ -116,3 +116,8 @@ requires review rather than implicitly combining their histories. Source aliases
 may still link to the same existing local person. Unchanged receipts add nothing
 and do not claim historical identifiers again. Complete dry-run orchestration
 and the review UI remain under development.
+
+Organization planning uses the loader’s normalized domains and imported aliases
+to show create/link/update/unchanged outcomes without creating companies. Ambiguous
+company matches are blocked and local names are preserved. Contact links to newly
+planned organizations and the complete dry-run workflow remain under development.

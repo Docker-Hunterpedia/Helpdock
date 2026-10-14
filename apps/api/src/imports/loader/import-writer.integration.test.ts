@@ -126,6 +126,7 @@ import { previewImportedCustom } from '../preflight/custom-values.js';
 import { validateImportFieldPlan } from '../preflight/field-plan-state.js';
 import { validateImportInvitationPlan } from '../preflight/invitation-plan-state.js';
 import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
+import { previewImportedOrganization } from '../preflight/organization-plan.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
@@ -6070,6 +6071,100 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         sql`SELECT id, xmin::text AS revision FROM attachments WHERE ticket_id = ${loaded.ticketId}`,
       ),
     ).toEqual(revisions);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('plans organization creation and reuse through the same domain matching as loading without company writes', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Organization preview', prefix: 'OPV' });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', startedBy: USER });
+    const input = organizationLoadSchema.parse({
+      brandId,
+      runId,
+      source: 'zendesk',
+      record: {
+        externalId: 'company-preview',
+        name: 'Source company',
+        domains: [' EXAMPLE.TEST ', 'example.test'],
+        custom: {},
+      },
+      custom: {},
+    });
+    const preview = () =>
+      withSystem(app.db, brandId, (tx) => previewImportedOrganization(tx, input));
+    expect(await preview()).toEqual({
+      action: 'create',
+      accountId: null,
+      name: 'Source company',
+      sourceName: 'Source company',
+      domains: ['example.test'],
+    });
+    expect(await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).toEqual([]);
+    const first = uuidv7();
+    const second = uuidv7();
+    await owner.db.insert(accounts).values([
+      {
+        id: first,
+        brandId,
+        name: 'Local company',
+        domain: 'example.test',
+        importedDetails: { domains: ['alias.test'], notes: null },
+      },
+      { id: second, brandId, name: 'Other company', domain: 'other.test' },
+    ]);
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM accounts WHERE brand_id = ${brandId} ORDER BY id`,
+    );
+    expect(await preview()).toMatchObject({
+      action: 'link',
+      accountId: first,
+      name: 'Local company',
+      sourceName: 'Source company',
+    });
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        previewImportedOrganization(tx, {
+          ...input,
+          record: { ...input.record, domains: ['alias.test'] },
+        }),
+      ),
+    ).toMatchObject({ action: 'link', accountId: first });
+    await expect(
+      withSystem(app.db, brandId, (tx) =>
+        previewImportedOrganization(tx, {
+          ...input,
+          record: { ...input.record, domains: ['example.test', 'other.test'] },
+        }),
+      ),
+    ).rejects.toThrow('identity-ambiguous');
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM accounts WHERE brand_id = ${brandId} ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
+    expect(await withSystem(app.db, brandId, (tx) => writer.organization(tx, input))).toMatchObject(
+      { id: first, outcome: 'linked' },
+    );
+    expect(await preview()).toMatchObject({
+      action: 'unchanged',
+      accountId: first,
+      name: 'Local company',
+    });
+    expect(
+      await withSystem(app.db, brandId, (tx) =>
+        previewImportedOrganization(tx, {
+          ...input,
+          record: { ...input.record, notes: 'New source note' },
+        }),
+      ),
+    ).toMatchObject({ action: 'update', accountId: first });
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

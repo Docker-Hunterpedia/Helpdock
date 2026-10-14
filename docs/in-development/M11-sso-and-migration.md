@@ -2549,6 +2549,25 @@ Planned organization resolution, media checks and complete dry-run consumer/repo
 preview UI remain unfinished. These plan checks alone do not approve loading;
 M11-10/16 remain in progress.
 
+### Read-only organization identity planning (M11-09/10/16, in progress)
+
+Preflight now shares organization domain normalization and matching with loading,
+including imported domain aliases, account-scoped source bindings, ambiguity
+refusal and missing prior targets. It plans create/link/update/unchanged outcomes
+without allocating company IDs or modifying companies. Local company names remain
+separate from the supplied source names. The loader retains its existing advisory
+locks and write behavior around the shared read-only matcher.
+
+Unit coverage verifies trimming/case normalization, duplicate removal and empty
+value exclusion. Real database coverage proves new-company planning, local domain
+and imported-alias reuse, conflicting company refusal, unchanged company revisions,
+loader link parity and unchanged/update plans, with no outbox work.
+
+Contact references to newly planned organizations, cross-source organization
+collisions, media availability and full dry-run consumer/report/preview UI remain
+unfinished. These organization plans alone do not approve loading; M11-09/10/16
+remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

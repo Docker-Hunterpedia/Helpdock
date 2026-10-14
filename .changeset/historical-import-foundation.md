@@ -97,3 +97,5 @@ Project custom values against existing and proposed field definitions using the 
 Plan contact identity reuse and ambiguity through the loader’s matching rules without locks, profile changes or verification upgrades.
 
 Detect conflicting contact identifier claims across the proposed import while allowing aliases of one existing local person.
+
+Share organization domain matching between read-only preflight and loading, preserving local names and refusing ambiguous company links.

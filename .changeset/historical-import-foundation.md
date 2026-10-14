@@ -39,3 +39,5 @@ Resolve ticket routing from confirmed status, department, priority, channel, sta
 Assemble ticket history and confirmed authors from staged records. Preserve name-only historical authors, reject incomplete or corrupted child history, and keep resume receipts deterministic.
 
 Checkpoint existing, invited and name-only staff mappings with import progress. Name-only history creates no account, and invited staff receive no invitation delivery or activation during import.
+
+Build field, profile, staff and knowledge load operations directly from staged source records and confirmed mappings. Resolve company links and require prepared article content before committing it.

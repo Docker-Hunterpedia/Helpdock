@@ -1796,6 +1796,27 @@ empty outbox/Redis. This extends the existing silent-staff coverage; it does not
 complete reference checkpoints, phase orchestration, delta-author hydration,
 physical media preparation or the import UI.
 
+### Prepared record operation assembly checkpoint (in progress)
+
+`loadPreparedStagedRecord` now builds the shared checkpoint's load operation from
+the fenced staged row and the run's confirmed mapping rows. Fields/staff use their
+confirmed mapping; companies/contacts use the custom-field compiler, and contacts
+require a loaded source company when one is referenced. Categories and sections
+retain their normalized parent references. Articles require a prepared body
+within the existing help-center size limit; there is no raw-body fallback around
+media preparation. The contact calling-code input is validated before use.
+
+The integration case stages and loads seven entity types in dependency order,
+then repeats every load without incrementing progress again. It verifies the
+mapped company value, contact/company relationship, null-account name-only staff
+and refusal of an article without prepared content. All 87 writer cases pass with
+real PostgreSQL/Redis and an empty outbox in this case.
+
+This resolves manual construction of those record operations. Automated dependency
+selection, reference-only rows, prepared media storage, phase/finish orchestration,
+source-account binding, dry-run/API/UI integration and full acceptance still remain
+required. M11-09 and M11-10 remain in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

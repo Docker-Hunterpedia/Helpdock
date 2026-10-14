@@ -50,7 +50,7 @@ import {
   ZendeskConnector,
 } from '@helpdock/importers';
 import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
-import { importEntitySchema, ticketCcSchema } from '@helpdock/schemas';
+import { importEntitySchema, importRecordSchema, ticketCcSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
@@ -74,6 +74,7 @@ import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { loadAssembledStagedTicket } from '../jobs/load-assembled-ticket.js';
 import { loadMappedStagedTicket } from '../jobs/load-mapped-ticket.js';
+import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
@@ -3228,6 +3229,164 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       expect(await redis.dbsize()).toBe(0);
     },
   );
+
+  it('builds field, profile, staff and knowledge loads directly from staged records and confirmed mappings', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
+    const records = [
+      {
+        entity: 'field',
+        payload: {
+          externalId: 'prepared-field',
+          target: 'organization',
+          key: 'source_region',
+          label: 'Region',
+          type: 'text',
+        },
+      },
+      {
+        entity: 'organization',
+        payload: {
+          externalId: 'prepared-org',
+          name: 'Prepared company',
+          domains: ['prepared.invalid'],
+          custom: { source_region: 'North' },
+        },
+      },
+      {
+        entity: 'contact',
+        payload: {
+          externalId: 'prepared-contact',
+          name: 'Prepared contact',
+          organizationExternalId: 'prepared-org',
+          emails: ['prepared@example.invalid'],
+          phones: [],
+          custom: {},
+        },
+      },
+      {
+        entity: 'user',
+        payload: {
+          externalId: 'prepared-agent',
+          kind: 'agent',
+          name: 'Historical person',
+          active: false,
+        },
+      },
+      {
+        entity: 'category',
+        payload: {
+          externalId: 'prepared-category',
+          names: { en: 'Prepared docs', ar: 'توثيق الاستيراد' },
+        },
+      },
+      {
+        entity: 'section',
+        payload: {
+          externalId: 'prepared-section',
+          parentExternalId: 'prepared-category',
+          names: { en: 'Prepared section', ar: 'قسم الاستيراد' },
+        },
+      },
+      {
+        entity: 'article',
+        payload: {
+          externalId: 'prepared-article',
+          sectionExternalId: 'prepared-section',
+          locale: 'en',
+          title: 'Prepared article',
+          bodyHtml: '<p>Prepared history</p>',
+          draft: true,
+          internal: true,
+          createdAt: '2020-01-01T00:00:00Z',
+          updatedAt: '2020-01-02T00:00:00Z',
+        },
+      },
+    ].map((record) => importRecordSchema.parse(record));
+    const ids = new Map<string, string>();
+    for (const record of records) {
+      const id = uuidv7();
+      ids.set(record.payload.externalId, id);
+      await owner.db.insert(importRecords).values({
+        id,
+        brandId: BRAND,
+        runId,
+        entity: record.entity,
+        externalId: record.payload.externalId,
+        payload: record.payload,
+        payloadHash: hashImportValue(record.payload),
+      });
+    }
+    await owner.db.insert(importMappings).values([
+      {
+        brandId: BRAND,
+        runId,
+        kind: 'field',
+        externalValue: 'prepared-field',
+        target: {
+          kind: 'create',
+          definition: { target: 'account', key: 'prepared_region', label: 'Region', type: 'text' },
+        },
+      },
+      {
+        brandId: BRAND,
+        runId,
+        kind: 'agent',
+        externalValue: 'prepared-agent',
+        target: { kind: 'name' },
+      },
+    ]);
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing loading claim');
+    const targets = new Map<string, string | null>();
+    for (const record of records) {
+      const recordId = ids.get(record.payload.externalId);
+      if (!recordId) throw new Error('Missing staged record');
+      if (record.entity === 'article')
+        await expect(
+          withSystem(app.db, BRAND, (tx) => loadPreparedStagedRecord(tx, { claim, recordId })),
+        ).rejects.toMatchObject({ code: 'mapping-invalid' });
+      const command = {
+        claim,
+        recordId,
+        ...(record.entity === 'article' ? { preparedBodyHtml: '<p>Prepared history</p>' } : {}),
+      };
+      const loaded = await withSystem(app.db, BRAND, (tx) => loadPreparedStagedRecord(tx, command));
+      expect(loaded.state).toBe('loaded');
+      targets.set(record.payload.externalId, loaded.id);
+      expect(
+        await withSystem(app.db, BRAND, (tx) => loadPreparedStagedRecord(tx, command)),
+      ).toEqual({ state: 'already_done', id: loaded.id });
+    }
+    const companyId = targets.get('prepared-org');
+    const contactId = targets.get('prepared-contact');
+    if (!companyId || !contactId) throw new Error('Missing prepared profiles');
+    expect(
+      (await owner.db.select().from(accounts).where(eq(accounts.id, companyId)))[0]?.custom,
+    ).toEqual({ prepared_region: 'North' });
+    expect(
+      (await owner.db.select().from(contacts).where(eq(contacts.id, contactId)))[0]?.accountId,
+    ).toBe(companyId);
+    expect(targets.get('prepared-agent')).toBeNull();
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts,
+    ).toEqual({
+      loaded: {
+        field: 1,
+        organization: 1,
+        contact: 1,
+        user: 1,
+        category: 1,
+        section: 1,
+        article: 1,
+      },
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
 
   it('refuses a failed staged child before loading or reporting a complete ticket', async () => {
     const scenario = await stagedTicketScenario('failed-child-history');

@@ -686,6 +686,26 @@ it('resumes a committed Guide article without repeating translations and refuses
   ).rejects.toMatchObject({ code: 'invalid-response' });
 });
 
+it('extracts nested Guide section parents separately from their owning category', async () => {
+  const original = zendeskCoreFixture.sections?.[0];
+  if (!original) throw new Error('Missing source section');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    sections: [{ ...original, parent_section_id: 1801 }],
+  });
+  const pages = await collectPages(connector.extract(context, 'section', null));
+  expect(pages.flatMap((page) => page.records)).toMatchObject([
+    {
+      payload: {
+        externalId: 'section:1602',
+        parentExternalId: 'category:1601',
+        parentSectionExternalId: 'section:1801',
+        names: { en: 'Getting started', ar: 'البدء' },
+      },
+    },
+  ]);
+});
+
 it('downloads stable Support attachment URLs without credentials reaching the redirected CDN', async () => {
   const url = fake.addAttachment('receipt', Buffer.from('original attachment'));
   const downloaded = await connector.fetchAttachment(context, {

@@ -27,3 +27,5 @@ Extract historical Zendesk audit changes and notification records as inert activ
 Extract Zendesk legacy and current survey satisfaction answers. Preserve native scores, answer metadata and timestamp provenance after staging purge, with explicit warnings for normalization and inferred legacy timestamps.
 
 Extract bilingual Zendesk Guide taxonomy and article translations with original dates and separate draft/readership states. Restricted or unknown readership stays internal with a warning.
+
+Retain nested source section ancestry and bilingual breadcrumb names within the flat help center. Refuse cycles and cross-category parents, and refresh breadcrumbs when source parent names change.

@@ -2,6 +2,7 @@ import { HC_BODY_MAX, HC_CATEGORY_DESCRIPTION_MAX, HC_TITLE_MAX } from '@helpdoc
 import { expect, it } from 'vitest';
 import {
   articleLoadSchema,
+  importedBreadcrumbNames,
   importedDescriptions,
   importedNames,
   sourceDescriptions,
@@ -24,6 +25,12 @@ const article = {
   },
   preparedBodyHtml: 'x'.repeat(HC_BODY_MAX),
 };
+
+it('retains available ancestor labels in breadcrumbs without inventing a missing child translation', () => {
+  expect(
+    importedBreadcrumbNames({ en: '', ar: 'الرئيسي' }, importedNames({ en: 'Child' })),
+  ).toEqual({ en: 'الرئيسي / Child', ar: '' });
+});
 
 it('accepts full destination bounds but refuses bodies that cannot be stored intact', () => {
   expect(articleLoadSchema.parse(article).record.title).toBe(article.record.title);

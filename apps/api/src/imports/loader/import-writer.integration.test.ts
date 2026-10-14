@@ -2568,6 +2568,102 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     ).toMatchObject([{ message: 'import.category.flattened' }]);
   });
 
+  it('retains nested section ancestry and bilingual breadcrumbs while refusing section cycles', async () => {
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.category(
+        tx,
+        categoryLoadSchema.parse({
+          ...scope,
+          record: { externalId: 'nested-category', names: { en: 'Docs', ar: 'التوثيق' } },
+        }),
+      ),
+    );
+    const parentInput = sectionLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'parent-section',
+        parentExternalId: 'nested-category',
+        names: { en: 'Parent', ar: 'الرئيسي' },
+      },
+    });
+    const parent = await withSystem(app.db, BRAND, (tx) => writer.section(tx, parentInput));
+    const childInput = sectionLoadSchema.parse({
+      ...scope,
+      record: {
+        externalId: 'child-section',
+        parentExternalId: 'nested-category',
+        parentSectionExternalId: 'parent-section',
+        names: { en: 'Child', ar: 'الفرعي' },
+      },
+    });
+    const child = await withSystem(app.db, BRAND, (tx) => writer.section(tx, childInput));
+    const [stored] = await owner.db.select().from(hcSections).where(eq(hcSections.id, child.id));
+    expect(stored).toMatchObject({
+      names: { en: 'Parent / Child', ar: 'الرئيسي / الفرعي' },
+      importedParentSectionExternalId: 'parent-section',
+    });
+    expect(await withSystem(app.db, BRAND, (tx) => writer.section(tx, childInput))).toMatchObject({
+      id: child.id,
+      outcome: 'unchanged',
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.section(tx, {
+          ...parentInput,
+          record: { ...parentInput.record, parentSectionExternalId: 'child-section' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      (await owner.db.select().from(hcSections).where(eq(hcSections.id, parent.id)))[0]?.names,
+    ).toEqual({ en: 'Parent', ar: 'الرئيسي' });
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.section(tx, {
+        ...parentInput,
+        record: { ...parentInput.record, names: { en: 'Renamed', ar: 'الجديد' } },
+      }),
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.section(tx, childInput))).toMatchObject({
+      id: child.id,
+      outcome: 'updated',
+    });
+    expect(
+      (await owner.db.select().from(hcSections).where(eq(hcSections.id, child.id)))[0]?.names,
+    ).toEqual({ en: 'Renamed / Child', ar: 'الجديد / الفرعي' });
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.category(
+        tx,
+        categoryLoadSchema.parse({
+          ...scope,
+          record: { externalId: 'other-category', names: { en: 'Other' } },
+        }),
+      ),
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.section(
+        tx,
+        sectionLoadSchema.parse({
+          ...scope,
+          record: {
+            externalId: 'other-section',
+            parentExternalId: 'other-category',
+            names: { en: 'Other section' },
+          },
+        }),
+      ),
+    );
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.section(tx, {
+          ...childInput,
+          record: { ...childInput.record, parentSectionExternalId: 'other-section' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
   it('accepts only ready same-brand images and refuses missing knowledge parents without leaving content', async () => {
     const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
     const mediaId = uuidv7();

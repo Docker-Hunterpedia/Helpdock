@@ -8,6 +8,7 @@ import { importedIdentity, rememberImported } from './external-ids.js';
 import {
   type CategoryLoad,
   categoryLoadSchema,
+  importedBreadcrumbNames,
   importedDescriptions,
   importedNames,
   type SectionLoad,
@@ -20,6 +21,7 @@ import {
   lockImportedKnowledge,
 } from './knowledge-targets.js';
 import { requireLoadingRun } from './run-scope.js';
+import { importedSectionNames } from './section-names.js';
 
 const repository = new HelpCenterRepository();
 
@@ -38,14 +40,7 @@ async function categoryNames(tx: DbTransaction, input: CategoryLoad) {
   }
   return {
     parentHash: parent.sourceHash,
-    names: importedNames({
-      en: names.en
-        ? [parent.names.en || parent.names.ar, names.en].filter(Boolean).join(' / ')
-        : '',
-      ar: names.ar
-        ? [parent.names.ar || parent.names.en, names.ar].filter(Boolean).join(' / ')
-        : '',
-    }),
+    names: importedBreadcrumbNames(parent.names, names),
   };
 }
 
@@ -133,6 +128,7 @@ async function createImportedSection(
     names,
     importedDescriptions: sourceDescriptions(input.record.descriptions),
     position: await repository.nextPosition(tx, 'sections', category.id),
+    importedParentSectionExternalId: input.record.parentSectionExternalId ?? null,
     slug: await resolveSlug(tx, repository, 'sections', {
       chosen: undefined,
       from: `${category.slug}-${names.en || names.ar}`,
@@ -147,8 +143,12 @@ export async function loadImportedSection(tx: DbTransaction, request: SectionLoa
   await requireLoadingRun(tx, input);
   await lockImportedKnowledge(tx, input, 'sections');
   const category = await importedCategoryTarget(tx, input, input.record.parentExternalId);
-  const names = importedNames(input.record.names);
-  const payloadHash = hashImportValue({ record: input.record, categoryId: category.id });
+  const { names, parentHash } = await importedSectionNames(tx, input, category.id);
+  const payloadHash = hashImportValue({
+    record: input.record,
+    categoryId: category.id,
+    ...(parentHash === null ? {} : { parentHash }),
+  });
   const known = await importedIdentity(tx, input, 'section', input.record.externalId);
   let id: string;
   if (known) {
@@ -159,8 +159,19 @@ export async function loadImportedSection(tx: DbTransaction, request: SectionLoa
       names,
       categoryId: category.id,
       importedDescriptions: sourceDescriptions(input.record.descriptions),
+      importedParentSectionExternalId: input.record.parentSectionExternalId ?? null,
     });
   } else id = await createImportedSection(tx, input, category, names);
+  if (input.record.parentSectionExternalId) {
+    await tx.insert(importLog).values({
+      brandId: input.brandId,
+      runId: input.runId,
+      entity: 'section',
+      externalId: input.record.externalId,
+      level: 'warning',
+      message: 'import.section.flattened',
+    });
+  }
   await rememberImported(tx, {
     brandId: input.brandId,
     source: input.source,

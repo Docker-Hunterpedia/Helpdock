@@ -28,6 +28,16 @@ export type ArticleLoad = z.infer<typeof articleLoadSchema>;
 export function importedNames(names: { en?: string | undefined; ar?: string | undefined }) {
   return hcNamesSchema.parse({ en: names.en ?? '', ar: names.ar ?? '' });
 }
+
+export function importedBreadcrumbNames(
+  parent: Record<string, string>,
+  child: ReturnType<typeof importedNames>,
+) {
+  return importedNames({
+    en: child.en ? [parent.en || parent.ar, child.en].filter(Boolean).join(' / ') : '',
+    ar: child.ar ? [parent.ar || parent.en, child.ar].filter(Boolean).join(' / ') : '',
+  });
+}
 export function importedDescriptions(
   descriptions: { en?: string | undefined; ar?: string | undefined } | undefined,
 ) {

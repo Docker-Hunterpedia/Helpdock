@@ -329,3 +329,18 @@ Emit a normalization warning rather than presenting that conversion as the sourc
 scale. Both APIs rescan on delta because creation-time filters do not prove that
 old edits are included. API availability/completeness must be established before
 approving a run; a failed endpoint is not a successful empty export.
+
+### 2026-10-14 — nested section ancestry in a flat help center
+
+Keep the destination's category/section model. Normalized sections carry their
+root category and optional immediate source-section parent separately. Preserve
+that source parent on the imported section row and use bilingual breadcrumb
+names to expose the hierarchy, with a flattening warning. Do not create extra
+categories for every source section or silently drop its parent relationship.
+
+Resolve ancestors through scoped source identities, reject cycles and category
+mismatches, and load parents before children. A nested child's idempotency hash
+includes its parent's source hash, allowing source parent renames to update the
+breadcrumb on delta. The shared breadcrumb formatter preserves existing category
+behaviour and never manufactures a missing child locale. Flat section hashes
+retain their prior shape.

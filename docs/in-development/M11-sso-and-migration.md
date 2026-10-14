@@ -1640,14 +1640,37 @@ retains bilingual taxonomy and both article translations, with an empty outbox.
 These are extraction/staging checks; image fetch/rewrite and final knowledge
 loading are not proven by them.
 
-Nested sections currently fail extraction rather than losing their hierarchy:
-the existing section loader requires a category parent. Unsupported locales,
+Nested section support was added in the subsequent ancestry checkpoint below.
+Unsupported locales,
 multiple variants collapsing to the same en/ar locale, and an unsupported or
 missing primary source-locale translation also fail instead of silently dropping
 content. These require mapping/completeness handling before connector completion;
 they are not added to the accepted-gaps table. Article attachment discovery,
 source binding, capability preflight, deleted/archive reconciliation and full
 reference-dataset/browser acceptance also remain unfinished. M11-12 remains in progress.
+
+### Nested source section ancestry checkpoint (in progress)
+
+Normalized sections retain the root category in `parentExternalId` and optionally
+their immediate source section in `parentSectionExternalId`. Zendesk emits both
+references. Migration `0062_imported_section_ancestry` stores the source section
+parent on `hc_sections`; the destination remains flat. Nested display names
+include bilingual ancestor breadcrumbs, with no invented child translations,
+and a transactional `import.section.flattened` warning explains the conversion.
+
+Section ancestry resolves only through scoped imported identities. Cycles,
+missing parents and ancestors belonging to another destination category are
+refused. The parent payload hash participates in nested child idempotency, so
+loading a changed parent before its children updates their breadcrumb. Flat
+section hashes remain compatible with the previous loader. The eventual load
+runner must order sections by both category and source-section dependencies.
+
+The integration case failed on the previously unsupported parent field before
+implementation. All 76 writer cases now pass, including repeat, cycle rollback,
+parent-name delta and cross-category refusal, with no outbox sends. Three knowledge
+contract unit cases and 25 connector HTTP cases also pass. This resolves the
+extraction/direct-loader nesting gap; it does not prove the still-unfinished full
+load runner, media preparation, completeness UI or reference-dataset acceptance.
 
 ## M11-13 Freshdesk connector
 

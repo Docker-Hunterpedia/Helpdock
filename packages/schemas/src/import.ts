@@ -233,6 +233,7 @@ export const importCategorySchema = z
   });
 export const importSectionSchema = importCategorySchema.safeExtend({
   parentExternalId: externalId,
+  parentSectionExternalId: externalId.optional(),
 });
 export const importArticleSchema = z
   .strictObject({

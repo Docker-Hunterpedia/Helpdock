@@ -85,7 +85,6 @@ async function taxonomyRecord(
   const source = taxonomySchema.parse(request);
   if (entity === 'section' && source.category_id === undefined)
     throw new ConnectorError('invalid-response');
-  if (source.parent_section_id) throw new ConnectorError('invalid-response');
   const content = localizedTranslations(await translations(client, entity, source.id));
   return [
     importRecordSchema.parse({
@@ -93,6 +92,9 @@ async function taxonomyRecord(
       payload: {
         externalId: `${entity}:${source.id}`,
         ...(entity === 'section' ? { parentExternalId: `category:${source.category_id}` } : {}),
+        ...(entity === 'section' && source.parent_section_id
+          ? { parentSectionExternalId: `section:${source.parent_section_id}` }
+          : {}),
         names: Object.fromEntries(
           [...content].map(([locale, translation]) => [locale, translation.title]),
         ),

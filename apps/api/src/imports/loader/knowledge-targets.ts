@@ -39,7 +39,7 @@ export async function importedSectionTarget(
     .from(hcSections)
     .where(and(eq(hcSections.id, pointer.helpdockId), eq(hcSections.brandId, scope.brandId)));
   if (!section) throw new ImportLoadError('target-unavailable');
-  return section;
+  return { ...section, sourceHash: pointer.payloadHash };
 }
 export async function importedArticleTarget(
   tx: DbTransaction,

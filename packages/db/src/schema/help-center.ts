@@ -86,6 +86,9 @@ export const hcSections = pgTable(
     slug: varchar('slug', { length: 120 }).notNull(),
     names: jsonb('names').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     importedDescriptions: jsonb('imported_descriptions').$type<Record<string, string>>(),
+    importedParentSectionExternalId: varchar('imported_parent_section_external_id', {
+      length: 200,
+    }),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

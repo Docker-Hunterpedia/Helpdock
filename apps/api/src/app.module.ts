@@ -36,6 +36,7 @@ import { EmailModule } from './email/email.module.js';
 import type { SmtpTransportFactory } from './email/transport.js';
 import { HelpCenterModule } from './help-center/help-center.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
+import { ImportsModule, type ImportsModuleOverrides } from './imports/imports.module.js';
 import { InstallModule } from './install/install.module.js';
 import { KnowledgeModule, type KnowledgeOverrides } from './knowledge/knowledge.module.js';
 import type { Logger } from './logging/logger.js';
@@ -130,6 +131,7 @@ export interface AppModuleOptions {
   readonly telegram?: TelegramModuleOverrides;
   /** M10: the Graph client and the inbound services, which suites replace. */
   readonly meta?: MetaModuleOverrides;
+  readonly imports?: ImportsModuleOverrides;
   /** M4: the siteverify call and the SSE timings, which suites replace. */
   readonly widget?: Pick<WidgetModuleOptions, 'captchaTransport' | 'streamTimings'>;
   /** M4-09: the siteverify call, which suites replace. */
@@ -222,6 +224,7 @@ export class AppModule implements NestModule {
         DbModule.forRoot(options.db),
         SettingsModule.forRoot(options.settings, options.redis),
         SsoModule.forRoot(options.env, options.db, options.logger),
+        ImportsModule.forRoot(options.env, options.imports),
         auth,
         BrandsModule.forRoot({ logger: options.logger }),
         InstallModule.forRoot({ auth, logger: options.logger }),

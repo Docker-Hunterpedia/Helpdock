@@ -2,6 +2,7 @@ import { type OutboxDispatcher, type OutboxEventHandler, outboxEvents } from '@h
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_SITE_CHANGED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
 } from '@helpdock/schemas';
@@ -28,6 +29,7 @@ export const HC_PAGE_EVENTS = [
   HC_STRUCTURE_CHANGED_EVENT,
   HC_ACCESS_CHANGED_EVENT,
   HC_SITE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
 ] as const;
 
 export const createPageCacheHandler =

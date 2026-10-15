@@ -54,6 +54,8 @@ export const hcCategories = pgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    importedParentExternalId: varchar('imported_parent_external_id', { length: 200 }),
+    importedDescriptions: jsonb('imported_descriptions').$type<Record<string, string>>(),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -83,6 +85,10 @@ export const hcSections = pgTable(
       .references(() => hcCategories.id, { onDelete: 'no action' }),
     slug: varchar('slug', { length: 120 }).notNull(),
     names: jsonb('names').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    importedDescriptions: jsonb('imported_descriptions').$type<Record<string, string>>(),
+    importedParentSectionExternalId: varchar('imported_parent_section_external_id', {
+      length: 200,
+    }),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -163,11 +169,12 @@ export const hcArticleVersions = pgTable(
     locale: localeEnum('locale').notNull(),
     status: hcArticleStatusEnum('status').notNull().default('draft'),
     visibility: hcVisibilityEnum('visibility').notNull().default('public'),
-    title: varchar('title', { length: 200 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
     description: varchar('description', { length: 160 }).notNull().default(''),
+    importedDescription: text('imported_description'),
     /** Sanitised on the way in (`sanitizeArticleHtml`), never on the way out. */
     bodyHtml: text('body_html').notNull().default(''),
-    publishedTitle: varchar('published_title', { length: 200 }),
+    publishedTitle: varchar('published_title', { length: 500 }),
     publishedDescription: varchar('published_description', { length: 160 }),
     publishedBodyHtml: text('published_body_html'),
     /** Extracted from the published html, for search (M5-05) and chunking (M7). */

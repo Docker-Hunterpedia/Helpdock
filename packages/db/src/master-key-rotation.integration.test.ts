@@ -16,6 +16,7 @@ import {
   auditLog,
   brands,
   departments,
+  importRuns,
   metaAccounts,
   outbox,
   settings,
@@ -223,6 +224,34 @@ describe.skipIf(!hasDocker)('rotateMasterKey', () => {
     expect(report.currentKeyId).toBe(newOnly.current.id);
     expect(report.previousKeyId).toBe(oldOnly.current.id);
     await expect(plaintexts(newOnly)).resolves.toEqual(before);
+  });
+
+  it('rotates a pending import credential envelope while preserving its worker fencing nonce', async () => {
+    const runId = uuidv7();
+    const token = uuidv7();
+    const plaintext = JSON.stringify({ accessToken: 'synthetic-import-token' });
+    await withSystem(handle.db, acme, (tx) =>
+      tx.insert(importRuns).values({
+        id: runId,
+        brandId: acme,
+        source: 'zendesk',
+        status: 'loading',
+        startedBy: userId,
+        credentialsEncrypted: encryptSecret(plaintext, oldOnly),
+        claimToken: token,
+        claimedAt: new Date(),
+      }),
+    );
+    await rotateMasterKey(handle.db, rotating);
+    const [run] = await withSystem(handle.db, acme, (tx) =>
+      tx.select().from(importRuns).where(eq(importRuns.id, runId)),
+    );
+    if (!run?.credentialsEncrypted) throw new Error('Missing rotated import envelope');
+    expect(decryptSecret(run.credentialsEncrypted, newOnly)).toBe(plaintext);
+    expect(run.claimToken).toBe(token);
+    expect(run.status).toBe('loading');
+    const again = await rotateMasterKey(handle.db, newOnly);
+    expect(again.rotated).toBe(0);
   });
 
   it('leaves settings that are not secrets, and outbox rows already published, alone', async () => {

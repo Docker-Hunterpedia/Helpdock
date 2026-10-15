@@ -676,6 +676,28 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
   });
 
   describe('erasure (DOMAIN-RULES §11)', () => {
+    it('erases multiple imported addresses of the same kind without a uniqueness collision', async () => {
+      const contact = await createContact({
+        name: 'Multiple addresses',
+        identities: [
+          { kind: 'email', value: 'first-import-address@example.com' },
+          { kind: 'email', value: 'second-import-address@example.com' },
+        ],
+      });
+      const response = await request('POST', `${base()}/${contact.id}/anonymise`, {
+        headers: auth(),
+      });
+      expect(response.statusCode).toBe(201);
+      const erased = response.json() as ContactDetail;
+      expect(erased.identities).toHaveLength(2);
+      expect(new Set(erased.identities.map((identity) => identity.value)).size).toBe(2);
+      expect(
+        erased.identities.every(
+          (identity) => identity.value.startsWith('erased:') && !identity.verified,
+        ),
+      ).toBe(true);
+    });
+
     it('keeps the row, hashes the identifiers, and audits without a value', async () => {
       const contact = await createContact({
         name: 'To Be Erased',

@@ -365,6 +365,104 @@
       "when": 1791905886655,
       "tag": "0053_sso",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791922444528,
+      "tag": "0054_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791924824732,
+      "tag": "0055_import_source_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791928384624,
+      "tag": "0056_imported_csat",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791929908817,
+      "tag": "0057_import_worker_claims",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791932888209,
+      "tag": "0058_imported_knowledge_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791937482435,
+      "tag": "0059_imported_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791938323465,
+      "tag": "0060_imported_participant_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791943126149,
+      "tag": "0061_imported_csat_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791943907466,
+      "tag": "0062_imported_section_ancestry",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791944318827,
+      "tag": "0063_import_record_load_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1791968763111,
+      "tag": "0064_import_source_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1791970269191,
+      "tag": "0065_import_message_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792000354446,
+      "tag": "0066_import_dry_run_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792074059564,
+      "tag": "0067_import_csat_source_accounts",
+      "breakpoints": true
     }
   ]
 }

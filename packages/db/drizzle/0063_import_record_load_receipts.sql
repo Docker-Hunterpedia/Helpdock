@@ -1,0 +1,1 @@
+ALTER TABLE "import_records" ADD COLUMN "load_hash" char(64);

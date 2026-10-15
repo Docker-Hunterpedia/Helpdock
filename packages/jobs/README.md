@@ -322,3 +322,38 @@ brand's rows.
 pnpm --filter @helpdock/jobs test
 pnpm test:integration packages/jobs     # needs Docker
 ```
+
+## Import scheduling (M11, in development)
+
+`import.extract`, `import.load`, `import.attachments` and `import.finish` are
+registered on the `import` queue with strict `{ brandId, runId }` payloads.
+Credentials remain encrypted on the run and never enter a job payload.
+
+Import phase changes enqueue `import.work_requested` in their transaction. The
+outbox handler validates the request, checks the active phase/account binding and
+uses a job ID derived from the phase, run and outbox ID. An optional ISO
+`notBefore` becomes a delay; redelivery uses the same job ID. Paused, cancelled or
+otherwise stale requests add no work when handled. The import consumer dispatches phase drivers and publishes fenced continuation
+requests; production connector/connection and worker registration remain in
+development; these definitions and the bridge alone do not
+provide the complete migration worker.
+
+`import.recover` runs every minute on maintenance. It requests checkpointed work
+for eligible active runs with absent or expired claims, respects retry deadlines
+and never replaces a fresh worker. It closes the committed-batch/continuation
+crash gap; actual process-kill acceptance remains part of the M11 release checks.
+
+## Historical import consumer
+
+The API worker starts the `import` consumer at concurrency one, handling
+`import.extract`, `import.load`, `import.attachments` and `import.finish`.
+Phase continuations are transactional `import.work_requested` events; pause,
+cancel and expired claims are checked before each fenced batch. On shutdown the
+consumer drains before media workers, queue producers and the Redis connection.
+The minute-based `import.recover` maintenance job recovers abandoned eligible work.
+
+Zendesk runtime credentials are decrypted only under the run's brand context and
+must match its verified source account. Additional attachment hosts are exact
+`options.downloadHosts` entries, checked on every safeFetch hop; API credentials
+never accompany cross-origin attachment requests. Other vendor factories and
+file/article preparation remain under development in M11.

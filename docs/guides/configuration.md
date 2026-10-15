@@ -62,6 +62,10 @@ re-encrypted under the new one with `node dist/cli.js keys rotate`
 in, so keep it set for a while after the rotation
 (docs/guides/operations.md#rotating-the-master-key).
 
+Pending import credential envelopes also participate in master-key rotation.
+Worker claim nonces remain unchanged; they fence workers and are not encrypted
+credentials.
+
 ### NODE_ENV
 
 | Key | Required | Default | In `.env.example` |

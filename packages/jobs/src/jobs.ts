@@ -1488,7 +1488,65 @@ export const samlMetadataRefreshJob = defineJob({
 });
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
+/** Import phases checkpoint their own short transactions; job payloads contain no credentials. */
+export const importRunPayloadSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
+export type ImportRunPayload = z.infer<typeof importRunPayloadSchema>;
+const importRetryOptions: JobsOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1000 },
+  removeOnComplete: { age: 86400, count: 1000 },
+  removeOnFail: 1000,
+};
+export const importExtractJob = defineJob({
+  name: 'import.extract',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importDryRunJob = defineJob({
+  name: 'import.dry_run',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importLoadJob = defineJob({
+  name: 'import.load',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importAttachmentsJob = defineJob({
+  name: 'import.attachments',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const importFinishJob = defineJob({
+  name: 'import.finish',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
+export const IMPORT_RECOVERY_CRON = '* * * * *';
+export const importRecoverJob = defineJob({
+  name: 'import.recover',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.strictObject({}),
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  },
+});
+
 export const JOB_DEFINITIONS = Object.freeze({
+  [importRecoverJob.name]: importRecoverJob,
+  [importExtractJob.name]: importExtractJob,
+  [importDryRunJob.name]: importDryRunJob,
+  [importLoadJob.name]: importLoadJob,
+  [importAttachmentsJob.name]: importAttachmentsJob,
+  [importFinishJob.name]: importFinishJob,
   [samlMetadataRefreshJob.name]: samlMetadataRefreshJob,
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,

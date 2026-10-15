@@ -362,6 +362,9 @@ importers:
       '@helpdock/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@helpdock/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       '@helpdock/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
@@ -663,6 +666,28 @@ importers:
       react-i18next:
         specifier: ^17.0.0
         version: 17.0.14(i18next@26.4.2(typescript@7.0.2))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
+
+  packages/importers:
+    dependencies:
+      '@helpdock/net':
+        specifier: workspace:*
+        version: link:../net
+      '@helpdock/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      csv-parse:
+        specifier: 7.0.3
+        version: 7.0.3
+      yauzl:
+        specifier: 3.4.0
+        version: 3.4.0
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/yauzl':
+        specifier: 3.4.0
+        version: 3.4.0
 
   packages/jobs:
     dependencies:
@@ -3013,6 +3038,9 @@ packages:
   '@types/xml2js@0.4.14':
     resolution: {integrity: sha512-4YnrRemBShWRO2QjvUin8ESA41rH+9nQGLUGZV/1IDhi3SL9OhdpNC/MrulTWuptXKwhx/aDxE7toV0f/ypIXQ==}
 
+  '@types/yauzl@3.4.0':
+    resolution: {integrity: sha512-NRPn5w6h8dhcnmx3YIRQcqMywY/+nND/uOkJessedcrowO3C0AssHp3tMJpxKAwOhFOo0OV1y9VtsC5hbKKBAw==}
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
     engines: {node: '>=16.20.0'}
@@ -3606,6 +3634,9 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  csv-parse@7.0.3:
+    resolution: {integrity: sha512-YFd3QM/yo17vH91L1IOZuvl09zM0zEEtdfTcOCKWcMdM++MNaQSyp09slXyFCLaPXvHstQFx/xC8myiFHSMUvw==}
 
   data-uri-to-buffer@4.0.1:
     resolution: {integrity: sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A==}
@@ -4895,6 +4926,9 @@ packages:
   peberminta@0.10.0:
     resolution: {integrity: sha512-80B2AsU+I4Qdb0ZAPSfe9UwvGzwkM37IKIFEvdS3D/3Ndgv2bsuJ0bfG1+iEYO+l7Gfd4EUJmuRyq7efLgRMzQ==}
 
+  pend@1.2.0:
+    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -5820,6 +5854,10 @@ packages:
 
   yargs@17.7.3:
     resolution: {integrity: sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==}
+    engines: {node: '>=12'}
+
+  yauzl@3.4.0:
+    resolution: {integrity: sha512-jIH9yLR9wqr0wOS0TpBvo/g/2UgZH5qePVbjgRliiF0BYvOZyaBknKsF+x9Iht0O6sqgnB93rCICdOZFecJuDw==}
     engines: {node: '>=12'}
 
   zip-stream@6.0.1:
@@ -8257,6 +8295,10 @@ snapshots:
     dependencies:
       '@types/node': 24.13.5
 
+  '@types/yauzl@3.4.0':
+    dependencies:
+      '@types/node': 24.13.5
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
 
@@ -8762,6 +8804,8 @@ snapshots:
   cssjanus@2.3.1: {}
 
   csstype@3.2.3: {}
+
+  csv-parse@7.0.3: {}
 
   data-uri-to-buffer@4.0.1: {}
 
@@ -10086,6 +10130,8 @@ snapshots:
 
   peberminta@0.10.0: {}
 
+  pend@1.2.0: {}
+
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
@@ -11122,6 +11168,10 @@ snapshots:
       string-width: 4.2.3
       y18n: 5.0.8
       yargs-parser: 21.1.1
+
+  yauzl@3.4.0:
+    dependencies:
+      pend: 1.2.0
 
   zip-stream@6.0.1:
     dependencies:

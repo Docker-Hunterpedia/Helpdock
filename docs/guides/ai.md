@@ -152,6 +152,9 @@ ai.transcribe (`ai` queue)            downloads the Opus variant (or the origina
   and a Translate action. It is never sent to the visitor, and no visitor
   response carries it.
 - Voice notes from before the endpoint was set are not transcribed later.
+- Imported historical voice notes are never submitted for transcription. Both
+  the event subscriber and the transcription worker exclude `origin = import`,
+  including stale events or jobs that were already queued.
 
 ## Per brand
 

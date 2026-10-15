@@ -48,6 +48,7 @@ export interface SafeFetchResponse {
 
 /** Codes that mean "the request was refused", as opposed to "the network failed". */
 const BLOCKED_CODES: ReadonlySet<SafeFetchErrorCode> = new Set([
+  'host-not-allowed',
   'invalid-url',
   'scheme-not-allowed',
   'credentials-in-url',

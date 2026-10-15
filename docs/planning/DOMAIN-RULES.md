@@ -139,6 +139,12 @@ A new ticket created by this rule gets `parent_id` = the closed ticket, a system
 
 A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
 
+Imported CCs can reference a same-brand contact without a source email; their
+address remains null and their provenance is `import`. Never invent an address.
+A delta reconciles only import-owned membership and preserves manually added
+participants. A known source email may fill an import-owned null address, but
+must not replace a manually chosen address. Importing a participant sends nothing.
+
 ### 2.6 Reply windows on the Meta channels
 
 WhatsApp, Messenger and Instagram let a business write to a customer only for a time after the customer's last message; outside it the platform refuses the send. Helpdock enforces the window itself, before the reply is written and again when it is sent, because a reply that cannot leave the desk must not be written as if it had (M10-06, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)).
@@ -229,6 +235,14 @@ The principle: **an identifier someone types is a hint, not proof.** Access to h
 An inbound email is attached to an existing ticket only if **both** hold:
 
 1. A thread hint matches: `In-Reply-To` or any `References` id equals a message id Helpdock sent or received on that ticket, **or** the subject contains the brand's `[PREFIX-N]` token.
+   For imported history, duplicate RFC IDs can name multiple tickets. Real Helpdock
+   deliveries take precedence, followed by live received email. A historical ID
+   threads only when it names one ticket. If no ID resolves and a known historical
+   ID is ambiguous, create a new ticket rather than falling back to a subject
+   token that may reuse an old vendor number. Unknown IDs still permit subject
+   token fallback. Imported RFC IDs are retained as history and do not participate
+   in live delivery deduplication.
+
 2. The sender address is a participant of that ticket (§2.5), compared case-insensitively on the normalised address.
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.

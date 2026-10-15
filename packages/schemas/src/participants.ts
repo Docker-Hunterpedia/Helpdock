@@ -8,7 +8,7 @@ import { ticketParamSchema } from './ticket.js';
  * receives public replies, which is M2's; this milestone keeps the list.
  */
 
-export const ticketParticipantSourceSchema = z.enum(['agent', 'email', 'merge']);
+export const ticketParticipantSourceSchema = z.enum(['agent', 'email', 'merge', 'import']);
 export type TicketParticipantSource = z.infer<typeof ticketParticipantSourceSchema>;
 
 /** One CC. `id` is the participant row, which is what a removal names. */
@@ -16,7 +16,7 @@ export const ticketCcSchema = z.object({
   id: z.uuid(),
   contactId: z.uuid(),
   name: z.string().min(1),
-  /** The normalised address it was added under; null when a merge brought a contact with none. */
+  /** The normalized address it was added under; null for merged or imported contacts without one. */
   address: z.string().max(MAX_IDENTITY_LENGTH).nullable(),
   source: ticketParticipantSourceSchema,
 });

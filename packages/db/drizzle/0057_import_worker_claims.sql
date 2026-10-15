@@ -1,0 +1,5 @@
+ALTER TABLE "import_runs" ADD COLUMN "claim_token" uuid;--> statement-breakpoint
+ALTER TABLE "import_runs" ADD COLUMN "paused_from" "import_status";--> statement-breakpoint
+CREATE UNIQUE INDEX "import_runs_brand_claim_key" ON "import_runs" USING btree ("brand_id") WHERE "import_runs"."claim_token" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_claim_shape" CHECK (("import_runs"."claim_token" IS NULL AND "import_runs"."claimed_at" IS NULL) OR ("import_runs"."claim_token" IS NOT NULL AND "import_runs"."claimed_at" IS NOT NULL AND "import_runs"."status" IN ('extracting', 'dry_run', 'loading', 'finishing')));--> statement-breakpoint
+ALTER TABLE "import_runs" ADD CONSTRAINT "import_runs_pause_shape" CHECK (("import_runs"."status" = 'paused' AND "import_runs"."paused_from" IS NOT NULL AND "import_runs"."paused_from" IN ('extracting', 'dry_run', 'loading', 'finishing')) OR ("import_runs"."status" <> 'paused' AND "import_runs"."paused_from" IS NULL));

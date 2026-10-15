@@ -62,6 +62,12 @@ describe('the schema', () => {
       'hc_sections',
       'hc_settings',
       'holidays',
+      'import_external_ids',
+      'import_file_presets',
+      'import_log',
+      'import_mappings',
+      'import_records',
+      'import_runs',
       'inbound_parse_settings',
       'job_receipts',
       'knowledge_chunks',
@@ -142,10 +148,13 @@ describe('the schema', () => {
   it('stamps a UUIDv7 on every row that does not bring an id', () => {
     const generated = [...byName.values()]
       .map((table) => getTableColumns(table).id)
-      .filter((column) => column !== undefined)
+      .filter(
+        (column): column is NonNullable<typeof column> =>
+          column !== undefined && column.columnType === 'PgUUID',
+      )
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but twenty-two has a uuid primary key; `settings` is keyed by
+    // Every table but twenty-four has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings`,
@@ -157,7 +166,8 @@ describe('the schema', () => {
     // by the brand, window and level, and `embedding_space` is a single row.
     // The four report rollups of M8-04 have no key: a run deletes and rewrites
     // a brand's days whole.
-    expect(generated).toHaveLength(byName.size - 22);
+    // Import source identities use a composite key; import logs use a monotonic bigint id.
+    expect(generated).toHaveLength(byName.size - 24);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

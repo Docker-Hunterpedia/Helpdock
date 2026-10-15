@@ -23,6 +23,12 @@ describe('erasedIdentityValue', () => {
     expect(erasedIdentityValue(CONTACT, 'email')).not.toBe(erasedIdentityValue(CONTACT, 'phone'));
   });
 
+  it('keeps two identifiers of one kind distinct so erasure cannot collide in the unique index', () => {
+    expect(erasedIdentityValue(CONTACT, 'email', 'identity-one')).not.toBe(
+      erasedIdentityValue(CONTACT, 'email', 'identity-two'),
+    );
+  });
+
   it('never carries the value it replaced', () => {
     // Derived from the contact id alone: an attacker holding the digest cannot
     // confirm a guessed address by hashing it.

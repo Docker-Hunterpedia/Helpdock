@@ -535,10 +535,15 @@ export class MergeService {
         kind: message.kind,
         authorType: message.authorType,
         authorId: message.authorId,
+        authorDisplay: message.authorDisplay,
         bodyHtml: message.bodyHtml,
         bodyText: message.bodyText,
         channel: message.channel,
         copiedFromMessageId: message.id,
+        importSourceAccountKey: message.importSourceAccountKey,
+        externalMessageId:
+          message.importSourceAccountKey === null ? null : message.externalMessageId,
+        email: message.email,
         createdAt: message.createdAt,
       });
       await this.#merges.insertAttachmentCopies(

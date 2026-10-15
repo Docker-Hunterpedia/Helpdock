@@ -794,74 +794,124 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
     const split = (who: Person, ticketId: string, body: Record<string, unknown>) =>
       call<TicketDetail & Refusal>('POST', `${ticketPath(ticketId)}/split`, who, body);
 
-    it('copies the chosen messages and their attachments onto a new ticket', async () => {
-      const original = await createTicket(sam, { departmentId: support, contactId: mona });
-      const first = original.messages.messages[0]?.id ?? '';
-      const second = await reply(sam, original.ticket.id, 'Also my invoice shows the wrong VAT');
-      const file = await attachReady(original.ticket.id, second.id);
+    it.each([
+      { origin: 'upload' as const, authorDisplay: null },
+      { origin: 'channel' as const, authorDisplay: null },
+      { origin: 'import' as const, authorDisplay: 'Historical agent' },
+    ])(
+      'copies $origin messages and attachments without losing author or asset provenance',
+      async ({ origin, authorDisplay }) => {
+        const original = await createTicket(sam, { departmentId: support, contactId: mona });
+        const first = original.messages.messages[0]?.id ?? '';
+        const second = await reply(sam, original.ticket.id, 'Also my invoice shows the wrong VAT');
+        const file = await attachReady(original.ticket.id, second.id);
+        await withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await tx.update(attachments).set({ origin }).where(eq(attachments.id, file));
+          await tx
+            .update(ticketMessages)
+            .set({
+              authorDisplay,
+              ...(origin === 'import'
+                ? {
+                    importSourceAccountKey: 'e'.repeat(64),
+                    externalMessageId: 'split-original@example.com',
+                    email: {
+                      from: { address: 'historical@example.com', name: null },
+                      to: [],
+                      cc: [],
+                      date: '2019-01-01T00:00:00Z',
+                      quotedHtml: null,
+                      remoteImages: [],
+                      remoteImagePolicy: 'block',
+                      inlineAttachmentIds: [],
+                      authFailed: false,
+                      mismatch: null,
+                    },
+                  }
+                : {}),
+              ...(authorDisplay === null
+                ? {}
+                : { authorType: 'system' as const, authorId: 'import:historical-agent' }),
+            })
+            .where(eq(ticketMessages.id, second.id));
+        });
 
-      const created = await split(sam, original.ticket.id, {
-        messageIds: [second.id],
-        subject: 'Invoice PDF shows wrong VAT number',
-        departmentId: support,
-      });
+        const created = await split(sam, original.ticket.id, {
+          messageIds: [second.id],
+          subject: 'Invoice PDF shows wrong VAT number',
+          departmentId: support,
+        });
 
-      expect(created.status).toBe(201);
-      const ticket = created.body.ticket;
-      expect(ticket.splitFromId).toBe(original.ticket.id);
-      expect(ticket.contactId).toBe(mona);
-      expect(ticket.number).toBeGreaterThan(original.ticket.number);
-      expect(ticket.priority).toBe(original.ticket.priority);
+        expect(created.status).toBe(201);
+        const ticket = created.body.ticket;
+        expect(ticket.splitFromId).toBe(original.ticket.id);
+        expect(ticket.contactId).toBe(mona);
+        expect(ticket.number).toBeGreaterThan(original.ticket.number);
+        expect(ticket.priority).toBe(original.ticket.priority);
 
-      const [copy, splitFrom] = created.body.messages.messages;
-      expect(copy?.bodyText).toBe(second.bodyText);
-      expect(copy?.createdAt).toBe(second.createdAt);
-      expect(copy?.attachments.map((row) => row.originalName)).toEqual(['invoice-9120.pdf']);
-      expect(splitFrom?.kind).toBe('system');
-      expect(created.body.related).toEqual([
-        expect.objectContaining({ visible: true, relation: 'splitFrom', id: original.ticket.id }),
-      ]);
+        const [copy, splitFrom] = created.body.messages.messages;
+        expect(copy?.bodyText).toBe(second.bodyText);
+        expect(copy?.createdAt).toBe(second.createdAt);
+        expect(copy?.attachments.map((row) => row.originalName)).toEqual(['invoice-9120.pdf']);
+        expect(splitFrom?.kind).toBe('system');
+        expect(created.body.related).toEqual([
+          expect.objectContaining({ visible: true, relation: 'splitFrom', id: original.ticket.id }),
+        ]);
 
-      const [stored] = await withSystem(runtime.db, seeded.brandId, (tx) =>
-        tx
-          .select()
-          .from(ticketMessages)
-          .where(eq(ticketMessages.id, copy?.id ?? '')),
-      );
-      expect(stored?.copiedFromMessageId).toBe(second.id);
+        const [stored] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select()
+            .from(ticketMessages)
+            .where(eq(ticketMessages.id, copy?.id ?? '')),
+        );
+        expect(stored?.copiedFromMessageId).toBe(second.id);
+        expect(stored?.authorDisplay).toBe(authorDisplay);
+        expect(stored?.importSourceAccountKey).toBe(origin === 'import' ? 'e'.repeat(64) : null);
+        expect(stored?.externalMessageId).toBe(
+          origin === 'import' ? 'split-original@example.com' : null,
+        );
+        if (origin === 'import')
+          expect(stored?.email).toMatchObject({
+            from: { address: 'historical@example.com' },
+            date: '2019-01-01T00:00:00Z',
+          });
 
-      // The copy shares the object and is authorised through the new ticket.
-      const copied = copy?.attachments[0]?.id ?? '';
-      const [row] = await withSystem(runtime.db, seeded.brandId, (tx) =>
-        tx.select().from(attachments).where(eq(attachments.id, copied)),
-      );
-      expect(row?.copiedFromAttachmentId).toBe(file);
-      const download = await call<{ url: string }>(
-        'GET',
-        `${ticketPath(ticket.id)}/attachments/${copied}`,
-        sam,
-      );
-      expect(download.status).toBe(200);
-      // Signed for the original's object, which is the only one there is.
-      expect(download.body.url).toContain(row?.s3Key ?? 'missing');
+        // The copy shares the object and is authorised through the new ticket.
+        const copied = copy?.attachments[0]?.id ?? '';
+        const [row] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.select().from(attachments).where(eq(attachments.id, copied)),
+        );
+        expect(row?.copiedFromAttachmentId).toBe(file);
+        expect(row?.origin).toBe(origin);
+        const download = await call<{ url: string }>(
+          'GET',
+          `${ticketPath(ticket.id)}/attachments/${copied}`,
+          sam,
+        );
+        expect(download.status).toBe(200);
+        // Signed for the original's object, which is the only one there is.
+        expect(download.body.url).toContain(row?.s3Key ?? 'missing');
 
-      // The original keeps every message and says where the copies went.
-      const after = await read(sam, original.ticket.id);
-      const ids = after.body.messages.messages.map((message) => message.id);
-      expect(ids).toEqual(expect.arrayContaining([first, second.id]));
-      expect(after.body.messages.messages.at(-1)?.bodyText).toBe(
-        `Messages split to ${ticket.prefix}-${ticket.number}`,
-      );
-      expect(after.body.related).toEqual([
-        expect.objectContaining({ visible: true, relation: 'splitTo', id: ticket.id }),
-      ]);
+        // The original keeps every message and says where the copies went.
+        const after = await read(sam, original.ticket.id);
+        const ids = after.body.messages.messages.map((message) => message.id);
+        expect(ids).toEqual(expect.arrayContaining([first, second.id]));
+        expect(after.body.messages.messages.at(-1)?.bodyText).toBe(
+          `Messages split to ${ticket.prefix}-${ticket.number}`,
+        );
+        expect(after.body.related).toEqual([
+          expect.objectContaining({ visible: true, relation: 'splitTo', id: ticket.id }),
+        ]);
 
-      expect(await activityFor(original.ticket.id, 'ticket.split')).toHaveLength(1);
-      expect((await outboxFor(ticket.id)).map((entry) => entry.event)).toContain('ticket.created');
-      expect((await outboxFor(original.ticket.id)).map((entry) => entry.event)).toContain(
-        'ticket.updated',
-      );
-    });
+        expect(await activityFor(original.ticket.id, 'ticket.split')).toHaveLength(1);
+        expect((await outboxFor(ticket.id)).map((entry) => entry.event)).toContain(
+          'ticket.created',
+        );
+        expect((await outboxFor(original.ticket.id)).map((entry) => entry.event)).toContain(
+          'ticket.updated',
+        );
+      },
+    );
 
     it('refuses a department the actor may not file in, and messages that are not this ticket’s', async () => {
       const original = await createTicket(sam, { departmentId: support });

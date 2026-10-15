@@ -9,6 +9,7 @@ import {
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_MEDIA_UPLOADED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
 } from '@helpdock/schemas';
@@ -85,7 +86,19 @@ describe('the help center outbox handlers', () => {
     await expect(handler(context(HC_ARTICLE_CHANGED_EVENT, { articleId: 'x' }))).rejects.toThrow();
   });
 
-  it('registers all four events, and converts an uploaded image', async () => {
+  it('validates the imported event payload before logging it', async () => {
+    const { queues } = recording();
+    const dispatcher = createOutboxDispatcher();
+    registerHelpCenterEventHandlers(queues, dispatcher);
+    await expect(
+      dispatcher.dispatch(
+        context(HC_IMPORTED_EVENT, { runId: ARTICLE, credentials: 'must-not-log' }),
+      ),
+    ).rejects.toThrow();
+    await dispatcher.dispatch(context(HC_IMPORTED_EVENT, { runId: ARTICLE }));
+  });
+
+  it('registers live and imported help center events, and converts an uploaded image', async () => {
     const { queues, media } = recording();
     const dispatcher = createOutboxDispatcher();
     registerHelpCenterEventHandlers(queues, dispatcher);
@@ -96,6 +109,7 @@ describe('the help center outbox handlers', () => {
         HC_STRUCTURE_CHANGED_EVENT,
         HC_ACCESS_CHANGED_EVENT,
         HC_MEDIA_UPLOADED_EVENT,
+        HC_IMPORTED_EVENT,
       ]),
     );
 

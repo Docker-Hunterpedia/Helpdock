@@ -1,4 +1,4 @@
-import { bareMessageId, type EmailInboundMessage } from '@helpdock/channels';
+import type { EmailInboundMessage } from '@helpdock/channels';
 import {
   contactIdentities,
   type DbTransaction,
@@ -27,6 +27,7 @@ import type {
 import { type ActivityActor, writeTicketActivity } from '../../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../../tickets/ticket-events.js';
 import type { TicketRepository } from '../../tickets/tickets.repository.js';
+import { referencedTickets } from './referenced-tickets.js';
 
 /**
  * M2-01's `ConversationRouter` (ARCHITECTURE §8) with M2-04's threading rule
@@ -193,13 +194,17 @@ export class ConversationRouter {
     message: EmailInboundMessage,
   ): Promise<ThreadCandidate | undefined> {
     let ticketId: string | undefined;
+    let ambiguousReference = false;
 
     if (message.hints.messageIds.length > 0) {
       const byId = await this.#ticketsByMessageId(tx, brandId, message.hints.messageIds);
-      ticketId = message.hints.messageIds.map((id) => byId.get(id)).find((id) => id !== undefined);
+      ticketId = message.hints.messageIds
+        .map((id) => byId.tickets.get(id))
+        .find((id) => id !== undefined);
+      ambiguousReference = message.hints.messageIds.some((id) => byId.ambiguous.has(id));
     }
 
-    if (ticketId === undefined && message.hints.ticketNumbers.length > 0) {
+    if (ticketId === undefined && !ambiguousReference && message.hints.ticketNumbers.length > 0) {
       const prefix = await this.#deps.tickets.brandPrefix(tx, brandId);
       const token = message.hints.ticketNumbers.find((hint) => hint.prefix === prefix);
       if (token !== undefined) {
@@ -243,14 +248,20 @@ export class ConversationRouter {
     tx: DbTransaction,
     brandId: string,
     ids: readonly string[],
-  ): Promise<Map<string, string>> {
+  ): Promise<ReturnType<typeof referencedTickets>> {
     const received = await tx
-      .select({ ticketId: ticketMessages.ticketId, externalId: ticketMessages.externalMessageId })
+      .select({
+        ticketId: ticketMessages.ticketId,
+        externalId: ticketMessages.externalMessageId,
+        importSourceAccountKey: ticketMessages.importSourceAccountKey,
+      })
       .from(ticketMessages)
       .where(
         and(
           eq(ticketMessages.brandId, brandId),
-          inArray(ticketMessages.externalMessageId, [...ids]),
+          eq(ticketMessages.channel, 'email'),
+          eq(ticketMessages.kind, 'public'),
+          inArray(ticketMessages.externalMessageId, [...ids.flatMap((id) => [id, `<${id}>`])]),
         ),
       );
     const sent = await tx
@@ -266,17 +277,7 @@ export class ConversationRouter {
         ),
       );
 
-    const byId = new Map<string, string>();
-    for (const row of sent) {
-      byId.set(bareMessageId(row.messageId), row.ticketId);
-    }
-    for (const row of received) {
-      if (row.externalId !== null) {
-        byId.set(row.externalId, row.ticketId);
-      }
-    }
-
-    return byId;
+    return referencedTickets(sent, received);
   }
 
   // -------------------------------------------------------------------- writes

@@ -21,7 +21,7 @@ import { localeSchema } from './brand.js';
 export const HC_SLUG_MAX = 120;
 export const HC_NAME_MAX = 120;
 export const HC_CATEGORY_DESCRIPTION_MAX = 300;
-export const HC_TITLE_MAX = 200;
+export const HC_TITLE_MAX = 500;
 /** The search description: what a results page shows under the title. */
 export const HC_DESCRIPTION_MAX = 160;
 /** Of the stored, sanitised html. A long article is tens of kilobytes. */
@@ -528,6 +528,8 @@ export type HcChangedVersion = z.infer<typeof hcChangedVersionSchema>;
  * `knowledge.sync` job re-labels its chunks (DOMAIN-RULES §5).
  */
 export const HC_ARTICLE_CHANGED_EVENT = 'help_center.article_changed';
+export const HC_IMPORTED_EVENT = 'help_center.imported';
+export const hcImportedPayloadSchema = z.strictObject({ runId: z.uuid() });
 /** `help_center.structure_changed`: a category or section was renamed, moved or removed. */
 export const HC_STRUCTURE_CHANGED_EVENT = 'help_center.structure_changed';
 /** `help_center.access_changed`: the brand's help center became public or internal-only. */

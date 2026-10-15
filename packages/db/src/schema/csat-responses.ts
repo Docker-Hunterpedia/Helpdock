@@ -1,18 +1,21 @@
 import { sql } from 'drizzle-orm';
 import {
+  char,
   check,
   index,
+  jsonb,
   pgTable,
   smallint,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { departments } from './departments.js';
-import { csatAnswerChannelEnum } from './enums.js';
+import { csatAnswerChannelEnum, importSourceEnum } from './enums.js';
 import { tickets } from './tickets.js';
 
 /**
@@ -23,7 +26,7 @@ import { tickets } from './tickets.js';
  * answer, so the answer is two nullable columns and a timestamp, and the
  * agent's "pending / sent / rated" is a read of one row.
  *
- * **One per close**, not one per ticket: `(ticket_id, closed_at)` is unique, so
+ * **One live survey per close**: `(ticket_id, closed_at)` is unique for live rows, so
  * a ticket reopened and closed again gets a second survey, and the job that
  * creates one can be delivered twice and still leave a single row.
  *
@@ -52,8 +55,14 @@ export const csatResponses = pgTable(
     departmentId: uuid('department_id')
       .notNull()
       .references(() => departments.id, { onDelete: 'restrict' }),
-    /** The close this survey asks about. */
-    closedAt: timestamp('closed_at', { withTimezone: true }).notNull(),
+    /** Live surveys require a close; imported answers may not provide one. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    importedSource: importSourceEnum('imported_source'),
+    importSourceAccountKey: char('import_source_account_key', { length: 64 })
+      .notNull()
+      .default('0'.repeat(64)),
+    importedExternalId: varchar('imported_external_id', { length: 200 }),
+    importedDetails: jsonb('imported_details').$type<Record<string, unknown>>(),
     /** SHA-256 of the token, hex. */
     tokenHash: text('token_hash').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -73,7 +82,25 @@ export const csatResponses = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('csat_responses_ticket_close_key').on(table.ticketId, table.closedAt),
+    uniqueIndex('csat_responses_ticket_close_key')
+      .on(table.ticketId, table.closedAt)
+      .where(sql`${table.importedExternalId} IS NULL`),
+    uniqueIndex('csat_responses_import_key')
+      .on(
+        table.brandId,
+        table.importedSource,
+        table.importSourceAccountKey,
+        table.importedExternalId,
+      )
+      .where(sql`${table.importedExternalId} IS NOT NULL`),
+    check(
+      'csat_responses_account_key_shape',
+      sql`${table.importSourceAccountKey} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'csat_responses_origin_shape',
+      sql`(${table.importedExternalId} IS NULL AND ${table.importedSource} IS NULL AND ${table.closedAt} IS NOT NULL AND ${table.ratedVia} IS DISTINCT FROM 'import') OR (${table.importedExternalId} IS NOT NULL AND ${table.importedSource} IS NOT NULL AND ${table.ratedVia} IS NOT DISTINCT FROM 'import' AND ${table.rating} IS NOT NULL AND ${table.ratedAt} IS NOT NULL)`,
+    ),
     uniqueIndex('csat_responses_token_hash_key').on(table.tokenHash),
     // A rating and its timestamp arrive together or not at all.
     check(

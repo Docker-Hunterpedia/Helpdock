@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import postgres from 'postgres';
@@ -66,6 +67,20 @@ const MIGRATION_TAGS = [
   '0051_meta_profile_checked',
   '0052_meta_deliveries_platform_ids',
   '0053_sso',
+  '0054_imports',
+  '0055_import_source_details',
+  '0056_imported_csat',
+  '0057_import_worker_claims',
+  '0058_imported_knowledge_metadata',
+  '0059_imported_activity',
+  '0060_imported_participant_source',
+  '0061_imported_csat_details',
+  '0062_imported_section_ancestry',
+  '0063_import_record_load_receipts',
+  '0064_import_source_accounts',
+  '0065_import_message_identity',
+  '0066_import_dry_run_identity',
+  '0067_import_csat_source_accounts',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -147,6 +162,180 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
+  });
+
+  it.each(['known', 'unknown', 'ambiguous'] as const)(
+    'migrates %s satisfaction account ownership without guessing',
+    async (ownership) => {
+      const url = await migrated(`csat_upgrade_${ownership}`);
+      const owner = postgres(url, { max: 1, onnotice: () => {} });
+      try {
+        await owner`ALTER TABLE csat_responses DROP COLUMN import_source_account_key CASCADE`;
+        await owner`CREATE UNIQUE INDEX csat_responses_import_key ON csat_responses(brand_id, imported_source, imported_external_id) WHERE imported_external_id IS NOT NULL`;
+        const [brand] =
+          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'CSAT upgrade','CSA') RETURNING id`;
+        const [department] =
+          await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
+        const [status] =
+          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Open','open','info') RETURNING id`;
+        const [ticket] =
+          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'CSA','History',${status?.id},'email') RETURNING id`;
+        const [answer] =
+          await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,imported_source,imported_external_id,token_hash,expires_at,rating,rated_at,rated_via)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'zendesk','rating-1','synthetic-migration-hash','1970-01-01',5,'2019-01-01','import') RETURNING id`;
+        if (ownership !== 'unknown')
+          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
+        VALUES(${brand?.id},'zendesk',${'a'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
+        if (ownership === 'ambiguous')
+          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
+        VALUES(${brand?.id},'zendesk',${'b'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
+        const migration = readFileSync(
+          new URL('../drizzle/0067_import_csat_source_accounts.sql', import.meta.url),
+          'utf8',
+        );
+        const applied = owner.begin(async (tx) => {
+          for (const statement of migration.split('--> statement-breakpoint'))
+            if (statement.trim()) await tx.unsafe(statement);
+        });
+        if (ownership === 'ambiguous') {
+          await expect(applied).rejects.toThrow(
+            'Cannot assign imported satisfaction to multiple source accounts',
+          );
+          expect(
+            await owner`SELECT column_name FROM information_schema.columns WHERE table_name='csat_responses' AND column_name='import_source_account_key'`,
+          ).toHaveLength(0);
+        } else {
+          await applied;
+          expect(
+            await owner`SELECT import_source_account_key AS account FROM csat_responses WHERE id=${answer?.id}`,
+          ).toMatchObject([{ account: (ownership === 'known' ? 'a' : '0').repeat(64) }]);
+        }
+      } finally {
+        await owner.end();
+      }
+    },
+  );
+
+  it('backfills imported message and copy provenance while retaining live RFC uniqueness', async () => {
+    const url = await migrated('import_message_upgrade');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      await owner`ALTER TABLE ticket_messages DROP COLUMN import_source_account_key CASCADE`;
+      await owner`DROP INDEX ticket_messages_reference_idx`;
+      await owner`CREATE UNIQUE INDEX ticket_messages_external_key ON ticket_messages(brand_id, channel, external_message_id) WHERE external_message_id IS NOT NULL`;
+      const [brand] =
+        await owner`INSERT INTO brands(id, name, prefix) VALUES (gen_random_uuid(), 'Header upgrade', 'REF') RETURNING id`;
+      const [department] =
+        await owner`INSERT INTO departments(id, brand_id, name) VALUES (gen_random_uuid(), ${brand?.id}, 'Support') RETURNING id`;
+      const [status] =
+        await owner`INSERT INTO ticket_statuses(id, brand_id, name, system_state, color) VALUES (gen_random_uuid(), ${brand?.id}, 'Open', 'open', 'info') RETURNING id`;
+      const [ticket] =
+        await owner`INSERT INTO tickets(id, brand_id, department_id, number, prefix, subject, status_id, channel)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, 1, 'REF', 'Historical mail', ${status?.id}, 'email') RETURNING id`;
+      const [message] =
+        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 1, 'public', 'system', '<p>History</p>', 'History', 'email', 'original@vendor') RETURNING id`;
+      const [copy] =
+        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, copied_from_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 2, 'public', 'system', '<p>History</p>', 'History', 'email', ${message?.id}) RETURNING id`;
+      await owner`INSERT INTO import_external_ids(brand_id, source, source_account_key, entity, external_id, helpdock_id, payload_hash)
+        VALUES (${brand?.id}, 'zendesk', ${'a'.repeat(64)}, 'message', 'native-root', ${message?.id}, ${'b'.repeat(64)})`;
+      const migration = readFileSync(
+        new URL('../drizzle/0065_import_message_identity.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint')) {
+        if (statement.trim()) await owner.unsafe(statement);
+      }
+      const historical =
+        await owner`SELECT id, external_message_id, import_source_account_key FROM ticket_messages WHERE id IN (${message?.id}, ${copy?.id}) ORDER BY seq`;
+      expect(historical).toEqual([
+        {
+          id: message?.id,
+          external_message_id: 'original@vendor',
+          import_source_account_key: 'a'.repeat(64),
+        },
+        { id: copy?.id, external_message_id: null, import_source_account_key: 'a'.repeat(64) },
+      ]);
+      await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 3, 'public', 'system', '<p>Live</p>', 'Live', 'email', 'original@vendor')`;
+      await expect(owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
+        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 4, 'public', 'system', '<p>Duplicate</p>', 'Duplicate', 'email', 'original@vendor')`).rejects.toMatchObject(
+        { code: '23505' },
+      );
+    } finally {
+      await owner.end();
+    }
+  });
+
+  it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {
+    const url = await migrated('import_claims');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'claim-test@example.com', 'Importer') RETURNING id`;
+      const [brand] =
+        await owner`INSERT INTO brands (id, name, prefix) VALUES (gen_random_uuid(), 'Claims', 'CL') RETURNING id`;
+      const [claimed] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'loading', gen_random_uuid(), now()) RETURNING id`;
+      await expect(owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'extracting', gen_random_uuid(), now())`).rejects.toMatchObject(
+        { code: '23505' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        owner`UPDATE import_runs SET status = 'paused', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'paused', paused_from = 'loading', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`;
+      await expect(
+        owner`UPDATE import_runs SET paused_from = 'ready' WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'loading', paused_from = NULL, claim_token = gen_random_uuid(), claimed_at = now() WHERE id = ${claimed?.id}`;
+    } finally {
+      await owner.end();
+    }
+  });
+
+  it('binds import children to their own brand and refuses credentials in terminal runs', async () => {
+    const url = await migrated('import_constraints');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'import-test@example.com', 'Importer') RETURNING id`;
+      const tenants = await owner`INSERT INTO brands (id, name, prefix) VALUES
+        (gen_random_uuid(), 'Import A', 'IA'),
+        (gen_random_uuid(), 'Import B', 'IB') RETURNING id`;
+      const [run] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, credentials_encrypted)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', ${person?.id}, 'encrypted-fixture') RETURNING id`;
+      await expect(owner`INSERT INTO import_records (id, brand_id, run_id, entity, external_id, payload, payload_hash)
+        VALUES (gen_random_uuid(), ${tenants[1]?.id}, ${run?.id}, 'ticket', '1', '{}', ${'a'.repeat(64)})`).rejects.toMatchObject(
+        { code: '23503' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET status = 'completed' WHERE id = ${run?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'completed', credentials_encrypted = NULL WHERE id = ${run?.id}`;
+      const [completed] =
+        await owner`SELECT status, credentials_encrypted FROM import_runs WHERE id = ${run?.id}`;
+      expect(completed).toEqual({ status: 'completed', credentials_encrypted: null });
+      await owner`INSERT INTO import_runs (id, brand_id, source, mode, parent_run_id, started_by)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', 'delta', ${run?.id}, ${person?.id})`;
+      // Brand purge deletes in batches; a parent's dependent deltas must not block its batch.
+      await owner`DELETE FROM import_runs WHERE id = ${run?.id}`;
+      expect(
+        await owner`SELECT id FROM import_runs WHERE brand_id = ${tenants[0]?.id}`,
+      ).toHaveLength(0);
+      const origins =
+        await owner`SELECT enumlabel FROM pg_enum JOIN pg_type ON enumtypid = pg_type.oid WHERE typname = 'csat_answer_channel'`;
+      expect(origins.map((entry) => entry.enumlabel)).toContain('import');
+    } finally {
+      await owner.end();
+    }
   });
 
   it('applies each migration once when two replicas start at the same time', async () => {

@@ -13,11 +13,14 @@ import {
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
   hcArticleChangedPayloadSchema,
+  hcImportedPayloadSchema,
 } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
+import { forEachImportedArticleBatch } from '../imported-articles.js';
 import { hourOf } from '../publish-due.job.js';
 import { reindexArticles } from './search-index.js';
 
@@ -69,6 +72,27 @@ export const brandChangedHandler: OutboxEventHandler = async ({
   log.info({ event, outboxId, brandId, ...counts }, 'help center search re-indexed');
 };
 
+export const importedArticlesHandler: OutboxEventHandler = async ({
+  tx,
+  brandId,
+  payload,
+  event,
+  outboxId,
+  log,
+}) => {
+  const { runId } = hcImportedPayloadSchema.parse(payload);
+  const counts = { indexed: 0, removed: 0 };
+  await forEachImportedArticleBatch(tx, { brandId, runId }, async (ids) => {
+    const batch = await reindexArticles(tx, ids);
+    counts.indexed += batch.indexed;
+    counts.removed += batch.removed;
+  });
+  log.info(
+    { event, outboxId, brandId, runId, ...counts },
+    'imported help center search re-indexed',
+  );
+};
+
 /** Called by the worker's start-up, beside `registerHelpCenterEventHandlers`. */
 export const registerSearchEventHandlers = (
   dispatcher: Pick<OutboxDispatcher, 'register'> = outboxEvents,
@@ -76,6 +100,7 @@ export const registerSearchEventHandlers = (
   dispatcher.register(HC_ARTICLE_CHANGED_EVENT, articleChangedHandler, SEARCH_SUBSCRIBER);
   dispatcher.register(HC_STRUCTURE_CHANGED_EVENT, brandChangedHandler, SEARCH_SUBSCRIBER);
   dispatcher.register(HC_ACCESS_CHANGED_EVENT, brandChangedHandler, SEARCH_SUBSCRIBER);
+  dispatcher.register(HC_IMPORTED_EVENT, importedArticlesHandler, SEARCH_SUBSCRIBER);
 };
 
 export interface SearchReindexQueue {

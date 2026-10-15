@@ -7,6 +7,7 @@ describe('queue names', () => {
       'ai',
       'assignment',
       'domains',
+      'import',
       'inbound',
       'knowledge',
       'maintenance',

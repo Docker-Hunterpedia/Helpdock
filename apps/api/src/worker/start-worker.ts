@@ -24,6 +24,13 @@ import {
   helpCenterPublishDueSweepJob,
   helpCenterSearchReindexJob,
   helpCenterSearchReindexSweepJob,
+  IMPORT_RECOVERY_CRON,
+  importAttachmentsJob,
+  importDryRunJob,
+  importExtractJob,
+  importFinishJob,
+  importLoadJob,
+  importRecoverJob,
   type JobLogger,
   knowledgeConfigureJob,
   knowledgeEmbedJob,
@@ -43,6 +50,7 @@ import {
   type OutboxRelay,
   outboxEventJob,
   outboxJobOrderingKeys,
+  parseJobPayloadOrFail,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -123,6 +131,10 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { registerImportEventHandlers } from '../imports/import-events.js';
+import { createImportConnectorRuntime } from '../imports/jobs/connector-runtime.js';
+import { createImportProcessor } from '../imports/jobs/import-processor.js';
+import { recoverImportWork } from '../imports/jobs/recover.js';
 import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
 import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
@@ -254,6 +266,7 @@ export interface WorkerDependencies {
     env: WorkerEnv;
     installSmtp: InstallSmtp;
   }): Closable;
+  createImportWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M1-10's `media.process` consumer: sharp, ffmpeg and the optional scanner. */
   createMediaWorker(options: { redis: Redis; db: Db; log: JobLogger; env: WorkerEnv }): Closable;
   /** M1-07's `assignment.offline_unassign` consumer: the auto-unassign timer firing. */
@@ -559,6 +572,24 @@ export const workerDependencies: WorkerDependencies = {
     // needs a producer. It is the one outbox handler that adds a job, and it
     // may: it runs after the confirm committed, and `jobId = attachmentId`
     // makes a redelivery a no-op (`media/attachment-events.ts`).
+    const imports = new Queue(QUEUE_NAMES.import, { connection: redis });
+    const importDefinitions = {
+      extract: importExtractJob,
+      dry_run: importDryRunJob,
+      load: importLoadJob,
+      attachments: importAttachmentsJob,
+      finish: importFinishJob,
+    };
+    registerImportEventHandlers({
+      add: async (step, payload, jobId, delay) => {
+        const definition = importDefinitions[step];
+        await imports.add(definition.name, definition.schema.parse(payload), {
+          ...definition.options,
+          jobId,
+          delay,
+        });
+      },
+    });
     const media = new Queue(QUEUE_NAMES.media, { connection: redis });
     registerAttachmentEventHandlers({
       broadcast,
@@ -784,6 +815,7 @@ export const workerDependencies: WorkerDependencies = {
 
     return {
       close: async () => {
+        await imports.close();
         await media.close();
         await knowledge.close();
         await assignment.close();
@@ -884,6 +916,25 @@ export const workerDependencies: WorkerDependencies = {
     );
     return worker;
   },
+  createImportWorker: ({ redis, db, log, env }) => {
+    const worker = new Worker(
+      QUEUE_NAMES.import,
+      createImportProcessor({
+        db,
+        storage: storageFor(env),
+        resolve: createImportConnectorRuntime({
+          db,
+          keyring: createKeyring(env),
+          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+        }),
+      }),
+      { connection: redis, concurrency: 1 },
+    );
+    worker.on('failed', (job) =>
+      log.error({ job: job?.name, jobId: job?.id }, 'import job failed'),
+    );
+    return worker;
+  },
   createMediaWorker: ({ redis, db, log, env }) => {
     const storage = storageFor(env);
     const attachments = createJobProcessor(
@@ -955,6 +1006,7 @@ export const workerDependencies: WorkerDependencies = {
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
       { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
       { job: samlMetadataRefreshJob, cron: SAML_METADATA_REFRESH_CRON },
+      { job: importRecoverJob, cron: IMPORT_RECOVERY_CRON },
     ]) {
       maintenance
         .upsertJobScheduler(
@@ -1041,6 +1093,11 @@ export const workerDependencies: WorkerDependencies = {
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
+        if (job.name === importRecoverJob.name) {
+          parseJobPayloadOrFail(importRecoverJob, job.data);
+          await recoverImportWork({ db, jobId: job.id ?? importRecoverJob.name });
+          return;
+        }
         // Retention fails a job it does not know, so it stays last.
         await (stats(job) ?? purge(job) ?? metaHealth(job) ?? samlMetadata(job) ?? retention(job));
       },
@@ -1520,6 +1577,7 @@ export const startWorker = ({
   });
   const worker = deps.createEventWorker({ redis: connection, db, log, env });
   const outbound = deps.createOutboundWorker({ redis: connection, db, log, env, installSmtp });
+  const imports = deps.createImportWorker({ redis: connection, db, log, env });
   const media = deps.createMediaWorker({ redis: connection, db, log, env });
   const assignment = deps.createAssignmentWorker({ redis: connection, db, log });
   const maintenance = deps.createMaintenanceWorker({
@@ -1559,6 +1617,7 @@ export const startWorker = ({
     // After the event worker, because that is what adds media jobs: closing the
     // media worker first would leave a job queued with nothing draining it,
     // which is harmless but slower to notice than the other order's bug.
+    await imports.close();
     await media.close();
     await assignment.close();
     await maintenance.close();

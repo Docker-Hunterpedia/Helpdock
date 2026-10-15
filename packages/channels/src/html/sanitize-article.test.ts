@@ -1,11 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { SanitizeLimitError } from './sanitize.js';
-import { ARTICLE_MAX_TAGS, sanitizeArticleHtml } from './sanitize-article.js';
+import { ARTICLE_MAX_TAGS, articleImageSources, sanitizeArticleHtml } from './sanitize-article.js';
 
 const BRAND = '0192a000-0000-7000-8000-000000000001';
 const OTHER = '0192a000-0000-7000-8000-000000000002';
 const MEDIA = '0192a000-0000-7000-8000-00000000000a';
 const clean = (html: string): string => sanitizeArticleHtml(html, { brandId: BRAND }).html;
+
+describe('articleImageSources', () => {
+  it('decodes attributes before import media authorization and preserves source order', () => {
+    expect(
+      articleImageSources(
+        `<IMG SRC='/api/help-center/brands/${BRAND}/media/${MEDIA}'><img src="https:&#47;&#47;vendor.example/a?x=1&amp;y=2"><img src=https://vendor.example/b><img alt="no source">`,
+      ),
+    ).toEqual([
+      `/api/help-center/brands/${BRAND}/media/${MEDIA}`,
+      'https://vendor.example/a?x=1&y=2',
+      'https://vendor.example/b',
+    ]);
+  });
+
+  it('ignores image-like text inside comments and non-content tags', () => {
+    expect(
+      articleImageSources(
+        '<!-- <img src="https://comment.example"> --><script>"<img src=script>"</script><style>"<img src=style>"</style><p>&lt;img src=text&gt;</p>',
+      ),
+    ).toEqual([]);
+  });
+});
 
 describe('sanitizeArticleHtml', () => {
   it('keeps what the article editor writes', () => {

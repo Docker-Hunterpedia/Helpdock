@@ -41,7 +41,8 @@ async function completeDryRun(deps: { db: Db; jobId: string }, claim: ImportClai
           checkpoint.planIssueCount +
           checkpoint.identityIssueCount +
           checkpoint.mediaErrors,
-        warnings: checkpoint.mediaWarnings,
+        warnings: checkpoint.mediaWarnings + checkpoint.recordWarningCount,
+        refusedPhones: checkpoint.refusedPhones,
       },
     });
     return { state: 'completed' as const };

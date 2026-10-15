@@ -6355,17 +6355,24 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .insert(importRuns)
       .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
     for (const externalId of ['a', 'b']) {
-      const record = organizationLoadSchema.parse({
+      const record = contactLoadSchema.parse({
         brandId,
         runId,
         source: 'zendesk',
         custom: {},
-        record: { externalId, name: 'Source company', domains: [], custom: {} },
+        accountId: null,
+        record: {
+          externalId,
+          name: 'Source person',
+          emails: [],
+          phones: ['invalid-one', 'invalid-two'],
+          custom: {},
+        },
       }).record;
       await owner.db.insert(importRecords).values({
         brandId,
         runId,
-        entity: 'organization',
+        entity: 'contact',
         externalId,
         payload: record,
         payloadHash: hashImportValue(record),
@@ -6380,6 +6387,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await runImportDryRunRecordBatch(deps, { claim, batchSize: 1 })).toEqual({
       state: 'more',
     });
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.dryRunReport,
+    ).toMatchObject({ recordWarningCount: 1, refusedPhones: 2 });
     await withSystem(app.db, brandId, (tx) => pauseImportRun(tx, scope));
     expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'stopped' });
     await withSystem(app.db, brandId, (tx) => resumeImportRun(tx, scope));
@@ -6396,6 +6406,13 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       checked: 2,
       issueCount: 0,
       issues: [],
+      recordWarningCount: 2,
+      refusedPhones: 4,
+      recordWarnings: ['a', 'b'].map((externalId) => ({
+        entity: 'contact',
+        externalId,
+        code: 'phone-refused',
+      })),
     });
     expect(run?.status).toBe('dry_run');
     expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
@@ -6411,7 +6428,12 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       state: 'identities_checked',
     });
     const [final] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
-    expect(final?.dryRunReport).toMatchObject({ checked: 2, identityIssueCount: 0 });
+    expect(final?.dryRunReport).toMatchObject({
+      checked: 2,
+      identityIssueCount: 0,
+      recordWarningCount: 2,
+      refusedPhones: 4,
+    });
     expect(await runImportDryRunRecordBatch(deps, { claim: resumed })).toEqual({
       state: 'identities_checked',
     });
@@ -6796,6 +6818,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const first = await withSystem(app.db, brandId, (tx) => validateImportRecordPage(tx, scope));
     expect(first).toEqual({
       identityPlans: expect.any(Array),
+      warningCount: 0,
+      warnings: [],
+      refusedPhones: 0,
       checked: 1,
       issueCount: 0,
       issues: [],
@@ -6806,6 +6831,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     );
     expect(second).toEqual({
       identityPlans: expect.any(Array),
+      warningCount: 0,
+      warnings: [],
+      refusedPhones: 0,
       checked: 1,
       issueCount: 1,
       issues: [{ entity: 'organization', externalId: 'b', code: 'mapping-invalid' }],
@@ -6821,6 +6849,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       issues: [],
       next: null,
       identityPlans: expect.any(Array),
+      warningCount: 0,
+      warnings: [],
+      refusedPhones: 0,
     });
     await expect(
       withSystem(app.db, brandId, (tx) =>
@@ -6874,6 +6905,9 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual({
       identityPlans: expect.any(Array),
+      warningCount: 0,
+      warnings: [],
+      refusedPhones: 0,
       checked: 1,
       issueCount: 2,
       next: null,

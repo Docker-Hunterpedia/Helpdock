@@ -2802,7 +2802,7 @@ Resume publishes dry-run work atomically; minute-based recovery now includes
 expired dry-run claims while retaining the active-account and cooldown guards.
 
 `GET /api/brands/:brandId/imports/:runId/dry-run` returns validation phase, input
-fingerprint, calling code, checked counters, error/warning totals and up to 400
+fingerprint, calling code, checked counters, error/warning totals and up to 500
 safe issue samples across records, mappings, identity and media. It omits source
 payloads, credentials, worker leases and internal cursors. A missing report is
 404. Counters are totals; capped samples do not claim to enumerate every issue.
@@ -2812,15 +2812,33 @@ its claim and returns the run to `awaiting_mapping`, retaining the report and
 credentials for review/retry. `complete` means validation finished, not that an
 import is approved; a completed report can contain blocking errors. Loading is
 not started. Approval/start, live-destination freshness, entity/completeness and
-retention reporting, refused-phone warnings across the whole run, and the EN/AR
+retention reporting and the EN/AR
 review UI still need completion before M11 acceptance. Preceding progress notes
 that describe the dry-run consumer and resume as unavailable are superseded here.
 
-Real Postgres/Redis tests exercise a 27-record multi-page dry run through BullMQ,
+Real Postgres/Redis tests exercise a 28-record multi-page dry run through BullMQ,
 source corruption, unchanged destination profiles, duplicate starts/deliveries,
 strict calling-code input, safe report serialization, role/guest refusal, resume
 and dry-run stale-claim recovery. They do not replace worker-termination or full
 vendor-reference-dataset acceptance.
+
+### Whole-run refused-phone warnings (M11-10/16, in progress)
+
+A failing real-worker regression showed that contact previews counted refused
+phones but the whole-run record scanner discarded that warning. The scanner now
+persists one `phone-refused` warning per affected contact plus an exact
+`refusedPhones` total across pages. Both counters and bounded source-ID-only
+samples commit with the record cursor, so pause/resume and repeated deliveries do
+not count them twice. No phone values enter issue samples or audit metadata.
+Public reports combine record/media warning totals and return at most 500 issue
+samples across the five groups. A completed scan can still require review of
+omitted data and cannot authorize loading.
+
+The real Redis HTTP regression covers two refused phones in a contact after a
+multi-page source scan, alongside both valid and corrupt source datasets. The
+checkpoint resume regression covers four refused phones in two contacts across
+a pause and repeat, without creating destination profiles. Full completeness and
+retention reporting, approval freshness and the review UI remain unfinished.
 
 ## M11-13 Freshdesk connector
 

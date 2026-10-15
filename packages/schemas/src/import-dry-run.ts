@@ -18,6 +18,7 @@ export const importDryRunReportSchema = z.strictObject({
   mediaChecked: z.int().nonnegative(),
   errors: z.int().nonnegative(),
   warnings: z.int().nonnegative(),
+  refusedPhones: z.int().nonnegative(),
   issues: z
     .array(
       z.strictObject({
@@ -28,5 +29,5 @@ export const importDryRunReportSchema = z.strictObject({
         level: z.enum(['warning', 'error']),
       }),
     )
-    .max(400),
+    .max(500),
 });

@@ -811,6 +811,18 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
           },
         }),
       );
+      records.push(
+        importRecordSchema.parse({
+          entity: 'contact',
+          payload: {
+            externalId: 'dry-contact',
+            name: 'Source person',
+            emails: [],
+            phones: ['invalid-one', 'invalid-two'],
+            custom: {},
+          },
+        }),
+      );
       await owner.db.insert(importRecords).values(
         records.map((native) => ({
           brandId,
@@ -908,9 +920,10 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
         expect(reportResponse.json()).toMatchObject({
           complete: true,
           phase: 'media_checked',
-          recordsChecked: 27,
+          recordsChecked: 28,
           errors: corrupt ? 1 : 0,
-          warnings: 0,
+          warnings: 1,
+          refusedPhones: 2,
           defaultCallingCode: '963',
         });
         expect(reportResponse.body).not.toMatch(/synthetic-token|claimToken|mediaAfter|retryAt/);

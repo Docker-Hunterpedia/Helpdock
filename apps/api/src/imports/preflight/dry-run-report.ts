@@ -33,9 +33,11 @@ export function importDryRunReportView(
     mediaChecked: report.mediaChecked,
     errors:
       report.issueCount + report.planIssueCount + report.identityIssueCount + report.mediaErrors,
-    warnings: report.mediaWarnings,
+    warnings: report.mediaWarnings + report.recordWarningCount,
+    refusedPhones: report.refusedPhones,
     issues: [
       ...report.issues.map((issue) => ({ ...issue, area: 'record', level: 'error' })),
+      ...report.recordWarnings.map((issue) => ({ ...issue, area: 'record', level: 'warning' })),
       ...report.planIssues.map((issue) => ({ ...issue, level: 'error' })),
       ...report.identityIssues.map((issue) => ({ ...issue, area: 'identity', level: 'error' })),
       ...report.mediaIssues.map((issue) => ({ ...issue, area: 'media' })),

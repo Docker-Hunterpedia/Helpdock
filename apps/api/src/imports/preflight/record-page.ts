@@ -42,6 +42,9 @@ const pageSchema = z.strictObject({
   checked: z.int().nonnegative().max(50),
   issueCount: z.int().nonnegative(),
   issues: z.array(importRecordIssueSchema).max(100),
+  warningCount: z.int().nonnegative(),
+  warnings: z.array(importRecordIssueSchema).max(100),
+  refusedPhones: z.int().nonnegative(),
   next: importRecordCursorSchema.nullable(),
   identityPlans: z
     .array(z.strictObject({ recordId: z.uuid(), projection: importIdentityProjectionSchema }))
@@ -49,7 +52,7 @@ const pageSchema = z.strictObject({
 });
 type Mapping = z.infer<typeof importMappingSchema>;
 
-async function profileIssues(
+async function profilePlan(
   tx: DbTransaction,
   request: {
     scope: ImportScope;
@@ -65,7 +68,14 @@ async function profileIssues(
       record: record.payload,
       defaultCallingCode,
     });
-    return contactIdentityProjection({ externalId: record.payload.externalId, inputHash, plan });
+    return {
+      projection: contactIdentityProjection({
+        externalId: record.payload.externalId,
+        inputHash,
+        plan,
+      }),
+      refusedPhones: plan.refusedPhones,
+    };
   } else if (record.entity === 'organization') {
     const custom = await previewImportedCustom(tx, {
       ...scope,
@@ -85,13 +95,16 @@ async function profileIssues(
         custom: record.payload.custom,
         operation: 'create',
       });
-    return organizationIdentityProjection({
-      externalId: record.payload.externalId,
-      inputHash,
-      plan,
-    });
+    return {
+      projection: organizationIdentityProjection({
+        externalId: record.payload.externalId,
+        inputHash,
+        plan,
+      }),
+      refusedPhones: 0,
+    };
   }
-  return null;
+  return { projection: null, refusedPhones: 0 };
 }
 
 async function recordIssues(
@@ -118,18 +131,18 @@ async function recordIssues(
         operation: 'create',
       });
     }
-    const projection = await profileIssues(tx, {
+    const profile = await profilePlan(tx, {
       scope,
       record,
       defaultCallingCode,
       inputHash: row.payloadHash,
     });
-    return { codes, projection };
+    return { codes, ...profile };
   } catch (error) {
     if (error instanceof ImportLoadError)
-      return { codes: [...codes, error.code], projection: null };
+      return { codes: [...codes, error.code], projection: null, refusedPhones: 0 };
     if (error instanceof z.ZodError)
-      return { codes: [...codes, 'mapping-invalid'], projection: null };
+      return { codes: [...codes, 'mapping-invalid'], projection: null, refusedPhones: 0 };
     throw error;
   }
 }
@@ -185,15 +198,28 @@ export async function validateImportRecordPage(
     .limit(batchSize + 1);
   const issues: z.infer<typeof importRecordIssueSchema>[] = [];
   let issueCount = 0;
+  let warningCount = 0;
+  let refusedPhones = 0;
+  const warnings: z.infer<typeof importRecordIssueSchema>[] = [];
   const page = rows.slice(0, batchSize);
   const identityPlans: z.infer<typeof pageSchema>['identityPlans'] = [];
   for (const row of page) {
-    const { codes, projection } = await recordIssues(tx, {
+    const {
+      codes,
+      projection,
+      refusedPhones: refused,
+    } = await recordIssues(tx, {
       scope,
       row,
       mappings,
       defaultCallingCode,
     });
+    refusedPhones += refused;
+    if (refused > 0) {
+      warningCount++;
+      if (warnings.length < 100)
+        warnings.push({ entity: row.entity, externalId: row.externalId, code: 'phone-refused' });
+    }
     if (projection) identityPlans.push({ recordId: row.id, projection });
     issueCount += codes.length;
     for (const code of codes)
@@ -206,6 +232,9 @@ export async function validateImportRecordPage(
     issueCount,
     issues,
     identityPlans,
+    warningCount,
+    warnings,
+    refusedPhones,
     next:
       rows.length > batchSize && last ? { entity: last.entity, externalId: last.externalId } : null,
   });

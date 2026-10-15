@@ -105,3 +105,5 @@ Expose a brand-admin ticket-history preview endpoint with validated pagination, 
 Expose contact source details and read-only identity/company plans, and select up to three stable ticket/contact sample IDs within a run. Preserve local profile verification and links, and reject malformed lookup IDs or invalid mapped values before returning a preview.
 
 Add outbox-backed, resumable dry-run execution and a bounded validation report API. Dry runs support pause/resume/recovery and stop at review without approving or starting destination writes.
+
+Preserve refused-phone warnings and exact omission totals through whole-run dry-run checkpoints and public reports, including pause/resume, without exposing phone values.

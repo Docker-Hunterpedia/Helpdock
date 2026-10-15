@@ -16,6 +16,9 @@ describe('public dry-run report', () => {
     planIssues: [{ area: 'field', externalId: 'age', code: 'mapping-invalid' }],
     identityIssueCount: 3,
     identityIssues: [{ entity: 'contact', externalId: 'person', code: 'identity-ambiguous' }],
+    recordWarningCount: 2,
+    refusedPhones: 3,
+    recordWarnings: [{ entity: 'contact', externalId: 'omitted-phones', code: 'phone-refused' }],
     mediaErrors: 4,
     mediaWarnings: 5,
     mediaIssues: [
@@ -25,7 +28,13 @@ describe('public dry-run report', () => {
   });
   it('combines all error classes without confusing capped samples with totals or exposing cursors', () => {
     const report = importDryRunReportView(checkpoint, 'awaiting_mapping');
-    expect(report).toMatchObject({ complete: true, errors: 129, warnings: 5, recordsChecked: 300 });
+    expect(report).toMatchObject({
+      complete: true,
+      errors: 129,
+      warnings: 7,
+      refusedPhones: 3,
+      recordsChecked: 300,
+    });
     expect(report.issues).toEqual([
       {
         area: 'record',
@@ -33,6 +42,13 @@ describe('public dry-run report', () => {
         externalId: '42',
         code: 'author-unmapped',
         level: 'error',
+      },
+      {
+        area: 'record',
+        entity: 'contact',
+        externalId: 'omitted-phones',
+        code: 'phone-refused',
+        level: 'warning',
       },
       { area: 'field', externalId: 'age', code: 'mapping-invalid', level: 'error' },
       {

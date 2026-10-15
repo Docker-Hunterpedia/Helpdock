@@ -146,6 +146,9 @@ export async function runImportDryRunRecordBatch(
         after: page.next,
         checked: prior.checked + page.checked,
         issueCount: prior.issueCount + page.issueCount,
+        recordWarningCount: prior.recordWarningCount + page.warningCount,
+        recordWarnings: [...prior.recordWarnings, ...page.warnings].slice(0, 100),
+        refusedPhones: prior.refusedPhones + page.refusedPhones,
         issues: [...prior.issues, ...page.issues].slice(0, 100),
       });
       await storeImportDryRunCheckpoint(tx, claim, checkpoint);

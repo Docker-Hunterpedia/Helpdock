@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportScope, importedIdentity } from '../loader/external-ids.js';
 import { importAttachmentHash } from '../loader/load-attachments.js';
-import { importHierarchyCycle } from './hierarchy.js';
+import { validateImportKnowledgeHierarchy } from './knowledge-hierarchy.js';
 import { type ImportReference, requiredImportReferences } from './references.js';
 import { validatedStagedRecord } from './staged-record.js';
 
@@ -76,33 +76,17 @@ export async function validateImportReferences(
       native.payload.ticketExternalId !== record.payload.ticketExternalId
     )
       issues.push({ code: 'reference-parent-mismatch', reference });
-    if (
-      record.entity === 'section' &&
-      native.entity === 'section' &&
-      native.payload.parentExternalId !== record.payload.parentExternalId
-    )
-      issues.push({ code: 'reference-parent-mismatch', reference });
   }
-  if (['category', 'section', 'article'].includes(record.entity) && !issues.length) {
-    const cycle = await importHierarchyCycle(record, async (externalId) => {
-      const [row] = await tx
-        .select()
-        .from(importRecords)
-        .where(
-          and(
-            eq(importRecords.brandId, scope.brandId),
-            eq(importRecords.runId, scope.runId),
-            eq(importRecords.entity, record.entity),
-            eq(importRecords.externalId, externalId),
-          ),
-        );
-      return row ? validatedStagedRecord(row) : null;
-    });
-    if (cycle) {
-      const reference = requiredImportReferences(record).find(
-        (ref) => ref.entity === record.entity,
-      );
-      if (reference) issues.push({ code: 'reference-cycle', reference });
+  if (
+    (record.entity === 'category' || record.entity === 'section' || record.entity === 'article') &&
+    !issues.length
+  ) {
+    const code = await validateImportKnowledgeHierarchy(tx, scope, record);
+    if (code) {
+      const references = requiredImportReferences(record);
+      const reference = references.find((ref) => ref.entity === record.entity) ?? references[0];
+      if (!reference) throw new ImportLoadError('mapping-invalid');
+      issues.push({ code, reference });
     }
   }
   return issues;

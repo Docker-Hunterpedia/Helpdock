@@ -562,3 +562,23 @@ targets. Existing internal/system load drivers without a public approval receipt
 retain their direct-driver behavior. Public starts always require and persist a
 receipt. The reviewed calling code reaches the loader unchanged, fixing a path
 where national phone numbers passed validation but were omitted during loading.
+
+
+### 2026-10-15 — effective knowledge ancestry and locale ownership checks
+
+Validate the graph that loading will apply: staged parent changes override live
+metadata, and unstaged ancestors resolve only through receipts in the same
+brand/vendor/account. Category and section nodes use physical target IDs for cycle
+detection when known; source aliases cannot become self-parents. Direct writers
+must enforce that same rule. Category aliases resolving to one destination are
+compatible when checking section membership.
+
+Article translations are locale versions of one local article, so their physical
+aliases are legitimate. Traverse their staged native translation graph and check
+container/identity compatibility at live leaves. Refuse duplicate staged locales
+and an unowned translation that would collide with an existing locale, matching
+the loader's refusal to overwrite a version without a receipt. Include article
+version row revisions in destination freshness. Use metadata projections for live
+ancestry, bounded paths and existing help-center limits; do not load complete
+knowledge bodies into a graph or synthesize fake normalized source records from
+local rows. No schema change is needed.

@@ -1,12 +1,18 @@
 import { importRecordSchema } from '@helpdock/schemas';
 import { expect, it } from 'vitest';
-import { importHierarchyCycle } from './hierarchy.js';
+import { importHierarchyCycle, importHierarchyNode } from './hierarchy.js';
 
 const category = (id: string, parent?: string) =>
-  importRecordSchema.parse({
-    entity: 'category',
-    payload: { externalId: id, names: { en: id }, ...(parent ? { parentExternalId: parent } : {}) },
-  });
+  importHierarchyNode(
+    importRecordSchema.parse({
+      entity: 'category',
+      payload: {
+        externalId: id,
+        names: { en: id },
+        ...(parent ? { parentExternalId: parent } : {}),
+      },
+    }),
+  );
 it('finds a cycle reached through an otherwise valid ancestry prefix', async () => {
   const records = new Map([
     ['a', category('a', 'b')],
@@ -32,35 +38,48 @@ it('leaves a missing staged ancestor to the separate dependency validator', asyn
   expect(await importHierarchyCycle(category('root', 'baseline'), async () => null)).toBeNull();
 });
 
+it('detects distinct source aliases that resolve to one physical hierarchy node', async () => {
+  expect(
+    await importHierarchyCycle(
+      { externalId: 'original', parentExternalId: 'alias', key: 'existing:local-id' },
+      async () => ({ externalId: 'alias', parentExternalId: null, key: 'existing:local-id' }),
+    ),
+  ).toEqual(['original', 'alias']);
+});
+
 it.each(['section', 'article'] as const)(
   'finds a two-record cycle in %s ancestry',
   async (entity) => {
     const build = (id: string, parent: string) =>
       entity === 'section'
-        ? importRecordSchema.parse({
-            entity,
-            payload: {
-              externalId: id,
-              parentExternalId: 'category',
-              parentSectionExternalId: parent,
-              names: { en: id },
-            },
-          })
-        : importRecordSchema.parse({
-            entity,
-            payload: {
-              externalId: id,
-              sectionExternalId: 'section',
-              translationOf: parent,
-              locale: 'en',
-              title: id,
-              bodyHtml: '<p>Body</p>',
-              draft: true,
-              internal: true,
-              createdAt: '2020-01-01T00:00:00Z',
-              updatedAt: '2020-01-01T00:00:00Z',
-            },
-          });
+        ? importHierarchyNode(
+            importRecordSchema.parse({
+              entity,
+              payload: {
+                externalId: id,
+                parentExternalId: 'category',
+                parentSectionExternalId: parent,
+                names: { en: id },
+              },
+            }),
+          )
+        : importHierarchyNode(
+            importRecordSchema.parse({
+              entity,
+              payload: {
+                externalId: id,
+                sectionExternalId: 'section',
+                translationOf: parent,
+                locale: 'en',
+                title: id,
+                bodyHtml: '<p>Body</p>',
+                draft: true,
+                internal: true,
+                createdAt: '2020-01-01T00:00:00Z',
+                updatedAt: '2020-01-01T00:00:00Z',
+              },
+            }),
+          );
     const records = new Map([
       ['a', build('a', 'b')],
       ['b', build('b', 'a')],

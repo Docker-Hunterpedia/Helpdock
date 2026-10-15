@@ -29,6 +29,8 @@ async function categoryNames(tx: DbTransaction, input: CategoryLoad) {
   const names = importedNames(input.record.names);
   if (!input.record.parentExternalId) return { names, parentHash: null };
   const visited = new Set([input.record.externalId]);
+  const own = await importedIdentity(tx, input, 'category', input.record.externalId);
+  const destinations = new Set(own ? [own.helpdockId] : []);
   let ancestorId: string | null = input.record.parentExternalId;
   const parent = await importedCategoryTarget(tx, input, ancestorId);
   for (let depth = 0; ancestorId; depth++) {
@@ -36,6 +38,8 @@ async function categoryNames(tx: DbTransaction, input: CategoryLoad) {
       throw new ImportLoadError('mapping-invalid');
     visited.add(ancestorId);
     const ancestor = await importedCategoryTarget(tx, input, ancestorId);
+    if (destinations.has(ancestor.id)) throw new ImportLoadError('mapping-invalid');
+    destinations.add(ancestor.id);
     ancestorId = ancestor.importedParentExternalId;
   }
   return {

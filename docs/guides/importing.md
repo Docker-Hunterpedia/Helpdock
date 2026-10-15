@@ -77,7 +77,7 @@ numbers that cannot be normalized; each affected contact contributes one
 `phone-refused` warning without exposing phone values. A completed report can
 contain blocking errors. `complete: true` alone never authorizes loading.
 
-Validation checks staged integrity/references, staged hierarchy cycles, routing,
+Validation checks staged integrity/references, effective knowledge ancestry, routing,
 required/custom field values, live mapping targets, combined field/invitation
 plans and contact/company identity collisions across record pages. Prior delta
 identities are reused only in the same brand/vendor/account. Ambiguous existing
@@ -85,6 +85,21 @@ matches or different new destinations sharing an identity block validation;
 source aliases may link to the same existing local profile. Linking preserves
 local names, company links and verification. Imports do not automatically merge
 people or send invitations.
+
+Knowledge ancestry uses staged edits first and existing same-account receipts
+second. Cycles through existing categories/sections, missing ancestors, deleted
+targets and wrong category/section bindings block validation. Physical target keys
+also prevent source aliases from becoming self-parents. Valid staged reparenting
+can replace old ancestry, and category aliases resolving to the same local target
+are allowed.
+
+Article locale versions share one local article, so legitimate translation aliases
+are not treated as physical parent cycles. Staged source translation cycles still
+block validation, as do redirected article identities, different sections and
+repeated staged locales in a translation chain. A new translation cannot overwrite
+an already occupied locale without its own import receipt. Existing owned
+translations can be updated; another language's version remains unchanged. Article
+version revisions are included in the destination freshness snapshot.
 
 Attachment validation downloads one bounded file at a time to temporary storage,
 checks bytes and content policy, and removes the temporary file. Missing files
@@ -138,6 +153,6 @@ their approval receipt while normal loader checks still validate live targets.
 Loading uses the direct historical writer. It must not send customer messages,
 run customer automation or start SLA timers. Cancel does not delete history
 already imported. Credentials are purged on terminal completion, cancellation or
-failure. Full completeness/retention reporting, mixed staged/live hierarchy
-validation, final vendor datasets and worker-termination/browser acceptance remain
+failure. Whole-run knowledge provisioning/capacity and completeness/retention
+reporting, final vendor datasets and worker-termination/browser acceptance remain
 unfinished, along with the bilingual review UI and cutover runbook.

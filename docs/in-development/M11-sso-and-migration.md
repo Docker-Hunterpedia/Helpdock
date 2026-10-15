@@ -2883,6 +2883,44 @@ that list approval/start and destination freshness as absent. Mixed staged/live
 hierarchy and complete omission/retention reporting, vendor acceptance and the
 EN/AR review UI remain unfinished; M11 is not complete.
 
+### Effective staged/live knowledge validation (M11-09/10, in progress)
+
+Preflight now walks compact hierarchy nodes, preferring staged edits and otherwise
+following same-brand/vendor/account native receipts into live categories,
+sections or articles. It reads only target IDs/parent/container metadata from live
+rows. Missing ancestors, deleted receipt targets, category/section mismatches and
+mixed staged/live cycles block the source record. Traversal uses the corresponding
+help-center entity limit and retains only its current path, not the entire source
+graph. Unexpected database errors propagate; known invalid target failures become
+safe reference errors.
+
+Category/section cycle keys use physical destination IDs when known, so two native
+aliases cannot create a self-parent. Failing direct-writer regressions showed that
+the loader's former native-ID-only check accepted those aliases; both category and
+section loaders now also track physical ancestor IDs. Staged reparenting that
+breaks old ancestry is accepted, including section categories that use different
+source aliases for the same local category.
+
+Article translations keep native traversal keys because language versions share a
+physical article. Preflight checks section consistency and existing article
+identity, refuses duplicate staged locales in a translation chain, and refuses a
+new translation taking an occupied local locale without its own receipt. A failing
+real-DB regression reproduced the occupied-locale omission. The destination
+fingerprint now includes `hc_article_versions` revisions so changes to this
+approval input cannot go unnoticed. This adds no table or migration.
+
+Real Postgres/Redis regressions cover mixed category/section cycles, aliased
+self-cycles, missing/deleted/foreign-account ancestors, cross-category parents,
+valid staged overrides and category aliases; article section/identity conflicts,
+occupied/duplicate locales, and both new and existing valid translations.
+Read-only checks preserve row revisions, and accepted plans are then exercised
+against the direct writers while preserving the other language's content.
+The full writer/API suites pass 199 scenarios; the focused hierarchy/reference
+units pass 11. Whole-run knowledge provisioning/capacity, omission/retention
+reporting, vendor acceptance and the EN/AR review UI remain unfinished. Earlier
+notes listing all mixed staged/live hierarchy validation as absent are superseded
+by this section; M11 remains in progress.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

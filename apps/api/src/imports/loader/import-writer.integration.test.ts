@@ -51,6 +51,7 @@ import {
   hashImportValue,
   ImportHttp,
   ImportRateLimiter,
+  importRecordParent,
   RateLimited,
   ZendeskConnector,
 } from '@helpdock/importers';
@@ -58,6 +59,7 @@ import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importLoadJob, JOB_DEFINITIONS } from '@helpdock/jobs';
 import {
   contentPolicySchema,
+  importArticleSchema,
   importEntitySchema,
   importMappingSchema,
   importRecordSchema,
@@ -6347,6 +6349,374 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(tickets).where(eq(tickets.brandId, brandId))).toEqual([]);
     expect(await owner.db.select().from(outbox).where(eq(outbox.brandId, brandId))).toEqual([]);
   });
+
+  it.each([
+    { entity: 'category', scenario: 'cycle', code: 'reference-cycle' },
+    { entity: 'category', scenario: 'alias-self', code: 'reference-cycle' },
+    { entity: 'section', scenario: 'alias-self', code: 'reference-cycle' },
+    { entity: 'section', scenario: 'cycle', code: 'reference-cycle' },
+    { entity: 'section', scenario: 'category-mismatch', code: 'reference-parent-mismatch' },
+    { entity: 'section', scenario: 'missing-target', code: 'reference-invalid' },
+    { entity: 'category', scenario: 'missing-ancestor', code: 'reference-missing' },
+    { entity: 'category', scenario: 'foreign-account', code: 'reference-missing' },
+    { entity: 'category', scenario: 'staged-override', code: null },
+    { entity: 'section', scenario: 'staged-override', code: null },
+    { entity: 'section', scenario: 'staged-category-alias', code: null },
+  ] as const)(
+    'checks $entity $scenario across staged and existing knowledge without preflight writes',
+    async ({ entity, scenario, code }) => {
+      const bound = await boundAccountRun(`mixed-${entity}-${scenario}`);
+      const scope = { brandId: BRAND, runId: bound.runId, source: 'zendesk' as const };
+      const categoryId = uuidv7();
+      const otherCategoryId = uuidv7();
+      const rootId = entity === 'category' ? categoryId : uuidv7();
+      const parentId = scenario === 'alias-self' ? rootId : uuidv7();
+      const prefix = `mixed-${entity}-${scenario}`;
+      await owner.db.insert(hcCategories).values([
+        { id: categoryId, brandId: BRAND, slug: `${prefix}-root`, names: { en: 'Root' } },
+        { id: otherCategoryId, brandId: BRAND, slug: `${prefix}-other`, names: { en: 'Other' } },
+        ...(entity === 'category' && scenario !== 'alias-self'
+          ? [
+              {
+                id: parentId,
+                brandId: BRAND,
+                slug: `${prefix}-parent`,
+                names: { en: 'Parent' },
+                importedParentExternalId: scenario === 'missing-ancestor' ? 'missing' : 'root',
+              },
+            ]
+          : []),
+      ]);
+      if (entity === 'section')
+        await owner.db.insert(hcSections).values([
+          {
+            id: rootId,
+            brandId: BRAND,
+            categoryId,
+            slug: `${prefix}-root-section`,
+            names: { en: 'Root' },
+          },
+          ...(scenario === 'missing-target' || scenario === 'alias-self'
+            ? []
+            : [
+                {
+                  id: parentId,
+                  brandId: BRAND,
+                  categoryId: scenario === 'category-mismatch' ? otherCategoryId : categoryId,
+                  slug: `${prefix}-parent-section`,
+                  names: { en: 'Parent' },
+                  importedParentSectionExternalId: [
+                    'cycle',
+                    'staged-override',
+                    'staged-category-alias',
+                  ].includes(scenario)
+                    ? 'root'
+                    : null,
+                },
+              ]),
+        ]);
+      await owner.db.insert(importExternalIds).values(
+        [
+          { entity, externalId: 'root', helpdockId: rootId },
+          { entity, externalId: 'parent', helpdockId: parentId },
+          ...(entity === 'section'
+            ? [
+                { entity: 'category' as const, externalId: 'category', helpdockId: categoryId },
+                ...(scenario === 'staged-category-alias'
+                  ? [
+                      {
+                        entity: 'category' as const,
+                        externalId: 'category-alias',
+                        helpdockId: categoryId,
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
+        ].map((identity) => ({
+          ...identity,
+          brandId: BRAND,
+          source: 'zendesk' as const,
+          sourceAccountKey:
+            scenario === 'foreign-account' && identity.externalId === 'parent'
+              ? 'f'.repeat(64)
+              : bound.key,
+          payloadHash: 'a'.repeat(64),
+        })),
+      );
+      const native = importRecordSchema.parse(
+        entity === 'category'
+          ? {
+              entity,
+              payload: { externalId: 'root', parentExternalId: 'parent', names: { en: 'Root' } },
+            }
+          : {
+              entity,
+              payload: {
+                externalId: 'root',
+                parentExternalId: 'category',
+                parentSectionExternalId: 'parent',
+                names: { en: 'Root' },
+              },
+            },
+      );
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId: bound.runId,
+        entity,
+        externalId: 'root',
+        parentExternalId: importRecordParent(native),
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      });
+      const override =
+        code === null
+          ? importRecordSchema.parse(
+              entity === 'category'
+                ? { entity, payload: { externalId: 'parent', names: { en: 'Parent' } } }
+                : {
+                    entity,
+                    payload: {
+                      externalId: 'parent',
+                      parentExternalId:
+                        scenario === 'staged-category-alias' ? 'category-alias' : 'category',
+                      names: { en: 'Parent' },
+                    },
+                  },
+            )
+          : null;
+      if (override)
+        await owner.db.insert(importRecords).values({
+          brandId: BRAND,
+          runId: bound.runId,
+          entity,
+          externalId: 'parent',
+          parentExternalId: importRecordParent(override),
+          payload: override.payload,
+          payloadHash: hashImportValue(override.payload),
+        });
+      const before = await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM hc_categories WHERE brand_id = ${BRAND} ORDER BY id`,
+      );
+      const sectionsBefore = await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM hc_sections WHERE brand_id = ${BRAND} ORDER BY id`,
+      );
+      const issues = await withSystem(app.db, BRAND, (tx) =>
+        validateImportReferences(tx, scope, native),
+      );
+      if (code) expect(issues).toMatchObject([{ code }]);
+      else expect(issues).toEqual([]);
+      expect(
+        await withSystem(app.db, BRAND, (tx) => validateImportRecordPage(tx, scope)),
+      ).toMatchObject({
+        checked: override ? 2 : 1,
+        issueCount: code ? 1 : 0,
+        issues: code ? [{ entity, externalId: 'root', code }] : [],
+      });
+      if (scenario === 'alias-self')
+        await expect(
+          withSystem(app.db, BRAND, (tx) =>
+            entity === 'category'
+              ? writer.category(tx, categoryLoadSchema.parse({ ...scope, record: native.payload }))
+              : writer.section(tx, sectionLoadSchema.parse({ ...scope, record: native.payload })),
+          ),
+        ).rejects.toMatchObject({ code: 'mapping-invalid' });
+
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, xmin::text AS revision FROM hc_categories WHERE brand_id = ${BRAND} ORDER BY id`,
+        ),
+      ).toEqual(before);
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, xmin::text AS revision FROM hc_sections WHERE brand_id = ${BRAND} ORDER BY id`,
+        ),
+      ).toEqual(sectionsBefore);
+      if (override) {
+        for (const source of [override, native])
+          await withSystem(app.db, BRAND, (tx) =>
+            entity === 'category'
+              ? writer.category(tx, categoryLoadSchema.parse({ ...scope, record: source.payload }))
+              : writer.section(tx, sectionLoadSchema.parse({ ...scope, record: source.payload })),
+          );
+      }
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
+
+  it.each([
+    { scenario: 'wrong-section', code: 'reference-parent-mismatch' },
+    { scenario: 'missing-target', code: 'reference-invalid' },
+    { scenario: 'redirected-identity', code: 'reference-invalid' },
+    { scenario: 'occupied-locale', code: 'reference-invalid' },
+    { scenario: 'new-translation', code: null },
+    { scenario: 'existing-translation', code: null },
+    { scenario: 'staged-different-locale', code: null },
+    { scenario: 'staged-locale-duplicate', code: 'reference-invalid' },
+  ] as const)(
+    'checks mixed article translation $scenario without overwriting unrelated history',
+    async ({ scenario, code }) => {
+      const bound = await boundAccountRun(`mixed-article-${scenario}`);
+      const scope = { brandId: BRAND, runId: bound.runId, source: 'zendesk' as const };
+      const categoryId = uuidv7();
+      const sectionId = uuidv7();
+      const otherSectionId = uuidv7();
+      const articleId = uuidv7();
+      const redirectedId = uuidv7();
+      const prefix = `mixed-article-${scenario}`;
+      await owner.db.insert(hcCategories).values({
+        id: categoryId,
+        brandId: BRAND,
+        slug: `${prefix}-category`,
+        names: { en: 'Docs' },
+      });
+      await owner.db.insert(hcSections).values([
+        {
+          id: sectionId,
+          brandId: BRAND,
+          categoryId,
+          slug: `${prefix}-section`,
+          names: { en: 'Section' },
+        },
+        {
+          id: otherSectionId,
+          brandId: BRAND,
+          categoryId,
+          slug: `${prefix}-other`,
+          names: { en: 'Other' },
+        },
+      ]);
+      if (scenario !== 'missing-target') {
+        await owner.db.insert(hcArticles).values({
+          id: articleId,
+          brandId: BRAND,
+          sectionId: scenario === 'wrong-section' ? otherSectionId : sectionId,
+          slug: `${prefix}-primary`,
+        });
+        await owner.db.insert(hcArticleVersions).values({
+          brandId: BRAND,
+          articleId,
+          locale: 'en',
+          title: 'English',
+          bodyHtml: '<p>Existing English</p>',
+        });
+        if (scenario === 'occupied-locale' || scenario === 'existing-translation')
+          await owner.db.insert(hcArticleVersions).values({
+            brandId: BRAND,
+            articleId,
+            locale: 'ar',
+            title: 'العربية',
+            bodyHtml: '<p>Existing Arabic</p>',
+          });
+      }
+      if (scenario === 'redirected-identity')
+        await owner.db
+          .insert(hcArticles)
+          .values({ id: redirectedId, brandId: BRAND, sectionId, slug: `${prefix}-redirected` });
+      await owner.db.insert(importExternalIds).values(
+        [
+          { entity: 'section' as const, externalId: 'section', helpdockId: sectionId },
+          { entity: 'article' as const, externalId: 'primary', helpdockId: articleId },
+          ...(['redirected-identity', 'existing-translation'].includes(scenario)
+            ? [
+                {
+                  entity: 'article' as const,
+                  externalId: 'translation',
+                  helpdockId: scenario === 'redirected-identity' ? redirectedId : articleId,
+                },
+              ]
+            : []),
+        ].map((identity) => ({
+          ...identity,
+          brandId: BRAND,
+          source: 'zendesk' as const,
+          sourceAccountKey: bound.key,
+          payloadHash: 'a'.repeat(64),
+        })),
+      );
+      const native = {
+        entity: 'article' as const,
+        payload: importArticleSchema.parse({
+          externalId: 'translation',
+          sectionExternalId: 'section',
+          translationOf: 'primary',
+          locale: 'ar',
+          title: 'العنوان',
+          bodyHtml: '<p>Imported Arabic</p>',
+          draft: true,
+          internal: true,
+          createdAt: '2019-01-01T00:00:00Z',
+          updatedAt: '2019-01-02T00:00:00Z',
+        }),
+      };
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId: bound.runId,
+        entity: 'article',
+        externalId: native.payload.externalId,
+        parentExternalId: importRecordParent(native),
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      });
+      if (scenario === 'staged-different-locale' || scenario === 'staged-locale-duplicate') {
+        const primary = {
+          ...native.payload,
+          externalId: 'primary',
+          translationOf: undefined,
+          locale: scenario === 'staged-locale-duplicate' ? ('ar' as const) : ('en' as const),
+        };
+        const { translationOf: _translation, ...source } = primary;
+        await owner.db.insert(importRecords).values({
+          brandId: BRAND,
+          runId: bound.runId,
+          entity: 'article',
+          externalId: 'primary',
+          parentExternalId: 'section',
+          payload: source,
+          payloadHash: hashImportValue(source),
+        });
+      }
+      const before = await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM hc_article_versions WHERE brand_id = ${BRAND} ORDER BY id`,
+      );
+      const issues = await withSystem(app.db, BRAND, (tx) =>
+        validateImportReferences(tx, scope, native),
+      );
+      if (code) expect(issues).toMatchObject([{ code }]);
+      else expect(issues).toEqual([]);
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, xmin::text AS revision FROM hc_article_versions WHERE brand_id = ${BRAND} ORDER BY id`,
+        ),
+      ).toEqual(before);
+      if (!code) {
+        const loaded = await withSystem(app.db, BRAND, (tx) =>
+          writer.article(
+            tx,
+            articleLoadSchema.parse({
+              ...scope,
+              record: native.payload,
+              preparedBodyHtml: native.payload.bodyHtml,
+            }),
+          ),
+        );
+        expect(loaded.id).toBe(articleId);
+        const versions = await owner.db
+          .select()
+          .from(hcArticleVersions)
+          .where(eq(hcArticleVersions.articleId, articleId));
+        expect(versions.find((version) => version.locale === 'en')?.bodyHtml).toBe(
+          '<p>Existing English</p>',
+        );
+        expect(versions.find((version) => version.locale === 'ar')).toMatchObject({
+          bodyHtml: '<p>Imported Arabic</p>',
+          visibility: 'internal',
+          status: 'draft',
+        });
+      }
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
 
   it('hashes paged destination revisions, isolates tenant/account changes and detects inserts, updates and deletions', async () => {
     const brandId = uuidv7();

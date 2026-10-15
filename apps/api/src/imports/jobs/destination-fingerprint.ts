@@ -20,6 +20,7 @@ const destinationTables = [
   'hc_categories',
   'hc_sections',
   'hc_articles',
+  'hc_article_versions',
 ] as const;
 const revisionPageSchema = z.array(z.strictObject({ id: z.uuid(), revision: z.string() })).max(500);
 

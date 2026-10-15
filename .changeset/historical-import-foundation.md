@@ -109,3 +109,5 @@ Add outbox-backed, resumable dry-run execution and a bounded validation report A
 Preserve refused-phone warnings and exact omission totals through whole-run dry-run checkpoints and public reports, including pause/resume, without exposing phone values.
 
 Bind import approval to the reviewed report, require explicit warning acknowledgement, and refuse stale source or destination snapshots at approval and before the first queued domain write. Preserve the reviewed calling code during loading so national phone numbers are not silently omitted.
+
+Validate effective staged/live knowledge ancestry and locale conflicts before importing. Refuse aliased category/section self-cycles in both preflight and loading, while allowing valid staged reparenting and shared article translations. Include article version changes in approval freshness.

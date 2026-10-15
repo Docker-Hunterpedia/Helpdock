@@ -5,8 +5,18 @@ import {
   ticketActivity,
   tickets,
 } from '@helpdock/db';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
+import type { ImportScope } from './external-ids.js';
+
+export async function lockImportedTicket(
+  tx: DbTransaction,
+  scope: ImportScope & { externalId: string },
+) {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${scope.brandId}:${scope.source}:${scope.externalId}`}, 17))`,
+  );
+}
 
 export function importedTicketChanges(
   input: TicketLoad,

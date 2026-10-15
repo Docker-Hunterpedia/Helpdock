@@ -1,6 +1,5 @@
 import { type DbTransaction, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { sql } from 'drizzle-orm';
 import { mappedTicketLoadSchema, type TicketLoad } from './contracts.js';
 import { validatedImportedCustom } from './custom-values.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
@@ -24,6 +23,7 @@ import { loadImportedCategory, loadImportedSection } from './load-taxonomy.js';
 import {
   createImportedTicket,
   importedTicketChanges,
+  lockImportedTicket,
   requireImportedTicket,
   updateImportedTicket,
 } from './load-ticket.js';
@@ -60,9 +60,7 @@ export class ImportWriter {
     request: TicketLoad,
   ): Promise<{ ticketId: string; outcome: 'created' | 'updated' | 'unchanged'; messages: number }> {
     const input = mappedTicketLoadSchema.parse(request);
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${input.brandId}:${input.source}:${input.record.externalId}`}, 17))`,
-    );
+    await lockImportedTicket(tx, { ...input, externalId: input.record.externalId });
     await requireLoadingRun(tx, input);
     const payloadHash = hashImportValue({
       ticket: input.record,

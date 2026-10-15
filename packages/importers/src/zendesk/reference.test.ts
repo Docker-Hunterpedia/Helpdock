@@ -5,7 +5,11 @@ import { ImportHttp } from '../http.js';
 import { ImportRateLimiter } from '../rate-limiter.js';
 import type { ZendeskCredentials } from './contracts.js';
 import { FakeZendesk } from './testing/fake-zendesk.js';
-import { zendeskReferenceFixture, zendeskReferenceMedia } from './testing/reference-fixture.js';
+import {
+  zendeskReferenceDelta,
+  zendeskReferenceFixture,
+  zendeskReferenceMedia,
+} from './testing/reference-fixture.js';
 import { ZendeskConnector } from './zendesk.connector.js';
 
 const fake = new FakeZendesk(
@@ -150,68 +154,7 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
   }
   const updatedAt = '2026-10-15T00:00:10Z';
   fake.advanceTime(120);
-  fake.replaceFixture({
-    ...fixture,
-    tickets: fixture.tickets?.map((ticket) =>
-      ticket.id === 101
-        ? {
-            ...ticket,
-            subject: 'Delta subject',
-            status: 'solved',
-            custom_status_id: null,
-            updated_at: updatedAt,
-          }
-        : ticket,
-    ),
-    users: fixture.users?.map((user) =>
-      user.id === 20001 ? { ...user, notes: 'Delta contact note', updated_at: updatedAt } : user,
-    ),
-    organizations: fixture.organizations?.map((company) =>
-      company.id === 401
-        ? { ...company, notes: 'Delta company note', updated_at: updatedAt }
-        : company,
-    ),
-    comments: {
-      ...fixture.comments,
-      '101': [
-        ...(fixture.comments?.['101'] ?? []),
-        {
-          id: 10104,
-          author_id: 301,
-          public: false,
-          body: 'Delta internal note',
-          created_at: updatedAt,
-          attachments: [],
-        },
-      ],
-    },
-    audits: {
-      ...fixture.audits,
-      '101': [
-        ...(fixture.audits?.['101'] ?? []),
-        {
-          id: 999999,
-          ticket_id: 101,
-          author_id: 301,
-          created_at: updatedAt,
-          events: [
-            {
-              id: 999998,
-              type: 'Change',
-              field_name: 'status',
-              previous_value: 'pending',
-              value: 'solved',
-            },
-          ],
-        },
-      ],
-    },
-    satisfaction_ratings: fixture.satisfaction_ratings?.map((rating) =>
-      rating.ticket_id === 101
-        ? { ...rating, comment: 'Corrected old feedback', updated_at: updatedAt }
-        : rating,
-    ),
-  });
+  fake.replaceFixture(zendeskReferenceDelta(fixture));
   const delta = new Map<ImportEntity, ImportRecord[]>();
   for (const entity of [
     'ticket',

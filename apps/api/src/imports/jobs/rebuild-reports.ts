@@ -28,18 +28,25 @@ const resultSchema = z.strictObject({
 async function initialProgress(
   tx: DbTransaction,
   claim: ImportClaim,
-  timezone: string,
-  countReopens: boolean,
-  options: Record<string, unknown>,
-  now: Date,
+  settings: {
+    timezone: string;
+    countReopens: boolean;
+    options: Record<string, unknown>;
+    now: Date;
+    ticketChanges: boolean;
+  },
 ) {
+  const { timezone, countReopens, options, now, ticketChanges } = settings;
   const [bounds] = boundsSchema.parse(
     await tx.execute(sql`
     SELECT ((min(t.created_at) AT TIME ZONE ${timezone})::date)::text AS first_day,
       coalesce(bool_or(t.id IS NULL), false) AS missing
-    FROM import_records r LEFT JOIN tickets t ON t.id = r.helpdock_id AND t.brand_id = r.brand_id
+    FROM import_records r
+    LEFT JOIN csat_responses c ON r.entity = 'csat' AND c.id = r.helpdock_id AND c.brand_id = r.brand_id
+    LEFT JOIN tickets t ON t.id = CASE WHEN r.entity = 'ticket' THEN r.helpdock_id ELSE c.ticket_id END
+      AND t.brand_id = r.brand_id AND t.deleted_at IS NULL
     WHERE r.brand_id = ${claim.brandId}::uuid AND r.run_id = ${claim.runId}::uuid
-      AND r.entity = 'ticket' AND r.status = 'loaded'
+      AND r.entity IN ('ticket', 'csat') AND r.status = 'loaded'
   `),
   );
   if (!bounds) throw new ImportClaimLost();
@@ -48,7 +55,7 @@ async function initialProgress(
     .object({ rebuildAllReports: z.boolean().default(false) })
     .parse(options);
   const window = importReportWindow({
-    firstDay: bounds.first_day,
+    firstDay: ticketChanges ? bounds.first_day : null,
     today: localDay(now, timezone),
     rebuildAllReports,
   });
@@ -91,7 +98,14 @@ export async function rebuildImportReportsBatch(
   const existing = run.counts.importReports;
   const progress =
     existing === undefined
-      ? await initialProgress(tx, claim, brand.timezone, countReopens, run.options, now)
+      ? await initialProgress(tx, claim, {
+          timezone: brand.timezone,
+          countReopens,
+          options: run.options,
+          now,
+          // Old/internal drivers lack this checkpoint and must retain their full backfill.
+          ticketChanges: z.boolean().parse(run.counts.reportTicketsChanged ?? true),
+        })
       : importReportProgressSchema.parse(existing);
   // Changing the report grain mid-backfill would mix incompatible local days or SLA metrics.
   if (progress.timezone !== brand.timezone || progress.countReopens !== countReopens)

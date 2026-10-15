@@ -161,3 +161,24 @@ already imported. Credentials are purged on terminal completion, cancellation or
 failure. Whole-run knowledge provisioning/capacity and completeness/retention
 reporting, final vendor datasets and worker-termination/browser acceptance remain
 unfinished, along with the bilingual review UI and cutover runbook.
+
+## Repeat imports and satisfaction deltas
+
+The loader skips unchanged business data and leaves report rows untouched when
+no ticket history or satisfaction answer changed. Run records, validation and
+load checkpoints still record the attempt. Older checkpoints without a change
+marker rebuild reports conservatively.
+
+A satisfaction rescan can update an existing imported ticket without exporting
+that ticket again. The loader requires the same brand, vendor and verified
+source account, preserves the answer's original date and never sends a survey.
+Deleted or unavailable parents are refused; dry-run reference checks also reject
+a deleted imported ticket. Independently changed answers invalidate the stored
+whole-ticket receipt so a later source reversion is applied rather than missed.
+Changed answers trigger report rebuilding from their parent ticket's original day.
+
+Satisfaction native IDs are unique within a source account. Migration
+`0067_import_csat_source_accounts` backfills existing ownership from native-ID
+receipts. Legacy rows without a receipt keep the zero-key namespace. Conflicting
+account receipts for one answer stop the migration; they require reconciliation
+before retrying, rather than an arbitrary account assignment.

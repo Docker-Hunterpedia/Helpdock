@@ -180,7 +180,12 @@ async function markChildBatch(
     WHERE staged.id = pointers.id AND staged.brand_id = ${input.brandId} AND staged.run_id = ${input.runId}`);
 }
 
-async function loadProgress(tx: DbTransaction, claim: ImportClaim, rows: StagedRow[]) {
+async function loadProgress(
+  tx: DbTransaction,
+  claim: ImportClaim,
+  rows: StagedRow[],
+  outcome: 'created' | 'updated' | 'unchanged',
+) {
   const [run] = await tx
     .select({ counts: importRuns.counts })
     .from(importRuns)
@@ -191,7 +196,14 @@ async function loadProgress(tx: DbTransaction, claim: ImportClaim, rows: StagedR
     if (row.status !== 'loaded') loaded[row.entity] = (loaded[row.entity] ?? 0) + 1;
   await tx
     .update(importRuns)
-    .set({ counts: { ...run.counts, loaded } })
+    .set({
+      counts: {
+        ...run.counts,
+        loaded,
+        reportTicketsChanged:
+          z.boolean().parse(run.counts.reportTicketsChanged ?? false) || outcome !== 'unchanged',
+      },
+    })
     .where(eq(importRuns.id, claim.runId));
 }
 
@@ -243,6 +255,6 @@ export async function loadStagedTicket(
       error: null,
     })
     .where(eq(importRecords.id, row.id));
-  await loadProgress(tx, claim, [row, ...children]);
+  await loadProgress(tx, claim, [row, ...children], loaded.outcome);
   return { state: 'loaded' as const, ...loaded };
 }

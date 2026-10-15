@@ -121,6 +121,7 @@ import { loadNextStagedMetadata } from '../jobs/load-next-metadata.js';
 import { loadPreparedStagedRecord } from '../jobs/load-prepared-record.js';
 import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedReference } from '../jobs/load-reference.js';
+import { loadStagedCsat } from '../jobs/load-staged-csat.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { recoverBrandImports } from '../jobs/recover.js';
@@ -654,7 +655,10 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .select()
       .from(importRuns)
       .where(eq(importRuns.id, scenario.input.runId));
-    expect(run?.counts).toEqual({ loaded: { ticket: 1, message: 2, attachment: 1, csat: 1 } });
+    expect(run?.counts).toEqual({
+      loaded: { ticket: 1, message: 2, attachment: 1, csat: 1 },
+      reportTicketsChanged: true,
+    });
     const before = await owner.db.execute(
       sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id = ${loaded.ticketId}`,
     );
@@ -3529,7 +3533,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     return { runId, key };
   }
 
-  it('separates identical ticket, message, contact and attachment IDs across accounts and reuses the original namespace on repeats', async () => {
+  it('separates identical ticket, message, contact, satisfaction and attachment IDs across accounts and reuses the original namespace on repeats', async () => {
     const results = [];
     for (const account of ['account-one', 'account-two', 'account-one']) {
       const run = await boundAccountRun(account);
@@ -3553,6 +3557,14 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       );
       const input = request('namespace-ticket');
       input.runId = run.runId;
+      input.csat = [
+        {
+          externalId: 'namespace-csat',
+          ticketExternalId: input.record.externalId,
+          rating: 5,
+          ratedAt: '2019-01-03T00:00:00Z',
+        },
+      ];
       input.record.subject = `${account} history`;
       input.resolved.contactId = contact.id;
       input.authors.customer = { kind: 'contact', id: contact.id };
@@ -3575,6 +3587,19 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     }
     const [one, two, repeated] = results;
     if (!one || !two || !repeated) throw new Error('Missing account outcomes');
+    const answers = await owner.db
+      .select()
+      .from(csatResponses)
+      .where(
+        and(
+          eq(csatResponses.brandId, BRAND),
+          eq(csatResponses.importedExternalId, 'namespace-csat'),
+        ),
+      );
+    expect(new Set(answers.map((answer) => answer.importSourceAccountKey))).toEqual(
+      new Set([one.key, two.key]),
+    );
+    expect(answers).toHaveLength(2);
     expect(one.key).not.toBe(two.key);
     expect(one.ticketId).not.toBe(two.ticketId);
     expect(one.contactId).not.toBe(two.contactId);
@@ -4346,8 +4371,333 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       claimImportRun(tx, { brandId, runId, phase: 'finishing' }),
     );
     if (!claim) throw new Error('Missing report claim');
-    return { claim, ticketId: loaded.ticketId, runId, brandId };
+    return { claim, ticketId: loaded.ticketId, runId, brandId, input };
   }
+
+  it.each([
+    'foreign-account',
+    'foreign-brand',
+    'foreign-vendor',
+    'deleted-ticket',
+    'missing-answer',
+    'stale-claim',
+    'bundled-parent',
+  ] as const)(
+    'refuses an independent satisfaction delta with %s without advancing its checkpoint',
+    async (failure) => {
+      const scenario = await stagedTicketScenario(`csat-denied-${failure}`);
+      const first = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+      await owner.db
+        .update(importRuns)
+        .set({ status: 'completed', claimToken: null, claimedAt: null })
+        .where(eq(importRuns.id, scenario.claim.runId));
+      const runId = uuidv7();
+      const brandId = failure === 'foreign-brand' ? OTHER_BRAND : BRAND;
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId,
+        source: failure === 'foreign-vendor' ? 'freshdesk' : 'zendesk',
+        sourceAccountKey: failure === 'foreign-account' ? 'a'.repeat(64) : '0'.repeat(64),
+        status: 'loading',
+        startedBy: USER,
+      });
+      const original = scenario.input.csat[0];
+      if (!original) throw new Error('Missing rejected rating fixture');
+      const rating = { ...original, rating: 1 };
+      const recordId = uuidv7();
+      await owner.db.insert(importRecords).values({
+        id: recordId,
+        brandId,
+        runId,
+        entity: 'csat',
+        externalId: rating.externalId,
+        parentExternalId: rating.ticketExternalId,
+        payload: rating,
+        payloadHash: hashImportValue(rating),
+      });
+      if (failure === 'deleted-ticket')
+        await owner.db
+          .update(tickets)
+          .set({ deletedAt: new Date() })
+          .where(eq(tickets.id, first.ticketId));
+      if (failure === 'missing-answer')
+        await owner.db.delete(csatResponses).where(eq(csatResponses.ticketId, first.ticketId));
+      if (failure === 'bundled-parent')
+        await owner.db.insert(importRecords).values({
+          brandId,
+          runId,
+          entity: 'ticket',
+          externalId: scenario.input.record.externalId,
+          payload: scenario.input.record,
+          payloadHash: hashImportValue(scenario.input.record),
+          status: 'loaded',
+          helpdockId: first.ticketId,
+        });
+      const claim = await withSystem(app.db, brandId, (tx) =>
+        claimImportRun(tx, { brandId, runId, phase: 'loading' }),
+      );
+      if (!claim) throw new Error('Missing rejected delta claim');
+      if (failure === 'stale-claim')
+        await owner.db
+          .update(importRuns)
+          .set({ status: 'paused', pausedFrom: 'loading', claimToken: null, claimedAt: null })
+          .where(eq(importRuns.id, runId));
+      if (
+        ['foreign-account', 'foreign-brand', 'foreign-vendor', 'deleted-ticket'].includes(failure)
+      ) {
+        expect(
+          await withSystem(app.db, brandId, (tx) =>
+            validateImportReferences(
+              tx,
+              { brandId, runId, source: failure === 'foreign-vendor' ? 'freshdesk' : 'zendesk' },
+              { entity: 'csat', payload: rating },
+            ),
+          ),
+        ).not.toEqual([]);
+      }
+      const pending = runImportLoadBatch(
+        { db: app.db, jobId: `rejected-${failure}` },
+        { claim, batchSize: 1 },
+      );
+      if (failure === 'stale-claim')
+        await expect(pending).resolves.toMatchObject({ state: 'stopped', processed: 0 });
+      else
+        await expect(pending).rejects.toMatchObject({
+          code: failure === 'bundled-parent' ? 'mapping-invalid' : 'target-unavailable',
+        });
+      expect(
+        (await owner.db.select().from(importRecords).where(eq(importRecords.id, recordId)))[0],
+      ).toMatchObject({ status: 'staged', helpdockId: null });
+      expect(
+        await owner.db
+          .select()
+          .from(csatResponses)
+          .where(eq(csatResponses.ticketId, first.ticketId)),
+      ).toHaveLength(failure === 'missing-answer' ? 0 : 1);
+    },
+  );
+
+  it('loads a rescanned satisfaction delta without a staged parent and later reapplies a reverted answer', async () => {
+    const scenario = await stagedTicketScenario('csat-only-delta');
+    const first = await withSystem(app.db, BRAND, (tx) => loadStagedTicket(tx, scenario));
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed', claimToken: null, claimedAt: null })
+      .where(eq(importRuns.id, scenario.claim.runId));
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      mode: 'delta',
+      parentRunId: scenario.claim.runId,
+      status: 'loading',
+      startedBy: USER,
+      options: { rebuildAllReports: true },
+    });
+    const original = scenario.input.csat[0];
+    if (!original) throw new Error('Missing rating fixture');
+    const rating = { ...original, rating: 1, comment: 'Corrected historical answer' };
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId,
+      entity: 'csat',
+      externalId: rating.externalId,
+      parentExternalId: rating.ticketExternalId,
+      payload: rating,
+      payloadHash: hashImportValue(rating),
+    });
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'loading' }),
+    );
+    if (!claim) throw new Error('Missing CSAT delta claim');
+    const [stagedAnswer] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, runId), eq(importRecords.entity, 'csat')));
+    if (!stagedAnswer) throw new Error('Missing staged answer');
+    const parentReceipts = () =>
+      owner.db
+        .select({ hash: importExternalIds.payloadHash })
+        .from(importExternalIds)
+        .where(
+          and(
+            eq(importExternalIds.brandId, BRAND),
+            eq(importExternalIds.entity, 'ticket'),
+            eq(importExternalIds.helpdockId, first.ticketId),
+          ),
+        );
+    const receiptBefore = await parentReceipts();
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await loadStagedCsat(tx, { claim, recordId: stagedAnswer.id });
+        throw new Error('CSAT worker stopped before commit');
+      }),
+    ).rejects.toThrow('CSAT worker stopped before commit');
+    expect(await parentReceipts()).toEqual(receiptBefore);
+    expect(
+      (await owner.db.select().from(importRecords).where(eq(importRecords.id, stagedAnswer.id)))[0],
+    ).toMatchObject({ status: 'staged', helpdockId: null });
+    expect(
+      await owner.db.select().from(csatResponses).where(eq(csatResponses.ticketId, first.ticketId)),
+    ).toMatchObject([{ rating: original.rating, comment: null }]);
+    const ticketRevision = () =>
+      owner.db.execute(
+        sql`SELECT xmin::text AS revision FROM tickets WHERE id = ${first.ticketId}`,
+      );
+    const before = await ticketRevision();
+    expect(
+      await runImportLoadBatch({ db: app.db, jobId: 'csat-only-delta' }, { claim, batchSize: 1 }),
+    ).toMatchObject({ state: 'more', processed: 1 });
+    expect(
+      await owner.db.select().from(csatResponses).where(eq(csatResponses.ticketId, first.ticketId)),
+    ).toMatchObject([
+      { rating: 1, comment: 'Corrected historical answer', ratedAt: new Date(original.ratedAt) },
+    ]);
+    const [checkpoint] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(and(eq(importRecords.runId, runId), eq(importRecords.entity, 'csat')));
+    if (!checkpoint) throw new Error('Missing answer checkpoint');
+    const answerRevisions = () =>
+      owner.db.execute(
+        sql`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${first.ticketId}`,
+      );
+    const answerBefore = await answerRevisions();
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        loadStagedCsat(tx, { claim, recordId: checkpoint.id }),
+      ),
+    ).toMatchObject({ state: 'already_loaded' });
+    expect(await answerRevisions()).toEqual(answerBefore);
+    await expect(
+      withSystem(app.db, BRAND, async (tx) => {
+        await tx.delete(csatResponses).where(eq(csatResponses.ticketId, first.ticketId));
+        return loadStagedCsat(tx, { claim, recordId: checkpoint.id });
+      }),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(await answerRevisions()).toEqual(answerBefore);
+    expect(await ticketRevision()).toEqual(before);
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'finishing', claimToken: null, claimedAt: null })
+      .where(eq(importRuns.id, runId));
+    const finishing = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId, phase: 'finishing' }),
+    );
+    if (!finishing) throw new Error('Missing CSAT finish claim');
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        rebuildImportReportsBatch(tx, finishing, new Date('2019-03-05T12:00:00Z')),
+      ),
+    ).toMatchObject({ state: 'more', progress: { from: '2019-01-01' } });
+    const restoredRunId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: restoredRunId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'loading',
+      startedBy: USER,
+    });
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        writer.ticket(tx, { ...scenario.input, runId: restoredRunId }),
+      ),
+    ).toMatchObject({ outcome: 'updated' });
+    expect(
+      await owner.db.select().from(csatResponses).where(eq(csatResponses.ticketId, first.ticketId)),
+    ).toMatchObject([{ rating: original.rating, comment: null }]);
+  });
+
+  it.each(['unchanged', 'changed'] as const)(
+    '%s repeated import rebuilds reports only when history changes',
+    async (change) => {
+      const scenario = await historicalReportScenario(change === 'changed' ? 'XPC' : 'XPU');
+      const now = new Date('2019-03-05T12:00:00Z');
+      while (
+        (
+          await withSystem(app.db, scenario.brandId, (tx) =>
+            rebuildImportReportsBatch(tx, scenario.claim, now),
+          )
+        ).state === 'more'
+      ) {}
+      const revisions = () =>
+        owner.db.execute(sql`
+      SELECT day, xmin::text AS revision FROM report_daily
+      WHERE brand_id = ${scenario.brandId} ORDER BY day
+    `);
+      const before = await revisions();
+      expect(before.length).toBeGreaterThan(0);
+      const runId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: scenario.brandId,
+        source: 'zendesk',
+        status: 'loading',
+        startedBy: USER,
+        options: { rebuildAllReports: true },
+      });
+      const input = {
+        ...scenario.input,
+        runId,
+        record: {
+          ...scenario.input.record,
+          ...(change === 'changed' ? { subject: 'Corrected historical subject' } : {}),
+        },
+      };
+      const recordId = uuidv7();
+      await owner.db.insert(importRecords).values([
+        {
+          id: recordId,
+          brandId: scenario.brandId,
+          runId,
+          entity: 'ticket',
+          externalId: input.record.externalId,
+          payload: input.record,
+          payloadHash: hashImportValue(input.record),
+        },
+        ...input.messages.map((message) => ({
+          brandId: scenario.brandId,
+          runId,
+          entity: 'message' as const,
+          externalId: message.externalId,
+          parentExternalId: input.record.externalId,
+          payload: message,
+          payloadHash: hashImportValue(message),
+        })),
+      ]);
+      const claim = await withSystem(app.db, scenario.brandId, (tx) =>
+        claimImportRun(tx, { brandId: scenario.brandId, runId, phase: 'loading' }),
+      );
+      if (!claim) throw new Error('Missing repeat loading claim');
+      expect(
+        await withSystem(app.db, scenario.brandId, (tx) =>
+          loadStagedTicket(tx, { claim, recordId, input }),
+        ),
+      ).toMatchObject({ outcome: change === 'changed' ? 'updated' : 'unchanged' });
+      await owner.db
+        .update(importRuns)
+        .set({ status: 'finishing', claimToken: null, claimedAt: null })
+        .where(eq(importRuns.id, runId));
+      const finishing = await withSystem(app.db, scenario.brandId, (tx) =>
+        claimImportRun(tx, { brandId: scenario.brandId, runId, phase: 'finishing' }),
+      );
+      if (!finishing) throw new Error('Missing repeat finish claim');
+      const reports = await withSystem(app.db, scenario.brandId, (tx) =>
+        rebuildImportReportsBatch(tx, finishing, now),
+      );
+      if (change === 'changed') {
+        expect(reports).toMatchObject({ state: 'more', progress: { from: '2019-01-01' } });
+        expect(await revisions()).not.toEqual(before);
+      } else {
+        expect(reports).toMatchObject({
+          state: 'reports_complete',
+          progress: { from: null, next: null },
+        });
+        expect(await revisions()).toEqual(before);
+      }
+    },
+  );
 
   it('rebuilds original report days in resumable chunks and leaves completion cleanup to the finish step', async () => {
     const scenario = await historicalReportScenario('RPA');

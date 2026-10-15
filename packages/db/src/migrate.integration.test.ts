@@ -80,6 +80,7 @@ const MIGRATION_TAGS = [
   '0064_import_source_accounts',
   '0065_import_message_identity',
   '0066_import_dry_run_identity',
+  '0067_import_csat_source_accounts',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -162,6 +163,59 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
   });
+
+  it.each(['known', 'unknown', 'ambiguous'] as const)(
+    'migrates %s satisfaction account ownership without guessing',
+    async (ownership) => {
+      const url = await migrated(`csat_upgrade_${ownership}`);
+      const owner = postgres(url, { max: 1, onnotice: () => {} });
+      try {
+        await owner`ALTER TABLE csat_responses DROP COLUMN import_source_account_key CASCADE`;
+        await owner`CREATE UNIQUE INDEX csat_responses_import_key ON csat_responses(brand_id, imported_source, imported_external_id) WHERE imported_external_id IS NOT NULL`;
+        const [brand] =
+          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'CSAT upgrade','CSA') RETURNING id`;
+        const [department] =
+          await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
+        const [status] =
+          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Open','open','info') RETURNING id`;
+        const [ticket] =
+          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'CSA','History',${status?.id},'email') RETURNING id`;
+        const [answer] =
+          await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,imported_source,imported_external_id,token_hash,expires_at,rating,rated_at,rated_via)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'zendesk','rating-1','synthetic-migration-hash','1970-01-01',5,'2019-01-01','import') RETURNING id`;
+        if (ownership !== 'unknown')
+          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
+        VALUES(${brand?.id},'zendesk',${'a'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
+        if (ownership === 'ambiguous')
+          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
+        VALUES(${brand?.id},'zendesk',${'b'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
+        const migration = readFileSync(
+          new URL('../drizzle/0067_import_csat_source_accounts.sql', import.meta.url),
+          'utf8',
+        );
+        const applied = owner.begin(async (tx) => {
+          for (const statement of migration.split('--> statement-breakpoint'))
+            if (statement.trim()) await tx.unsafe(statement);
+        });
+        if (ownership === 'ambiguous') {
+          await expect(applied).rejects.toThrow(
+            'Cannot assign imported satisfaction to multiple source accounts',
+          );
+          expect(
+            await owner`SELECT column_name FROM information_schema.columns WHERE table_name='csat_responses' AND column_name='import_source_account_key'`,
+          ).toHaveLength(0);
+        } else {
+          await applied;
+          expect(
+            await owner`SELECT import_source_account_key AS account FROM csat_responses WHERE id=${answer?.id}`,
+          ).toMatchObject([{ account: (ownership === 'known' ? 'a' : '0').repeat(64) }]);
+        }
+      } finally {
+        await owner.end();
+      }
+    },
+  );
 
   it('backfills imported message and copy provenance while retaining live RFC uniqueness', async () => {
     const url = await migrated('import_message_upgrade');

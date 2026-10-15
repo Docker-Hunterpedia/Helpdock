@@ -582,3 +582,28 @@ version row revisions in destination freshness. Use metadata projections for liv
 ancestry, bounded paths and existing help-center limits; do not load complete
 knowledge bodies into a graph or synthesize fake normalized source records from
 local rows. No schema change is needed.
+
+### 2026-10-15 — unchanged report rows and independently rescanned satisfaction
+
+A run records whether its ticket/history writes changed data in the same
+transaction as their load checkpoints. An unchanged repeat must preserve report
+rows too; checkpoints from older drivers without that marker retain conservative
+backfilling.
+
+Satisfaction APIs can require a full rescan while the ticket export is incremental.
+An unbundled satisfaction record may therefore update an existing imported parent
+through its brand/vendor/account receipt, under the loading claim and the same
+parent lock as ticket loading. Reject missing, deleted, foreign or mismatched
+parents; never fabricate a normalized ticket from local columns. Upsert the answer
+with its original date and expired token, checkpoint it atomically and rebuild
+reports from the existing parent's original day when changed. Invalidate the
+parent's aggregate receipt after an independent change so later source reversions
+cannot be hidden by an old whole-thread hash. Other unbundled child types remain
+refused until their own reconciliation contract is implemented.
+
+Satisfaction row uniqueness must include the verified source-account key, just
+like its native-ID ledger. The previous brand/vendor/native-ID index rejects
+valid answers from a second account. Add `csat_responses.import_source_account_key`
+with the legacy zero-key default and include it in that index. Backfill from the
+same-brand/vendor CSAT receipts, refusing ambiguous account ownership. Live
+surveys retain the zero sentinel and their existing ticket/close uniqueness.

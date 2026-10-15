@@ -765,6 +765,16 @@ Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vit
 
 ### Coverage gates
 
+The large migration reference fixture runs separately from instrumented API
+coverage, using `pnpm exec vitest run --project integration apps/api/src/imports/zendesk-reference.integration.test.ts --maxWorkers=1`.
+CI requires both `api` and `import-reference` for affected API changes; the latter
+is skipped for changes confined to unrelated workspaces, such as admin UI.
+The API coverage gate still includes every production import file, exercised by
+the smaller real-database integration cases. Only the large reference test file
+is excluded from that instrumented run. Its separate job has a 45-minute budget
+for full extraction, dry run, loading, repeat and delta; it does not contact a
+real vendor. This avoids timing out a valid import under coverage overhead.
+
 Coverage uses `@vitest/coverage-v8`. There are three gates, all on lines, all
 run by their own CI job — a drop below any of them fails that job, and with it
 the required `ci` check:
@@ -938,7 +948,8 @@ command you can run locally:
 | `semgrep` | `semgrep scan --test .semgrep`, then Helpdock's rules over `apps`, `packages` and `scripts` ([security scanning](security-scanning.md#semgrep)) |
 | `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
-| `api` | `pnpm --filter @helpdock/api test:coverage`: the api's unit and integration suites and its 90 % gate (Testcontainers) |
+| `api` | `pnpm --filter @helpdock/api test:coverage`: API unit and representative real-DB integration suites with the 90 % gate |
+| `import-reference` | The full 500-ticket import/repeat/delta acceptance suite on real Postgres/Redis, one Vitest worker, without coverage instrumentation |
 | `integration` | `vitest run --project=integration packages/`: the packages' integration suites (Testcontainers) |
 | `e2e (1/4)` … `e2e (4/4)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/4`: browser tests, `en` and `ar`, against the fixture |
 | `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, then `e2e:api` against a real api, Postgres and Redis |

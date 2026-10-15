@@ -1,6 +1,6 @@
-import { type DbTransaction, importRecords } from '@helpdock/db';
+import { type DbTransaction, importRecords, tickets } from '@helpdock/db';
 import type { ImportRecord } from '@helpdock/schemas';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportScope, importedIdentity } from '../loader/external-ids.js';
 import { importAttachmentHash } from '../loader/load-attachments.js';
@@ -42,8 +42,22 @@ export async function validateImportReferences(
         ),
       );
     if (!row) {
-      if (!(await importedIdentity(tx, scope, reference.entity, reference.externalId)))
-        issues.push({ code: 'reference-missing', reference });
+      const pointer = await importedIdentity(tx, scope, reference.entity, reference.externalId);
+      if (!pointer) issues.push({ code: 'reference-missing', reference });
+      else if (reference.entity === 'ticket') {
+        const [ticket] = await tx
+          .select({ id: tickets.id })
+          .from(tickets)
+          .where(
+            and(
+              eq(tickets.id, pointer.helpdockId),
+              eq(tickets.brandId, scope.brandId),
+              eq(tickets.importSource, scope.source),
+              isNull(tickets.deletedAt),
+            ),
+          );
+        if (!ticket) issues.push({ code: 'reference-invalid', reference });
+      }
       continue;
     }
     let native: ImportRecord;

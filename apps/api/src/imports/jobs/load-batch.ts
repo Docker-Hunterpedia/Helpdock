@@ -11,6 +11,7 @@ import { loadAssembledStagedTicket } from './load-assembled-ticket.js';
 import { loadNextStagedMetadata } from './load-next-metadata.js';
 import { loadPreparedStagedRecord } from './load-prepared-record.js';
 import { loadStagedReference } from './load-reference.js';
+import { loadStagedCsat } from './load-staged-csat.js';
 
 const requestSchema = z.strictObject({
   claim: importClaimSchema,
@@ -120,6 +121,10 @@ async function nextRecord(tx: DbTransaction, request: z.infer<typeof requestSche
     .orderBy(importRecords.id)
     .limit(1);
   if (!remaining) return { state: 'records_loaded' as const };
+  if (remaining.entity === 'csat') {
+    await loadStagedCsat(tx, { claim, recordId: remaining.id });
+    return { state: 'processed' as const };
+  }
   if (!['group', 'tag', 'user'].includes(remaining.entity))
     throw new ImportLoadError('mapping-invalid');
   await loadStagedReference(tx, { claim, recordId: remaining.id });

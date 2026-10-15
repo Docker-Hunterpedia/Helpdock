@@ -4,11 +4,14 @@ import path from 'node:path';
 import { setTimeout as waitForWork } from 'node:timers/promises';
 import { createKeyring } from '@helpdock/config';
 import {
+  accounts,
   attachments,
   brands,
   contactIdentities,
   contacts,
   createDb,
+  csatResponses,
+  customFieldDefs,
   type DbHandle,
   departments,
   importExternalIds,
@@ -28,6 +31,7 @@ import {
 import { ImportRateLimiter } from '@helpdock/importers';
 import {
   FakeZendesk,
+  zendeskReferenceDelta,
   zendeskReferenceFixture,
   zendeskReferenceMedia,
 } from '@helpdock/importers/testing';
@@ -81,6 +85,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
   let storage: FakeStorage;
   let directory: string;
   let service: ImportsService;
+  let fixture: ReturnType<typeof zendeskReferenceFixture>;
   let vendorStarted = false;
   const failures: string[] = [];
   const tagIds = new Map<string, string>();
@@ -133,7 +138,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     }
     await fake.server.start();
     vendorStarted = true;
-    const fixture = zendeskReferenceFixture(fake.server.root);
+    fixture = zendeskReferenceFixture(fake.server.root);
     for (const ticket of fixture.tickets ?? [])
       fake.addAttachment(String(ticket.id * 100 + 3), zendeskReferenceMedia, {
         contentType: 'application/pdf',
@@ -215,8 +220,9 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       },
     });
     const purge = createObjectPurgeHandler(storage);
-    const deadline = Date.now() + 600000;
+    const deadline = Date.now() + 1200000;
     while (Date.now() < deadline) {
+      if (failures.length) throw new Error(`Reference queue job failed: ${failures[0]}`);
       const events = await owner.db
         .select()
         .from(outbox)
@@ -260,11 +266,12 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     throw new Error('Reference worker exceeded its deadline');
   }
 
-  function mappings(): ImportMappingsRequest {
-    return importMappingsRequestSchema.parse({
+  async function mappings(): Promise<ImportMappingsRequest> {
+    const proposed = importMappingsRequestSchema.parse({
       mappings: [
         { kind: 'status', externalValue: 'pending:701', target: { statusId: pendingId } },
         { kind: 'status', externalValue: 'closed', target: { statusId: closedId } },
+        { kind: 'status', externalValue: 'solved', target: { statusId: closedId } },
         ...(['low', 'normal', 'high', 'urgent'] as const).map((priority) => ({
           kind: 'priority' as const,
           externalValue: priority,
@@ -314,6 +321,50 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
         },
       ],
     });
+    const existing = await owner.db
+      .select()
+      .from(customFieldDefs)
+      .where(eq(customFieldDefs.brandId, brandId));
+    return {
+      mappings: proposed.mappings.map((mapping) => {
+        if (mapping.kind !== 'field' || mapping.target.kind !== 'create') return mapping;
+        const { definition } = mapping.target;
+        const field = existing.find(
+          (candidate) => candidate.target === definition.target && candidate.key === definition.key,
+        );
+        return field
+          ? { ...mapping, target: { kind: 'existing' as const, fieldId: field.id } }
+          : mapping;
+      }),
+    };
+  }
+
+  async function businessSnapshot() {
+    const snapshots: Record<string, unknown> = {};
+    for (const table of [
+      'tickets',
+      'ticket_messages',
+      'ticket_activity',
+      'ticket_participants',
+      'ticket_tags',
+      'attachments',
+      'contacts',
+      'contact_identities',
+      'accounts',
+      'custom_field_defs',
+      'user_brand_roles',
+      'csat_responses',
+      'report_daily',
+      'report_agent_daily',
+    ]) {
+      const [snapshot] = await owner.db.execute(sql`
+        SELECT count(*)::int AS total,
+          md5(coalesce(string_agg(row_to_json(t)::text || ':' || t.xmin::text, '' ORDER BY row_to_json(t)::text), '')) AS revision
+        FROM ${sql.identifier(table)} t WHERE brand_id = ${brandId}
+      `);
+      snapshots[table] = snapshot;
+    }
+    return snapshots;
   }
 
   async function migrate(input: ImportRunCreate) {
@@ -345,7 +396,8 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     await inBrand((context) => service.extract(context, created.id));
     const extracted = await pump(created.id, ['extracting']);
     expect(extracted.status).toBe('awaiting_mapping');
-    await inBrand((context) => service.confirmMappings(context, created.id, mappings()));
+    const confirmed = await mappings();
+    await inBrand((context) => service.confirmMappings(context, created.id, confirmed));
     await inBrand((context) => service.dryRun(context, created.id, { defaultCallingCode: '' }));
     const checked = await pump(created.id, ['dry_run']);
     expect(checked.status).toBe('awaiting_mapping');
@@ -365,7 +417,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     return completed.id;
   }
 
-  it('stores all 500 ticket threads, authors, files and mapped custom values without customer-side work', async () => {
+  it('preserves the 500-ticket graph, writes no business rows on repeat and reconciles changed history quietly', async () => {
     const runId = await migrate({ source: 'zendesk', mode: 'full' });
     const loaded = await owner.db.select().from(tickets).where(eq(tickets.brandId, brandId));
     expect(loaded).toHaveLength(500);
@@ -439,5 +491,90 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
         .from(importExternalIds)
         .where(and(eq(importExternalIds.brandId, brandId), eq(importExternalIds.entity, 'ticket'))),
     ).toHaveLength(500);
-  }, 900000);
+    const beforeRepeat = await businessSnapshot();
+    const beforeRepeatMedia = fake.server.calls.filter((call) =>
+      call.path.startsWith('/attachments/token/'),
+    ).length;
+    const repeatId = await migrate({ source: 'zendesk', mode: 'full' });
+    expect(await businessSnapshot()).toEqual(beforeRepeat);
+    // Dry-run still verifies each source file; a repeated load must not download it again.
+    expect(
+      fake.server.calls.filter((call) => call.path.startsWith('/attachments/token/')).length -
+        beforeRepeatMedia,
+    ).toBe(500);
+    fake.advanceTime(120);
+    fake.replaceFixture(zendeskReferenceDelta(fixture));
+    await migrate({ source: 'zendesk', mode: 'delta', parentRunId: repeatId });
+    const [identity] = await owner.db
+      .select()
+      .from(importExternalIds)
+      .where(
+        and(
+          eq(importExternalIds.brandId, brandId),
+          eq(importExternalIds.entity, 'ticket'),
+          eq(importExternalIds.externalId, '101'),
+        ),
+      );
+    if (!identity) throw new Error('Missing delta ticket identity');
+    const [changed] = await owner.db
+      .select()
+      .from(tickets)
+      .where(eq(tickets.id, identity.helpdockId));
+    expect(changed).toMatchObject({
+      subject: 'Delta subject',
+      statusId: closedId,
+      createdAt: new Date('2018-01-01T10:00:00Z'),
+    });
+    const thread = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, identity.helpdockId));
+    expect(thread).toHaveLength(3);
+    expect(thread.find((message) => message.bodyText === 'Delta internal note')).toMatchObject({
+      kind: 'note',
+      authorType: 'staff',
+      authorId: userId,
+      createdAt: new Date('2026-10-15T00:00:10Z'),
+    });
+    const [feedback] = await owner.db
+      .select()
+      .from(csatResponses)
+      .where(eq(csatResponses.ticketId, identity.helpdockId));
+    expect(feedback).toMatchObject({
+      comment: 'Corrected old feedback',
+      ratedAt: new Date('2018-01-03T10:00:00Z'),
+    });
+    const changedProfiles = await owner.db
+      .select()
+      .from(contacts)
+      .where(eq(contacts.brandId, brandId));
+    expect(changedProfiles).toHaveLength(503);
+    expect(
+      changedProfiles.find((profile) => profile.importedDetails?.notes === 'Delta contact note'),
+    ).toBeDefined();
+    const changedCompanies = await owner.db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.brandId, brandId));
+    expect(changedCompanies).toHaveLength(10);
+    expect(
+      changedCompanies.find((company) => company.importedDetails?.notes === 'Delta company note'),
+    ).toBeDefined();
+    const afterDelta = await businessSnapshot();
+    expect(afterDelta.tickets).toMatchObject({ total: 500 });
+    expect(afterDelta.ticket_messages).toMatchObject({ total: 1001 });
+    expect(afterDelta.attachments).toEqual(beforeRepeat.attachments);
+    for (const table of [
+      'workflow_runs',
+      'ticket_sla_clocks',
+      'notifications',
+      'ai_calls',
+      'webhook_deliveries',
+    ]) {
+      const [count] = await owner.db.execute(
+        sql`SELECT count(*)::int AS total FROM ${sql.identifier(table)} WHERE brand_id = ${brandId}`,
+      );
+      expect(count?.total, table).toBe(0);
+    }
+  }, 2100000);
 });

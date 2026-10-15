@@ -12,9 +12,10 @@ export async function recordLoadProgress(
     entity: ImportEntity;
     status: 'loaded' | 'skipped';
     knowledgeChanged?: boolean;
+    reportTicketsChanged?: boolean;
   },
 ) {
-  const { claim, entity, status, knowledgeChanged } = request;
+  const { claim, entity, status, knowledgeChanged, reportTicketsChanged } = request;
   const predicate = and(eq(importRuns.id, claim.runId), eq(importRuns.brandId, claim.brandId));
   const [run] = await tx.select({ counts: importRuns.counts }).from(importRuns).where(predicate);
   if (!run) throw new ImportClaimLost();
@@ -28,6 +29,12 @@ export async function recordLoadProgress(
       counts: {
         ...run.counts,
         [status]: counts,
+        ...(reportTicketsChanged === undefined
+          ? {}
+          : {
+              reportTicketsChanged:
+                z.boolean().parse(run.counts.reportTicketsChanged ?? false) || reportTicketsChanged,
+            }),
         ...(knowledgeChanged ? { knowledgeChanged: true } : {}),
       },
     })

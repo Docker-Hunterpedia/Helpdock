@@ -3128,3 +3128,48 @@ run affected workspace suites and their transitive dependents; global or
 incomplete diffs run everything. Main pushes retain the full regression run.
 Coverage gates and the required `ci` aggregate remain in place. See the
 [development guide](../guides/development.md#the-ci-workflow).
+
+### Repeat reports and independently rescanned CSAT decision (M11-09/10/12; 2026-10-15)
+
+An unchanged repeat must leave business and report row revisions unchanged.
+Ticket checkpoints retain a private, monotonic change marker; old checkpoints
+without one keep conservative report rebuilding. A source satisfaction rescan can
+contain answers whose existing parent tickets are absent from the incremental
+export. Load those answers through an account-scoped existing-ticket receipt,
+under the parent lock and current claim, without synthesizing source tickets or
+changing local ticket columns. Changed answers invalidate the aggregate ticket
+receipt and include the parent's historical day in report rebuilding. The
+contract and safety requirements are amended in ADR 0027. Focused regressions
+reproduced both the unnecessary report rebuild and the refused CSAT-only delta
+before implementation.
+
+The CSAT account-isolation regression also reproduced a collision between two
+accounts using the same native answer ID. Migration `0067` adds the account key
+to satisfaction row uniqueness and backfills it from receipts, refusing ambiguous
+ownership. The focused writer/migration/RLS run passes 1,094 cases; the RLS
+generator confirms all existing policies are present. API satisfaction unit cases
+also pass. The full 500-ticket core import, unchanged repeat and changed delta sequence
+also passes through the real queue and media pipeline. The repeat compares
+row values and `xmin` revisions for tickets, messages, activity, participants,
+tags, attachments, contacts/identities, companies, fields, staff memberships,
+satisfaction and report rows; none change. Source files are rechecked in dry
+run but not downloaded again for unchanged loading. The delta preserves the
+original ticket creation date and rating date, adds one private note, updates
+profile/company notes and old feedback, and retains the attachment revisions.
+Customer-side tables remain empty. This is core Support acceptance, not
+production Guide loading, a real worker-process kill or real-vendor proof.
+
+CI now runs that dataset as required `import-reference` work, scoped with the API
+suite and using a single Vitest worker without coverage instrumentation. Only
+that test file is excluded from the instrumented API test run; every production
+import file remains under the unchanged 90% coverage gate. The change follows
+run 38748429031, where coverage overhead exceeded the reference phase deadline.
+The new dedicated job must pass alongside API coverage before #215 can merge.
+Local reference evidence does not establish the new CI job as green.
+
+After the reference sequence, the focused writer/API/CSAT/Zendesk/CI-scope run
+passes 271 tests. Satisfaction checkpoint tests also prove transactional rollback,
+no rewrite on checkpoint replay, refusal after target removal and source answer
+reversion. These simulated transaction failures are not a real process-kill test.
+Root/API typechecks, repository lint and boundary/route checks pass; the existing
+informational suggestion in the untouched staff screen remains unchanged.

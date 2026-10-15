@@ -35,6 +35,7 @@ export const csatSurveyRow = (overrides: Partial<CsatResponse> = {}): CsatRespon
   departmentId: '0199f4b2-3333-7000-8000-0000000000dd',
   closedAt: CSAT_NOW,
   importedSource: null,
+  importSourceAccountKey: '0'.repeat(64),
   importedExternalId: null,
   importedDetails: null,
   tokenHash: 'not-a-real-hash',

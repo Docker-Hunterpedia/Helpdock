@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  char,
   check,
   index,
   jsonb,
@@ -57,6 +58,9 @@ export const csatResponses = pgTable(
     /** Live surveys require a close; imported answers may not provide one. */
     closedAt: timestamp('closed_at', { withTimezone: true }),
     importedSource: importSourceEnum('imported_source'),
+    importSourceAccountKey: char('import_source_account_key', { length: 64 })
+      .notNull()
+      .default('0'.repeat(64)),
     importedExternalId: varchar('imported_external_id', { length: 200 }),
     importedDetails: jsonb('imported_details').$type<Record<string, unknown>>(),
     /** SHA-256 of the token, hex. */
@@ -82,8 +86,17 @@ export const csatResponses = pgTable(
       .on(table.ticketId, table.closedAt)
       .where(sql`${table.importedExternalId} IS NULL`),
     uniqueIndex('csat_responses_import_key')
-      .on(table.brandId, table.importedSource, table.importedExternalId)
+      .on(
+        table.brandId,
+        table.importedSource,
+        table.importSourceAccountKey,
+        table.importedExternalId,
+      )
       .where(sql`${table.importedExternalId} IS NOT NULL`),
+    check(
+      'csat_responses_account_key_shape',
+      sql`${table.importSourceAccountKey} ~ '^[0-9a-f]{64}$'`,
+    ),
     check(
       'csat_responses_origin_shape',
       sql`(${table.importedExternalId} IS NULL AND ${table.importedSource} IS NULL AND ${table.closedAt} IS NOT NULL AND ${table.ratedVia} IS DISTINCT FROM 'import') OR (${table.importedExternalId} IS NOT NULL AND ${table.importedSource} IS NOT NULL AND ${table.ratedVia} IS NOT DISTINCT FROM 'import' AND ${table.rating} IS NOT NULL AND ${table.ratedAt} IS NOT NULL)`,

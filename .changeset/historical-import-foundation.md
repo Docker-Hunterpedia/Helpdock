@@ -113,3 +113,5 @@ Preserve refused-phone warnings and exact omission totals through whole-run dry-
 Bind import approval to the reviewed report, require explicit warning acknowledgement, and refuse stale source or destination snapshots at approval and before the first queued domain write. Preserve the reviewed calling code during loading so national phone numbers are not silently omitted.
 
 Validate effective staged/live knowledge ancestry and locale conflicts before importing. Refuse aliased category/section self-cycles in both preflight and loading, while allowing valid staged reparenting and shared article translations. Include article version changes in approval freshness.
+
+Preserve report rows on unchanged repeats and reconcile satisfaction-only deltas against existing imported tickets. Retain original answer dates, refuse unavailable parents and invalidate aggregate receipts so reverted source answers are reapplied. Namespace satisfaction rows by vendor account and backfill ownership without guessing ambiguous receipts.

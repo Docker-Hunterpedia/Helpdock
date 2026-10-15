@@ -37,6 +37,7 @@ const survey = (overrides: Partial<CsatResponse> = {}): CsatResponse => ({
   departmentId: '0199f4b2-3333-7000-8000-0000000000dd',
   closedAt: NOW,
   importedSource: null,
+  importSourceAccountKey: '0'.repeat(64),
   importedExternalId: null,
   importedDetails: null,
   tokenHash: hashCsatToken(signedUnder(CURRENT)),

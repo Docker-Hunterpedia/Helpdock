@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { createFakeModel, type FakeModel, type HttpTransport, minimalPdf } from '@helpdock/ai';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
@@ -49,6 +47,7 @@ import { BusinessHoursService } from '../../sla/business-hours.service.js';
 import { SlaRepository } from '../../sla/sla.repository.js';
 import { SlaService } from '../../sla/sla.service.js';
 import { withSystemJob } from '../../tenant/system-job.js';
+import { dockerAvailable } from '../../testing/docker-available.js';
 import { FakeStorage, silentJobLogger } from '../../testing/media.js';
 import { signInForTest } from '../../testing/staff-sign-in.js';
 import { TICKET_EVENTS } from '../../tickets/ticket-events.js';
@@ -97,12 +96,7 @@ const GULF_WEEK: BusinessHours = {
   ),
 };
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write('Skipping the auto-reply integration tests: Docker is not available.\n');

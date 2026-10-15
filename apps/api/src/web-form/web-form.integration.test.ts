@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { CaptchaTransport } from '@helpdock/channels';
 import type { Env } from '@helpdock/config';
 import {
@@ -42,6 +40,7 @@ import { registerEmailEventHandlers } from '../email/email-events.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 
@@ -71,12 +70,7 @@ const PNG = Buffer.from(
   'base64',
 );
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

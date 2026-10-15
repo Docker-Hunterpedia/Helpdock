@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
   auditLog,
@@ -25,6 +23,7 @@ import { GenericContainer, type StartedTestContainer } from 'testcontainers';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { INSTALL_STATE_META, SETUP_KEY_META } from '../static/install-meta.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { SETUP_IP_RULE } from './setup.service.js';
 
@@ -65,12 +64,7 @@ const BRAND = {
   helpcenterDomain: 'support.acme.test',
 } as const;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

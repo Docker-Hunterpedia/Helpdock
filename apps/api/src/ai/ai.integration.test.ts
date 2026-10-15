@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import {
   BudgetExceededError,
   createFakeModel,
@@ -57,6 +55,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { configureEmbeddingSpace, reembedChunks } from '../knowledge/embedding-space.job.js';
 import { createLogger } from '../logging/logger.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { handleBudgetAlert } from './budget-alert.handler.js';
 import { AI_BUDGET_ALERT_EVENT } from './budget-meter.js';
@@ -88,12 +87,7 @@ const MASTER_KEY = Buffer.alloc(32, 31).toString('base64');
 const PASSWORD = 'a staff password';
 const CONTAINER_STARTUP_MS = 180_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

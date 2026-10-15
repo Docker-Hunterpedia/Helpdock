@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -61,6 +59,7 @@ import { NotificationsRepository } from '../notifications/notifications.reposito
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { noCsatDelivery } from '../testing/csat-doubles.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from './ticket-events.js';
 import type { SearchMode } from './ticket-query.js';
@@ -91,12 +90,7 @@ const MASTER_KEY = Buffer.alloc(32, 21).toString('base64');
 const AGENT_PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

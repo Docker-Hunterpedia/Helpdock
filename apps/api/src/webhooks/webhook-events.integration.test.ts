@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
   createDb,
@@ -23,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { createWebhookSourceHandler, WEBHOOK_DELIVERY_REQUESTED_EVENT } from './webhook-events.js';
 import { WebhooksRepository } from './webhooks.repository.js';
 
@@ -46,12 +45,7 @@ const MASTER_KEY = Buffer.alloc(32, 83).toString('base64');
 const CONTAINER_STARTUP_MS = 120_000;
 const NOW = new Date('2026-10-06T10:00:00Z');
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

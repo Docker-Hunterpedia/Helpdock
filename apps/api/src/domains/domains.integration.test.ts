@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -26,6 +24,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { BrandHostResolver } from './brand-host.js';
 import { scheduleDomainChecks } from './domain-jobs.js';
@@ -60,12 +59,7 @@ const CONTAINER_STARTUP_MS = 180_000;
 const CNAME_TARGET = 'support.example.com';
 const TARGET_ADDRESS = '203.0.113.10';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

@@ -1,10 +1,8 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { craftedZip, fakeService, type HttpTransport, minimalPdf } from '@helpdock/ai';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
@@ -43,6 +41,7 @@ import { semanticSource } from '../help-center/search/semantic.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage, silentJobLogger } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { readOAuthApps } from './credentials.js';
@@ -82,12 +81,7 @@ const CONTAINER_STARTUP_MS = 180_000;
 const DIMS = 16;
 const NOTION = 'https://notion.fake';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write('Skipping the knowledge integration tests: Docker is not available.\n');

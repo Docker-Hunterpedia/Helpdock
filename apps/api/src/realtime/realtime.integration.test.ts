@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -32,6 +30,7 @@ import { refreshCookieOf } from '../auth/session/cookies.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInResponseForTest } from '../testing/staff-sign-in.js';
 import { PresenceService } from './presence.service.js';
 import { presenceSocketKey } from './presence.store.js';
@@ -62,12 +61,7 @@ const REVOCATION_BUDGET_MS = 5_000;
 
 const CONTAINER_STARTUP_MS = 120_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

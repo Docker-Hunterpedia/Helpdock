@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { CreateBucketCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import type { Env } from '@helpdock/config';
 import {
@@ -34,6 +32,7 @@ import { createLogger } from '../logging/logger.js';
 import { S3BrandObjects } from '../media/brand-objects.js';
 import { createS3Client } from '../media/storage.js';
 import { StorageUsageStore } from '../observability/storage-usage.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { BRAND_DELETION_REQUESTED } from './brand-deletion.service.js';
 import { BRAND_PURGED, runBrandPurge, scheduleBrandPurges } from './brand-purge.job.js';
 
@@ -63,12 +62,7 @@ const MASTER_KEY = Buffer.alloc(32, 43).toString('base64');
 const CONTAINER_STARTUP_MS = 180_000;
 const DAY_MS = 86_400_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

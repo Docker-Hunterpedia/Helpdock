@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import {
   APP_ROLE_NAME,
   brands,
@@ -12,6 +10,7 @@ import {
 } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { withAllBrands } from './all-brands.js';
 import { liveBrandIds } from './live-brands.js';
 
@@ -26,12 +25,7 @@ const POSTGRES_IMAGE = 'pgvector/pgvector:pg17';
 const APP_ROLE_PASSWORD = 'app-role-password';
 const CONTAINER_STARTUP_MS = 120_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

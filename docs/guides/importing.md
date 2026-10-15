@@ -198,3 +198,23 @@ The same permission allows contact and sample previews:
 Blank/NUL lookup IDs are invalid requests. Invalid mapped source values return a
 409 conflict rather than an approval or a raw-value error response. The complete
 dry-run execution/approval workflow and EN/AR review UI remain under development.
+
+
+Connected imports can now run validation through the worker:
+
+1. After extraction and mapping, send
+   `POST /api/brands/{brandId}/imports/{runId}/dry-run` with `{}` or
+   `{ "defaultCallingCode": "963" }`. A duplicate start or unavailable phase
+   returns 409; malformed settings return 400.
+2. Poll `GET /api/brands/{brandId}/imports/{runId}/dry-run` for phase, checked
+   counters and safe issue samples. A report that does not exist returns 404.
+   Error/warning totals can exceed the capped list of samples.
+3. Pause, resume or cancel through the existing run controls. Dry-run progress
+   survives resume; the worker also recovers abandoned claims.
+
+Validation returns the run to `awaiting_mapping` with its report retained.
+`complete: true` means validation finished, including when it found errors. It
+**does not approve or start loading**. The approval/start action and bilingual
+review UI remain unfinished, as do full completeness/retention reporting and
+whole-run refused-phone warnings. Credentials remain encrypted for review and
+are purged on terminal cancellation/failure/completion.

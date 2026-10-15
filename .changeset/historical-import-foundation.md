@@ -103,3 +103,5 @@ Share organization domain matching between read-only preflight and loading, pres
 Expose a brand-admin ticket-history preview endpoint with validated pagination, sanitized bodies, source-author checks and filtered attachment metadata. Refuse foreign-brand access and invalid source author kinds without returning source/download URL fields.
 
 Expose contact source details and read-only identity/company plans, and select up to three stable ticket/contact sample IDs within a run. Preserve local profile verification and links, and reject malformed lookup IDs or invalid mapped values before returning a preview.
+
+Add outbox-backed, resumable dry-run execution and a bounded validation report API. Dry runs support pause/resume/recovery and stop at review without approving or starting destination writes.

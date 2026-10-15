@@ -1,3 +1,4 @@
+import { setTimeout as waitForQueue } from 'node:timers/promises';
 import { createKeyring, decodeMasterKey, decryptSecret } from '@helpdock/config';
 import {
   accounts,
@@ -17,9 +18,11 @@ import {
 } from '@helpdock/db';
 import { hashImportValue, ImportRateLimiter } from '@helpdock/importers';
 import { FakeZendesk } from '@helpdock/importers/testing';
+import { JOB_DEFINITIONS, silentLogger as silentJobLogger } from '@helpdock/jobs';
 import { type ImportRunView, importRecordSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
+import { Queue, Worker } from 'bullmq';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
@@ -28,7 +31,12 @@ import { createLogger } from '../logging/logger.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
 import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
-import { createZendeskImportConnection } from './jobs/connector-runtime.js';
+import { createImportWorkHandler } from './import-events.js';
+import {
+  createImportConnectorRuntime,
+  createZendeskImportConnection,
+} from './jobs/connector-runtime.js';
+import { createImportProcessor } from './jobs/import-processor.js';
 
 const masterKey = Buffer.alloc(32, 19).toString('base64');
 const password = 'import-test-password';
@@ -153,6 +161,8 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
         { credentials: { auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' } },
       ],
       ['POST', `${root()}/${id}/extract`, undefined],
+      ['POST', `${root()}/${id}/dry-run`, {}],
+      ['GET', `${root()}/${id}/dry-run`, undefined],
       ['PUT', `${root()}/${id}/scope`, { entities: ['ticket'] }],
       ['POST', `${root()}/${id}/pause`, undefined],
       ['POST', `${root()}/${id}/resume`, undefined],
@@ -208,7 +218,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
           ticketExternalId: '42',
           authorKind: 'system',
           public: publicMessage,
-          bodyHtml: `<p>History ${index}</p><script>alert(1)</script>`,
+          bodyHtml: `<p>History ${index}</p><ScRiPt>alert(1)</ScRiPt>`,
           createdAt: `2019-01-0${index + 1}T00:00:00Z`,
           attachments: [
             {
@@ -240,7 +250,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       nextOffset: 1,
       messages: [{ public: true, bodyText: 'History 0' }],
     });
-    expect(first.body).not.toMatch(/hidden-root|hidden-file|<script>/);
+    expect(first.body).not.toMatch(/hidden-root|hidden-file|<script\b/i);
     const second = await call('GET', `${url}&offset=1`, adminToken);
     expect(second.statusCode).toBe(200);
     expect(second.json()).toMatchObject({
@@ -748,7 +758,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
     if (!foreign) throw new Error('Missing foreign run');
     expect((await call('GET', `${root()}/${foreign.id}`, adminToken)).statusCode).toBe(404);
   });
-  it('rolls back an unavailable dry-run resume rather than releasing a paused run with no consumer', async () => {
+  it('resumes a paused dry run and publishes its next work atomically', async () => {
     const created = await call('POST', root(), adminToken, { source: 'zendesk' });
     expect(created.statusCode).toBe(201);
     const run = created.json<ImportRunView>();
@@ -760,16 +770,180 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       .update(importRuns)
       .set({ status: 'paused', pausedFrom: 'dry_run' })
       .where(eq(importRuns.id, run.id));
-    expect((await call('POST', `${root()}/${run.id}/resume`, adminToken)).statusCode).toBe(409);
+    expect((await call('POST', `${root()}/${run.id}/resume`, adminToken)).statusCode).toBe(200);
     expect((await call('GET', `${root()}/${run.id}`, adminToken)).json()).toMatchObject({
-      status: 'paused',
+      status: 'dry_run',
       hasCredentials: true,
     });
     expect(
       await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${run.id}`),
-    ).toEqual([]);
+    ).toMatchObject([{ payload: { runId: run.id, step: 'dry_run' } }]);
     expect((await call('POST', `${root()}/${run.id}/cancel`, adminToken)).statusCode).toBe(200);
   });
+  it.each([false, true])(
+    'runs paged dry-run validation through Redis without creating profiles or approving loading (corrupt source: %s)',
+    async (corrupt) => {
+      const created = await call('POST', root(), adminToken, { source: 'zendesk' });
+      const runId = created.json<ImportRunView>().id;
+      expect((await call('GET', `${root()}/${runId}/dry-run`, adminToken)).statusCode).toBe(404);
+      expect((await call('POST', `${root()}/${runId}/dry-run`, adminToken, {})).statusCode).toBe(
+        409,
+      );
+      expect(
+        (
+          await call('PUT', `${root()}/${runId}/connection`, adminToken, {
+            credentials: { auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' },
+          })
+        ).statusCode,
+      ).toBe(200);
+      await owner.db
+        .update(importRuns)
+        .set({ status: 'awaiting_mapping' })
+        .where(eq(importRuns.id, runId));
+      const records = Array.from({ length: 27 }, (_, index) =>
+        importRecordSchema.parse({
+          entity: 'organization',
+          payload: {
+            externalId: `dry-company-${index}`,
+            name: `Company ${index}`,
+            domains: [],
+            custom: {},
+          },
+        }),
+      );
+      await owner.db.insert(importRecords).values(
+        records.map((native) => ({
+          brandId,
+          runId,
+          entity: native.entity,
+          externalId: native.payload.externalId,
+          payload: native.payload,
+          payloadHash:
+            corrupt && native.payload.externalId === 'dry-company-0'
+              ? '0'.repeat(64)
+              : hashImportValue(native.payload),
+        })),
+      );
+      const profilesBefore = await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM accounts WHERE brand_id = ${brandId} ORDER BY id`,
+      );
+      expect(
+        (
+          await call('POST', `${root()}/${runId}/dry-run`, adminToken, {
+            defaultCallingCode: 'bad',
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await call('POST', `${root()}/${runId}/dry-run`, adminToken, {
+            defaultCallingCode: '963',
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect((await call('POST', `${root()}/${runId}/dry-run`, adminToken, {})).statusCode).toBe(
+        409,
+      );
+      expect((await call('GET', `${root()}/${runId}/dry-run`, adminToken)).json()).toMatchObject({
+        phase: 'records',
+        complete: false,
+        defaultCallingCode: '963',
+      });
+      const producer = runtime.redis.duplicate({ maxRetriesPerRequest: null });
+      const consumer = runtime.redis.duplicate({ maxRetriesPerRequest: null });
+      const queueName = `m11-http-dry-run-${uuidv7()}`;
+      const queue = new Queue(queueName, { connection: producer });
+      const worker = new Worker(
+        queueName,
+        createImportProcessor({
+          db: runtime.db,
+          storage: {} as never,
+          resolve: createImportConnectorRuntime({
+            db: runtime.db,
+            keyring: createKeyring({ APP_MASTER_KEY: masterKey }),
+            allowCidrs: [],
+          }),
+        }),
+        { connection: consumer, concurrency: 1 },
+      );
+      const failures: string[] = [];
+      worker.on('failed', (_job, error) => failures.push(error.message));
+      const delivered = new Set<string>();
+      const bridge = createImportWorkHandler({
+        add: async (step, payload, jobId, delay) => {
+          const definition = JOB_DEFINITIONS[`import.${step}`];
+          await queue.add(definition.name, payload, { ...definition.options, jobId, delay });
+        },
+      });
+      try {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline) {
+          const events = await owner.db
+            .select()
+            .from(outbox)
+            .where(sql`${outbox.payload}->>'runId' = ${runId}`);
+          for (const event of events)
+            if (!delivered.has(event.id)) {
+              await withSystem(runtime.db, brandId, (tx) =>
+                bridge({
+                  tx,
+                  brandId,
+                  event: event.event,
+                  payload: event.payload,
+                  outboxId: event.id,
+                  log: silentJobLogger,
+                }),
+              );
+              delivered.add(event.id);
+            }
+          const selected = (
+            await owner.db.select().from(importRuns).where(eq(importRuns.id, runId))
+          )[0];
+          if (selected?.status !== 'dry_run') break;
+          await waitForQueue(20);
+        }
+        expect(failures).toEqual([]);
+        const reportResponse = await call('GET', `${root()}/${runId}/dry-run`, adminToken);
+        expect(reportResponse.statusCode).toBe(200);
+        expect(reportResponse.json()).toMatchObject({
+          complete: true,
+          phase: 'media_checked',
+          recordsChecked: 27,
+          errors: corrupt ? 1 : 0,
+          warnings: 0,
+          defaultCallingCode: '963',
+        });
+        expect(reportResponse.body).not.toMatch(/synthetic-token|claimToken|mediaAfter|retryAt/);
+        expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
+          status: 'awaiting_mapping',
+          hasCredentials: true,
+        });
+        expect(
+          await owner.db.execute(
+            sql`SELECT id, xmin::text AS revision FROM accounts WHERE brand_id = ${brandId} ORDER BY id`,
+          ),
+        ).toEqual(profilesBefore);
+        expect(
+          (
+            await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${runId}`)
+          ).every((event) => event.event === 'import.work_requested'),
+        ).toBe(true);
+        const before = reportResponse.json();
+        await queue.add('import.dry_run', { brandId, runId }, { jobId: `duplicate-${runId}` });
+        await worker.close();
+        expect((await call('GET', `${root()}/${runId}/dry-run`, adminToken)).json()).toEqual(
+          before,
+        );
+      } finally {
+        await worker.close();
+        await queue.obliterate({ force: true });
+        await queue.close();
+        await producer.quit();
+        await consumer.quit();
+      }
+    },
+    30000,
+  );
   it('confirms mappings atomically, returns their input fingerprint and clears obsolete dry-run approval', async () => {
     const created = await call('POST', root(), adminToken, { source: 'zendesk' });
     expect(created.statusCode).toBe(201);

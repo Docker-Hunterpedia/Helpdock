@@ -102,6 +102,7 @@ import {
   createZendeskImportConnection,
 } from '../jobs/connector-runtime.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
+import { runImportDryRunBatch } from '../jobs/dry-run-batch.js';
 import { runImportDryRunMediaBatch } from '../jobs/dry-run-media.js';
 import { runImportDryRunRecordBatch } from '../jobs/dry-run-records.js';
 import { storeImportPage } from '../jobs/extract-page.js';
@@ -4099,58 +4100,78 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     }
   });
 
-  it('recovers expired import claims once per minute and fences the old worker without touching fresh or paused runs', async () => {
-    const recoveryBrand = uuidv7();
-    await owner.db.insert(brands).values({ id: recoveryBrand, name: 'Recovery', prefix: 'RCR' });
-    const expired = await boundAccountRun('recovery-expired', recoveryBrand);
-    const claim = await withSystem(app.db, recoveryBrand, (tx) =>
-      claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase: 'loading' }),
-    );
-    if (!claim) throw new Error('Missing recovery claim');
-    await owner.db
-      .update(importRuns)
-      .set({ claimedAt: new Date(Date.now() - IMPORT_CLAIM_TIMEOUT_MS - 1000) })
-      .where(eq(importRuns.id, expired.runId));
-    const waiting = await boundAccountRun('recovery-waiting', recoveryBrand);
-    await owner.db
-      .update(importRuns)
-      .set({ counts: { retryAt: new Date(Date.now() + 3600000).toISOString() } })
-      .where(eq(importRuns.id, waiting.runId));
-    const paused = await boundAccountRun('recovery-paused', recoveryBrand);
-    await withSystem(app.db, recoveryBrand, (tx) =>
-      pauseImportRun(tx, { brandId: recoveryBrand, runId: paused.runId }),
-    );
-    const now = new Date();
-    expect(
-      await withSystem(app.db, recoveryBrand, (tx) => recoverBrandImports(tx, recoveryBrand, now)),
-    ).toBe(1);
-    expect(
-      await withSystem(app.db, recoveryBrand, (tx) => recoverBrandImports(tx, recoveryBrand, now)),
-    ).toBe(0);
-    await expect(
-      withSystem(app.db, recoveryBrand, (tx) => renewImportClaim(tx, claim)),
-    ).rejects.toThrow('import.claim-lost');
-    const events = await owner.db.select().from(outbox);
-    expect(events).toHaveLength(1);
-    expect(events[0]?.payload).toEqual({ runId: expired.runId, step: 'load' });
-    expect(
-      (await owner.db.select().from(importRuns).where(eq(importRuns.id, expired.runId)))[0]?.counts,
-    ).toMatchObject({ recoveryRequestedAt: now.toISOString() });
-    const replacement = await withSystem(app.db, recoveryBrand, (tx) =>
-      claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase: 'loading' }),
-    );
-    if (!replacement) throw new Error('Missing replacement recovery claim');
-    expect(replacement.token).not.toBe(claim.token);
-    expect(
+  it.each(['loading', 'dry_run'] as const)(
+    'recovers expired %s claims once per minute and fences the old worker without touching fresh or paused runs',
+    async (phase) => {
+      const recoveryBrand = uuidv7();
+      await owner.db.insert(brands).values({
+        id: recoveryBrand,
+        name: 'Recovery',
+        prefix: phase === 'dry_run' ? 'RCD' : 'RCR',
+      });
+      const expired = await boundAccountRun('recovery-expired', recoveryBrand);
+      await owner.db
+        .update(importRuns)
+        .set({ status: phase })
+        .where(eq(importRuns.id, expired.runId));
+      const claim = await withSystem(app.db, recoveryBrand, (tx) =>
+        claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase }),
+      );
+      if (!claim) throw new Error('Missing recovery claim');
+      await owner.db
+        .update(importRuns)
+        .set({ claimedAt: new Date(Date.now() - IMPORT_CLAIM_TIMEOUT_MS - 1000) })
+        .where(eq(importRuns.id, expired.runId));
+      const waiting = await boundAccountRun('recovery-waiting', recoveryBrand);
+      await owner.db
+        .update(importRuns)
+        .set({ counts: { retryAt: new Date(Date.now() + 3600000).toISOString() } })
+        .where(eq(importRuns.id, waiting.runId));
+      const paused = await boundAccountRun('recovery-paused', recoveryBrand);
       await withSystem(app.db, recoveryBrand, (tx) =>
-        recoverBrandImports(tx, recoveryBrand, new Date(now.getTime() + 61000)),
-      ),
-    ).toBe(0);
-    expect(
-      (await owner.db.select().from(importRuns).where(eq(importRuns.id, paused.runId)))[0]?.status,
-    ).toBe('paused');
-    await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${expired.runId}`);
-  });
+        pauseImportRun(tx, { brandId: recoveryBrand, runId: paused.runId }),
+      );
+      const now = new Date();
+      expect(
+        await withSystem(app.db, recoveryBrand, (tx) =>
+          recoverBrandImports(tx, recoveryBrand, now),
+        ),
+      ).toBe(1);
+      expect(
+        await withSystem(app.db, recoveryBrand, (tx) =>
+          recoverBrandImports(tx, recoveryBrand, now),
+        ),
+      ).toBe(0);
+      await expect(
+        withSystem(app.db, recoveryBrand, (tx) => renewImportClaim(tx, claim)),
+      ).rejects.toThrow('import.claim-lost');
+      const events = await owner.db.select().from(outbox);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.payload).toEqual({
+        runId: expired.runId,
+        step: phase === 'dry_run' ? 'dry_run' : 'load',
+      });
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, expired.runId)))[0]
+          ?.counts,
+      ).toMatchObject({ recoveryRequestedAt: now.toISOString() });
+      const replacement = await withSystem(app.db, recoveryBrand, (tx) =>
+        claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase }),
+      );
+      if (!replacement) throw new Error('Missing replacement recovery claim');
+      expect(replacement.token).not.toBe(claim.token);
+      expect(
+        await withSystem(app.db, recoveryBrand, (tx) =>
+          recoverBrandImports(tx, recoveryBrand, new Date(now.getTime() + 61000)),
+        ),
+      ).toBe(0);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, paused.runId)))[0]
+          ?.status,
+      ).toBe('paused');
+      await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${expired.runId}`);
+    },
+  );
 
   it('retries transient vendor outages twice, preserves the budget across 429, then purges credentials on the third outage', async () => {
     const run = await boundAccountRun('vendor-outage-budget');
@@ -6152,7 +6173,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         },
       ],
     });
-    expect(JSON.stringify(first)).not.toMatch(/tracker\.invalid|secret-root|<script>/);
+    expect(JSON.stringify(first)).not.toMatch(/tracker\.invalid|secret-root|<script\b/i);
     const second = await withSystem(app.db, BRAND, (tx) =>
       previewImportedTicket(tx, { ...scope, offset: 1 }),
     );
@@ -6520,18 +6541,29 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       status: 'dry_run',
       startedBy: USER,
       dryRunReport: { version: 1, phase: 'plans_checked' },
+      credentialsEncrypted: 'synthetic-retained-credentials',
     });
     const claim = await withSystem(app.db, BRAND, (tx) =>
       claimImportRun(tx, { brandId: BRAND, runId, phase: 'dry_run' }),
     );
     if (!claim) throw new Error('Missing old checkpoint claim');
     expect(
-      await runImportDryRunRecordBatch({ db: app.db, jobId: 'old-dry-run' }, { claim }),
+      await runImportDryRunBatch(
+        {
+          db: app.db,
+          jobId: 'old-dry-run',
+          resolve: async () => {
+            throw new Error('Legacy checkpoints must invalidate before resolving credentials');
+          },
+        },
+        claim,
+      ),
     ).toEqual({ state: 'invalidated' });
     const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
     expect(run).toMatchObject({
       status: 'awaiting_mapping',
       dryRunReport: null,
+      credentialsEncrypted: 'synthetic-retained-credentials',
       claimToken: null,
       claimedAt: null,
     });

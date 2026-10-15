@@ -4,6 +4,8 @@ import {
   importConnectionResultSchema,
   importContactPreviewQuerySchema,
   importContactPreviewSchema,
+  importDryRunReportSchema,
+  importDryRunRequestSchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
   importPreviewSamplesSchema,
@@ -33,3 +35,7 @@ export class ImportTicketPreviewDto extends createZodDto(importTicketPreviewSche
 export class ImportContactPreviewQueryDto extends createZodDto(importContactPreviewQuerySchema) {}
 export class ImportContactPreviewDto extends createZodDto(importContactPreviewSchema) {}
 export class ImportPreviewSamplesDto extends createZodDto(importPreviewSamplesSchema) {}
+
+export class ImportDryRunRequestDto extends createZodDto(importDryRunRequestSchema) {}
+
+export class ImportDryRunReportDto extends createZodDto(importDryRunReportSchema) {}

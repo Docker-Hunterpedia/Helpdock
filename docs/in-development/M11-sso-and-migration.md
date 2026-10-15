@@ -103,7 +103,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
 | M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `attachment.uploaded`, `media.objects.purge` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
-| M11-10 | Import jobs: `import.extract`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
+| M11-10 | Import jobs: `import.extract`, `import.dry_run`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
 | M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
@@ -2785,6 +2785,42 @@ role/guest refusal, preserved source/local contact data and verification, no com
 creation, mapped-value errors, deterministic bounded samples and both same-brand
 other-run and foreign-brand exclusion. Five preview schema cases also pass.
 The full dry-run report, execution/approval entry points and EN/AR UI remain unfinished.
+
+### Executable dry-run queue and report (M11-10/16, in progress)
+
+`POST /api/brands/:brandId/imports/:runId/dry-run` accepts a strict body with
+optional `defaultCallingCode` (up to four digits). It requires a connected,
+account-bound run in `awaiting_mapping` or `ready`, clears obsolete identity
+projections/retry state, snapshots the inputs and publishes `import.dry_run`
+through the transactional outbox. Duplicate starts conflict. Like all import
+routes, it requires `brand:manage` and validates/serializes its DTOs with Zod.
+
+Each queue delivery scans one bounded record page, validates the combined mapping
+plan or identity claims, or inspects one source attachment. The existing fenced
+claims, pause/cancel, 429 delay and vendor-error handling apply to this phase too.
+Resume publishes dry-run work atomically; minute-based recovery now includes
+expired dry-run claims while retaining the active-account and cooldown guards.
+
+`GET /api/brands/:brandId/imports/:runId/dry-run` returns validation phase, input
+fingerprint, calling code, checked counters, error/warning totals and up to 400
+safe issue samples across records, mappings, identity and media. It omits source
+payloads, credentials, worker leases and internal cursors. A missing report is
+404. Counters are totals; capped samples do not claim to enumerate every issue.
+
+After media validation, the worker checks the input fingerprint again, releases
+its claim and returns the run to `awaiting_mapping`, retaining the report and
+credentials for review/retry. `complete` means validation finished, not that an
+import is approved; a completed report can contain blocking errors. Loading is
+not started. Approval/start, live-destination freshness, entity/completeness and
+retention reporting, refused-phone warnings across the whole run, and the EN/AR
+review UI still need completion before M11 acceptance. Preceding progress notes
+that describe the dry-run consumer and resume as unavailable are superseded here.
+
+Real Postgres/Redis tests exercise a 27-record multi-page dry run through BullMQ,
+source corruption, unchanged destination profiles, duplicate starts/deliveries,
+strict calling-code input, safe report serialization, role/guest refusal, resume
+and dry-run stale-claim recovery. They do not replace worker-termination or full
+vendor-reference-dataset acceptance.
 
 ## M11-13 Freshdesk connector
 

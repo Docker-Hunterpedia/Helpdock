@@ -3,6 +3,7 @@ import {
   enqueueOutbox,
   type ImportRunPayload,
   importAttachmentsJob,
+  importDryRunJob,
   importExtractJob,
   importFinishJob,
   importLoadJob,
@@ -15,7 +16,7 @@ import { z } from 'zod';
 import { ImportLoadError } from './loader/contracts.js';
 
 export const IMPORT_WORK_REQUESTED_EVENT = 'import.work_requested';
-const stepSchema = z.enum(['extract', 'load', 'attachments', 'finish']);
+const stepSchema = z.enum(['extract', 'dry_run', 'load', 'attachments', 'finish']);
 const payloadSchema = z.strictObject({
   runId: z.uuid(),
   step: stepSchema,
@@ -24,17 +25,20 @@ const payloadSchema = z.strictObject({
 const requestSchema = payloadSchema.extend({ brandId: z.uuid() });
 const definitions = {
   extract: importExtractJob,
+  dry_run: importDryRunJob,
   load: importLoadJob,
   attachments: importAttachmentsJob,
   finish: importFinishJob,
 } as const;
 const phases = {
   extract: 'extracting',
+  dry_run: 'dry_run',
   load: 'loading',
   attachments: 'loading',
   finish: 'finishing',
 } as const;
-type Step = z.infer<typeof stepSchema>;
+export type ImportWorkStep = z.infer<typeof stepSchema>;
+type Step = ImportWorkStep;
 
 export async function importWorkRunnable(
   tx: DbTransaction,

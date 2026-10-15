@@ -10,7 +10,7 @@ const recoveryTimesSchema = z.strictObject({
   retryAt: z.iso.datetime().optional(),
   recoveryRequestedAt: z.iso.datetime().optional(),
 });
-const phases = ['extracting', 'loading', 'finishing'] as const;
+const phases = ['extracting', 'dry_run', 'loading', 'finishing'] as const;
 const RECOVERY_COOLDOWN_MS = 60000;
 
 /** A fresh claim cannot be cleared by recovery; controls and renewals hold this same brand lock. */
@@ -42,7 +42,13 @@ export async function recoverBrandImports(tx: DbTransaction, brandId: string, no
       recoveryRequestedAt: run.counts.recoveryRequestedAt,
     });
     const step =
-      run.status === 'extracting' ? 'extract' : run.status === 'finishing' ? 'finish' : 'load';
+      run.status === 'extracting'
+        ? 'extract'
+        : run.status === 'dry_run'
+          ? 'dry_run'
+          : run.status === 'finishing'
+            ? 'finish'
+            : 'load';
     if (!(await importWorkRunnable(tx, brandId, run.id, step))) continue;
     await tx
       .update(importRuns)

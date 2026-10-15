@@ -1503,6 +1503,12 @@ export const importExtractJob = defineJob({
   schema: importRunPayloadSchema,
   options: importRetryOptions,
 });
+export const importDryRunJob = defineJob({
+  name: 'import.dry_run',
+  queue: QUEUE_NAMES.import,
+  schema: importRunPayloadSchema,
+  options: importRetryOptions,
+});
 export const importLoadJob = defineJob({
   name: 'import.load',
   queue: QUEUE_NAMES.import,
@@ -1537,6 +1543,7 @@ export const importRecoverJob = defineJob({
 export const JOB_DEFINITIONS = Object.freeze({
   [importRecoverJob.name]: importRecoverJob,
   [importExtractJob.name]: importExtractJob,
+  [importDryRunJob.name]: importDryRunJob,
   [importLoadJob.name]: importLoadJob,
   [importAttachmentsJob.name]: importAttachmentsJob,
   [importFinishJob.name]: importFinishJob,

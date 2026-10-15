@@ -26,6 +26,7 @@ import {
   helpCenterSearchReindexSweepJob,
   IMPORT_RECOVERY_CRON,
   importAttachmentsJob,
+  importDryRunJob,
   importExtractJob,
   importFinishJob,
   importLoadJob,
@@ -574,6 +575,7 @@ export const workerDependencies: WorkerDependencies = {
     const imports = new Queue(QUEUE_NAMES.import, { connection: redis });
     const importDefinitions = {
       extract: importExtractJob,
+      dry_run: importDryRunJob,
       load: importLoadJob,
       attachments: importAttachmentsJob,
       finish: importFinishJob,

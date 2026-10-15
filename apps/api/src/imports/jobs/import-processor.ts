@@ -3,6 +3,7 @@ import type { Connector, ConnectorContext } from '@helpdock/importers';
 import { ConnectorError, RateLimited } from '@helpdock/importers';
 import {
   importAttachmentsJob,
+  importDryRunJob,
   importExtractJob,
   importFinishJob,
   importLoadJob,
@@ -12,11 +13,12 @@ import type { Job } from 'bullmq';
 import { z } from 'zod';
 import type { ObjectStorage } from '../../media/storage.js';
 import { withSystemJob } from '../../tenant/system-job.js';
-import { enqueueImportWork, importWorkRunnable } from '../import-events.js';
+import { enqueueImportWork, type ImportWorkStep, importWorkRunnable } from '../import-events.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { runImportAttachmentBatch } from './attachment-batch.js';
 import { claimImportRun, type ImportClaim, ImportClaimLost, type ImportRunRef } from './claims.js';
 import { continueImportWork, deferImportVendorFailure, failImportWork } from './continuation.js';
+import { runImportDryRunBatch } from './dry-run-batch.js';
 import { runImportExtraction } from './extract-run.js';
 import { extractionRun } from './extract-state.js';
 import { runImportFinishBatch } from './finish-batch.js';
@@ -30,6 +32,7 @@ type Dependencies<C> = {
 };
 const definitions = {
   'import.extract': importExtractJob,
+  'import.dry_run': importDryRunJob,
   'import.load': importLoadJob,
   'import.attachments': importAttachmentsJob,
   'import.finish': importFinishJob,
@@ -44,10 +47,17 @@ class ImportExecution<C> {
   inRun<T>(work: (tx: DbTransaction) => Promise<T>) {
     return withSystemJob(this.deps.db, this.scope.brandId, this.jobId, work);
   }
-  async request(step: 'extract' | 'load' | 'attachments' | 'finish', delayMs: number) {
+  async request(step: ImportWorkStep, delayMs: number) {
     await this.inRun(async (tx) => {
       const run = await extractionRun(tx, this.scope);
-      const phase = step === 'extract' ? 'extracting' : step === 'finish' ? 'finishing' : 'loading';
+      const phase =
+        step === 'extract'
+          ? 'extracting'
+          : step === 'dry_run'
+            ? 'dry_run'
+            : step === 'finish'
+              ? 'finishing'
+              : 'loading';
       if (run?.status !== phase) return;
       await enqueueImportWork(tx, {
         ...this.scope,
@@ -62,6 +72,12 @@ class ImportExecution<C> {
       const resolved = await this.deps.resolve(this.scope);
       const result = await runImportExtraction({ ...base, ...resolved, scope: this.scope, claim });
       if (result.state === 'deferred') await this.request('extract', result.retryAfterMs);
+      return;
+    }
+    if (name === 'import.dry_run') {
+      const result = await runImportDryRunBatch({ ...base, resolve: this.deps.resolve }, claim);
+      if (result.state === 'more')
+        await this.inRun((tx) => continueImportWork(tx, { claim, step: 'dry_run' }));
       return;
     }
     if (name === 'import.load') {
@@ -100,11 +116,7 @@ class ImportExecution<C> {
     if (result.state === 'more')
       await this.inRun((tx) => continueImportWork(tx, { claim, step: 'finish' }));
   }
-  async failure(
-    claim: ImportClaim,
-    error: unknown,
-    step: 'extract' | 'load' | 'attachments' | 'finish',
-  ) {
+  async failure(claim: ImportClaim, error: unknown, step: ImportWorkStep) {
     if (error instanceof ImportClaimLost) return;
     if (error instanceof RateLimited) {
       const deadline = new Date(Date.now() + error.retryAfterMs);
@@ -145,9 +157,16 @@ export function createImportProcessor<C>(deps: Dependencies<C>) {
     if (!Object.hasOwn(definitions, job.name)) throw new Error('import.unknown-job');
     const name = job.name as keyof typeof definitions;
     const scope = parseJobPayloadOrFail(definitions[name], job.data);
-    const step = name.slice('import.'.length) as 'extract' | 'load' | 'attachments' | 'finish';
+    const step = name.slice('import.'.length) as ImportWorkStep;
     const execution = new ImportExecution(deps, scope, job.id ?? name);
-    const phase = step === 'extract' ? 'extracting' : step === 'finish' ? 'finishing' : 'loading';
+    const phase =
+      step === 'extract'
+        ? 'extracting'
+        : step === 'dry_run'
+          ? 'dry_run'
+          : step === 'finish'
+            ? 'finishing'
+            : 'loading';
     if (!(await execution.inRun((tx) => importWorkRunnable(tx, scope.brandId, scope.runId, step))))
       return;
     const claim = await execution.inRun((tx) => claimImportRun(tx, { ...scope, phase }));

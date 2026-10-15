@@ -8,6 +8,8 @@ import {
   ImportConnectionResultDto,
   ImportContactPreviewDto,
   ImportContactPreviewQueryDto,
+  ImportDryRunReportDto,
+  ImportDryRunRequestDto,
   ImportMappingsRequestDto,
   ImportMappingsViewDto,
   ImportPreviewSamplesDto,
@@ -93,6 +95,22 @@ export class ImportsController {
     @Body(new ZodValidationPipe(ImportScopeDto)) body: ImportScopeDto,
   ) {
     return this.imports.scope(requireTicketingContext(), runId, body);
+  }
+  @Get(':runId/dry-run')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportDryRunReportDto)
+  dryRunReport(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.dryRunReport(requireTicketingContext(), runId);
+  }
+  @Post(':runId/dry-run')
+  @HttpCode(200)
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  dryRun(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Body(new ZodValidationPipe(ImportDryRunRequestDto)) body: ImportDryRunRequestDto,
+  ) {
+    return this.imports.dryRun(requireTicketingContext(), runId, body);
   }
   @Post(':runId/pause')
   @HttpCode(200)

@@ -100,3 +100,11 @@ export const importMappingsViewSchema = z.strictObject({
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
 });
 export type ImportMappingsRequest = z.infer<typeof importMappingsRequestSchema>;
+
+export const importDryRunRequestSchema = z.strictObject({
+  defaultCallingCode: z
+    .string()
+    .regex(/^\d{0,4}$/)
+    .default(''),
+});
+export type ImportDryRunRequest = z.infer<typeof importDryRunRequestSchema>;

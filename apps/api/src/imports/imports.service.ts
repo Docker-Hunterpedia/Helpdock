@@ -1,9 +1,10 @@
 import { encryptSecret, type Keyring } from '@helpdock/config';
-import { auditLog, importMappings, importRuns } from '@helpdock/db';
+import { auditLog, importMappings, importRecords, importRuns } from '@helpdock/db';
 import type { Connector, ConnectorContext, ZendeskCredentials } from '@helpdock/importers';
 import {
   type ImportConnectionRequest,
   type ImportContactPreviewQuery,
+  type ImportDryRunRequest,
   type ImportMappingsRequest,
   type ImportRunCreate,
   type ImportScope,
@@ -11,6 +12,7 @@ import {
   importConnectionRequestSchema,
   importConnectionResultSchema,
   importContactPreviewQuerySchema,
+  importDryRunRequestSchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
   importRunCreateSchema,
@@ -30,12 +32,14 @@ import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { enqueueImportWork } from './import-events.js';
 import { importRunView } from './import-run-view.js';
 import { lockImportBrand } from './jobs/claims.js';
+import { importDryRunCheckpointSchema } from './jobs/dry-run-state.js';
 import { importInputFingerprint } from './jobs/input-fingerprint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-control.js';
 import { ImportMappingEditError, saveImportMappings } from './jobs/save-mappings.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
 import { ImportLoadError } from './loader/contracts.js';
 import { previewImportedContactRecord } from './preflight/contact-preview.js';
+import { importDryRunReport } from './preflight/dry-run-report.js';
 import { importPreviewSamples } from './preflight/preview-samples.js';
 import { previewImportedTicket } from './preflight/ticket-preview.js';
 
@@ -187,16 +191,65 @@ export class ImportsService {
     await this.audit(context, 'import.scope-updated', runId);
     return this.get(context, runId);
   }
+  async dryRunReport({ tx, brandId }: TicketingContext, runId: string) {
+    try {
+      return await importDryRunReport(tx, { brandId, runId });
+    } catch (error) {
+      throw importPreviewHttpError(error);
+    }
+  }
+  async dryRun(context: TicketingContext, runId: string, raw: ImportDryRunRequest) {
+    const input = importDryRunRequestSchema.parse(raw);
+    const { tx, brandId } = context;
+    await lockImportBrand(tx, brandId);
+    const run = await this.get(context, runId);
+    if (!['awaiting_mapping', 'ready'].includes(run.status) || !run.hasCredentials)
+      throw new ConflictException('import.phase-invalid');
+    const scope = { brandId, runId };
+    const checkpoint = importDryRunCheckpointSchema.parse({
+      version: 2,
+      phase: 'records',
+      fingerprint: await importInputFingerprint(tx, scope),
+      defaultCallingCode: input.defaultCallingCode,
+      after: null,
+      checked: 0,
+      issueCount: 0,
+      issues: [],
+    });
+    await tx
+      .update(importRecords)
+      .set({ dryRunIdentity: null })
+      .where(and(eq(importRecords.brandId, brandId), eq(importRecords.runId, runId)));
+    await tx
+      .update(importRuns)
+      .set({
+        status: 'dry_run',
+        dryRunReport: checkpoint,
+        claimToken: null,
+        claimedAt: null,
+        counts: sql`${importRuns.counts} - 'retryAt' - 'retryFailures' - 'recoveryRequestedAt'`,
+      })
+      .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
+    await enqueueImportWork(tx, { ...scope, step: 'dry_run' });
+    await this.audit(context, 'import.dry-run-started', runId);
+    return this.get(context, runId);
+  }
   async control(context: TicketingContext, runId: string, action: 'pause' | 'resume' | 'cancel') {
     await this.get(context, runId);
     const scope = { brandId: context.brandId, runId };
     if (action === 'resume') {
       const phase = await resumeImportRun(context.tx, scope);
       if (!phase) throw new ConflictException('import.phase-invalid');
-      if (phase === 'dry_run') throw new ConflictException('import.phase-unavailable');
       await enqueueImportWork(context.tx, {
         ...scope,
-        step: phase === 'extracting' ? 'extract' : phase === 'finishing' ? 'finish' : 'load',
+        step:
+          phase === 'extracting'
+            ? 'extract'
+            : phase === 'dry_run'
+              ? 'dry_run'
+              : phase === 'finishing'
+                ? 'finish'
+                : 'load',
       });
     } else {
       const changed = await (action === 'pause'

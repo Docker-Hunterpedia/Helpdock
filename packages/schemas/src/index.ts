@@ -24,6 +24,7 @@ export * from './help-center-site.js';
 export * from './identity-rules.js';
 export * from './import.js';
 export * from './import-api.js';
+export * from './import-dry-run.js';
 export * from './import-mappings.js';
 export * from './import-preview.js';
 export * from './install.js';

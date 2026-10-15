@@ -517,3 +517,15 @@ source count with at most 100 samples, without reading the complete identity gra
 into worker memory. This changes only staging; it does not merge people/companies
 or approve loading. Final approval must still validate input and live-target
 freshness, media completeness and the other dry-run checks.
+
+
+### 2026-10-15 — resumable dry-run work and explicit review boundary
+
+Add `import.dry_run` to the existing import queue/outbox protocol rather than
+running whole-source validation inside an HTTP request. Each delivery checkpoints
+one bounded step using the same fenced claims and retry/recovery controls as
+loading. The request body and queue payload contain no credentials. Validation
+completion retains a bounded public report, releases the claim and returns to
+`awaiting_mapping` for review, regardless of whether errors were found. It does
+not set `ready` or authorize loading. Approval requires the remaining freshness
+and completeness checks; a report's `complete` flag must never serve as approval.

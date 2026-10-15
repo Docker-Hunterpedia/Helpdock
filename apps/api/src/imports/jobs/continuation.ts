@@ -1,7 +1,7 @@
 import { auditLog, type DbTransaction, importLog, importRuns } from '@helpdock/db';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { enqueueImportWork } from '../import-events.js';
+import { enqueueImportWork, type ImportWorkStep } from '../import-events.js';
 import { type ImportClaim, renewImportClaim } from './claims.js';
 
 /** Release ownership and publish the next phase request in the same checkpoint transaction. */
@@ -9,7 +9,7 @@ export async function continueImportWork(
   tx: DbTransaction,
   request: {
     claim: ImportClaim;
-    step: 'extract' | 'load' | 'attachments' | 'finish';
+    step: ImportWorkStep;
     delayMs?: number;
     preserveFailures?: boolean;
   },
@@ -96,7 +96,7 @@ export async function deferImportVendorFailure(
   tx: DbTransaction,
   request: {
     claim: ImportClaim;
-    step: 'extract' | 'load' | 'attachments' | 'finish';
+    step: ImportWorkStep;
   },
 ) {
   await renewImportClaim(tx, request.claim);

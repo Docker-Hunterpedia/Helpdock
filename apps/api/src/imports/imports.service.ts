@@ -3,12 +3,14 @@ import { auditLog, importMappings, importRuns } from '@helpdock/db';
 import type { Connector, ConnectorContext, ZendeskCredentials } from '@helpdock/importers';
 import {
   type ImportConnectionRequest,
+  type ImportContactPreviewQuery,
   type ImportMappingsRequest,
   type ImportRunCreate,
   type ImportScope,
   type ImportTicketPreviewQuery,
   importConnectionRequestSchema,
   importConnectionResultSchema,
+  importContactPreviewQuerySchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
   importRunCreateSchema,
@@ -33,12 +35,21 @@ import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-con
 import { ImportMappingEditError, saveImportMappings } from './jobs/save-mappings.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
 import { ImportLoadError } from './loader/contracts.js';
+import { previewImportedContactRecord } from './preflight/contact-preview.js';
+import { importPreviewSamples } from './preflight/preview-samples.js';
 import { previewImportedTicket } from './preflight/ticket-preview.js';
 
 export type ImportConnectionFactory = (request: ImportConnectionRequest) => {
   connector: Connector<ZendeskCredentials>;
   context: ConnectorContext<ZendeskCredentials>;
 };
+
+function importPreviewHttpError(error: unknown) {
+  if (!(error instanceof ImportLoadError)) throw error;
+  return error.code === 'target-unavailable'
+    ? new NotFoundException('import.preview-not-found')
+    : new ConflictException(`import.${error.code}`);
+}
 
 export class ImportsService {
   constructor(
@@ -59,10 +70,7 @@ export class ImportsService {
     try {
       return await previewImportedTicket(context.tx, { brandId: context.brandId, runId, ...query });
     } catch (error) {
-      if (!(error instanceof ImportLoadError)) throw error;
-      if (error.code === 'target-unavailable')
-        throw new NotFoundException('import.preview-not-found');
-      throw new ConflictException(`import.${error.code}`);
+      throw importPreviewHttpError(error);
     }
   }
   async list({ tx, brandId }: TicketingContext) {
@@ -73,6 +81,25 @@ export class ImportsService {
       .orderBy(desc(importRuns.createdAt), desc(importRuns.id))
       .limit(100);
     return importRunListSchema.parse({ runs: runs.map(importRunView) });
+  }
+  async previewContact(context: TicketingContext, runId: string, raw: ImportContactPreviewQuery) {
+    const query = importContactPreviewQuerySchema.parse(raw);
+    try {
+      return await previewImportedContactRecord(context.tx, {
+        brandId: context.brandId,
+        runId,
+        ...query,
+      });
+    } catch (error) {
+      throw importPreviewHttpError(error);
+    }
+  }
+  async previewSamples({ tx, brandId }: TicketingContext, runId: string) {
+    try {
+      return await importPreviewSamples(tx, { brandId, runId });
+    } catch (error) {
+      throw importPreviewHttpError(error);
+    }
   }
   async create(context: TicketingContext, raw: ImportRunCreate) {
     const input = importRunCreateSchema.parse(raw);

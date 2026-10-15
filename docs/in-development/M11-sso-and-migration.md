@@ -2758,9 +2758,33 @@ foreign-brand run hiding and cookie-only refusal. A customer source identity
 presented as an agent now returns 409 without its name instead of misleading
 the reviewer. The real Postgres/Redis HTTP suite passes six scenarios.
 
-Sample selection, contact previews, complete dry-run report/approval, queue entry
-points and the EN/AR review UI remain unfinished; this endpoint does not approve
-or start an import.
+Complete dry-run report/approval, queue entry points and the EN/AR review UI
+remain unfinished; this endpoint does not approve or start an import. Contact
+previews and bounded sample selection are described below.
+
+### Contact and sample preview APIs (M11-16, in progress)
+
+Staff with `brand:manage` can now call
+`GET /api/brands/:brandId/imports/:runId/preview/contact?externalId=...` and
+`GET /api/brands/:brandId/imports/:runId/preview/samples`. Contact preview returns
+the normalized source details alongside the loader's read-only identity/company
+plan. Notes, descriptions, original dates, locale/timezone and identity provenance
+stay visible without upgrading verification or changing local names/company links.
+`defaultCallingCode` is an optional digit-only query setting for phone planning;
+refused phones remain explicit in the plan. Proposed companies allocate no ID.
+
+Sample selection returns at most three ticket IDs and three contact IDs, in stable
+source-ID order, within the requested brand/run. It is a navigation aid, not a
+claim of representative coverage or approval. All preview readers share the same
+run-state guard. Lookup queries reject NUL/blank IDs before PostgreSQL; invalid
+source custom values become safe 409 conflicts without echoing values. Unexpected
+database errors still propagate. DTOs define strict output serialization/OpenAPI.
+
+The real-session HTTP suite now covers fourteen routes across nine scenarios:
+role/guest refusal, preserved source/local contact data and verification, no company
+creation, mapped-value errors, deterministic bounded samples and both same-brand
+other-run and foreign-brand exclusion. Five preview schema cases also pass.
+The full dry-run report, execution/approval entry points and EN/AR UI remain unfinished.
 
 ## M11-13 Freshdesk connector
 

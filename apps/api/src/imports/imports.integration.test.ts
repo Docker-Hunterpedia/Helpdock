@@ -1,8 +1,12 @@
 import { createKeyring, decodeMasterKey, decryptSecret } from '@helpdock/config';
 import {
+  accounts,
   brands,
+  contactIdentities,
+  contacts,
   createDb,
   type DbHandle,
+  importMappings,
   importRecords,
   importRuns,
   outbox,
@@ -141,6 +145,8 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ['POST', root(), { source: 'zendesk' }],
       ['GET', `${root()}/${id}`, undefined],
       ['GET', `${root()}/${id}/preview/ticket?externalId=42`, undefined],
+      ['GET', `${root()}/${id}/preview/contact?externalId=42`, undefined],
+      ['GET', `${root()}/${id}/preview/samples`, undefined],
       [
         'PUT',
         `${root()}/${id}/connection`,
@@ -269,6 +275,299 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       headers: { cookie: '__Secure-hd_refresh=untrusted', origin: 'https://attacker.example' },
     });
     expect(csrf.statusCode).toBe(401);
+  });
+
+  it('previews source contact details and proposed companies while preserving local identity and company links', async () => {
+    const runId = uuidv7();
+    const accountId = uuidv7();
+    const contactId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId,
+      source: 'zendesk',
+      status: 'awaiting_mapping',
+      startedBy: adminId,
+    });
+    await owner.db
+      .insert(accounts)
+      .values({ id: accountId, brandId, name: 'Local company', domain: 'local.test' });
+    await owner.db
+      .insert(contacts)
+      .values({ id: contactId, brandId, name: 'Local person', accountId });
+    await owner.db.insert(contactIdentities).values({
+      brandId,
+      contactId,
+      kind: 'email',
+      value: 'local@example.test',
+      verified: false,
+      source: 'agent',
+    });
+    const records = [
+      {
+        entity: 'organization',
+        payload: {
+          externalId: 'source-company',
+          name: 'Source company',
+          domains: ['source.test'],
+          custom: {},
+        },
+      },
+      {
+        entity: 'contact',
+        payload: {
+          externalId: 'source-person',
+          name: 'Source person',
+          emails: ['LOCAL@EXAMPLE.TEST'],
+          phones: ['invalid'],
+          organizationExternalId: 'source-company',
+          custom: {},
+          notes: 'Original notes',
+          description: 'Original description',
+          createdAt: '2018-01-01T00:00:00Z',
+          updatedAt: '2019-01-01T00:00:00Z',
+          locale: 'ar',
+          timezone: 'Asia/Damascus',
+          sourceIdentities: [
+            {
+              externalId: 'native-email',
+              type: 'email',
+              value: 'LOCAL@EXAMPLE.TEST',
+              verificationMethod: 'source-verified',
+            },
+          ],
+        },
+      },
+    ].map((record) => importRecordSchema.parse(record));
+    await owner.db.insert(importRecords).values(
+      records.map((native) => ({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      })),
+    );
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contacts WHERE id = ${contactId}`,
+    );
+    const identityBefore = await owner.db.execute(
+      sql`SELECT id, verified, xmin::text AS revision FROM contact_identities WHERE contact_id = ${contactId}`,
+    );
+    const url = `${root()}/${runId}/preview/contact?externalId=source-person`;
+    const response = await call('GET', url, adminToken);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      source: {
+        name: 'Source person',
+        notes: 'Original notes',
+        description: 'Original description',
+        createdAt: '2018-01-01T00:00:00Z',
+        updatedAt: '2019-01-01T00:00:00Z',
+        locale: 'ar',
+        timezone: 'Asia/Damascus',
+        sourceIdentities: [{ verificationMethod: 'source-verified' }],
+      },
+      plan: {
+        action: 'link',
+        contactId,
+        accountId,
+        sourceAccountId: null,
+        name: 'Local person',
+        sourceName: 'Source person',
+        refusedPhones: 1,
+        identifiers: [{ kind: 'email', value: 'local@example.test' }],
+        organization: { action: 'create', accountId: null, name: 'Source company' },
+      },
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contacts WHERE id = ${contactId}`,
+      ),
+    ).toEqual(before);
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, verified, xmin::text AS revision FROM contact_identities WHERE contact_id = ${contactId}`,
+      ),
+    ).toEqual(identityBefore);
+    expect(
+      (await owner.db.select().from(accounts).where(eq(accounts.brandId, brandId))).filter(
+        (account) => account.domain === 'source.test',
+      ),
+    ).toEqual([]);
+    expect((await call('GET', `${url}&defaultCallingCode=invalid`, adminToken)).statusCode).toBe(
+      400,
+    );
+    expect(
+      (await call('GET', `${root()}/${runId}/preview/contact?externalId=%00`, adminToken))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (await call('GET', `${root()}/${runId}/preview/ticket?externalId=%00`, adminToken))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (await call('GET', `${root()}/${runId}/preview/contact?externalId=missing`, adminToken))
+        .statusCode,
+    ).toBe(404);
+  });
+
+  it('returns a safe conflict for invalid contact custom values instead of a server error or raw source value', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId,
+      source: 'zendesk',
+      status: 'awaiting_mapping',
+      startedBy: adminId,
+    });
+    const records = [
+      {
+        entity: 'field',
+        payload: {
+          externalId: 'age-field',
+          target: 'contact',
+          key: 'source_age',
+          label: 'Age',
+          type: 'number',
+        },
+      },
+      {
+        entity: 'contact',
+        payload: {
+          externalId: 'invalid-contact',
+          name: 'Source person',
+          emails: [],
+          phones: [],
+          custom: { source_age: 'private-invalid-number' },
+        },
+      },
+    ].map((record) => importRecordSchema.parse(record));
+    await owner.db.insert(importRecords).values(
+      records.map((native) => ({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      })),
+    );
+    await owner.db.insert(importMappings).values({
+      brandId,
+      runId,
+      kind: 'field',
+      externalValue: 'age-field',
+      target: {
+        kind: 'create',
+        definition: { target: 'contact', key: 'mapped_age', label: 'Age', type: 'number' },
+      },
+    });
+    const response = await call(
+      'GET',
+      `${root()}/${runId}/preview/contact?externalId=invalid-contact`,
+      adminToken,
+    );
+    expect(response.statusCode).toBe(409);
+    expect(response.body).not.toContain('private-invalid-number');
+  });
+
+  it('selects at most three stable sample IDs per entity only from the requested brand and run', async () => {
+    const runId = uuidv7();
+    const foreignRunId = uuidv7();
+    const otherRunId = uuidv7();
+    await owner.db.insert(importRuns).values([
+      { id: runId, brandId, source: 'zendesk', status: 'awaiting_mapping', startedBy: adminId },
+      {
+        id: otherRunId,
+        brandId,
+        source: 'zendesk',
+        status: 'awaiting_mapping',
+        startedBy: adminId,
+      },
+      {
+        id: foreignRunId,
+        brandId: otherBrandId,
+        source: 'zendesk',
+        status: 'awaiting_mapping',
+        startedBy: adminId,
+      },
+    ]);
+    const rows = ['d', 'b', 'c', 'a']
+      .flatMap((externalId) => [
+        {
+          entity: 'contact',
+          payload: { externalId, name: 'Source person', emails: [], phones: [], custom: {} },
+        },
+        {
+          entity: 'ticket',
+          payload: {
+            externalId,
+            subject: 'Source ticket',
+            status: 'open',
+            ccEmails: [],
+            tags: [],
+            custom: {},
+            createdAt: '2019-01-01T00:00:00Z',
+            updatedAt: '2019-01-02T00:00:00Z',
+          },
+        },
+      ])
+      .map((record) => importRecordSchema.parse(record));
+    await owner.db.insert(importRecords).values(
+      rows.map((native) => ({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      })),
+    );
+    const foreign = importRecordSchema.parse({
+      entity: 'contact',
+      payload: {
+        externalId: '000-foreign',
+        name: 'Private person',
+        emails: [],
+        phones: [],
+        custom: {},
+      },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId: otherBrandId,
+      runId: foreignRunId,
+      entity: foreign.entity,
+      externalId: foreign.payload.externalId,
+      payload: foreign.payload,
+      payloadHash: hashImportValue(foreign.payload),
+    });
+    const other = importRecordSchema.parse({
+      entity: 'contact',
+      payload: {
+        externalId: '000-other-run',
+        name: 'Other run',
+        emails: [],
+        phones: [],
+        custom: {},
+      },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId: otherRunId,
+      entity: other.entity,
+      externalId: other.payload.externalId,
+      payload: other.payload,
+      payloadHash: hashImportValue(other.payload),
+    });
+    const url = `${root()}/${runId}/preview/samples`;
+    const first = await call('GET', url, adminToken);
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({ tickets: ['a', 'b', 'c'], contacts: ['a', 'b', 'c'] });
+    expect((await call('GET', url, adminToken)).json()).toEqual(first.json());
+    expect(
+      (await call('GET', `${root()}/${foreignRunId}/preview/samples`, adminToken)).statusCode,
+    ).toBe(404);
   });
 
   it('refuses a customer source identity presented as a staff author without exposing its name', async () => {

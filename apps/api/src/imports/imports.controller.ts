@@ -6,8 +6,11 @@ import {
   ImportBrandParamDto,
   ImportConnectionRequestDto,
   ImportConnectionResultDto,
+  ImportContactPreviewDto,
+  ImportContactPreviewQueryDto,
   ImportMappingsRequestDto,
   ImportMappingsViewDto,
+  ImportPreviewSamplesDto,
   ImportRunCreateDto,
   ImportRunListDto,
   ImportRunParamDto,
@@ -50,6 +53,21 @@ export class ImportsController {
     @Query(new ZodValidationPipe(ImportTicketPreviewQueryDto)) query: ImportTicketPreviewQueryDto,
   ) {
     return this.imports.previewTicket(requireTicketingContext(), runId, query);
+  }
+  @Get(':runId/preview/contact')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportContactPreviewDto)
+  previewContact(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Query(new ZodValidationPipe(ImportContactPreviewQueryDto)) query: ImportContactPreviewQueryDto,
+  ) {
+    return this.imports.previewContact(requireTicketingContext(), runId, query);
+  }
+  @Get(':runId/preview/samples')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportPreviewSamplesDto)
+  previewSamples(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
+    return this.imports.previewSamples(requireTicketingContext(), runId);
   }
   @Put(':runId/connection')
   @Requires('brand:manage')

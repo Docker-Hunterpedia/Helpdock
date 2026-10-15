@@ -182,3 +182,19 @@ query fields return 400. Missing/unavailable tickets or foreign-brand runs retur
 404; corrupt or oversized source history returns 409 and must be corrected before
 importing. Previewing a ticket creates no destination records and does not approve
 the run.
+
+The same permission allows contact and sample previews:
+
+- `GET /api/brands/{brandId}/imports/{runId}/preview/contact?externalId=42` returns
+  original contact details and the proposed contact/company match. It preserves
+  local names, company links and verification; a proposed new company has no ID yet.
+  Optional `defaultCallingCode` accepts up to four digits for phone normalization.
+  Refused phones are counted rather than hidden.
+- `GET /api/brands/{brandId}/imports/{runId}/preview/samples` returns up to three
+  ticket IDs and three contact IDs, ordered by source ID, from that run only.
+  Use them with the preview endpoints. They do not prove that the whole import is
+  complete or representative.
+
+Blank/NUL lookup IDs are invalid requests. Invalid mapped source values return a
+409 conflict rather than an approval or a raw-value error response. The complete
+dry-run execution/approval workflow and EN/AR review UI remain under development.

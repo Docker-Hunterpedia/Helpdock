@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { importTicketPreviewSchema } from './import-preview.js';
+import {
+  importContactPreviewQuerySchema,
+  importTicketPreviewQuerySchema,
+  importTicketPreviewSchema,
+} from './import-preview.js';
 
 const ticket = {
   externalId: '42',
@@ -56,3 +60,11 @@ it('retains ticket date ordering validation when deriving the preview field shap
     }).success,
   ).toBe(false);
 });
+
+it.each(['\u0000', '42\u0000suffix', '   '])(
+  'rejects database-invalid or blank preview lookup ID %j before querying',
+  (externalId) => {
+    expect(importTicketPreviewQuerySchema.safeParse({ externalId }).success).toBe(false);
+    expect(importContactPreviewQuerySchema.safeParse({ externalId }).success).toBe(false);
+  },
+);

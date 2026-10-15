@@ -101,3 +101,5 @@ Detect conflicting contact identifier claims across the proposed import while al
 Share organization domain matching between read-only preflight and loading, preserving local names and refusing ambiguous company links.
 
 Expose a brand-admin ticket-history preview endpoint with validated pagination, sanitized bodies, source-author checks and filtered attachment metadata. Refuse foreign-brand access and invalid source author kinds without returning source/download URL fields.
+
+Expose contact source details and read-only identity/company plans, and select up to three stable ticket/contact sample IDs within a run. Preserve local profile verification and links, and reject malformed lookup IDs or invalid mapped values before returning a preview.

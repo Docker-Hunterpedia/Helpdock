@@ -1,10 +1,14 @@
 import { z } from 'zod';
-import { importMessageSchema, importTicketSchema } from './import.js';
+import { importContactSchema, importMessageSchema, importTicketSchema } from './import.js';
+
+const previewExternalIdSchema = importTicketSchema.shape.externalId.refine(
+  (id) => !id.includes('\u0000'),
+);
 
 export const importTicketPreviewRequestSchema = z.strictObject({
   brandId: z.uuid(),
   runId: z.uuid(),
-  externalId: z.string().min(1).max(200),
+  externalId: previewExternalIdSchema,
   offset: z.int().nonnegative().max(100000).default(0),
   limit: z.int().min(1).max(50).default(20),
 });
@@ -45,4 +49,48 @@ export const importTicketPreviewSchema = z.strictObject({
       }),
     )
     .max(50),
+});
+
+export const importContactPreviewQuerySchema = z.strictObject({
+  externalId: previewExternalIdSchema,
+  defaultCallingCode: z
+    .string()
+    .regex(/^\d{0,4}$/)
+    .default(''),
+});
+export type ImportContactPreviewQuery = z.infer<typeof importContactPreviewQuerySchema>;
+export const importContactPreviewRequestSchema = importContactPreviewQuerySchema.extend({
+  brandId: z.uuid(),
+  runId: z.uuid(),
+});
+export const importContactPreviewSchema = z.strictObject({
+  source: importContactSchema,
+  plan: z.strictObject({
+    action: z.enum(['create', 'link', 'update', 'unchanged']),
+    contactId: z.uuid().nullable(),
+    accountId: z.uuid().nullable(),
+    sourceAccountId: z.uuid().nullable(),
+    name: z.string().min(1).max(200),
+    sourceName: z.string().min(1).max(200),
+    identifiers: z
+      .array(
+        z.strictObject({ kind: z.enum(['email', 'phone']), value: z.string().min(1).max(320) }),
+      )
+      .max(200),
+    refusedPhones: z.int().nonnegative(),
+    organization: z
+      .strictObject({
+        externalId: z.string().min(1).max(200),
+        action: z.enum(['create', 'link', 'update', 'unchanged', 'reuse']),
+        accountId: z.uuid().nullable(),
+        name: z.string().min(1).max(200),
+        sourceName: z.string().min(1).max(200).optional(),
+        domains: z.array(z.string().max(253)).max(100).optional(),
+      })
+      .nullable(),
+  }),
+});
+export const importPreviewSamplesSchema = z.strictObject({
+  tickets: z.array(z.string().min(1).max(200)).max(3),
+  contacts: z.array(z.string().min(1).max(200)).max(3),
 });

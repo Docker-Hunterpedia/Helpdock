@@ -1,4 +1,4 @@
-import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
+import { type DbTransaction, importRecords } from '@helpdock/db';
 import {
   type ImportMessage,
   importTicketPreviewRequestSchema,
@@ -10,6 +10,7 @@ import { type ImportRunRef, lockImportBrand } from '../jobs/claims.js';
 import { previewStagedTicketChildren } from '../jobs/load-ticket-checkpoint.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { importedMessageBody } from '../loader/message-body.js';
+import { requireImportPreviewRun } from './preview-run.js';
 import { validatedStagedRecord } from './staged-record.js';
 
 const MAX_PREVIEW_PAGE_BYTES = 4 * 1024 * 1024;
@@ -38,20 +39,7 @@ async function sourceAuthorName(tx: DbTransaction, scope: ImportRunRef, message:
 }
 
 async function previewTicketRoot(tx: DbTransaction, scope: ImportRunRef, externalId: string) {
-  const [run] = await tx
-    .select({ status: importRuns.status, pausedFrom: importRuns.pausedFrom })
-    .from(importRuns)
-    .where(and(eq(importRuns.brandId, scope.brandId), eq(importRuns.id, scope.runId)));
-  if (
-    !run ||
-    !(
-      ['awaiting_mapping', 'dry_run', 'ready', 'loading', 'finishing', 'completed'].includes(
-        run.status,
-      ) ||
-      (run.status === 'paused' && run.pausedFrom !== 'extracting')
-    )
-  )
-    throw new ImportLoadError('target-unavailable');
+  await requireImportPreviewRun(tx, scope);
   const [row] = await tx
     .select()
     .from(importRecords)

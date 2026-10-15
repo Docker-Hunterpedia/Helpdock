@@ -2,8 +2,11 @@ import {
   importBrandParamSchema,
   importConnectionRequestSchema,
   importConnectionResultSchema,
+  importContactPreviewQuerySchema,
+  importContactPreviewSchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
+  importPreviewSamplesSchema,
   importRunCreateSchema,
   importRunListSchema,
   importRunParamSchema,
@@ -27,3 +30,6 @@ export class ImportMappingsRequestDto extends createZodDto(importMappingsRequest
 export class ImportMappingsViewDto extends createZodDto(importMappingsViewSchema) {}
 export class ImportTicketPreviewQueryDto extends createZodDto(importTicketPreviewQuerySchema) {}
 export class ImportTicketPreviewDto extends createZodDto(importTicketPreviewSchema) {}
+export class ImportContactPreviewQueryDto extends createZodDto(importContactPreviewQuerySchema) {}
+export class ImportContactPreviewDto extends createZodDto(importContactPreviewSchema) {}
+export class ImportPreviewSamplesDto extends createZodDto(importPreviewSamplesSchema) {}

@@ -18,6 +18,7 @@ import {
   ImportRunParamDto,
   ImportRunViewDto,
   ImportScopeDto,
+  ImportStartRequestDto,
   ImportTicketPreviewDto,
   ImportTicketPreviewQueryDto,
 } from './dto.js';
@@ -111,6 +112,16 @@ export class ImportsController {
     @Body(new ZodValidationPipe(ImportDryRunRequestDto)) body: ImportDryRunRequestDto,
   ) {
     return this.imports.dryRun(requireTicketingContext(), runId, body);
+  }
+  @Post(':runId/start')
+  @HttpCode(200)
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportRunViewDto)
+  start(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Body(new ZodValidationPipe(ImportStartRequestDto)) body: ImportStartRequestDto,
+  ) {
+    return this.imports.start(requireTicketingContext(), runId, body);
   }
   @Post(':runId/pause')
   @HttpCode(200)

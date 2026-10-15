@@ -7,6 +7,7 @@ import {
   contacts,
   createDb,
   type DbHandle,
+  importExternalIds,
   importMappings,
   importRecords,
   importRuns,
@@ -19,11 +20,11 @@ import {
 import { hashImportValue, ImportRateLimiter } from '@helpdock/importers';
 import { FakeZendesk } from '@helpdock/importers/testing';
 import { JOB_DEFINITIONS, silentLogger as silentJobLogger } from '@helpdock/jobs';
-import { type ImportRunView, importRecordSchema } from '@helpdock/schemas';
+import { contentPolicySchema, type ImportRunView, importRecordSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { Queue, Worker } from 'bullmq';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
@@ -36,7 +37,10 @@ import {
   createImportConnectorRuntime,
   createZendeskImportConnection,
 } from './jobs/connector-runtime.js';
+import { importDestinationFingerprint } from './jobs/destination-fingerprint.js';
+import { importDryRunCheckpointSchema } from './jobs/dry-run-state.js';
 import { createImportProcessor } from './jobs/import-processor.js';
+import { importInputFingerprint } from './jobs/input-fingerprint.js';
 
 const masterKey = Buffer.alloc(32, 19).toString('base64');
 const password = 'import-test-password';
@@ -162,6 +166,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ],
       ['POST', `${root()}/${id}/extract`, undefined],
       ['POST', `${root()}/${id}/dry-run`, {}],
+      ['POST', `${root()}/${id}/start`, { reviewToken: 'a'.repeat(64) }],
       ['GET', `${root()}/${id}/dry-run`, undefined],
       ['PUT', `${root()}/${id}/scope`, { entities: ['ticket'] }],
       ['POST', `${root()}/${id}/pause`, undefined],
@@ -818,7 +823,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
             externalId: 'dry-contact',
             name: 'Source person',
             emails: [],
-            phones: ['invalid-one', 'invalid-two'],
+            phones: ['invalid-one', 'invalid-two', '0944556677'],
             custom: {},
           },
         }),
@@ -887,7 +892,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
           await queue.add(definition.name, payload, { ...definition.options, jobId, delay });
         },
       });
-      try {
+      const pump = async (running: readonly string[]) => {
         const deadline = Date.now() + 15000;
         while (Date.now() < deadline) {
           const events = await owner.db
@@ -911,9 +916,12 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
           const selected = (
             await owner.db.select().from(importRuns).where(eq(importRuns.id, runId))
           )[0];
-          if (selected?.status !== 'dry_run') break;
+          if (!selected || !running.includes(selected.status)) return;
           await waitForQueue(20);
         }
+      };
+      try {
+        await pump(['dry_run']);
         expect(failures).toEqual([]);
         const reportResponse = await call('GET', `${root()}/${runId}/dry-run`, adminToken);
         expect(reportResponse.statusCode).toBe(200);
@@ -926,7 +934,9 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
           refusedPhones: 2,
           defaultCallingCode: '963',
         });
-        expect(reportResponse.body).not.toMatch(/synthetic-token|claimToken|mediaAfter|retryAt/);
+        expect(reportResponse.body).not.toMatch(
+          /synthetic-token|claimToken|mediaAfter|retryAt|destinationFingerprint|approvedReviewToken|loadApprovalChecked/,
+        );
         expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
           status: 'awaiting_mapping',
           hasCredentials: true,
@@ -941,12 +951,61 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
             await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${runId}`)
           ).every((event) => event.event === 'import.work_requested'),
         ).toBe(true);
-        const before = reportResponse.json();
-        await queue.add('import.dry_run', { brandId, runId }, { jobId: `duplicate-${runId}` });
-        await worker.close();
-        expect((await call('GET', `${root()}/${runId}/dry-run`, adminToken)).json()).toEqual(
-          before,
-        );
+        const report = reportResponse.json<{ reviewToken: string }>();
+        expect(
+          (
+            await call('POST', `${root()}/${runId}/start`, adminToken, {
+              reviewToken: '0'.repeat(64),
+            })
+          ).statusCode,
+        ).toBe(409);
+        expect(
+          (
+            await call('POST', `${root()}/${runId}/start`, adminToken, {
+              reviewToken: report.reviewToken,
+            })
+          ).statusCode,
+        ).toBe(409);
+        if (corrupt) {
+          const blocked = await call('POST', `${root()}/${runId}/start`, adminToken, {
+            reviewToken: report.reviewToken,
+            acknowledgeWarnings: true,
+          });
+          expect(blocked.statusCode).toBe(409);
+          expect(blocked.json()).toMatchObject({ error: { message: 'import.dry-run-errors' } });
+        } else {
+          const approved = await call('POST', `${root()}/${runId}/start`, adminToken, {
+            reviewToken: report.reviewToken,
+            acknowledgeWarnings: true,
+          });
+          expect(approved.statusCode).toBe(200);
+          expect(approved.json()).toMatchObject({ status: 'loading' });
+          expect(
+            (
+              await call('POST', `${root()}/${runId}/start`, adminToken, {
+                reviewToken: report.reviewToken,
+                acknowledgeWarnings: true,
+              })
+            ).statusCode,
+          ).toBe(409);
+          await pump(['loading', 'finishing']);
+          expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
+            status: 'completed',
+            hasCredentials: false,
+          });
+          expect(
+            await owner.db
+              .select()
+              .from(contactIdentities)
+              .where(
+                and(
+                  eq(contactIdentities.brandId, brandId),
+                  eq(contactIdentities.value, '+963944556677'),
+                ),
+              ),
+          ).toMatchObject([{ source: 'import', verified: false }]);
+          expect(failures).toEqual([]);
+        }
       } finally {
         await worker.close();
         await queue.obliterate({ force: true });
@@ -957,6 +1016,176 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
     },
     30000,
   );
+  async function seedCompletedValidation() {
+    const created = await call('POST', root(), adminToken, { source: 'zendesk' });
+    const runId = created.json<ImportRunView>().id;
+    expect(
+      (
+        await call('PUT', `${root()}/${runId}/connection`, adminToken, {
+          credentials: { auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' },
+        })
+      ).statusCode,
+    ).toBe(200);
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'awaiting_mapping' })
+      .where(eq(importRuns.id, runId));
+    const native = importRecordSchema.parse({
+      entity: 'contact',
+      payload: {
+        externalId: `stale-${runId}`,
+        name: 'Must not load stale contact',
+        emails: [],
+        phones: [],
+        custom: {},
+      },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: native.entity,
+      externalId: native.payload.externalId,
+      payload: native.payload,
+      payloadHash: hashImportValue(native.payload),
+    });
+    const checkpoint = await withSystem(runtime.db, brandId, async (tx) =>
+      importDryRunCheckpointSchema.parse({
+        version: 2,
+        phase: 'media_checked',
+        fingerprint: await importInputFingerprint(tx, { brandId, runId }),
+        destinationFingerprint: await importDestinationFingerprint(tx, { brandId, runId }),
+        defaultCallingCode: '',
+        after: null,
+        checked: 1,
+        issueCount: 0,
+        issues: [],
+      }),
+    );
+    await owner.db
+      .update(importRuns)
+      .set({ dryRunReport: checkpoint })
+      .where(eq(importRuns.id, runId));
+    const report = (await call('GET', `${root()}/${runId}/dry-run`, adminToken)).json<{
+      reviewToken: string;
+    }>();
+    return { runId, reviewToken: report.reviewToken };
+  }
+  it.each(['source', 'contact', 'staff', 'policy', 'ledger'] as const)(
+    'rejects a reviewed report after a %s change without publishing load work',
+    async (changed) => {
+      const { runId, reviewToken } = await seedCompletedValidation();
+      if (changed === 'source')
+        await owner.db
+          .update(importRuns)
+          .set({ options: { entities: ['contact'] } })
+          .where(eq(importRuns.id, runId));
+      if (changed === 'contact')
+        await owner.db.insert(contacts).values({ brandId, name: 'Created after review' });
+      if (changed === 'staff')
+        await owner.db.insert(users).values({
+          email: `after-review-${runId}@example.test`,
+          name: 'Possible invite collision',
+        });
+      const [originalBrand] = await owner.db.select().from(brands).where(eq(brands.id, brandId));
+      if (!originalBrand) throw new Error('Missing brand');
+      if (changed === 'policy') {
+        const policy = contentPolicySchema.parse({});
+        policy.file.enabled = false;
+        await owner.db
+          .update(brands)
+          .set({ settings: { ...originalBrand.settings, contentPolicy: policy } })
+          .where(eq(brands.id, brandId));
+      }
+      if (changed === 'ledger') {
+        const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+        if (!stored) throw new Error('Missing run');
+        await owner.db.insert(importExternalIds).values({
+          brandId,
+          source: 'zendesk',
+          sourceAccountKey: stored.sourceAccountKey,
+          entity: 'contact',
+          externalId: `after-review-${runId}`,
+          helpdockId: uuidv7(),
+          payloadHash: 'a'.repeat(64),
+        });
+      }
+      try {
+        const refused = await call('POST', `${root()}/${runId}/start`, adminToken, {
+          reviewToken,
+          acknowledgeWarnings: true,
+        });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json()).toMatchObject({ error: { message: 'import.dry-run-stale' } });
+        expect(
+          await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${runId}`),
+        ).toEqual([]);
+        expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
+          status: 'awaiting_mapping',
+          hasCredentials: true,
+        });
+      } finally {
+        if (changed === 'policy')
+          await owner.db
+            .update(brands)
+            .set({ settings: originalBrand.settings })
+            .where(eq(brands.id, brandId));
+      }
+    },
+  );
+  it('returns a queued approval to review when destinations change before its first domain write', async () => {
+    const { runId, reviewToken } = await seedCompletedValidation();
+    const started = await call('POST', `${root()}/${runId}/start`, adminToken, { reviewToken });
+    expect(started.statusCode).toBe(200);
+    const contactId = uuidv7();
+    await owner.db
+      .insert(contacts)
+      .values({ id: contactId, brandId, name: 'Changed while the job waited' });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId} ORDER BY id`,
+    );
+    const processor = createImportProcessor({
+      db: runtime.db,
+      storage: {} as never,
+      resolve: async () => {
+        throw new Error('Stale approval must stop before vendor I/O');
+      },
+    });
+    await processor({ name: 'import.load', id: 'stale-queued-approval', data: { brandId, runId } });
+    expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
+      status: 'awaiting_mapping',
+      hasCredentials: true,
+    });
+    const report = await call('GET', `${root()}/${runId}/dry-run`, adminToken);
+    expect(report.json()).toMatchObject({
+      phase: 'invalidated',
+      complete: false,
+      reviewToken: null,
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM contacts WHERE brand_id = ${brandId} ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(
+      await owner.db.select().from(outbox).where(sql`${outbox.payload}->>'runId' = ${runId}`),
+    ).toHaveLength(1);
+    const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(stored).toMatchObject({ claimToken: null, claimedAt: null });
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+    ).toMatchObject([{ status: 'staged' }]);
+    expect(
+      await owner.db
+        .select()
+        .from(importExternalIds)
+        .where(
+          and(
+            eq(importExternalIds.brandId, brandId),
+            eq(importExternalIds.externalId, `stale-${runId}`),
+          ),
+        ),
+    ).toEqual([]);
+  });
   it('confirms mappings atomically, returns their input fingerprint and clears obsolete dry-run approval', async () => {
     const created = await call('POST', root(), adminToken, { source: 'zendesk' });
     expect(created.statusCode).toBe(201);

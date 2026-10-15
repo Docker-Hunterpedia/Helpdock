@@ -18,6 +18,11 @@ export const importDryRunCheckpointSchema = z.strictObject({
   ]),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   defaultCallingCode: callingCodeSchema,
+  destinationFingerprint: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable()
+    .default(null),
   after: importRecordCursorSchema.nullable(),
   checked: z.int().nonnegative(),
   issueCount: z.int().nonnegative(),

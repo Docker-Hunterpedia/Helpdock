@@ -109,7 +109,7 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
 | M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | planned |
 | M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | planned |
-| M11-16 | Admin: Brand › Import: runs list, the wizard (source, connect, scope, map, dry run, import, done), progress with log, pause/cancel, delta sync, the dry-run report | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api for every step and failure state; real-api browser spec importing from the Zendesk stand-in | 6 d | #198 | planned |
+| M11-16 | Admin: Brand › Import: runs list, the wizard (source, connect, scope, map, dry run, import, done), progress with log, pause/cancel, delta sync, the dry-run report | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api for every step and failure state; real-api browser spec importing from the Zendesk stand-in | 6 d | #198 | in progress |
 | M11-17 | Imported tickets in the workspace: header chip "Imported from Zendesk · #1234" with the source link, the `ticket.imported` activity line, the "Source" filter in views, the System page's Import card | DESIGN §6.3 | Playwright `en`/`ar` | 1.5 d | #199 | planned |
 | M11-18 | Import docs: `docs/guides/importing.md` (per vendor, the manual mapper, the bundle format, the cutover runbook), retention and reports guides, PRD and this doc | AGENTS.md DoD 1 | `docs-guard` | 2 d | #200 | planned |
 | M11-19 | Help Scout connector (Mailbox API 2.0: conversations, threads, customers, Docs) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #201 | later (may ship after 1.0) |
@@ -2839,6 +2839,49 @@ multi-page source scan, alongside both valid and corrupt source datasets. The
 checkpoint resume regression covers four refused phones in two contacts across
 a pause and repeat, without creating destination profiles. Full completeness and
 retention reporting, approval freshness and the review UI remain unfinished.
+
+### Review-bound approval and destination freshness (M11-10/16, in progress)
+
+Dry runs now capture a private destination fingerprint alongside their staged
+input fingerprint. A conservative SHA-256 snapshot covers destination metadata in
+500-row pages, same-brand profile/routing/field/membership/knowledge revisions,
+same-account native identity receipts, brand policy/timezone/locale/prefix/status,
+and install-wide staff-row revisions. Password/session values and full
+profile/knowledge payloads are excluded. Any staff-row update can require new
+validation; session-table changes do not. Revisions also detect committed changes
+that are later reverted; a failing test reproduced the reverted staff-state case
+before correction. Another brand's tenant rows or another
+account's receipts do not change the snapshot. Unrelated local edits can still
+invalidate a report; operators may need a quiet cutover window. Completion refuses
+changed destinations and legacy checkpoints without a destination snapshot.
+
+Completed reports expose an opaque `reviewToken` over the full checkpoint; private
+destination digests, leases and cursors stay hidden. The new seventeenth route,
+`POST /api/brands/:brandId/imports/:runId/start`, requires that exact token, a
+completed report, no errors and explicit `acknowledgeWarnings: true` when warnings
+exist. It checks current input/destination snapshots and `staff:manage` for
+invitations. Refusal publishes no load request. Approval, its internal receipt and
+`import.load` outbox event commit with the `loading` transition. Duplicate starts
+conflict. Stale approval returns 409; the owner must revalidate and review.
+
+The first load transaction rechecks queued approval before domain writes. Drift
+returns to `awaiting_mapping` with an invalidated report and retained credentials.
+An internal checked receipt avoids invalidating later batches on their own domain
+writes. Direct internal/system drivers keep their earlier semantics; public starts
+always persist the receipt. A regression reproduced omission of a national phone
+number when the processor dropped the dry run's calling code; it now forwards that
+setting into all record loading.
+
+Real Postgres/Redis tests cover the entire multi-page dry-run → warning
+acknowledgement → load → finish path, preserved/unverified normalized phones and
+terminal credential purge; blocking errors/wrong tokens/duplicate starts; source,
+contact, staff, brand-policy and receipt drift; stale queued approvals without
+profile writes; and metadata/receipt pages beyond 500 records with cross-brand
+refusal. Pure approval tests cover report binding, legacy refusal, warning/error
+policy and phase/credential restrictions. These supersede earlier progress notes
+that list approval/start and destination freshness as absent. Mixed staged/live
+hierarchy and complete omission/retention reporting, vendor acceptance and the
+EN/AR review UI remain unfinished; M11 is not complete.
 
 ## M11-13 Freshdesk connector
 

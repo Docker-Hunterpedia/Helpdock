@@ -1,223 +1,143 @@
 # Importing historical support data
 
-M11 is under development. The SSO track is complete; the import wizard, dry-run
-approval, manual mapper and additional vendor connectors are still being built.
-Do not use the current backend checkpoint as a completed migration workflow.
-Track implementation and acceptance in [the milestone plan](../in-development/M11-sso-and-migration.md).
+M11 is under development. The backend has a partial Zendesk connector, mapping,
+dry-run, preview and approval APIs. The bilingual wizard, manual mapper, additional
+connectors and complete vendor/completeness acceptance are unfinished. Do not treat
+this checkpoint as a completed migration product. Track scope and evidence in
+[the milestone plan](../in-development/M11-sso-and-migration.md).
 
-## Current staff API checkpoint
+## Staff API
 
-These routes use the authenticated staff session and require `brand:manage`.
-They are separate from the scoped public REST API. Requests and responses are
-validated with Zod and included in the generated OpenAPI document.
+All routes below use an authenticated staff session and require `brand:manage`.
+Creating staff through agent mappings additionally requires `staff:manage`.
+Inputs and outputs use Zod and the generated OpenAPI schemas. These routes are
+separate from the scoped public REST API.
 
 | Method | Path below `/api/brands/:brandId/imports` | Behavior |
 |---|---|---|
 | GET | `/` | Up to 100 newest runs, newest first |
-| POST | `/` | Create a draft using `source`, `mode`, and a completed same-brand `parentRunId` for delta mode |
-| GET | `/:runId` | Public run state and extracted/loaded/skipped counters |
+| POST | `/` | Create a draft with `source`, `mode` and a completed same-brand `parentRunId` for delta mode |
+| GET | `/:runId` | Run state and extracted/loaded/skipped counters; no worker or credential internals |
 | PUT | `/:runId/connection` | Test and encrypt credentials; bind the verified account |
-| POST | `/:runId/extract` | Start extraction through a transactional outbox event |
-| PUT | `/:runId/scope` | Select unique entity types and whether to rebuild all report history before extraction |
-| POST | `/:runId/pause` | Revoke an active worker claim and retain credentials |
-| POST | `/:runId/resume` | Resume extraction/loading/finishing with a transactional work request |
+| PUT | `/:runId/scope` | Select entity types and report-backfill scope before extraction |
+| POST | `/:runId/extract` | Start extraction through the transactional outbox |
+| GET/PUT | `/:runId/mappings` | Read/replace confirmed mappings and their input fingerprint |
+| POST | `/:runId/dry-run` | Start resumable validation |
+| GET | `/:runId/dry-run` | Read counters, issue samples and a completed report's review token |
+| GET | `/:runId/preview/ticket` | Read paged ticket history |
+| GET | `/:runId/preview/contact` | Read source details and the proposed identity/company match |
+| GET | `/:runId/preview/samples` | Select up to three ticket and three contact source IDs |
+| POST | `/:runId/start` | Approve the reviewed report and queue loading |
+| POST | `/:runId/pause` | Revoke an active claim and retain credentials |
+| POST | `/:runId/resume` | Resume extraction, validation, loading or finishing through the outbox |
 | POST | `/:runId/cancel` | Stop further work and purge credentials |
-| GET | `/:runId/mappings` | Confirmed mappings and their current input fingerprint |
-| PUT | `/:runId/mappings` | Replace confirmed mappings and invalidate an older dry-run report |
 
-Only the Zendesk factory is currently registered. A connection request has
-`credentials` and `downloadHosts`. OAuth credentials contain `auth: "oauth"`,
-`subdomain` and `accessToken`. Labelled legacy API-token credentials contain
-`auth: "api_token"`, `subdomain`, `email` and `apiToken`.
+## Connect and map
 
-`downloadHosts` is an explicit list of up to 32 exact lowercase hostnames, without
-schemes, ports or wildcards. The account API host comes from the validated
-subdomain. Every attachment redirect must stay inside the approved host list and
-pass DNS/IP checks. The UI confirmation of external download hosts is pending.
+Only the Zendesk factory is registered. A connection body contains `credentials`
+and `downloadHosts`. OAuth credentials use `auth: "oauth"`, `subdomain` and
+`accessToken`; labelled legacy API-token credentials use `auth: "api_token"`,
+`subdomain`, `email` and `apiToken`.
+
+`downloadHosts` allows up to 32 exact lowercase hostnames, without schemes, ports
+or wildcards. Every attachment redirect must stay within these approved hosts and
+pass DNS/IP checks. The account API host comes from the validated subdomain. UI
+confirmation of external download hosts is still pending.
 
 A successful connection returns the verified account and moves the run to
-`connecting`. A failed test leaves the draft unchanged. Credentials are encrypted
-under `APP_MASTER_KEY` and never returned after save; reads expose only
+`connecting`. A refused test leaves the draft unchanged. Credentials are encrypted
+under `APP_MASTER_KEY` and never returned after saving; reads expose only
 `hasCredentials`. Delta connection refuses an account different from its completed
-parent. Extraction can start once from `connecting`, commits its queue request
-with its state change, and eventually stops at `awaiting_mapping`.
+parent. Extraction starts once from `connecting` and ends at `awaiting_mapping`.
 
-Scope updates accept nonempty, unique `entities` and `rebuildAllReports`; saved
-scope appears in run reads. Connection updates preserve it. Scope is frozen once
-extraction starts. Date-range filtering, automatic mapping proposals, dry-run and load approval are
-pending. Mapping confirmation is available after extraction; automatic mapping
-proposals and the read-only dry-run validator are still pending. Resume of a paused dry-run is refused until its consumer is implemented.
-Cancel does not remove history already imported. Imports preserve original history through the direct writer and must not
-send customer communications or start SLA timers. The completed cutover runbook
-and vendor-specific acceptance evidence will be added with those workflows.
+Scope accepts nonempty, unique `entities` and `rebuildAllReports`. It is frozen
+once extraction starts. Date-range filtering, paged run listing, automatic mapping
+proposals and the manual mapper are unfinished.
 
-## Mapping confirmation checkpoint
+PUT mappings accepts `{ "mappings": [...] }` using the shared schemas' status,
+priority, channel, group, agent, field and tag target shapes. Each kind/source-value
+pair is unique. Saving from `awaiting_mapping` or `ready` clears the old report;
+edits during extraction or loading are refused. The returned input fingerprint
+covers source account/options, staged metadata and confirmed mappings. It is not
+an approval or a substitute for validation.
 
-PUT mappings takes `{ "mappings": [...] }`, with the documented status, priority,
-channel, group, agent, field and tag target shapes from the shared import schemas.
-Each kind/source-value pair is unique. Invited-agent mappings additionally require
-`staff:manage`. Saving from awaiting_mapping or ready returns to awaiting_mapping
-and clears the previous dry-run report. Edits during extraction/loading are refused.
+## Validate and inspect
 
-The returned fingerprint covers the run's source account/options, staged record
-identifiers/hashes/parents/status and confirmed mappings. It is a paged metadata
-snapshot, not a validation result or authorization to start loading. It does not
-fetch attachments or create contacts, tickets, staff or fields. The pending dry-run
-validator must verify actual payload integrity, relationships, destination targets
-and completeness before approving a report.
+1. Send `POST /api/brands/{brandId}/imports/{runId}/dry-run` with `{}` or
+   `{ "defaultCallingCode": "963" }`. Duplicate starts or unavailable phases
+   return 409; malformed settings return 400.
+2. Poll `GET /api/brands/{brandId}/imports/{runId}/dry-run`. A report that does
+   not exist returns 404. Validation returns to `awaiting_mapping` for review.
+3. Inspect previews and correct blocking errors. Rerun validation after edits.
+   Pause/resume retains committed progress; recovery also handles abandoned claims.
 
-The read-only preflight foundation checks staged IDs/hashes/parents and required
-source relationships. Prior identities may satisfy delta references only within
-the same brand, vendor and verified account. Corrupted or missing references and
-mismatched attachment parents/metadata block validation. The complete dry-run
-consumer, destination checks, availability report and UI remain under development;
-these structural checks do not authorize loading.
+The report exposes checked counters, full error/warning totals and at most 500
+issue samples. Totals can exceed displayed samples. `refusedPhones` counts phone
+numbers that cannot be normalized; each affected contact contributes one
+`phone-refused` warning without exposing phone values. A completed report can
+contain blocking errors. `complete: true` alone never authorizes loading.
 
-Staged category, section and translation cycles are structural blockers, including
-cycles reached through an otherwise valid prefix. Live destination hierarchy and
-complete dry-run approval are still pending.
+Validation checks staged integrity/references, staged hierarchy cycles, routing,
+required/custom field values, live mapping targets, combined field/invitation
+plans and contact/company identity collisions across record pages. Prior delta
+identities are reused only in the same brand/vendor/account. Ambiguous existing
+matches or different new destinations sharing an identity block validation;
+source aliases may link to the same existing local profile. Linking preserves
+local names, company links and verification. Imports do not automatically merge
+people or send invitations.
 
-Individual live mapping destinations are checked for brand ownership, eligible
-staff membership, department/team consistency and field binding/key conflicts.
-Those checks provision no users or fields. Validation of the complete creation
-plan, ticket department eligibility, custom values and contact identity choices
-still belongs to the pending full dry-run engine.
+Attachment validation downloads one bounded file at a time to temporary storage,
+checks bytes and content policy, and removes the temporary file. Missing files
+produce warnings; policy refusals produce errors. Throttling/transient failures
+do not advance the file cursor. These checks do not replace final image processing
+or antivirus work during loading.
 
-Field mappings are also evaluated as a complete plan: duplicate destinations and
-combined additions over the per-target limit are blocked before creation. Reused
-bindings count only in the same brand/vendor/account; deleted bindings and
-redirects are refused. Complete value/contact validation and dry-run approval
-remain pending.
+Validation also snapshots local destination revisions. Changes to destination
+profiles, memberships, field/routing definitions, knowledge hierarchy, brand
+policy or same-account import identities can invalidate it. Staff-row revisions are checked install-wide because invitation emails are unique
+across the install. Password values are never read, but any staff-row update can
+require validation again. Session-table changes do not affect this snapshot.
+This is conservative: unrelated destination edits can require validation again.
+Use a quiet cutover window if active edits repeatedly invalidate a run. The worker
+retains bounded metadata pages rather than full profile/knowledge bodies.
 
-Ticket routing checks the selected staff member's department access using the same
-rule as loading. New invitations must include the ticket department; reused
-invitations cannot widen an existing membership. A new invitation colliding with
-an existing email is blocked and must be mapped explicitly. These checks create no
-users or jobs; the complete dry-run workflow is still under development.
+Ticket previews accept `externalId`, `offset` (default 0) and `limit` (default 20,
+maximum 50). They return chronological public messages/private notes with original
+dates, staged source-author names and attachment metadata. Follow `nextOffset`
+until null; the 4 MiB message-entry budget never truncates an individual message.
+Preview and storage use the same safe body renderer. Source/download URL fields
+and mail transport headers are omitted.
 
-The invitation plan also rejects case-insensitive duplicate emails among new
-source agents, including duplicates in separate validation batches. Same-account
-reused identities create no new invitation; another account’s binding cannot
-exempt a duplicate. These read-only checks are not yet a complete dry-run workflow.
+Contact previews accept `externalId` and optional `defaultCallingCode`. They show
+original notes, dates, locale, identity provenance and a separate source-company
+plan; a proposed new company has no allocated ID. Use the dry run's calling code
+when comparing the plan. Sample selection returns up to three source IDs of each
+type, ordered by source ID. It aids navigation and does not prove representative
+coverage. Blank/NUL lookup IDs return 400, missing or foreign-brand records return
+404, and corrupt/oversized history or invalid mapped values return 409.
 
-Custom value preflight uses the same conversion, required-field and choice rules
-as loading against existing or proposed definitions. Unknown source keys and
-invalid values are blocked; only confirmed skips remove values. Projections create
-no definitions and do not yet constitute the complete dry-run approval workflow.
+## Approve and load
 
-Contact planning uses normalized identifiers to show create/link/update/unchanged
-outcomes. Multiple existing identity matches block the plan; imports do not merge
-people automatically. Local names, company links and verification are preserved
-when linking, and source values are shown separately. Complete cross-source
-contact planning and the dry-run UI remain under development.
+Send `POST /api/brands/{brandId}/imports/{runId}/start` with the completed report's
+`reviewToken`. If warnings are acceptable after inspection, include
+`"acknowledgeWarnings": true`. Do not acknowledge omissions without checking them.
 
-When distinct newly proposed contacts share a normalized identifier, preflight
-requires review rather than implicitly combining their histories. Source aliases
-may still link to the same existing local person. Unchanged receipts add nothing
-and do not claim historical identifiers again. Complete dry-run orchestration
-and the review UI remain under development.
+Blocking errors return 409 even when warnings are acknowledged. A wrong token,
+changed source/mappings or changed destinations returns `import.dry-run-stale`
+inside the standard error envelope, with status 409. Rerun validation and review
+the new report. Missing warning acknowledgement returns
+`import.warnings-not-acknowledged`. Paused, terminal or already-loading runs cannot
+start again.
 
-Organization planning uses the loader’s normalized domains and imported aliases
-to show create/link/update/unchanged outcomes without creating companies. Ambiguous
-company matches are blocked and local names are preserved. Contact previews include
-a separate source-company plan, including companies that would be created. They
-preserve existing local company links and refuse missing company references or
-references belonging to another source account. The complete dry-run workflow
-and its review UI remain under development.
+Approval and its load request commit atomically through the outbox. The worker
+rechecks the approved snapshot before its first domain write; if the queued report
+has become stale, it returns to review without loading and retains credentials.
+The calling code used by validation is also used by loading. Later batches retain
+their approval receipt while normal loader checks still validate live targets.
 
-Staged-record preflight scans in bounded pages and reports safe source-record IDs
-and error codes for integrity, references, routing and profile-value failures.
-It changes neither staged statuses nor destination profiles. These page checks
-are part of the dry-run foundation; they do not authorize starting an import.
-
-The internal record scan stores progress between batches and resumes from its
-last committed cursor. A pause invalidates the old worker's authority; staged
-input changes invalidate the scan. Finishing these checks alone does not make a
-run ready. Dry-run entry points and the complete approval report are still under
-development.
-
-The internal dry run also checks live mapping destinations and combined field and
-invitation plans. Duplicate destination keys and invitation emails block the plan;
-diagnostics identify source records without exposing invitation email values.
-These checks create no fields or memberships and send no invitations. Media
-completeness and final approval still need to be
-connected before the dry-run workflow is available.
-
-The internal identity phase now detects contact/company collisions across scan
-pages. Different proposed destinations sharing an email, phone or domain require
-review; source aliases already targeting one existing profile are permitted.
-Reports include the total affected sources with up to 100 samples. Compact hashed
-claims stay in protected staging so the worker does not hold the complete profile
-graph in memory. Media completeness, final approval and the review UI still remain
-under development.
-
-Internal ticket preflight requires all mandatory ticket custom values, matching
-the loader's creation rules. An incomplete ticket cannot pass this check merely
-because a partial update would have been valid.
-
-Internal attachment preflight now downloads one source file at a time into a
-temporary file, checks its bytes and the brand's content policy, then removes it.
-It creates no storage object or attachment row. Missing source files produce
-explicit warnings; policy refusals produce errors. Vendor throttling or temporary
-failures do not advance progress. Tightening the content policy invalidates a prior
-media result. These checks do not replace final image processing or antivirus work
-when importing. The complete dry-run report, approval and UI are still unfinished.
-
-Internal ticket previews now show chronological public messages and private notes
-with original dates, source-author names when staged, and attachment metadata.
-History is paged rather than truncated. Preview and stored messages use the same
-safe body renderer. Source-link/download URL fields and mail transport headers are
-excluded. Ticket previews are available through the API below; the complete review
-UI is still under development.
-Pages have a 4 MiB message-entry budget, except that a single larger message stays
-complete on its own page. Later history remains available through pagination.
-
-Staff with brand-management permission can request:
-
-`GET /api/brands/{brandId}/imports/{runId}/preview/ticket?externalId=42&offset=0&limit=20`
-
-The response includes `messageCount`, `messages` and `nextOffset`. Request the
-returned offset to continue; null means the end of the thread. Invalid or unknown
-query fields return 400. Missing/unavailable tickets or foreign-brand runs return
-404; corrupt or oversized source history returns 409 and must be corrected before
-importing. Previewing a ticket creates no destination records and does not approve
-the run.
-
-The same permission allows contact and sample previews:
-
-- `GET /api/brands/{brandId}/imports/{runId}/preview/contact?externalId=42` returns
-  original contact details and the proposed contact/company match. It preserves
-  local names, company links and verification; a proposed new company has no ID yet.
-  Optional `defaultCallingCode` accepts up to four digits for phone normalization.
-  Refused phones are counted rather than hidden.
-- `GET /api/brands/{brandId}/imports/{runId}/preview/samples` returns up to three
-  ticket IDs and three contact IDs, ordered by source ID, from that run only.
-  Use them with the preview endpoints. They do not prove that the whole import is
-  complete or representative.
-
-Blank/NUL lookup IDs are invalid requests. Invalid mapped source values return a
-409 conflict rather than an approval or a raw-value error response. The
-approval/start workflow and EN/AR review UI remain under development. Dry-run
-execution is described below.
-
-
-Connected imports can now run validation through the worker:
-
-1. After extraction and mapping, send
-   `POST /api/brands/{brandId}/imports/{runId}/dry-run` with `{}` or
-   `{ "defaultCallingCode": "963" }`. A duplicate start or unavailable phase
-   returns 409; malformed settings return 400.
-2. Poll `GET /api/brands/{brandId}/imports/{runId}/dry-run` for phase, checked
-   counters and safe issue samples. A report that does not exist returns 404.
-   Error/warning totals can exceed the capped list of samples. `refusedPhones`
-   counts omitted phone numbers; each affected contact contributes one
-   `phone-refused` warning without exposing the phone values.
-3. Pause, resume or cancel through the existing run controls. Dry-run progress
-   survives resume; the worker also recovers abandoned claims.
-
-Validation returns the run to `awaiting_mapping` with its report retained.
-`complete: true` means validation finished, including when it found errors. It
-**does not approve or start loading**. The approval/start action and bilingual
-review UI remain unfinished, as does full completeness/retention reporting.
-Credentials remain encrypted for review and are purged on terminal
-cancellation/failure/completion.
+Loading uses the direct historical writer. It must not send customer messages,
+run customer automation or start SLA timers. Cancel does not delete history
+already imported. Credentials are purged on terminal completion, cancellation or
+failure. Full completeness/retention reporting, mixed staged/live hierarchy
+validation, final vendor datasets and worker-termination/browser acceptance remain
+unfinished, along with the bilingual review UI and cutover runbook.

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportClaim, ImportClaimLost, importClaimSchema } from './claims.js';
+import { prepareApprovedImportLoad } from './load-approval.js';
 import { loadAssembledStagedTicket } from './load-assembled-ticket.js';
 import { loadNextStagedMetadata } from './load-next-metadata.js';
 import { loadPreparedStagedRecord } from './load-prepared-record.js';
@@ -53,6 +54,8 @@ type Dependencies = {
 
 async function nextRecord(tx: DbTransaction, request: z.infer<typeof requestSchema>) {
   const { claim } = request;
+  if (!(await prepareApprovedImportLoad(tx, claim, request.defaultCallingCode)))
+    return { state: 'stopped' as const };
   const metadata = await loadNextStagedMetadata(tx, {
     claim,
     defaultCallingCode: request.defaultCallingCode,

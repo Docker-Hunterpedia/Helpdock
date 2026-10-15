@@ -101,6 +101,7 @@ import {
   createImportConnectorRuntime,
   createZendeskImportConnection,
 } from '../jobs/connector-runtime.js';
+import { importDestinationFingerprint } from '../jobs/destination-fingerprint.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { runImportDryRunBatch } from '../jobs/dry-run-batch.js';
 import { runImportDryRunMediaBatch } from '../jobs/dry-run-media.js';
@@ -6345,6 +6346,174 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(preview.issueCount).toBe(1);
     expect(await owner.db.select().from(tickets).where(eq(tickets.brandId, brandId))).toEqual([]);
     expect(await owner.db.select().from(outbox).where(eq(outbox.brandId, brandId))).toEqual([]);
+  });
+
+  it('hashes paged destination revisions, isolates tenant/account changes and detects inserts, updates and deletions', async () => {
+    const brandId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Destination snapshots', prefix: 'DST' });
+    const run = await boundAccountRun('destination-snapshot', brandId);
+    const scope = { brandId, runId: run.runId };
+    const snapshot = () =>
+      withSystem(app.db, brandId, (tx) => importDestinationFingerprint(tx, scope));
+    const original = await snapshot();
+    expect(await snapshot()).toBe(original);
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) => importDestinationFingerprint(tx, scope)),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    const inserted = await owner.db
+      .insert(contacts)
+      .values(Array.from({ length: 501 }, (_, index) => ({ brandId, name: `Local ${index}` })))
+      .returning({ id: contacts.id });
+    const first = inserted[0];
+    const last = inserted[500];
+    if (!first || !last) throw new Error('Missing destination page fixtures');
+    const withContacts = await snapshot();
+    expect(withContacts).not.toBe(original);
+    await owner.db
+      .update(contacts)
+      .set({ name: 'Changed local name' })
+      .where(eq(contacts.id, last.id));
+    const updated = await snapshot();
+    expect(updated).not.toBe(withContacts);
+    const foreignId = uuidv7();
+    await owner.db
+      .insert(contacts)
+      .values({ id: foreignId, brandId: OTHER_BRAND, name: 'Other tenant' });
+    expect(await snapshot()).toBe(updated);
+    await owner.db.delete(contacts).where(eq(contacts.id, last.id));
+    expect(await snapshot()).not.toBe(updated);
+    await owner.db.delete(contacts).where(eq(contacts.id, foreignId));
+    const beforeLedger = await snapshot();
+    await owner.db.insert(importExternalIds).values(
+      Array.from({ length: 501 }, (_, index) => ({
+        brandId,
+        source: 'zendesk' as const,
+        sourceAccountKey: run.key,
+        entity: 'contact' as const,
+        externalId: `source-${index}`,
+        helpdockId: first.id,
+        payloadHash: 'a'.repeat(64),
+      })),
+    );
+    const withLedger = await snapshot();
+    expect(withLedger).not.toBe(beforeLedger);
+    await owner.db
+      .update(importExternalIds)
+      .set({ payloadHash: 'b'.repeat(64) })
+      .where(
+        and(eq(importExternalIds.brandId, brandId), eq(importExternalIds.externalId, 'source-99')),
+      );
+    const changedLedger = await snapshot();
+    expect(changedLedger).not.toBe(withLedger);
+    await owner.db.insert(importExternalIds).values({
+      brandId,
+      source: 'zendesk',
+      sourceAccountKey: 'f'.repeat(64),
+      entity: 'contact',
+      externalId: 'unrelated-account',
+      helpdockId: first.id,
+      payloadHash: 'a'.repeat(64),
+    });
+    expect(await snapshot()).toBe(changedLedger);
+    const userId = uuidv7();
+    await owner.db.insert(users).values({
+      id: userId,
+      email: `snapshot-${userId}@example.test`,
+      name: 'Invitable person',
+      status: 'active',
+    });
+    const withStaff = await snapshot();
+    expect(withStaff).not.toBe(changedLedger);
+    await owner.db.update(users).set({ status: 'deactivated' }).where(eq(users.id, userId));
+    expect(await snapshot()).not.toBe(withStaff);
+    await owner.db.update(users).set({ status: 'active' }).where(eq(users.id, userId));
+    expect(await snapshot()).not.toBe(withStaff);
+    const beforeBrand = await snapshot();
+    await owner.db.update(brands).set({ timezone: 'Europe/Paris' }).where(eq(brands.id, brandId));
+    expect(await snapshot()).not.toBe(beforeBrand);
+    await owner.db.update(brands).set({ timezone: 'UTC' }).where(eq(brands.id, brandId));
+    expect(await snapshot()).not.toBe(beforeBrand);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('invalidates completed validation when destination matching changes after the record scan', async () => {
+    const brandId = uuidv7();
+    await owner.db.insert(brands).values({ id: brandId, name: 'Dry run freshness', prefix: 'DRF' });
+    const bound = await boundAccountRun('dry-run-freshness', brandId);
+    const runId = bound.runId;
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'dry_run', credentialsEncrypted: 'retained-fixture' })
+      .where(eq(importRuns.id, runId));
+    const contactId = uuidv7();
+    await owner.db.insert(contacts).values({ id: contactId, brandId, name: 'Reviewed local name' });
+    await owner.db.insert(contactIdentities).values({
+      brandId,
+      contactId,
+      kind: 'email',
+      value: 'freshness@example.test',
+      source: 'agent',
+      verified: false,
+    });
+    const native = importRecordSchema.parse({
+      entity: 'contact',
+      payload: {
+        externalId: 'person',
+        name: 'Source person',
+        emails: ['freshness@example.test'],
+        phones: [],
+        custom: {},
+      },
+    });
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: native.entity,
+      externalId: native.payload.externalId,
+      payload: native.payload,
+      payloadHash: hashImportValue(native.payload),
+    });
+    const claim = await withSystem(app.db, brandId, (tx) =>
+      claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+    );
+    if (!claim) throw new Error('Missing freshness claim');
+    const deps = {
+      db: app.db,
+      jobId: 'dry-run-freshness',
+      resolve: async () =>
+        createZendeskImportConnection({
+          credentials: { auth: 'oauth' as const, subdomain: 'demo', accessToken: 'synthetic' },
+          downloadHosts: [],
+          allowCidrs: [],
+          limiter: new ImportRateLimiter({ capacity: 10, perMinute: 1000 }),
+          log: async () => {},
+        }),
+    };
+    for (let index = 0; index < 3; index++)
+      expect(await runImportDryRunBatch(deps, claim)).toEqual({ state: 'more' });
+    await owner.db
+      .update(contacts)
+      .set({ name: 'Changed after review' })
+      .where(eq(contacts.id, contactId));
+    expect(await runImportDryRunBatch(deps, claim)).toEqual({ state: 'invalidated' });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({
+      status: 'awaiting_mapping',
+      claimToken: null,
+      dryRunReport: { phase: 'invalidated' },
+      credentialsEncrypted: 'retained-fixture',
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    const [contact] = await owner.db.select().from(contacts).where(eq(contacts.id, contactId));
+    expect(contact?.name).toBe('Changed after review');
+    expect(
+      await owner.db
+        .select()
+        .from(contactIdentities)
+        .where(eq(contactIdentities.contactId, contactId)),
+    ).toMatchObject([{ verified: false }]);
   });
 
   it('resumes dry-run record checkpoints after pause without duplicating counts or writing profiles', async () => {

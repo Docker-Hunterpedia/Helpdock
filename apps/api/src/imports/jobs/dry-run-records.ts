@@ -7,6 +7,7 @@ import { validateImportIdentityPlan } from '../preflight/identity-plan-state.js'
 import { validateImportMappingPlan } from '../preflight/mapping-plan.js';
 import { validateImportRecordPage } from '../preflight/record-page.js';
 import { ImportClaimLost, importClaimSchema, renewImportClaim } from './claims.js';
+import { importDestinationFingerprint } from './destination-fingerprint.js';
 import { importDryRunCheckpointSchema, storeImportDryRunCheckpoint } from './dry-run-state.js';
 import { importInputFingerprint } from './input-fingerprint.js';
 
@@ -70,6 +71,7 @@ export async function runImportDryRunRecordBatch(
           version: 2,
           phase: 'records',
           fingerprint: await importInputFingerprint(tx, scope),
+          destinationFingerprint: await importDestinationFingerprint(tx, scope),
           defaultCallingCode: request.defaultCallingCode,
           after: null,
           checked: 0,

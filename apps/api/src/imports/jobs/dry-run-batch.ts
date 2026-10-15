@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { type ImportClaim, type ImportRunRef, renewImportClaim } from './claims.js';
+import { importDestinationFingerprint } from './destination-fingerprint.js';
 import { runImportDryRunMediaBatch } from './dry-run-media.js';
 import { runImportDryRunRecordBatch } from './dry-run-records.js';
 import { importDryRunCheckpointSchema, storeImportDryRunCheckpoint } from './dry-run-state.js';
@@ -19,6 +20,14 @@ async function completeDryRun(deps: { db: Db; jobId: string }, claim: ImportClai
     if (
       (await importInputFingerprint(tx, { brandId: claim.brandId, runId: claim.runId })) !==
       checkpoint.fingerprint
+    ) {
+      await storeImportDryRunCheckpoint(tx, claim, { ...checkpoint, phase: 'invalidated' });
+      return { state: 'invalidated' as const };
+    }
+    if (
+      !checkpoint.destinationFingerprint ||
+      checkpoint.destinationFingerprint !==
+        (await importDestinationFingerprint(tx, { brandId: claim.brandId, runId: claim.runId }))
     ) {
       await storeImportDryRunCheckpoint(tx, claim, { ...checkpoint, phase: 'invalidated' });
       return { state: 'invalidated' as const };

@@ -68,6 +68,8 @@ describe('public dry-run report', () => {
     ]);
     expect(report).not.toHaveProperty('mediaAfter');
     expect(report).not.toHaveProperty('after');
+    expect(report).not.toHaveProperty('destinationFingerprint');
+    expect(report.reviewToken).toMatch(/^[0-9a-f]{64}$/);
   });
   it.each(['dry_run', 'paused', 'failed', 'cancelled'] as const)(
     'does not label an unfinished or terminal %s run as ready for review',

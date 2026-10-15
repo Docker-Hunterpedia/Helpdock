@@ -1,4 +1,5 @@
 import { type DbTransaction, importRuns } from '@helpdock/db';
+import { hashImportValue } from '@helpdock/importers';
 import { importDryRunReportSchema } from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -19,13 +20,20 @@ export async function importDryRunReport(tx: DbTransaction, raw: ImportRunRef) {
   return importDryRunReportView(report, run.status);
 }
 
+export function importDryRunReviewToken(report: z.infer<typeof importDryRunCheckpointSchema>) {
+  return hashImportValue({ version: 'import-review-v1', report });
+}
+
 export function importDryRunReportView(
   report: z.infer<typeof importDryRunCheckpointSchema>,
   status: typeof importRuns.$inferSelect.status,
 ) {
+  const complete =
+    report.phase === 'media_checked' && ['awaiting_mapping', 'ready'].includes(status);
   return importDryRunReportSchema.parse({
     phase: report.phase,
-    complete: report.phase === 'media_checked' && ['awaiting_mapping', 'ready'].includes(status),
+    complete,
+    reviewToken: complete ? importDryRunReviewToken(report) : null,
     fingerprint: report.fingerprint,
     defaultCallingCode: report.defaultCallingCode,
     recordsChecked: report.checked,

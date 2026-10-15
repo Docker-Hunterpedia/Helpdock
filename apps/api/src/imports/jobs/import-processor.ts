@@ -16,9 +16,16 @@ import { withSystemJob } from '../../tenant/system-job.js';
 import { enqueueImportWork, type ImportWorkStep, importWorkRunnable } from '../import-events.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { runImportAttachmentBatch } from './attachment-batch.js';
-import { claimImportRun, type ImportClaim, ImportClaimLost, type ImportRunRef } from './claims.js';
+import {
+  claimImportRun,
+  type ImportClaim,
+  ImportClaimLost,
+  type ImportRunRef,
+  renewImportClaim,
+} from './claims.js';
 import { continueImportWork, deferImportVendorFailure, failImportWork } from './continuation.js';
 import { runImportDryRunBatch } from './dry-run-batch.js';
+import { importDryRunCheckpointSchema } from './dry-run-state.js';
 import { runImportExtraction } from './extract-run.js';
 import { extractionRun } from './extract-state.js';
 import { runImportFinishBatch } from './finish-batch.js';
@@ -81,12 +88,19 @@ class ImportExecution<C> {
       return;
     }
     if (name === 'import.load') {
+      const defaultCallingCode = await this.inRun(async (tx) => {
+        await renewImportClaim(tx, claim);
+        const run = await extractionRun(tx, this.scope);
+        return run?.dryRunReport
+          ? importDryRunCheckpointSchema.parse(run.dryRunReport).defaultCallingCode
+          : '';
+      });
       const result = await runImportLoadBatch(
         {
           ...base,
           ...(this.deps.prepareArticle ? { prepareArticle: this.deps.prepareArticle } : {}),
         },
-        { claim },
+        { claim, defaultCallingCode },
       );
       if (result.state === 'stopped') return;
       if (result.state === 'article_required')

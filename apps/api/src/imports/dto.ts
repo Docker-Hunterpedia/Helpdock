@@ -14,6 +14,7 @@ import {
   importRunParamSchema,
   importRunViewSchema,
   importScopeSchema,
+  importStartRequestSchema,
   importTicketPreviewQuerySchema,
   importTicketPreviewSchema,
 } from '@helpdock/schemas';
@@ -39,3 +40,5 @@ export class ImportPreviewSamplesDto extends createZodDto(importPreviewSamplesSc
 export class ImportDryRunRequestDto extends createZodDto(importDryRunRequestSchema) {}
 
 export class ImportDryRunReportDto extends createZodDto(importDryRunReportSchema) {}
+
+export class ImportStartRequestDto extends createZodDto(importStartRequestSchema) {}

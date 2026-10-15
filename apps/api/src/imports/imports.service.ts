@@ -8,6 +8,7 @@ import {
   type ImportMappingsRequest,
   type ImportRunCreate,
   type ImportScope,
+  type ImportStartRequest,
   type ImportTicketPreviewQuery,
   importConnectionRequestSchema,
   importConnectionResultSchema,
@@ -18,6 +19,7 @@ import {
   importRunCreateSchema,
   importRunListSchema,
   importScopeSchema,
+  importStartRequestSchema,
   importTicketPreviewQuerySchema,
 } from '@helpdock/schemas';
 import {
@@ -31,7 +33,9 @@ import { roleHasPermission } from '../auth/permissions.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { enqueueImportWork } from './import-events.js';
 import { importRunView } from './import-run-view.js';
+import { ImportApprovalError, requireCurrentImportApproval } from './jobs/approval.js';
 import { lockImportBrand } from './jobs/claims.js';
+import { importDestinationFingerprint } from './jobs/destination-fingerprint.js';
 import { importDryRunCheckpointSchema } from './jobs/dry-run-state.js';
 import { importInputFingerprint } from './jobs/input-fingerprint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-control.js';
@@ -210,6 +214,7 @@ export class ImportsService {
       version: 2,
       phase: 'records',
       fingerprint: await importInputFingerprint(tx, scope),
+      destinationFingerprint: await importDestinationFingerprint(tx, scope),
       defaultCallingCode: input.defaultCallingCode,
       after: null,
       checked: 0,
@@ -232,6 +237,44 @@ export class ImportsService {
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
     await enqueueImportWork(tx, { ...scope, step: 'dry_run' });
     await this.audit(context, 'import.dry-run-started', runId);
+    return this.get(context, runId);
+  }
+  async start(context: TicketingContext, runId: string, raw: ImportStartRequest) {
+    const input = importStartRequestSchema.parse(raw);
+    const { tx, brandId } = context;
+    const scope = { brandId, runId };
+    try {
+      await requireCurrentImportApproval(tx, { ...scope, ...input });
+    } catch (error) {
+      if (!(error instanceof ImportApprovalError)) throw error;
+      if (error.code === 'run-not-found') throw new NotFoundException(error.message);
+      throw new ConflictException(error.message);
+    }
+    const invitations = await tx
+      .select({ id: importMappings.id })
+      .from(importMappings)
+      .where(
+        and(
+          eq(importMappings.brandId, brandId),
+          eq(importMappings.runId, runId),
+          eq(importMappings.kind, 'agent'),
+          sql`${importMappings.target}->>'kind' = 'invited'`,
+        ),
+      )
+      .limit(1);
+    if (invitations.length && !roleHasPermission(context.actor.role, 'staff:manage'))
+      throw new ForbiddenException('import.staff-permission-required');
+    await tx
+      .update(importRuns)
+      .set({
+        status: 'loading',
+        claimToken: null,
+        claimedAt: null,
+        counts: sql`(${importRuns.counts} - 'retryAt' - 'retryFailures' - 'recoveryRequestedAt' - 'loadApprovalChecked') || ${JSON.stringify({ approvedReviewToken: input.reviewToken })}::jsonb`,
+      })
+      .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
+    await enqueueImportWork(tx, { ...scope, step: 'load' });
+    await this.audit(context, 'import.approved', runId);
     return this.get(context, runId);
   }
   async control(context: TicketingContext, runId: string, action: 'pause' | 'resume' | 'cancel') {

@@ -107,3 +107,5 @@ Expose contact source details and read-only identity/company plans, and select u
 Add outbox-backed, resumable dry-run execution and a bounded validation report API. Dry runs support pause/resume/recovery and stop at review without approving or starting destination writes.
 
 Preserve refused-phone warnings and exact omission totals through whole-run dry-run checkpoints and public reports, including pause/resume, without exposing phone values.
+
+Bind import approval to the reviewed report, require explicit warning acknowledgement, and refuse stale source or destination snapshots at approval and before the first queued domain write. Preserve the reviewed calling code during loading so national phone numbers are not silently omitted.

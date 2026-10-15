@@ -108,3 +108,9 @@ export const importDryRunRequestSchema = z.strictObject({
     .default(''),
 });
 export type ImportDryRunRequest = z.infer<typeof importDryRunRequestSchema>;
+
+export const importStartRequestSchema = z.strictObject({
+  reviewToken: z.string().regex(/^[0-9a-f]{64}$/),
+  acknowledgeWarnings: z.boolean().default(false),
+});
+export type ImportStartRequest = z.infer<typeof importStartRequestSchema>;

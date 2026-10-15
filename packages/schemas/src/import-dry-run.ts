@@ -11,6 +11,10 @@ export const importDryRunReportSchema = z.strictObject({
     'invalidated',
   ]),
   complete: z.boolean(),
+  reviewToken: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
   fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   defaultCallingCode: z.string().regex(/^\d{0,4}$/),
   recordsChecked: z.int().nonnegative(),

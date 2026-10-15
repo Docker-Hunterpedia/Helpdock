@@ -529,3 +529,36 @@ completion retains a bounded public report, releases the claim and returns to
 `awaiting_mapping` for review, regardless of whether errors were found. It does
 not set `ready` or authorize loading. Approval requires the remaining freshness
 and completeness checks; a report's `complete` flag must never serve as approval.
+
+
+### 2026-10-15 — destination freshness and report-bound load approval
+
+Bind approval to a SHA-256 review token over the full persisted validation
+checkpoint, including its source and destination fingerprints and warning totals.
+`complete` remains a validation state, not authorization. `/start` requires the
+exact token, no blocking errors and explicit acknowledgement of warnings, checks
+both snapshots again, and atomically records approval and publishes load work.
+Invitations recheck `staff:manage` at start.
+
+The destination fingerprint hashes 500-row metadata pages of local contacts,
+identities, companies, routing/field definitions, memberships and knowledge
+hierarchy, plus the same-account import ledger. Pagination uses indexed UUID/native keys. The brand revision covers policy,
+locale, timezone, prefix and availability. Staff revisions are install-wide because
+invitation uniqueness is global. Only record keys and PostgreSQL row revisions
+leave SQL; no profile payloads, staff addresses or password/session values enter
+the checkpoint. Any staff-row update can require revalidation; session-table
+changes do not. Revisions detect committed changes even when values are reverted
+during the scan, which a final-value digest alone would miss. A failing real-DB
+regression reproduced that reverted staff-state case before correction.
+This conservative snapshot may invalidate on unrelated destination edits. Prefer
+that refusal over silently approving a different matching/provisioning plan;
+operators can validate during a quiet cutover window.
+
+The first load transaction rechecks the receipt and snapshots before a domain
+write. Stale queued approvals return to review with credentials retained. A
+`loadApprovalChecked` receipt in internal counters prevents subsequent own writes
+from invalidating the original snapshot; the ordinary loader still validates live
+targets. Existing internal/system load drivers without a public approval receipt
+retain their direct-driver behavior. Public starts always require and persist a
+receipt. The reviewed calling code reaches the loader unchanged, fixing a path
+where national phone numbers passed validation but were omitted during loading.

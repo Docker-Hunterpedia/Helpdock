@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   contactIdentities,
@@ -35,6 +33,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { noSurveyEmails } from '../testing/csat-doubles.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { AutoReplyService } from './auto-reply.service.js';
 import { EmailRepository } from './email.repository.js';
@@ -71,12 +70,7 @@ const MASTER_KEY = Buffer.alloc(32, 41).toString('base64');
 const AGENT_PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

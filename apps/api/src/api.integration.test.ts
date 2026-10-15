@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
   auditLog,
@@ -29,6 +27,7 @@ import { REQUEST_ID_HEADER } from './context/request-id.js';
 import { createLogger } from './logging/logger.js';
 import { INSTALL_SCOPE_ACTION } from './tenant/install-scope.js';
 import { withSystemJob } from './tenant/system-job.js';
+import { dockerAvailable } from './testing/docker-available.js';
 import { ProbeController, type SessionSettings } from './testing/probe.controller.js';
 
 /**
@@ -45,12 +44,7 @@ const REDIS_IMAGE = 'redis:7-alpine';
 const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 7).toString('base64');
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   // Written straight to stderr: Vitest drops console output from a file whose

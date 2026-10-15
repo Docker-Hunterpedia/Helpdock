@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   aiCalls,
@@ -53,6 +51,7 @@ import {
   OBJECT_PURGE_EVENT,
 } from '../media/object-purge.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { runBrandRetention, scheduleRetention } from './retention.job.js';
@@ -89,12 +88,7 @@ const AGENT_PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 180_000;
 const DAY_MS = 86_400_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

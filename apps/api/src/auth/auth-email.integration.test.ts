@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
 import { createDb, users } from '@helpdock/db';
 import {
@@ -24,6 +22,7 @@ import { createLogger } from '../logging/logger.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { createAuthEmailEventHandler, createAuthEmailProcessor } from './auth-email.job.js';
 import { AUTH_EMAIL_EVENT } from './auth-email.js';
@@ -52,12 +51,7 @@ const APP_URL = 'https://support.example.com';
 const CONTAINER_STARTUP_MS = 120_000;
 const SYSTEM_FROM = 'no-reply@helpdock.test';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

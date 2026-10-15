@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -42,6 +40,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { AssignmentRepository } from './assignment.repository.js';
 import {
@@ -83,12 +82,7 @@ const MASTER_KEY = Buffer.alloc(32, 29).toString('base64');
 const PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

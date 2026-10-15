@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -52,6 +50,7 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
@@ -79,12 +78,7 @@ const PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 const MINUTE = 60_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

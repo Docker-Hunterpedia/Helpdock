@@ -1,6 +1,4 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import {
   aiCalls,
@@ -32,6 +30,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from '../auth/principal-resolver.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { runBrandRollup } from './rollup.job.js';
 import { REPORT_ROLLUP_VERSION } from './rollup.repository.js';
 
@@ -53,12 +52,7 @@ const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 41).toString('base64');
 const DAY_MS = 86_400_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

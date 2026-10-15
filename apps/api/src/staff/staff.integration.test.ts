@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { EmailMessage } from '@helpdock/channels';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
@@ -29,6 +27,7 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { anonymisedEmail, FORMER_STAFF_NAME } from './anonymise.js';
 
@@ -52,12 +51,7 @@ const APP_URL = 'https://support.example.com';
 const REFRESH_COOKIE = refreshCookieOf({ APP_URL }).name;
 const NEW_PASSWORD = 'a brand new password';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

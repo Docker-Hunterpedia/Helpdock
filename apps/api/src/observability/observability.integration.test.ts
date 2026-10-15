@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import { auditLog, brands, type Db, userBrandRoles, users, uuidv7 } from '@helpdock/db';
 import {
@@ -25,6 +23,7 @@ import { RefreshStore } from '../auth/session/refresh-store.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { ObservabilityGauges } from './observability.module.js';
 import { QUEUE_BOARD_COOKIE, QUEUE_BOARD_PATH } from './queue-board.js';
 import { StorageUsageStore } from './storage-usage.js';
@@ -44,12 +43,7 @@ const APP_ROLE_PASSWORD = 'app-role-password';
 const MASTER_KEY = Buffer.alloc(32, 7).toString('base64');
 const METRICS_TOKEN = 'a-metrics-token-long-enough';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

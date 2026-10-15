@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { CaptchaTransport } from '@helpdock/channels';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
@@ -66,6 +64,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
@@ -107,12 +106,7 @@ mkdirSync(path.join(WIDGET_DIST, 'chunks'));
 writeFileSync(path.join(WIDGET_DIST, 'widget.js'), 'import("./chunks/remote-abc.js");');
 writeFileSync(path.join(WIDGET_DIST, 'chunks', 'remote-abc.js'), 'export {};');
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

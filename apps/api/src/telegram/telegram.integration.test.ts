@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
   attachments,
@@ -53,6 +51,7 @@ import { createLogger } from '../logging/logger.js';
 import { objectKeyBeside } from '../media/keys.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { noCsatNotices } from '../testing/csat-doubles.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
@@ -97,12 +96,7 @@ const TOKEN = '7000001:AAEacmeSupportBotTokenAbcdefghijklmn';
 const OTHER_TOKEN = '7000002:AAEotherBotTokenAbcdefghijklmnopqrst';
 const CHAT = 4_242_001;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

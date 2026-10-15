@@ -2669,6 +2669,20 @@ tests, two focused projection unit tests and all 887 RLS isolation tests.
 Media/completeness checks, live-target
 approval freshness, entry points and the review UI remain unfinished.
 
+### Required ticket values and CI inventory correction (M11-07/10, 2026-10-15)
+
+The required-field regression first proved that record preflight returned no error
+for a ticket the loader rejected. Ticket custom-value preflight now uses creation
+validation, matching both the direct writer and mapped ticket loader. The test
+uses an isolated brand and checks that neither a ticket nor outbox work is written.
+This closes a false-negative validation path; complete approval remains unfinished.
+
+CI also caught migration 0066 missing from the migration runner's explicit test
+inventory and unformatted generated metadata. The inventory now includes it and
+the journal/snapshot use repository formatting. The full migration suite covers
+fresh application, repeat application, concurrent replicas and runtime-role safety.
+These corrections do not complete M11 or its remaining dry-run/API/UI requirements.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

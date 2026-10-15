@@ -79,6 +79,7 @@ const MIGRATION_TAGS = [
   '0063_import_record_load_receipts',
   '0064_import_source_accounts',
   '0065_import_message_identity',
+  '0066_import_dry_run_identity',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

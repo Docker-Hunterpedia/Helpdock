@@ -6078,6 +6078,77 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
+  it('blocks missing required ticket values in preflight just as the loader does', async () => {
+    const brandId = uuidv7();
+    const runId = uuidv7();
+    const departmentId = uuidv7();
+    const statusId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Required ticket preflight', prefix: 'RTV' });
+    await owner.db.insert(departments).values({ id: departmentId, brandId, name: 'Support' });
+    await owner.db.insert(ticketStatuses).values({
+      id: statusId,
+      brandId,
+      name: 'Open',
+      systemState: 'open',
+      isDefault: true,
+      color: 'info',
+    });
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'loading', startedBy: USER });
+    const input = request('required-value-preflight');
+    input.brandId = brandId;
+    input.runId = runId;
+    input.messages = [];
+    input.authors = {};
+    input.resolved = {
+      ...input.resolved,
+      departmentId,
+      statusId,
+      assigneeId: null,
+      contactId: null,
+    };
+    await owner.db.insert(customFieldDefs).values({
+      brandId,
+      target: 'ticket',
+      key: 'required_reference',
+      label: 'Reference',
+      type: 'text',
+      required: true,
+    });
+    await owner.db.insert(importRecords).values({
+      brandId,
+      runId,
+      entity: 'ticket',
+      externalId: input.record.externalId,
+      payload: input.record,
+      payloadHash: hashImportValue(input.record),
+    });
+    const mappings = [
+      { kind: 'status', externalValue: 'open', target: { statusId } },
+      { kind: 'group', externalValue: '', target: { departmentId, teamId: null } },
+      { kind: 'priority', externalValue: '', target: { priority: 'high' } },
+      { kind: 'channel', externalValue: '', target: { channel: 'email' } },
+    ].map((mapping) => importMappingSchema.parse(mapping));
+    await owner.db
+      .insert(importMappings)
+      .values(mappings.map((mapping) => ({ brandId, runId, ...mapping })));
+    await expect(
+      withSystem(app.db, brandId, (tx) => writer.ticket(tx, input)),
+    ).rejects.toMatchObject({ name: 'ZodError' });
+    const preview = await withSystem(app.db, brandId, (tx) =>
+      validateImportRecordPage(tx, { brandId, runId, source: 'zendesk' }),
+    );
+    expect(preview.issues).toEqual([
+      { entity: 'ticket', externalId: input.record.externalId, code: 'mapping-invalid' },
+    ]);
+    expect(preview.issueCount).toBe(1);
+    expect(await owner.db.select().from(tickets).where(eq(tickets.brandId, brandId))).toEqual([]);
+    expect(await owner.db.select().from(outbox).where(eq(outbox.brandId, brandId))).toEqual([]);
+  });
+
   it('resumes dry-run record checkpoints after pause without duplicating counts or writing profiles', async () => {
     const brandId = uuidv7();
     const runId = uuidv7();

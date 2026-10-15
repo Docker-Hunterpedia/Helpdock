@@ -115,7 +115,7 @@ async function recordIssues(
         ...scope,
         target: 'ticket',
         custom: record.payload.custom,
-        operation: 'patch',
+        operation: 'create',
       });
     }
     const projection = await profileIssues(tx, {

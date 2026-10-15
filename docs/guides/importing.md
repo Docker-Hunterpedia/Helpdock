@@ -150,3 +150,7 @@ Reports include the total affected sources with up to 100 samples. Compact hashe
 claims stay in protected staging so the worker does not hold the complete profile
 graph in memory. Media completeness, final approval and the review UI still remain
 under development.
+
+Internal ticket preflight requires all mandatory ticket custom values, matching
+the loader's creation rules. An incomplete ticket cannot pass this check merely
+because a partial update would have been valid.

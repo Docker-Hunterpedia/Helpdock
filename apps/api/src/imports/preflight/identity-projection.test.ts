@@ -29,7 +29,7 @@ it('hashes canonical contact claims independently of source IDs and omits claims
     contactIdentityProjection({
       externalId: 'a',
       inputHash: 'a'.repeat(64),
-      plan: { ...plan, action: 'unchanged' },
+      plan: { ...plan, action: 'unchanged', contactId: '01900000-0000-7000-8000-000000000001' },
     }).claims,
   ).toEqual([]);
 });

@@ -154,3 +154,11 @@ under development.
 Internal ticket preflight requires all mandatory ticket custom values, matching
 the loader's creation rules. An incomplete ticket cannot pass this check merely
 because a partial update would have been valid.
+
+Internal attachment preflight now downloads one source file at a time into a
+temporary file, checks its bytes and the brand's content policy, then removes it.
+It creates no storage object or attachment row. Missing source files produce
+explicit warnings; policy refusals produce errors. Vendor throttling or temporary
+failures do not advance progress. Tightening the content policy invalidates a prior
+media result. These checks do not replace final image processing or antivirus work
+when importing. The complete dry-run report, approval and UI are still unfinished.

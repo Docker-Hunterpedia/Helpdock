@@ -1,19 +1,13 @@
-import { type Db, type DbTransaction, importRecords, importRuns } from '@helpdock/db';
+import { type Db, importRecords, importRuns } from '@helpdock/db';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { validateImportIdentityPlan } from '../preflight/identity-plan-state.js';
-import {
-  importMappingPlanIssueSchema,
-  validateImportMappingPlan,
-} from '../preflight/mapping-plan.js';
-import {
-  importRecordCursorSchema,
-  importRecordIssueSchema,
-  validateImportRecordPage,
-} from '../preflight/record-page.js';
+import { validateImportMappingPlan } from '../preflight/mapping-plan.js';
+import { validateImportRecordPage } from '../preflight/record-page.js';
 import { ImportClaimLost, importClaimSchema, renewImportClaim } from './claims.js';
+import { importDryRunCheckpointSchema, storeImportDryRunCheckpoint } from './dry-run-state.js';
 import { importInputFingerprint } from './input-fingerprint.js';
 
 const callingCodeSchema = z.string().regex(/^\d{0,4}$/);
@@ -22,53 +16,17 @@ const requestSchema = z.strictObject({
   batchSize: z.int().min(1).max(50).default(25),
   defaultCallingCode: callingCodeSchema.default(''),
 });
-const checkpointSchema = z.strictObject({
-  version: z.literal(2),
-  phase: z.enum([
-    'records',
-    'records_checked',
-    'plans_checked',
-    'identities_checked',
-    'invalidated',
-  ]),
-  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-  defaultCallingCode: callingCodeSchema,
-  after: importRecordCursorSchema.nullable(),
-  checked: z.int().nonnegative(),
-  issueCount: z.int().nonnegative(),
-  issues: z.array(importRecordIssueSchema).max(100),
-  mappingsChecked: z.int().nonnegative().default(0),
-  planIssueCount: z.int().nonnegative().default(0),
-  planIssues: z.array(importMappingPlanIssueSchema).max(100).default([]),
-  identityIssueCount: z.int().nonnegative().default(0),
-  identityIssues: z.array(importRecordIssueSchema).max(100).default([]),
-});
 const resultSchema = z.strictObject({
   state: z.enum([
     'more',
     'records_checked',
     'plans_checked',
     'identities_checked',
+    'media_checked',
     'invalidated',
     'stopped',
   ]),
 });
-
-async function storeCheckpoint(
-  tx: DbTransaction,
-  claim: z.infer<typeof importClaimSchema>,
-  checkpoint: z.infer<typeof checkpointSchema>,
-) {
-  await tx
-    .update(importRuns)
-    .set({
-      dryRunReport: checkpoint,
-      ...(checkpoint.phase === 'invalidated'
-        ? { status: 'awaiting_mapping' as const, claimToken: null, claimedAt: null }
-        : {}),
-    })
-    .where(and(eq(importRuns.brandId, claim.brandId), eq(importRuns.id, claim.runId)));
-}
 
 /** Atomic scan/checkpoint commits; plans_checked still requires identity/media validation and approval. */
 export async function runImportDryRunRecordBatch(
@@ -107,7 +65,7 @@ export async function runImportDryRunRecordBatch(
           .where(
             and(eq(importRecords.brandId, claim.brandId), eq(importRecords.runId, claim.runId)),
           );
-      const prior = checkpointSchema.parse(
+      const prior = importDryRunCheckpointSchema.parse(
         run.dryRunReport ?? {
           version: 2,
           phase: 'records',
@@ -127,10 +85,10 @@ export async function runImportDryRunRecordBatch(
           (await importInputFingerprint(tx, scope)) === prior.fingerprint
             ? 'identities_checked'
             : 'invalidated';
-        await storeCheckpoint(
+        await storeImportDryRunCheckpoint(
           tx,
           claim,
-          checkpointSchema.parse({
+          importDryRunCheckpointSchema.parse({
             ...prior,
             phase,
             identityIssueCount: identities.issueCount,
@@ -145,14 +103,14 @@ export async function runImportDryRunRecordBatch(
           (await importInputFingerprint(tx, scope)) === prior.fingerprint
             ? 'plans_checked'
             : 'invalidated';
-        const checkpoint = checkpointSchema.parse({
+        const checkpoint = importDryRunCheckpointSchema.parse({
           ...prior,
           phase,
           mappingsChecked: plan.checked,
           planIssueCount: plan.issueCount,
           planIssues: plan.issues,
         });
-        await storeCheckpoint(tx, claim, checkpoint);
+        await storeImportDryRunCheckpoint(tx, claim, checkpoint);
         return resultSchema.parse({ state: phase });
       }
       if (prior.phase !== 'records') return resultSchema.parse({ state: prior.phase });
@@ -182,7 +140,7 @@ export async function runImportDryRunRecordBatch(
         : (await importInputFingerprint(tx, scope)) === prior.fingerprint
           ? 'records_checked'
           : 'invalidated';
-      const checkpoint = checkpointSchema.parse({
+      const checkpoint = importDryRunCheckpointSchema.parse({
         ...prior,
         phase,
         after: page.next,
@@ -190,7 +148,7 @@ export async function runImportDryRunRecordBatch(
         issueCount: prior.issueCount + page.issueCount,
         issues: [...prior.issues, ...page.issues].slice(0, 100),
       });
-      await storeCheckpoint(tx, claim, checkpoint);
+      await storeImportDryRunCheckpoint(tx, claim, checkpoint);
       return resultSchema.parse({ state: phase === 'records' ? 'more' : phase });
     });
   } catch (error) {

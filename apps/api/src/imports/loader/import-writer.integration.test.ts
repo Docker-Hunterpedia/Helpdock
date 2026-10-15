@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as waitForQueue } from 'node:timers/promises';
@@ -57,6 +57,7 @@ import {
 import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
 import { importLoadJob, JOB_DEFINITIONS } from '@helpdock/jobs';
 import {
+  contentPolicySchema,
   importEntitySchema,
   importMappingSchema,
   importRecordSchema,
@@ -101,6 +102,7 @@ import {
   createZendeskImportConnection,
 } from '../jobs/connector-runtime.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
+import { runImportDryRunMediaBatch } from '../jobs/dry-run-media.js';
 import { runImportDryRunRecordBatch } from '../jobs/dry-run-records.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
@@ -8206,6 +8208,209 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       },
     };
   }
+
+  it('checks dry-run media availability and policy failures without creating attachments or outbox work', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-dry-media-'));
+    try {
+      const brandId = uuidv7();
+      const runId = uuidv7();
+      await owner.db.insert(brands).values({ id: brandId, name: 'Dry media', prefix: 'DMV' });
+      await owner.db
+        .insert(importRuns)
+        .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+      const png = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: '#ffffff' },
+      })
+        .png()
+        .toBuffer();
+      const urls = [
+        fake.addAttachment('good-file', Buffer.from('%PDF-1.7\nHistory')),
+        fake.addAttachment('bad-file', png),
+        `${fake.server.root}/attachments/token/missing/file`,
+      ];
+      for (const [index, url] of urls.entries()) {
+        const payload = importRecordSchema.parse({
+          entity: 'attachment',
+          payload: {
+            externalId: `dry-file-${index}`,
+            ticketExternalId: 'source-ticket',
+            fileName: 'history.pdf',
+            contentType: 'application/pdf',
+            url,
+          },
+        }).payload;
+        await owner.db.insert(importRecords).values({
+          brandId,
+          runId,
+          entity: 'attachment',
+          externalId: `dry-file-${index}`,
+          parentExternalId: 'source-ticket',
+          payload,
+          payloadHash: hashImportValue(payload),
+        });
+      }
+      const claim = await withSystem(app.db, brandId, (tx) =>
+        claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+      );
+      if (!claim) throw new Error('Missing dry-run media claim');
+      const deps = downloadHarness(fake, new FakeStorage(dir));
+      expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({
+        state: 'records_checked',
+      });
+      expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'plans_checked' });
+      expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({
+        state: 'identities_checked',
+      });
+      for (let index = 0; index < 3; index++)
+        expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({ state: 'more', checked: 1 });
+      expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
+        state: 'media_checked',
+        checked: 0,
+      });
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run?.status).toBe('dry_run');
+      expect(run?.dryRunReport).toMatchObject({
+        mediaChecked: 3,
+        mediaWarnings: 1,
+        mediaErrors: 1,
+        mediaIssues: expect.arrayContaining([
+          {
+            entity: 'attachment',
+            externalId: 'dry-file-1',
+            level: 'error',
+            code: 'media-mime_mismatch',
+          },
+          {
+            entity: 'attachment',
+            externalId: 'dry-file-2',
+            level: 'warning',
+            code: 'media-unavailable',
+          },
+        ]),
+      });
+      const requests = fake.server.calls.length;
+      expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
+        state: 'media_checked',
+        checked: 0,
+      });
+      expect(fake.server.calls).toHaveLength(requests);
+      expect(
+        await owner.db.select().from(attachments).where(eq(attachments.brandId, brandId)),
+      ).toEqual([]);
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await readdir(dir)).toEqual([]);
+      expect(JSON.stringify(run?.dryRunReport)).not.toContain(fake.server.root);
+      await owner.db
+        .update(brands)
+        .set({
+          settings: {
+            contentPolicy: {
+              ...contentPolicySchema.parse({}),
+              file: { ...contentPolicySchema.parse({}).file, enabled: false },
+            },
+          },
+        })
+        .where(eq(brands.id, brandId));
+      expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
+        state: 'invalidated',
+        checked: 0,
+      });
+      expect(fake.server.calls).toHaveLength(requests);
+      const [invalidated] = await owner.db
+        .select()
+        .from(importRuns)
+        .where(eq(importRuns.id, runId));
+      expect(invalidated).toMatchObject({
+        status: 'awaiting_mapping',
+        claimToken: null,
+        claimedAt: null,
+      });
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { status: 429, expected: { name: 'RateLimited' } },
+    { status: 503, expected: { code: 'vendor-unavailable' } },
+    { status: 401, expected: { code: 'credentials-refused' } },
+  ])('does not advance dry-run media after a vendor $status', async ({ status, expected }) => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-dry-media-error-'));
+    try {
+      const brandId = uuidv7();
+      const runId = uuidv7();
+      await owner.db
+        .insert(brands)
+        .values({ id: brandId, name: 'Dry media failure', prefix: `DMF${status}` });
+      await owner.db
+        .insert(importRuns)
+        .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+      const url = fake.addAttachment('retry-file', Buffer.from('%PDF-1.7\nHistory'));
+      const native = importRecordSchema.parse({
+        entity: 'attachment',
+        payload: {
+          externalId: 'retry-file',
+          ticketExternalId: 'source-ticket',
+          fileName: 'history.pdf',
+          contentType: 'application/pdf',
+          url,
+        },
+      });
+      await owner.db.insert(importRecords).values({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        parentExternalId: 'source-ticket',
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      });
+      const claim = await withSystem(app.db, brandId, (tx) =>
+        claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+      );
+      if (!claim) throw new Error('Missing failing media claim');
+      const deps = downloadHarness(fake, new FakeStorage(dir));
+      await runImportDryRunRecordBatch(deps, { claim });
+      await runImportDryRunRecordBatch(deps, { claim });
+      await runImportDryRunRecordBatch(deps, { claim });
+      fake.server.failNext({
+        path: new URL(url).pathname,
+        status,
+        headers: { 'retry-after': '2' },
+        json: { error: 'opaque-provider-secret' },
+      });
+      await expect(runImportDryRunMediaBatch(deps, claim)).rejects.toMatchObject(expected);
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run?.dryRunReport).toMatchObject({
+        phase: 'identities_checked',
+        mediaAfter: null,
+        mediaChecked: 0,
+        mediaWarnings: 0,
+        mediaErrors: 0,
+        mediaIssues: [],
+      });
+      expect(JSON.stringify(run?.dryRunReport)).not.toContain('opaque-provider-secret');
+      expect(
+        await owner.db.select().from(attachments).where(eq(attachments.brandId, brandId)),
+      ).toEqual([]);
+      expect(await readdir(dir)).toEqual([]);
+      await withSystem(app.db, brandId, (tx) => pauseImportRun(tx, { brandId, runId }));
+      const requests = fake.server.calls.length;
+      expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
+        state: 'stopped',
+        checked: 0,
+      });
+      expect(fake.server.calls).toHaveLength(requests);
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 
   it.each(['success', 'failure'] as const)(
     'drains four concurrent downloads when the batch has %s',

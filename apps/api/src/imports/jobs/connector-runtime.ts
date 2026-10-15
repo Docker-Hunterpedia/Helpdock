@@ -40,7 +40,7 @@ export function createImportConnectorRuntime(deps: Dependencies, transport?: Tes
     );
     if (
       !run ||
-      (run.status !== 'extracting' && run.status !== 'loading') ||
+      (run.status !== 'extracting' && run.status !== 'loading' && run.status !== 'dry_run') ||
       !run.credentialsEncrypted
     )
       throw new ConnectorError('credentials-refused');

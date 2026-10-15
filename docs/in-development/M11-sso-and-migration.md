@@ -2683,6 +2683,34 @@ the journal/snapshot use repository formatting. The full migration suite covers
 fresh application, repeat application, concurrent replicas and runtime-role safety.
 These corrections do not complete M11 or its remaining dry-run/API/UI requirements.
 
+### Bounded dry-run attachment inspection (M11-10/16, in progress)
+
+Dry-run checkpoint state is now shared by the record and media phases. The media
+batch inspects one staged attachment per invocation through the connector's existing
+safe HTTP path and the same temporary-file, magic-byte and brand-policy validation
+used during loading. It downloads outside transactions, creates no attachment or
+storage object and emits no media-processing event. Source MIME precedence matches
+the loader. Temporary files are removed by the shared preparation helper.
+
+Before publishing each outcome, the batch rechecks its claim, prior cursor, staged
+payload hash and content policy. Successful reads, unavailable-source warnings and
+policy errors advance the media cursor once; 429, 5xx and authentication failures
+propagate without advancing it. Input changes at phase boundaries or policy changes
+invalidate the report and return the run to mapping review. Repeated completed
+inspection does not fetch files again. Runtime connection resolution now permits
+claimed dry-run work while retaining source-account and credential checks.
+
+Real Postgres/Redis and Zendesk stand-in tests prove all these outcomes, no attachment
+or outbox writes, no storage files, opaque diagnostics and refusal of paused work.
+The writer suite passes 158 tests; API and root/test typechecks and repository checks
+pass. Root typechecking also corrected an older unchanged-contact test fixture to
+provide the existing contact ID required by its real contract.
+
+`media_checked` means source reads and file-policy inspection finished; it does not
+prove final image processing or antivirus results, and does not approve loading.
+Queue/HTTP entry points, full completeness/preview reporting, live-target approval
+freshness and the review UI remain unfinished.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

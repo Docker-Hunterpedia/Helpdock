@@ -1398,7 +1398,14 @@ stand-in tests do not prove access or completeness for a real account.
   for tickets, retaining deletion tombstones. The last minute is excluded;
   archived tickets are included. Organizations use
   `/api/v2/incremental/organizations.json` with `end_time`/`next_page` and stable-ID
-  deduplication. [Exports](https://developer.zendesk.com/api-reference/ticketing/ticket-management/incremental_exports/).
+  deduplication. Time-based pages can exceed 1,000 rows when timestamps tie;
+  split them into staging chunks, retaining the exact vendor watermark and a
+  page fingerprint/offset for safe resume. Never advance the watermark by one
+  second. Checked 2026-10-15: [incremental workflow](https://developer.zendesk.com/documentation/api-basics/working-with-data/using-the-incremental-export-api/).
+  The same documentation restricts third-party/Marketplace use of incremental
+  exports while retaining direct customer access. A distributed OAuth connection
+  alone does not establish export access; capability probing remains required.
+  [Exports](https://developer.zendesk.com/api-reference/ticketing/ticket-management/incremental_exports/).
 - **Threads:** `/api/v2/tickets/{id}/comments.json?page[size]=100` and per-ticket
   `/audits.json`; traverse every page. Keep `public`, `author_id`, `html_body`,
   original dates and attachments (`id`, `content_url`, `file_name`, `content_type`,
@@ -2920,6 +2927,44 @@ units pass 11. Whole-run knowledge provisioning/capacity, omission/retention
 reporting, vendor acceptance and the EN/AR review UI remain unfinished. Earlier
 notes listing all mixed staged/live hierarchy validation as absent are superseded
 by this section; M11 remains in progress.
+
+### Zendesk reference graph and time-page checkpoint (M11-09/10/12; 2026-10-15)
+
+Organization time exports now split timestamp-tied vendor pages into at most
+1,000 staged rows per checkpoint. Mid-page resume retains a hash and offset;
+changed pages fail instead of skipping rows. The next request and final delta
+checkpoint retain the vendor's exact `end_time`. Regression coverage includes a
+1,001-company page, resume after the first chunk, changed-page refusal and a delta.
+
+`zendeskReferenceFixture` is synthetic: 500 tickets (100 closed), 503 users/contacts,
+10 companies, five groups, 1,000 messages (500 private notes), 500 PDF references,
+500 audit changes, 500 satisfaction answers, scoped field definitions/tags and the
+core bilingual Guide fixture. All 39 Zendesk HTTP tests pass, including every
+normalized reference entity and a delta changing a ticket, contact, company,
+private note, audit and historical satisfaction answer. CSAT is rescanned because
+its creation bounds cannot establish updated-since completeness.
+
+The real Postgres/Redis reference test uses encrypted connection credentials,
+the production import processor, outbox continuations, the media processor and
+object cleanup. Its selected scope is the 11 core Support entities; Guide
+extraction is covered by the SDK case, not production article loading. Test-only
+transport/rate budgets avoid vendor throttling during this local fixture run;
+production rate behavior is unchanged. Filesystem storage and external media
+tools are test stand-ins; PDFs do not require ffmpeg and the scanner is disabled.
+
+The reference database case passed with all 500 tickets, 1,000 messages and
+500 ready PDF objects present, credentials purged at completion and no
+`workflow_runs`, `ticket_sla_clocks`, `notifications`, `ai_calls` or
+`webhook_deliveries` for the brand. The complete outbox contains only import
+continuations, attachment processing and the permitted old-object cleanup;
+no live attachment-ready event is emitted. The test processes cleanup too and
+checks that all retained file objects still exist. It does not substitute for
+the final full import-path review with delivery canaries.
+
+Full repeat/delta database acceptance, actual worker termination/restart,
+capability probing, archived-comment equivalence, production knowledge-image
+preparation, browser acceptance and real-provider runs remain unfinished. This
+checkpoint does not complete M11-09, M11-10 or M11-12.
 
 ## M11-13 Freshdesk connector
 

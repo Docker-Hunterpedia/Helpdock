@@ -20,6 +20,8 @@ Add initial Zendesk core exports and resumable contact hydration. Preserve nativ
 
 Extract paged Zendesk public replies, private notes and attachment references with original authors/dates and resumable thread checkpoints.
 
+Stage Zendesk organization exports above 1,000 records without losing timestamp ties. Preserve exact vendor watermarks and refuse changed pages during chunked resume.
+
 Extract Zendesk ticket, contact and company field definitions with separate source scopes, and discover historical tags from ticket exports rather than the limited popular-tag listing.
 
 Extract historical Zendesk audit changes and notification records as inert activity with original dates and actors, resumable pagination and changed-history delta watermarks.

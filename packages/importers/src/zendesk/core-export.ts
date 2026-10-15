@@ -8,17 +8,10 @@ import {
   zendeskGroupSchema,
   zendeskListEnvelopeSchema,
   zendeskOffsetSchema,
-  zendeskOrganizationSchema,
   zendeskTicketSchema,
-  zendeskTimeEnvelopeSchema,
   zendeskUserSchema,
 } from './contracts.js';
-import {
-  zendeskGroupRecord,
-  zendeskOrganizationRecord,
-  zendeskTicketRecord,
-  zendeskUserRecord,
-} from './records.js';
+import { zendeskGroupRecord, zendeskTicketRecord, zendeskUserRecord } from './records.js';
 
 function startingCursor(cursor: ImportCursor | null, since: Date | undefined) {
   return zendeskCursorSchema.parse(
@@ -73,32 +66,6 @@ export async function* exportZendeskUsers(
     const next = { after: page.after_cursor };
     yield {
       records: page.users.map(zendeskUserRecord),
-      cursor: page.end_of_stream ? null : next,
-      ...(page.end_of_stream ? { deltaCursor: next } : {}),
-    };
-    if (page.end_of_stream) return;
-    checkpoint = next;
-  }
-}
-
-export async function* exportZendeskOrganizations(
-  client: ZendeskClient,
-  cursor: ImportCursor | null,
-  since?: Date,
-): AsyncGenerator<ImportPage> {
-  let checkpoint = z
-    .strictObject({ startTime: z.int().nonnegative() })
-    .parse(cursor ?? startingCursor(null, since));
-  const schema = zendeskTimeEnvelopeSchema.extend({
-    organizations: z.array(zendeskOrganizationSchema).max(1000),
-  });
-  while (true) {
-    const page = await client.json('/api/v2/incremental/organizations.json', schema, {
-      start_time: String(checkpoint.startTime),
-    });
-    const next = { startTime: page.end_time };
-    yield {
-      records: page.organizations.map(zendeskOrganizationRecord),
       cursor: page.end_of_stream ? null : next,
       ...(page.end_of_stream ? { deltaCursor: next } : {}),
     };

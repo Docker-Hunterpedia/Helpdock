@@ -50,6 +50,11 @@ under `APP_MASTER_KEY` and never returned after saving; reads expose only
 `hasCredentials`. Delta connection refuses an account different from its completed
 parent. Extraction starts once from `connecting` and ends at `awaiting_mapping`.
 
+Zendesk organization exports may return more than 1,000 records when update
+timestamps tie. The connector stages these in chunks, retaining the exact
+vendor time checkpoint. Resuming within a chunked page checks its fingerprint;
+a changed page is refused rather than silently skipping changed records.
+
 Scope accepts nonempty, unique `entities` and `rebuildAllReports`. It is frozen
 once extraction starts. Date-range filtering, paged run listing, automatic mapping
 proposals and the manual mapper are unfinished.

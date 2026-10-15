@@ -7,15 +7,11 @@ import { fetchZendeskAttachment } from './attachment-fetch.js';
 import { ZendeskClient } from './client.js';
 import { exportZendeskContacts } from './contacts-export.js';
 import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.js';
-import {
-  exportZendeskGroups,
-  exportZendeskOrganizations,
-  exportZendeskTickets,
-  exportZendeskUsers,
-} from './core-export.js';
+import { exportZendeskGroups, exportZendeskTickets, exportZendeskUsers } from './core-export.js';
 import { exportZendeskCsat } from './csat-export.js';
 import { exportZendeskFields } from './fields-export.js';
 import { exportZendeskGuide } from './guide-export.js';
+import { exportZendeskOrganizations } from './organizations-export.js';
 import { exportZendeskTags } from './tags-export.js';
 import { exportZendeskThread } from './threads-export.js';
 

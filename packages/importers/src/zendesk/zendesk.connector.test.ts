@@ -4,7 +4,7 @@ import { ImportHttp } from '../http.js';
 import { ImportRateLimiter } from '../rate-limiter.js';
 import type { ZendeskCredentials } from './contracts.js';
 import { zendeskCoreFixture } from './testing/core-fixture.js';
-import { FakeZendesk } from './testing/fake-zendesk.js';
+import { FakeZendesk, type ZendeskFixture } from './testing/fake-zendesk.js';
 import { ZendeskConnector } from './zendesk.connector.js';
 
 async function collectPages(source: AsyncIterable<ImportPage>): Promise<ImportPage[]> {
@@ -814,5 +814,66 @@ it('rejects attachment metadata for another native ID', async () => {
       fileName: 'receipt.pdf',
       url: `${fake.server.root}/missing-file`,
     }),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
+it('chunks a timestamp-tied organization response above one thousand without losing resume or delta state', async () => {
+  const original = zendeskCoreFixture.organizations?.[0];
+  if (!original) throw new Error('Missing organization fixture');
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    organizations: Array.from({ length: 1001 }, (_, index) => ({ ...original, id: index + 1 })),
+  });
+  const stream = connector.extract(context, 'organization', null)[Symbol.asyncIterator]();
+  const first = await stream.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing organization chunk');
+  expect(first.value.records).toHaveLength(1000);
+  await stream.return?.(undefined);
+  const resumed = await collectPages(
+    connector.extract(context, 'organization', first.value.cursor),
+  );
+  expect(
+    resumed.flatMap((page) => page.records.map((record) => record.payload.externalId)),
+  ).toEqual(['1001']);
+  const watermark = resumed.at(-1)?.deltaCursor;
+  if (!watermark) throw new Error('Missing organization delta watermark');
+  expect(watermark).toEqual({ startTime: Date.parse('2026-10-13T23:59:00Z') / 1000 });
+  fake.advanceTime(120);
+  fake.replaceFixture({
+    ...zendeskCoreFixture,
+    organizations: [
+      {
+        ...original,
+        id: 1001,
+        notes: 'Changed after full export',
+        updated_at: '2026-10-14T00:00:10Z',
+      },
+    ],
+  });
+  const delta = await collectPages(connector.extract(context, 'organization', watermark));
+  expect(delta.flatMap((page) => page.records)).toMatchObject([
+    { payload: { externalId: '1001', notes: 'Changed after full export' } },
+  ]);
+});
+
+it('refuses a changed organization page rather than skipping rows under an old chunk checkpoint', async () => {
+  const original = zendeskCoreFixture.organizations?.[0];
+  if (!original) throw new Error('Missing organization fixture');
+  const organizations: NonNullable<ZendeskFixture['organizations']> = Array.from(
+    { length: 1001 },
+    (_, index) => ({
+      ...original,
+      id: index + 1,
+    }),
+  );
+  fake.replaceFixture({ ...zendeskCoreFixture, organizations });
+  const stream = connector.extract(context, 'organization', null)[Symbol.asyncIterator]();
+  const first = await stream.next();
+  if (first.done || !first.value.cursor) throw new Error('Missing organization checkpoint');
+  await stream.return?.(undefined);
+  organizations[0] = { ...original, id: 1, name: 'Changed page' };
+  fake.replaceFixture({ ...zendeskCoreFixture, organizations });
+  await expect(
+    collectPages(connector.extract(context, 'organization', first.value.cursor)),
   ).rejects.toMatchObject({ code: 'invalid-response' });
 });

@@ -29,7 +29,7 @@ const optionsSchema = z.object({
 
 type Dependencies = { db: Db; keyring: Keyring; allowCidrs: readonly string[] };
 /** Overrides are test-only; production derives its API origin exclusively from validated credentials. */
-type TestTransport = { apiRoot: string; policy: SafeFetchPolicy };
+type TestTransport = { apiRoot: string; policy: SafeFetchPolicy; limiter?: ImportRateLimiter };
 
 export function createImportConnectorRuntime(deps: Dependencies, transport?: TestTransport) {
   const limiters = new Map<string, ImportRateLimiter>();
@@ -61,7 +61,9 @@ export function createImportConnectorRuntime(deps: Dependencies, transport?: Tes
       // Bounded process-local budgets survive continuations without retaining credentials.
       const oldest = limiters.keys().next().value;
       if (limiters.size >= 1000 && oldest !== undefined) limiters.delete(oldest);
-      limiter = new ImportRateLimiter({ capacity: 10, perMinute: 60, resumeTokens: 10 });
+      limiter =
+        transport?.limiter ??
+        new ImportRateLimiter({ capacity: 10, perMinute: 60, resumeTokens: 10 });
       limiters.set(key, limiter);
     }
     return createZendeskImportConnection({

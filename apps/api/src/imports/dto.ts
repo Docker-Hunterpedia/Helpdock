@@ -9,6 +9,8 @@ import {
   importRunParamSchema,
   importRunViewSchema,
   importScopeSchema,
+  importTicketPreviewQuerySchema,
+  importTicketPreviewSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 export class ImportBrandParamDto extends createZodDto(importBrandParamSchema) {}
@@ -23,3 +25,5 @@ export class ImportScopeDto extends createZodDto(importScopeSchema) {}
 
 export class ImportMappingsRequestDto extends createZodDto(importMappingsRequestSchema) {}
 export class ImportMappingsViewDto extends createZodDto(importMappingsViewSchema) {}
+export class ImportTicketPreviewQueryDto extends createZodDto(importTicketPreviewQuerySchema) {}
+export class ImportTicketPreviewDto extends createZodDto(importTicketPreviewSchema) {}

@@ -2738,9 +2738,29 @@ content, forward pagination and the end-of-history boundary. The writer integrat
 suite now contains 160 cases; the two renderer unit cases pass separately.
 Two response-contract tests also enforce source/download URL field omission and
 preservation of the original ticket date-ordering rule in the derived preview schema.
-These readers/output schemas are not yet connected to API/UI or the complete
-three-ticket/contact dry-run report. Approval/completeness and live-target
-freshness remain unfinished.
+The ticket reader is exposed by the authenticated API described below. The complete
+three-ticket/contact dry-run report and review UI, approval/completeness and
+live-target freshness remain unfinished.
+
+### Authenticated ticket-preview API (M11-16, in progress)
+
+`GET /api/brands/:brandId/imports/:runId/preview/ticket` now exposes the read-only
+ticket reader to staff with `brand:manage`. Its strict query schema takes
+`externalId`, `offset` (default 0) and `limit` (default 20, maximum 50); query
+numbers are coerced at the HTTP boundary. The controller declares its permission
+and Zod response DTO for serialization/OpenAPI. Missing or unavailable resources
+return 404; corrupt/oversized source history returns a safe 409 code.
+
+Real-session HTTP tests cover all twelve current import routes for unauthenticated
+requests and agent/team-leader/viewer refusal. Preview tests prove public/private
+pagination, omitted source/download URLs, invalid/unknown query rejection,
+foreign-brand run hiding and cookie-only refusal. A customer source identity
+presented as an agent now returns 409 without its name instead of misleading
+the reviewer. The real Postgres/Redis HTTP suite passes six scenarios.
+
+Sample selection, contact previews, complete dry-run report/approval, queue entry
+points and the EN/AR review UI remain unfinished; this endpoint does not approve
+or start an import.
 
 ## M11-13 Freshdesk connector
 

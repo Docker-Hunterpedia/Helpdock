@@ -99,3 +99,5 @@ Plan contact identity reuse and ambiguity through the loader’s matching rules 
 Detect conflicting contact identifier claims across the proposed import while allowing aliases of one existing local person.
 
 Share organization domain matching between read-only preflight and loading, preserving local names and refusing ambiguous company links.
+
+Expose a brand-admin ticket-history preview endpoint with validated pagination, sanitized bodies, source-author checks and filtered attachment metadata. Refuse foreign-brand access and invalid source author kinds without returning source/download URL fields.

@@ -32,6 +32,8 @@ async function sourceAuthorName(tx: DbTransaction, scope: ImportRunRef, message:
   const native = validatedStagedRecord(row);
   if (native.entity !== 'user' && native.entity !== 'contact')
     throw new ImportLoadError('mapping-invalid');
+  if (native.entity === 'user' && native.payload.kind !== 'agent')
+    throw new ImportLoadError('mapping-invalid');
   return native.payload.name;
 }
 

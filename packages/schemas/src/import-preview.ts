@@ -8,6 +8,12 @@ export const importTicketPreviewRequestSchema = z.strictObject({
   offset: z.int().nonnegative().max(100000).default(0),
   limit: z.int().min(1).max(50).default(20),
 });
+export const importTicketPreviewQuerySchema = z.strictObject({
+  externalId: importTicketPreviewRequestSchema.shape.externalId,
+  offset: z.coerce.number().int().min(0).max(100000).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export type ImportTicketPreviewQuery = z.infer<typeof importTicketPreviewQuerySchema>;
 const { sourceUrl: _sourceUrl, ...ticketPreviewShape } = importTicketSchema.shape;
 export const importTicketPreviewSchema = z.strictObject({
   ticket: z

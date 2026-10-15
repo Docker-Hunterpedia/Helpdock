@@ -6,6 +6,7 @@ import {
   type ImportMappingsRequest,
   type ImportRunCreate,
   type ImportScope,
+  type ImportTicketPreviewQuery,
   importConnectionRequestSchema,
   importConnectionResultSchema,
   importMappingsRequestSchema,
@@ -13,6 +14,7 @@ import {
   importRunCreateSchema,
   importRunListSchema,
   importScopeSchema,
+  importTicketPreviewQuerySchema,
 } from '@helpdock/schemas';
 import {
   BadRequestException,
@@ -31,6 +33,7 @@ import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-con
 import { ImportMappingEditError, saveImportMappings } from './jobs/save-mappings.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
 import { ImportLoadError } from './loader/contracts.js';
+import { previewImportedTicket } from './preflight/ticket-preview.js';
 
 export type ImportConnectionFactory = (request: ImportConnectionRequest) => {
   connector: Connector<ZendeskCredentials>;
@@ -50,6 +53,17 @@ export class ImportsService {
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
     if (!run) throw new NotFoundException('import.run-not-found');
     return importRunView(run);
+  }
+  async previewTicket(context: TicketingContext, runId: string, raw: ImportTicketPreviewQuery) {
+    const query = importTicketPreviewQuerySchema.parse(raw);
+    try {
+      return await previewImportedTicket(context.tx, { brandId: context.brandId, runId, ...query });
+    } catch (error) {
+      if (!(error instanceof ImportLoadError)) throw error;
+      if (error.code === 'target-unavailable')
+        throw new NotFoundException('import.preview-not-found');
+      throw new ConflictException(`import.${error.code}`);
+    }
   }
   async list({ tx, brandId }: TicketingContext) {
     const runs = await tx

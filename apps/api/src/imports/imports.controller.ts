@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../auth/route-declaration.js';
 import { requireTicketingContext } from '../ticketing/ticketing-context.js';
@@ -13,6 +13,8 @@ import {
   ImportRunParamDto,
   ImportRunViewDto,
   ImportScopeDto,
+  ImportTicketPreviewDto,
+  ImportTicketPreviewQueryDto,
 } from './dto.js';
 import { ImportsService } from './imports.service.js';
 
@@ -39,6 +41,15 @@ export class ImportsController {
   @ZodSerializerDto(ImportRunViewDto)
   get(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
     return this.imports.get(requireTicketingContext(), runId);
+  }
+  @Get(':runId/preview/ticket')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportTicketPreviewDto)
+  previewTicket(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Query(new ZodValidationPipe(ImportTicketPreviewQueryDto)) query: ImportTicketPreviewQueryDto,
+  ) {
+    return this.imports.previewTicket(requireTicketingContext(), runId, query);
   }
   @Put(':runId/connection')
   @Requires('brand:manage')

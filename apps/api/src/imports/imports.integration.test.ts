@@ -3,6 +3,7 @@ import {
   brands,
   createDb,
   type DbHandle,
+  importRecords,
   importRuns,
   outbox,
   userBrandRoles,
@@ -10,9 +11,9 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-import { ImportRateLimiter } from '@helpdock/importers';
+import { hashImportValue, ImportRateLimiter } from '@helpdock/importers';
 import { FakeZendesk } from '@helpdock/importers/testing';
-import type { ImportRunView } from '@helpdock/schemas';
+import { type ImportRunView, importRecordSchema } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { eq, sql } from 'drizzle-orm';
@@ -139,6 +140,7 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ['GET', root(), undefined],
       ['POST', root(), { source: 'zendesk' }],
       ['GET', `${root()}/${id}`, undefined],
+      ['GET', `${root()}/${id}/preview/ticket?externalId=42`, undefined],
       [
         'PUT',
         `${root()}/${id}/connection`,
@@ -166,6 +168,173 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       payload: { source: 'zendesk' },
     });
     expect(csrf.statusCode).toBe(401);
+  });
+
+  it('serves validated paged previews only within the authenticated admin brand without source URLs', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId,
+      source: 'zendesk',
+      status: 'awaiting_mapping',
+      startedBy: adminId,
+    });
+    const ticket = importRecordSchema.parse({
+      entity: 'ticket',
+      payload: {
+        externalId: '42',
+        number: '900',
+        subject: 'History preview',
+        status: 'open',
+        ccEmails: [],
+        tags: [],
+        custom: {},
+        createdAt: '2019-01-01T00:00:00Z',
+        updatedAt: '2019-01-03T00:00:00Z',
+        sourceUrl: 'https://vendor.example/tickets/42?token=hidden-root',
+      },
+    });
+    const messages = [true, false].map((publicMessage, index) =>
+      importRecordSchema.parse({
+        entity: 'message',
+        payload: {
+          externalId: `message-${index}`,
+          ticketExternalId: '42',
+          authorKind: 'system',
+          public: publicMessage,
+          bodyHtml: `<p>History ${index}</p><script>alert(1)</script>`,
+          createdAt: `2019-01-0${index + 1}T00:00:00Z`,
+          attachments: [
+            {
+              externalId: `file-${index}`,
+              fileName: 'history.pdf',
+              url: 'https://vendor.example/file?token=hidden-file',
+            },
+          ],
+        },
+      }),
+    );
+    await owner.db.insert(importRecords).values(
+      [ticket, ...messages].map((native) => ({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        parentExternalId: native.entity === 'message' ? '42' : null,
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      })),
+    );
+    const url = `${root()}/${runId}/preview/ticket?externalId=42&limit=1`;
+    const first = await call('GET', url, adminToken);
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      ticket: { number: '900' },
+      messageCount: 2,
+      nextOffset: 1,
+      messages: [{ public: true, bodyText: 'History 0' }],
+    });
+    expect(first.body).not.toMatch(/hidden-root|hidden-file|<script>/);
+    const second = await call('GET', `${url}&offset=1`, adminToken);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      nextOffset: null,
+      messages: [{ public: false, bodyText: 'History 1' }],
+    });
+    expect((await call('GET', `${url}&offset=-1`, adminToken)).statusCode).toBe(400);
+    expect(
+      (await call('GET', `${root()}/${runId}/preview/ticket?externalId=42&limit=51`, adminToken))
+        .statusCode,
+    ).toBe(400);
+    expect((await call('GET', `${url}&credentials=forbidden`, adminToken)).statusCode).toBe(400);
+    expect(
+      (await call('GET', `${root()}/${runId}/preview/ticket?externalId=missing`, adminToken))
+        .statusCode,
+    ).toBe(404);
+    const foreignRunId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: foreignRunId,
+      brandId: otherBrandId,
+      source: 'zendesk',
+      status: 'awaiting_mapping',
+      startedBy: adminId,
+    });
+    expect(
+      (await call('GET', `${root()}/${foreignRunId}/preview/ticket?externalId=42`, adminToken))
+        .statusCode,
+    ).toBe(404);
+    const csrf = await app.inject({
+      method: 'GET',
+      url,
+      headers: { cookie: '__Secure-hd_refresh=untrusted', origin: 'https://attacker.example' },
+    });
+    expect(csrf.statusCode).toBe(401);
+  });
+
+  it('refuses a customer source identity presented as a staff author without exposing its name', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId,
+      source: 'zendesk',
+      status: 'awaiting_mapping',
+      startedBy: adminId,
+    });
+    const records = [
+      {
+        entity: 'ticket',
+        payload: {
+          externalId: 'bad-author-ticket',
+          subject: 'History',
+          status: 'open',
+          ccEmails: [],
+          tags: [],
+          custom: {},
+          createdAt: '2019-01-01T00:00:00Z',
+          updatedAt: '2019-01-02T00:00:00Z',
+        },
+      },
+      {
+        entity: 'message',
+        payload: {
+          externalId: 'bad-author-message',
+          ticketExternalId: 'bad-author-ticket',
+          authorKind: 'agent',
+          authorExternalId: 'bad-agent',
+          public: false,
+          bodyText: 'Private note',
+          createdAt: '2019-01-02T00:00:00Z',
+          attachments: [],
+        },
+      },
+      {
+        entity: 'user',
+        payload: {
+          externalId: 'bad-agent',
+          kind: 'customer',
+          name: 'Private customer name',
+          active: true,
+        },
+      },
+    ].map((record) => importRecordSchema.parse(record));
+    await owner.db.insert(importRecords).values(
+      records.map((native) => ({
+        brandId,
+        runId,
+        entity: native.entity,
+        externalId: native.payload.externalId,
+        parentExternalId: native.entity === 'message' ? 'bad-author-ticket' : null,
+        payload: native.payload,
+        payloadHash: hashImportValue(native.payload),
+      })),
+    );
+    const response = await call(
+      'GET',
+      `${root()}/${runId}/preview/ticket?externalId=bad-author-ticket`,
+      adminToken,
+    );
+    expect(response.statusCode).toBe(409);
+    expect(response.body).not.toContain('Private customer name');
   });
 
   it('validates input and serializes a successful verified connection without returning secrets', async () => {

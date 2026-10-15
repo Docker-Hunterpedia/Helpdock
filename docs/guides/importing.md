@@ -167,6 +167,18 @@ Internal ticket previews now show chronological public messages and private note
 with original dates, source-author names when staged, and attachment metadata.
 History is paged rather than truncated. Preview and stored messages use the same
 safe body renderer. Source-link/download URL fields and mail transport headers are
-excluded. The preview API and review UI are still under development.
+excluded. Ticket previews are available through the API below; the complete review
+UI is still under development.
 Pages have a 4 MiB message-entry budget, except that a single larger message stays
 complete on its own page. Later history remains available through pagination.
+
+Staff with brand-management permission can request:
+
+`GET /api/brands/{brandId}/imports/{runId}/preview/ticket?externalId=42&offset=0&limit=20`
+
+The response includes `messageCount`, `messages` and `nextOffset`. Request the
+returned offset to continue; null means the end of the thread. Invalid or unknown
+query fields return 400. Missing/unavailable tickets or foreign-brand runs return
+404; corrupt or oversized source history returns 409 and must be corrected before
+importing. Previewing a ticket creates no destination records and does not approve
+the run.

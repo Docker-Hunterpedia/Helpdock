@@ -2736,6 +2736,8 @@ loading; subsequent loading produces the same bodies, visibility and timestamps.
 Paused loading remains inspectable. A large-body regression proves complete
 content, forward pagination and the end-of-history boundary. The writer integration
 suite now contains 160 cases; the two renderer unit cases pass separately.
+Two response-contract tests also enforce source/download URL field omission and
+preservation of the original ticket date-ordering rule in the derived preview schema.
 These readers/output schemas are not yet connected to API/UI or the complete
 three-ticket/contact dry-run report. Approval/completeness and live-target
 freshness remain unfinished.

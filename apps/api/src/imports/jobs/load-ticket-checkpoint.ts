@@ -10,6 +10,7 @@ import { requireImportedTicket } from '../loader/load-ticket.js';
 import {
   type ImportClaim,
   ImportClaimLost,
+  type ImportRunRef,
   importClaimSchema,
   renewImportClaim,
 } from './claims.js';
@@ -41,32 +42,51 @@ async function stagedTicket(tx: DbTransaction, claim: ImportClaim, recordId: str
   return row;
 }
 
-export async function stagedTicketChildren(
-  tx: DbTransaction,
-  claim: ImportClaim,
-  externalId: string,
-) {
-  const filter = and(
-    eq(importRecords.brandId, claim.brandId),
-    eq(importRecords.runId, claim.runId),
+function stagedThreadFilter(scope: ImportRunRef, externalId: string) {
+  return and(
+    eq(importRecords.brandId, scope.brandId),
+    eq(importRecords.runId, scope.runId),
     eq(importRecords.parentExternalId, externalId),
     inArray(importRecords.entity, ['message', 'csat', 'attachment', 'activity']),
   );
+}
+
+async function assertStagedThreadSize(tx: DbTransaction, scope: ImportRunRef, externalId: string) {
   const [footprint] = await tx
     .select({
       bytes: sql<string>`coalesce(sum(octet_length(${importRecords.payload}::text)), 0)::text`,
     })
     .from(importRecords)
-    .where(filter);
+    .where(stagedThreadFilter(scope, externalId));
   if (!footprint) throw new ImportLoadError('target-unavailable');
   if (BigInt(footprint.bytes) > BigInt(MAX_STAGED_THREAD_BYTES))
     throw new ImportLoadError('thread-too-large');
+}
+
+function stagedChildrenQuery(tx: DbTransaction, scope: ImportRunRef, externalId: string) {
   return tx
     .select()
     .from(importRecords)
-    .where(filter)
-    .orderBy(importRecords.entity, importRecords.externalId, importRecords.id)
-    .for('update');
+    .where(stagedThreadFilter(scope, externalId))
+    .orderBy(importRecords.entity, importRecords.externalId, importRecords.id);
+}
+
+export async function stagedTicketChildren(
+  tx: DbTransaction,
+  claim: ImportClaim,
+  externalId: string,
+) {
+  await assertStagedThreadSize(tx, claim, externalId);
+  return stagedChildrenQuery(tx, claim, externalId).for('update');
+}
+
+export async function previewStagedTicketChildren(
+  tx: DbTransaction,
+  scope: ImportRunRef,
+  externalId: string,
+) {
+  await assertStagedThreadSize(tx, scope, externalId);
+  return stagedChildrenQuery(tx, scope, externalId);
 }
 
 function validateStagedThread(children: StagedRow[], input: TicketLoad): void {

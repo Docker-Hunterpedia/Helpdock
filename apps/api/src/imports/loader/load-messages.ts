@@ -1,4 +1,3 @@
-import { sanitizeMessageBody } from '@helpdock/channels';
 import { type DbTransaction, ticketMessages, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import type { ImportMessage } from '@helpdock/schemas';
@@ -12,11 +11,7 @@ import {
   reconcileImportedMessageAttachments,
 } from './load-attachments.js';
 import { importedAuthor } from './load-authors.js';
-
-function plainHtml(text: string): string {
-  const escaped = text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  return `<p>${escaped.replaceAll(/\r?\n/g, '<br>')}</p>`;
-}
+import { importedMessageBody } from './message-body.js';
 
 /** Download URLs expire and change independently of the historical message. */
 export function importMessageHash(message: ImportMessage): string {
@@ -34,7 +29,7 @@ async function insertImportedMessage(
 ): Promise<void> {
   const { input, message } = options;
   const author = await importedAuthor(tx, input, message);
-  const messageBody = sanitizeMessageBody(message.bodyHtml ?? plainHtml(message.bodyText ?? ''));
+  const messageBody = importedMessageBody(message);
   const messageId = uuidv7();
   await tx.insert(ticketMessages).values({
     id: messageId,
@@ -80,7 +75,7 @@ async function updateImportedMessage(
 ): Promise<void> {
   await reconcileImportedMessageAttachments(tx, input, ticketId, messageId, message);
   const author = await importedAuthor(tx, input, message);
-  const messageBody = sanitizeMessageBody(message.bodyHtml ?? plainHtml(message.bodyText ?? ''));
+  const messageBody = importedMessageBody(message);
   await tx
     .update(ticketMessages)
     .set({

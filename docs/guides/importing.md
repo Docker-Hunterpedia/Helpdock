@@ -162,3 +162,11 @@ explicit warnings; policy refusals produce errors. Vendor throttling or temporar
 failures do not advance progress. Tightening the content policy invalidates a prior
 media result. These checks do not replace final image processing or antivirus work
 when importing. The complete dry-run report, approval and UI are still unfinished.
+
+Internal ticket previews now show chronological public messages and private notes
+with original dates, source-author names when staged, and attachment metadata.
+History is paged rather than truncated. Preview and stored messages use the same
+safe body renderer. Source-link/download URL fields and mail transport headers are
+excluded. The preview API and review UI are still under development.
+Pages have a 4 MiB message-entry budget, except that a single larger message stays
+complete on its own page. Later history remains available through pagination.

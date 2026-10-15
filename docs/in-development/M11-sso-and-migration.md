@@ -2711,6 +2711,35 @@ prove final image processing or antivirus results, and does not approve loading.
 Queue/HTTP entry points, full completeness/preview reporting, live-target approval
 freshness and the review UI remain unfinished.
 
+### Read-only ticket-history previews (M11-10/16, in progress)
+
+The ticket preview reader validates the staged root and its children, applies the
+loader's 50 MiB thread bound, and returns chronological history in pages of 20
+messages by default (50 maximum). Root source-link fields, attachment download
+URLs/bundle paths and email transport headers are omitted. The preview retains
+source ticket fields, dates, public/note distinctions, source-author references and
+available staged names, and attachment metadata. Missing source names stay null.
+Message entries use a 4 MiB page budget; one complete oversized message is allowed
+alone, and subsequent history continues on the next page. This avoids silently
+truncating a long body or combining many expanded HTML bodies into one response.
+
+Preview and loading now share one message-body renderer, so plain-text markup
+remains literal and HTML receives the same sanitizer in both paths. A shared
+bounded child query retains row locks for loading but uses read-only row access
+for preview, under the import brand lock. It does not allocate ticket numbers,
+provision profiles, update staged status or emit outbox work.
+
+Unit tests cover literal plain-text markup and HTML sanitization. Real database
+coverage proves paged public/note chronology, source names/file metadata, omitted
+source/download URLs, cross-brand refusal and unchanged row revisions before
+loading; subsequent loading produces the same bodies, visibility and timestamps.
+Paused loading remains inspectable. A large-body regression proves complete
+content, forward pagination and the end-of-history boundary. The writer integration
+suite now contains 160 cases; the two renderer unit cases pass separately.
+These readers/output schemas are not yet connected to API/UI or the complete
+three-ticket/contact dry-run report. Approval/completeness and live-target
+freshness remain unfinished.
+
 ## M11-13 Freshdesk connector
 
 *First task: confirm against developers.freshdesk.com/api and fix this section.*

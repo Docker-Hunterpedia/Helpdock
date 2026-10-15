@@ -25,6 +25,7 @@ export * from './identity-rules.js';
 export * from './import.js';
 export * from './import-api.js';
 export * from './import-mappings.js';
+export * from './import-preview.js';
 export * from './install.js';
 export * from './install-settings.js';
 export * from './knowledge.js';

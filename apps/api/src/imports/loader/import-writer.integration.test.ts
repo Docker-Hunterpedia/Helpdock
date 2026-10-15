@@ -134,6 +134,7 @@ import { validateImportMappingTarget } from '../preflight/mapping-targets.js';
 import { previewImportedOrganization } from '../preflight/organization-plan.js';
 import { validateImportRecordPage } from '../preflight/record-page.js';
 import { validateImportReferences } from '../preflight/record-references.js';
+import { previewImportedTicket } from '../preflight/ticket-preview.js';
 import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
@@ -6078,6 +6079,180 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ),
     ).toEqual(revisions);
     expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('previews chronological ticket history, notes, source authors and file metadata without URLs or writes', async () => {
+    const scenario = await stagedTicketScenario(
+      'preview-history',
+      'https://vendor.example/file?token=secret-file',
+    );
+    const root = {
+      ...scenario.input.record,
+      sourceUrl: 'https://vendor.example/tickets/42?token=secret-root',
+    };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: root, payloadHash: hashImportValue(root) })
+      .where(eq(importRecords.id, scenario.recordId));
+    const agent = {
+      externalId: 'oldagent',
+      kind: 'agent',
+      name: 'Historical agent',
+      active: false,
+    };
+    const contact = {
+      externalId: 'customer',
+      name: 'Historical customer',
+      emails: [],
+      phones: [],
+      custom: {},
+    };
+    await owner.db.insert(importRecords).values([
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        entity: 'user',
+        externalId: agent.externalId,
+        payload: agent,
+        payloadHash: hashImportValue(agent),
+      },
+      {
+        brandId: BRAND,
+        runId: scenario.input.runId,
+        entity: 'contact',
+        externalId: contact.externalId,
+        payload: contact,
+        payloadHash: hashImportValue(contact),
+      },
+    ]);
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${scenario.input.runId} ORDER BY id`,
+    );
+    const ticketRevisions = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`,
+    );
+    const scope = {
+      brandId: BRAND,
+      runId: scenario.input.runId,
+      externalId: root.externalId,
+      limit: 1,
+    };
+    const first = await withSystem(app.db, BRAND, (tx) => previewImportedTicket(tx, scope));
+    expect(first).toMatchObject({
+      ticket: { number: '900', subject: 'Original ticket' },
+      messageCount: 2,
+      nextOffset: 1,
+      messages: [
+        {
+          externalId: 'm-preview-history-1',
+          sourceAuthorName: 'Historical customer',
+          public: true,
+          createdAt: '2019-01-01T00:00:00Z',
+          bodyText: 'Hello',
+        },
+      ],
+    });
+    expect(JSON.stringify(first)).not.toMatch(/tracker\.invalid|secret-root|<script>/);
+    const second = await withSystem(app.db, BRAND, (tx) =>
+      previewImportedTicket(tx, { ...scope, offset: 1 }),
+    );
+    expect(second).toMatchObject({
+      messageCount: 2,
+      nextOffset: null,
+      messages: [
+        {
+          sourceAuthorName: 'Historical agent',
+          public: false,
+          bodyText: 'Private note',
+          attachments: [{ fileName: 'history.pdf', contentType: 'application/pdf' }],
+        },
+      ],
+    });
+    expect(JSON.stringify(second)).not.toContain('secret-file');
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM import_records WHERE run_id = ${scenario.input.runId} ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM tickets ORDER BY id`),
+    ).toEqual(ticketRevisions);
+    await expect(
+      withSystem(app.db, OTHER_BRAND, (tx) =>
+        previewImportedTicket(tx, { ...scope, brandId: OTHER_BRAND }),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+    await withSystem(app.db, BRAND, (tx) =>
+      pauseImportRun(tx, { brandId: BRAND, runId: scenario.input.runId }),
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => previewImportedTicket(tx, scope))).toEqual(
+      first,
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      resumeImportRun(tx, { brandId: BRAND, runId: scenario.input.runId }),
+    );
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, scenario.input));
+    const stored = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId))
+      .orderBy(ticketMessages.seq);
+    expect(
+      stored.map((message) => ({
+        bodyHtml: message.bodyHtml,
+        bodyText: message.bodyText,
+        public: message.kind === 'public',
+        createdAt: message.createdAt.toISOString(),
+      })),
+    ).toEqual(
+      [...first.messages, ...second.messages].map((message) => ({
+        bodyHtml: message.bodyHtml,
+        bodyText: message.bodyText,
+        public: message.public,
+        createdAt: new Date(message.createdAt).toISOString(),
+      })),
+    );
+  });
+
+  it('keeps oversized preview messages complete while continuing later history on another page', async () => {
+    const scenario = await stagedTicketScenario('large-preview');
+    const message = scenario.input.messages.find((message) => message.public);
+    if (!message) throw new Error('Missing public preview message');
+    const { bodyHtml: _html, ...source } = message;
+    const bodyText = '<'.repeat(1024 * 1024);
+    const payload = { ...source, bodyText };
+    await owner.db
+      .update(importRecords)
+      .set({ payload, payloadHash: hashImportValue(payload) })
+      .where(
+        and(
+          eq(importRecords.runId, scenario.input.runId),
+          eq(importRecords.entity, 'message'),
+          eq(importRecords.externalId, message.externalId),
+        ),
+      );
+    const scope = {
+      brandId: BRAND,
+      runId: scenario.input.runId,
+      externalId: scenario.input.record.externalId,
+      limit: 50,
+    };
+    const first = await withSystem(app.db, BRAND, (tx) => previewImportedTicket(tx, scope));
+    expect(first.messages).toHaveLength(1);
+    expect(first.messages[0]?.bodyText).toBe(bodyText);
+    expect(Buffer.byteLength(JSON.stringify(first.messages))).toBeGreaterThan(4 * 1024 * 1024);
+    expect(first.nextOffset).toBe(1);
+    const second = await withSystem(app.db, BRAND, (tx) =>
+      previewImportedTicket(tx, { ...scope, offset: 1 }),
+    );
+    expect(second.messages).toHaveLength(1);
+    expect(second.messages[0]?.public).toBe(false);
+    expect(second.nextOffset).toBeNull();
+    expect(
+      (await withSystem(app.db, BRAND, (tx) => previewImportedTicket(tx, { ...scope, offset: 2 })))
+        .messages,
+    ).toEqual([]);
   });
 
   it('blocks missing required ticket values in preflight just as the loader does', async () => {

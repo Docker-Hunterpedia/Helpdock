@@ -3091,9 +3091,23 @@ PRD status board.
 | Packages | `@helpdock/importers`, `@helpdock/importers/testing` |
 | Columns | `user_brand_roles.source`, `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `ticket_messages.author_display` |
 
+## Database acceptance runner gap — #216
+
+PR #215 CI run 38741181295 skipped the 182 import-writer cases and 97 ticket
+cases after Docker availability probes failed; coverage then failed at 87.22%.
+The API container suites and eval/perf setup now share one probe that allows
+60 seconds for Docker and throws on probe failure when `CI` is nonempty.
+Optional local skips remain.
+This is an M11-09/M11-10 validation fix, not completed importer acceptance.
+The boundary regression uses a disposable executable on `PATH`, without a
+real daemon, and verifies required-CI refusal, optional local absence and a
+successful daemon response.
+
 ## Pull requests
 
 - [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–23 migration work in progress (draft; work continuing, not ready to merge).
+
+- [#217](https://github.com/Docker-Hunterpedia/Helpdock/pull/217) — M11-09/10 CI validation gap #216: required Docker probes fail explicitly in CI; local skips remain available (merged; all checks passed).
 
 - [#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212) — M11-04–06 staff SSO integration, bilingual administration and setup guides (merged; all PR checks passed).
 

@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { HttpTransport } from '@helpdock/ai';
 import type { Env } from '@helpdock/config';
 import { createDb } from '@helpdock/db';
@@ -12,6 +10,7 @@ import { sql } from 'drizzle-orm';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
 import { createLogger } from '../../logging/logger.js';
 import { seedDevInstall } from '../../seed/dev-seed.js';
+import { dockerAvailable } from '../docker-available.js';
 import { FakeStorage } from '../media.js';
 import { signInForTest } from '../staff-sign-in.js';
 
@@ -30,14 +29,7 @@ const CONTAINER_STARTUP_MS = 180_000;
 const APP_ROLE_PASSWORD = 'ai-eval-app-role';
 const MASTER_KEY = Buffer.alloc(32, 71).toString('base64');
 
-export const hasDocker = await promisify(execFile)(
-  'docker',
-  ['info', '--format', '{{.ServerVersion}}'],
-  { timeout: 10_000 },
-).then(
-  () => true,
-  () => false,
-);
+export const hasDocker = await dockerAvailable();
 
 export interface StaffResponse<T> {
   readonly status: number;

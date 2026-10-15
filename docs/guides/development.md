@@ -14,6 +14,13 @@ No database to install by hand: the integration tests start the services they
 need in containers themselves, and [the dev Compose stack](#docker) starts
 Postgres, Redis, MinIO and Mailpit for the dev loop.
 
+The shared API Docker probe (used by the API container suites and eval/perf setup)
+allows 60 seconds for a loaded daemon to answer. Without Docker these suites
+may skip locally. With a nonempty `CI` environment variable, a failed probe
+throws instead: required database tests must not silently disappear from CI
+or its coverage report. Start Docker or repair the runner before retrying;
+do not lower the coverage threshold to compensate for skipped suites.
+
 ## Install
 
 ```bash

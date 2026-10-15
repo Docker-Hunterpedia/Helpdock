@@ -1,6 +1,4 @@
-import { execFile } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
-import { promisify } from 'node:util';
 import {
   createFakeModel,
   type FakeModel,
@@ -67,6 +65,7 @@ import { createLogger } from '../logging/logger.js';
 import { evaluateEventRules } from '../rules/engine.js';
 import { createRulesEngineDeps } from '../rules/engine-deps.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { runTranscription } from '../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../transcription/transcription-events.js';
@@ -85,12 +84,7 @@ const MASTER_KEY = Buffer.alloc(32, 41).toString('base64');
 const PASSWORD = 'a staff password';
 const CONTAINER_STARTUP_MS = 180_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -42,6 +40,7 @@ import { createLogger } from '../../logging/logger.js';
 import { runBrandRetention } from '../../retention/retention.job.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
 import { withSystemJob } from '../../tenant/system-job.js';
+import { dockerAvailable } from '../../testing/docker-available.js';
 import { FakeStorage, silentJobLogger } from '../../testing/media.js';
 import { signInForTest } from '../../testing/staff-sign-in.js';
 import { HelpCenterFeedbackService } from '../feedback/feedback.service.js';
@@ -71,12 +70,7 @@ const STAFF_PASSWORD = 'a staff password';
 const CONTAINER_STARTUP_MS = 120_000;
 const SHOP = 'https://shop.example.com';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

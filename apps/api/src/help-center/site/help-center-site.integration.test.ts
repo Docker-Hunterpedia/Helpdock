@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -35,6 +33,7 @@ import { PasswordHasher } from '../../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
 import { createLogger } from '../../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
+import { dockerAvailable } from '../../testing/docker-available.js';
 import { FakeStorage } from '../../testing/media.js';
 import { signInForTest } from '../../testing/staff-sign-in.js';
 import { reindexArticles } from '../search/search-index.js';
@@ -76,12 +75,7 @@ const STAFF_PASSWORD = 'a staff password';
 const CONTAINER_STARTUP_MS = 120_000;
 const HOST = 'help.acme.test';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

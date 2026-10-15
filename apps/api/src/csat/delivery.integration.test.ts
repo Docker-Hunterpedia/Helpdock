@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
   contactIdentities,
@@ -70,6 +68,7 @@ import {
   createTelegramSendHandler,
   createTelegramSendProcessor,
 } from '../telegram/telegram-send.job.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeTelegram, textUpdate } from '../testing/fake-telegram.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
@@ -116,12 +115,7 @@ const SHOP = 'https://shop.example.com';
 const TOKEN = '7000009:AAEcsatSurveyBotTokenAbcdefghijklmnop';
 const NO_INSTALL_SMTP: InstallSmtp = { read: async () => undefined };
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

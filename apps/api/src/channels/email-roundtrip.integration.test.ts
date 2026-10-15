@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { createKeyring, type Env } from '@helpdock/config';
 import {
   brands,
@@ -49,6 +47,7 @@ import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { noSurveyEmails } from '../testing/csat-doubles.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 
@@ -80,12 +79,7 @@ const MASTER_KEY = Buffer.alloc(32, 41).toString('base64');
 const CONTAINER_STARTUP_MS = 120_000;
 const MAILBOX = 'desk@helpdock.test';
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

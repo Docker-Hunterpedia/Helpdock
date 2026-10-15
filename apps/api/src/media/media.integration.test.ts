@@ -1,5 +1,3 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   attachments,
@@ -15,7 +13,6 @@ import {
   uuidv7,
   withSystem,
 } from '@helpdock/db';
-
 import type {
   Attachment,
   AttachmentDownload,
@@ -33,6 +30,7 @@ import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { dockerAvailable } from '../testing/docker-available.js';
 import { fakeScanner, fakeTools, silentJobLogger } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { createMediaProcessor } from './process.job.js';
@@ -86,12 +84,7 @@ const MASTER_KEY = Buffer.alloc(32, 23).toString('base64');
 const AGENT_PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 180_000;
 
-const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
-  timeout: 10_000,
-}).then(
-  () => true,
-  () => false,
-);
+const hasDocker = await dockerAvailable();
 
 if (!hasDocker) {
   process.stderr.write(

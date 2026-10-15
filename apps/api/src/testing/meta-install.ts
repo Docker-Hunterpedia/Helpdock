@@ -1,8 +1,7 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { Env } from '@helpdock/config';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
+import { dockerAvailable } from './docker-available.js';
 
 /**
  * What every Meta integration suite begins with, written once: whether Docker is
@@ -18,15 +17,8 @@ const REDIS_IMAGE = 'redis:7-alpine';
 const CONTAINER_STARTUP_MS = 120_000;
 const APP_ROLE_PASSWORD = 'app-role-password';
 
-/** Whether a Docker daemon answers: a suite without one skips itself and says why. */
-export const hasDocker: boolean = await promisify(execFile)(
-  'docker',
-  ['info', '--format', '{{.ServerVersion}}'],
-  { timeout: 10_000 },
-).then(
-  () => true,
-  () => false,
-);
+/** Local absence may skip a suite; CI must run the required database tests. */
+export const hasDocker = await dockerAvailable();
 
 export const startPostgres = (): Promise<StartedPostgreSqlContainer> =>
   new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start();

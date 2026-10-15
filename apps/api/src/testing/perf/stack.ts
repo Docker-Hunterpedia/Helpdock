@@ -1,13 +1,13 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import { decodeMasterKey } from '@helpdock/config';
 import { createDb, type DbHandle, runMigrations } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
 import { PasswordHasher } from '../../auth/password.js';
+import { dockerAvailable } from '../docker-available.js';
 import { overHttp, signInForTest } from '../staff-sign-in.js';
 
 /**
@@ -42,14 +42,7 @@ export const envNumber = (name: string, fallback: number): number => {
   return value;
 };
 
-export const hasDocker = await promisify(execFile)(
-  'docker',
-  ['info', '--format', '{{.ServerVersion}}'],
-  { timeout: 10_000 },
-).then(
-  () => true,
-  () => false,
-);
+export const hasDocker = await dockerAvailable();
 
 export interface PerfStackOptions {
   /** Api processes, each on its own port. */

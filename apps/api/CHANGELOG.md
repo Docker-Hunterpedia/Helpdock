@@ -1,5 +1,21 @@
 # @helpdock/api
 
+## 0.6.0
+
+### Minor Changes
+
+- [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210) [`317f967`](https://github.com/Docker-Hunterpedia/Helpdock/commit/317f96719d70ad928965e909c2c4ea0d61a7cfee) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Add staff OIDC authorization-code sign-in with PKCE, browser-bound single-use state, verified ID-token signatures, safe provider requests and local MFA for existing subject bindings. Provisioning and group-role sync follow in M11-04.
+
+- [#211](https://github.com/Docker-Hunterpedia/Helpdock/pull/211) [`a6a64ff`](https://github.com/Docker-Hunterpedia/Helpdock/commit/a6a64ff1f7a428c7843906880b54c99e001a264a) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Add staff SAML sign-in with signed AuthnRequests, strict signed assertion checks, browser-bound completion, atomic replay protection, SP metadata, certificate rotation and outbound-safe daily IdP metadata refresh. Existing subject bindings retain local MFA; provisioning and group-role sync follow in M11-04.
+
+- [#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207) [`087b572`](https://github.com/Docker-Hunterpedia/Helpdock/commit/087b57224ed5cae8205656c28d32b3555625c4d0) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Add install-admin SSO configuration, encrypted connection secrets, validated role mappings, atomic signing-key initialization, and single-use request state. Protocol sign-in and authentication enforcement are separate M11 deliverables.
+
+- [#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212) [`6287265`](https://github.com/Docker-Hunterpedia/Helpdock/commit/62872659d6b967827f158e1c479e1d29821c4c4b) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Add staff SSO account linking, just-in-time provisioning, group role sync and enforcement with password/TOTP emergency access. Add bilingual SSO administration and protected connection previews; bound SSO sessions to twelve hours and preserve manual role ownership.
+
+### Patch Changes
+
+- [#181](https://github.com/Docker-Hunterpedia/Helpdock/pull/181) [`6fe948c`](https://github.com/Docker-Hunterpedia/Helpdock/commit/6fe948cc452b4cc3d8d79844e32c9280e9beb6d3) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Admin: the ticket's SLA card keeps its policy and clocks when a reply or note arrives live, instead of saying "No SLA policy applies" until a reload.
+
 ## 0.5.1
 
 ### Patch Changes

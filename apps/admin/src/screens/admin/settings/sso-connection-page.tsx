@@ -26,7 +26,7 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'rea
 import { useT } from '../../../app/i18n.js';
 import { ROUTES, ssoConnectionRoute } from '../../../app/route-paths.js';
 import { PageHeader } from '../../../shell/page-header.js';
-import { ssoKeys } from '../../../sso/api.js';
+import { isSsoError, ssoKeys } from '../../../sso/api.js';
 import { useSsoApi } from '../../../sso/context.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
@@ -159,6 +159,8 @@ function ConnectionForm({
     },
   });
   const test = useMutation({ mutationFn: () => api.test(id) });
+  const refusal = isSsoError(save.error) ? save.error : null;
+  const domainsTaken = refusal?.reason === 'sso-email-domain-taken' ? refusal.domains : null;
   const submit = () => {
     const parsed = ssoConnectionCreateSchema.safeParse({
       ...draft,
@@ -211,7 +213,11 @@ function ConnectionForm({
       <PageHeader title={connection?.name ?? t('sso:add')} caption={t('sso:providerHint')} />
       {invalid ? <AlertBanner tone="danger">{t('sso:invalid')}</AlertBanner> : null}
       {save.isError || remove.isError ? (
-        <AlertBanner tone="danger">{t('sso:saveError')}</AlertBanner>
+        <AlertBanner tone="danger">
+          {refusal?.reason === 'sso-metadata-confirm-certificates'
+            ? t('sso:refusals.sso-metadata-confirm-certificates')
+            : t('sso:saveError')}
+        </AlertBanner>
       ) : null}
       <Box
         sx={{
@@ -290,7 +296,16 @@ function ConnectionForm({
             <TextField
               label={t('sso:domains')}
               value={domains}
-              onChange={(event) => setDomains(event.target.value)}
+              onChange={(event) => {
+                setDomains(event.target.value);
+                if (domainsTaken) save.reset();
+              }}
+              error={domainsTaken !== null}
+              helperText={
+                domainsTaken
+                  ? t('sso:refusals.sso-email-domain-taken', { domains: domainsTaken.join(', ') })
+                  : undefined
+              }
               slotProps={{ htmlInput: { dir: 'ltr' } }}
             />
             <FormControlLabel

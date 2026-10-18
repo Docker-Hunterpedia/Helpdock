@@ -269,6 +269,8 @@ const authErrorCodes = [
   'sso-connection-disabled',
   'sso-required',
   'sso-invalid-response',
+  /** The matched account already has an identity on this or another SSO connection. */
+  'sso-identity-conflict',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

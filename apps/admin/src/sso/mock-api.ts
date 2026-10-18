@@ -14,7 +14,7 @@ import {
 } from '@helpdock/schemas';
 import { MOCK_BRANDS, MOCK_USER, type MockAuthApi } from '../auth/mock-api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
-import type { SsoApi } from './api.js';
+import { type SsoApi, SsoError } from './api.js';
 
 export class MockSsoApi implements SsoApi {
   readonly #connections = new Map<string, SsoConnection>();
@@ -77,6 +77,7 @@ export class MockSsoApi implements SsoApi {
   }
   async create(input: SsoConnectionInput) {
     const validated = ssoConnectionCreateSchema.parse(input);
+    this.#checkDomains(validated);
     const connection = ssoConnectionSchema.parse({
       ...validated,
       id: crypto.randomUUID(),
@@ -94,6 +95,7 @@ export class MockSsoApi implements SsoApi {
     const current = this.#connection(id);
     const validated = ssoConnectionCreateSchema.parse(input);
     if (current.protocol !== validated.config.protocol) throw new Error('sso-protocol-immutable');
+    this.#checkDomains(validated, id);
     if (
       current.enabled &&
       !validated.enabled &&
@@ -185,6 +187,17 @@ export class MockSsoApi implements SsoApi {
       conflict: false,
       access: connection.defaultAccess ? [connection.defaultAccess] : [],
     };
+  }
+  /** The api's rule: two enabled connections never list the same email domain. */
+  #checkDomains(input: SsoConnectionInput, id?: string) {
+    if (!input.enabled) return;
+    const listed = new Set(
+      [...this.#connections.values()]
+        .filter((connection) => connection.enabled && connection.id !== id)
+        .flatMap((connection) => connection.emailDomains),
+    );
+    const taken = input.emailDomains.filter((domain) => listed.has(domain));
+    if (taken.length > 0) throw new SsoError('sso-email-domain-taken', taken);
   }
   #connection(id: string): SsoConnection {
     const connection = this.#connections.get(id);

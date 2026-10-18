@@ -209,3 +209,33 @@ returns bounded raw bytes rather than automatically decompressing responses.
   The public `test=1` toggle stays refused.
 - The settings form saves connection and mappings in one transaction through
   additional configuration routes, avoiding partial saves or duplicate retry creates.
+
+### 2026-10-18 — Linking, domain and metadata hardening (#219)
+
+Review of the merged SSO work found that the email fallback in decision 7 could
+hand an already-linked account to another identity. The rules are now:
+
+- **Email linking is a first link only.** An unseen `(connection, subject)` links
+  by email only when the matched account has no `user_sso_identities` row at
+  all. A second subject on the same connection (a recycled or edited address)
+  or a subject on another connection is refused with the new auth code
+  `sso-identity-conflict`; nothing is linked or changed. Migration `0053_sso`
+  (not yet in a release) also declares `UNIQUE (user_id, connection_id)`, and
+  the identity insert tolerates only a repeat of its own `(connection_id, subject)`.
+- **One enabled connection per email domain.** Create, update and enable refuse
+  a domain another enabled connection lists, under the configuration lock, with
+  the refusal `sso-email-domain-taken` and the overlapping domains in
+  `error.sso`, which the connection form shows on its domains field.
+- **`email_verified` vouches only for `email`.** `SsoAssertion.emailVerified` is
+  now a boolean: for OIDC it is true only when the configured email claim is
+  `email` and `email_verified === true`; SAML keeps its domain rule. Email
+  linking and JIT require it. Existing subject links sign in either way, so an
+  unverified address or an administrator-chosen claim (such as `upn`) no longer
+  blocks people already linked, but can never introduce an account.
+- **A metadata refresh never adds trust.** The daily refresh applies a fetched
+  set only when every certificate in it is already trusted, so removals stay
+  automatic. Any added certificate, beside the current ones or replacing them,
+  is refused with `sso.metadata.rotation-refused` / `admin-confirmation-required`.
+  A save confirms only the certificates the administrator submitted: one that
+  omits a certificate the metadata lists is refused with
+  `sso-metadata-confirm-certificates`.

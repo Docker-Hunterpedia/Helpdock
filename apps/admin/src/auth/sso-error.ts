@@ -4,6 +4,7 @@ const SSO_ERROR_KEYS = {
   'sso-connection-disabled': 'auth:sso.errors.sso-connection-disabled',
   'sso-required': 'auth:sso.errors.sso-required',
   'sso-invalid-response': 'auth:sso.errors.sso-invalid-response',
+  'sso-identity-conflict': 'auth:sso.errors.sso-identity-conflict',
 } as const;
 
 export function ssoErrorKey(code: string | null) {

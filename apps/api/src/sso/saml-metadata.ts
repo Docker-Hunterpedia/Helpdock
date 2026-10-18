@@ -16,9 +16,10 @@ export function samlCertificate(pem: string) {
   return cert;
 }
 export const certificateFingerprint = (pem: string) => samlCertificate(pem).fingerprint256;
-export function overlappingCertificates(current: string[], next: string[]) {
+/** Whether `next` trusts a signing certificate that `current` does not. */
+export function addsCertificates(current: string[], next: string[]) {
   const fingerprints = new Set(current.map(certificateFingerprint));
-  return next.some((pem) => fingerprints.has(certificateFingerprint(pem)));
+  return next.some((pem) => !fingerprints.has(certificateFingerprint(pem)));
 }
 
 function metadataIdpDescriptor(xml: string, config: Pick<SamlConfig, 'idpEntityId' | 'idpSsoUrl'>) {

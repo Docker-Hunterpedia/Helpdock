@@ -10,6 +10,7 @@ import type {
   KnowledgeRefusal,
   MetaRefusal,
   MetaRefusalDetails,
+  SsoRefusal,
   StaffRefusal,
   TelegramRefusal,
   TicketingRefusal,
@@ -26,6 +27,7 @@ import { DomainsError } from '../domains/api.js';
 import { HelpCenterError } from '../help-center/api.js';
 import { KnowledgeError } from '../knowledge/api.js';
 import { MetaError } from '../meta/api.js';
+import { SsoError } from '../sso/api.js';
 import { StaffError } from '../staff/api.js';
 import { TelegramError } from '../telegram/api.js';
 import { TicketingError } from '../ticketing/api.js';
@@ -220,6 +222,7 @@ const toError = async (
   | HelpCenterError
   | KnowledgeError
   | MetaError
+  | SsoError
   | StaffError
   | TelegramError
   | TicketingError
@@ -240,6 +243,7 @@ const toError = async (
   let meta: { reason: MetaRefusal; details?: MetaRefusalDetails | undefined } | undefined;
   let assist: AssistRefusal | undefined;
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
+  let sso: { reason: SsoRefusal; domains?: string[] | undefined } | undefined;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -257,6 +261,7 @@ const toError = async (
     meta = body.meta;
     assist = body.assist?.reason;
     webhooks = body.webhooks;
+    sso = body.sso;
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -312,6 +317,10 @@ const toError = async (
 
   if (webhooks !== undefined) {
     return new WebhooksError(webhooks.reason, webhooks.address);
+  }
+
+  if (sso !== undefined) {
+    return new SsoError(sso.reason, sso.domains);
   }
 
   if (auth === undefined) {

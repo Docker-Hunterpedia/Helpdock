@@ -38,6 +38,19 @@ describe('OIDC claim boundaries', () => {
       }),
     ).toThrow('sso-email-unverified');
   });
+  it('vouches for the address only when it is the verified email claim', () => {
+    expect(oidcAssertion(input)).toMatchObject({ email: 'ada@example.com', emailVerified: true });
+    expect(
+      oidcAssertion({ ...input, claims: { ...input.claims, email_verified: false } }),
+    ).toMatchObject({ email: 'ada@example.com', emailVerified: false });
+    expect(
+      oidcAssertion({
+        ...input,
+        emailClaim: 'upn',
+        claims: { ...input.claims, upn: 'admin@example.com' },
+      }),
+    ).toMatchObject({ email: 'admin@example.com', emailVerified: false });
+  });
   it('refuses overage instead of deleting all sourced grants', () => {
     expect(() =>
       oidcAssertion({ ...input, claims: { ...input.claims, _claim_names: { groups: 'src1' } } }),

@@ -37,7 +37,8 @@ CREATE TABLE "user_sso_identities" (
 	"email_at_link" varchar(320) NOT NULL,
 	"linked_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"last_sign_in_at" timestamp with time zone,
-	CONSTRAINT "sso_identity_subject_key" UNIQUE("connection_id","subject")
+	CONSTRAINT "sso_identity_subject_key" UNIQUE("connection_id","subject"),
+	CONSTRAINT "sso_identity_user_connection_key" UNIQUE("user_id","connection_id")
 );
 --> statement-breakpoint
 ALTER TABLE "user_brand_roles" ADD COLUMN "source" "brand_role_source" DEFAULT 'manual' NOT NULL;--> statement-breakpoint

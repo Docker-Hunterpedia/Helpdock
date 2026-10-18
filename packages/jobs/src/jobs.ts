@@ -1491,6 +1491,9 @@ export const samlMetadataRefreshJob = defineJob({
 /** Import phases checkpoint their own short transactions; job payloads contain no credentials. */
 export const importRunPayloadSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
 export type ImportRunPayload = z.infer<typeof importRunPayloadSchema>;
+/** `workId` is the outbox request this job delivers; a job whose request was superseded exits. */
+export const importWorkPayloadSchema = importRunPayloadSchema.extend({ workId: z.uuid() });
+export type ImportWorkPayload = z.infer<typeof importWorkPayloadSchema>;
 const importRetryOptions: JobsOptions = {
   attempts: 3,
   backoff: { type: 'exponential', delay: 1000 },
@@ -1500,7 +1503,7 @@ const importRetryOptions: JobsOptions = {
 export const importExtractJob = defineJob({
   name: 'import.extract',
   queue: QUEUE_NAMES.import,
-  schema: importRunPayloadSchema,
+  schema: importWorkPayloadSchema,
   options: importRetryOptions,
 });
 export const importFilePreparePayloadSchema = importRunPayloadSchema.extend({
@@ -1516,25 +1519,25 @@ export const importFilePrepareJob = defineJob({
 export const importDryRunJob = defineJob({
   name: 'import.dry_run',
   queue: QUEUE_NAMES.import,
-  schema: importRunPayloadSchema,
+  schema: importWorkPayloadSchema,
   options: importRetryOptions,
 });
 export const importLoadJob = defineJob({
   name: 'import.load',
   queue: QUEUE_NAMES.import,
-  schema: importRunPayloadSchema,
+  schema: importWorkPayloadSchema,
   options: importRetryOptions,
 });
 export const importAttachmentsJob = defineJob({
   name: 'import.attachments',
   queue: QUEUE_NAMES.import,
-  schema: importRunPayloadSchema,
+  schema: importWorkPayloadSchema,
   options: importRetryOptions,
 });
 export const importFinishJob = defineJob({
   name: 'import.finish',
   queue: QUEUE_NAMES.import,
-  schema: importRunPayloadSchema,
+  schema: importWorkPayloadSchema,
   options: importRetryOptions,
 });
 export const importSlaActivatePayloadSchema = importRunPayloadSchema.extend({

@@ -353,7 +353,7 @@ export class ImportsService {
         dryRunReport: checkpoint,
         claimToken: null,
         claimedAt: null,
-        counts: sql`${importRuns.counts} - 'retryAt' - 'retryFailures' - 'recoveryRequestedAt'`,
+        counts: sql`${importRuns.counts} - 'retryAt' - 'retryFailures'`,
       })
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
     await enqueueImportWork(tx, { ...scope, step: 'dry_run' });
@@ -391,7 +391,7 @@ export class ImportsService {
         status: 'loading',
         claimToken: null,
         claimedAt: null,
-        counts: sql`(${importRuns.counts} - 'retryAt' - 'retryFailures' - 'recoveryRequestedAt' - 'loadApprovalChecked') || ${JSON.stringify({ approvedReviewToken: input.reviewToken })}::jsonb`,
+        counts: sql`(${importRuns.counts} - 'retryAt' - 'retryFailures' - 'loadApprovalChecked') || ${JSON.stringify({ approvedReviewToken: input.reviewToken })}::jsonb`,
       })
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
     await enqueueImportWork(tx, { ...scope, step: 'load' });

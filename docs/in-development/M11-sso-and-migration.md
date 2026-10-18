@@ -1381,9 +1381,10 @@ boundary tests for checkpoint consistency/counter rollover are authored but unru
 This addresses cursor bookkeeping; complete extraction memory evidence and the
 remaining worker acceptance gates are still required.
 
-`packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,
-`import.finish`, all on queue `import`, payload `{ brandId, runId }`, job id
-`import.<step>.<runId>.<attempt-epoch>`; `apps/api/src/imports/jobs/*.job.ts`.
+`packages/jobs/src/jobs.ts`: `import.extract`, `import.dry_run`, `import.load`,
+`import.attachments`, `import.finish`, all on queue `import`, payload
+`{ brandId, runId, workId }`, job id `import.<step>.<runId>.<workId>`, where
+`workId` is the outbox row that requested the work; `apps/api/src/imports/jobs/`.
 The status machine lives on `import_runs` (claimed with `claimed_at`, a stale
 claim older than 30 min is taken over, as `knowledge.sync` does).
 
@@ -2452,19 +2453,48 @@ every minute on worker boot. It lists active brands through the existing global
 brand helper, then handles tenant runs in their own system transactions. Under the
 brand claim/control lock, it selects at most 100 eligible runs: bound account,
 active extracting/loading/finishing state, absent/expired ownership, due vendor
-retry and no recovery request in the preceding minute. It clears only expired
-ownership, records recoveryRequestedAt and enqueues a phase request atomically.
+retry and no live pending request (see the next section). It clears only expired
+ownership and enqueues a phase request atomically.
 Loading recovery restarts the checkpointed load driver, which leads to attachments
 when records are complete. Fresh workers, paused runs and future retry deadlines
 are left alone. The internal work-request event is explicitly included in silent
 import acceptance and ADR 0027; it has no customer/rule/AI/webhook subscriber.
 
 The writer suite passes 126 real PostgreSQL/Redis cases. An isolated-brand recovery
-case proves expired-token fencing, repeat-sweep cooldown, delayed retry exclusion,
+case proves expired-token fencing, no repeat request on the next sweep, delayed retry exclusion,
 paused-run exclusion and that a replacement worker's fresh claim is retained.
 This simulates lease expiry; an actual killed-process test remains required.
 Additional connector factories, article preparation, complete retry
 handling, API/UI and the rest of the milestone remain unfinished.
+
+### One pending request per run (M11-10, gap found and solved)
+
+Recovery treated every unclaimed run as orphaned. `continueImportWork` releases
+the claim at every page and phase handoff while the next request still waits in
+the outbox or BullMQ, so a sweep landing in that gap queued a second chain. A job
+that found the claim busy requeued itself instead of exiting, so extra chains
+never died and outbox rows and queue jobs grew for the length of an import.
+Fencing kept the data correct; the leak was outbox rows and queue jobs.
+
+A run is now owned by one claim or one pending request, never both.
+`enqueueImportWork` records the new outbox row in `import_runs.counts` as
+`pendingWorkId` with its due time `pendingWorkDueAt`, in the same transaction.
+That supersedes any earlier request. The outbox subscriber skips a superseded
+row, and the job carries `workId`. Under the brand lock, a job whose `workId` is
+no longer pending exits without claiming or requeueing. Claiming consumes the
+marker. A current job that cannot claim, because another run of the brand holds
+the claim, hands its turn to exactly one successor request. Recovery skips a run
+with a pending request unless the request has left the outbox and has not started
+30 minutes after it fell due, the same lease as a claim. A killed worker's stale
+claim is still recovered as before. The `recoveryRequestedAt` cooldown is gone;
+the pending marker replaces it. No schema change was needed.
+
+Two writer-suite regressions, which failed against the previous code, cover this.
+Recovery during a handoff queues nothing, including past the lease while the
+request is still in the outbox. Once the published request is lost, recovery
+revives the run once, and the late original job exits. A job waiting for another
+run of its brand leaves exactly one successor, and its duplicate delivery adds
+none. Direct-processor fixtures now pass the pending `workId`.
 
 ### Bounded parallel media and vendor retry budget (M11-10, in progress)
 

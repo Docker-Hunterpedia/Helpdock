@@ -139,6 +139,7 @@ import {
   createImportConnectorRuntime,
   createZendeskImportConnection,
 } from '../jobs/connector-runtime.js';
+import { continueImportWork } from '../jobs/continuation.js';
 import { importDestinationFingerprint } from '../jobs/destination-fingerprint.js';
 import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { runImportDryRunBatch } from '../jobs/dry-run-batch.js';
@@ -162,6 +163,7 @@ import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedCsat } from '../jobs/load-staged-csat.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
 import { importExtractionPageCache } from '../jobs/page-cache.js';
+import { markPendingImportWork } from '../jobs/pending-work.js';
 import { createImportArticlePreparer } from '../jobs/prepare-article.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { recoverBrandImports } from '../jobs/recover.js';
@@ -5286,6 +5288,23 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     return { runId, key };
   }
 
+  /** The queue job that delivers the run's pending request, as the outbox bridge would build it. */
+  async function deliveredJob(name: string, runId: string, id: string) {
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    const pending = run?.counts.pendingWorkId;
+    const workId = typeof pending === 'string' ? pending : uuidv7();
+    if (workId !== pending)
+      await withSystem(app.db, BRAND, (tx) =>
+        markPendingImportWork(tx, {
+          brandId: BRAND,
+          runId,
+          workId,
+          dueAt: new Date().toISOString(),
+        }),
+      );
+    return { name, id, data: { brandId: BRAND, runId, workId } };
+  }
+
   async function changedArticleAnchor(
     scenario: 'same-account' | 'foreign-account' | 'foreign-brand' | 'foreign-vendor',
   ) {
@@ -5952,7 +5971,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       await deliver();
       const jobs = await queue.getJobs(['delayed', 'waiting']);
       expect(jobs).toHaveLength(1);
-      expect(jobs[0]?.data).toEqual({ brandId: BRAND, runId: run.runId });
+      expect(jobs[0]?.data).toEqual({ brandId: BRAND, runId: run.runId, workId: eventId });
       expect(jobs[0]?.id).toBe(`import.load.${run.runId}.${eventId}`);
       expect(jobs[0]?.attemptsMade).toBe(0);
       expect(jobs[0]?.opts.delay).toBeGreaterThan(0);
@@ -6233,11 +6252,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           throw new RateLimited(60000);
         },
       });
-      await processor({
-        name: 'import.attachments',
-        data: { brandId: BRAND, runId: run.runId },
-        id: 'rate-limited-fixture',
-      });
+      await processor(await deliveredJob('import.attachments', run.runId, 'rate-limited-fixture'));
       const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId));
       expect(stored).toMatchObject({
         status: 'loading',
@@ -6275,11 +6290,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           throw new Error('provider body contains private-token-fixture');
         },
       });
-      const job = {
-        name: 'import.attachments',
-        data: { brandId: BRAND, runId: run.runId },
-        id: 'opaque-failure-fixture',
-      };
+      const job = await deliveredJob('import.attachments', run.runId, 'opaque-failure-fixture');
       await processor(job);
       await processor(job);
       expect(
@@ -6305,7 +6316,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   });
 
   it.each(['loading', 'dry_run'] as const)(
-    'recovers expired %s claims once per minute and fences the old worker without touching fresh or paused runs',
+    'recovers expired %s claims once and fences the old worker without touching fresh or paused runs',
     async (phase) => {
       const recoveryBrand = uuidv7();
       await owner.db.insert(brands).values({
@@ -6358,7 +6369,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, expired.runId)))[0]
           ?.counts,
-      ).toMatchObject({ recoveryRequestedAt: now.toISOString() });
+      ).toMatchObject({ pendingWorkId: events[0]?.id });
       const replacement = await withSystem(app.db, recoveryBrand, (tx) =>
         claimImportRun(tx, { brandId: recoveryBrand, runId: expired.runId, phase }),
       );
@@ -6377,6 +6388,107 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     },
   );
 
+  describe('recovery and the phase handoff', () => {
+    const runEvents = (runId: string) =>
+      owner.db
+        .select()
+        .from(outbox)
+        .where(sql`${outbox.payload}->>'runId' = ${runId}`)
+        .orderBy(outbox.id);
+    const storedCounts = async (runId: string) =>
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]?.counts;
+    const refusingProcessor = () =>
+      createImportProcessor({
+        db: app.db,
+        storage: {} as never,
+        resolve: async () => {
+          throw new Error('A request without the claim must not reach the vendor');
+        },
+      });
+    const loadJob = (brandId: string, runId: string, workId: string) => ({
+      name: 'import.load',
+      id: `import.load.${runId}.${workId}`,
+      data: { brandId, runId, workId },
+    });
+
+    it('leaves a handoff to its queued request and revives the run only once the queue lost it', async () => {
+      const brandId = uuidv7();
+      await owner.db.insert(brands).values({ id: brandId, name: 'Handoff', prefix: 'HFR' });
+      const { runId } = await boundAccountRun('handoff-recovery', brandId);
+      const recover = (at: Date) =>
+        withSystem(app.db, brandId, (tx) => recoverBrandImports(tx, brandId, at));
+      const leaseLater = (from: Date) => new Date(from.getTime() + IMPORT_CLAIM_TIMEOUT_MS + 1000);
+      try {
+        const claim = await withSystem(app.db, brandId, (tx) =>
+          claimImportRun(tx, { brandId, runId, phase: 'loading' }),
+        );
+        if (!claim) throw new Error('Missing handoff claim');
+        await withSystem(app.db, brandId, (tx) => continueImportWork(tx, { claim, step: 'load' }));
+        const [handoff] = await runEvents(runId);
+        if (!handoff) throw new Error('Missing handoff request');
+        const handedOffAt = new Date();
+
+        expect(await recover(handedOffAt)).toBe(0);
+        expect(await recover(leaseLater(handedOffAt))).toBe(0);
+        await owner.db
+          .update(outbox)
+          .set({ publishedAt: handedOffAt })
+          .where(eq(outbox.id, handoff.id));
+        expect(await recover(new Date(handedOffAt.getTime() + 60000))).toBe(0);
+        expect(await runEvents(runId)).toHaveLength(1);
+
+        expect(await recover(leaseLater(handedOffAt))).toBe(1);
+        const [, revived] = await runEvents(runId);
+        if (!revived) throw new Error('Missing recovery request');
+        expect(await storedCounts(runId)).toMatchObject({ pendingWorkId: revived.id });
+
+        await refusingProcessor()(loadJob(brandId, runId, handoff.id));
+        expect(await runEvents(runId)).toHaveLength(2);
+        expect(
+          (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0],
+        ).toMatchObject({ claimToken: null, counts: { pendingWorkId: revived.id } });
+      } finally {
+        await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${runId}`);
+      }
+    });
+
+    it('keeps one pending request while a run waits for another run of its brand', async () => {
+      const brandId = uuidv7();
+      await owner.db.insert(brands).values({ id: brandId, name: 'Busy brand', prefix: 'BSY' });
+      const holder = await boundAccountRun('busy-holder', brandId);
+      const { runId } = await boundAccountRun('busy-waiting', brandId);
+      try {
+        const held = await withSystem(app.db, brandId, (tx) =>
+          claimImportRun(tx, { brandId, runId: holder.runId, phase: 'loading' }),
+        );
+        if (!held) throw new Error('Missing holder claim');
+        const first = await withSystem(app.db, brandId, (tx) =>
+          enqueueImportWork(tx, { brandId, runId, step: 'load' }),
+        );
+        const processor = refusingProcessor();
+
+        await processor(loadJob(brandId, runId, first));
+        const [, retry] = await runEvents(runId);
+        if (!retry) throw new Error('Missing busy retry request');
+        expect(retry.payload).toMatchObject({ step: 'load', notBefore: expect.any(String) });
+        expect(await storedCounts(runId)).toMatchObject({ pendingWorkId: retry.id });
+
+        await processor(loadJob(brandId, runId, first));
+        expect(await runEvents(runId)).toHaveLength(2);
+        expect(
+          await withSystem(app.db, brandId, (tx) =>
+            recoverBrandImports(tx, brandId, new Date(Date.now() + 60000)),
+          ),
+        ).toBe(0);
+        expect(await runEvents(runId)).toHaveLength(2);
+      } finally {
+        await owner.db
+          .delete(outbox)
+          .where(sql`${outbox.payload}->>'runId' IN (${runId}, ${holder.runId})`);
+      }
+    });
+  });
+
   it('retries transient vendor outages twice, preserves the budget across 429, then purges credentials on the third outage', async () => {
     const run = await boundAccountRun('vendor-outage-budget');
     await owner.db
@@ -6393,11 +6505,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           throw error;
         },
       });
-      const job = {
-        name: 'import.attachments',
-        data: { brandId: BRAND, runId: run.runId },
-        id: 'vendor-outage-fixture',
-      };
+      const job = () => deliveredJob('import.attachments', run.runId, 'vendor-outage-fixture');
       const expireRetry = async () => {
         const [stored] = await owner.db
           .select()
@@ -6407,7 +6515,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         await owner.db.update(importRuns).set({ counts }).where(eq(importRuns.id, run.runId));
         await owner.db.delete(outbox).where(sql`${outbox.payload}->>'runId' = ${run.runId}`);
       };
-      await processor(job);
+      await processor(await job());
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
       ).toMatchObject({
@@ -6417,20 +6525,20 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       });
       await expireRetry();
       error = new RateLimited(60000);
-      await processor(job);
+      await processor(await job());
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0]?.counts
           .retryFailures,
       ).toBe(1);
       await expireRetry();
       error = new ConnectorError('vendor-unavailable', 503);
-      await processor(job);
+      await processor(await job());
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0]?.counts
           .retryFailures,
       ).toBe(2);
       await expireRetry();
-      await processor(job);
+      await processor(await job());
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
       ).toMatchObject({
@@ -6465,11 +6573,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           throw new RateLimited(Number.MAX_SAFE_INTEGER);
         },
       });
-      await processor({
-        name: 'import.attachments',
-        data: { brandId: BRAND, runId: run.runId },
-        id: 'invalid-delay-fixture',
-      });
+      await processor(await deliveredJob('import.attachments', run.runId, 'invalid-delay-fixture'));
       expect(
         (await owner.db.select().from(importRuns).where(eq(importRuns.id, run.runId)))[0],
       ).toMatchObject({

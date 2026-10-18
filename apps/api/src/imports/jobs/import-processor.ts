@@ -26,6 +26,7 @@ import {
   type ImportClaim,
   ImportClaimLost,
   type ImportRunRef,
+  lockImportBrand,
   renewImportClaim,
 } from './claims.js';
 import { continueImportWork, deferImportVendorFailure, failImportWork } from './continuation.js';
@@ -43,6 +44,7 @@ type Dependencies<C> = {
   resolve(scope: ImportRunRef): Promise<{ connector: Connector<C>; context: ConnectorContext<C> }>;
   prepareArticle?: NonNullable<Parameters<typeof runImportLoadBatch>[0]['prepareArticle']>;
 };
+const CLAIM_BUSY_RETRY_MS = 30000;
 const definitions = {
   'import.extract': importExtractJob,
   'import.dry_run': importDryRunJob,
@@ -177,6 +179,24 @@ class ImportExecution<C> {
   }
 }
 
+/** A superseded request exits; a current one that cannot claim hands its turn to one successor. */
+async function claimPendingImportWork(
+  tx: DbTransaction,
+  request: ImportRunRef & { phase: ImportClaim['phase']; step: ImportWorkStep; workId: string },
+) {
+  const { phase, step, workId, ...scope } = request;
+  await lockImportBrand(tx, scope.brandId);
+  if (!(await importWorkRunnable(tx, scope.brandId, scope.runId, step, workId))) return null;
+  const claim = await claimImportRun(tx, { ...scope, phase });
+  if (!claim)
+    await enqueueImportWork(tx, {
+      ...scope,
+      step,
+      notBefore: new Date(Date.now() + CLAIM_BUSY_RETRY_MS).toISOString(),
+    });
+  return claim;
+}
+
 /** Queue boundary only: all I/O drivers retain their own fenced transactions. */
 export function createImportProcessor<C>(deps: Dependencies<C>) {
   return async (
@@ -204,7 +224,7 @@ export function createImportProcessor<C>(deps: Dependencies<C>) {
     }
     if (!Object.hasOwn(definitions, job.name)) throw new Error('import.unknown-job');
     const name = job.name as keyof typeof definitions;
-    const scope = parseJobPayloadOrFail(definitions[name], job.data);
+    const { workId, ...scope } = parseJobPayloadOrFail(definitions[name], job.data);
     const step = name.slice('import.'.length) as ImportWorkStep;
     const execution = new ImportExecution(deps, scope, job.id ?? name);
     const phase =
@@ -215,10 +235,10 @@ export function createImportProcessor<C>(deps: Dependencies<C>) {
           : step === 'finish'
             ? 'finishing'
             : 'loading';
-    if (!(await execution.inRun((tx) => importWorkRunnable(tx, scope.brandId, scope.runId, step))))
-      return;
-    const claim = await execution.inRun((tx) => claimImportRun(tx, { ...scope, phase }));
-    if (!claim) return execution.request(step, 30000);
+    const claim = await execution.inRun((tx) =>
+      claimPendingImportWork(tx, { ...scope, phase, step, workId }),
+    );
+    if (!claim) return;
     try {
       await execution.execute(name, claim);
     } catch (error) {

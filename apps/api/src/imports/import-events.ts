@@ -1,7 +1,7 @@
 import { brands, type DbTransaction, importRuns } from '@helpdock/db';
 import {
   enqueueOutbox,
-  type ImportRunPayload,
+  type ImportWorkPayload,
   importAttachmentsJob,
   importDryRunJob,
   importExtractJob,
@@ -13,6 +13,7 @@ import {
 } from '@helpdock/jobs';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { isPendingImportWork, markPendingImportWork } from './jobs/pending-work.js';
 import { ImportLoadError } from './loader/contracts.js';
 
 export const IMPORT_WORK_REQUESTED_EVENT = 'import.work_requested';
@@ -40,11 +41,13 @@ const phases = {
 export type ImportWorkStep = z.infer<typeof stepSchema>;
 type Step = ImportWorkStep;
 
+/** With `workId`, the run must also still be waiting for that exact request. */
 export async function importWorkRunnable(
   tx: DbTransaction,
   brandId: string,
   runId: string,
   step: Step,
+  workId?: string,
 ) {
   const [run] = await tx
     .select({ id: importRuns.id })
@@ -61,31 +64,42 @@ export async function importWorkRunnable(
           WHERE parent.id = ${importRuns.parentRunId} AND parent.brand_id = ${importRuns.brandId}
             AND parent.source = ${importRuns.source} AND parent.source_account_key = ${importRuns.sourceAccountKey}
             AND parent.status = 'completed'))`,
+        workId === undefined ? undefined : isPendingImportWork(workId),
       ),
     );
   return run !== undefined;
 }
 
-/** Start/resume/continuation callers enqueue in the same transaction as their phase checkpoint. */
+/**
+ * Start/resume/continuation callers enqueue in the same transaction as their phase checkpoint.
+ * The new request supersedes any earlier one still queued for the run.
+ */
 export async function enqueueImportWork(tx: DbTransaction, request: z.infer<typeof requestSchema>) {
   const { brandId, ...payload } = requestSchema.parse(request);
   if (!(await importWorkRunnable(tx, brandId, payload.runId, payload.step)))
     throw new ImportLoadError('mapping-invalid');
-  return enqueueOutbox(tx, { brandId, event: IMPORT_WORK_REQUESTED_EVENT, payload });
+  const workId = await enqueueOutbox(tx, { brandId, event: IMPORT_WORK_REQUESTED_EVENT, payload });
+  await markPendingImportWork(tx, {
+    brandId,
+    runId: payload.runId,
+    workId,
+    dueAt: payload.notBefore ?? new Date().toISOString(),
+  });
+  return workId;
 }
 
 export interface ImportWorkQueue {
-  add(step: Step, payload: ImportRunPayload, jobId: string, delayMs: number): Promise<void>;
+  add(step: Step, payload: ImportWorkPayload, jobId: string, delayMs: number): Promise<void>;
 }
 
-/** Outbox redelivery keeps the same BullMQ ID; stale paused/cancelled requests add no work. */
+/** Outbox redelivery keeps the same BullMQ ID; stale, superseded or paused requests add no work. */
 export const createImportWorkHandler =
   (queue: ImportWorkQueue, now = () => new Date()): OutboxEventHandler =>
   async ({ tx, brandId, payload, outboxId }) => {
     const work = payloadSchema.parse(payload);
-    if (!(await importWorkRunnable(tx, brandId, work.runId, work.step))) return;
+    if (!(await importWorkRunnable(tx, brandId, work.runId, work.step, outboxId))) return;
     const definition = definitions[work.step];
-    const job = definition.schema.parse({ brandId, runId: work.runId });
+    const job = definition.schema.parse({ brandId, runId: work.runId, workId: outboxId });
     const delay = work.notBefore ? Math.max(0, Date.parse(work.notBefore) - now().getTime()) : 0;
     await queue.add(work.step, job, `${definition.name}.${work.runId}.${outboxId}`, delay);
   };

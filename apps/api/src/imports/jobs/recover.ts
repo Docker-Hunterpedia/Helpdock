@@ -12,22 +12,23 @@ import { withSystemJob } from '../../tenant/system-job.js';
 import { enqueueImportWork, importWorkRunnable } from '../import-events.js';
 import { readBrandImportHealth } from '../import-health.js';
 import { IMPORT_CLAIM_TIMEOUT_MS, lockImportBrand } from './claims.js';
+import { pendingImportWorkLost, pendingImportWorkSchema } from './pending-work.js';
 import { recoverImportFilePreparations } from './recover-files.js';
 import { recoverImportedSlaActivations } from './recover-sla.js';
 
-const recoveryTimesSchema = z.strictObject({
+const recoveryStateSchema = pendingImportWorkSchema.extend({
   retryAt: z.iso.datetime().optional(),
-  recoveryRequestedAt: z.iso.datetime().optional(),
 });
 const phases = ['extracting', 'dry_run', 'loading', 'finishing'] as const;
-const RECOVERY_COOLDOWN_MS = 60000;
 
-/** A fresh claim cannot be cleared by recovery; controls and renewals hold this same brand lock. */
+/**
+ * Revives runs that nothing owns: no fresh claim and no live pending request. A queued request
+ * gets the same lease as a claim before it counts as lost. Controls and renewals hold this brand lock.
+ */
 export async function recoverBrandImports(tx: DbTransaction, brandId: string, now = new Date()) {
   z.uuid().parse(brandId);
   await lockImportBrand(tx, brandId);
   const stale = new Date(now.getTime() - IMPORT_CLAIM_TIMEOUT_MS);
-  const cooldown = new Date(now.getTime() - RECOVERY_COOLDOWN_MS).toISOString();
   const runs = await tx
     .select()
     .from(importRuns)
@@ -38,7 +39,7 @@ export async function recoverBrandImports(tx: DbTransaction, brandId: string, no
         ne(importRuns.sourceAccountKey, '0'.repeat(64)),
         or(isNull(importRuns.claimToken), lt(importRuns.claimedAt, stale)),
         sql`(${importRuns.counts}->>'retryAt' IS NULL OR ${importRuns.counts}->>'retryAt' <= ${now.toISOString()})`,
-        sql`(${importRuns.counts}->>'recoveryRequestedAt' IS NULL OR ${importRuns.counts}->>'recoveryRequestedAt' <= ${cooldown})`,
+        pendingImportWorkLost(stale),
       ),
     )
     .orderBy(importRuns.createdAt, importRuns.id)
@@ -47,9 +48,10 @@ export async function recoverBrandImports(tx: DbTransaction, brandId: string, no
   let recovered = await recoverImportFilePreparations(tx, brandId, now);
   recovered += await recoverImportedSlaActivations(tx, brandId, now);
   for (const run of runs) {
-    recoveryTimesSchema.parse({
+    recoveryStateSchema.parse({
       retryAt: run.counts.retryAt,
-      recoveryRequestedAt: run.counts.recoveryRequestedAt,
+      pendingWorkId: run.counts.pendingWorkId,
+      pendingWorkDueAt: run.counts.pendingWorkDueAt,
     });
     const step =
       run.status === 'extracting'
@@ -62,11 +64,7 @@ export async function recoverBrandImports(tx: DbTransaction, brandId: string, no
     if (!(await importWorkRunnable(tx, brandId, run.id, step))) continue;
     await tx
       .update(importRuns)
-      .set({
-        claimToken: null,
-        claimedAt: null,
-        counts: { ...run.counts, recoveryRequestedAt: now.toISOString() },
-      })
+      .set({ claimToken: null, claimedAt: null })
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, run.id)));
     await enqueueImportWork(tx, { brandId, runId: run.id, step });
     recovered++;

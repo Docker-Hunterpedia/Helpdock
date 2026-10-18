@@ -647,6 +647,10 @@ start again.
 Approval and its load request commit atomically through the outbox. The worker
 rechecks the approved snapshot before its first domain write; if the queued report
 has become stale, it returns to review without loading and retains credentials.
+Each run has at most one queued request at a time. A run whose worker stopped
+renewing its claim, or whose queued request left the outbox but never started,
+is resumed by the per-minute recovery sweep 30 minutes later. A request still
+waiting in the outbox is never duplicated.
 The calling code used by validation is also used by loading. Later batches retain
 their approval receipt while normal loader checks still validate live targets.
 

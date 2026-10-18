@@ -1,6 +1,7 @@
 import { brands, type DbTransaction, importRuns, uuidv7 } from '@helpdock/db';
 import { and, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { countsWithoutPendingImportWork } from './pending-work.js';
 import { extractionRetry } from './retry-state.js';
 
 export const importPhaseSchema = z.enum(['extracting', 'dry_run', 'loading', 'finishing']);
@@ -100,6 +101,7 @@ export async function claimImportRun(
     .set({
       claimToken: token,
       claimedAt: now,
+      counts: countsWithoutPendingImportWork(),
       startedAt: sql`coalesce(${importRuns.startedAt}, ${now.toISOString()}::timestamptz)`,
     })
     .where(eq(importRuns.id, input.runId));

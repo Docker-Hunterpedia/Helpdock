@@ -1571,7 +1571,16 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
         throw new Error('Stale approval must stop before vendor I/O');
       },
     });
-    await processor({ name: 'import.load', id: 'stale-queued-approval', data: { brandId, runId } });
+    const [queued] = await owner.db
+      .select()
+      .from(outbox)
+      .where(sql`${outbox.payload}->>'runId' = ${runId} AND ${outbox.payload}->>'step' = 'load'`);
+    if (!queued) throw new Error('Missing queued load request');
+    await processor({
+      name: 'import.load',
+      id: 'stale-queued-approval',
+      data: { brandId, runId, workId: queued.id },
+    });
     expect((await call('GET', `${root()}/${runId}`, adminToken)).json()).toMatchObject({
       status: 'awaiting_mapping',
       hasCredentials: true,

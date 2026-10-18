@@ -4470,7 +4470,15 @@ the browser jobs pass. CI's shared-unit run catches a stale registry description
 behind the generated configuration guide: the registry now describes eligible
 chunks and imported-language deferral. Its focused seven-case test and the
 subsequent full 3,860-case package coverage run pass locally at 91.22% lines.
-The connector reference jobs and final CI on the corrected head remain pending.
+All three required connector reference jobs in
+[run 39086830247](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39086830247)
+now pass on `3890b74`: Zendesk, Freshdesk and Zoho each execute their complete
+reference sequence. Each matrix job intentionally selects one source; the
+other sources are deselected, not skipped for missing Docker. Route/type/lint,
+API/admin coverage, integration, browser, image, CodeQL and screenshot jobs also
+pass. That run still fails its aggregate because of the configuration-reference
+mismatch above. The corrected publication must pass its own required checks
+before the PR leaves draft or is merged.
 
 Additional EN/AR checks pass at 640 CSS pixels on the wizard and 320 pixels on
 the public article, with no document-level horizontal overflow. The SLA dialog

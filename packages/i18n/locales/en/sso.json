@@ -98,5 +98,9 @@
   "certificateSoon": "Expires soon",
   "removeCertificate": "Remove certificate",
   "certificateHint": "Paste a PEM signing certificate from your identity provider. Keep the current certificate during rotation.",
-  "invalidCertificate": "The signing certificate is invalid. Use an RSA certificate with at least 2048 bits."
+  "invalidCertificate": "The signing certificate is invalid. Use an RSA certificate with at least 2048 bits.",
+  "refusals": {
+    "sso-email-domain-taken": "{{domains}} already belongs to another enabled connection. Each email domain signs in through one enabled connection only.",
+    "sso-metadata-confirm-certificates": "The provider metadata lists a signing certificate that is not saved here. Verify it with your identity provider, add it under Signing certificates, then save."
+  }
 }

@@ -12,7 +12,8 @@ export const ssoAssertionSchema = z.object({
   connectionRevision: z.iso.datetime().optional(),
   subject: z.string().min(1).max(300),
   email: z.email(),
-  emailVerified: z.literal(true),
+  /** Whether the provider vouched for `email`; only a verified address may link or provision. */
+  emailVerified: z.boolean(),
   name: z.string().max(300).optional(),
   groups: z.array(z.string().min(1).max(300)).max(1000),
 });
@@ -61,7 +62,9 @@ export function oidcAssertion(input: {
   groupAttribute: string | null;
 }): SsoAssertion {
   const { claims, supplemental, groupAttribute } = input;
-  if (claims.email_verified !== true) throw new OidcFailure('sso-email-unverified');
+  // Supplementary UserInfo never establishes the address or its verification.
+  const email = claims[input.emailClaim];
+  if (typeof email !== 'string') throw new OidcFailure('sso-email-unverified');
   // Entra overage is unknown membership, not an empty authoritative list.
   const sources = claims._claim_names;
   if (
@@ -77,9 +80,10 @@ export function oidcAssertion(input: {
   return ssoAssertionSchema.parse({
     connectionId: input.connectionId,
     subject: claims.sub,
-    // Supplementary UserInfo never establishes the address or its verification.
-    email: claims[input.emailClaim],
-    emailVerified: true,
+    email,
+    // `email_verified` speaks only for the `email` claim, never for an
+    // administrator-chosen claim such as `upn`, which can hold any address.
+    emailVerified: input.emailClaim === 'email' && claims.email_verified === true,
     name: claims[input.nameClaim] ?? supplemental[input.nameClaim],
     groups: typeof groups === 'string' ? [groups] : groups,
   });

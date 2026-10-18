@@ -204,6 +204,78 @@ describe.skipIf(!hasDocker)(
       ]);
     });
 
+    it('refuses a second subject on the same connection taking over a linked account by email (#219)', async () => {
+      const { user } = await service.signIn(assertion());
+      const takeover = assertion({ subject: 'recycled-address' });
+      await expect(service.signIn(takeover)).rejects.toMatchObject({
+        auth: { code: 'sso-identity-conflict' },
+      });
+      await expect(service.preview(takeover)).rejects.toMatchObject({
+        auth: { code: 'sso-identity-conflict' },
+      });
+      expect(await owner.db.select().from(userSsoIdentities)).toMatchObject([
+        { userId: user.id, subject: 'staff-1' },
+      ]);
+      expect(
+        (await owner.db.select().from(auditLog)).filter((row) => row.action === 'sso.user.linked'),
+      ).toEqual([]);
+    });
+
+    it('refuses email linking to an account already linked through another connection (#219)', async () => {
+      await owner.db
+        .update(ssoConnections)
+        .set({ emailDomains: ['example.com'] })
+        .where(eq(ssoConnections.id, OTHER_CONNECTION));
+      const [user] = await owner.db
+        .insert(users)
+        .values({ email: 'ada@example.com', name: 'Ada', status: 'active' })
+        .returning();
+      if (!user) throw new Error('Missing user fixture');
+      await owner.db
+        .insert(userBrandRoles)
+        .values({ userId: user.id, brandId: BRAND, role: 'admin' });
+      await owner.db.insert(userSsoIdentities).values({
+        userId: user.id,
+        connectionId: OTHER_CONNECTION,
+        subject: 'break-glass-admin',
+        emailAtLink: 'ada@example.com',
+      });
+      await expect(service.signIn(assertion())).rejects.toMatchObject({
+        auth: { code: 'sso-identity-conflict' },
+      });
+      expect(await owner.db.select().from(userSsoIdentities)).toMatchObject([
+        { connectionId: OTHER_CONNECTION, subject: 'break-glass-admin' },
+      ]);
+      expect(await owner.db.select().from(userBrandRoles)).toMatchObject([
+        { source: 'manual', role: 'admin' },
+      ]);
+    });
+
+    it('allows only one identity per account on each connection', async () => {
+      const { user } = await service.signIn(assertion());
+      await expect(
+        owner.db.insert(userSsoIdentities).values({
+          userId: user.id,
+          connectionId: CONNECTION,
+          subject: 'second-subject',
+          emailAtLink: 'ada@example.com',
+        }),
+      ).rejects.toMatchObject({ cause: { constraint_name: 'sso_identity_user_connection_key' } });
+    });
+
+    it('refuses email linking and JIT for an unverified address but keeps the subject link', async () => {
+      await expect(service.signIn(assertion({ emailVerified: false }))).rejects.toMatchObject({
+        auth: { code: 'sso-email-unverified' },
+      });
+      expect(await owner.db.select().from(users).where(eq(users.email, 'ada@example.com'))).toEqual(
+        [],
+      );
+      const linked = await service.signIn(assertion());
+      expect((await service.signIn(assertion({ emailVerified: false }))).user.id).toBe(
+        linked.user.id,
+      );
+    });
+
     it.each([
       [{ emailDomains: ['elsewhere.example'] as string[] }, 'sso-email-unverified'],
       [{ jitEnabled: false }, 'no-account'],

@@ -21,9 +21,11 @@ for (const protocol of ['oidc', 'saml'] as const) {
       const controlOrigin = protocol === 'oidc' ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:8443';
       const key =
         process.env[protocol === 'oidc' ? OIDC_CONTROL_KEY_ENV : SAML_CONTROL_KEY_ENV] ?? '';
+      // Enabled connections may not share a domain, and the seeded ones list example.com.
+      const domain = `jit-${protocol}-${locale}.example.com`;
       const identity = {
         subject: `jit-${protocol}-${locale}`,
-        email: `jit-${protocol}-${locale}@example.com`,
+        email: `person@${domain}`,
         groups: ['Support'],
       };
       const setGroups = async (groups: string[]) => {
@@ -64,7 +66,7 @@ for (const protocol of ['oidc', 'saml'] as const) {
           connection: {
             name: `JIT ${protocol} ${locale}`,
             enabled: true,
-            emailDomains: ['example.com'],
+            emailDomains: [domain],
             jitEnabled: true,
             idpEnforcesMfa: true,
             groupAttribute: 'groups',

@@ -10,6 +10,7 @@ import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
 import { knowledgeRefusalSchema } from './knowledge.js';
 import { metaRefusalDetailsSchema, metaRefusalSchema } from './meta.js';
+import { ssoRefusalSchema } from './sso.js';
 import { staffRefusalSchema } from './staff.js';
 import { telegramRefusalSchema } from './telegram.js';
 import { ticketLifecycleRefusalSchema } from './ticket.js';
@@ -118,6 +119,11 @@ export const errorResponseSchema = z.object({
     webhooks: z
       .object({ reason: webhooksRefusalSchema, address: z.string().optional() })
       .optional(),
+    /**
+     * Only on a refused SSO connection save (M11). `domains` names the email
+     * domains another enabled connection already lists.
+     */
+    sso: z.object({ reason: ssoRefusalSchema, domains: z.array(z.string()).optional() }).optional(),
   }),
 });
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

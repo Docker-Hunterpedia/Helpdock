@@ -85,5 +85,9 @@ export const userSsoIdentities = pgTable(
     linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
     lastSignInAt: timestamp('last_sign_in_at', { withTimezone: true }),
   },
-  (table) => [unique('sso_identity_subject_key').on(table.connectionId, table.subject)],
+  (table) => [
+    unique('sso_identity_subject_key').on(table.connectionId, table.subject),
+    // One subject per account and connection: email linking cannot add a second.
+    unique('sso_identity_user_connection_key').on(table.userId, table.connectionId),
+  ],
 );

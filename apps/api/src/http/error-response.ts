@@ -15,6 +15,7 @@ import type {
   MetaRefusal,
   MetaRefusalDetails,
   SetupRefusal,
+  SsoRefusal,
   StaffRefusal,
   TelegramRefusal,
   TicketingRefusal,
@@ -36,6 +37,7 @@ import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { KnowledgeFailure } from '../knowledge/knowledge-failure.js';
 import { MetaFailure } from '../meta/meta-failure.js';
+import { SsoFailure } from '../sso/sso-failure.js';
 import { StaffFailure } from '../staff/staff-failure.js';
 import { TelegramFailure } from '../telegram/telegram-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -90,6 +92,8 @@ export interface MappedError {
   readonly knowledge?: KnowledgeRefusal;
   /** Only on a refused webhook endpoint; see `webhooks/webhooks-failure.ts`. */
   readonly webhooks?: { readonly reason: WebhooksRefusal; readonly address?: string };
+  /** Only on a refused SSO connection save; see `sso/sso-failure.ts`. */
+  readonly sso?: { readonly reason: SsoRefusal; readonly domains?: readonly string[] };
   /** True when the log line should carry the whole error, not just its message. */
   readonly unexpected: boolean;
 }
@@ -268,6 +272,19 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  if (error instanceof SsoFailure) {
+    return {
+      status: error.getStatus(),
+      code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
+      message: error.message,
+      sso: {
+        reason: error.reason,
+        ...(error.domains === undefined ? {} : { domains: error.domains }),
+      },
+      unexpected: false,
+    };
+  }
+
   // M4. Before the generic branch, for the reason the ones above give.
   if (error instanceof WidgetFailure) {
     return {
@@ -379,5 +396,13 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.knowledge === undefined ? {} : { knowledge: { reason: mapped.knowledge } }),
     ...(mapped.assist === undefined ? {} : { assist: { reason: mapped.assist } }),
     ...(mapped.webhooks === undefined ? {} : { webhooks: mapped.webhooks }),
+    ...(mapped.sso === undefined
+      ? {}
+      : {
+          sso: {
+            reason: mapped.sso.reason,
+            ...(mapped.sso.domains === undefined ? {} : { domains: [...mapped.sso.domains] }),
+          },
+        }),
   },
 });

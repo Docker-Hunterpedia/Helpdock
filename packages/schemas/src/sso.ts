@@ -124,6 +124,15 @@ export const ssoSettingsSchema = ssoSettingsUpdateSchema.safeExtend({
   breakGlassLocked: z.boolean(),
 });
 export const ssoConnectionParamSchema = z.object({ id: z.uuid() });
+
+/** A connection save refused by a rule the form can explain (M11, issue #219). */
+export const ssoRefusalSchema = z.enum([
+  /** Another enabled connection lists one of these email domains. */
+  'sso-email-domain-taken',
+  /** The IdP metadata lists a signing certificate the admin has not saved. */
+  'sso-metadata-confirm-certificates',
+]);
+export type SsoRefusal = z.infer<typeof ssoRefusalSchema>;
 export type SsoConnectionInput = z.infer<typeof ssoConnectionCreateSchema>;
 export type SsoConnection = z.infer<typeof ssoConnectionSchema>;
 export type SsoMapping = z.infer<typeof ssoMappingSchema>;

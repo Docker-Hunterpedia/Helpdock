@@ -300,6 +300,7 @@ user_sso_identities
   email_at_link varchar(320) not null
   linked_at, last_sign_in_at timestamptz
   unique (connection_id, subject)
+  unique (user_id, connection_id)      -- one identity per account and connection (#219)
 
 user_brand_roles.source brand_role_source not null default 'manual'  -- manual | sso
 user_brand_roles.sso_connection_id uuid null fk sso_connections on delete restrict
@@ -429,7 +430,10 @@ on 2026-10-13. A provider client must allow authorization code, PKCE S256 and
   The callback is built from `APP_URL`, never Host/forwarded headers. Responses
   are not cached; completion redirects also suppress the referrer.
 - Verified email and subject come only from the validated ID token.
-  `email_verified` must be boolean `true`. Subject-checked UserInfo can supplement
+  Boolean `email_verified: true` marks the address verified only when the
+  configured email claim is `email` (#219); otherwise the assertion carries
+  `emailVerified: false`, which existing subject links accept and email
+  linking/JIT refuse. Subject-checked UserInfo can supplement
   name/groups, never email or verification. Configured groups may be a string
   or string array. Missing/malformed groups and Entra overage claims are refused
   with a safe warning, so an unknown list cannot remove SSO grants. Distributed
@@ -537,12 +541,14 @@ approved by ADR 0026. Browser fixtures use the same approved signing libraries.
   daily `sso.metadata_refresh` maintenance job (04:45 UTC), re-registered on
   worker boot. Entity ID, Redirect SSO URL and one to three RSA signing
   certificates (at least 2048 bits) must match the configured provider. A
-  refresh only applies a set overlapping a current certificate, under the
-  configuration lock and revision check. Dropping every trusted certificate
+  refresh only applies a set whose certificates are all already trusted
+  (removals), under the configuration lock and revision check (#219). Any
+  certificate the metadata adds, beside the current ones or replacing them,
   keeps the old set and writes `sso.metadata.rotation-refused` with
   `admin-confirmation-required`. An admin confirms by explicitly saving the
-  new certificate set; failed fetches write sanitized audit warnings. Identical
-  refreshes do not rewrite configuration.
+  new certificate; a save that omits a certificate the metadata lists is
+  refused with `sso-metadata-confirm-certificates`. Failed fetches write
+  sanitized audit warnings. Identical refreshes do not rewrite configuration.
 
 **Stand-ins:** `apps/api/src/testing/fake-saml-idp.ts` and
 `apps/admin/e2e/api/fake-saml.ts`, disposable RSA certificates, verify actual
@@ -564,9 +570,14 @@ remain later milestone acceptance evidence, not claimed by stand-in tests.
 beside `completeOauth`. Steps:
 
 1. **Find the link**: `user_sso_identities` by `(connection, subject)`.
-2. **Else link by email**, only when the email is verified (OIDC claim, or SAML
-   domain rule) **and** its domain is in `email_domains`: an existing user with
-   that email (case-insensitive) is linked; audit `sso.user.linked`.
+2. **Else link by email**, only when the email is verified (OIDC `email` claim
+   with `email_verified: true`, or SAML domain rule) **and** its domain is in
+   `email_domains`: an existing user with that email (case-insensitive) is
+   linked; audit `sso.user.linked`. A user who already has an identity, on this
+   connection or another, is refused with `sso-identity-conflict` instead
+   (#219); `user_sso_identities` is unique on `(user_id, connection_id)` too.
+   Enabled connections never share an email domain: create, update and enable
+   refuse an overlap with `error.sso.reason = 'sso-email-domain-taken'`.
 3. **Else JIT** (if `jit_enabled`): compute memberships from mappings (step 4);
    none and no `default_access` → refuse `sso-no-access`; otherwise create the
    user `active` (no password), insert `user_sso_identities`, insert memberships
@@ -591,7 +602,8 @@ beside `completeOauth`. Steps:
 
 `SignInMethod` gains `'sso'`; `authErrorCodes` gains `sso-email-unverified`,
 `sso-no-access`, `sso-connection-disabled`, `sso-required`, `sso-invalid-response`
-(all with en/ar copy in `packages/i18n/locales/*/auth.json`).
+and, from #219, `sso-identity-conflict` (all with en/ar copy in
+`packages/i18n/locales/*/auth.json`).
 
 **Enforcement.** When `sso.enforced`, `signIn` (password), `requestMagicLink`,
 `consumeMagicLink`, `completeOauth` and invite acceptance with a password refuse
@@ -682,6 +694,21 @@ browser tests, typecheck, lint, route validation and boundaries have passed loca
 Broad local coverage runs were stopped to reduce owner-device memory usage; the
 final full suites and coverage gates must pass in PR CI. Do not treat the
 deliverables or exit criteria as complete until that CI evidence is available.
+
+**Review fix #219 (2026-10-18).** Email linking could hand an already-linked
+account to another identity: a second subject on the same connection, or a
+second connection listing the same domain. Email linking now applies only to an
+account with no SSO identity (`sso-identity-conflict` otherwise), backed by
+`UNIQUE (user_id, connection_id)` in the still-unreleased `0053_sso`; enabled
+connections cannot share an email domain (`error.sso.reason =
+'sso-email-domain-taken'`, shown on the connection form's domains field);
+OIDC `email_verified` vouches only for the `email` claim; and a metadata
+refresh never adds a signing certificate without an admin save
+(`sso-metadata-confirm-certificates` on a save that omits one). Regression
+tests: `identity`, `oidc`, `sso` and `saml` integration suites, the OIDC
+contract and error-envelope unit tests, the connection form unit test and the
+EN/AR mock browser test in `apps/admin/e2e/sso.spec.ts`. ADR 0026 amendment
+2026-10-18.
 
 ## M11-07 Import schema
 

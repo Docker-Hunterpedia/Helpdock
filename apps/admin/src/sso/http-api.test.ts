@@ -1,5 +1,6 @@
 import { ssoConnectionCreateSchema, ssoConnectionSchema } from '@helpdock/schemas';
 import { afterEach, expect, it, vi } from 'vitest';
+import { SsoError } from './api.js';
 import { HttpSsoApi } from './http-api.js';
 
 const connection = ssoConnectionSchema.parse({
@@ -72,3 +73,30 @@ it.each([null, connection.id])(
     ]);
   },
 );
+
+it('turns a refused save into the SSO rule and the domains it names', async () => {
+  vi.stubGlobal(
+    'fetch',
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 'conflict',
+            message: 'Another enabled connection already lists one of these email domains',
+            requestId: 'req-1',
+            sso: { reason: 'sso-email-domain-taken', domains: ['example.com'] },
+          },
+        }),
+        { status: 409 },
+      ),
+  );
+  const refused = new HttpSsoApi().update(
+    connection.id,
+    ssoConnectionCreateSchema.parse(connection),
+  );
+  await expect(refused).rejects.toBeInstanceOf(SsoError);
+  await expect(refused).rejects.toMatchObject({
+    reason: 'sso-email-domain-taken',
+    domains: ['example.com'],
+  });
+});

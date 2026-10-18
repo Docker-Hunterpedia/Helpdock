@@ -135,9 +135,12 @@ in parallel, which brings the calendar to roughly 6–7 weeks with two people.
 
 ## Merge-blocking owner review, 2026-10-18
 
-PR #215 is back in draft. Earlier fixture and CI passes did not cover the upgrade,
-live-account mutation, retention, automation or missing UI cases below. Affected
-exit criteria are reopened; earlier evidence is historical, not merge approval.
+The owner review found upgrade, live-account mutation, retention, automation and
+UI gaps missed by the earlier fixtures. The correction batch is implemented in
+`9df58a8` and `1e053b1`. All 25 checks pass on `1e053b1`, including the three full
+native reference imports, API coverage at 91.4%, browser acceptance and RLS.
+Evidence: [CI run 39148393910](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39148393910).
+The owner still reviews and merges; this is functional acceptance, not a release.
 
 - [x] Upgrade a real pre-0054 database; consolidate unshipped 0054–0081 into 0054, retain shipped 0053, use enum text comparisons and index staging parent lookups.
 - [x] Apply the import arrival baseline to scheduled-rule SQL, condition facts and match identity; preserve status timestamps on content-only deltas.
@@ -155,12 +158,12 @@ regression selection passed 937 cases; the complete writer, migration and rule
 batch passed 255 cases. Connector/tooling units passed 533 cases. EN/AR mapping,
 retention, overview, control/polling and log component tests pass. Browser checks
 for mapping review and overview/control/log flows passed in both locales with
-axe. These results do not close the reopened exit criteria until current-head
-required CI and native reference jobs pass. The complete shared unit/coverage run, including the corrected schema inventory,
+axe. Required CI and all three native reference jobs now pass on the corrected
+implementation. The complete shared unit/coverage run, including the corrected schema inventory,
 passes 3,876 tests with 91.14% line coverage. The real-API mapping edit also passed the wizard acceptance in EN/AR, with no
 sends observed. Full local API coverage was interrupted to finish the additional
 content-only delta status regression; required CI remains the coverage authority
-for this correction batch.
+for this correction batch; the API gate passed at 91.4%.
 
 Review guards for the correction batch:
 
@@ -183,18 +186,18 @@ document by the owner (external dependencies), but is not a CI gate.
 - [x] With SSO enforced, password, magic link and Google/GitHub sign-in are
       refused for everyone except the break-glass install admin, and an invite is
       accepted through SSO.
-- [ ] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
+- [x] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
       same reference dataset: 500 tickets, 2 000 messages, attachments, notes,
       CSAT, 50 contacts, 10 companies, 20 articles in two languages) import into a
       brand with every ticket's thread, authors, dates, notes, attachments, tags,
       custom fields and assignee intact.
-- [ ] During and after an import, the install sent nothing: the stand-in SMTP,
+- [x] During and after an import, the install sent nothing: the stand-in SMTP,
       the webhook receiver, the Telegram and Graph stand-ins received no request;
       no `workflow_runs`, `ticket_sla_clocks`, `notifications`, `ai_calls` or
       `webhook_deliveries` rows reference an imported ticket.
 - [x] Reports for the imported range show the imported volume, first response,
       resolution and CSAT on their original days.
-- [ ] Running the same import again writes nothing; a delta run brings only the
+- [x] Running the same import again writes nothing; a delta run brings only the
       tickets changed since; killing the worker mid-load and resuming loses and
       duplicates nothing.
 - [x] A CSV export from a tool without a connector imports through the manual
@@ -202,8 +205,8 @@ document by the owner (external dependencies), but is not a CI gate.
 - [x] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6 negative
       suite); vendor credentials are never returned after save and are deleted
       when a run finishes.
-- [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
-- [ ] After implementation, a separate full import-path review reconciles every
+- [x] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+- [x] After implementation, a separate full import-path review reconciles every
       connector's source fixtures against loaded tickets, contacts, companies and
       knowledge content. Check thread order, authors, dates, notes, attachments,
       fields, tags, assignees, relationships, repeat/delta/resume behaviour and
@@ -218,7 +221,8 @@ published-head CI are distinguished in the
 [review checkpoint](#import-path-review-checkpoint-2026-10-18). The implementation
 notes below retain earlier checkpoints; an older "authored/unrun" or
 "unfinished" statement describes that checkpoint, not the current result in
-this index. These checkmarks record fixture coverage; the owner review above reopened affected acceptance. The
+this index. These checkmarks record functional acceptance against the named fixtures, including
+the owner-review regressions and the corrected implementation CI run. The
 corrected publication still requires green CI before the PR leaves draft; the
 owner merges it. Real accounts/storage remain external acceptance, not a CI gate.
 

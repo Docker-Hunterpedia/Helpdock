@@ -69,11 +69,13 @@ export async function* ticketAudits(
   const path = `/api/v2/tickets/${ticketId}/audits.json`;
   let checkpoint = state.audit ?? { page: 1, offset: 0 };
   while (true) {
-    const response = await client.ticketJson(ticketId, path, auditPageSchema, {
-      page: String(checkpoint.page),
-      per_page: '100',
-      sort_order: 'asc',
-    });
+    const response = await client.ticketJson(
+      ticketId,
+      path,
+      auditPageSchema,
+      { page: String(checkpoint.page), per_page: '100', sort_order: 'asc' },
+      { slot: 'zendesk.audits' },
+    );
     if (!response) return;
     const fingerprint = hashImportValue(response.audits);
     if (

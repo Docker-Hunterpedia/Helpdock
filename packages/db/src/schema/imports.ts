@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
+  boolean,
   char,
   check,
   foreignKey,
@@ -350,7 +351,10 @@ export const importTicketInventory = pgTable(
   ],
 );
 
-/** Immutable successful GET responses used only while extraction may resume. */
+/**
+ * Immutable successful GET responses kept only while a resume can still read them.
+ * A row with neither flag serves the page being produced and is dropped when it commits.
+ */
 export const importPages = pgTable(
   'import_pages',
   {
@@ -361,6 +365,10 @@ export const importPages = pgTable(
     runId: uuid('run_id').notNull(),
     requestHash: char('request_hash', { length: 64 }).notNull(),
     response: jsonb('response').$type<Record<string, unknown>>().notNull(),
+    /** An enumeration several entities replay, such as the ticket stream; kept until extraction ends. */
+    runScoped: boolean('run_scoped').notNull().default(false),
+    /** A page the current checkpoint still indexes into; each slot holds only its latest page. */
+    slot: varchar('slot', { length: 64 }),
   },
   (table) => [
     foreignKey({
@@ -368,6 +376,14 @@ export const importPages = pgTable(
       foreignColumns: [importRuns.brandId, importRuns.id],
     }).onDelete('cascade'),
     unique('import_pages_request_key').on(table.runId, table.requestHash),
+    uniqueIndex('import_pages_slot_key')
+      .on(table.runId, table.slot)
+      .where(sql`${table.slot} IS NOT NULL`),
     check('import_pages_hash_shape', sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
+    check('import_pages_slot_shape', sql`${table.slot} ~ '^[a-z][a-z0-9.-]{0,63}$'`),
+    check(
+      'import_pages_one_retention',
+      sql`NOT (${table.runScoped} AND ${table.slot} IS NOT NULL)`,
+    ),
   ],
 );

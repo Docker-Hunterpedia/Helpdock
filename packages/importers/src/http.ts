@@ -9,11 +9,24 @@ import { ConnectorError, RateLimited } from './errors.js';
 import { type ImportRateLimiter, retryAfterMs } from './rate-limiter.js';
 import { isInvalidUtf8 } from './utf8.js';
 
-type RequestOptions = { followRedirects?: boolean };
+/**
+ * How long a successful GET snapshot outlives the checkpoint that read it. `run` keeps an
+ * enumeration that several entities replay, so they see one source stream. A slot keeps the
+ * latest page a checkpoint still indexes into, such as the comment page being walked. Any
+ * other response serves only the checkpoint being produced and is dropped once it commits.
+ */
+export type ImportSnapshotScope = { run: true } | { slot: string };
+export const RUN_SNAPSHOT: ImportSnapshotScope = { run: true };
+
+type RequestOptions = { followRedirects?: boolean; snapshot?: ImportSnapshotScope | undefined };
 
 export interface ImportPageCache {
-  read(url: string): Promise<SafeFetchResponse | undefined>;
-  write(url: string, response: SafeFetchResponse): Promise<SafeFetchResponse>;
+  read(url: string, scope?: ImportSnapshotScope): Promise<SafeFetchResponse | undefined>;
+  write(
+    url: string,
+    response: SafeFetchResponse,
+    scope?: ImportSnapshotScope,
+  ): Promise<SafeFetchResponse>;
 }
 
 export class ImportHttp {
@@ -44,7 +57,7 @@ export class ImportHttp {
       this.options.hosts.includes(address.hostname)
         ? this.options.cache
         : undefined;
-    const cached = await cache?.read(address.href);
+    const cached = await cache?.read(address.href, options.snapshot);
     if (cached) return cached;
     this.options.limiter.reserve();
     const response = await safeFetch(url, init, {
@@ -93,7 +106,7 @@ export class ImportHttp {
     if (response.status >= 500) throw new ConnectorError('vendor-unavailable', response.status);
     if (response.status < 200 || response.status >= 300)
       throw new ConnectorError('invalid-response', response.status);
-    return cache ? cache.write(address.href, response) : response;
+    return cache ? cache.write(address.href, response, options.snapshot) : response;
   }
 
   async json<T>(

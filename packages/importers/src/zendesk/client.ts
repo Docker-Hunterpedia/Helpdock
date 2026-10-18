@@ -2,6 +2,7 @@ import type { SafeFetchInit } from '@helpdock/net';
 import { z } from 'zod';
 import type { ConnectorContext } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import type { ImportSnapshotScope } from '../http.js';
 import { type ZendeskCredentials, zendeskCredentialsSchema } from './contracts.js';
 
 export class ZendeskClient {
@@ -33,9 +34,14 @@ export class ZendeskClient {
     return address.href;
   }
 
-  json<T>(path: string, schema: z.ZodType<T>, query: Record<string, string> = {}): Promise<T> {
+  json<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    query: Record<string, string> = {},
+    snapshot?: ImportSnapshotScope,
+  ): Promise<T> {
     this.context.signal.throwIfAborted();
-    return this.context.http.json(this.url(path, query), schema, this.init());
+    return this.context.http.json(this.url(path, query), schema, this.init(), { snapshot });
   }
 
   async ticketJson<T>(
@@ -43,9 +49,10 @@ export class ZendeskClient {
     path: string,
     schema: z.ZodType<T>,
     query: Record<string, string>,
+    snapshot: ImportSnapshotScope,
   ): Promise<T | null> {
     try {
-      return await this.json(path, schema, query);
+      return await this.json(path, schema, query, snapshot);
     } catch (error) {
       if (!(error instanceof ConnectorError) || error.code !== 'record-unavailable') throw error;
       await this.warnUnavailableTicket(ticketId);

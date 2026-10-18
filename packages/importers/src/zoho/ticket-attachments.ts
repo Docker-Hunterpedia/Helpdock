@@ -1,6 +1,7 @@
 import { importAttachmentRefSchema, importMessageSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
+import type { ImportSnapshotScope } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoTicketAttachmentSchema } from './contracts.js';
 
@@ -8,6 +9,7 @@ export async function readZohoTicketAttachments(
   client: ZohoDeskClient,
   ticketId: string,
   from: number,
+  snapshot?: ImportSnapshotScope,
 ) {
   if (!Number.isSafeInteger(from) || from < 0 || from % 100 !== 0 || from > 99999900)
     throw new ConnectorError('invalid-response');
@@ -20,6 +22,7 @@ export async function readZohoTicketAttachments(
       sortBy: 'createdTime',
       include: 'creator',
     },
+    snapshot,
   );
   if (new Set(page.data.map((file) => file.id)).size !== page.data.length)
     throw new ConnectorError('invalid-response');

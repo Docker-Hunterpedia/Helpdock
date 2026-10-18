@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoIdSchema } from './contracts.js';
 import { zohoNativeFields } from './profile-fields.js';
@@ -29,10 +30,12 @@ export type ZohoField = FieldRecord;
 
 /** The module endpoint returns all fields; it does not document page/from/limit parameters. */
 export async function readZohoFields(client: ZohoDeskClient, target: Target): Promise<ZohoField[]> {
+  // Ticket and profile entities replay this response, so custom values use the staged fields.
   const result = await client.list(
     '/api/v1/fields',
     z.object({ data: z.array(fieldSchema).max(10000) }),
     { module: modules[target] },
+    RUN_SNAPSHOT,
   );
   if (
     new Set(result.data.map((field) => field.apiName)).size !== result.data.length ||

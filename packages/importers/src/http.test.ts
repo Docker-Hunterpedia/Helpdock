@@ -1,8 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { SafeFetchResponse } from '@helpdock/net';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
-import { ImportHttp } from './http.js';
+import { ImportHttp, type ImportPageCache, RUN_SNAPSHOT } from './http.js';
 import { ImportRateLimiter } from './rate-limiter.js';
 
 let server: Server;
@@ -73,4 +74,32 @@ it.each([
     message: code,
     status,
   });
+});
+
+it('passes the requested snapshot scope to the page cache on a miss and on a hit', async () => {
+  const stored = new Map<string, SafeFetchResponse>();
+  const calls: unknown[][] = [];
+  const cache: ImportPageCache = {
+    read: async (url, scope) => {
+      calls.push(['read', url, scope]);
+      return stored.get(url);
+    },
+    write: async (url, response, scope) => {
+      calls.push(['write', url, scope]);
+      stored.set(url, response);
+      return response;
+    },
+  };
+  const http = client().withPageCache(cache);
+  const slot = { slot: 'zendesk.comments' };
+  const url = `${origin}/200`;
+  await http.request(url, {}, { snapshot: slot });
+  await http.request(url, {}, { snapshot: RUN_SNAPSHOT });
+  await http.request(url);
+  expect(calls).toEqual([
+    ['read', url, slot],
+    ['write', url, slot],
+    ['read', url, RUN_SNAPSHOT],
+    ['read', url, undefined],
+  ]);
 });

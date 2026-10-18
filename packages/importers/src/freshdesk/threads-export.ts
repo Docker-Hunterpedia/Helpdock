@@ -150,6 +150,7 @@ async function* conversations(
       `/api/v2/tickets/${archived ? 'archived/' : ''}${ticketId}/conversations`,
       freshdeskConversationSchema,
       { page: String(checkpoint.conversationPage), per_page: '100' },
+      { slot: 'freshdesk.conversations' },
     );
     const fingerprint = hashImportValue(
       page.rows.map((conversation) => ({

@@ -768,10 +768,17 @@ waiting period. If an admin has activated SLAs, subsequent deltas
 satisfy response clocks for imported agent replies and reconcile paused statuses
 without emitting live ticket hooks, notifications or new SLA timer events.
 
-A resumed extraction reuses successful source GET responses already captured for
-that run, with the original page boundaries. These private, tenant-isolated page
-snapshots are removed when extraction ends or is cancelled/failed. A new run
-fetches new source state; attachment downloads still refresh their signed URLs.
+A resumed extraction reuses the source GET responses its last checkpoint still
+points into, with the original page boundaries: for example the ticket list page
+and the comment page being walked. Responses no checkpoint points into, such as
+an earlier ticket's comments or an author lookup, are removed when the next
+checkpoint is saved, so storage stays bounded while a large account is extracted.
+List pages that several entities walk, such as the ticket list used by tickets,
+tags and conversations, are kept for the whole extraction so every entity sees
+the same records. A resume re-reads a per-record detail page, such as an author,
+from the source. These private, tenant-isolated page snapshots are removed when
+extraction ends or is cancelled/failed. A new run fetches new source state;
+attachment downloads still refresh their signed URLs.
 Freshdesk scans in creation order; a nonempty 300th page requires the complete
 native-ID inventory mode. Zoho deltas scan creation-ordered tickets and filter
 modified timestamps locally instead of paging mutable search results.

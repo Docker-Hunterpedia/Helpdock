@@ -75,7 +75,9 @@ async function articlePage(
       sortBy: 'createdTime',
       ...(cursor.from === null ? {} : { from: String(cursor.from) }),
     };
-    const page = await client.list(path, pageSchema, query);
+    const page = await client.list(path, pageSchema, query, {
+      slot: articleId === undefined ? 'zoho.articles' : 'zoho.article-translations',
+    });
     if (
       new Set(page.data.map((row) => `${row.id}:${row.translationId}`)).size !== page.data.length ||
       page.data.some(

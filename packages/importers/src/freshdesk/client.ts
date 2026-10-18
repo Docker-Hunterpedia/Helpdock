@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ConnectorContext } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import type { ImportSnapshotScope } from '../http.js';
 import { type FreshdeskCredentials, freshdeskCredentialsSchema } from './contracts.js';
 
 export class FreshdeskClient {
@@ -32,12 +33,15 @@ export class FreshdeskClient {
     path: string,
     schema: z.ZodType<T>,
     query: Record<string, string> = {},
+    snapshot?: ImportSnapshotScope,
   ): Promise<T> {
     this.context.signal.throwIfAborted();
-    return this.context.http.json(this.url(path, query), schema, {
-      signal: this.context.signal,
-      headers: { authorization: this.authorization },
-    });
+    return this.context.http.json(
+      this.url(path, query),
+      schema,
+      { signal: this.context.signal, headers: { authorization: this.authorization } },
+      { snapshot },
+    );
   }
 
   async refuseTimestampWindow(): Promise<never> {
@@ -145,13 +149,16 @@ export class FreshdeskClient {
     path: string,
     schema: z.ZodType<T>,
     query: Record<string, string> & { page: string },
+    snapshot?: ImportSnapshotScope,
   ) {
     this.context.signal.throwIfAborted();
     const current = new URL(this.url(path, query));
-    const result = await this.context.http.jsonResponse(current.href, z.array(schema).max(100), {
-      signal: this.context.signal,
-      headers: { authorization: this.authorization },
-    });
+    const result = await this.context.http.jsonResponse(
+      current.href,
+      z.array(schema).max(100),
+      { signal: this.context.signal, headers: { authorization: this.authorization } },
+      { snapshot },
+    );
     const rawLink = result.headers.link;
     const link = Array.isArray(rawLink) ? rawLink.join(',') : rawLink;
     if (!link) return { rows: result.data, nextPage: null };
@@ -181,7 +188,12 @@ export class FreshdeskClient {
     return { rows: result.data, nextPage };
   }
 
-  async tokenPage<T>(path: string, schema: z.ZodType<T>, token: string | null) {
+  async tokenPage<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    token: string | null,
+    snapshot?: ImportSnapshotScope,
+  ) {
     const query = { per_page: '100', ...(token === null ? {} : { next_token: token }) };
     const current = new URL(this.url(path, query));
     const result = await this.json(
@@ -191,6 +203,7 @@ export class FreshdeskClient {
         paging: z.object({ next: z.url().nullable(), previous: z.url().nullable() }),
       }),
       query,
+      snapshot,
     );
     if (result.paging.next === null) return { rows: result.data, nextToken: null };
     const next = new URL(result.paging.next);

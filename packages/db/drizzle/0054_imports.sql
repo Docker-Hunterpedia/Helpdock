@@ -111,8 +111,12 @@ CREATE TABLE "import_pages" (
 	"run_id" uuid NOT NULL,
 	"request_hash" char(64) NOT NULL,
 	"response" jsonb NOT NULL,
+	"run_scoped" boolean DEFAULT false NOT NULL,
+	"slot" varchar(64),
 	CONSTRAINT "import_pages_request_key" UNIQUE("run_id","request_hash"),
-	CONSTRAINT "import_pages_hash_shape" CHECK ("import_pages"."request_hash" ~ '^[0-9a-f]{64}$')
+	CONSTRAINT "import_pages_hash_shape" CHECK ("import_pages"."request_hash" ~ '^[0-9a-f]{64}$'),
+	CONSTRAINT "import_pages_slot_shape" CHECK ("import_pages"."slot" ~ '^[a-z][a-z0-9.-]{0,63}$'),
+	CONSTRAINT "import_pages_one_retention" CHECK (NOT ("import_pages"."run_scoped" AND "import_pages"."slot" IS NOT NULL))
 );
 --> statement-breakpoint
 CREATE TABLE "import_records" (
@@ -247,6 +251,7 @@ CREATE INDEX "import_files_run_idx" ON "import_files" USING btree ("brand_id","r
 CREATE INDEX "import_files_work_idx" ON "import_files" USING btree ("status","updated_at");--> statement-breakpoint
 CREATE INDEX "import_log_run_cursor_idx" ON "import_log" USING btree ("run_id","id");--> statement-breakpoint
 CREATE INDEX "import_log_run_level_cursor_idx" ON "import_log" USING btree ("run_id","level","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "import_pages_slot_key" ON "import_pages" USING btree ("run_id","slot") WHERE "import_pages"."slot" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "import_records_parent_idx" ON "import_records" USING btree ("run_id","parent_external_id","entity");--> statement-breakpoint
 CREATE INDEX "import_records_load_idx" ON "import_records" USING btree ("run_id","entity","status","id");--> statement-breakpoint
 CREATE INDEX "import_records_article_translation_idx" ON "import_records" USING btree ("brand_id","run_id",("payload" ->> 'translationOf')) WHERE "import_records"."entity" = 'article';--> statement-breakpoint

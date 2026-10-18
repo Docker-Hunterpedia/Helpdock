@@ -11,6 +11,7 @@ import { type ImportEntity, importEntitySchema, importRecordSchema } from '@help
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ImportClaim, ImportClaimLost, renewImportClaim } from './claims.js';
+import { discardConsumedImportPages } from './page-cache.js';
 
 const cursorSchema = z.record(z.string().max(200), z.json());
 const pageSchema = z
@@ -183,6 +184,7 @@ export async function storeImportPage(
     .update(importRuns)
     .set({ cursors: checkpoints, counts: { ...counts, extracted } })
     .where(eq(importRuns.id, claim.runId));
+  await discardConsumedImportPages(tx, claim, page.cursor === null);
 }
 
 /** A disappearing source ticket is omitted with its graph; live destination history is untouched. */

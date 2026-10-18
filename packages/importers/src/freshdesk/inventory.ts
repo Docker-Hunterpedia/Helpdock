@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
+import type { ImportSnapshotScope } from '../http.js';
 import {
   type TicketInventory,
   ticketInventoryEntrySchema,
@@ -28,6 +29,7 @@ export async function readFreshdeskInventory(
   client: FreshdeskClient,
   checkpoint: z.infer<typeof freshdeskInventoryCursorSchema>,
   inventory?: TicketInventory,
+  snapshot?: ImportSnapshotScope,
 ) {
   if (
     !inventory ||
@@ -46,6 +48,8 @@ export async function readFreshdeskInventory(
     row = await client.json(
       `/api/v2/tickets/${archived ? 'archived/' : ''}${id}`,
       freshdeskTicketSchema,
+      {},
+      snapshot,
     );
   } catch (error) {
     if (
@@ -55,7 +59,7 @@ export async function readFreshdeskInventory(
     )
       throw error;
     archived = true;
-    row = await client.json(`/api/v2/tickets/archived/${id}`, freshdeskTicketSchema);
+    row = await client.json(`/api/v2/tickets/archived/${id}`, freshdeskTicketSchema, {}, snapshot);
   }
   if (String(row.id) !== id || row.deleted || row.spam)
     throw new ConnectorError('invalid-response');

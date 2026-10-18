@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import { type TicketInventory, ticketInventoryEntrySchema } from '../ticket-inventory.js';
 import {
   initialZohoArchiveScan,
@@ -116,10 +117,12 @@ export async function readZohoTicketScan(
     limit: '100',
     sortBy: 'createdTime',
   };
+  // Tag and history entities replay this scan, so they enumerate the tickets this entity staged.
   const page = await client.list(
     '/api/v1/tickets',
     z.object({ data: z.array(zohoTicketIndexSchema).max(100) }),
     query,
+    RUN_SNAPSHOT,
   );
   if (new Set(page.data.map((row) => row.id)).size !== page.data.length)
     throw new ConnectorError('invalid-response');

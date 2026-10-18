@@ -50,6 +50,7 @@ export async function* exportFreshdeskModernCsat(
       '/api/v2/customer-satisfaction/surveys',
       freshdeskSurveySchema,
       checkpoint.surveyToken,
+      { slot: 'freshdesk.surveys' },
     );
     const fingerprint = hashImportValue(surveys.rows.map((row) => row.id));
     if (checkpoint.surveyFingerprint !== null && checkpoint.surveyFingerprint !== fingerprint)

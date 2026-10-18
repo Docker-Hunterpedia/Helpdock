@@ -259,6 +259,9 @@ repeat/no-op coverage in `packages/db/src/migrate.integration.test.ts`.
 bind their children. Staging includes a `(run_id, parent_external_id, entity)`
 index for ticket-thread reads. Successful extraction pages are immutable and
 claim-fenced; a trigger removes them when extraction ends, fails or is cancelled.
+Each checkpoint also deletes the pages it no longer reads: `run_scoped` keeps
+enumerations several entities replay, and a `slot` keeps the page being walked
+(ADR 0027, bounded extraction page snapshots).
 
 The same migration creates the final provenance, original message and satisfaction
 metadata, account namespaces, source knowledge descriptions, article asset and
@@ -4609,6 +4612,21 @@ Additional EN/AR checks pass at 640 CSS pixels on the wizard and 320 pixels on
 the public article, with no document-level horizontal overflow. The SLA dialog
 returns focus on cancellation and remains usable under forced colors. Both
 flows honor reduced motion and retain their normal-color axe checks.
+
+## Bounded extraction page snapshots, 2026-10-18
+
+Extraction stored every successful vendor GET in `import_pages` until extraction
+ended. For a large account that was a second copy of the source data, such as one
+comment page per ticket. Connector requests now declare a retention scope:
+a slot for the page a checkpoint indexes into, run scope for an enumeration that
+several entities replay, or neither. `storeImportPage` deletes unscoped snapshots
+in the checkpoint transaction, and slots when their entity finishes (ADR 0027).
+Writer integration tests cover the retention rules. They walk twelve Zendesk
+threads holding at most the ticket stream and one comment page, where the old
+store held 15 rows. A worker killed inside a comment page resumes from its
+snapshots after the vendor edits that page and adds a ticket. No source page is
+fetched twice. Per-record lookups, such as an author's role, are re-read from the
+source after a crash.
 
 ## Pull requests
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { validatedImportCursor } from '../cursor.js';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { TicketInventory } from '../ticket-inventory.js';
 import type { FreshdeskClient } from './client.js';
 import { freshdeskFieldSchema } from './contracts.js';
@@ -36,10 +37,13 @@ export async function* exportFreshdeskStatusTickets(
 ): AsyncGenerator<ImportPage> {
   let checkpoint = cursorSchema.parse(raw ?? { stage: 'fields', page: 1, labels: {} });
   while (checkpoint.stage === 'fields') {
-    const page = await client.page('/api/v2/ticket_fields', freshdeskFieldSchema, {
-      page: String(checkpoint.page),
-      per_page: '100',
-    });
+    // The field entity replays these pages, so status labels match the staged definitions.
+    const page = await client.page(
+      '/api/v2/ticket_fields',
+      freshdeskFieldSchema,
+      { page: String(checkpoint.page), per_page: '100' },
+      RUN_SNAPSHOT,
+    );
     const labels = { ...checkpoint.labels };
     for (const field of page.rows) {
       if (field.type !== 'default_status') continue;

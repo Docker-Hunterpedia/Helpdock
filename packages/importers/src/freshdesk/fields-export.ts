@@ -2,6 +2,7 @@ import { CUSTOM_FIELD_OPTIONS_MAX, type ImportRecord, importRecordSchema } from 
 import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { FreshdeskClient } from './client.js';
 import { freshdeskFieldSchema } from './contracts.js';
 import { freshdeskProfileFields } from './profile-fields.js';
@@ -96,10 +97,12 @@ export async function* exportFreshdeskFields(
   while (true) {
     const collection = collections[checkpoint.collection];
     if (!collection) throw new ConnectorError('invalid-response');
-    const page = await client.page(collection.path, freshdeskFieldSchema, {
-      page: String(checkpoint.page),
-      per_page: '100',
-    });
+    const page = await client.page(
+      collection.path,
+      freshdeskFieldSchema,
+      { page: String(checkpoint.page), per_page: '100' },
+      RUN_SNAPSHOT,
+    );
     const records: ImportRecord[] = [];
     if (checkpoint.page === 1 && collection.target !== 'ticket')
       records.push(...freshdeskProfileFields(collection.target));

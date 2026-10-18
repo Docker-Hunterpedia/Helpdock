@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoIdSchema } from './contracts.js';
 
@@ -95,11 +96,12 @@ async function departmentPage(client: ZohoDeskClient, cursor: ArchiveScan): Prom
       next: cursor.enabled ? { ...initialZohoArchiveScan(), enabled: false } : null,
     };
   }
-  const page = await client.list('/api/v1/departments', departmentPageSchema, {
-    from: String(cursor.departmentFrom),
-    limit: '200',
-    isEnabled: String(cursor.enabled),
-  });
+  const page = await client.list(
+    '/api/v1/departments',
+    departmentPageSchema,
+    { from: String(cursor.departmentFrom), limit: '200', isEnabled: String(cursor.enabled) },
+    RUN_SNAPSHOT,
+  );
   if (page.data.some((row) => row.isEnabled !== cursor.enabled))
     throw new ConnectorError('invalid-response');
   const checked = checkedPage(
@@ -128,12 +130,12 @@ async function ticketPage(
   departmentId: string,
 ): Promise<ScanResult> {
   const limit = Math.min(100, 5000 - cursor.from);
-  const page = await client.list('/api/v1/tickets/archivedTickets', archivePageSchema, {
-    departmentId,
-    from: String(cursor.from),
-    limit: String(limit),
-    viewType: '1',
-  });
+  const page = await client.list(
+    '/api/v1/tickets/archivedTickets',
+    archivePageSchema,
+    { departmentId, from: String(cursor.from), limit: String(limit), viewType: '1' },
+    RUN_SNAPSHOT,
+  );
   if (page.data.length > limit || page.data.some((row) => row.departmentId !== departmentId))
     throw new ConnectorError('invalid-response');
   const checked = checkedPage(

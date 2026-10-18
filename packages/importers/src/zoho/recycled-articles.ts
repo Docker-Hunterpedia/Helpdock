@@ -40,11 +40,8 @@ async function articleRecyclePage(
     const response = await client.list(
       '/api/v1/articleTranslations/trashedTranslations',
       z.object({ data: z.array(nativeSchema).max(50) }),
-      {
-        from: String(cursor.from),
-        limit: '50',
-        sortBy: 'deletedTime',
-      },
+      { from: String(cursor.from), limit: '50', sortBy: 'deletedTime' },
+      { slot: 'zoho.recycled-articles' },
     );
     if (
       response.data.some((row) => !row.isTrashed) ||

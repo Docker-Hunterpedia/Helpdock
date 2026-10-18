@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import { ticketAudits } from './audits-export.js';
 import type { ZendeskClient } from './client.js';
 import {
@@ -95,11 +96,19 @@ async function* ticketComments(
   const path = `/api/v2/tickets/${ticketId}/comments.json`;
   let checkpoint = state;
   while (true) {
-    const page = await client.ticketJson(ticketId, path, zendeskCommentPageSchema, {
-      'page[size]': '100',
-      include_inline_images: 'true',
-      ...(checkpoint.commentAfter === undefined ? {} : { 'page[after]': checkpoint.commentAfter }),
-    });
+    const page = await client.ticketJson(
+      ticketId,
+      path,
+      zendeskCommentPageSchema,
+      {
+        'page[size]': '100',
+        include_inline_images: 'true',
+        ...(checkpoint.commentAfter === undefined
+          ? {}
+          : { 'page[after]': checkpoint.commentAfter }),
+      },
+      { slot: 'zendesk.comments' },
+    );
     if (!page) return;
     const fingerprint = hashImportValue(page.comments);
     if (
@@ -153,13 +162,18 @@ export async function* exportZendeskThread(
     tickets: z.array(z.looseObject({ id: z.int().positive() })).max(1000),
   });
   while (true) {
-    const batch = await client.json('/api/v2/incremental/tickets/cursor.json', schema, {
-      per_page: '1000',
-      support_type_scope: 'all',
-      ...(checkpoint.tickets.after === undefined
-        ? { start_time: String(checkpoint.tickets.startTime) }
-        : { cursor: checkpoint.tickets.after }),
-    });
+    const batch = await client.json(
+      '/api/v2/incremental/tickets/cursor.json',
+      schema,
+      {
+        per_page: '1000',
+        support_type_scope: 'all',
+        ...(checkpoint.tickets.after === undefined
+          ? { start_time: String(checkpoint.tickets.startTime) }
+          : { cursor: checkpoint.tickets.after }),
+      },
+      RUN_SNAPSHOT,
+    );
     const fingerprint = hashImportValue(batch.tickets);
     if (
       (checkpoint.ticketFingerprint && checkpoint.ticketFingerprint !== fingerprint) ||

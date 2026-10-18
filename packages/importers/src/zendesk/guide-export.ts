@@ -155,10 +155,12 @@ export async function* exportZendeskGuide(
     articles: z.array(row).optional(),
   });
   while (true) {
-    const response = await client.json(path, schema, {
-      page: String(checkpoint.page),
-      per_page: '100',
-    });
+    const response = await client.json(
+      path,
+      schema,
+      { page: String(checkpoint.page), per_page: '100' },
+      { slot: 'zendesk.guide' },
+    );
     const rows =
       entity === 'category'
         ? response.categories

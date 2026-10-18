@@ -2,6 +2,7 @@ import { type ImportRecord, importRecordSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoIdSchema } from './contracts.js';
 import { zohoCustomValues } from './field-values.js';
@@ -182,10 +183,12 @@ export async function* exportZohoDepartments(
   const schema = z.strictObject({ enabled: z.boolean(), from: z.int().min(0).max(2147483647) });
   let cursor = schema.parse(raw ?? { enabled: true, from: 0 });
   while (true) {
+    // The archived-ticket scan replays these pages, so it walks only the staged departments.
     const page = await client.list(
       '/api/v1/departments',
       z.object({ data: z.array(zohoDepartmentSchema).max(200) }),
       { from: String(cursor.from), limit: '200', isEnabled: String(cursor.enabled) },
+      RUN_SNAPSHOT,
     );
     if (
       page.data.some((department) => department.isEnabled !== cursor.enabled) ||

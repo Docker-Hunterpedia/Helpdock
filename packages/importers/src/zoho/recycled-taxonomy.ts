@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoIdSchema } from './contracts.js';
 import { zohoRootCategorySchema, zohoSectionSchema } from './knowledge-contracts.js';
@@ -51,11 +52,9 @@ async function recycledTaxonomyPage(
     const response = await client.list(
       '/api/v1/kbCategory/trashedCategories',
       z.object({ data: z.array(nativeTaxonomySchema).max(50) }),
-      {
-        from: String(cursor.from),
-        limit: '50',
-        sortBy: 'deletedTime',
-      },
+      { from: String(cursor.from), limit: '50', sortBy: 'deletedTime' },
+      // Category and section entities replay this recycle bin.
+      RUN_SNAPSHOT,
     );
     if (new Set(response.data.map((row) => row.id)).size !== response.data.length)
       throw new ConnectorError('invalid-response');

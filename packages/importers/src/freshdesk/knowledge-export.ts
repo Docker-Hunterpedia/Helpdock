@@ -3,6 +3,7 @@ import type { ImportCursor, ImportPage } from '../connector.js';
 import { validatedImportCursor } from '../cursor.js';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { FreshdeskClient } from './client.js';
 import {
   freshdeskArticleSchema,
@@ -69,10 +70,12 @@ function knowledgePages(client: FreshdeskClient) {
   return {
     categories: async (page: number) => {
       if (category?.page === page) return category.data;
-      const data = await client.page('/api/v2/solutions/categories', freshdeskCategorySchema, {
-        page: String(page),
-        per_page: '100',
-      });
+      const data = await client.page(
+        '/api/v2/solutions/categories',
+        freshdeskCategorySchema,
+        { page: String(page), per_page: '100' },
+        RUN_SNAPSHOT,
+      );
       category = { page, data };
       return data;
     },
@@ -83,20 +86,25 @@ function knowledgePages(client: FreshdeskClient) {
           : `/api/v2/solutions/folders/${frame.parentId}/subfolders`;
       const key = `${path}:${frame.page}`;
       if (folder?.key === key) return folder.data;
-      const data = await client.page(path, freshdeskFolderSchema, {
-        page: String(frame.page),
-        per_page: '100',
-      });
+      // Open frames are re-read on the way back up, and articles replay the section tree.
+      const data = await client.page(
+        path,
+        freshdeskFolderSchema,
+        { page: String(frame.page), per_page: '100' },
+        RUN_SNAPSHOT,
+      );
       folder = { key, data };
       return data;
     },
     articles: async (id: number, page: number) => {
       const key = `${id}:${page}`;
       if (article?.key === key) return article.data;
-      const data = await client.page(`/api/v2/solutions/folders/${id}/articles`, indexSchema, {
-        page: String(page),
-        per_page: '100',
-      });
+      const data = await client.page(
+        `/api/v2/solutions/folders/${id}/articles`,
+        indexSchema,
+        { page: String(page), per_page: '100' },
+        { slot: 'freshdesk.articles' },
+      );
       article = { key, data };
       return data;
     },
@@ -114,10 +122,12 @@ async function* categories(
     throw new ConnectorError('invalid-response');
   checkpoint = { ...checkpoint, localesFingerprint };
   while (true) {
-    const page = await client.page('/api/v2/solutions/categories', freshdeskCategorySchema, {
-      page: String(checkpoint.page),
-      per_page: '100',
-    });
+    const page = await client.page(
+      '/api/v2/solutions/categories',
+      freshdeskCategorySchema,
+      { page: String(checkpoint.page), per_page: '100' },
+      RUN_SNAPSHOT,
+    );
     const hash = hashImportValue(page.rows);
     if (
       (checkpoint.fingerprint && checkpoint.fingerprint !== hash) ||

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { validatedImportCursor } from '../cursor.js';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { TicketInventory } from '../ticket-inventory.js';
 import type { FreshdeskClient } from './client.js';
 import { freshdeskTicketSchema } from './contracts.js';
@@ -65,15 +66,24 @@ export async function readFreshdeskTicketPage(
   checkpoint: z.infer<typeof freshdeskTicketCursorSchema>,
   inventory?: TicketInventory,
 ) {
-  if ('kind' in checkpoint) return readFreshdeskInventory(client, checkpoint, inventory);
-  const result = await client.page('/api/v2/tickets', freshdeskTicketSchema, {
-    page: String(checkpoint.page),
-    per_page: '100',
-    updated_since: checkpoint.windowStart,
-    order_by: 'created_at',
-    order_type: 'asc',
-    include: 'description,stats',
-  });
+  if ('kind' in checkpoint)
+    return readFreshdeskInventory(client, checkpoint, inventory, {
+      slot: 'freshdesk.inventory-ticket',
+    });
+  // Tag and thread entities replay these pages, so they enumerate the tickets this entity staged.
+  const result = await client.page(
+    '/api/v2/tickets',
+    freshdeskTicketSchema,
+    {
+      page: String(checkpoint.page),
+      per_page: '100',
+      updated_since: checkpoint.windowStart,
+      order_by: 'created_at',
+      order_type: 'asc',
+      include: 'description,stats',
+    },
+    RUN_SNAPSHOT,
+  );
   for (const row of result.rows) {
     if (
       Date.parse(row.updated_at) < Date.parse(checkpoint.windowStart) ||

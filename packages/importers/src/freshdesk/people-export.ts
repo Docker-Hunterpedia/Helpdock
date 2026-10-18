@@ -1,6 +1,7 @@
 import { type ImportRecord, importRecordSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { FreshdeskClient } from './client.js';
 import {
   freshdeskAgentSchema,
@@ -48,11 +49,16 @@ export async function* exportFreshdeskContacts(
 ): AsyncGenerator<ImportPage> {
   let page = checkpointSchema.parse(raw ?? { page: 1 }).page;
   while (true) {
-    const result = await client.page('/api/v2/contacts', freshdeskContactSchema, {
-      page: String(page),
-      per_page: '100',
-      ...(since ? { updated_since: since.toISOString() } : {}),
-    });
+    const result = await client.page(
+      '/api/v2/contacts',
+      freshdeskContactSchema,
+      {
+        page: String(page),
+        per_page: '100',
+        ...(since ? { updated_since: since.toISOString() } : {}),
+      },
+      RUN_SNAPSHOT,
+    );
     yield {
       records: result.rows.map(freshdeskContactRecord),
       cursor: result.nextPage ? { page: result.nextPage } : null,
@@ -95,10 +101,13 @@ export async function* exportFreshdeskUsers(
       };
       checkpoint = next;
     } else {
-      const result = await client.page('/api/v2/contacts', freshdeskContactSchema, {
-        ...query,
-        ...(since ? { updated_since: since.toISOString() } : {}),
-      });
+      // The contact entity replays these pages, so customers and contacts stay one set.
+      const result = await client.page(
+        '/api/v2/contacts',
+        freshdeskContactSchema,
+        { ...query, ...(since ? { updated_since: since.toISOString() } : {}) },
+        RUN_SNAPSHOT,
+      );
       const next = result.nextPage
         ? { collection: 'contacts' as const, page: result.nextPage }
         : null;

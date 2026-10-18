@@ -99,6 +99,7 @@ export async function* exportZohoCsat(
         startTime: '0',
         endTime: String(cursor.endTime),
       },
+      { slot: 'zoho.csat' },
     );
     const fingerprint = hashImportValue(page.data);
     if (

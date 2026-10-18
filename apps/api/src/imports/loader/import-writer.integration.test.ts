@@ -61,14 +61,18 @@ import {
   hashImportValue,
   ImportHttp,
   ImportRateLimiter,
+  type ImportSnapshotScope,
   importRecordParent,
   RateLimited,
+  RUN_SNAPSHOT,
   ZendeskConnector,
+  type ZendeskCredentials,
 } from '@helpdock/importers';
 import {
   FakeZendesk,
   FakeZoho,
   VendorServer,
+  type ZendeskFixture,
   zendeskCoreFixture,
   zohoCoreFixture,
 } from '@helpdock/importers/testing';
@@ -89,7 +93,7 @@ import { Queue, Worker } from 'bullmq';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
@@ -634,6 +638,72 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     );
     await withSystem(app.db, BRAND, (tx) => completeExtraction(tx, resumed));
     expect(await owner.db.select().from(importPages)).toEqual([]);
+  });
+
+  it('drops each snapshot once its checkpoint commits unless a slot or the whole run still reads it', async () => {
+    await owner.db.update(importRuns).set({ status: 'extracting' }).where(eq(importRuns.id, RUN));
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { brandId: BRAND, runId: RUN, phase: 'extracting' }),
+    );
+    if (!claim) throw new Error('Expected extraction claim');
+    const cache = importExtractionPageCache(app.db, claim, 'import.retention');
+    const pages = {
+      stream: '/api/v2/incremental/tickets/cursor.json',
+      first: '/api/v2/tickets/1/comments.json',
+      lookup: '/api/v2/users/7.json',
+      second: '/api/v2/tickets/2/comments.json',
+    };
+    const url = (name: keyof typeof pages) => `https://demo.zendesk.com${pages[name]}`;
+    const store = (name: keyof typeof pages, scope?: ImportSnapshotScope) =>
+      cache.write(
+        url(name),
+        { status: 200, body: Buffer.from('{}'), headers: {}, url: url(name), redirects: [] },
+        scope,
+      );
+    const commit = (cursor: { step: number } | null) =>
+      withSystem(app.db, BRAND, (tx) =>
+        storeImportPage(tx, claim, 'group', { records: [], cursor }),
+      );
+    const names = new Map(
+      Object.keys(pages).map((name) => [hashImportValue(url(name as keyof typeof pages)), name]),
+    );
+    const retained = async () =>
+      (
+        await owner.db
+          .select({
+            hash: importPages.requestHash,
+            slot: importPages.slot,
+            run: importPages.runScoped,
+          })
+          .from(importPages)
+      )
+        .map(({ hash, ...row }) => ({ name: names.get(hash), ...row }))
+        .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+    const slot = { slot: 'zendesk.comments' };
+
+    await store('stream', RUN_SNAPSHOT);
+    await store('first', slot);
+    await store('lookup');
+    await commit({ step: 1 });
+    expect(await retained()).toEqual([
+      { name: 'first', slot: 'zendesk.comments', run: false },
+      { name: 'stream', slot: null, run: true },
+    ]);
+    // Until the next checkpoint commits, a killed worker can still resume inside the first page.
+    await store('second', slot);
+    expect(await retained()).toEqual([
+      { name: 'first', slot: null, run: false },
+      { name: 'second', slot: 'zendesk.comments', run: false },
+      { name: 'stream', slot: null, run: true },
+    ]);
+    await commit({ step: 2 });
+    await cache.read(url('stream'), { slot: 'zendesk.audits' });
+    expect(await retained()).toEqual([
+      { name: 'second', slot: 'zendesk.comments', run: false },
+      { name: 'stream', slot: null, run: true },
+    ]);
+    await commit(null);
+    expect(await retained()).toEqual([{ name: 'stream', slot: null, run: true }]);
   });
 
   it('quietly satisfies an activated response SLA and pauses then resumes resolution after vendor deltas', async () => {
@@ -2942,6 +3012,172 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       ]);
       expect(await owner.db.select().from(outbox)).toEqual([]);
       expect(await redis.dbsize()).toBe(0);
+    } finally {
+      await fake.server.close();
+    }
+  });
+
+  function zendeskThreadContext(fake: FakeZendesk, signal = new AbortController().signal) {
+    return {
+      credentials: { auth: 'oauth' as const, subdomain: 'demo', accessToken: 'synthetic-token' },
+      signal,
+      log: async () => {},
+      http: new ImportHttp({
+        hosts: ['127.0.0.1'],
+        limiter: new ImportRateLimiter({ capacity: 100, perMinute: 1000 }),
+        policy: {
+          allowedPorts: [Number(new URL(fake.server.root).port)],
+          allowCidrs: ['127.0.0.1/32'],
+        },
+      }),
+    };
+  }
+
+  function zendeskThreads(
+    ticketIds: number[],
+    bodies: Record<number, string> = {},
+  ): ZendeskFixture {
+    const comment = (id: number, author: number) => ({
+      id,
+      author_id: author,
+      public: true,
+      created_at: '2020-01-01T10:00:00Z',
+      html_body: `<p>${bodies[id] ?? `Comment ${id}`}</p>`,
+      attachments: [],
+    });
+    return {
+      tickets: ticketIds.map((id) => ({ id, updated_at: '2020-01-02T10:00:00Z' })),
+      users: [
+        { id: 201, role: 'end-user', updated_at: '2020-01-02T10:00:00Z' },
+        { id: 301, role: 'agent', updated_at: '2020-01-02T10:00:00Z' },
+      ],
+      comments: Object.fromEntries(
+        ticketIds.map((id) => [String(id), [comment(id * 10 + 1, 201), comment(id * 10 + 2, 301)]]),
+      ),
+    };
+  }
+
+  async function startZendeskThreadRun() {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      options: { entities: ['message'] },
+    });
+    return runId;
+  }
+
+  /** Observes the database between pages: the worker has committed each yielded page by then. */
+  function afterEachCommit(
+    connector: Connector<ZendeskCredentials>,
+    observe: () => Promise<void>,
+  ): Connector<ZendeskCredentials> {
+    return {
+      source: connector.source,
+      credentialsSchema: connector.credentialsSchema,
+      entities: connector.entities,
+      test: (context) => connector.test(context),
+      defaultMappings: (sample) => connector.defaultMappings(sample),
+      fetchAttachment: (context, ref) => connector.fetchAttachment(context, ref),
+      async *extract(context, entity, cursor, since) {
+        for await (const page of connector.extract(context, entity, cursor, since)) {
+          yield page;
+          await observe();
+        }
+      },
+    };
+  }
+
+  const snapshotCount = async (runId: string) =>
+    (await owner.db.select().from(importPages).where(eq(importPages.runId, runId))).length;
+
+  it('holds only the ticket stream and the comment page being walked across many Zendesk threads', async () => {
+    const ticketIds = Array.from({ length: 12 }, (_, index) => 3001 + index);
+    const fake = new FakeZendesk(zendeskThreads(ticketIds), {
+      authorization: 'Bearer synthetic-token',
+      now: Date.parse('2026-10-14T00:00:00Z') / 1000,
+    });
+    await fake.server.start();
+    try {
+      const runId = await startZendeskThreadRun();
+      const counts: number[] = [];
+      const connector = afterEachCommit(
+        new ZendeskConnector({ apiRoot: fake.server.root }),
+        async () => {
+          counts.push(await snapshotCount(runId));
+        },
+      );
+      expect(
+        await runImportExtraction({
+          db: app.db,
+          connector,
+          context: zendeskThreadContext(fake),
+          scope: { brandId: BRAND, runId },
+          jobId: `zendesk.${runId}`,
+        }),
+      ).toEqual({ state: 'awaiting_mapping' });
+      expect(
+        await owner.db.select().from(importRecords).where(eq(importRecords.runId, runId)),
+      ).toHaveLength(24);
+      expect(counts.length).toBeGreaterThan(24);
+      expect(Math.max(...counts)).toBe(2);
+      expect(await snapshotCount(runId)).toBe(0);
+    } finally {
+      await fake.server.close();
+    }
+  });
+
+  it('resumes a worker killed inside a Zendesk comment page from the pages it had already read', async () => {
+    const ticketIds = [3001, 3002, 3003];
+    const fake = new FakeZendesk(zendeskThreads(ticketIds), {
+      authorization: 'Bearer synthetic-token',
+      now: Date.parse('2026-10-14T00:00:00Z') / 1000,
+    });
+    await fake.server.start();
+    try {
+      const runId = await startZendeskThreadRun();
+      const deps = (signal?: AbortSignal) => ({
+        db: app.db,
+        connector: new ZendeskConnector({ apiRoot: fake.server.root }),
+        context: zendeskThreadContext(fake, signal),
+        scope: { brandId: BRAND, runId },
+        jobId: `zendesk.${runId}`,
+      });
+      // The first agent comment is on ticket 3001; the worker dies resolving its author.
+      const lookup = fake.server.holdNextRequest('/api/v2/users/301.json');
+      const worker = new AbortController();
+      const killed = runImportExtraction(deps(worker.signal));
+      await vi.waitFor(() => expect(lookup.waiting).toBe(true));
+      worker.abort();
+      lookup.release();
+      expect(await killed).toEqual({ state: 'deferred', retryAfterMs: 1000 });
+      expect(await snapshotCount(runId)).toBe(2);
+
+      fake.replaceFixture(
+        zendeskThreads([...ticketIds, 3004], { 30012: 'Edited after the crash' }),
+      );
+      expect(await runImportExtraction(deps())).toEqual({ state: 'awaiting_mapping' });
+      const messages = await owner.db
+        .select()
+        .from(importRecords)
+        .where(and(eq(importRecords.runId, runId), eq(importRecords.entity, 'message')));
+      expect(messages.map((row) => row.externalId).sort()).toEqual([
+        '30011',
+        '30012',
+        '30021',
+        '30022',
+        '30031',
+        '30032',
+      ]);
+      expect(messages.find((row) => row.externalId === '30012')?.payload).toMatchObject({
+        bodyHtml: '<p>Comment 30012</p>',
+      });
+      const reads = (path: string) => fake.server.calls.filter((call) => call.path === path);
+      expect(reads('/api/v2/incremental/tickets/cursor.json')).toHaveLength(1);
+      expect(reads('/api/v2/tickets/3001/comments.json')).toHaveLength(1);
     } finally {
       await fake.server.close();
     }

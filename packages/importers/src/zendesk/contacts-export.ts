@@ -52,12 +52,17 @@ export async function* exportZendeskContacts(
     users: z.array(zendeskUserSchema).max(1000),
   });
   while (true) {
-    const page = await client.json('/api/v2/incremental/users/cursor.json', schema, {
-      per_page: '100',
-      ...(checkpoint.after === undefined
-        ? { start_time: String(checkpoint.startTime) }
-        : { cursor: checkpoint.after }),
-    });
+    const page = await client.json(
+      '/api/v2/incremental/users/cursor.json',
+      schema,
+      {
+        per_page: '100',
+        ...(checkpoint.after === undefined
+          ? { start_time: String(checkpoint.startTime) }
+          : { cursor: checkpoint.after }),
+      },
+      { slot: 'zendesk.contact-batch' },
+    );
     const fingerprint = hashImportValue(page.users);
     if (
       (checkpoint.fingerprint && checkpoint.fingerprint !== fingerprint) ||

@@ -1,6 +1,7 @@
 import type { ImportRecord } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { ZendeskClient } from './client.js';
 import {
   zendeskCursorEnvelopeSchema,
@@ -29,13 +30,19 @@ export async function* exportZendeskTickets(
     tickets: z.array(zendeskTicketSchema).max(1000),
   });
   while (true) {
-    const page = await client.json('/api/v2/incremental/tickets/cursor.json', schema, {
-      per_page: '1000',
-      support_type_scope: 'all',
-      ...(checkpoint.after === undefined
-        ? { start_time: String(checkpoint.startTime) }
-        : { cursor: checkpoint.after }),
-    });
+    // Thread entities replay this exact stream, so they cover the same tickets.
+    const page = await client.json(
+      '/api/v2/incremental/tickets/cursor.json',
+      schema,
+      {
+        per_page: '1000',
+        support_type_scope: 'all',
+        ...(checkpoint.after === undefined
+          ? { start_time: String(checkpoint.startTime) }
+          : { cursor: checkpoint.after }),
+      },
+      RUN_SNAPSHOT,
+    );
     const next = { after: page.after_cursor };
     for (const ticket of page.tickets)
       if (ticket.status === 'deleted') await client.warnUnavailableTicket(ticket.id);

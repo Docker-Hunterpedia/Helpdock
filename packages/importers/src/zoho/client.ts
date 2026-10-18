@@ -2,6 +2,7 @@ import type { SafeFetchInit, SafeFetchResponse } from '@helpdock/net';
 import { z } from 'zod';
 import type { ConnectorContext } from '../connector.js';
 import { ConnectorError } from '../errors.js';
+import type { ImportSnapshotScope } from '../http.js';
 import { isInvalidUtf8 } from '../utf8.js';
 import type { ZohoOAuthSession } from './oauth.js';
 import { ZOHO_REGIONS, type ZohoCredentials, zohoCredentialsSchema } from './regions.js';
@@ -37,19 +38,24 @@ export class ZohoDeskClient {
     path: string,
     schema: z.ZodType<T>,
     query: Record<string, string> = {},
+    snapshot?: ImportSnapshotScope,
   ): Promise<T> {
     // Resolve before requesting a token: a malicious locator cannot trigger any
     // credential-bearing network call, including an otherwise legitimate refresh.
     const url = this.url(path, query);
     return this.authorized((init) =>
-      this.context.http.json(url, schema, init, { followRedirects: false }),
+      this.context.http.json(url, schema, init, { followRedirects: false, snapshot }),
     );
   }
 
-  async request(path: string, query: Record<string, string> = {}): Promise<SafeFetchResponse> {
+  async request(
+    path: string,
+    query: Record<string, string> = {},
+    snapshot?: ImportSnapshotScope,
+  ): Promise<SafeFetchResponse> {
     const url = this.url(path, query);
     return this.authorized((init) =>
-      this.context.http.request(url, init, { followRedirects: false }),
+      this.context.http.request(url, init, { followRedirects: false, snapshot }),
     );
   }
 
@@ -58,8 +64,9 @@ export class ZohoDeskClient {
     path: string,
     schema: z.ZodType<T>,
     query: Record<string, string> = {},
+    snapshot?: ImportSnapshotScope,
   ): Promise<T> {
-    const response = await this.request(path, query);
+    const response = await this.request(path, query, snapshot);
     let decoded: unknown;
     try {
       decoded =

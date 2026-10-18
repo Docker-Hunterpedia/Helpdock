@@ -1,6 +1,7 @@
 import { type ImportRecord, importRecordSchema } from '@helpdock/schemas';
 import { z } from 'zod';
 import { ConnectorError } from '../errors.js';
+import { RUN_SNAPSHOT } from '../http.js';
 import type { FreshdeskClient } from './client.js';
 import {
   freshdeskArticleSchema,
@@ -12,12 +13,15 @@ export type KnowledgeLocale = { source: string; locale: 'en' | 'ar'; primary: bo
 export async function freshdeskKnowledgeLocales(
   client: FreshdeskClient,
 ): Promise<KnowledgeLocale[]> {
+  // Every knowledge checkpoint carries this response's fingerprint, in all three entities.
   const settings = await client.json(
     '/api/v2/settings/helpdesk',
     z.object({
       primary_language: z.string().min(1).max(80),
       supported_languages: z.array(z.string().min(1).max(80)).max(100),
     }),
+    {},
+    RUN_SNAPSHOT,
   );
   const locales: KnowledgeLocale[] = [];
   for (const source of new Set([settings.primary_language, ...settings.supported_languages])) {

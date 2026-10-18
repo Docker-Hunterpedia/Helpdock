@@ -31,9 +31,12 @@ export async function* exportZendeskOrganizations(
     cursor ?? { startTime: since ? Math.max(0, Math.floor(since.getTime() / 1000)) : 0 },
   );
   while (true) {
-    const page = await client.json('/api/v2/incremental/organizations.json', pageSchema, {
-      start_time: String(checkpoint.startTime),
-    });
+    const page = await client.json(
+      '/api/v2/incremental/organizations.json',
+      pageSchema,
+      { start_time: String(checkpoint.startTime) },
+      { slot: 'zendesk.organizations' },
+    );
     const fingerprint = hashImportValue(page.organizations);
     if (
       (checkpoint.fingerprint && checkpoint.fingerprint !== fingerprint) ||

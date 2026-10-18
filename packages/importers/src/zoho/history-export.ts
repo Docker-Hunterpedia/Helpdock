@@ -47,6 +47,8 @@ type HistoryRows =
   | z.infer<typeof zohoCommentSchema>[]
   | z.infer<typeof zohoTicketAttachmentSchema>[];
 type PageCache = { current?: { key: string; rows: HistoryRows; fingerprint: string } };
+// Threads, comments and files of one ticket are walked in turn; the page being walked is kept.
+const HISTORY_SLOT = { slot: 'zoho.history' };
 
 function attachments(
   client: ZohoDeskClient,
@@ -90,11 +92,14 @@ async function historyPage(
             path,
             z.object({ data: z.array(zohoThreadIndexSchema).max(200) }),
             query,
+            HISTORY_SLOT,
           )
-        : await client.list(path, z.object({ data: z.array(zohoCommentSchema).max(100) }), {
-            ...query,
-            include: 'plainText',
-          });
+        : await client.list(
+            path,
+            z.object({ data: z.array(zohoCommentSchema).max(100) }),
+            { ...query, include: 'plainText' },
+            HISTORY_SLOT,
+          );
     const fingerprint = hashImportValue(
       page.data.map((row) =>
         'attachments' in row
@@ -224,7 +229,12 @@ async function ticketFilesPage(
 ): Promise<ImportPage> {
   const key = `${cursor.ticket.id}:attachments:${cursor.from}`;
   if (cache.current?.key !== key) {
-    const rows = await readZohoTicketAttachments(client, cursor.ticket.id, cursor.from);
+    const rows = await readZohoTicketAttachments(
+      client,
+      cursor.ticket.id,
+      cursor.from,
+      HISTORY_SLOT,
+    );
     cache.current = {
       key,
       rows,

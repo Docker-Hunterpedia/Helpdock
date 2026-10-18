@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ImportCursor, ImportPage } from '../connector.js';
 import { ConnectorError } from '../errors.js';
 import { hashImportValue } from '../hash.js';
+import { type ImportSnapshotScope, RUN_SNAPSHOT } from '../http.js';
 import type { ZohoDeskClient } from './client.js';
 import { zohoIdSchema } from './contracts.js';
 import {
@@ -52,10 +53,11 @@ export function initialZohoRootScan(): PageCursor {
 
 async function sourcePage(
   client: ZohoDeskClient,
-  path: string,
+  request: { path: string; snapshot: ImportSnapshotScope },
   cursor: PageCursor,
   cache: PageCache,
 ) {
+  const { path } = request;
   const status = statuses[cursor.statusIndex];
   if (!status) throw new ConnectorError('invalid-response');
   const key = `${path}:${cursor.from}:${status}:${cursor.trashed}`;
@@ -70,6 +72,7 @@ async function sourcePage(
         status,
         isTrashed: String(cursor.trashed),
       },
+      request.snapshot,
     );
     if (
       new Set(page.data.map((row) => row.id)).size !== page.data.length ||
@@ -117,7 +120,13 @@ export async function readZohoRootStep(
   cache: PageCache = {},
 ): Promise<{ row: Root | null; next: PageCursor | null }> {
   const cursor = pageCursor.parse(raw);
-  const page = await sourcePage(client, '/api/v1/kbRootCategories', cursor, cache);
+  // The section entity replays the root list, so sections hang off staged categories.
+  const page = await sourcePage(
+    client,
+    { path: '/api/v1/kbRootCategories', snapshot: RUN_SNAPSHOT },
+    cursor,
+    cache,
+  );
   const index = page.rows[cursor.offset];
   if (!index)
     return { row: null, next: nextFilteredPage(cursor, page.rows.length, page.fingerprint) };
@@ -251,7 +260,10 @@ export async function* exportZohoTaxonomy(
     if (entity !== 'section') throw new ConnectorError('invalid-response');
     const page = await sourcePage(
       client,
-      `/api/v1/kbRootCategories/${cursor.rootId}/sections`,
+      {
+        path: `/api/v1/kbRootCategories/${cursor.rootId}/sections`,
+        snapshot: { slot: 'zoho.kb-sections' },
+      },
       cursor.page,
       sectionCache,
     );

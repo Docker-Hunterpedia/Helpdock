@@ -1495,3 +1495,43 @@ ID is unchanged. They cannot create a new scheduled-rule match key by rewriting
 an old source updated timestamp. Actual status transitions keep the existing
 database trigger's arrival-time baseline; the source's historical transition
 activity remains independently dated.
+
+### Owner review: bounded extraction page snapshots (2026-10-18)
+
+This amends the resumable-extraction review above. Keeping every successful GET
+until extraction ended held a second copy of the source account in
+`import_pages`, for example every comment page of every ticket. A snapshot now
+lives only while a resume or another entity can still read it. Each connector
+request declares a retention scope, and the checkpoint transaction in
+`storeImportPage` deletes what the new checkpoint no longer needs:
+
+- **Slot.** A page a checkpoint indexes into by offset and fingerprint, such as
+  the Zendesk comment or audit page, the Freshdesk conversation page or the Zoho
+  history page being walked. A slot holds only its latest request. Requesting the
+  next page in a slot releases the previous one, and the next checkpoint deletes
+  it, so a worker killed in between still resumes inside the old page. Slots are
+  deleted when their entity finishes.
+- **Run.** An enumeration that several entities replay: the Zendesk incremental
+  ticket stream (tickets, tags, messages, attachments, activity); Freshdesk ticket
+  pages, contacts, ticket fields and the Solutions locales, categories and
+  folders; and the Zoho ticket and archive scans, departments, field definitions,
+  knowledge roots and taxonomy recycle bin. These stay until extraction ends.
+  That preserves the guarantee that child entities enumerate the parents
+  already staged. Their size is bounded by collection size over page size.
+- **Page (default).** Every other response serves only the checkpoint being
+  produced: per-record details, author lookups, identities, translations and
+  full bodies. The next checkpoint deletes it; a crash before that checkpoint
+  still re-reads it.
+
+A slot request never shrinks a run-scoped snapshot. `import_pages` gains
+`run_scoped` and a nullable `slot`, with one row per slot in a run, a slot-name
+shape check and a check that a row has at most one scope, all inside the
+unreleased `0054_imports` migration. The trigger still deletes every snapshot
+when extraction ends, fails or is cancelled; pausing keeps them. Attachment
+downloads still bypass the cache, because only extraction wraps its HTTP client.
+
+At any checkpoint the rows held are the run-scoped enumerations plus at most one
+page per slot in use, the walk's nesting depth. A later entity, or a resumed
+worker, re-reads a per-record detail such as an author's role from the source
+instead of a snapshot. A slot must name one walk level; two levels that are open
+at once need two slots.

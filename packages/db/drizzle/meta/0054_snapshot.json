@@ -6603,9 +6603,45 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "run_scoped": {
+          "name": "run_scoped",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "slot": {
+          "name": "slot",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "import_pages_slot_key": {
+          "name": "import_pages_slot_key",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "slot",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"import_pages\".\"slot\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "import_pages_brand_id_brands_id_fk": {
           "name": "import_pages_brand_id_brands_id_fk",
@@ -6639,6 +6675,14 @@
         "import_pages_hash_shape": {
           "name": "import_pages_hash_shape",
           "value": "\"import_pages\".\"request_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "import_pages_slot_shape": {
+          "name": "import_pages_slot_shape",
+          "value": "\"import_pages\".\"slot\" ~ '^[a-z][a-z0-9.-]{0,63}$'"
+        },
+        "import_pages_one_retention": {
+          "name": "import_pages_one_retention",
+          "value": "NOT (\"import_pages\".\"run_scoped\" AND \"import_pages\".\"slot\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false

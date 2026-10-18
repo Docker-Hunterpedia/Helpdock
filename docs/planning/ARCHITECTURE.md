@@ -160,7 +160,7 @@ knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync
 knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)
 import_runs, import_records, import_mappings, import_external_ids, import_log, import_file_presets, import_files, import_ticket_inventory   -- M11, ADR 0027
 hc_import_assets(brand_id, article_id, media_id, source, source_account_key, parent_external_id, locale, asset_external_id)
-import_pages(brand_id, run_id, request_hash, response jsonb)   -- immutable successful extraction GETs, claim-fenced and discarded when extraction ends
+import_pages(brand_id, run_id, request_hash, response jsonb, run_scoped, slot)   -- immutable successful extraction GETs, claim-fenced; dropped at the next checkpoint unless a slot or run scope keeps them, all discarded when extraction ends
 outbox(id, brand_id, event, payload jsonb, created_at, published_at), job_receipts(key, completed_at)   -- DOMAIN-RULES §6
 ai_settings(brand_id, provider_id, model, embeddings_model, modes jsonb, guardrails jsonb, budget jsonb, system_prompt)
 ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sources jsonb)

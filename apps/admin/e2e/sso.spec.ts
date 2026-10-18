@@ -47,6 +47,43 @@ test('SSO settings validate, save a provider and mappings, and refuse invalid en
   await expect(page.getByRole('link', { name: 'Work OIDC', exact: true })).toBeVisible();
 });
 
+test('SSO refuses an email domain that another enabled connection lists', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openSettings(page, locale);
+  await page.getByRole('tab', { name: t('sso:title') }).click();
+  for (const name of ['Work OIDC', 'Staging OIDC']) {
+    await page.getByRole('link', { name: t('sso:add'), exact: true }).click();
+    await page.getByLabel(t('sso:label')).fill(name);
+    await page.getByLabel(t('sso:issuer')).fill('https://idp.example.com');
+    await page.getByLabel(t('sso:clientId')).fill('helpdock');
+    await page.getByLabel(t('sso:clientSecret'), { exact: true }).fill('never-return-this');
+    await page.getByLabel(t('sso:domains'), { exact: true }).fill('example.com');
+    await page.getByRole('checkbox', { name: t('sso:enabled'), exact: true }).check();
+    await page.getByRole('button', { name: t('sso:saveConnection') }).click();
+    if (name === 'Work OIDC') {
+      await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+      await page.getByRole('link', { name: t('sso:title'), exact: true }).click();
+    }
+  }
+  const domains = page.getByLabel(t('sso:domains'), { exact: true });
+  await expect(domains).toHaveAttribute('aria-invalid', 'true');
+  await expect(domains).toHaveAccessibleDescription(
+    t('sso:refusals.sso-email-domain-taken', { domains: 'example.com' }),
+  );
+  await expect(page.getByRole('heading', { name: t('sso:add'), level: 1 })).toBeVisible();
+  expect(
+    (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
+      .violations,
+  ).toEqual([]);
+  await domains.fill('staging.example.com');
+  await page.getByRole('button', { name: t('sso:saveConnection') }).click();
+  await expect(page.getByRole('heading', { name: 'Staging OIDC', level: 1 })).toBeVisible();
+});
+
 test('SAML configuration and enforced discovery use bilingual controls', async ({
   page,
   appLocale: locale,

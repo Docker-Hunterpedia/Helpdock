@@ -46,7 +46,8 @@ const principal: Principal = { type: 'staff', id: ADMIN, installAdmin: true, bra
 const connection = (name = 'Work') => ({
   name,
   enabled: true,
-  emailDomains: ['example.com'],
+  // Enabled connections may not share a domain, so each name gets its own.
+  emailDomains: [`${name.toLowerCase().replaceAll(' ', '-')}.example.com`],
   config: { protocol: 'oidc', issuer: 'http://127.0.0.1:3098', clientId: 'work' },
   clientSecret: 'private-client-secret',
 });
@@ -353,6 +354,42 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
     expect((await request('DELETE', `connections/${id}`)).statusCode).toBe(409);
     await runtime.db.delete(userSsoIdentities).where(eq(userSsoIdentities.connectionId, id));
     await request('DELETE', `connections/${id}`);
+  });
+
+  it('refuses an email domain another enabled connection already lists, on create, update and enable (#219)', async () => {
+    const domainTaken = {
+      error: { sso: { reason: 'sso-email-domain-taken', domains: ['work.example.com'] } },
+    };
+    const work = (await request('POST', 'connections', connection())).json();
+    const overlapping = { ...connection('Staging'), emailDomains: ['WORK.example.com'] };
+    const created = await request('POST', 'connections', overlapping);
+    expect(created.statusCode).toBe(409);
+    expect(created.json()).toMatchObject(domainTaken);
+    expect(
+      (await request('POST', 'configurations', { connection: overlapping, mappings: [] })).json(),
+    ).toMatchObject(domainTaken);
+    const staging = (await request('POST', 'connections', connection('Staging'))).json();
+    expect((await request('PUT', `connections/${staging.id}`, overlapping)).json()).toMatchObject(
+      domainTaken,
+    );
+    const disabled = await request('POST', 'connections', {
+      ...overlapping,
+      name: 'Disabled',
+      enabled: false,
+    });
+    expect(disabled.statusCode).toBe(201);
+    const enabled = await request('PUT', `connections/${disabled.json().id}`, {
+      ...overlapping,
+      name: 'Disabled',
+    });
+    expect(enabled.statusCode).toBe(409);
+    expect(enabled.json()).toMatchObject(domainTaken);
+    expect((await request('PUT', `connections/${work.id}`, connection())).statusCode).toBe(200);
+    expect(
+      (await request('PUT', `connections/${work.id}`, { ...connection(), enabled: false }))
+        .statusCode,
+    ).toBe(200);
+    expect((await request('PUT', `connections/${staging.id}`, overlapping)).statusCode).toBe(200);
   });
 
   it('validates SAML certificates before saving configuration', async () => {

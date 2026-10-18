@@ -23,18 +23,30 @@ connection when changing identity authority.
 
 The first save gives a new connection its callback URL. Enable it after the IdP
 has registered that exact URL. A SAML metadata URL is optional: supply entity ID,
-SSO URL and trusted PEM certificates explicitly. Metadata refresh must overlap a
-trusted certificate; it cannot silently replace the identity authority.
+SSO URL and trusted PEM certificates explicitly. A metadata refresh may drop a
+certificate the provider no longer lists, but never adds one: a new signing
+certificate is trusted only after an administrator saves it (see
+[SAML protocol](#saml-protocol-m11-03)).
 
 Add exact email domains, without wildcards. New links require an email in an
-allowed domain. OIDC additionally requires signed `email_verified: true`; SAML
+allowed domain. Each domain belongs to at most one enabled connection: saving,
+creating or enabling a connection that lists a domain another enabled connection
+already lists is refused, and the form names the domain. Disable the old
+connection first when moving a domain to a new provider. OIDC additionally
+requires signed `email_verified: true` on the standard `email` claim; SAML
 trusts the configured IdP's signed email attribute. Only use domains the IdP
 administrator controls, with verified or centrally managed email attributes.
 A provider that lets people choose an unverified coworker's email is unsafe for
 email-based linking, even if its tokens are signed.
 
 Existing `(connection, subject)` links remain authoritative when an email changes.
-Otherwise a matching email links the existing active or invited account. With
+Otherwise a matching email links an existing active or invited account only if
+that account has no SSO identity yet, on this connection or any other. An account
+already linked to a subject is never handed to a different subject by email: a
+second subject on the same connection (for example a recycled address) or a
+subject on another connection is refused with `sso-identity-conflict`, and the
+database allows one identity per account and connection. Helpdock never moves an
+existing link to a new subject by email. With
 **Create accounts on first sign-in**, an unknown email gets a passwordless active
 account only if mappings/default access grant an active brand. SSO never grants
 install-admin access. Completing the required factors accepts invitations,
@@ -170,7 +182,8 @@ immediate revocation is required.
 
 | Error | Check |
 |---|---|
-| `sso-email-unverified` | Controlled email claim and OIDC `email_verified: true` |
+| `sso-email-unverified` | Allowed domain; for OIDC, the standard `email` claim with `email_verified: true` |
+| `sso-identity-conflict` | The account is already linked to another subject or connection; sign in through that identity |
 | `sso-no-access` | Active brands, group values/order, default access, departments and conflicting provider ownership |
 | `sso-connection-disabled` | Connection enabled; restart any pending MFA flow |
 | `sso-required` | Use SSO, or the configured emergency password + fresh TOTP path |
@@ -235,7 +248,11 @@ installation master key does not require replacing IdP metadata.
 Register an authorization-code client with PKCE S256, `client_secret_post`,
 scopes `openid email profile`, and the exact Redirect URI returned by the
 connection details API. Discovery must expose a JWKS URI. The ID token must
-contain `sub`, a valid configured email claim, and boolean `email_verified:true`.
+contain `sub` and a valid configured email claim. Boolean `email_verified: true`
+vouches only for the standard `email` claim: email linking and account creation
+need the configured claim to be `email` and verified. With another claim (for
+example `upn`) or an unverified address, people who are already linked by
+subject still sign in, but nobody new is linked or created by email.
 If a group attribute is configured, its authoritative value must be a string
 or an array of strings; unresolved distributed/overage claims refuse sign-in.
 
@@ -287,9 +304,14 @@ POST alone. Helpdock does not offer single logout.
 For certificate rotation, save up to three signing certificates. If
 `idpMetadataUrl` is configured, save fetches and validates its entity ID, Redirect
 SSO URL and signing certificates. The worker refreshes enabled connections at
-04:45 UTC. A fetched set must overlap a current certificate; otherwise the
-current set remains and the audit log records
+04:45 UTC. A refresh that only removes certificates is applied and recorded as
+`sso.metadata.refreshed` / `signing-certificates-removed`. A refresh that lists
+any certificate not already trusted, whether added beside the current ones or
+replacing them all, keeps the current set and records
 `sso.metadata.rotation-refused` / `admin-confirmation-required`. After verifying
-the new keys with your IdP, explicitly save them to confirm a complete
-replacement. Metadata errors produce `sso.metadata.refused` without raw
-provider errors. Unchanged sets do not rewrite the connection.
+the new certificate with your IdP, add it under **Signing certificates** and save:
+saving is the confirmation. A save is refused with "The provider metadata lists a
+signing certificate that is not saved here" until every certificate the metadata
+lists has been added; certificates the metadata no longer lists are dropped on
+save. Metadata errors produce `sso.metadata.refused` without raw provider errors.
+Unchanged sets do not rewrite the connection.

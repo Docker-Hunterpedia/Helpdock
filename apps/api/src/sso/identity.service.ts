@@ -19,6 +19,7 @@ import { AuthFailure } from '../auth/auth-failure.js';
 import { EmailTokenStore } from '../auth/email-token.store.js';
 import { lockSessionWriteAuthority } from '../auth/session/authority-lock.js';
 import type { SessionService } from '../auth/session/session.service.js';
+import { isUniqueViolation } from '../http/unique-violation.js';
 import { writeStaffAudit } from '../staff/audit.js';
 import { InviteStore } from '../staff/invite.store.js';
 import { type SsoAssertion, ssoAssertionSchema } from './oidc-contracts.js';
@@ -204,12 +205,26 @@ export class SsoIdentityService {
         ),
       );
     if (linked) return linked.user;
-    if (!connection.emailDomains.includes(assertion.email.split('@')[1]?.toLowerCase() ?? ''))
+    if (
+      !assertion.emailVerified ||
+      !connection.emailDomains.includes(assertion.email.split('@')[1]?.toLowerCase() ?? '')
+    )
       throw new AuthFailure('sso-email-unverified');
     const [matched] = await tx
       .select()
       .from(users)
       .where(sql`lower(${users.email}) = lower(${assertion.email})`);
+    if (!matched) return undefined;
+    // An email match only introduces an account that has never been linked. A
+    // linked account belongs to its subject: another subject on this connection
+    // (a recycled address) or any subject on another connection (a second IdP
+    // listing the same domain) must not inherit it.
+    const [identity] = await tx
+      .select({ id: userSsoIdentities.id })
+      .from(userSsoIdentities)
+      .where(eq(userSsoIdentities.userId, matched.id))
+      .limit(1);
+    if (identity) throw new AuthFailure('sso-identity-conflict');
     return matched;
   }
 
@@ -355,8 +370,14 @@ export class SsoIdentityService {
         emailAtLink: assertion.email,
         lastSignInAt: new Date(),
       })
-      .onConflictDoNothing()
-      .returning();
+      // Only a repeat of this subject's own link is benign; a second subject for
+      // the same account on this connection must fail the transaction.
+      .onConflictDoNothing({ target: [userSsoIdentities.connectionId, userSsoIdentities.subject] })
+      .returning()
+      .catch((error: unknown) => {
+        if (isUniqueViolation(error)) throw new AuthFailure('sso-identity-conflict');
+        throw error;
+      });
     if (inserted.length)
       await this.#audit(tx, userId, provisioned ? 'sso.user.provisioned' : 'sso.user.linked', {
         connectionId,

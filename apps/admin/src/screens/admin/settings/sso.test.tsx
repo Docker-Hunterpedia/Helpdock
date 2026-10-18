@@ -72,6 +72,29 @@ describe('SSO administration', () => {
     );
   });
 
+  it('marks the email domains another enabled connection lists and saves nothing', async () => {
+    const sso = new MockSsoApi();
+    await sso.create({ ...input, name: 'Existing' });
+    const { user } = renderApp(<SsoConnectionPage />, { ssoApi: sso });
+    await user.type(await screen.findByLabelText('Button label'), 'Staging');
+    await user.type(
+      screen.getByLabelText('Issuer URL'),
+      input.config.protocol === 'oidc' ? input.config.issuer : '',
+    );
+    await user.type(screen.getByLabelText('Client ID'), 'helpdock');
+    await user.type(screen.getByLabelText('Email domains'), 'staging.example, example.com');
+    await user.click(screen.getByRole('checkbox', { name: 'Enabled' }));
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    const domains = screen.getByLabelText('Email domains');
+    await waitFor(() => expect(domains).toHaveAttribute('aria-invalid', 'true'));
+    expect(domains).toHaveAccessibleDescription(
+      'example.com already belongs to another enabled connection. Each email domain signs in through one enabled connection only.',
+    );
+    expect((await sso.connections()).connections.map(({ name }) => name)).toEqual(['Existing']);
+    await user.type(domains, 'x');
+    expect(domains).toHaveAttribute('aria-invalid', 'false');
+  });
+
   it('keeps invalid connection values in the form without creating a provider', async () => {
     const sso = new MockSsoApi();
     const { user } = renderApp(<SsoConnectionPage />, { ssoApi: sso });

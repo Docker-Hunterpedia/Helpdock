@@ -9,11 +9,7 @@ import { type JobLogger, parseJobPayloadOrFail, samlMetadataRefreshJob } from '@
 import { ssoConnectionConfigSchema } from '@helpdock/schemas';
 import type { Job } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
-import {
-  certificateFingerprint,
-  fetchSamlMetadata,
-  overlappingCertificates,
-} from './saml-metadata.js';
+import { addsCertificates, certificateFingerprint, fetchSamlMetadata } from './saml-metadata.js';
 import { SamlFailure } from './saml-xml.js';
 import { SSO_CONFIG_LOCK } from './sp-keys.js';
 
@@ -60,8 +56,10 @@ export async function refreshSamlMetadata(options: {
         return;
       const fingerprints = (certs: string[]) => certs.map(certificateFingerprint).sort().join(',');
       if (fingerprints(config.idpCertificates) === fingerprints(next)) return;
-      const overlap = overlappingCertificates(config.idpCertificates, next);
-      if (overlap)
+      // Whoever controls the metadata URL must not be able to add a key that
+      // signs assertions. Dropping one is safe; a new one waits for an admin.
+      const applied = !addsCertificates(config.idpCertificates, next);
+      if (applied)
         await tx
           .update(ssoConnections)
           .set({ config: { ...config, idpCertificates: next }, updatedAt: new Date() })
@@ -70,11 +68,11 @@ export async function refreshSamlMetadata(options: {
         brandId: INSTALL_SCOPE_BRAND_ID,
         actorType: 'system',
         actorId: 'system',
-        action: overlap ? 'sso.metadata.refreshed' : 'sso.metadata.rotation-refused',
+        action: applied ? 'sso.metadata.refreshed' : 'sso.metadata.rotation-refused',
         targetType: 'sso_connection',
         targetId: row.id,
         meta: {
-          reason: overlap ? 'overlapping-signing-certificates' : 'admin-confirmation-required',
+          reason: applied ? 'signing-certificates-removed' : 'admin-confirmation-required',
         },
       });
     });

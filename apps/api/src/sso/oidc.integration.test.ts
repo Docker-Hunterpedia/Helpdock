@@ -148,10 +148,15 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     },
   );
 
-  it('refuses unverified email even when UserInfo supplies another identity', async () => {
+  it('marks an unverified email unverified and keeps the existing subject link', async () => {
     const attempt = await flow();
     idp.controls.claims.email_verified = false;
-    await expect(complete(attempt)).rejects.toThrow('sso-email-unverified');
+    const { assertion } = await complete(attempt);
+    expect(assertion).toMatchObject({ subject: 'staff-1', emailVerified: false });
+    const { AuthService } = await import('../auth/auth.service.js');
+    await expect(app.get(AuthService).completeSso(assertion, undefined)).resolves.toMatchObject({
+      issued: { session: { user: { id: USER } } },
+    });
   });
 
   it('consumes state atomically across concurrent callbacks', async () => {
@@ -346,5 +351,42 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     expect(await owner.db.select().from(userSsoIdentities)).toMatchObject([
       { userId: USER, subject: assertion.subject },
     ]);
+  });
+
+  it('refuses a new subject asserting the email of an account already linked to this connection (#219)', async () => {
+    idp.controls.claims.sub = 'staff-2';
+    const assertion = (await complete(await flow())).assertion;
+    const { AuthService } = await import('../auth/auth.service.js');
+    await expect(app.get(AuthService).completeSso(assertion, undefined)).rejects.toMatchObject({
+      auth: { code: 'sso-identity-conflict' },
+    });
+    expect(await owner.db.select().from(userSsoIdentities)).toMatchObject([
+      { userId: USER, subject: 'staff-1' },
+    ]);
+  });
+
+  it.each([
+    ['an unverified email claim', { email_verified: false }, 'email'],
+    ['a configured claim email_verified does not cover', { upn: 'ada@example.com' }, 'upn'],
+  ])('does not link an unlinked subject by %s', async (_case, claims, emailClaim) => {
+    await owner.db.delete(userSsoIdentities);
+    await owner.db
+      .update(ssoConnections)
+      .set({
+        config: ssoConnectionConfigSchema.parse({
+          protocol: 'oidc',
+          issuer: idp.issuer,
+          clientId: 'helpdock',
+          emailClaim,
+        }),
+      })
+      .where(eq(ssoConnections.id, CONNECTION));
+    Object.assign(idp.controls.claims, claims);
+    const assertion = (await complete(await flow())).assertion;
+    const { AuthService } = await import('../auth/auth.service.js');
+    await expect(app.get(AuthService).completeSso(assertion, undefined)).rejects.toMatchObject({
+      auth: { code: 'sso-email-unverified' },
+    });
+    expect(await owner.db.select().from(userSsoIdentities)).toEqual([]);
   });
 });

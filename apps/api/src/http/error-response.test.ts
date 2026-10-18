@@ -15,6 +15,7 @@ import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
 import { MetaFailure } from '../meta/meta-failure.js';
+import { SsoFailure } from '../sso/sso-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
 import { WebhooksFailure } from '../webhooks/webhooks-failure.js';
 import { WidgetFailure } from '../widget/widget-failure.js';
@@ -173,6 +174,24 @@ describe('errorBody', () => {
       webhooks: { reason: 'webhook-destination-blocked', address: '10.0.4.12' },
     });
     expect(http.error.webhooks).toEqual({ reason: 'webhook-https-required' });
+  });
+
+  it('carries the SSO refusal and the email domains another connection lists', () => {
+    const taken = errorBody(
+      mapError(new SsoFailure('sso-email-domain-taken', ['example.com'])),
+      'req-15',
+    );
+    const certificates = errorBody(
+      mapError(new SsoFailure('sso-metadata-confirm-certificates')),
+      'req-16',
+    );
+
+    expect(taken.error).toMatchObject({
+      code: 'conflict',
+      sso: { reason: 'sso-email-domain-taken', domains: ['example.com'] },
+    });
+    expect(certificates.error).toMatchObject({ code: 'validation_failed' });
+    expect(certificates.error.sso).toEqual({ reason: 'sso-metadata-confirm-certificates' });
   });
 
   it('answers a key that may not read a webhook endpoint’s events with 403 and its reason', () => {

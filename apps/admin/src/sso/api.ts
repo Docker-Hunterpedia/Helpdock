@@ -5,11 +5,27 @@ import type {
   SsoConnectionDetail,
   SsoConnectionInput,
   SsoMapping,
+  SsoRefusal,
   SsoSettings,
   SsoSettingsUpdate,
   SsoTargets,
   SsoTestResult,
 } from '@helpdock/schemas';
+
+/** A connection save the api refused by a rule; `domains` names the ones already taken. */
+export class SsoError extends Error {
+  readonly reason: SsoRefusal;
+  readonly domains: readonly string[];
+
+  constructor(reason: SsoRefusal, domains: readonly string[] = []) {
+    super(`sso: ${reason}`);
+    this.name = 'SsoError';
+    this.reason = reason;
+    this.domains = domains;
+  }
+}
+
+export const isSsoError = (error: unknown): error is SsoError => error instanceof SsoError;
 
 export interface SsoApi {
   inspectCertificates(certificates: string[]): Promise<SsoCertificateDetails>;

@@ -8620,6 +8620,11 @@
           "name": "sso_identity_subject_key",
           "nullsNotDistinct": false,
           "columns": ["connection_id", "subject"]
+        },
+        "sso_identity_user_connection_key": {
+          "name": "sso_identity_user_connection_key",
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "connection_id"]
         }
       },
       "policies": {},

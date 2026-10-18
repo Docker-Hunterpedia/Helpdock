@@ -20,14 +20,15 @@ import {
   ssoConnectionSchema,
 } from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
-import { fetchSamlMetadata, overlappingCertificates, samlCertificate } from './saml-metadata.js';
+import { addsCertificates, fetchSamlMetadata, samlCertificate } from './saml-metadata.js';
 import { loadSpKeys, SSO_CONFIG_LOCK } from './sp-keys.js';
+import { SsoFailure } from './sso-failure.js';
 import { readSsoSetting, writeSsoSetting } from './sso-settings.js';
 
 export interface SsoServiceOptions {
@@ -120,6 +121,7 @@ export class SsoService {
     await this.lock(tx);
     const actor = this.actor();
     await this.checkName(input.name);
+    await this.checkDomains(input);
     const [created] = await tx
       .insert(ssoConnections)
       .values({
@@ -138,6 +140,7 @@ export class SsoService {
     await this.lock(tx);
     const current = await this.row(id);
     await this.checkName(input.name, id);
+    await this.checkDomains(input, id);
     const [identity] = await tx
       .select({ id: userSsoIdentities.id })
       .from(userSsoIdentities)
@@ -315,6 +318,29 @@ export class SsoService {
     if (existing !== undefined && existing.id !== id) throw new ConflictException('sso-name-taken');
   }
 
+  /**
+   * Discovery and email linking pick a connection by domain, so two enabled
+   * connections listing one domain would let either IdP speak for its people.
+   * Runs under the configuration lock, so concurrent saves cannot both pass.
+   */
+  private async checkDomains(input: SsoConnectionInput, id?: string) {
+    if (!input.enabled) return;
+    const others = await getTx()
+      .select({ emailDomains: ssoConnections.emailDomains })
+      .from(ssoConnections)
+      .where(
+        and(
+          eq(ssoConnections.enabled, true),
+          id === undefined ? undefined : ne(ssoConnections.id, id),
+        ),
+      );
+    const listed = new Set(
+      others.flatMap((row) => row.emailDomains.map((domain) => domain.toLowerCase())),
+    );
+    const taken = input.emailDomains.filter((domain) => listed.has(domain));
+    if (taken.length > 0) throw new SsoFailure('sso-email-domain-taken', taken);
+  }
+
   private values(input: SsoConnectionInput) {
     const { clientSecret, ...publicFields } = input;
     return {
@@ -361,15 +387,17 @@ export class SsoService {
         }
       }
     if (config.protocol === 'saml' && config.idpMetadataUrl) {
+      let certificates: string[];
       try {
-        const certificates = await fetchSamlMetadata(config, this.options.env.OUTBOUND_ALLOW_CIDRS);
-        if (!overlappingCertificates(config.idpCertificates, certificates))
-          throw new BadRequestException('sso-metadata-confirm-certificates');
-        config.idpCertificates = certificates;
-      } catch (error) {
-        if (error instanceof BadRequestException) throw error;
+        certificates = await fetchSamlMetadata(config, this.options.env.OUTBOUND_ALLOW_CIDRS);
+      } catch {
         throw new BadRequestException('sso-metadata-refused');
       }
+      // Saving is the admin's confirmation, so it covers only certificates the
+      // admin submitted; metadata may still drop ones it no longer lists.
+      if (addsCertificates(config.idpCertificates, certificates))
+        throw new SsoFailure('sso-metadata-confirm-certificates');
+      config.idpCertificates = certificates;
     }
     if (input.defaultAccess !== null) await this.validateAccess(input.defaultAccess);
   }

@@ -24,6 +24,7 @@ import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-i
 import { silentLogger } from '../testing/silent-logger.js';
 import { SamlService } from './saml.service.js';
 import { createSamlMetadataProcessor, refreshSamlMetadata } from './saml-metadata.job.js';
+import { certificateFingerprint } from './saml-metadata.js';
 import { SAML_METADATA_NS, samlChild, samlChildren, samlDocument } from './saml-xml.js';
 import { SsoService } from './sso.service.js';
 
@@ -71,6 +72,7 @@ describe.skipIf(!hasDocker)('M11-03 SAML through Postgres, Redis and a signed lo
   beforeEach(async () => {
     idp.reset();
     await runtime.redis.flushdb();
+    await owner.db.delete(auditLog);
     await owner.db.delete(userSsoIdentities);
     await owner.db.delete(ssoConnections);
     await owner.db.insert(ssoConnections).values({
@@ -344,7 +346,7 @@ describe.skipIf(!hasDocker)('M11-03 SAML through Postgres, Redis and a signed lo
       }),
     ).rejects.toThrow();
   });
-  it('validates metadata on save and applies overlapping rotation on the daily job', async () => {
+  it('needs an admin save to trust a certificate metadata adds, and drops removed ones on refresh (#219)', async () => {
     const config = ssoConnectionConfigSchema.parse({
       protocol: 'saml',
       idpEntityId: idp.issuer,
@@ -354,33 +356,64 @@ describe.skipIf(!hasDocker)('M11-03 SAML through Postgres, Redis and a signed lo
       emailAttribute: 'email',
     });
     const http = app.getHttpAdapter().getInstance();
-    const saved = await http.inject({
-      method: 'PUT',
-      url: `/api/install/sso/connections/${CONNECTION}`,
-      headers: {
-        [DEV_PRINCIPAL_HEADER]: JSON.stringify({
-          type: 'staff',
-          id: USER,
-          installAdmin: true,
-          brands: {},
-        }),
-      },
-      payload: { name: 'Work', enabled: true, emailDomains: ['example.com'], config },
-    });
-    expect(saved.statusCode).toBe(200);
-    idp.controls.metadataCertificates = [idp.certificate, idp.rotatedCertificate];
+    const save = (idpCertificates: string[]) =>
+      http.inject({
+        method: 'PUT',
+        url: `/api/install/sso/connections/${CONNECTION}`,
+        headers: {
+          [DEV_PRINCIPAL_HEADER]: JSON.stringify({
+            type: 'staff',
+            id: USER,
+            installAdmin: true,
+            brands: {},
+          }),
+        },
+        payload: {
+          name: 'Work',
+          enabled: true,
+          emailDomains: ['example.com'],
+          config: { ...config, idpCertificates },
+        },
+      });
+    const trusted = async () =>
+      ((await connectionRow()).config as { idpCertificates: string[] }).idpCertificates.map(
+        certificateFingerprint,
+      );
+    const [current, rotated] = [idp.certificate, idp.rotatedCertificate].map(
+      certificateFingerprint,
+    );
+    const refusals = () =>
+      withSystem(owner.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
+        tx.select().from(auditLog).where(eq(auditLog.action, 'sso.metadata.rotation-refused')),
+      );
+    expect((await save([idp.certificate])).statusCode).toBe(200);
     const processor = createSamlMetadataProcessor({
       db: runtime.db,
       allowCidrs: runtime.env.OUTBOUND_ALLOW_CIDRS,
       log: silentLogger(),
     });
+
+    idp.controls.metadataCertificates = [idp.certificate, idp.rotatedCertificate];
     await processor({ name: 'sso.metadata_refresh', data: {} });
-    const row = await connectionRow();
-    expect((row.config as { idpCertificates: string[] }).idpCertificates).toHaveLength(2);
-    const before = row.updatedAt;
+    expect(await trusted()).toEqual([current]);
+    expect((await refusals()).map((row) => row.meta)).toEqual([
+      { reason: 'admin-confirmation-required' },
+    ]);
+    const unconfirmed = await save([idp.certificate]);
+    expect(unconfirmed.statusCode).toBe(400);
+    expect(unconfirmed.json()).toMatchObject({
+      error: { sso: { reason: 'sso-metadata-confirm-certificates' } },
+    });
+    expect((await save([idp.certificate, idp.rotatedCertificate])).statusCode).toBe(200);
+    expect((await trusted()).sort()).toEqual([current, rotated].sort());
+
+    idp.controls.metadataCertificates = [idp.rotatedCertificate];
     await processor({ name: 'sso.metadata_refresh', data: {} });
-    const repeated = await connectionRow();
-    expect(repeated.updatedAt).toEqual(before);
+    expect(await trusted()).toEqual([rotated]);
+    const before = (await connectionRow()).updatedAt;
+    await processor({ name: 'sso.metadata_refresh', data: {} });
+    expect((await connectionRow()).updatedAt).toEqual(before);
+    expect(await refusals()).toHaveLength(1);
   });
   it('keeps trusted certificates when metadata removes every current certificate, and records an audit warning', async () => {
     const row = await connectionRow();

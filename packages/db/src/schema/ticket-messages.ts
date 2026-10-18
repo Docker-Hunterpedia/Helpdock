@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
+  char,
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
@@ -65,6 +68,9 @@ export const ticketMessages = pgTable(
      * `audit_log` is text for the same reason.
      */
     authorId: text('author_id'),
+    authorDisplay: varchar('author_display', { length: 200 }),
+    /** Inert imported status/channel/author facts; never interpreted as lifecycle commands. */
+    importDetails: jsonb('import_details').$type<Record<string, unknown>>(),
     /** Sanitised on the way in (REQUIREMENTS §5.1). Never stored as it arrived. */
     bodyHtml: text('body_html').notNull(),
     /** The same body as plain text: what search, notifications and digests read. */
@@ -77,6 +83,8 @@ export const ticketMessages = pgTable(
      * (DOMAIN-RULES §6).
      */
     externalMessageId: text('external_message_id'),
+    /** Historical RFC headers are provenance, not live inbound deduplication keys. */
+    importSourceAccountKey: char('import_source_account_key', { length: 64 }),
     /**
      * M1-09. The message this one is a copy of, when a split copied it onto a
      * new ticket (DOMAIN-RULES §2.4: "copied (not moved) with
@@ -108,6 +116,15 @@ export const ticketMessages = pgTable(
       .on(table.ticketId, table.clientId)
       .where(sql`${table.clientId} is not null`),
     uniqueIndex('ticket_messages_external_key')
+      .on(table.brandId, table.channel, table.externalMessageId)
+      .where(
+        sql`${table.externalMessageId} is not null AND ${table.importSourceAccountKey} is null`,
+      ),
+    check(
+      'ticket_messages_import_account_key_shape',
+      sql`${table.importSourceAccountKey} IS NULL OR ${table.importSourceAccountKey} ~ '^[0-9a-f]{64}$'`,
+    ),
+    index('ticket_messages_reference_idx')
       .on(table.brandId, table.channel, table.externalMessageId)
       .where(sql`${table.externalMessageId} is not null`),
     index('ticket_messages_brand_department_idx').on(table.brandId, table.departmentId),

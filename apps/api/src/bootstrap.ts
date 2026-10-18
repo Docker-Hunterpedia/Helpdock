@@ -199,6 +199,7 @@ export interface CreateApiAppOptions {
   readonly telegram?: AppModuleOptions['telegram'];
   /** M10's Graph client and inbound services, for suites. */
   readonly meta?: AppModuleOptions['meta'];
+  readonly imports?: AppModuleOptions['imports'];
   /** M4's siteverify call and SSE timings, for suites. */
   readonly widget?: AppModuleOptions['widget'];
   /** M4-09's siteverify call, for suites. */
@@ -219,6 +220,7 @@ export const createApiApp = async ({
   channels,
   telegram,
   meta,
+  imports,
   widget,
   webForm,
   ai,
@@ -277,6 +279,7 @@ export const createApiApp = async ({
       ...(channels === undefined ? {} : { channels }),
       ...(telegram === undefined ? {} : { telegram }),
       ...(meta === undefined ? {} : { meta }),
+      ...(imports === undefined ? {} : { imports }),
       ...(widget === undefined ? {} : { widget }),
       ...(webForm === undefined ? {} : { webForm }),
       ...(ai === undefined ? {} : { ai }),

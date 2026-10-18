@@ -17,6 +17,7 @@ import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
 import { buildInfo } from './build-info.js';
+import { readImportHealth } from './import-health.js';
 import { ProductMetricsService } from './product-metrics.js';
 import type { QueueRegistry } from './queues.js';
 import type { StorageUsageStore } from './storage-usage.js';
@@ -154,6 +155,7 @@ export class SystemService {
       storage,
       aiSpend,
       audit: [...audit],
+      imports: await readImportHealth(this.#redis).catch(() => ({ configured: false as const })),
     };
   }
 

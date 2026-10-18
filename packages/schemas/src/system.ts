@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readinessCheckSchema } from './health.js';
+import { importHealthSchema } from './import-health.js';
 
 /**
  * What the admin System page shows (REQUIREMENTS §4.10, ARCHITECTURE §14):
@@ -223,6 +224,7 @@ export const auditEntrySchema = z.object({
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export const systemStatusSchema = z.object({
+  imports: importHealthSchema.optional(),
   /** When this snapshot was taken, so a stale tab can say so. */
   observedAt: z.iso.datetime(),
   build: systemBuildSchema,

@@ -5,11 +5,16 @@ import type { HelpCenterMediaProcessPayload, JobHandler, JobLogger } from '@help
 import { HC_IMAGE_MAX_BYTES, HC_SITE_IMAGE_MAX_EDGE } from '@helpdock/schemas';
 import { eq } from 'drizzle-orm';
 import sharp, { type OutputInfo } from 'sharp';
+import { PolicyRefusal } from '../media/content-policy.js';
 import { bytesMatchMime, MAGIC_BYTES_PROBE } from '../media/magic-bytes.js';
 import { TIMEOUTS_MS } from '../media/process.job.js';
+import type { FileScanner } from '../media/scanner.js';
 import { type ObjectStorage, ObjectTooLargeError } from '../media/storage.js';
 import { withTempDir } from '../media/temp-dir.js';
 import { IMAGE_MAX_EDGE, IMAGE_QUALITY } from '../media/variants.js';
+import { type HcImportFileVerdict, processImportedArticleFile } from './import-file-process.js';
+import { enqueueImportedHcOriginalCleanup } from './import-media-cleanup.js';
+import { HcImportIntegrityRefusal, verifyImportedHcMedia } from './import-media-integrity.js';
 import { hcMediaKey } from './media.service.js';
 
 /**
@@ -20,9 +25,14 @@ import { hcMediaKey } from './media.service.js';
  * logo or favicon (M5-06, DESIGN §8) — drop every byte of metadata, and
  * discard the original, which is what disarms a polyglot.
  *
+ * Import-owned download files use import-file-process.ts instead: their
+ * recorded source digest, MIME/size policy and configured scanner must pass.
+ * Images still take the re-encoding path; a file row cannot bypass it by
+ * declaring an image MIME. Download serving requires a separate parent check.
+ *
  * A verdict (not an image, will not decode, too large) makes the row
- * `rejected` and the job *returns*; only the bucket or the database throws,
- * and that is retried.
+ * `rejected` and the job *returns*; storage/database failures and an unavailable
+ * configured file scanner throw and are retried.
  */
 
 type Verdict = 'object_missing' | 'too_large' | 'unreadable' | 'mime_mismatch';
@@ -52,23 +62,26 @@ const firstBytes = async (file: string): Promise<Uint8Array> => {
 
 export interface HcMediaOutcome {
   readonly status: 'ready' | 'rejected' | 'skipped';
-  readonly reason?: Verdict;
+  readonly reason?: Verdict | HcImportFileVerdict;
 }
 
 const convert = async (
   storage: ObjectStorage,
   row: typeof hcMedia.$inferSelect,
   dir: string,
+  tx: DbTransaction,
 ): Promise<{ width: number; height: number; key: string }> => {
   const source = path.join(dir, 'source');
   try {
     await storage.download(row.s3Key, source, HC_IMAGE_MAX_BYTES);
   } catch (error) {
     if (error instanceof ObjectTooLargeError) {
+      if (row.importedByRunId) throw new HcImportIntegrityRefusal('size_mismatch');
       throw new Reject('too_large');
     }
     throw error;
   }
+  if (row.importedByRunId) await verifyImportedHcMedia(tx, row, source);
   if (!bytesMatchMime(await firstBytes(source), row.mime)) {
     throw new Reject('mime_mismatch');
   }
@@ -94,12 +107,13 @@ const convert = async (
 
   const key = hcMediaKey(row.brandId, row.id, 'webp');
   await storage.upload({ key, path: target, contentType: 'image/webp' });
-  await storage.remove(row.s3Key);
+  if (!row.importedByRunId) await storage.remove(row.s3Key);
   return { width: info.width, height: info.height, key };
 };
 
 export const createHcMediaProcessor = (
   storage: ObjectStorage,
+  scanner?: FileScanner,
 ): JobHandler<HelpCenterMediaProcessPayload> & {
   run(context: {
     payload: HelpCenterMediaProcessPayload;
@@ -116,14 +130,21 @@ export const createHcMediaProcessor = (
     tx: DbTransaction;
     log: JobLogger;
   }): Promise<HcMediaOutcome> => {
-    const [row] = await tx.select().from(hcMedia).where(eq(hcMedia.id, payload.mediaId)).limit(1);
+    const [row] = await tx
+      .select()
+      .from(hcMedia)
+      .where(eq(hcMedia.id, payload.mediaId))
+      .limit(1)
+      .for('update');
     if (row?.status !== 'processing') {
       log.info({ mediaId: payload.mediaId }, 'the article image is gone or already processed');
       return { status: 'skipped' };
     }
+    if (row.kind === 'file')
+      return processImportedArticleFile({ tx, row, storage, ...(scanner ? { scanner } : {}) });
 
     try {
-      const result = await withTempDir((dir) => convert(storage, row, dir));
+      const result = await withTempDir((dir) => convert(storage, row, dir, tx));
       await tx
         .update(hcMedia)
         .set({
@@ -135,9 +156,16 @@ export const createHcMediaProcessor = (
           processedAt: new Date(),
         })
         .where(eq(hcMedia.id, row.id));
+      if (row.importedByRunId) await enqueueImportedHcOriginalCleanup(tx, row);
       return { status: 'ready' };
     } catch (error) {
-      if (!(error instanceof Reject)) {
+      if (
+        !(
+          error instanceof Reject ||
+          error instanceof HcImportIntegrityRefusal ||
+          error instanceof PolicyRefusal
+        )
+      ) {
         throw error;
       }
       log.warn({ mediaId: row.id, reason: error.reason }, 'the article image was rejected');
@@ -145,6 +173,7 @@ export const createHcMediaProcessor = (
         .update(hcMedia)
         .set({ status: 'rejected', rejectReason: error.reason, processedAt: new Date() })
         .where(eq(hcMedia.id, row.id));
+      if (row.importedByRunId) await enqueueImportedHcOriginalCleanup(tx, row);
       return { status: 'rejected', reason: error.reason };
     }
   };

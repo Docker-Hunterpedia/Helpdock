@@ -13,6 +13,9 @@ import {
   contactIdentities,
   contactNotes,
   contacts,
+  importExternalIds,
+  importRecords,
+  importRuns,
   users,
 } from '@helpdock/db';
 import {
@@ -465,6 +468,7 @@ export class ContactsRepository {
         name,
         accountId: null,
         externalId: null,
+        importedDetails: null,
         custom: {},
         locale: null,
         timezone: null,
@@ -476,6 +480,31 @@ export class ContactsRepository {
     if (updated.length === 0) {
       return false;
     }
+
+    const mergedAncestors = sql`WITH RECURSIVE erasure_contacts AS (
+      SELECT id FROM contacts WHERE id = ${contactId}::uuid
+      UNION SELECT prior.id FROM contacts prior JOIN erasure_contacts current ON prior.merged_into_id = current.id
+    ) SELECT id FROM erasure_contacts`;
+    await tx
+      .update(contacts)
+      .set({ importedDetails: null })
+      .where(sql`${contacts.id} IN (${mergedAncestors})`);
+    await tx.delete(importRecords).where(
+      and(
+        or(
+          eq(importRecords.entity, 'contact'),
+          and(
+            eq(importRecords.entity, 'user'),
+            sql`${importRecords.payload}->>'kind' = 'customer'`,
+          ),
+        ),
+        sql`EXISTS (SELECT 1 FROM ${importExternalIds} source_identity
+        JOIN ${importRuns} source_run ON source_run.id = ${importRecords.runId} AND source_run.brand_id = ${importRecords.brandId}
+        WHERE source_identity.brand_id = ${importRecords.brandId} AND source_identity.source = source_run.source
+          AND source_identity.entity = 'contact' AND source_identity.external_id = ${importRecords.externalId}
+          AND source_identity.helpdock_id IN (${mergedAncestors}))`,
+      ),
+    );
 
     for (const identity of identities) {
       await tx

@@ -130,6 +130,7 @@ export function AppRoutes(): ReactNode {
               its first. */}
           <Route path={ROUTES.brand} element={<BrandPage />} />
           <Route path={ROUTES.brandTab} element={<BrandPage />} />
+          <Route path={ROUTES.importRun} element={<BrandPage />} />
           {/* M8-01, M8-03: API keys and Webhooks; `/admin/developers` alone opens API keys. */}
           <Route path={ROUTES.developers} element={<DevelopersPage />} />
           <Route path={ROUTES.developersTab} element={<DevelopersPage />} />

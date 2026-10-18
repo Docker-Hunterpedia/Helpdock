@@ -40,6 +40,7 @@
     "@helpdock/config": "workspace:*",
     "@helpdock/db": "workspace:*",
     "@helpdock/i18n": "workspace:*",
+    "@helpdock/importers": "workspace:*",
     "@helpdock/jobs": "workspace:*",
     "@helpdock/net": "workspace:*",
     "@helpdock/schemas": "workspace:*",

@@ -263,7 +263,10 @@ export class RulesRepository {
         : inArray(tickets.statusId, [...options.statusIds]),
       options.changedBefore === undefined
         ? undefined
-        : lte(tickets.statusChangedAt, options.changedBefore),
+        : lte(
+            sql`greatest(${tickets.statusChangedAt}, ${tickets.importedAt})`,
+            options.changedBefore.toISOString(),
+          ),
     ];
 
     const rows = await tx
@@ -271,7 +274,10 @@ export class RulesRepository {
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .where(and(...filters))
-      .orderBy(asc(tickets.statusChangedAt), asc(tickets.id))
+      .orderBy(
+        asc(sql`greatest(${tickets.statusChangedAt}, ${tickets.importedAt})`),
+        asc(tickets.id),
+      )
       .limit(options.limit);
 
     return rows.map((row) => row.id);

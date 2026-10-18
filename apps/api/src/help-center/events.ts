@@ -11,6 +11,7 @@ import {
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_MEDIA_UPLOADED_EVENT,
   HC_SITE_CHANGED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
@@ -18,6 +19,7 @@ import {
   type HcArticleChangedPayload,
   type HcSiteCard,
   hcArticleChangedPayloadSchema,
+  hcImportedPayloadSchema,
 } from '@helpdock/schemas';
 import { z } from 'zod';
 
@@ -130,4 +132,8 @@ export const registerHelpCenterEventHandlers = (
   dispatcher.register(HC_ACCESS_CHANGED_EVENT, logOnly);
   dispatcher.register(HC_SITE_CHANGED_EVENT, logOnly);
   dispatcher.register(HC_MEDIA_UPLOADED_EVENT, createMediaUploadedHandler(queues));
+  dispatcher.register(HC_IMPORTED_EVENT, async (context) => {
+    hcImportedPayloadSchema.parse(context.payload);
+    await logOnly(context);
+  });
 };

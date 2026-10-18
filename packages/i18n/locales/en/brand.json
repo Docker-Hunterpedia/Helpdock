@@ -5,6 +5,7 @@
   "tabs": {
     "general": "General",
     "domains": "Domains",
+    "import": "Import",
     "danger": "Danger zone"
   },
   "general": {

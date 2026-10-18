@@ -39,6 +39,56 @@ const toggleFilter = async (page: Page, locale: 'en' | 'ar', chip: string): Prom
 };
 
 test.describe('views in the sidebar', () => {
+  test('saves imported history filters and preserves a later native-only choice', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale);
+    await toggleFilter(page, locale, t('tickets:filters.imported'));
+    const bar = page.getByRole('status').filter({ hasText: t('tickets:viewBar.changed') });
+    await bar.getByRole('button', { name: t('tickets:viewBar.saveAsNew') }).click();
+    const dialog = page.getByRole('dialog', { name: t('tickets:viewDialog.title') });
+    await dialog.getByLabel(t('tickets:viewDialog.name')).fill('Imported support history');
+    await dialog.getByRole('button', { name: t('tickets:viewDialog.submit') }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Imported support history', level: 1 }),
+    ).toBeVisible();
+    const open = page.getByRole('button', { name: new RegExp(`^${t('tickets:filters.open')}`) });
+    await open.click();
+    await expect(
+      page.getByRole('switch', { name: t('tickets:filters.imported'), exact: true }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('switch', { name: t('tickets:filters.native'), exact: true }).click();
+    await page.keyboard.press('Escape');
+    await bar.getByRole('button', { name: t('tickets:viewBar.save'), exact: true }).click();
+    await expect(bar).not.toBeVisible();
+    await nav(page)
+      .getByRole('link', { name: t('tickets:views.all'), exact: true })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: t('tickets:views.all'), level: 1 }),
+    ).toBeVisible();
+    await nav(page)
+      .getByRole('link', { name: /^Imported support history/ })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: 'Imported support history', level: 1 }),
+    ).toBeVisible();
+    await open.click();
+    await expect(
+      page.getByRole('switch', { name: t('tickets:filters.native'), exact: true }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await expect(
+      page.getByRole('switch', { name: t('tickets:filters.imported'), exact: true }),
+    ).toHaveAttribute('aria-checked', 'false');
+    await expect(
+      page.getByRole('switch', { name: t('tickets:filters.allSources'), exact: true }),
+    ).toHaveAttribute('aria-checked', 'false');
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('lists the shared views, then the reader’s own under "Mine"', async ({
     page,
     appLocale: locale,

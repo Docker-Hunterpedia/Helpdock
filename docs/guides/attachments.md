@@ -271,8 +271,16 @@ page in one statement.
 
 ### Realtime
 
-When the worker finishes, an `attachment.ready` outbox row becomes an
-`attachment:changed` frame on the `ticket:<id>` room:
+When the worker finishes a live upload or channel file, an `attachment.ready`
+outbox row becomes an `attachment:changed` frame on the `ticket:<id>` room.
+
+Imported historical files are an exception: processing updates the asset and all
+same-brand imported copies without emitting `attachment.ready`. This avoids live
+notifications and transcription while loading history. They use the ordinary
+attachment object-key layout, so authorized downloads and retention purges work
+the same way as for uploads. Ticket splitting preserves the attachment's origin.
+
+The live frame is:
 
 ```jsonc
 { "brandId": "…", "ticketId": "…", "departmentId": "…", "attachmentId": "…", "status": "ready" }

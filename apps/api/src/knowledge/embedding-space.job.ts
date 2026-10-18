@@ -19,6 +19,7 @@ import type { Job } from 'bullmq';
 import { and, asc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import { articleEmbeddingEligible } from './article-embedding-eligibility.js';
 
 /**
  * The embedding space's two jobs (M7-02, DOMAIN-RULES §8, ADR 0005).
@@ -34,8 +35,8 @@ import { withSystemJob } from '../tenant/system-job.js';
  * (`activeEmbeddingSpace`). For the whole re-embed the space is `reindexing`,
  * so retrieval is full text alone; a re-embed that fails stays `reindexing`
  * with `last_error` set, and the next tick resumes it from the chunks still
- * left. The space flips to `ready` only when no chunk of any brand is left in
- * another model.
+ * left. The space flips to `ready` when no eligible chunk is left in another
+ * model; imported article languages wait for staff publication.
  *
  * **Tenancy.** `brands` and `embedding_space` are global tables, and the DDL
  * runs through owner-rights functions; every read and write of a chunk is in
@@ -182,6 +183,7 @@ const reembedBrand = async ({
         .where(
           and(
             eq(knowledgeChunks.brandId, brandId),
+            articleEmbeddingEligible(),
             or(
               isNull(knowledgeChunks.embeddingModel),
               ne(knowledgeChunks.embeddingModel, model),

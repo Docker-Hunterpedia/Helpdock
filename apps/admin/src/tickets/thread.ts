@@ -5,7 +5,7 @@ import type { PendingMessage } from './pending.js';
  * One thread out of three sources: the messages, the activity log and whatever
  * the composer has sent and not yet heard back about.
  *
- * **Only two activity actions are drawn.** `ticket_activity` is rendered in the
+ * **Only activity without a duplicate bubble is drawn.** `ticket_activity` is rendered in the
  * thread (`docs/guides/tickets.md`), but three of its five actions are the
  * *same events* as messages — `ticket.created`, `ticket.replied` and
  * `ticket.note_added` each accompany a row that is already a bubble — so
@@ -14,6 +14,7 @@ import type { PendingMessage } from './pending.js';
  * several at once, which is one entry "via macro …", (M5-08) the help
  * center article a conversation or a web form ticket came from, and (M7-05)
  * an article drafted from the ticket and sent for approval.
+ * Imported provenance and source audit events are also distinct timeline entries.
  *
  * Ordering is by time, and a pending send sorts last within its own instant so
  * that what somebody just typed sits at the bottom where they left it.
@@ -25,6 +26,8 @@ import type { PendingMessage } from './pending.js';
  */
 
 const THREAD_EVENT_ACTIONS: readonly string[] = [
+  'ticket.imported',
+  'ticket.imported.event',
   'ticket.updated',
   'ticket.status.changed',
   'ticket.macro_applied',

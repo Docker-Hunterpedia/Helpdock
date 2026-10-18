@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { ticketAiStateSchema, ticketMessageAiSchema } from './ai.js';
 import { ticketCsatSchema } from './csat.js';
 import { emailMessageViewSchema } from './email-inbound.js';
+import { importMessageDetailsSchema, importSourceSchema } from './import.js';
+import { importSourceLink } from './import-source-link.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 import { ticketSlaSchema, ticketSlaSummarySchema } from './sla.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
@@ -232,6 +234,14 @@ export type TicketContact = z.infer<typeof ticketContactSchema>;
  * what colour it was.
  */
 export const ticketSchema = z.object({
+  imported: z
+    .strictObject({
+      source: importSourceSchema,
+      number: z.string().max(200).nullable(),
+      url: z.string().nullable().transform(importSourceLink),
+    })
+    .nullable()
+    .optional(),
   id: z.uuid(),
   number: z.int().positive(),
   prefix: z.string().min(1),
@@ -309,6 +319,8 @@ export const ticketMessageSchema = z.object({
   kind: ticketMessageKindSchema,
   authorType: messageAuthorTypeSchema,
   authorId: z.string().nullable(),
+  authorDisplay: z.string().min(1).max(200).nullable().optional(),
+  importDetails: importMessageDetailsSchema.optional(),
   bodyHtml: z.string(),
   bodyText: z.string(),
   channel: ticketChannelSchema,
@@ -355,9 +367,15 @@ export const ticketActivityEntrySchema = z.object({
 export type TicketActivityEntry = z.infer<typeof ticketActivityEntrySchema>;
 
 export const ticketActivityListSchema = z.object({
-  activity: z.array(ticketActivityEntrySchema),
+  activity: z.array(ticketActivityEntrySchema).max(100),
+  nextBefore: z.uuid().nullable().optional(),
 });
 export type TicketActivityList = z.infer<typeof ticketActivityListSchema>;
+export const ticketActivityQuerySchema = z.strictObject({
+  before: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+});
+export type TicketActivityQuery = z.infer<typeof ticketActivityQuerySchema>;
 
 // --------------------------------------------------------------------------
 // Merge and split (M1-09, DOMAIN-RULES §2.4)
@@ -457,7 +475,8 @@ export type MergedInto = z.infer<typeof mergedIntoSchema>;
 export const ticketDetailSchema = z.object({
   ticket: ticketSchema,
   messages: ticketMessagePageSchema,
-  activity: z.array(ticketActivityEntrySchema),
+  activity: z.array(ticketActivityEntrySchema).max(100),
+  activityNextBefore: z.uuid().nullable().optional(),
   /**
    * The survey for the ticket's latest close (M1-12), or null when there is
    * none — never closed, closed as spam or a merge, or closed while the brand
@@ -527,6 +546,12 @@ export const TICKET_ASSIGNEE_ME = 'me';
 const queryBoolean = z.union([z.boolean(), z.stringbool()]);
 
 export const ticketListQuerySchema = z.object({
+  imported: z
+    .preprocess(
+      (value) => (value === 'true' ? true : value === 'false' ? false : value),
+      z.boolean(),
+    )
+    .optional(),
   statusId: coerceArray(z.uuid()).optional(),
   /** Filter by the four system states, for "everything still open". */
   systemState: coerceArray(ticketSystemStateSchema).optional(),

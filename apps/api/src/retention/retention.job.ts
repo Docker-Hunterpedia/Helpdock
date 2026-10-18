@@ -142,6 +142,10 @@ export const runBrandRetention = async ({
     () => inBrand((tx) => purgePublishedOutbox(tx, { now, limit: batchSize })),
     batchSize,
   );
+  counts.importStaging = await drainInBatches(
+    () => inBrand((tx) => repository.purgeImportStagingBatch(tx, brandId, now, batchSize)),
+    batchSize,
+  );
 
   await inBrand((tx) => recordRun(tx, { repository, brandId, jobId, now, counts }));
 

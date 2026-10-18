@@ -611,7 +611,7 @@ export type WidgetTranscriptRequest = z.infer<typeof widgetTranscriptRequestSche
 
 export const widgetQueueSchema = z.object({
   conversationId: z.uuid(),
-  /** 1 is next. Null once an agent holds the conversation, or when it is closed. */
+  /** 1 is next. Null once an agent holds the conversation, when it is closed, or for imported history nobody continued. */
   position: z.int().positive().nullable(),
 });
 export type WidgetQueue = z.infer<typeof widgetQueueSchema>;

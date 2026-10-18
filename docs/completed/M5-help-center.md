@@ -211,7 +211,7 @@ Migration `0033_help_center` adds six tenant tables, all brand-scoped and none d
 - **Scheduled publish.** Scheduling writes `help_center.article_changed` with `change: 'scheduled'` and `scheduledAt`; its handler adds a **delayed** `help_center.publish_due` job for that brand and minute on the `knowledge` queue. An hourly `help_center.publish_due.sweep` adds one per active brand as the safety net, the `sla.timer` / `sla.rebuild` shape. The job publishes every version whose time has passed, as the system actor; the Activity panel shows it as "Scheduled publish".
 - **Fallback locale.** A reader in a language an article has no readable version in gets the brand's default language, flagged `fallback: true`; category and section names fall back the same way.
 - **Deleting** a category or section with anything in it is refused (`not-empty`); an article that was ever published is archived rather than deleted (`was-published`), so nothing downstream is left pointing at a row that vanished.
-- **Limits:** 100 categories, 500 sections, 5 000 articles per brand; slugs 120 characters of `[a-z0-9-]`; titles 200; search descriptions 160; bodies 500 000 characters and 20 000 tags.
+- **Limits at M5 close-out:** 100 categories, 500 sections, 5 000 articles per brand; slugs 120 characters of `[a-z0-9-]`; titles 200; search descriptions 160; bodies 500 000 characters and 20 000 tags. M11 later raises titles to 500 characters; see the [current help-center guide](../guides/help-center.md).
 - **Permissions:** `help_center:read` for every role, `help_center:manage` for Admin and Team Leader (DOMAIN-RULES §1.2).
 
 #### `HelpCenterContentService` (the read side, for M5-03, M5-04, M5-05, M5-10)

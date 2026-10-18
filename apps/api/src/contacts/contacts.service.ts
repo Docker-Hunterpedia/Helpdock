@@ -507,7 +507,7 @@ export class ContactsService {
       name: ERASED_CONTACT_NAME,
       identities: identities.map((identity) => ({
         id: identity.id,
-        value: erasedIdentityValue(contactId, identity.kind),
+        value: erasedIdentityValue(contactId, identity.kind, identity.id),
       })),
     });
 

@@ -79,6 +79,16 @@ from an unlocked laptop would be minutes of guessing.
   no longer sign in and is answered `no-account`. The rows are not deleted —
   turning the setting back on restores them exactly.
 
+### Imported historical agents (M11, in development)
+
+An import can retain an old agent as a name, map them to existing staff in the
+brand, or create a new invited Agent with confirmed departments. Import does
+not send an invitation or create a sign-in token. An administrator can send the
+invitation later through Staff. Existing accounts, names and roles are preserved;
+an email already used by another account must be mapped explicitly. Import
+never creates an install admin or automatically activates a person.
+
+
 ## What a Team Leader may do
 
 A Team Leader holds `staff:manage`, so they reach the staff screen. Inside it

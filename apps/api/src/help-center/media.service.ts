@@ -156,7 +156,11 @@ export class HelpCenterMediaService {
   }
 
   async #find(tx: DbTransaction, mediaId: string): Promise<HcMediaRow | undefined> {
-    const [row] = await tx.select().from(hcMedia).where(eq(hcMedia.id, mediaId)).limit(1);
+    const [row] = await tx
+      .select()
+      .from(hcMedia)
+      .where(and(eq(hcMedia.id, mediaId), eq(hcMedia.kind, 'image')))
+      .limit(1);
     return row;
   }
 

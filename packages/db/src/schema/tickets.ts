@@ -17,7 +17,7 @@ import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
-import { ticketChannelEnum, ticketPriorityEnum } from './enums.js';
+import { importSourceEnum, ticketChannelEnum, ticketPriorityEnum } from './enums.js';
 import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
@@ -71,6 +71,9 @@ export const tickets = pgTable(
      * reserved for the same reason).
      */
     prefix: text('prefix').notNull(),
+    importedAt: timestamp('imported_at', { withTimezone: true }),
+    importSource: importSourceEnum('import_source'),
+    importSlaStartedAt: timestamp('import_sla_started_at', { withTimezone: true }),
     subject: text('subject').notNull(),
     statusId: uuid('status_id')
       .notNull()
@@ -239,6 +242,11 @@ export const tickets = pgTable(
     // Numbers are per brand, and the unique index is also what catches a
     // duplicate if two requests ever read the same value from the sequence.
     unique('tickets_brand_number_key').on(table.brandId, table.number),
+    index('tickets_import_sla_pending_idx')
+      .on(table.brandId, table.importSource, table.id)
+      .where(
+        sql`${table.importedAt} IS NOT NULL AND ${table.importSlaStartedAt} IS NULL AND ${table.deletedAt} IS NULL AND ${table.mergedIntoId} IS NULL`,
+      ),
     // M4-02: a visitor's conversation list, and the ownership check on each.
     index('tickets_visitor_idx').on(table.visitorId).where(sql`${table.visitorId} is not null`),
     // M4-04: one conversation per started `clientId` and visitor.

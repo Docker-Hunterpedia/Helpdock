@@ -135,9 +135,30 @@ A new ticket created by this rule gets `parent_id` = the closed ticket, a system
 - New clocks start at split time under the new ticket's policy. Original ticket's clocks are untouched.
 - CSAT is sent per ticket on its own close.
 
+Imported history bypasses live ticket lifecycle hooks. Scheduled rules use the
+later of `status_changed_at` and `imported_at` for both candidate selection and
+condition evaluation. A content-only delta that retains the same mapped status
+must retain `status_changed_at`, so it cannot manufacture another scheduled-rule
+match. Actual status transitions keep the database trigger's arrival baseline.
+
 ### 2.5 Participants
 
 A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
+
+Imported CCs can reference a same-brand contact without a source email; their
+address remains null and their provenance is `import`. Never invent an address.
+A delta reconciles only import-owned membership and preserves manually added
+participants. A known source email may fill an import-owned null address, but
+must not replace a manually chosen address. Importing a participant sends nothing.
+
+Imported satisfaction answers are historical rows with expired random tokens;
+native delivery and survey selection never select them. A response whose source
+scale cannot be established keeps a null comparable rating, its original date
+and answers, and an explicit `ratingUnmapped: true` provenance marker. It never
+counts as a zero or enters score averages. Staff may read it as
+`imported_unscored`, with no share link. Each changed imported answer writes an
+inert dated history event; repeats change neither row. Importing an answer emits
+no native `csat.received` action, workflow, notification or vendor send.
 
 ### 2.6 Reply windows on the Meta channels
 
@@ -160,6 +181,24 @@ WhatsApp, Messenger and Instagram let a business write to a customer only for a 
 ## 3. SLA calculation
 
 ### 3.1 Clocks
+
+Imported tickets are exempt from automatic clock creation until an administrator
+explicitly activates them. `tickets.import_sla_started_at` records that opt-in;
+sync, reopen and policy/calendar recomputation leave unactivated imported tickets
+without clocks. Activation is idempotent and starts applicable clocks at the
+activation time, preserving the original ticket creation date. Deleted, merged
+or closed tickets and tickets without a matching policy are not activated.
+Bulk activation requires `brand:manage` and explicit acknowledgment. It covers
+the completed run's verified source account within that brand, using durable
+receipts; only tickets imported by the request time qualify. Revision/cursor
+fences and atomic clock/progress/outbox commits make replay and resume safe.
+
+A vendor delta reconciles clocks that an administrator already activated, using
+the pure clock/calendar functions and database writes only. Public agent replies
+satisfy the appropriate response clock; paused/closed/excluded status changes
+reconcile resolution clocks and ticket summaries. A reply older than a staff
+reopen cannot satisfy its next-response clock. This path emits no live ticket,
+SLA timer or notification events and does not start clocks on unactivated imports.
 
 Every ticket has at most two running clocks, each with `target_minutes`, `started_at`, `paused_total_ms`, `due_at`, `satisfied_at`, `breached_at`:
 
@@ -229,6 +268,14 @@ The principle: **an identifier someone types is a hint, not proof.** Access to h
 An inbound email is attached to an existing ticket only if **both** hold:
 
 1. A thread hint matches: `In-Reply-To` or any `References` id equals a message id Helpdock sent or received on that ticket, **or** the subject contains the brand's `[PREFIX-N]` token.
+   For imported history, duplicate RFC IDs can name multiple tickets. Real Helpdock
+   deliveries take precedence, followed by live received email. A historical ID
+   threads only when it names one ticket. If no ID resolves and a known historical
+   ID is ambiguous, create a new ticket rather than falling back to a subject
+   token that may reuse an old vendor number. Unknown IDs still permit subject
+   token fallback. Imported RFC IDs are retained as history and do not participate
+   in live delivery deduplication.
+
 2. The sender address is a participant of that ticket (§2.5), compared case-insensitively on the normalised address.
 
 If the hint matches but the sender is not a participant, a new ticket is created in the same department with a system note "Referenced HD-1042 but sender is not a participant", and the agent may merge manually. A subject token with no other hint is treated the same way. This prevents anyone who learns a ticket number from injecting into or reading that thread.
@@ -319,6 +366,7 @@ Socket.IO does not guarantee delivery. The REST API is the source of truth; sock
 - **Receive**: the server emits `message` events with `seq` to the room. The client tracks `last_seq`. Any gap (received `seq > last_seq + 1`) or any reconnect triggers `GET …/messages?after=<last_seq>` to catch up. Delivered and read receipts are separate events carrying the `seq` they refer to.
 - **SSE fallback**: identical event payloads over `GET /widget/stream?after=<last_seq>`; sends go over REST. The server closes SSE connections after 5 minutes and the client reconnects with its cursor.
 - Typing indicators, presence, and queue position are ephemeral, unacknowledged, and never replayed.
+- Queue position counts the unassigned, open `chat` tickets of the department that joined the queue before this one. A live conversation joins when it is created. An imported ticket is history: it joins only at its customer's first public message written in Helpdock, never at its historical creation date, and has no position until then.
 - Staff side is the same contract on the `/staff` namespace with rooms per ticket and per department.
 - Tests (Playwright + toxiproxy or a network-throttling fixture): drop the connection mid-send and assert exactly one message exists; restart the api and assert the client catches up; submit the same message twice and assert one row.
 
@@ -330,6 +378,7 @@ Socket.IO does not guarantee delivery. The REST API is the source of truth; sock
 - `knowledge_chunks.embedding` is `vector(<dims>)`; the column and its HNSW index are created by `knowledge.configure` when the model is first saved, not by a static migration. Every chunk stores `embedding_model`; retrieval filters `embedding_model = current` so vectors from two models are never ranked together even if their dimensions match.
 - Changing the model: admin action → `knowledge.reembed` job. It sets `ai.retrieval_status = reindexing` (auto-reply and suggestions fall back to full-text only, with a banner in admin), drops the index, alters the column to the new dimension, re-embeds every source in order, rebuilds the index, and flips the status back. Progress is visible per source. A failed re-embed leaves the status at `reindexing` and never serves mixed results.
 - Dimension limit: 2000 (pgvector HNSW). Models above that are rejected at configuration time with an explanation.
+- Imported article language versions set `hc_article_versions.import_embedding_deferred`. Import completion may index and re-chunk them locally, but never schedules embeddings. Pending and full-reembedding workers exclude deferred versions before provider calls, even for previously queued work. Full-text retrieval remains available. Staff publication, including an explicitly scheduled publication, clears that language's deferral; changed source imports defer their replacement again. See ADR 0027.
 
 ---
 
@@ -453,3 +502,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-09-16 | Initial version, written to close the review findings on PRD 1.0. |
 | 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |
 | 2026-10-11 | The Meta channels (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): §2.5 and the new §2.6 reply-window rule; §4.4's three scoped ids and the first verified phone, a WhatsApp `wa_id`; the new §4.7 identities and §4.8 message kinds; §6's keys; §11's delivery logs and erasure; §13's Graph client. |
+| 2026-10-18 | §7: imported tickets join the widget queue only when their customer continues them live (M11-17). |

@@ -123,6 +123,7 @@ export const fullQueuePage = (): SystemQueuePage => ({
  * together, because a page that reads one usually reads the other.
  */
 export const fakeSystemApi = (overrides: Partial<SystemApi> = {}): SystemApi => ({
+  imports: async () => ({ configured: false }),
   status: async () => healthySystemStatus(),
   queues: async () => fullQueuePage(),
   auditLog: async () => auditLogPage(),

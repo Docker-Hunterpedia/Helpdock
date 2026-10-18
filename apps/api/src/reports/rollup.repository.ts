@@ -36,7 +36,7 @@ import type { DayRange } from './rollup-window.js';
  *   brand chose "count reopens" (`slaCountReopens`, §3.5), when the
  *   next-response and later resolution clocks count too.
  * - Without a clock (no SLA policy matched): the first public staff reply
- *   after creation, and `closed_at` minus creation.
+ *   after creation (including imported name-only agents), and `closed_at` minus creation.
  *
  * SLA compliance reads the same clocks: met when satisfied unbreached,
  * breached when breached, on the day of the outcome.
@@ -60,11 +60,12 @@ const assigneeKey = (column: SQL): SQL =>
 
 /**
  * The grain `report_daily` rows are built at. 2 added the assignee
- * (`0044_report_daily_assignee`). Raise it whenever the grain or a column's
+ * (`0044_report_daily_assignee`); 3 counts imported name-only agent replies.
+ * Raise it whenever the grain or a column's
  * meaning changes: a brand with older rows in its backfill window is then
  * rebuilt in full by its next run, with no data rewritten in SQL.
  */
-export const REPORT_ROLLUP_VERSION = 2;
+export const REPORT_ROLLUP_VERSION = 3;
 
 /** Whether a brand's rollups exist, and whether they are at {@link REPORT_ROLLUP_VERSION}. */
 export type RollupState = 'none' | 'stale' | 'current';
@@ -85,7 +86,7 @@ const boundsCte = ({ timezone, range }: RollupScope): SQL => sql`
 /** The tickets that count in reports; see the file comment. */
 const countedCte = ({ brandId }: RollupScope): SQL => sql`
   counted AS (
-    SELECT t.id, t.department_id, t.channel, t.priority, t.created_at, t.closed_at, t.assignee_id
+    SELECT t.id, t.department_id, t.channel, t.priority, t.created_at, t.closed_at, t.assignee_id, t.imported_at
     FROM tickets t
     JOIN ticket_statuses s ON s.id = t.status_id
     WHERE t.brand_id = ${brandId}
@@ -197,7 +198,10 @@ export class RollupRepository {
         FROM counted c
         CROSS JOIN LATERAL (
           SELECT min(m.created_at) AS at FROM ticket_messages m
-          WHERE m.ticket_id = c.id AND m.kind = 'public' AND m.author_type = 'staff'
+          WHERE m.ticket_id = c.id AND m.kind = 'public'
+            AND (m.author_type = 'staff' OR (c.imported_at IS NOT NULL
+              AND m.author_type = 'system' AND m.author_display IS NOT NULL
+              AND coalesce(m.import_details->>'authorKind', 'agent') = 'agent'))
         ) r
         WHERE r.at IS NOT NULL
           AND NOT EXISTS (

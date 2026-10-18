@@ -26,6 +26,11 @@ import { HelpCenterSite } from '../dist/help-center/site/site.js';
 import { loadFonts } from '../dist/static/fonts.js';
 import { articleId, memorySiteContent } from '../src/testing/help-center-site.ts';
 import { HELP_CENTER_PORT, HELP_CENTER_WALL_PORT } from './fixtures.ts';
+import {
+  IMPORTED_FILE_BYTES,
+  IMPORTED_FILE_DOWNLOAD_PATH,
+  withImportedArticle,
+} from './imported-article.ts';
 
 const refundHits = [
   {
@@ -40,7 +45,7 @@ const refundHits = [
 
 const siteOver = (access: 'public' | 'internal_only', port: number) =>
   new HelpCenterSite({
-    content: memorySiteContent({ access }).content,
+    content: withImportedArticle(memorySiteContent({ access }).content),
     hosts: { brandOf: async () => null },
     search: {
       search: async ({ q }: { q: string }) =>
@@ -79,6 +84,13 @@ const fonts = loadFonts();
 const serve = async (site: HelpCenterSite, port: number): Promise<void> => {
   const server = Fastify();
   await server.register(cookie);
+  server.get(IMPORTED_FILE_DOWNLOAD_PATH, async (_request, reply) =>
+    reply
+      .header('content-disposition', 'attachment; filename="original-manual.pdf"')
+      .header('cache-control', 'private, no-store')
+      .type('application/pdf')
+      .send(IMPORTED_FILE_BYTES),
+  );
   server.addContentTypeParser(
     'application/x-www-form-urlencoded',
     { parseAs: 'string' },

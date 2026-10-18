@@ -11,7 +11,7 @@ import type {
   TicketUpdateRequest,
 } from '@helpdock/schemas';
 import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
-import { Box, Button, Drawer } from '@mui/material';
+import { Box, Button, Drawer, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock, GitMerge, Split, TicketIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -41,6 +41,7 @@ import {
 import { mergeCandidates, visibleLinks } from '../../tickets/merge.js';
 import { acknowledgedBy, type PendingMessage, pendingReducer } from '../../tickets/pending.js';
 import { applyCatchUp, buildThread } from '../../tickets/thread.js';
+import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 import { useTicketAi } from './ai/use-ticket-ai.tsx';
 import { useTicketAssist } from './assist/use-ticket-assist.tsx';
@@ -66,6 +67,7 @@ import { TicketHeader } from './ticket-header.tsx';
 import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
 import { useSpamActions } from './use-spam-actions.tsx';
+import { useTicketActivity } from './use-ticket-activity.js';
 import { useTicketEmail } from './use-ticket-email.tsx';
 import { useTicketRoom } from './use-ticket-realtime.js';
 import { useTicketTags } from './use-ticket-tags.js';
@@ -151,6 +153,7 @@ export function TicketView({
     queryKey: ticketKeys.detail(brandId, ticketId),
     queryFn: () => api.ticket(brandId, ticketId),
   });
+  const activityHistory = useTicketActivity(api, brandId, ticketId, detail.data);
 
   // "Is replying" while the composer holds something unsent (M1-09).
   const { viewers } = useTicketRoom(
@@ -591,7 +594,7 @@ export function TicketView({
 
   const merged = detail.data?.merged ?? [];
   const mergedInto = detail.data?.mergedInto ?? null;
-  const items = buildThread(messages, detail.data?.activity ?? [], pending, merged);
+  const items = buildThread(messages, activityHistory.entries, pending, merged);
 
   // M1-09's two come first; Log time (M1-12) and Mark as spam (M1-11) follow,
   // in the artboard's order. A merged ticket's state is its primary's, so it
@@ -902,6 +905,45 @@ export function TicketView({
             </Box>
           )}
           <TranscriptsProvider value={assist.transcripts}>
+            {activityHistory.older || activityHistory.hasOlder ? (
+              <Box sx={{ display: 'grid', gap: 2, marginBlockEnd: 4 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  role={activityHistory.loading ? 'status' : undefined}
+                >
+                  {t(
+                    activityHistory.loading
+                      ? 'tickets:thread.activityLoading'
+                      : activityHistory.older
+                        ? 'tickets:thread.olderActivityCaption'
+                        : 'tickets:thread.latestActivityCaption',
+                  )}
+                </Typography>
+                {activityHistory.failed ? (
+                  <AlertBanner tone="danger">{t('tickets:thread.activityFailed')}</AlertBanner>
+                ) : null}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Button
+                    disabled={!activityHistory.older || activityHistory.loading}
+                    onClick={activityHistory.loadNewer}
+                  >
+                    {t('tickets:thread.newerActivity')}
+                  </Button>
+                  <Button
+                    disabled={!activityHistory.hasOlder || activityHistory.loading}
+                    onClick={activityHistory.loadOlder}
+                  >
+                    {t('tickets:thread.olderActivity')}
+                  </Button>
+                  {activityHistory.older ? (
+                    <Button onClick={activityHistory.latest}>
+                      {t('tickets:thread.latestActivity')}
+                    </Button>
+                  ) : null}
+                </Box>
+              </Box>
+            ) : null}
             <Thread
               items={items}
               names={names}

@@ -73,19 +73,16 @@ export const runTranscription = async (
         variants: attachments.variants,
         mime: attachments.mime,
         transcriptStatus: attachments.transcriptStatus,
+        origin: attachments.origin,
       })
       .from(attachments)
       .where(eq(attachments.id, payload.attachmentId))
       .limit(1);
     return found;
   });
+  if (row === undefined || row.origin === 'import') return 'skipped';
   const config = await deps.config();
-  if (
-    row === undefined ||
-    row.transcriptStatus === 'done' ||
-    row.transcriptStatus === 'failed' ||
-    config === null
-  ) {
+  if (row.transcriptStatus === 'done' || row.transcriptStatus === 'failed' || config === null) {
     return 'skipped';
   }
 

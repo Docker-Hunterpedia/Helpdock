@@ -41,6 +41,7 @@ export interface WorkspaceFilters {
   readonly tagIds: readonly string[];
   readonly channel: readonly TicketChannel[];
   readonly overdue: boolean;
+  readonly imported?: boolean | undefined;
   readonly q: string;
   readonly sort: TicketSort;
   readonly direction: TicketSortDirection;
@@ -55,6 +56,7 @@ export const EMPTY_FILTERS: WorkspaceFilters = {
   tagIds: [],
   channel: [],
   overdue: false,
+  imported: undefined,
   q: '',
   sort: 'updatedAt',
   direction: 'desc',
@@ -74,6 +76,7 @@ export const filtersOfView = (filters: TicketViewFilters): WorkspaceFilters => (
   tagIds: [...new Set([...(filters.tagId ?? []), ...(filters.tagIds ?? [])])],
   channel: filters.channel ?? [],
   overdue: filters.overdue ?? false,
+  imported: filters.imported,
   q: filters.q ?? '',
   sort: filters.sort,
   direction: filters.direction,
@@ -93,6 +96,7 @@ export const viewFiltersOf = (filters: WorkspaceFilters): TicketViewFiltersInput
     tagIds: some(filters.tagIds),
     channel: some(filters.channel),
     overdue: filters.overdue ? true : undefined,
+    imported: filters.imported,
     q: filters.q === '' ? undefined : filters.q,
     sort: filters.sort,
     direction: filters.direction,
@@ -128,6 +132,7 @@ const PARAM = {
 } as const;
 
 const OVERDUE = 'overdue';
+const IMPORTED = 'imported';
 const SORT = 'sort';
 const DIRECTION = 'dir';
 const SEARCH = 'q';
@@ -148,6 +153,8 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
     tagIds: params.getAll(PARAM.tagIds),
     channel: params.getAll(PARAM.channel) as TicketChannel[],
     overdue: params.get(OVERDUE) === '1',
+    imported:
+      params.get(IMPORTED) === '1' ? true : params.get(IMPORTED) === '0' ? false : undefined,
     q: params.get(SEARCH) ?? '',
     sort: SORTS.includes(sort as TicketSort) ? (sort as TicketSort) : EMPTY_FILTERS.sort,
     direction: params.get(DIRECTION) === 'asc' ? 'asc' : 'desc',
@@ -157,7 +164,7 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
 /** `params` without any filter, keeping the view and anything else it carried. */
 export const withoutFilters = (params: URLSearchParams): URLSearchParams => {
   const next = new URLSearchParams(params);
-  for (const key of [...Object.values(PARAM), OVERDUE, SORT, DIRECTION, SEARCH, CUSTOM]) {
+  for (const key of [...Object.values(PARAM), OVERDUE, IMPORTED, SORT, DIRECTION, SEARCH, CUSTOM]) {
     next.delete(key);
   }
 
@@ -178,6 +185,7 @@ export const withFilters = (
   if (filters.overdue) {
     next.set(OVERDUE, '1');
   }
+  if (filters.imported !== undefined) next.set(IMPORTED, filters.imported ? '1' : '0');
   if (filters.q !== '') {
     next.set(SEARCH, filters.q);
   }
@@ -205,6 +213,7 @@ export const sameFilters = (left: WorkspaceFilters, right: WorkspaceFilters): bo
   sameSet(left.tagIds, right.tagIds) &&
   sameSet(left.channel, right.channel) &&
   left.overdue === right.overdue &&
+  left.imported === right.imported &&
   left.q === right.q &&
   left.sort === right.sort &&
   left.direction === right.direction;
@@ -278,7 +287,8 @@ export const activeFilterCount = (filters: WorkspaceFilters): number =>
   filters.departmentId.length +
   filters.tagIds.length +
   filters.channel.length +
-  (filters.overdue ? 1 : 0);
+  (filters.overdue ? 1 : 0) +
+  (filters.imported === undefined ? 0 : 1);
 
 // ------------------------------------------------------------------ intents
 

@@ -13,6 +13,17 @@ The admin screen built on it is the [ticket workspace](#the-admin-workspace)
 
 ## The model
 
+Local M11 implementation, pending batch verification: imported tickets expose
+`imported: { source, number, url } | null` on workspace responses. Original
+numbers and native IDs are searchable alongside Helpdock's new ticket number.
+The original URL is a navigation link with query strings/fragments removed; an
+unsafe or ambiguous address is omitted. The Source filter distinguishes imported
+and native tickets and can be saved in a view. Every source lookup still narrows
+the ticket's existing brand/department policy. Name-only former agents retain
+their saved display name in message history. The imported activity line retains
+original source dates; history never implies a new delivery to the customer.
+These UI/API changes have not yet passed the deferred regression/browser batch.
+
 ```
 tickets ──< ticket_messages          one thread per ticket, ordered by `seq`
         ──< ticket_activity          who changed what, and how
@@ -286,6 +297,16 @@ Two more things the sanitiser does to a body, which change what is stored:
 it is rendered in the thread, it is department-scoped like the ticket, and
 retention purges it with the ticket. `audit_log` stays what an admin reads.
 
+Local M11 pagination, pending batch verification: ticket details include the
+newest activity page and `activityNextBefore`. The activity endpoint returns
+`activity` plus `nextBefore`; pass that UUID as `before` to read an older page.
+Pages contain at most 100 entries and render oldest first within each page.
+The UUID anchors a row in this same visible ticket, and PostgreSQL compares its
+native timestamp/UUID tuple, retaining sub-millisecond precision. A missing or
+foreign anchor is refused. The workspace offers older/newer/latest controls and
+keeps only one older activity payload in memory, with inactive page caches
+discarded immediately. Message paging remains independently available.
+
 | Action | Written when |
 |---|---|
 | `ticket.created` | A ticket is created |
@@ -299,6 +320,8 @@ retention purges it with the ticket. `audit_log` stays what an admin reads.
 | `ticket.deleted` | An Admin soft-deleted it (M1-08) |
 | `ticket.escalated` | Recorded in `audit_log`, not here: the activity row moves with the ticket |
 | `ticket.source_article` | A widget conversation or web form ticket was opened from a help center article's "Still need help?"; `to` holds `articleId`, `title` and `locale`, and the thread shows "Came from the help center article …" (M5-08) |
+| `ticket.imported` | Imported provenance, original number and dates (local M11 implementation) |
+| `ticket.imported.event` | Original source activity with its preserved actor, date and changes (local M11 implementation) |
 
 `ticket.status.changed` is written for **every** status move. A close or a
 reopen writes it *and* the more specific verb beside it, because a reader of the
@@ -610,7 +633,8 @@ cannot open comes in two kinds (§1.2):
 The named messages are **copied** onto a new ticket: `split_from_id`, the same
 contact and channel, the department and subject the agent chose, the priority
 chosen or the original's, a fresh number, and the default open status. Each copy
-has `copied_from_message_id`, keeps its original `created_at`, and takes the new
+has `copied_from_message_id`, keeps its original `created_at` and historical
+`author_display`, and takes the new
 ticket's own `seq` from 1; a `system` message "Split from HD-1042" follows them,
 and the original gets "Messages split to HD-1043". The new ticket is announced
 with `ticket.created`, which is where M3-02's fresh clocks start; the original's
@@ -623,7 +647,8 @@ ticket answers 404; a `system` message answers 400.
 **Attachments are copied as rows, not bytes.** A copy of a `ready` attachment
 points at the **same object** with the new ticket's `ticket_id`, `message_id`
 and — through the trigger — `department_id`, which is what authorises a
-download through it; `copied_from_attachment_id` names the original.
+download through it; `copied_from_attachment_id` names the original. The copy
+retains the original's `origin`, including imported and channel files.
 `attachments.s3_key` is therefore unique among originals only
 (`attachments_s3_key_original_key`). Rejected and infected rows are not copied,
 and a message whose attachment is still `pending` or `processing` is refused
@@ -749,7 +774,7 @@ which departments it reaches is the policies'.
 | `GET /tickets/:ticketId/messages` | `ticket:read` | The thread after a `seq` |
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
 | `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
-| `GET /tickets/:ticketId/activity` | `ticket:read` | The newest 100 activity entries, oldest first. It does not page yet |
+| `GET /tickets/:ticketId/activity` | `ticket:read` | Bounded activity pages; newest page by default, each page returned oldest first. `before=<entry UUID>` loads an older page; `limit` is 1–100 |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
 | `GET /tickets/:ticketId/spam-sender` | `ticket:read` | Who "Block sender" would block, and whether the dialog offers it (M1-11) |
@@ -1801,6 +1826,14 @@ close: `pending` (created, not delivered yet, or nobody to reach), `sent` (a
 channel delivered it), `rated` (with the rating and comment) or `expired`, and
 the link while it can still be used. The details panel draws it on a
 Satisfaction card with **Copy survey link**, for sharing it another way.
+
+If there is no native survey, the card may show the latest imported historical
+answer instead. An original answer whose scale cannot be established appears as
+`imported_unscored`; expand **Original survey answers** to read its questions and
+values. It has no share link and does not affect score averages. Imported answers
+also appear in the ticket timeline at their original response dates, so older
+answers remain readable when a newer native survey exists. Their history events
+do not trigger satisfaction workflows or send a survey.
 
 **The contact card.** A contact's `stats.csat` is the share of their answered
 surveys rated 4 or 5, as a percentage, over the tickets the viewer can see; null

@@ -384,8 +384,12 @@ shows agents. It has no field that could carry an internal note.
   while the visitor types. An indicator that is not repeated within
   `WIDGET_TYPING_TTL_MS` (6 s) counts as stopped.
 - **Read** tells the agents the visitor has read up to `seq`.
-- **Queue** returns `position`: 1 means next in line. It is `null` once an
-  agent holds the conversation, and when the conversation is closed.
+- **Queue** returns `position`: 1 means next in line. It counts the
+  unassigned, open `chat` conversations of the same department that joined
+  the queue earlier. It is `null` once an agent holds the conversation, when
+  the conversation is closed, and for an imported conversation nobody has
+  continued. An imported conversation joins the queue at the customer's first
+  live message in it, not at its historical creation date.
 - **Transcript** emails this one conversation to the address given. The
   message comes from the brand's outbound email, holds no link that grants
   access, and goes through the outbox. It works only when the brand turned

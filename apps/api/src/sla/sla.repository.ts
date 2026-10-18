@@ -330,6 +330,19 @@ export class SlaRepository {
     return row;
   }
 
+  /** Called only by explicit imported-ticket activation while holding its ticket lock. */
+  async markImportedActivated(
+    tx: DbTransaction,
+    brandId: string,
+    ticketId: string,
+    at: Date,
+  ): Promise<void> {
+    await tx
+      .update(tickets)
+      .set({ importSlaStartedAt: at })
+      .where(and(eq(tickets.brandId, brandId), eq(tickets.id, ticketId)));
+  }
+
   /** Locks the ticket row, so two writers of the same clocks queue rather than race. */
   async lockTicket(tx: DbTransaction, ticketId: string): Promise<void> {
     await tx.execute(sql`SELECT 1 FROM ${tickets} WHERE ${tickets.id} = ${ticketId} FOR UPDATE`);

@@ -21,7 +21,7 @@ import { localeSchema } from './brand.js';
 export const HC_SLUG_MAX = 120;
 export const HC_NAME_MAX = 120;
 export const HC_CATEGORY_DESCRIPTION_MAX = 300;
-export const HC_TITLE_MAX = 200;
+export const HC_TITLE_MAX = 500;
 /** The search description: what a results page shows under the title. */
 export const HC_DESCRIPTION_MAX = 160;
 /** Of the stored, sanitised html. A long article is tens of kilobytes. */
@@ -374,6 +374,13 @@ export const hcMediaPath = (brandId: string, mediaId: string): string =>
 export const HC_MEDIA_PATH_PATTERN =
   /^\/api\/help-center\/brands\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}$/;
 
+/** A locator only; the download route must authorize the current parent article. */
+export const hcImportAssetPath = (brandId: string, assetId: string): string =>
+  `/api/help-center/brands/${brandId}/assets/${assetId}`;
+export const HC_IMPORT_ASSET_PATH_PATTERN =
+  /^\/api\/help-center\/brands\/[0-9a-f-]{36}\/assets\/[0-9a-f-]{36}$/;
+export const hcImportAssetParamSchema = z.strictObject({ brandId: z.uuid(), assetId: z.uuid() });
+
 /** The two kinds of callout the editor offers, and the only two the sanitiser keeps. */
 export const CALLOUT_KINDS = ['tip', 'caution'] as const;
 export type CalloutKind = (typeof CALLOUT_KINDS)[number];
@@ -528,6 +535,8 @@ export type HcChangedVersion = z.infer<typeof hcChangedVersionSchema>;
  * `knowledge.sync` job re-labels its chunks (DOMAIN-RULES §5).
  */
 export const HC_ARTICLE_CHANGED_EVENT = 'help_center.article_changed';
+export const HC_IMPORTED_EVENT = 'help_center.imported';
+export const hcImportedPayloadSchema = z.strictObject({ runId: z.uuid() });
 /** `help_center.structure_changed`: a category or section was renamed, moved or removed. */
 export const HC_STRUCTURE_CHANGED_EVENT = 'help_center.structure_changed';
 /** `help_center.access_changed`: the brand's help center became public or internal-only. */

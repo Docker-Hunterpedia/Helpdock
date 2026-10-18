@@ -30,6 +30,7 @@ import {
   type SQL,
   sql,
 } from 'drizzle-orm';
+import { purgeImportStagingBatch } from '../imports/retention.js';
 import type { PurgeableAttachment } from '../media/object-purge.js';
 import type { RetentionWindowColumns } from './retention-rules.js';
 
@@ -77,6 +78,9 @@ const spamTicketCondition = (tx: DbTransaction, brandId: string, cutoff: Date): 
 export type TicketPurgeKind = 'closed' | 'spam';
 
 export class RetentionRepository {
+  async purgeImportStagingBatch(tx: DbTransaction, brandId: string, now: Date, limit: number) {
+    return purgeImportStagingBatch(tx, { brandId, now, limit });
+  }
   // ----------------------------------------------------------------- settings
 
   async find(tx: DbTransaction, brandId: string): Promise<RetentionSettingsRow | undefined> {

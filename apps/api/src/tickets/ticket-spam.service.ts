@@ -7,10 +7,10 @@ import { getTx } from '../context/request-context.js';
 import type { BlockListService } from '../ticketing/block-list.service.js';
 import { tagsOfTicket } from '../ticketing/ticket-tags.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
+import { ticketWithSource } from './imported-ticket-sources.js';
 import type { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
 import { senderOf } from './spam-sender.js';
 import { activityActorFor } from './ticket-activity.js';
-import { toTicket } from './ticket-view.js';
 import type { TicketRepository } from './tickets.repository.js';
 
 /**
@@ -84,7 +84,7 @@ export class TicketSpamService {
       await this.#block(tx, brandId, found.ticket, blocker);
     }
 
-    return toTicket(marked.ticket, marked.status, await tagsOfTicket(tx, ticketId));
+    return ticketWithSource(tx, marked.ticket, marked.status, await tagsOfTicket(tx, ticketId));
   }
 
   /** "Not spam": back to the brand's default open status, as an agent reopen. */
@@ -97,7 +97,7 @@ export class TicketSpamService {
       found.status,
     );
 
-    return toTicket(landed.ticket, landed.status, await tagsOfTicket(tx, ticketId));
+    return ticketWithSource(tx, landed.ticket, landed.status, await tagsOfTicket(tx, ticketId));
   }
 
   // ------------------------------------------------------------------

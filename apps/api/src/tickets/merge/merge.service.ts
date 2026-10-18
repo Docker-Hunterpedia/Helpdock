@@ -25,6 +25,7 @@ import type { Principal } from '../../auth/principal.js';
 import { getTx } from '../../context/request-context.js';
 import { MediaRepository } from '../../media/media.repository.js';
 import { replaceTicketTags, tagsOfTicket } from '../../ticketing/ticket-tags.js';
+import { ticketWithSource } from '../imported-ticket-sources.js';
 import { TicketLifecycleHooks } from '../lifecycle/hooks.js';
 import { TicketLifecycleRepository } from '../lifecycle/lifecycle.repository.js';
 import {
@@ -34,7 +35,6 @@ import {
 import { TicketLifecycleFailure } from '../lifecycle/lifecycle-failure.js';
 import { activityActorFor, writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
-import { toTicket } from '../ticket-view.js';
 import { TicketRepository, type TicketWithStatus } from '../tickets.repository.js';
 import { TicketsService } from '../tickets.service.js';
 import { MergeRepository } from './merge.repository.js';
@@ -181,8 +181,13 @@ export class MergeService {
     await this.#announce(context, primaryAfter, primaryAfter.departmentId);
 
     return {
-      primary: toTicket(primaryAfter, primary.status, await tagsOfTicket(tx, primaryAfter.id)),
-      secondary: toTicket(moved, merged, await tagsOfTicket(tx, secondaryId)),
+      primary: await ticketWithSource(
+        tx,
+        primaryAfter,
+        primary.status,
+        await tagsOfTicket(tx, primaryAfter.id),
+      ),
+      secondary: await ticketWithSource(tx, moved, merged, await tagsOfTicket(tx, secondaryId)),
     };
   }
 
@@ -266,8 +271,13 @@ export class MergeService {
     await this.#announce(context, primaryAfter, primaryAfter.departmentId);
 
     return {
-      primary: toTicket(primaryAfter, primary.status, await tagsOfTicket(tx, primaryAfter.id)),
-      secondary: toTicket(moved, restored, await tagsOfTicket(tx, secondaryId)),
+      primary: await ticketWithSource(
+        tx,
+        primaryAfter,
+        primary.status,
+        await tagsOfTicket(tx, primaryAfter.id),
+      ),
+      secondary: await ticketWithSource(tx, moved, restored, await tagsOfTicket(tx, secondaryId)),
     };
   }
 
@@ -535,10 +545,16 @@ export class MergeService {
         kind: message.kind,
         authorType: message.authorType,
         authorId: message.authorId,
+        authorDisplay: message.authorDisplay,
+        importDetails: message.importDetails,
         bodyHtml: message.bodyHtml,
         bodyText: message.bodyText,
         channel: message.channel,
         copiedFromMessageId: message.id,
+        importSourceAccountKey: message.importSourceAccountKey,
+        externalMessageId:
+          message.importSourceAccountKey === null ? null : message.externalMessageId,
+        email: message.email,
         createdAt: message.createdAt,
       });
       await this.#merges.insertAttachmentCopies(

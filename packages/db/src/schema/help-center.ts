@@ -1,12 +1,15 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
+  check,
   index,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
@@ -14,6 +17,7 @@ import {
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
 import {
+  attachmentScanStatusEnum,
   hcAccessEnum,
   hcArticleStatusEnum,
   hcMediaPurposeEnum,
@@ -54,6 +58,8 @@ export const hcCategories = pgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    importedParentExternalId: varchar('imported_parent_external_id', { length: 200 }),
+    importedDescriptions: jsonb('imported_descriptions').$type<Record<string, string>>(),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -83,6 +89,10 @@ export const hcSections = pgTable(
       .references(() => hcCategories.id, { onDelete: 'no action' }),
     slug: varchar('slug', { length: 120 }).notNull(),
     names: jsonb('names').$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    importedDescriptions: jsonb('imported_descriptions').$type<Record<string, string>>(),
+    importedParentSectionExternalId: varchar('imported_parent_section_external_id', {
+      length: 200,
+    }),
     position: integer('position').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -125,6 +135,7 @@ export const hcArticles = pgTable(
   },
   (table) => [
     uniqueIndex('hc_articles_brand_slug_key').on(table.brandId, table.slug),
+    unique('hc_articles_brand_id_key').on(table.brandId, table.id),
     index('hc_articles_section_idx').on(table.sectionId, table.position),
   ],
 );
@@ -163,11 +174,14 @@ export const hcArticleVersions = pgTable(
     locale: localeEnum('locale').notNull(),
     status: hcArticleStatusEnum('status').notNull().default('draft'),
     visibility: hcVisibilityEnum('visibility').notNull().default('public'),
-    title: varchar('title', { length: 200 }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
     description: varchar('description', { length: 160 }).notNull().default(''),
+    importedDescription: text('imported_description'),
+    importedPublishedDescription: text('imported_published_description'),
+    importEmbeddingDeferred: boolean('import_embedding_deferred').notNull().default(false),
     /** Sanitised on the way in (`sanitizeArticleHtml`), never on the way out. */
     bodyHtml: text('body_html').notNull().default(''),
-    publishedTitle: varchar('published_title', { length: 200 }),
+    publishedTitle: varchar('published_title', { length: 500 }),
     publishedDescription: varchar('published_description', { length: 160 }),
     publishedBodyHtml: text('published_body_html'),
     /** Extracted from the published html, for search (M5-05) and chunking (M7). */
@@ -252,6 +266,10 @@ export const hcMedia = pgTable(
     originalName: text('original_name').notNull(),
     /** Declared at presign; rewritten from the magic bytes by the worker. */
     mime: text('mime').notNull(),
+    kind: varchar('kind', { length: 8 }).$type<'image' | 'file'>().notNull().default('image'),
+    scanStatus: attachmentScanStatusEnum('scan_status').notNull().default('skipped'),
+    /** Audit only: immutable prepared content outlives transient import runs. */
+    importedByRunId: uuid('imported_by_run_id'),
     size: bigint('size', { mode: 'number' }).notNull(),
     status: hcMediaStatusEnum('status').notNull().default('pending'),
     /** An article image, or the site's logo or favicon (M5-06), which decides the largest edge. */
@@ -266,7 +284,14 @@ export const hcMedia = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp('processed_at', { withTimezone: true }),
   },
-  (table) => [uniqueIndex('hc_media_s3_key_key').on(table.s3Key)],
+  (table) => [
+    uniqueIndex('hc_media_s3_key_key').on(table.s3Key),
+    unique('hc_media_brand_id_key').on(table.brandId, table.id),
+    check('hc_media_kind_check', sql`${table.kind} IN ('image', 'file')`),
+    index('hc_media_import_candidates_idx')
+      .on(table.createdAt, table.id)
+      .where(sql`${table.importedByRunId} IS NOT NULL`),
+  ],
 );
 
 export type HcCategory = typeof hcCategories.$inferSelect;

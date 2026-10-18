@@ -491,3 +491,12 @@ describe('safeFetch, argument validation', () => {
     );
   });
 });
+
+it('refuses a redirect to a host outside the importer allow-list before connecting', async () => {
+  const error = await caught(
+    safeFetch(url('/cross-host-redirect'), {}, localPolicy({ allowedHosts: ['primary.test'] })),
+  );
+  expect(error.code).toBe('redirect-blocked');
+  expect(error.reason).toBe('host-not-allowed');
+  expect(requests.map((request) => request.path)).toEqual(['/cross-host-redirect']);
+});

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Attachment as AttachmentRow, DbTransaction } from '@helpdock/db';
 import type { JobLogger } from '@helpdock/jobs';
@@ -11,6 +11,7 @@ import type { FileScanner, ScanVerdict } from '../media/scanner.js';
 import type {
   ObjectHead,
   ObjectStorage,
+  PresignDownloadOptions,
   PresignedDownload,
   PresignedUpload,
 } from '../media/storage.js';
@@ -28,6 +29,7 @@ export class FakeStorage implements ObjectStorage {
   readonly #root: string;
   /** Every key ever deleted, so a suite can assert the original was discarded. */
   readonly removed: string[] = [];
+  readonly presignedDownloads: PresignDownloadOptions[] = [];
 
   constructor(root: string) {
     this.#root = root;
@@ -55,7 +57,9 @@ export class FakeStorage implements ObjectStorage {
     };
   }
 
-  async presignDownload({ key }: { key: string }): Promise<PresignedDownload> {
+  async presignDownload(options: PresignDownloadOptions): Promise<PresignedDownload> {
+    this.presignedDownloads.push({ ...options });
+    const { key } = options;
     return {
       url: `https://bucket.test/${encodeURIComponent(key)}`,
       expiresAt: new Date(Date.now() + 300_000),
@@ -87,6 +91,7 @@ export class FakeStorage implements ObjectStorage {
 
   async remove(key: string): Promise<void> {
     this.removed.push(key);
+    await rm(this.#path(key), { force: true });
   }
 
   /** What is in the bucket at a key, for a suite that wants to look at bytes. */
@@ -184,6 +189,13 @@ export const fakeRepository = (state: FakeAttachmentState): MediaRepository =>
       state.row = { ...state.row, ...values } as AttachmentRow;
       return state.row;
     },
+    setImportedAssetStatus: async (
+      _tx: DbTransaction,
+      _asset: unknown,
+      values: Record<string, unknown>,
+    ) => {
+      state.row = { ...state.row, ...values } as AttachmentRow;
+    },
   }) as unknown as MediaRepository;
 
 export const attachmentRow = (overrides: Partial<AttachmentRow> = {}): AttachmentRow =>
@@ -194,6 +206,7 @@ export const attachmentRow = (overrides: Partial<AttachmentRow> = {}): Attachmen
     departmentId: '01937f5e-7e53-7000-8000-00000000000d',
     messageId: null,
     uploaderType: 'staff',
+    origin: 'upload',
     uploaderId: '01937f5e-7e53-7000-8000-000000000001',
     s3Key: 'brands/a/tickets/b/c/original',
     originalName: 'upload.bin',

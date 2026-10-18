@@ -9,8 +9,8 @@ import type {
   MessageCreateRequest,
   MessagePageQuery,
   Ticket,
-  TicketActivityEntry,
   TicketActivityList,
+  TicketActivityQuery,
   TicketCreateRequest,
   TicketDetail,
   TicketList,
@@ -53,6 +53,7 @@ import { paragraphsFrom } from '../ticketing/template-render.js';
 import type { TemplatesService } from '../ticketing/templates.service.js';
 import { replaceTicketTags, tagsOfTicket, tagsOfTickets } from '../ticketing/ticket-tags.js';
 import { InvalidCursorError } from './cursor.js';
+import { importedTicketSources, ticketWithSource } from './imported-ticket-sources.js';
 import type { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import {
   escalateIntoUnseenDepartment,
@@ -116,7 +117,7 @@ export interface ActivityBundle {
   readonly to: Record<string, unknown>;
 }
 
-/** How many activity rows a ticket read returns. The thread pages; this does not yet. */
+/** First activity page; older history uses a scoped UUID anchor without losing timestamp precision. */
 const ACTIVITY_PAGE = 100;
 
 /** What a creation writes, once the request and its template have both spoken. */
@@ -197,6 +198,10 @@ export class TicketsService {
     const { rows, search } = await this.#read(() => this.#tickets.listTickets(tx, reader, query));
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
+    const imported = await importedTicketSources(
+      tx,
+      page.filter(({ ticket }) => ticket.importSource !== null).map(({ ticket }) => ticket.id),
+    );
     // M1-06: one read of `ticket_tags` for the whole page rather than one per
     // row, which is how a list of fifty becomes fifty-one round trips. M1-15
     // does the same for the contact's name.
@@ -226,6 +231,7 @@ export class TicketsService {
           tags.get(ticket.id) ?? [],
           contactNames === undefined ? undefined : ticketContactOf(ticket.contactId, contactNames),
           sla.get(ticket.id) ?? null,
+          imported.get(ticket.id) ?? null,
         ),
       ),
       nextCursor:
@@ -260,6 +266,7 @@ export class TicketsService {
     const summary = (await this.#sla.summaries(tx, found.ticket.brandId, [found.ticket], now)).get(
       ticketId,
     );
+    const activity = await this.#activityPage(tx, ticketId, { limit: ACTIVITY_PAGE });
 
     return {
       ticket: toTicket(
@@ -268,6 +275,9 @@ export class TicketsService {
         await tagsOfTicket(tx, ticketId),
         contact,
         summary ?? null,
+        found.ticket.importSource
+          ? ((await importedTicketSources(tx, [ticketId])).get(ticketId) ?? null)
+          : null,
       ),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.
@@ -275,7 +285,8 @@ export class TicketsService {
         after: 0,
         limit: TICKET_PAGE_SIZE_DEFAULT,
       }),
-      activity: await this.#activityOf(tx, ticketId),
+      activity: activity.activity,
+      activityNextBefore: activity.nextBefore,
       csat: await this.#csat.forTicket(tx, found.ticket.brandId, ticketId),
       sla,
       // M1-09: what was merged into this ticket, where it was merged to, and
@@ -296,11 +307,14 @@ export class TicketsService {
     return this.#messagePage(tx, ticketId, query);
   }
 
-  async activity(ticketId: string): Promise<TicketActivityList> {
+  async activity(
+    ticketId: string,
+    query: TicketActivityQuery = { limit: ACTIVITY_PAGE },
+  ): Promise<TicketActivityList> {
     const tx = getTx();
     await this.#require(tx, ticketId);
 
-    return { activity: await this.#activityOf(tx, ticketId) };
+    return this.#activityPage(tx, ticketId, query);
   }
 
   // ------------------------------------------------------------------- writes
@@ -420,9 +434,10 @@ export class TicketsService {
     await this.#routeIfUnassigned(tx, brandId, ticket.id, ticket.departmentId, ticket.assigneeId);
 
     return {
-      ticket: toTicket(filed, status, await tagsOfTicket(tx, ticket.id)),
+      ticket: await ticketWithSource(tx, filed, status, await tagsOfTicket(tx, ticket.id)),
       messages: { messages: [toTicketMessage(message)], nextAfter: null },
-      activity: await this.#activityOf(tx, ticket.id),
+      activity: (await this.#activityPage(tx, ticket.id, { limit: ACTIVITY_PAGE })).activity,
+      activityNextBefore: null,
     };
   }
 
@@ -514,7 +529,7 @@ export class TicketsService {
     }
 
     if (Object.keys(values).length === 0) {
-      return toTicket(ticket, status, await tagsOfTicket(tx, ticketId));
+      return ticketWithSource(tx, ticket, status, await tagsOfTicket(tx, ticketId));
     }
 
     /**
@@ -636,7 +651,7 @@ export class TicketsService {
       );
     }
 
-    return toTicket(updated, nextStatus, await tagsOfTicket(tx, ticketId));
+    return ticketWithSource(tx, updated, nextStatus, await tagsOfTicket(tx, ticketId));
   }
 
   /**
@@ -903,10 +918,17 @@ export class TicketsService {
    * same limit would return the first hundred and silently drop every status
    * change and reassignment since.
    */
-  async #activityOf(tx: DbTransaction, ticketId: string): Promise<TicketActivityEntry[]> {
-    const rows = await this.#tickets.activityOf(tx, ticketId, ACTIVITY_PAGE);
-
-    return rows.reverse().map(toTicketActivity);
+  async #activityPage(
+    tx: DbTransaction,
+    ticketId: string,
+    query: TicketActivityQuery,
+  ): Promise<TicketActivityList> {
+    if (query.before && !(await this.#tickets.activityCursorExists(tx, ticketId, query.before)))
+      throw new BadRequestException('ticket.activity-cursor-invalid');
+    const rows = await this.#tickets.activityOf(tx, ticketId, query.limit + 1, query.before);
+    const page = rows.slice(0, query.limit);
+    const nextBefore = rows.length > query.limit ? (page.at(-1)?.id ?? null) : null;
+    return { activity: page.reverse().map(toTicketActivity), nextBefore };
   }
 
   /**

@@ -61,6 +61,8 @@ export const ROUTES = {
   automationRule: '/admin/automation/rules/:ruleId',
   /** The brand's own settings: General, Domains (M5-07) and Danger zone (M1-14). */
   brand: '/admin/brand',
+  brandImport: '/admin/brand/import',
+  importRun: '/admin/brand/import/:runId',
   /** One tab of it. `/admin/brand` alone redirects to the first built one. */
   brandTab: '/admin/brand/:tab',
   /** How customers reach the brand (M2-08): Mailboxes, then M2-05's Outgoing email. */
@@ -192,6 +194,8 @@ export const developersRoute = (tab: string): string => `${ROUTES.developers}/${
 
 /** One tab of the Brand page, by its url segment. */
 export const brandRoute = (tab: string): string => `${ROUTES.brand}/${tab}`;
+export const importRunRoute = (runId: string): string =>
+  `${ROUTES.brandImport}/${encodeURIComponent(runId)}`;
 
 /** Where a sign-in lands when nothing asked for a particular screen. */
 export const DEFAULT_SIGNED_IN_ROUTE = ROUTES.tickets;

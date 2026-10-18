@@ -1,4 +1,9 @@
-import { type HcLocale, hcSlugSchema, localeSchema } from '@helpdock/schemas';
+import {
+  HC_IMPORT_ASSET_PATH_PATTERN,
+  type HcLocale,
+  hcSlugSchema,
+  localeSchema,
+} from '@helpdock/schemas';
 
 /**
  * The help center's addresses (M5-03). The language is the first segment of
@@ -165,6 +170,10 @@ export class SiteLinks {
    * link to another article; on the fallback that path needs the base.
    */
   bodyHref(href: string): string {
+    const prefix = `/api/help-center/brands/${this.#brandId}/assets/`;
+    // The fallback staff cookie is intentionally scoped to /hc/<brand>, rather than /api.
+    if (this.fallback && href.startsWith(prefix) && HC_IMPORT_ASSET_PATH_PATTERN.test(href))
+      return `${this.base}/_hd/assets/${href.slice(prefix.length)}`;
     return this.fallback && /^\/(?:en|ar)(?:\/|$)/.test(href) ? `${this.base}${href}` : href;
   }
 }

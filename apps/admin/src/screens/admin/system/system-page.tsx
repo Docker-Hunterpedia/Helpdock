@@ -7,6 +7,7 @@ import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
 import { secondsSince } from './format.js';
 import { HealthCards } from './health-cards.js';
+import { ImportsCard } from './imports-card.js';
 import { LlmSpendCard } from './llm-spend-card.js';
 import { PendingDeletionsCard } from './pending-deletions-card.js';
 import { ProductMetricsRow } from './product-metrics-row.js';
@@ -149,6 +150,7 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
           <Box sx={{ display: 'grid', gap: 4 }}>
             <QueuesCard summary={data.queues} api={client} />
             <ChannelsCard channels={data.channels} />
+            <ImportsCard health={data.imports} api={client} />
           </Box>
 
           <Box sx={{ display: 'grid', gap: 4 }}>

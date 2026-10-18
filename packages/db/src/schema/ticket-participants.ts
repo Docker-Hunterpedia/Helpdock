@@ -44,7 +44,7 @@ export const ticketParticipants = pgTable(
     contactId: uuid('contact_id')
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
-    /** The normalised email it was added under; null when a merge brought a contact with none. */
+    /** The normalized email it was added under; null for merged or imported contacts without one. */
     address: text('address'),
     source: ticketParticipantSourceEnum('source').notNull(),
     /** The staff member who added it; null for an inbound email or a deleted account. */

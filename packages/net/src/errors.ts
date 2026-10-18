@@ -5,6 +5,7 @@
  * is any later hop failing any check, with the underlying reason in `reason`.
  */
 export type SafeFetchErrorCode =
+  | 'host-not-allowed'
   | 'invalid-url'
   | 'scheme-not-allowed'
   | 'credentials-in-url'

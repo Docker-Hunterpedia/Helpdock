@@ -5,7 +5,7 @@ import {
   type OutboxEventHandler,
   registerEventHandler,
 } from '@helpdock/jobs';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { ATTACHMENT_EVENTS, attachmentReadyPayloadSchema } from '../media/attachment-events.js';
 import type { TranscriptionConfigReader } from './transcription-config.js';
 
@@ -42,6 +42,8 @@ export const createTranscriptionHandler =
       .where(
         and(
           eq(attachments.id, ready.attachmentId),
+          eq(attachments.brandId, brandId),
+          ne(attachments.origin, 'import'),
           eq(attachments.kind, 'audio'),
           isNull(attachments.transcriptStatus),
         ),

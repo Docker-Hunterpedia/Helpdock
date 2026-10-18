@@ -15,6 +15,7 @@ import type {
   Ticket,
   TicketActivityEntry,
   TicketActivityList,
+  TicketActivityQuery,
   TicketAiCalls,
   TicketAiState,
   TicketCc,
@@ -54,6 +55,7 @@ import {
   renderSegments,
   splitName,
   TICKET_PAGE_SIZE_DEFAULT,
+  ticketActivityQuerySchema,
   UNMERGE_WINDOW_MS,
 } from '@helpdock/schemas';
 import { ContactError } from '../contacts/api.js';
@@ -80,6 +82,7 @@ import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { MockMacros } from '../ticketing/mock-macros.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import { MOCK_IMPORTED_CSAT, mockImportedCsatEvent } from './mock-imported-csat.js';
 import { metaSeed } from './mock-meta-seed.js';
 import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
@@ -608,6 +611,16 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       authorType: 'contact',
       channel: 'form',
       bodyText: 'Could you send me the transcript of the chat I had this morning?',
+      importDetails: {
+        status: 'SUCCESS',
+        channel: 'EMAIL',
+        direction: 'in',
+        authorKind: 'customer',
+        authorType: 'END_USER',
+        mailSubject: 'Original transcript request',
+        mailDate: 'Fri, 01 Nov 2013 15:00:00 +0530',
+        mailReturnPath: '<bounce@example.test>',
+      },
       createdAt: at(-11 * DAY),
     }),
   ];
@@ -804,6 +817,8 @@ export class MockTicketsApi implements TicketsApi {
     this.#tickets = seeded.tickets;
     this.#messages = seeded.messages;
     this.#activity = seeded.activity;
+    this.#activity.push(mockImportedCsatEvent(MOCK_TICKET_TRANSCRIPT));
+    this.#csat.set(MOCK_TICKET_TRANSCRIPT, MOCK_IMPORTED_CSAT);
     // The closed ticket on the artboard was rated; the others have not closed.
     this.#csat.set(MOCK_TICKET_CLOSED, {
       state: 'rated',
@@ -874,11 +889,13 @@ export class MockTicketsApi implements TicketsApi {
 
   async ticket(_brandId: string, ticketId: string): Promise<TicketDetail> {
     const ticket = this.#require(ticketId);
+    const activity = this.#activityPage(ticketId, { limit: 100 });
 
     return Promise.resolve({
       ticket: this.#withContact(ticket),
       messages: this.#page(ticketId, 0),
-      activity: this.#activityOf(ticketId),
+      activity: activity.activity,
+      activityNextBefore: activity.nextBefore,
       csat: this.#csat.get(ticketId) ?? null,
       sla: mockSlaOf(ticket, this.#now),
       ...this.#mergeView(ticket),
@@ -891,10 +908,14 @@ export class MockTicketsApi implements TicketsApi {
     return Promise.resolve(this.#page(ticketId, after));
   }
 
-  async activity(_brandId: string, ticketId: string): Promise<TicketActivityList> {
+  async activity(
+    _brandId: string,
+    ticketId: string,
+    query: TicketActivityQuery = { limit: 100 },
+  ): Promise<TicketActivityList> {
     this.#require(ticketId);
 
-    return Promise.resolve({ activity: this.#activityOf(ticketId) });
+    return this.#activityPage(ticketId, ticketActivityQuerySchema.parse(query));
   }
 
   async create(_brandId: string, request: TicketCreateRequest): Promise<TicketDetail> {
@@ -1658,6 +1679,20 @@ export class MockTicketsApi implements TicketsApi {
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
+  #activityPage(ticketId: string, query: TicketActivityQuery): TicketActivityList {
+    const rows = this.#activityOf(ticketId).sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id),
+    );
+    const cursor = query.before ? rows.findIndex((entry) => entry.id === query.before) : -1;
+    if (query.before && cursor === -1) throw new Error('ticket.activity-cursor-invalid');
+    const page = rows.slice(cursor + 1, cursor + query.limit + 2);
+    const visible = page.slice(0, query.limit);
+    return {
+      activity: visible.reverse(),
+      nextBefore: page.length > query.limit ? (page[query.limit - 1]?.id ?? null) : null,
+    };
+  }
+
   #nextSeq(ticketId: string): number {
     return (
       this.#messages
@@ -1878,8 +1913,10 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     assignee &&
     (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
     (query.overdue !== true || isOverdue(ticket, now)) &&
+    (query.imported === undefined || Boolean(ticket.imported) === query.imported) &&
     (term === '' ||
       ticket.subject.toLowerCase().includes(term) ||
+      ticket.imported?.number?.toLowerCase() === (term.startsWith('#') ? term.slice(1) : term) ||
       `${ticket.prefix}-${ticket.number}`.toLowerCase().includes(term))
   );
 };

@@ -73,6 +73,7 @@ export const ticketParticipantSourceEnum = pgEnum('ticket_participant_source', [
   'agent',
   'email',
   'merge',
+  'import',
 ]);
 
 /** What became of a possible-duplicate suggestion (DOMAIN-RULES §4.4). */
@@ -317,7 +318,12 @@ export const emailDeliveryKindEnum = pgEnum('email_delivery_kind', [
  * the widget's inline card, or a Telegram button. A Telegram tap records the
  * score alone and leaves the link open for a comment (`Telegram/Chat-EN`).
  */
-export const csatAnswerChannelEnum = pgEnum('csat_answer_channel', ['link', 'widget', 'telegram']);
+export const csatAnswerChannelEnum = pgEnum('csat_answer_channel', [
+  'link',
+  'widget',
+  'telegram',
+  'import',
+]);
 
 /**
  * Where an outbound email is. `failed` is the dead-letter state an Admin sees
@@ -527,3 +533,63 @@ export const metaDeliveryStatusEnum = pgEnum('meta_delivery_status', [
   'failed',
   'refused',
 ]);
+
+export const importSourceEnum = pgEnum('import_source', [
+  'zendesk',
+  'freshdesk',
+  'zohodesk',
+  'helpscout',
+  'intercom',
+  'gorgias',
+  'zammad',
+  'front',
+  'file',
+]);
+export const importModeEnum = pgEnum('import_mode', ['full', 'delta']);
+export const importStatusEnum = pgEnum('import_status', [
+  'draft',
+  'connecting',
+  'extracting',
+  'awaiting_mapping',
+  'dry_run',
+  'ready',
+  'loading',
+  'finishing',
+  'completed',
+  'failed',
+  'cancelled',
+  'paused',
+]);
+export const importEntityEnum = pgEnum('import_entity', [
+  'user',
+  'contact',
+  'organization',
+  'group',
+  'field',
+  'tag',
+  'ticket',
+  'message',
+  'attachment',
+  'csat',
+  'category',
+  'section',
+  'article',
+  'activity',
+]);
+export const importRecordStatusEnum = pgEnum('import_record_status', [
+  'staged',
+  'loaded',
+  'skipped',
+  'failed',
+]);
+export const importMappingKindEnum = pgEnum('import_mapping_kind', [
+  'status',
+  'priority',
+  'group',
+  'agent',
+  'field',
+  'tag',
+  'channel',
+]);
+export const importLogLevelEnum = pgEnum('import_log_level', ['info', 'warning', 'error']);
+export const attachmentOriginEnum = pgEnum('attachment_origin', ['upload', 'channel', 'import']);

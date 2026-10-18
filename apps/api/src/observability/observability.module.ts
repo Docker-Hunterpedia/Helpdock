@@ -18,6 +18,7 @@ import type { Logger } from '../logging/logger.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
 import { DB, ENV, REDIS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
+import { ImportHealthController } from './import-health.controller.js';
 import { MetricsController } from './metrics.controller.js';
 import { createMetrics, type Metrics } from './metrics.js';
 import {
@@ -135,7 +136,7 @@ export class ObservabilityModule {
   static forRoot({ logger, bootFacts, signingKeys }: ObservabilityModuleOptions): DynamicModule {
     return {
       module: ObservabilityModule,
-      controllers: [MetricsController, SystemController],
+      controllers: [MetricsController, SystemController, ImportHealthController],
       providers: [
         { provide: OBSERVABILITY_LOGGER, useValue: logger },
         { provide: BOOT_FACTS, useValue: bootFacts },

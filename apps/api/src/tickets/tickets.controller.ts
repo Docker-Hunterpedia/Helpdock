@@ -29,6 +29,7 @@ import {
   MessageCreateRequestDto,
   MessagePageQueryDto,
   TicketActivityListDto,
+  TicketActivityQueryDto,
   TicketBrandParamDto,
   TicketCreateRequestDto,
   TicketDetailDto,
@@ -168,8 +169,9 @@ export class TicketsController {
   @ZodSerializerDto(TicketActivityListDto)
   async activity(
     @Param(new ZodValidationPipe(TicketParamDto)) { ticketId }: TicketParamDto,
+    @Query(new ZodValidationPipe(TicketActivityQueryDto)) query: TicketActivityQueryDto,
   ): Promise<TicketActivityList> {
-    return this.#tickets.activity(ticketId);
+    return this.#tickets.activity(ticketId, query);
   }
 
   /**

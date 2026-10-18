@@ -14,6 +14,7 @@ import { brands } from './brands.js';
 import { departments } from './departments.js';
 import {
   attachmentKindEnum,
+  attachmentOriginEnum,
   attachmentRejectReasonEnum,
   attachmentScanStatusEnum,
   attachmentStatusEnum,
@@ -65,6 +66,7 @@ export const attachments = pgTable(
      * reads the keys before it deletes.
      */
     messageId: uuid('message_id').references(() => ticketMessages.id, { onDelete: 'cascade' }),
+    origin: attachmentOriginEnum('origin').notNull().default('upload'),
     uploaderType: attachmentUploaderTypeEnum('uploader_type').notNull(),
     /**
      * Text and no foreign key, for the same reason as `ticket_messages.author_id`:

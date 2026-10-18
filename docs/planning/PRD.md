@@ -96,7 +96,7 @@ Update this table in the same PR that changes a milestone's status.
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
 | 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | shipped | 2026-10-11 | 2026-10-13 |
-| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | in progress | 2026-10-13 | |
+| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | implemented; [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) validation/review, merge pending | 2026-10-13 | |
 | | **Total** | | **60–78** | | | |
 
 Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
@@ -447,19 +447,25 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M1, M3, M5, M8. Part 
 | M11-16 | Admin: Brand › Import with the wizard (source, connect, scope, map, dry run, import, done) | R §4.10 |
 | M11-17 | Imported tickets in the workspace: "Imported from" chip, activity line, view filter, System page card | DESIGN §6.3 |
 | M11-18 | Import docs: `docs/guides/importing.md` with the cutover runbook; retention, reports, tickets guides | A §2 |
-| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. May ship after 1.0 | |
+| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. Deferred to later work by the owner on 2026-10-17; not required for the current combined M11 PR | |
+
+The 2026-10-18 owner-review corrections pass the named suites in the
+[milestone evidence index](../in-development/M11-sso-and-migration.md#evidence-index-2026-10-18)
+and all 25 checks on implementation commit `1e053b1`, including the three native
+reference imports. PR #215 still requires owner review and merge; no release is
+recorded here. Real-provider runs remain in External dependencies.
 
 Exit criteria:
 
-- [ ] A staff member signs in through an OIDC IdP and a SAML IdP; the first sign-in creates the account and memberships from the IdP's groups; a group removed in the IdP removes the matching SSO role at the next sign-in.
-- [ ] With SSO enforced, password, magic link and OAuth are refused for everyone except the break-glass install admin.
-- [ ] Zendesk, Freshdesk and Zoho Desk accounts (stand-ins with the reference dataset) import into a brand with every thread, author, date, note, attachment, tag, field and assignee intact.
-- [ ] An import sends nothing: no email, Telegram or Meta send, webhook, rule run, SLA clock, notification or AI call exists for imported tickets.
-- [ ] Reports show the imported history on its original days.
-- [ ] A repeated import writes nothing, a delta brings only changes, and a resumed import loses and duplicates nothing.
-- [ ] A CSV from a tool without a connector imports through the manual mapper.
-- [ ] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6); vendor credentials are never returned and are deleted when a run ends.
-- [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+- [x] A staff member signs in through an OIDC IdP and a SAML IdP; the first sign-in creates the account and memberships from the IdP's groups; a group removed in the IdP removes the matching SSO role at the next sign-in.
+- [x] With SSO enforced, password, magic link and OAuth are refused for everyone except the break-glass install admin.
+- [x] Zendesk, Freshdesk and Zoho Desk accounts (stand-ins with the reference dataset) import into a brand with every thread, author, date, note, attachment, tag, field and assignee intact.
+- [x] An import sends nothing: no email, Telegram or Meta send, webhook, rule run, SLA clock, notification or AI call exists for imported tickets.
+- [x] Reports show the imported history on its original days.
+- [x] A repeated import writes nothing, a delta brings only changes, and a resumed import loses and duplicates nothing.
+- [x] A CSV from a tool without a connector imports through the manual mapper.
+- [x] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6); vendor credentials are never returned and are deleted when a run ends.
+- [x] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
 
 ---
 

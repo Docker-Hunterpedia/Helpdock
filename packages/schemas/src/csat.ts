@@ -38,8 +38,10 @@ export const csatRatingSchema = z.int().min(CSAT_RATING_MIN).max(CSAT_RATING_MAX
  *   message landed, or the widget card was offered.
  * - `rated`: the customer answered; `rating` and `comment` are filled.
  * - `expired`: thirty days passed without an answer.
+ * - `imported_unscored`: an original answer whose historical scale cannot be
+ *   established. It has a date and original answers, but no comparable score.
  */
-export const csatStateSchema = z.enum(['pending', 'sent', 'rated', 'expired']);
+export const csatStateSchema = z.enum(['pending', 'sent', 'rated', 'expired', 'imported_unscored']);
 export type CsatState = z.infer<typeof csatStateSchema>;
 
 /**
@@ -49,6 +51,16 @@ export type CsatState = z.infer<typeof csatStateSchema>;
  */
 export const csatAnswerChannelSchema = z.enum(['link', 'widget', 'telegram']);
 export type CsatAnswerChannel = z.infer<typeof csatAnswerChannelSchema>;
+
+export const csatOriginalAnswerSchema = z.object({
+  question_id: z.string().min(1).max(200),
+  question_text: z.string().max(20000),
+  value: z.union([
+    z.number().finite(),
+    z.string().max(200000),
+    z.array(z.string().max(20000)).max(1000),
+  ]),
+});
 
 export const ticketCsatSchema = z.object({
   state: csatStateSchema,
@@ -61,6 +73,7 @@ export const ticketCsatSchema = z.object({
   link: z.url().nullable(),
   expiresAt: z.iso.datetime(),
   ratedAt: z.iso.datetime().nullable(),
+  originalAnswers: z.array(csatOriginalAnswerSchema).max(1000).optional(),
 });
 export type TicketCsat = z.infer<typeof ticketCsatSchema>;
 

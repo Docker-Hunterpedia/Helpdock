@@ -487,6 +487,7 @@ export class EmailRepository {
         and(
           eq(ticketMessages.ticketId, delivery.ticketId),
           eq(ticketMessages.channel, 'email'),
+          eq(ticketMessages.kind, 'public'),
           eq(ticketMessages.authorType, 'contact'),
           isNotNull(ticketMessages.externalMessageId),
           lt(ticketMessages.createdAt, before),

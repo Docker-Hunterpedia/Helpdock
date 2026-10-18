@@ -3,6 +3,7 @@ import {
   messageCreateRequestSchema,
   messagePageQuerySchema,
   ticketActivityListSchema,
+  ticketActivityQuerySchema,
   ticketCreateRequestSchema,
   ticketDetailSchema,
   ticketListQuerySchema,
@@ -34,6 +35,7 @@ export class TicketStatusListDto extends createZodDto(ticketStatusListSchema) {}
 export class TicketMessageDto extends createZodDto(ticketMessageSchema) {}
 export class TicketMessagePageDto extends createZodDto(ticketMessagePageSchema) {}
 export class TicketActivityListDto extends createZodDto(ticketActivityListSchema) {}
+export class TicketActivityQueryDto extends createZodDto(ticketActivityQuerySchema) {}
 
 export class TicketListQueryDto extends createZodDto(ticketListQuerySchema) {}
 export class MessagePageQueryDto extends createZodDto(messagePageQuerySchema) {}

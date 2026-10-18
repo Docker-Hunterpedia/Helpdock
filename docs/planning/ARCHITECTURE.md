@@ -27,7 +27,7 @@ Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural 
 | Audio/video | ffmpeg (static binary in image) | — | Voice-note normalization, video posters |
 | Auth | argon2 + jose + otplib | 0.45 / 6.2 / 13.5 | Hand-wired, auditable (passport was listed here but never installed) |
 | Staff SSO (M11) | openid-client + @node-saml/node-saml + @peculiar/x509 | 6.8 / 5.1 / 2.1 | OIDC and SAML 2.0 for staff, all IdP HTTP through `safeFetch` ([ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), accepted) |
-| Imports (M11, planned) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0 / 3.4 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), proposed) |
+| Imports (M11, in development) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0.3 / 3.4.0 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), accepted) |
 | Storage | @aws-sdk/client-s3 | 3.x | S3 / MinIO / R2 — S3-only in v1 |
 | Docs parsing | unpdf, mammoth, cheerio, playwright (optional) | 1.8 / 1.12 / 1.2 / 1.63 | PDF, DOCX, HTML crawl |
 | Connectors | @notionhq/client, googleapis | 5.26 / 181 | Notion + Google Drive knowledge |
@@ -135,7 +135,7 @@ contacts(brand_id, primary_email, phone, telegram_chat_id, external_id, visitor_
 accounts
 tickets(brand_id, number, prefix, subject, status_id, priority, channel, department_id, team_id, assignee_id, merged_into_id, split_from_id,
         contact_id, sla_policy_id, first_response_due_at, resolution_due_at, sla_breached, closed_at, custom jsonb,
-        search tsvector, parent_id)
+        search tsvector, parent_id, imported_at, import_source, import_sla_started_at)
 ticket_messages(ticket_id, department_id /*denormalised for RLS*/, seq, client_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
                 external_message_id, ai_meta jsonb)
 attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status)
@@ -154,10 +154,13 @@ meta_deliveries(brand_id, department_id /*denormalised for RLS*/, ticket_id, tic
                 sent_at, delivered_at, read_at, failed_at)
 api_keys(brand_id, hash, scopes[], rate_limit, last_used_at, expires_at)
 webhooks, webhook_deliveries
-hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility), hc_settings, hc_media
+hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility, import_embedding_deferred), hc_settings, hc_media
 hc_search_documents(version_id, locale, title, body_text, search tsvector, title_normalized), hc_search_log, hc_article_views, hc_article_feedback
 knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync_status)
 knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)
+import_runs, import_records, import_mappings, import_external_ids, import_log, import_file_presets, import_files, import_ticket_inventory   -- M11, ADR 0027
+hc_import_assets(brand_id, article_id, media_id, source, source_account_key, parent_external_id, locale, asset_external_id)
+import_pages(brand_id, run_id, request_hash, response jsonb, run_scoped, slot)   -- immutable successful extraction GETs, claim-fenced; dropped at the next checkpoint unless a slot or run scope keeps them, all discarded when extraction ends
 outbox(id, brand_id, event, payload jsonb, created_at, published_at), job_receipts(key, completed_at)   -- DOMAIN-RULES §6
 ai_settings(brand_id, provider_id, model, embeddings_model, modes jsonb, guardrails jsonb, budget jsonb, system_prompt)
 ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sources jsonb)
@@ -277,6 +280,7 @@ packages/ai
 
 | Queue | Jobs | Notes |
 |---|---|---|
+| `import` | `import.extract`, `import.load`, `import.attachments`, `import.finish` (M11, in development) | resumable staging; per-brand load lock; vendor retry delays |
 | `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit`, `meta.media_fetch` (M10: the bytes of an attachment a Meta webhook named, into the pipeline) | dedupe by external id |
 | `outbound` | `email.send`, `telegram.send`, `meta.send` (M10, paced per recipient), `widget.deliver` | retries 5, backoff exp, DLQ |
 | `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02) |

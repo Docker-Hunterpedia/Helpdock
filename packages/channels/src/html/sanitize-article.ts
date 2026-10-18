@@ -1,4 +1,9 @@
-import { CALLOUT_KINDS, HC_MEDIA_PATH_PATTERN, videoEmbedUrl } from '@helpdock/schemas';
+import {
+  CALLOUT_KINDS,
+  HC_IMPORT_ASSET_PATH_PATTERN,
+  HC_MEDIA_PATH_PATTERN,
+  videoEmbedUrl,
+} from '@helpdock/schemas';
 import sanitizeHtmlLibrary from 'sanitize-html';
 import { SanitizeLimitError } from './sanitize.js';
 import { htmlToText } from './text.js';
@@ -101,6 +106,13 @@ export const ARTICLE_MAX_TAGS = 20_000;
 
 const TAG_OPENING = /<[a-zA-Z]/g;
 
+function assertArticleComplexity(html: string): void {
+  if ((html.match(TAG_OPENING)?.length ?? 0) > ARTICLE_MAX_TAGS)
+    throw new SanitizeLimitError(
+      `That article contains more than ${ARTICLE_MAX_TAGS} HTML tags and cannot be saved`,
+    );
+}
+
 const without = (attribs: Record<string, string>, name: string): Record<string, string> => {
   const { [name]: _dropped, ...rest } = attribs;
   return rest;
@@ -117,7 +129,16 @@ const heading = (tagName: string, attribs: Record<string, string>) => {
   return { tagName, attribs: withDirection(keepsId ? attribs : without(attribs, 'id')) };
 };
 
-const optionsFor = (brandId: string): sanitizeHtmlLibrary.IOptions => ({
+type PreparedResources = {
+  images?: ReadonlyMap<string, string>;
+  links?: ReadonlyMap<string, string>;
+  unavailableLinks?: ReadonlySet<string>;
+};
+
+const optionsFor = (
+  brandId: string,
+  resources: PreparedResources,
+): sanitizeHtmlLibrary.IOptions => ({
   allowedTags: [...ARTICLE_TAGS],
   allowedAttributes: ARTICLE_ATTRIBUTES,
   allowedClasses: { code: ['language-*'] },
@@ -139,9 +160,15 @@ const optionsFor = (brandId: string): sanitizeHtmlLibrary.IOptions => ({
   disallowedTagsMode: 'discard',
   transformTags: {
     a: (tagName, attribs) => {
-      const href = attribs.href?.trim();
+      const replacement = resources.links?.get(attribs.href ?? '');
+      const rewritten = resources.unavailableLinks?.has(attribs.href ?? '')
+        ? without(attribs, 'href')
+        : replacement === undefined
+          ? attribs
+          : { ...attribs, href: replacement };
+      const href = rewritten.href?.trim();
       const kept =
-        href !== undefined && ARTICLE_LINK.test(href) ? attribs : without(attribs, 'href');
+        href !== undefined && ARTICLE_LINK.test(href) ? rewritten : without(rewritten, 'href');
 
       return {
         tagName,
@@ -153,13 +180,15 @@ const optionsFor = (brandId: string): sanitizeHtmlLibrary.IOptions => ({
       };
     },
     img: (tagName, attribs) => {
-      const src = attribs.src?.trim();
+      const replacement = resources.images?.get(attribs.src ?? '');
+      const rewritten = replacement === undefined ? attribs : { ...attribs, src: replacement };
+      const src = rewritten.src?.trim();
       const ownMedia =
         src !== undefined &&
         HC_MEDIA_PATH_PATTERN.test(src) &&
         src.startsWith(`/api/help-center/brands/${brandId}/`);
 
-      return { tagName, attribs: ownMedia ? attribs : without(attribs, 'src') };
+      return { tagName, attribs: ownMedia ? rewritten : without(rewritten, 'src') };
     },
     h2: heading,
     h3: heading,
@@ -198,18 +227,68 @@ export interface SanitizedArticle {
  * The sanitised article and its text. Refuses a body built to be expensive
  * ({@link SanitizeLimitError}); never throws on malformed markup.
  */
-export const sanitizeArticleHtml = (
+const sanitizePreparedArticle = (
   html: string,
-  { brandId }: { brandId: string },
+  brandId: string,
+  resources: PreparedResources = {},
 ): SanitizedArticle => {
-  const tags = html.match(TAG_OPENING)?.length ?? 0;
-  if (tags > ARTICLE_MAX_TAGS) {
-    throw new SanitizeLimitError(
-      `That article contains more than ${ARTICLE_MAX_TAGS} HTML tags and cannot be saved`,
-    );
-  }
+  assertArticleComplexity(html);
 
-  const safe = sanitizeHtmlLibrary(html, optionsFor(brandId));
+  const safe = sanitizeHtmlLibrary(html, optionsFor(brandId, resources));
 
   return { html: safe, text: htmlToText(safe) };
 };
+
+export const sanitizeArticleHtml = (
+  html: string,
+  { brandId }: { brandId: string },
+): SanitizedArticle => sanitizePreparedArticle(html, brandId);
+
+/** Mappings name prepared local resources; they grant neither network access nor parent authorization. */
+export function sanitizeImportedArticleHtml(
+  html: string,
+  options: PreparedResources & { brandId: string },
+): SanitizedArticle {
+  const prefix = `/api/help-center/brands/${options.brandId}/`;
+  for (const src of options.images?.values() ?? [])
+    if (!HC_MEDIA_PATH_PATTERN.test(src) || !src.startsWith(prefix))
+      throw new RangeError('An imported image must name its article brand');
+  for (const href of options.links?.values() ?? [])
+    if (!HC_IMPORT_ASSET_PATH_PATTERN.test(href) || !href.startsWith(prefix))
+      throw new RangeError('An imported file must name its article brand');
+  return sanitizePreparedArticle(html, options.brandId, options);
+}
+
+/** The same HTML parser as sanitization, so quoted/encoded attributes cannot bypass image preparation. */
+export function articleImageSources(html: string): string[] {
+  assertArticleComplexity(html);
+  const sources: string[] = [];
+  sanitizeHtmlLibrary(html, {
+    allowedTags: [],
+    allowedAttributes: {},
+    transformTags: {
+      img: (tagName, attribs) => {
+        if (attribs.src) sources.push(attribs.src);
+        return { tagName, attribs };
+      },
+    },
+  });
+  return sources;
+}
+
+/** Text examples of links are not grants to a private file; inspect actual parsed anchor targets. */
+export function articleLinkTargets(html: string): string[] {
+  assertArticleComplexity(html);
+  const targets: string[] = [];
+  sanitizeHtmlLibrary(html, {
+    allowedTags: [],
+    allowedAttributes: {},
+    transformTags: {
+      a: (tagName, attribs) => {
+        if (attribs.href) targets.push(attribs.href);
+        return { tagName, attribs };
+      },
+    },
+  });
+  return targets;
+}

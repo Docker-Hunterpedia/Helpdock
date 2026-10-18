@@ -10,12 +10,15 @@ import {
 import {
   HC_ACCESS_CHANGED_EVENT,
   HC_ARTICLE_CHANGED_EVENT,
+  HC_IMPORTED_EVENT,
   HC_STRUCTURE_CHANGED_EVENT,
   hcArticleChangedPayloadSchema,
+  hcImportedPayloadSchema,
   type KnowledgeSchedule,
 } from '@helpdock/schemas';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { forEachImportedArticleBatch } from '../help-center/imported-articles.js';
 import { syncArticleKnowledge } from './article-knowledge.js';
 
 /**
@@ -176,26 +179,28 @@ export const createKnowledgeHandlers = (
  */
 export const createArticleKnowledgeHandlers = (
   queues: Pick<KnowledgeQueues, 'addEmbed'>,
-): { article: OutboxEventHandler; brand: OutboxEventHandler } => {
-  const after = async (
-    brandId: string,
-    outboxId: string,
-    counts: { written: number; removed: number },
-  ): Promise<void> => {
-    if (counts.written > 0) {
-      await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
-    }
-  };
+): { article: OutboxEventHandler; brand: OutboxEventHandler; imported: OutboxEventHandler } => {
   return {
     article: async ({ tx, brandId, payload, outboxId, event, log }) => {
-      const { articleId } = hcArticleChangedPayloadSchema.parse(payload);
+      const { articleId, change } = hcArticleChangedPayloadSchema.parse(payload);
       const counts = await syncArticleKnowledge(tx, brandId, [articleId]);
-      await after(brandId, outboxId, counts);
+      if (change === 'published' || counts.written > 0)
+        await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
       log.info({ event, outboxId, brandId, articleId, ...counts }, 'article knowledge synced');
+    },
+    imported: async ({ tx, brandId, payload, outboxId, event, log }) => {
+      const { runId } = hcImportedPayloadSchema.parse(payload);
+      const counts = { written: 0, removed: 0 };
+      await forEachImportedArticleBatch(tx, { brandId, runId }, async (ids) => {
+        const batch = await syncArticleKnowledge(tx, brandId, ids);
+        counts.written += batch.written;
+        counts.removed += batch.removed;
+      });
+      log.info({ event, outboxId, brandId, runId, ...counts }, 'imported article knowledge synced');
     },
     brand: async ({ tx, brandId, outboxId, event, log }) => {
       const counts = await syncArticleKnowledge(tx, brandId);
-      await after(brandId, outboxId, counts);
+      if (counts.written > 0) await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
       log.info({ event, outboxId, brandId, ...counts }, 'article knowledge synced');
     },
   };
@@ -214,4 +219,5 @@ export const registerKnowledgeEventHandlers = (
   dispatcher.register(HC_ARTICLE_CHANGED_EVENT, articles.article, KNOWLEDGE_SUBSCRIBER);
   dispatcher.register(HC_STRUCTURE_CHANGED_EVENT, articles.brand, KNOWLEDGE_SUBSCRIBER);
   dispatcher.register(HC_ACCESS_CHANGED_EVENT, articles.brand, KNOWLEDGE_SUBSCRIBER);
+  dispatcher.register(HC_IMPORTED_EVENT, articles.imported, KNOWLEDGE_SUBSCRIBER);
 };

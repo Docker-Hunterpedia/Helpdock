@@ -53,7 +53,7 @@ export const ticketActivity = pgTable(
   (table) => [
     // The thread reads one ticket's entries oldest first; retention reads a
     // brand's by age, which this covers from its leading column.
-    index('ticket_activity_ticket_created_idx').on(table.ticketId, table.createdAt),
+    index('ticket_activity_ticket_created_idx').on(table.ticketId, table.createdAt, table.id),
     index('ticket_activity_brand_department_idx').on(table.brandId, table.departmentId),
   ],
 );

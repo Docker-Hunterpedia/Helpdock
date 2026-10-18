@@ -1,4 +1,22 @@
 {
+  "importedMessage": {
+    "title": "تفاصيل الرسالة الأصلية",
+    "status": "الحالة في المصدر",
+    "channel": "القناة في المصدر",
+    "direction": "الاتجاه في المصدر",
+    "authorKind": "فئة الكاتب الأصلي",
+    "authorType": "نوع الكاتب في المصدر",
+    "via": "وسيلة النقل في المصدر",
+    "mailSubject": "موضوع البريد الأصلي",
+    "mailDate": "ترويسة تاريخ البريد الأصلي",
+    "mailReturnPath": "عنوان إرجاع البريد الأصلي",
+    "kinds": {
+      "agent": "موظف",
+      "customer": "عميل",
+      "system": "النظام",
+      "unknown": "هوية غير مثبتة"
+    }
+  },
   "title": "التذاكر",
   "views": {
     "label": "العروض",
@@ -58,7 +76,9 @@
     "closeDetails": "إغلاق التفاصيل",
     "logTime": "تسجيل الوقت…",
     "replyingOne": "{{name}} يكتب ردًا",
-    "replyingMany": "{{name}} يكتب ردًا · {{others}} آخرون يطالعون"
+    "replyingMany": "{{name}} يكتب ردًا · {{others}} آخرون يطالعون",
+    "imported": "مستوردة من {{source}}",
+    "importedNumber": "مستوردة من {{source}} · #{{number}}"
   },
   "sla": {
     "running": "بقي {{remaining}}",
@@ -104,7 +124,16 @@
     "retry": "أعد المحاولة",
     "discard": "تجاهل",
     "sent": "أُرسل",
-    "empty": "لم يُكتب شيء على هذه التذكرة بعد."
+    "empty": "لم يُكتب شيء على هذه التذكرة بعد.",
+    "formerAgent": "موظف سابق",
+    "sourceAuthor": "الكاتب الأصلي",
+    "olderActivityCaption": "سجل أقدم · اختر الأحدث أو أحدث السجل للعودة.",
+    "latestActivityCaption": "أحدث السجل · تتوفر إدخالات أقدم.",
+    "activityFailed": "تعذّرت قراءة السجل. عُد إلى أحدث الإدخالات لتحديثه.",
+    "newerActivity": "سجل أحدث",
+    "olderActivity": "سجل أقدم",
+    "latestActivity": "أحدث السجل",
+    "activityLoading": "جارٍ تحميل السجل…"
   },
   "event": {
     "priority": "غيّر {{actor}} الأولوية من {{from}} إلى {{to}}",
@@ -122,7 +151,14 @@
       "system": "من النظام"
     },
     "sourceArticle": "جاء من مقالة مركز المساعدة «{{title}}»",
-    "articleProposed": "اقترح {{actor}} مقالًا · بانتظار الموافقة"
+    "articleProposed": "اقترح {{actor}} مقالًا · بانتظار الموافقة",
+    "imported": "استُوردت من {{source}} بتاريخ {{importedAt}} · التذكرة الأصلية #{{number}}",
+    "importedCreated": "استُوردت من {{source}} بتاريخ {{importedAt}} · التذكرة الأصلية #{{number}} · أُنشئت بتاريخ {{createdAt}}",
+    "importedSource": "النظام الأصلي",
+    "importedHistory": "{{actor}} · سجل من {{source}} · {{action}}",
+    "importedChange": "{{actor}} · سجل من {{source}} · {{field}}: {{from}} ← {{to}}",
+    "structuredValue": "قيمة منظّمة",
+    "importedCsat": "إجابة رضا مستوردة من {{source}}"
   },
   "composer": {
     "label": "رد أو ملاحظة داخلية",
@@ -246,7 +282,11 @@
     "tags": "الوسوم",
     "tag": "الوسم",
     "sla": "اتفاقية مستوى الخدمة",
-    "overdue": "متجاوزة أو مستحقة"
+    "overdue": "متجاوزة أو مستحقة",
+    "source": "المصدر",
+    "allSources": "جميع المصادر",
+    "imported": "مستوردة",
+    "native": "أُنشئت في Helpdock"
   },
   "newTicket": {
     "action": "تذكرة جديدة",
@@ -355,7 +395,9 @@
     "shareHint": "يُرسل الاستبيان عبر قناة الطلب. انسخ الرابط لمشاركته بطريقة أخرى.",
     "copyLink": "نسخ رابط الاستبيان",
     "copied": "نُسخ رابط الاستبيان",
-    "copyFailed": "تعذّر نسخ الرابط."
+    "copyFailed": "تعذّر نسخ الرابط.",
+    "imported_unscored": "إجابة مستوردة · التقييم غير مطابق للمقياس",
+    "originalAnswers": "إجابات الاستبيان الأصلية"
   },
   "merge": {
     "title": "دمج التذاكر",

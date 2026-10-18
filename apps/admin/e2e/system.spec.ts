@@ -32,6 +32,64 @@ test.use({ reducedMotion: 'reduce' });
 
 const SYSTEM_ENDPOINT = '**/api/install/system';
 
+test('pages import readings, retries a failed page and treats expiration as unknown', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  const brands = Array.from({ length: 51 }, (_, index) => ({
+    brandId: `019a0000-0000-7000-8000-${String(index + 10).padStart(12, '0')}`,
+    brandName: `Migration brand ${index + 1}`,
+    active: 1,
+    paused: 0,
+    lastError: null,
+  }));
+  const health = {
+    configured: true as const,
+    snapshotId: '019a0000-0000-7000-8000-000000000001',
+    observedAt: '2026-10-18T00:00:00.000Z',
+    totalBrands: 51,
+    active: 51,
+    paused: 0,
+    brands: brands.slice(0, 50),
+  };
+  let failed = false,
+    expired = false;
+  await page.route('**/api/install/system/imports?*', (route) => {
+    if (!failed) {
+      failed = true;
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'unavailable' } }),
+      });
+    }
+    return route.fulfill(
+      json(
+        expired
+          ? { configured: false }
+          : { ...health, brands: brands.slice(50), page: 2, hasNext: false },
+      ),
+    );
+  });
+  await openSystem(page, locale, { ...healthySystemStatus(), imports: health });
+  const card = page.getByRole('region', { name: t('system:imports.title'), exact: true });
+  await expect(card.getByText('Migration brand 1', { exact: true })).toBeVisible();
+  await card.getByRole('button', { name: t('system:imports.next') }).click();
+  await expect(card.getByRole('alert')).toContainText(t('system:imports.failed'));
+  expect(await violations(page)).toEqual([]);
+  await card.getByRole('button', { name: t('system:imports.retry') }).click();
+  await expect(card.getByText('Migration brand 51', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: t('system:imports.next') })).toBeDisabled();
+  expired = true;
+  await card.getByRole('button', { name: t('system:imports.latest') }).click();
+  await expect(card.getByText('Migration brand 1', { exact: true })).toBeVisible();
+  await card.getByRole('button', { name: t('system:imports.next') }).click();
+  await expect(card.getByText(t('system:imports.unavailable'), { exact: true })).toBeVisible();
+  await expect(card.getByRole('table')).toHaveCount(0);
+  expect(await violations(page)).toEqual([]);
+});
+
 type Fixture = ReturnType<typeof healthySystemStatus>;
 
 const json = (body: unknown) => ({

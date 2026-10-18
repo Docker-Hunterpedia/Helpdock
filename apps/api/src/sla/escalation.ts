@@ -62,11 +62,21 @@ export const fireSlaTimer = async (
   payload: SlaTimerPayload,
   now: Date,
 ): Promise<TimerOutcome> => {
+  await deps.repository.lockTicket(tx, payload.ticketId);
   const found = await deps.repository.findTicket(tx, payload.ticketId);
-  if (found === undefined) {
+  // A quiet historical update does not reconcile clocks. Old queue entries
+  // must not turn a closed or unactivated import back into live work.
+  if (
+    found === undefined ||
+    found.ticket.brandId !== payload.brandId ||
+    found.ticket.deletedAt !== null ||
+    found.ticket.mergedIntoId !== null ||
+    found.status.systemState === 'closed' ||
+    found.status.excludedFromReports ||
+    ((found.ticket.importedAt || found.ticket.importSource) && !found.ticket.importSlaStartedAt)
+  ) {
     return { kind: 'done' };
   }
-  await deps.repository.lockTicket(tx, payload.ticketId);
 
   const clocks = await deps.repository.currentClocks(tx, payload.ticketId);
   const clock = clocks.find((candidate) => candidate.kind === payload.clock);

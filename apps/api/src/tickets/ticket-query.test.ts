@@ -207,7 +207,9 @@ describe('ticketFilters', () => {
       const sql = render(ticketFilters(query({ q: 'HD-1042' })));
 
       expect(sql?.sql).toContain('"tickets"."id" IN (');
-      expect(sql?.sql.match(/UNION ALL/g)).toHaveLength(2);
+      expect(sql?.sql.match(/UNION ALL/g)).toHaveLength(4);
+      expect(sql?.sql).toContain('"import_external_ids"."source_number" in');
+      expect(sql?.sql).toContain('"import_external_ids"."external_id" in');
     });
 
     it('rules out the tickets carrying a -word', () => {
@@ -215,7 +217,10 @@ describe('ticketFilters', () => {
 
       expect(sql?.sql).toContain('"tickets"."id" NOT IN (');
       expect(sql?.params).toEqual(expect.arrayContaining(['refund', 'spam']));
-      expect(sql?.params).not.toContain('refund -spam');
+      const lexemeInputs = [
+        ...(sql?.sql.matchAll(/helpdock_search_lexemes\(\$(\d+)\)/g) ?? []),
+      ].map((match) => sql?.params[Number(match[1]) - 1]);
+      expect(lexemeInputs).toEqual(['refund', 'refund', 'spam']);
     });
 
     it('adds no exclusion when nothing is excluded', () => {
@@ -225,7 +230,7 @@ describe('ticketFilters', () => {
     it('names the brand of the path in every half, for the planner', () => {
       const sql = render(ticketFilters(query({ q: 'HD-1042' })));
 
-      expect(sql?.params?.filter((param) => param === BRAND)).toHaveLength(5);
+      expect(sql?.params?.filter((param) => param === BRAND)).toHaveLength(7);
     });
   });
 

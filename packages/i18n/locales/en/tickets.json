@@ -1,4 +1,22 @@
 {
+  "importedMessage": {
+    "title": "Original message details",
+    "status": "Source status",
+    "channel": "Source channel",
+    "direction": "Source direction",
+    "authorKind": "Original author category",
+    "authorType": "Source author type",
+    "via": "Source transport",
+    "mailSubject": "Original email subject",
+    "mailDate": "Original email date header",
+    "mailReturnPath": "Original email return path",
+    "kinds": {
+      "agent": "Agent",
+      "customer": "Customer",
+      "system": "System",
+      "unknown": "Identity not established"
+    }
+  },
   "title": "Tickets",
   "views": {
     "label": "Views",
@@ -58,7 +76,9 @@
     "closeDetails": "Close the details",
     "logTime": "Log time…",
     "replyingOne": "{{name}} is replying",
-    "replyingMany": "{{name}} is replying · {{others}} more viewing"
+    "replyingMany": "{{name}} is replying · {{others}} more viewing",
+    "imported": "Imported from {{source}}",
+    "importedNumber": "Imported from {{source}} · #{{number}}"
   },
   "sla": {
     "running": "{{remaining}} left",
@@ -104,7 +124,16 @@
     "retry": "Retry",
     "discard": "Discard",
     "sent": "Sent",
-    "empty": "Nothing has been written on this ticket yet."
+    "empty": "Nothing has been written on this ticket yet.",
+    "formerAgent": "former agent",
+    "sourceAuthor": "original author",
+    "olderActivityCaption": "Older activity · use Newer or Latest to return.",
+    "latestActivityCaption": "Latest activity · older entries are available.",
+    "activityFailed": "Activity could not be read. Return to the latest entries to refresh the history.",
+    "newerActivity": "Newer activity",
+    "olderActivity": "Older activity",
+    "latestActivity": "Latest activity",
+    "activityLoading": "Loading activity…"
   },
   "event": {
     "priority": "{{actor}} changed priority {{from}} → {{to}}",
@@ -122,7 +151,14 @@
       "system": "by the system"
     },
     "sourceArticle": "Came from the help center article “{{title}}”",
-    "articleProposed": "{{actor}} proposed an article · waiting for approval"
+    "articleProposed": "{{actor}} proposed an article · waiting for approval",
+    "imported": "Imported from {{source}} on {{importedAt}} · original ticket #{{number}}",
+    "importedCreated": "Imported from {{source}} on {{importedAt}} · original ticket #{{number}} · created {{createdAt}}",
+    "importedSource": "the original system",
+    "importedHistory": "{{actor}} · history from {{source}} · {{action}}",
+    "importedChange": "{{actor}} · history from {{source}} · {{field}}: {{from}} → {{to}}",
+    "structuredValue": "structured value",
+    "importedCsat": "Satisfaction response imported from {{source}}"
   },
   "composer": {
     "label": "Reply or internal note",
@@ -242,7 +278,11 @@
     "tags": "Tags",
     "tag": "Tag",
     "sla": "SLA",
-    "overdue": "Breached or due"
+    "overdue": "Breached or due",
+    "source": "Source",
+    "allSources": "All sources",
+    "imported": "Imported",
+    "native": "Created in Helpdock"
   },
   "newTicket": {
     "action": "New ticket",
@@ -351,7 +391,9 @@
     "shareHint": "The survey goes out on the ticket's channel. Copy the link to share it another way.",
     "copyLink": "Copy survey link",
     "copied": "Survey link copied",
-    "copyFailed": "The link could not be copied."
+    "copyFailed": "The link could not be copied.",
+    "imported_unscored": "Imported answer · score not mapped",
+    "originalAnswers": "Original survey answers"
   },
   "merge": {
     "title": "Merge tickets",

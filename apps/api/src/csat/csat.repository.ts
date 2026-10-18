@@ -13,7 +13,7 @@ import {
   users,
 } from '@helpdock/db';
 import type { CsatAnswerChannel } from '@helpdock/schemas';
-import { and, desc, eq, gt, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 
 /**
  * Every query M1-12's survey makes, each one in the caller's transaction so the
@@ -87,7 +87,10 @@ export class CsatRepository {
     const [row] = await tx
       .insert(csatResponses)
       .values(values)
-      .onConflictDoNothing({ target: [csatResponses.ticketId, csatResponses.closedAt] })
+      .onConflictDoNothing({
+        target: [csatResponses.ticketId, csatResponses.closedAt],
+        where: sql`${csatResponses.importedExternalId} IS NULL`,
+      })
       .returning();
 
     return row;
@@ -98,10 +101,24 @@ export class CsatRepository {
     const [row] = await tx
       .select()
       .from(csatResponses)
-      .where(eq(csatResponses.ticketId, ticketId))
+      .where(and(eq(csatResponses.ticketId, ticketId), isNull(csatResponses.importedExternalId)))
       .orderBy(desc(csatResponses.closedAt))
       .limit(1);
 
+    return row;
+  }
+
+  /** Historical answers are a display fallback, never candidates for live delivery. */
+  async latestImportedForTicket(
+    tx: DbTransaction,
+    ticketId: string,
+  ): Promise<CsatResponse | undefined> {
+    const [row] = await tx
+      .select()
+      .from(csatResponses)
+      .where(and(eq(csatResponses.ticketId, ticketId), isNotNull(csatResponses.importedExternalId)))
+      .orderBy(desc(csatResponses.ratedAt), desc(csatResponses.id))
+      .limit(1);
     return row;
   }
 

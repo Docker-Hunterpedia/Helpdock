@@ -1,6 +1,12 @@
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type DbHandle } from './client.js';
@@ -66,6 +72,7 @@ const MIGRATION_TAGS = [
   '0051_meta_profile_checked',
   '0052_meta_deliveries_platform_ids',
   '0053_sso',
+  '0054_imports',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -147,6 +154,131 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(first.total).toBe(MIGRATION_TAGS.length);
     expect(second.total).toBe(MIGRATION_TAGS.length);
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
+  });
+
+  it.each([52, 53])(
+    'upgrades an existing install at migration %s in one transaction without losing live history',
+    async (prefix) => {
+      const url = await freshDatabase(`pre_import_upgrade_${prefix}`);
+      const folder = await mkdtemp(join(tmpdir(), 'helpdock-upgrade-'));
+      const owner = postgres(url, { max: 1, onnotice: () => {} });
+      try {
+        const journal = JSON.parse(
+          readFileSync(new URL('../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
+        );
+        journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= prefix);
+        await mkdir(join(folder, 'meta'));
+        await writeFile(join(folder, 'meta/_journal.json'), JSON.stringify(journal));
+        for (const entry of journal.entries)
+          await cp(
+            new URL(`../drizzle/${entry.tag}.sql`, import.meta.url),
+            join(folder, `${entry.tag}.sql`),
+          );
+        await owner`SELECT set_config('helpdock.app_password', ${APP_ROLE_PASSWORD}, false)`;
+        await migrate(drizzle(owner), { migrationsFolder: folder });
+        const [brand] =
+          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Existing install','OLD') RETURNING id`;
+        const [department] =
+          await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
+        const [status] =
+          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Closed','closed','info') RETURNING id`;
+        const [ticket] =
+          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel,closed_at)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'OLD','Existing history',${status?.id},'email','2025-01-01') RETURNING id`;
+        await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,closed_at,token_hash,expires_at,rating,rated_at,rated_via)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'2025-01-01','existing-answer','2025-02-01',5,'2025-01-02','link')`;
+        const before =
+          await owner`SELECT id,rating,rated_at,rated_via,token_hash FROM csat_responses`;
+        const result = await runMigrations({
+          migrationUrl: url,
+          appRolePassword: APP_ROLE_PASSWORD,
+          log: () => {},
+        });
+        expect(result.applied).toEqual(
+          MIGRATION_TAGS.filter((tag) => Number(tag.slice(0, 4)) > prefix),
+        );
+        expect(
+          await owner`SELECT id,rating,rated_at,rated_via,token_hash FROM csat_responses`,
+        ).toEqual(before);
+        expect(await owner`SELECT subject FROM tickets WHERE id=${ticket?.id}`).toEqual([
+          { subject: 'Existing history' },
+        ]);
+        expect(await owner`SELECT count(*)::int AS count FROM outbox`).toEqual([{ count: 0 }]);
+        expect((await runMigrations({ migrationUrl: url, log: () => {} })).applied).toEqual([]);
+      } finally {
+        await owner.end();
+        await rm(folder, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {
+    const url = await migrated('import_claims');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'claim-test@example.com', 'Importer') RETURNING id`;
+      const [brand] =
+        await owner`INSERT INTO brands (id, name, prefix) VALUES (gen_random_uuid(), 'Claims', 'CL') RETURNING id`;
+      const [claimed] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'loading', gen_random_uuid(), now()) RETURNING id`;
+      await expect(owner`INSERT INTO import_runs (id, brand_id, source, started_by, status, claim_token, claimed_at)
+        VALUES (gen_random_uuid(), ${brand?.id}, 'file', ${person?.id}, 'extracting', gen_random_uuid(), now())`).rejects.toMatchObject(
+        { code: '23505' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        owner`UPDATE import_runs SET status = 'paused', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'paused', paused_from = 'loading', claim_token = NULL, claimed_at = NULL WHERE id = ${claimed?.id}`;
+      await expect(
+        owner`UPDATE import_runs SET paused_from = 'ready' WHERE id = ${claimed?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'loading', paused_from = NULL, claim_token = gen_random_uuid(), claimed_at = now() WHERE id = ${claimed?.id}`;
+    } finally {
+      await owner.end();
+    }
+  });
+
+  it('binds import children to their own brand and refuses credentials in terminal runs', async () => {
+    const url = await migrated('import_constraints');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [person] =
+        await owner`INSERT INTO users (id, email, name) VALUES (gen_random_uuid(), 'import-test@example.com', 'Importer') RETURNING id`;
+      const tenants = await owner`INSERT INTO brands (id, name, prefix) VALUES
+        (gen_random_uuid(), 'Import A', 'IA'),
+        (gen_random_uuid(), 'Import B', 'IB') RETURNING id`;
+      const [run] =
+        await owner`INSERT INTO import_runs (id, brand_id, source, started_by, credentials_encrypted)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', ${person?.id}, 'encrypted-fixture') RETURNING id`;
+      await expect(owner`INSERT INTO import_records (id, brand_id, run_id, entity, external_id, payload, payload_hash)
+        VALUES (gen_random_uuid(), ${tenants[1]?.id}, ${run?.id}, 'ticket', '1', '{}', ${'a'.repeat(64)})`).rejects.toMatchObject(
+        { code: '23503' },
+      );
+      await expect(
+        owner`UPDATE import_runs SET status = 'completed' WHERE id = ${run?.id}`,
+      ).rejects.toMatchObject({ code: '23514' });
+      await owner`UPDATE import_runs SET status = 'completed', credentials_encrypted = NULL WHERE id = ${run?.id}`;
+      const [completed] =
+        await owner`SELECT status, credentials_encrypted FROM import_runs WHERE id = ${run?.id}`;
+      expect(completed).toEqual({ status: 'completed', credentials_encrypted: null });
+      await owner`INSERT INTO import_runs (id, brand_id, source, mode, parent_run_id, started_by)
+        VALUES (gen_random_uuid(), ${tenants[0]?.id}, 'file', 'delta', ${run?.id}, ${person?.id})`;
+      // Brand purge deletes in batches; a parent's dependent deltas must not block its batch.
+      await owner`DELETE FROM import_runs WHERE id = ${run?.id}`;
+      expect(
+        await owner`SELECT id FROM import_runs WHERE brand_id = ${tenants[0]?.id}`,
+      ).toHaveLength(0);
+      const origins =
+        await owner`SELECT enumlabel FROM pg_enum JOIN pg_type ON enumtypid = pg_type.oid WHERE typname = 'csat_answer_channel'`;
+      expect(origins.map((entry) => entry.enumlabel)).toContain('import');
+    } finally {
+      await owner.end();
+    }
   });
 
   it('applies each migration once when two replicas start at the same time', async () => {

@@ -152,6 +152,9 @@ ai.transcribe (`ai` queue)            downloads the Opus variant (or the origina
   and a Translate action. It is never sent to the visitor, and no visitor
   response carries it.
 - Voice notes from before the endpoint was set are not transcribed later.
+- Imported historical voice notes are never submitted for transcription. Both
+  the event subscriber and the transcription worker exclude `origin = import`,
+  including stale events or jobs that were already queued.
 
 ## Per brand
 
@@ -366,7 +369,7 @@ be the one the model returns; a mismatch fails the re-embed, which says so in
 
 ### Changing the model
 
-Changing the model or the dimension re-embeds every chunk of every brand, at
+Changing the model or the dimension re-embeds eligible chunks of every brand, at
 the provider's price, and for its duration retrieval is full text only. The api
 refuses the change unless the request says `confirmReembed: true`.
 
@@ -376,7 +379,7 @@ What happens next runs in the worker:
 every minute   knowledge.configure   settings differ from the space?
                                      drop the vector index, resize the column,
                                      status = reindexing, add knowledge.reembed
-               knowledge.reembed     brand by brand, embed every chunk not yet in the new model
+               knowledge.reembed     brand by brand, embed eligible chunks not yet in the new model
                                      then build the HNSW index, status = ready
 ```
 
@@ -384,6 +387,15 @@ The change takes effect within a minute of saving, or at the next worker start
 after changing `HD_EMBEDDING_MODEL`. `GET /api/install/ai/embedding` shows the
 status, the active and target models, and progress as chunks embedded out of
 all chunks.
+
+Imported help-center language versions stay deferred for embedding until staff
+publishes a revision, including a revision scheduled by staff. Import completion
+indexes and re-chunks their text locally; full-text retrieval remains available.
+Pending embedding and full-reembedding jobs skip deferred versions, including
+jobs queued before the import. Their chunks may therefore remain unembedded
+while the space is ready. An unchanged repeat preserves staff publication; a
+changed source version defers its replacement again. See the
+[importing guide](importing.md).
 
 Two models are never served together. Retrieval ranks by vector only while the
 status is `ready`, and only chunks whose `embedding_model` is the active model

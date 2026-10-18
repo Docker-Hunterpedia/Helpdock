@@ -6,6 +6,10 @@ import {
   type BrandDeletion,
   brandDeletionSchema,
   brandListSchema,
+  type ImportHealthPage,
+  type ImportHealthQuery,
+  importHealthPageSchema,
+  importHealthQuerySchema,
   type ProductMetrics,
   productMetricsSchema,
   queueBoardPassSchema,
@@ -49,6 +53,7 @@ export type AccessTokenSource = () => Promise<string | null>;
 
 export interface SystemApi {
   status(): Promise<SystemStatus>;
+  imports(query: ImportHealthQuery): Promise<ImportHealthPage>;
   /** Every queue, paginated. What "All queues" asks for. */
   queues(query: SystemQueuesQuery): Promise<SystemQueuePage>;
   /** M3-08: one page of the install-wide audit log, newest first. */
@@ -78,6 +83,14 @@ export class HttpSystemApi implements SystemApi {
 
   async status(): Promise<SystemStatus> {
     return this.#read('/install/system', systemStatusSchema);
+  }
+  async imports(query: ImportHealthQuery): Promise<ImportHealthPage> {
+    const parsed = importHealthQuerySchema.parse(query);
+    const search = new URLSearchParams({
+      page: String(parsed.page),
+      ...(parsed.snapshotId ? { snapshotId: parsed.snapshotId } : {}),
+    });
+    return this.#read(`/install/system/imports?${search}`, importHealthPageSchema);
   }
 
   async queues({ page, pageSize }: SystemQueuesQuery): Promise<SystemQueuePage> {

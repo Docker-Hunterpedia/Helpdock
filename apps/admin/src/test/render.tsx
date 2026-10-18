@@ -23,6 +23,8 @@ import type { EmailApi } from '../email/api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { ImportsApi } from '../imports/api.js';
+import { MockImportsApi } from '../imports/mock-api.js';
 import type { KnowledgeApi } from '../knowledge/api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
@@ -53,6 +55,7 @@ export interface RenderAppOptions {
   readonly strictMode?: boolean;
   readonly authApi?: AuthApi;
   readonly ssoApi?: SsoApi;
+  readonly importsApi?: ImportsApi;
   /** Defaults to a fresh fixture, so a screen that reads it always has one. */
   readonly staffApi?: StaffApi;
   readonly contactsApi?: ContactsApi;
@@ -86,6 +89,7 @@ export interface RenderedApp extends RenderResult {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly authApi: AuthApi;
   readonly ssoApi: SsoApi;
+  readonly importsApi: ImportsApi;
   readonly staffApi: StaffApi;
   readonly contactsApi: ContactsApi;
   readonly ticketingApi: TicketingApi;
@@ -120,6 +124,8 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     options.ssoApi ?? new MockSsoApi(authApi instanceof MockAuthApi ? authApi : undefined);
   const contactsApi = options.contactsApi ?? new MockContactsApi();
   const ticketingApi = options.ticketingApi ?? new MockTicketingApi();
+  const importsApi =
+    options.importsApi ?? new MockImportsApi('happy', { ticketing: ticketingApi, staff: staffApi });
   const ticketsApi = options.ticketsApi ?? new MockTicketsApi();
   const uploader = options.uploader ?? new MockAttachmentUploader();
   const emailApi = options.emailApi ?? new MockEmailApi();
@@ -144,6 +150,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     <AppProviders
       authApi={authApi}
       ssoApi={ssoApi}
+      importsApi={importsApi}
       staffApi={staffApi}
       contactsApi={contactsApi}
       ticketingApi={ticketingApi}
@@ -181,6 +188,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     user: userEvent.setup(),
     authApi,
     ssoApi,
+    importsApi,
     staffApi,
     contactsApi,
     ticketingApi,

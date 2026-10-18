@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { Ban, Timer } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
+import { LOCALE_STORAGE_KEY } from '../../app/preferences.js';
 import { renderApp } from '../../test/render.tsx';
 import { NOW, testTicket } from '../../tickets/fixtures.js';
 import type { TicketAction } from './ticket-actions-menu.tsx';
@@ -24,6 +25,54 @@ const renderHeader = (viewers: readonly HeaderViewer[], actions: readonly Ticket
       onShowDetails={() => {}}
     />,
   );
+
+it.each(['en', 'ar'] as const)(
+  'shows the original source number with a query-free, isolated source link in %s',
+  (locale) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    renderApp(
+      <TicketHeader
+        ticket={{
+          ...testTicket(),
+          imported: {
+            source: 'zendesk',
+            number: '0039812',
+            url: 'https://support.example/agent/tickets/39812?token=private#secret',
+          },
+        }}
+        departmentName="Billing"
+        viewers={[]}
+        actions={[]}
+        now={NOW}
+        showDetailsButton={false}
+        onShowDetails={() => {}}
+      />,
+    );
+    const source = screen.getByRole('link', { name: /Zendesk.*0039812/ });
+    expect(source).toHaveAttribute('href', 'https://support.example/agent/tickets/39812');
+    expect(source).toHaveAttribute('target', '_blank');
+    expect(source).toHaveAttribute('rel', 'noopener noreferrer');
+  },
+);
+
+it('keeps provenance visible without making an unsafe source address clickable', () => {
+  renderApp(
+    <TicketHeader
+      ticket={{
+        ...testTicket(),
+        imported: { source: 'file', number: 'old-42', url: 'javascript:alert(1)' },
+      }}
+      departmentName="Billing"
+      viewers={[]}
+      actions={[]}
+      now={NOW}
+      showDetailsButton={false}
+      onShowDetails={() => {}}
+    />,
+  );
+  expect(screen.getByText(/old-42/)).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /old-42/ })).not.toBeInTheDocument();
+});
 
 describe('the collision pill', () => {
   it('says somebody is replying when their composer has something in it', () => {

@@ -560,6 +560,7 @@ pnpm --filter @helpdock/admin test            # Vitest, happy-dom
 pnpm --filter @helpdock/admin test:coverage   # the same, with the 85 % line gate
 pnpm --filter @helpdock/admin e2e             # Playwright, en and ar, the fixture
 pnpm --filter @helpdock/admin e2e:api         # Playwright against a real api
+pnpm --filter @helpdock/admin e2e:imports     # real import API and workers, en and ar
 ```
 
 The unit suite renders through the real provider stack with `MemoryRouter`, so a
@@ -612,6 +613,17 @@ Both need Docker and a `pnpm build`; without Docker they skip themselves and say
 so. It is a separate config because a `webServer` and a `globalSetup` belong to
 a whole run, and putting it in the main one would start containers for the
 fixture suite too.
+
+`e2e:imports` uses `playwright.imports.config.ts` for the real import wizard in
+`en` and `ar`. Build the workspace packages and API first. Its dedicated install
+uses `HD_E2E_IMPORT_API_PORT` (3092) and `HD_E2E_IMPORT_WEB_PORT` (5286), plus
+owned Postgres/Redis containers and workers reading the Zendesk stand-in.
+The test confirms mapping choices through the public API, reviews the dry-run
+preview, starts the import, and opens the stored history. It also checks the
+managed file bytes, credential purge and absence of sends or queued side
+effects. The [development guide](../../docs/guides/development.md#coverage-gates)
+explains the storage stand-in and validation boundary. Docker absence may skip
+locally; it is an error in CI.
 
 The fixture suite has one project per locale and runs every spec twice, which
 is what catches a layout that only works in one direction. `@axe-core/playwright`

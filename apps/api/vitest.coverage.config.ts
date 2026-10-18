@@ -46,6 +46,12 @@ export default defineConfig({
   test: {
     name: '@helpdock/api-coverage',
     include: ['src/**/*.test.ts'],
+    // The full dataset runs separately without instrumentation; CI requires import-reference.
+    // Smaller real-DB suites still cover the production import code under the 90% gate.
+    exclude: [
+      'src/imports/zendesk-reference.integration.test.ts',
+      'src/imports/native-reference.integration.test.ts',
+    ],
     testTimeout: 120_000,
     hookTimeout: 300_000,
     coverage: {

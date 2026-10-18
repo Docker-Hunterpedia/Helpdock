@@ -11,6 +11,7 @@ import { currentBrand, useChannelsApi, useSession } from '../../auth/session.tsx
 import { initialsOf } from '../contacts/format.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { messageTime } from './format.js';
+import { ImportedMessageDetails } from './imported-message-details.js';
 import { MESSAGE_MAX_WIDTH, SystemEvent } from './message-bubble.tsx';
 
 /**
@@ -237,6 +238,9 @@ export function EmailMessageCard({
               ) : null}
             </>
           )}
+          {message.importDetails ? (
+            <ImportedMessageDetails details={message.importDetails} />
+          ) : null}
         </Box>
       </Box>
     </Box>

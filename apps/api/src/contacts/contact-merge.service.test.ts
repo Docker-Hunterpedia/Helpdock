@@ -39,6 +39,7 @@ const contact = (id: string, overrides: Partial<ContactRow> = {}): ContactRow =>
   notesCount: 0,
   createdAt: new Date(),
   updatedAt: new Date(),
+  importedDetails: null,
   anonymisedAt: null,
   mergedIntoId: null,
   mergedAt: null,

@@ -32,6 +32,8 @@ export interface BlockedEvent {
 }
 
 export interface SafeFetchPolicy {
+  /** Exact lowercase hosts; when set, every redirect hop must match. An empty list refuses all hosts. */
+  readonly allowedHosts?: readonly string[];
   /** Ports the destination may use. Default 80, 443, 8080, 8443. */
   readonly allowedPorts?: readonly number[];
   /**
@@ -56,6 +58,7 @@ export interface SafeFetchPolicy {
 
 /** A policy with every default filled in and every CIDR already parsed. */
 export interface ResolvedPolicy {
+  readonly allowedHosts: ReadonlySet<string> | undefined;
   readonly allowedPorts: ReadonlySet<number>;
   readonly allowCidrs: readonly ParsedCidr[];
   readonly maxRedirects: number;
@@ -122,6 +125,10 @@ export function resolvePolicy(policy: SafeFetchPolicy = {}): ResolvedPolicy {
   }
 
   return {
+    allowedHosts:
+      policy.allowedHosts === undefined
+        ? undefined
+        : new Set(policy.allowedHosts.map((host) => host.toLowerCase())),
     allowedPorts: new Set(policy.allowedPorts ?? DEFAULT_ALLOWED_PORTS),
     allowCidrs: parseAllowCidrs(policy.allowCidrs ?? []),
     maxRedirects,

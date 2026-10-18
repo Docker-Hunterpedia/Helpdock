@@ -1488,7 +1488,90 @@ export const samlMetadataRefreshJob = defineJob({
 });
 
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
+/** Import phases checkpoint their own short transactions; job payloads contain no credentials. */
+export const importRunPayloadSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
+export type ImportRunPayload = z.infer<typeof importRunPayloadSchema>;
+/** `workId` is the outbox request this job delivers; a job whose request was superseded exits. */
+export const importWorkPayloadSchema = importRunPayloadSchema.extend({ workId: z.uuid() });
+export type ImportWorkPayload = z.infer<typeof importWorkPayloadSchema>;
+const importRetryOptions: JobsOptions = {
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 1000 },
+  removeOnComplete: { age: 86400, count: 1000 },
+  removeOnFail: 1000,
+};
+export const importExtractJob = defineJob({
+  name: 'import.extract',
+  queue: QUEUE_NAMES.import,
+  schema: importWorkPayloadSchema,
+  options: importRetryOptions,
+});
+export const importFilePreparePayloadSchema = importRunPayloadSchema.extend({
+  fileId: z.uuid(),
+  revision: z.uuid(),
+});
+export const importFilePrepareJob = defineJob({
+  name: 'import.file_prepare',
+  queue: QUEUE_NAMES.import,
+  schema: importFilePreparePayloadSchema,
+  options: importRetryOptions,
+});
+export const importDryRunJob = defineJob({
+  name: 'import.dry_run',
+  queue: QUEUE_NAMES.import,
+  schema: importWorkPayloadSchema,
+  options: importRetryOptions,
+});
+export const importLoadJob = defineJob({
+  name: 'import.load',
+  queue: QUEUE_NAMES.import,
+  schema: importWorkPayloadSchema,
+  options: importRetryOptions,
+});
+export const importAttachmentsJob = defineJob({
+  name: 'import.attachments',
+  queue: QUEUE_NAMES.import,
+  schema: importWorkPayloadSchema,
+  options: importRetryOptions,
+});
+export const importFinishJob = defineJob({
+  name: 'import.finish',
+  queue: QUEUE_NAMES.import,
+  schema: importWorkPayloadSchema,
+  options: importRetryOptions,
+});
+export const importSlaActivatePayloadSchema = importRunPayloadSchema.extend({
+  revision: z.uuid(),
+  after: z.uuid().nullable(),
+});
+export const importSlaActivateJob = defineJob({
+  name: 'import.sla_activate',
+  queue: QUEUE_NAMES.import,
+  schema: importSlaActivatePayloadSchema,
+  options: importRetryOptions,
+});
+export const IMPORT_RECOVERY_CRON = '* * * * *';
+export const importRecoverJob = defineJob({
+  name: 'import.recover',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.strictObject({}),
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 1000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  },
+});
+
 export const JOB_DEFINITIONS = Object.freeze({
+  [importSlaActivateJob.name]: importSlaActivateJob,
+  [importFilePrepareJob.name]: importFilePrepareJob,
+  [importRecoverJob.name]: importRecoverJob,
+  [importExtractJob.name]: importExtractJob,
+  [importDryRunJob.name]: importDryRunJob,
+  [importLoadJob.name]: importLoadJob,
+  [importAttachmentsJob.name]: importAttachmentsJob,
+  [importFinishJob.name]: importFinishJob,
   [samlMetadataRefreshJob.name]: samlMetadataRefreshJob,
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,

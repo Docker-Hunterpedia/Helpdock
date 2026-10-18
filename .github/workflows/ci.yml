@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The complete regression run, including the suites a pull request skips.
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -44,7 +48,7 @@ permissions:
 
 jobs:
   # Keep the required context present; select jobs rather than filtering the workflow.
-  # Main is the complete regression run. PRs include affected workspace consumers.
+  # PRs include affected workspace consumers; main runs the checks; nightly runs everything.
   scope:
     name: scope
     runs-on: ubuntu-latest
@@ -52,6 +56,7 @@ jobs:
     outputs:
       run_full: ${{ steps.classify.outputs.run_full }}
       run_api: ${{ steps.classify.outputs.run_api }}
+      run_import_reference: ${{ steps.classify.outputs.run_import_reference }}
       run_admin: ${{ steps.classify.outputs.run_admin }}
       run_widget: ${{ steps.classify.outputs.run_widget }}
       run_unit: ${{ steps.classify.outputs.run_unit }}
@@ -78,18 +83,22 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          suites='run_api run_import_reference run_admin run_widget run_unit run_integration run_browser_api run_image run_semgrep'
+          if [ "$EVENT_NAME" = 'push' ]; then
+            # The ruleset requires a branch to be up to date and green before it
+            # merges, so main already passed these suites as a pull request.
+            # Keep the cheap repository-wide checks; the nightly run covers the rest.
+            echo 'run_full=true' >> "$GITHUB_OUTPUT"
+            for suite in $suites; do echo "$suite=false" >> "$GITHUB_OUTPUT"; done
+            echo 'typecheck_filters=[]' >> "$GITHUB_OUTPUT"
+            echo 'A push to main runs the repository-wide checks only.'
+            exit 0
+          fi
           if [ "$EVENT_NAME" != 'pull_request' ]; then
             echo 'run_full=true' >> "$GITHUB_OUTPUT"
-            echo 'run_api=true' >> "$GITHUB_OUTPUT"
-            echo 'run_admin=true' >> "$GITHUB_OUTPUT"
-            echo 'run_widget=true' >> "$GITHUB_OUTPUT"
-            echo 'run_unit=true' >> "$GITHUB_OUTPUT"
-            echo 'run_integration=true' >> "$GITHUB_OUTPUT"
-            echo 'run_browser_api=true' >> "$GITHUB_OUTPUT"
-            echo 'run_image=true' >> "$GITHUB_OUTPUT"
-            echo 'run_semgrep=true' >> "$GITHUB_OUTPUT"
+            for suite in $suites; do echo "$suite=true" >> "$GITHUB_OUTPUT"; done
             echo 'typecheck_filters=[]' >> "$GITHUB_OUTPUT"
-            echo 'A push to main always runs the complete suite.'
+            echo 'A scheduled or manual run executes the complete suite.'
             exit 0
           fi
 
@@ -384,7 +393,7 @@ jobs:
   import-reference:
     name: import-reference (${{ matrix.source }})
     needs: scope
-    if: needs.scope.outputs.run_api == 'true'
+    if: needs.scope.outputs.run_import_reference == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:

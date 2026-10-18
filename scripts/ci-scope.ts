@@ -3,7 +3,31 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type Workspace = { name: string; path: string; dependencies: string[] };
-type ChangedFile = { filename: string; previous_filename?: string };
+type ChangedFile = { filename: string; previous_filename?: string; patch?: string };
+
+// The 500-ticket vendor reference imports are the slowest suites (15–30 minutes).
+// Pull requests run them only when the import path or what it writes through changes;
+// the nightly full run covers everything else.
+const IMPORT_PATHS = [
+  /^apps\/api\/src\/imports\//,
+  /^apps\/api\/src\/media\//,
+  /^apps\/api\/src\/testing\/(native-reference|import-browser|vendor-lookup)/,
+  /^apps\/api\/src\/.*\/import(ed)?[-.]/,
+  /^packages\/importers\//,
+  /^packages\/jobs\/src\//,
+  /^packages\/db\/(drizzle|src\/schema)\//,
+  /^packages\/schemas\/src\/import/,
+];
+
+/** A release PR only bumps `"version"`; that cannot change what any suite tests. */
+function versionBumpOnly(file: ChangedFile): boolean {
+  if (!file.filename.endsWith('package.json') || file.previous_filename || !file.patch)
+    return false;
+  const changed = file.patch
+    .split('\n')
+    .filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---)/.test(line));
+  return changed.length > 0 && changed.every((line) => /^[+-]\s*"version": "[^"]+",?$/.test(line));
+}
 
 export function readWorkspaces(root: string): Workspace[] {
   return ['apps', 'packages'].flatMap((area) =>
@@ -32,10 +56,13 @@ export function classifyChanges(
 ) {
   const affected = new Set<string>();
   let full = files.length === 0 || files.length !== expectedCount;
+  let imports = false;
   for (const file of files) {
+    if (versionBumpOnly(file)) continue;
     for (const path of [file.filename, file.previous_filename].filter(Boolean) as string[]) {
       // Documentation does not alter runtime contracts; unknown paths fail closed.
       if (path.startsWith('docs/') || path.endsWith('.md')) continue;
+      if (IMPORT_PATHS.some((pattern) => pattern.test(path))) imports = true;
       const workspace = workspaces.find((item) => path.startsWith(`${item.path}/`));
       if (workspace && !path.endsWith('/package.json')) affected.add(workspace.name);
       else full = true;
@@ -62,6 +89,7 @@ export function classifyChanges(
   return {
     run_full: full,
     run_api: has('api'),
+    run_import_reference: full || (imports && has('api')),
     run_admin: has('admin'),
     run_widget: has('widget'),
     run_unit: packages || has('widget') || has('helpcenter'),

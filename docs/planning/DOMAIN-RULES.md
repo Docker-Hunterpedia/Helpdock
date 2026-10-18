@@ -366,6 +366,7 @@ Socket.IO does not guarantee delivery. The REST API is the source of truth; sock
 - **Receive**: the server emits `message` events with `seq` to the room. The client tracks `last_seq`. Any gap (received `seq > last_seq + 1`) or any reconnect triggers `GET …/messages?after=<last_seq>` to catch up. Delivered and read receipts are separate events carrying the `seq` they refer to.
 - **SSE fallback**: identical event payloads over `GET /widget/stream?after=<last_seq>`; sends go over REST. The server closes SSE connections after 5 minutes and the client reconnects with its cursor.
 - Typing indicators, presence, and queue position are ephemeral, unacknowledged, and never replayed.
+- Queue position counts the unassigned, open `chat` tickets of the department that joined the queue before this one. A live conversation joins when it is created. An imported ticket is history: it joins only at its customer's first public message written in Helpdock, never at its historical creation date, and has no position until then.
 - Staff side is the same contract on the `/staff` namespace with rooms per ticket and per department.
 - Tests (Playwright + toxiproxy or a network-throttling fixture): drop the connection mid-send and assert exactly one message exists; restart the api and assert the client catches up; submit the same message twice and assert one row.
 
@@ -501,3 +502,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-09-16 | Initial version, written to close the review findings on PRD 1.0. |
 | 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |
 | 2026-10-11 | The Meta channels (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): §2.5 and the new §2.6 reply-window rule; §4.4's three scoped ids and the first verified phone, a WhatsApp `wa_id`; the new §4.7 identities and §4.8 message kinds; §6's keys; §11's delivery logs and erasure; §13's Graph client. |
+| 2026-10-18 | §7: imported tickets join the widget queue only when their customer continues them live (M11-17). |

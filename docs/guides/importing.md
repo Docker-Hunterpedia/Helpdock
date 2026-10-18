@@ -15,6 +15,11 @@ resume ordinary embedding for that language. A changed source version in a
 later import defers the replacement again. Starting imported-ticket SLA clocks
 is also a separate, explicit admin action.
 
+Imported open chat conversations do not join the live widget queue. A visitor
+waiting after a migration is not counted behind historical chats. If the
+customer writes in an imported chat again, it joins the queue from that
+message, as a new conversation would.
+
 Imported ticket attachments and article files are copied into Helpdock's
 configured private S3-compatible bucket (`S3_ENDPOINT`, `S3_BUCKET`), such as a
 self-hosted MinIO store or S3. The worker uses local disk for bounded temporary

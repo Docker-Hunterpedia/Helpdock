@@ -13,7 +13,7 @@ import {
   type WidgetVisitor,
   widgetVisitors,
 } from '@helpdock/db';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, max, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, max, or, sql } from 'drizzle-orm';
 
 /**
  * The widget's own reads and writes: visitors, and a visitor's view of the
@@ -33,6 +33,29 @@ export interface TicketWithStatus {
 
 /** What a visitor may see of a thread: public replies and AI answers, never notes or system rows. */
 const VISITOR_KINDS = ['public', 'ai'] as const;
+
+/**
+ * When a conversation joined the live queue (M4-04). A widget conversation
+ * queues from when it was opened. An imported one (M11) is history, so it
+ * queues only once its customer writes in it live, and from that message:
+ * its historical creation date would put it ahead of every visitor waiting
+ * now. Null for imported history nobody continued. `CASE` keeps the
+ * per-ticket message lookup, an index probe on `(ticket_id, seq)`, to
+ * imported rows.
+ *
+ * Column names are spelled out because Drizzle drops table qualifiers in a
+ * single-table select list, where a bare `id` would bind to the message.
+ */
+const queuedSince = sql<string | null>`CASE
+  WHEN tickets.imported_at IS NULL THEN tickets.created_at
+  ELSE (
+    SELECT min(m.created_at) FROM ${ticketMessages} m
+    WHERE m.ticket_id = tickets.id
+      AND m.kind = 'public'
+      AND m.author_type = 'contact'
+      AND m.import_source_account_key IS NULL
+  )
+END`;
 
 export class WidgetRepository {
   // ------------------------------------------------------------- visitors
@@ -278,12 +301,20 @@ export class WidgetRepository {
 
   /**
    * M4-04's queue position: the unassigned, still-open widget conversations
-   * of the same department that were opened before this one, plus one. Null
-   * once somebody holds it or it is closed.
+   * of the same department that joined the queue before this one, plus one.
+   * Null once somebody holds it or it is closed, and for imported history
+   * nobody has continued.
    */
   async queuePosition(tx: DbTransaction, entry: TicketWithStatus): Promise<number | null> {
     const { ticket, status } = entry;
     if (ticket.assigneeId !== null || status.systemState === 'closed') {
+      return null;
+    }
+    const [mine] = await tx
+      .select({ since: queuedSince })
+      .from(tickets)
+      .where(eq(tickets.id, ticket.id));
+    if (!mine?.since) {
       return null;
     }
     const [row] = await tx
@@ -298,7 +329,7 @@ export class WidgetRepository {
           isNull(tickets.deletedAt),
           isNull(tickets.mergedIntoId),
           sql`${ticketStatuses.systemState} <> 'closed'`,
-          lt(tickets.createdAt, ticket.createdAt),
+          sql`${queuedSince} < ${mine.since}::timestamptz`,
         ),
       );
     return (row?.ahead ?? 0) + 1;

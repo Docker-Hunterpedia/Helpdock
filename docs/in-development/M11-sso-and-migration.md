@@ -4462,6 +4462,26 @@ also pass. The separate local EN/AR Source-view, import-health, SLA and imported
 ticket checks pass with axe. Final CI remains required on the combined PR's
 latest head.
 
+### Imported chats and the widget queue (gap found and solved, 2026-10-18)
+
+The widget's queue position counted every unassigned, open `chat` ticket of
+the department created earlier. Open imported chats carry their historical
+creation dates, so after a migration a live visitor could read "position 300
+in queue". An imported ticket now joins the queue only at its customer's first
+public message written in Helpdock: a message with no
+`import_source_account_key`. It queues from that message, not from its
+historical creation date. Until then its own position is `null`. A customer
+who continues an imported chat is genuinely waiting, so DOMAIN-RULES §7 now
+states this rule. Live conversations still queue from creation.
+
+`CASE` restricts the per-ticket lookup to imported rows. That lookup is a probe
+on `ticket_messages (ticket_id, seq)`. The outer filters are unchanged, so the
+query keeps its existing index path. A failing-first Postgres regression,
+`widget/widget-queue.integration.test.ts`, covers untouched imports, imports
+with only imported customer messages, and a continued import between two live
+chats. No other live-queue count exists. Per-agent assignment load and backlog
+reports count workload, not waiting visitors, and stay unchanged.
+
 Artboard: `Admin/Ticket-Imported`. The ticket header chip (from `import_source` +
 `import_external_ids.source_number/source_url`, added to `ticketSchema` as
 `imported: { source, number, url } | null`), the activity line, a "Source:

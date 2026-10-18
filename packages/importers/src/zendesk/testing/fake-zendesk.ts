@@ -299,7 +299,20 @@ export class FakeZendesk {
   }
 
   private commentPage(url: URL, rows: ZendeskRow[]): VendorAnswer {
-    return this.cursorCollectionPage(url, 'comments', rows);
+    const visible =
+      url.searchParams.get('include_inline_images') === 'true'
+        ? rows
+        : rows.map((row) => ({
+            ...row,
+            ...(Array.isArray(row.attachments)
+              ? {
+                  attachments: row.attachments.filter(
+                    (attachment: { inline?: boolean }) => attachment.inline !== true,
+                  ),
+                }
+              : {}),
+          }));
+    return this.cursorCollectionPage(url, 'comments', visible);
   }
 
   private cursorCollectionPage(url: URL, entity: string, rows: readonly unknown[]): VendorAnswer {

@@ -29,6 +29,7 @@ import {
 } from './load-ticket.js';
 import { validateTicketMappings } from './mapping-scope.js';
 import type { ContactLoad, OrganizationLoad } from './profile-contracts.js';
+import { reconcileImportedSla } from './reconcile-sla.js';
 import { requireLoadingRun } from './run-scope.js';
 import type { StaffLoad } from './staff-contracts.js';
 
@@ -71,8 +72,10 @@ export class ImportWriter {
       authors: input.authors,
     });
     const existing = await importedIdentity(tx, input, 'ticket', input.record.externalId);
+    let previousDepartmentId: string | undefined;
     if (existing) {
-      await requireImportedTicket(tx, input, existing.helpdockId);
+      previousDepartmentId = (await requireImportedTicket(tx, input, existing.helpdockId))
+        .departmentId;
       await requireImportedMessageTargets(tx, input, existing.helpdockId);
     }
     if (existing?.payloadHash === payloadHash)
@@ -93,6 +96,8 @@ export class ImportWriter {
     await loadImportedTags(tx, input, ticketId);
     await loadImportedParticipants(tx, input, ticketId);
     await loadImportedCsat(tx, input, ticketId);
+    if (existing && previousDepartmentId)
+      await reconcileImportedSla(tx, input, ticketId, previousDepartmentId);
     await rememberImported(tx, {
       brandId: input.brandId,
       source: input.source,

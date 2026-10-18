@@ -3,6 +3,11 @@ import path from 'node:path';
 import { SyntaxKind, type Token, tokenize } from './controller-scan.ts';
 
 const ALLOWED_MODULES = new Set([
+  '../../sla/ticket-clocks.js',
+  '../../sla/sla.repository.js',
+  '../../sla/policy-match.js',
+  '../../sla/clock.js',
+  '../../sla/calendars.js',
   '../preflight/staged-record.js',
   '../article-asset-proof.js',
   '../article-asset-requests.js',
@@ -29,6 +34,11 @@ const PURE_CHANNEL_EXPORTS = new Set([
   'htmlToText',
 ]);
 const REVIEWED_EXPORTS = new Map([
+  ['../../sla/ticket-clocks.js', new Set(['isResponseClock', 'reconcileClocks', 'summaryColumns'])],
+  ['../../sla/sla.repository.js', new Set(['SlaRepository'])],
+  ['../../sla/policy-match.js', new Set(['matchPolicy'])],
+  ['../../sla/clock.js', new Set(['Clock', 'satisfy'])],
+  ['../../sla/calendars.js', new Set(['buildCalendars'])],
   ['../preflight/staged-record.js', new Set(['validatedStagedRecord'])],
   [
     '../article-asset-proof.js',
@@ -54,6 +64,7 @@ const FORBIDDEN_IDENTIFIERS = new Set([
   'requestAutoAssign',
   'enqueueContactCreated',
   'enqueueOutbox',
+  'outbox',
   'nextMessageSeq',
   'fetch',
   'eval',
@@ -130,6 +141,94 @@ export function findImportWriterViolations(source: string): string[] {
 export function findImportLifecycleViolations(source: string): string[] {
   const violations = new Set<string>();
   const tokens = tokenize(source, 'import.ts');
+  const allowedEvents = new Set([
+    'import.work_requested',
+    'import.file_uploaded',
+    'attachment.uploaded',
+    'media.objects.purge',
+    'help_center.media_uploaded',
+    'help_center.imported',
+    'import.sla_activation_requested',
+  ]);
+  const allowedConstants = new Set<string>();
+  for (let index = 0; index < tokens.length; index++) {
+    if (
+      tokens[index]?.kind === SyntaxKind.ConstKeyword &&
+      tokens[index + 1]?.kind === SyntaxKind.Identifier &&
+      tokens[index + 2]?.kind === SyntaxKind.EqualsToken
+    ) {
+      const value = tokens[index + 3];
+      if (value?.kind === SyntaxKind.StringLiteral && allowedEvents.has(value.text.slice(1, -1)))
+        allowedConstants.add(tokens[index + 1]?.text ?? '');
+    }
+    if (tokens[index]?.kind !== SyntaxKind.ImportKeyword) continue;
+    const declaration: Token[] = [];
+    for (const token of tokens.slice(index + 1)) {
+      declaration.push(token);
+      if (token.kind === SyntaxKind.StringLiteral || token.kind === SyntaxKind.SemicolonToken)
+        break;
+    }
+    const specifier = declaration
+      .find((token) => token.kind === SyntaxKind.StringLiteral)
+      ?.text.slice(1, -1);
+    const reviewed =
+      specifier === '@helpdock/schemas'
+        ? new Set(['HC_IMPORTED_EVENT', 'HC_MEDIA_UPLOADED_EVENT'])
+        : specifier?.endsWith('/media/object-purge.js')
+          ? new Set(['OBJECT_PURGE_EVENT'])
+          : new Set<string>();
+    for (let at = 0; at < declaration.length; at++) {
+      const name = declaration[at]?.text;
+      if (name && reviewed.has(name))
+        allowedConstants.add(
+          declaration[at + 1]?.kind === SyntaxKind.AsKeyword
+            ? (declaration[at + 2]?.text ?? '')
+            : name,
+        );
+    }
+  }
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (
+      token &&
+      [
+        SyntaxKind.StringLiteral,
+        SyntaxKind.NoSubstitutionTemplateLiteral,
+        SyntaxKind.TemplateHead,
+      ].includes(token.kind) &&
+      /\binsert\s+into\s+(?:"?public"?\.)?"?outbox"?\b/i.test(token.text)
+    )
+      violations.add('raw SQL import outbox writes are forbidden');
+    if (token?.text !== 'enqueueOutbox') continue;
+    if (tokens[index + 1]?.kind === SyntaxKind.AsKeyword)
+      violations.add('outbox producer aliases are forbidden');
+    if (tokens[index + 1]?.kind !== SyntaxKind.OpenParenToken) continue;
+    if (tokens[index + 4]?.kind !== SyntaxKind.OpenBraceToken) {
+      violations.add('outbox payload must declare its allowed event inline');
+      continue;
+    }
+    let depth = 1,
+      found = false;
+    for (let at = index + 5; at < tokens.length && depth > 0; at++) {
+      const part = tokens[at];
+      if (part?.kind === SyntaxKind.OpenBraceToken) depth++;
+      if (part?.kind === SyntaxKind.CloseBraceToken) depth--;
+      if (depth === 1 && part?.kind === SyntaxKind.DotDotDotToken)
+        violations.add('import outbox payload spreads are forbidden');
+      if (depth !== 1 || part?.text !== 'event' || tokens[at + 1]?.kind !== SyntaxKind.ColonToken)
+        continue;
+      found = true;
+      const value = tokens[at + 2];
+      if (
+        !value ||
+        !(value.kind === SyntaxKind.StringLiteral
+          ? allowedEvents.has(value.text.slice(1, -1))
+          : value.kind === SyntaxKind.Identifier && allowedConstants.has(value.text))
+      )
+        violations.add('unreviewed import outbox event');
+    }
+    if (!found) violations.add('import outbox event must be explicit');
+  }
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (!token) continue;
@@ -163,6 +262,9 @@ async function checkWriter(): Promise<void> {
   const imports = [
     ...(await writerFiles(path.resolve('apps/api/src/imports'))),
     ...(await writerFiles(path.resolve('packages/importers/src'))),
+    ...(await writerFiles(path.resolve('apps/api/src'))).filter(
+      (file) => !file.includes('/imports/') && path.basename(file).includes('import'),
+    ),
   ];
   const failures: string[] = [];
   for (const file of files)

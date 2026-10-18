@@ -6,7 +6,7 @@ import { type FreshdeskCredentials, freshdeskCredentialsSchema } from './contrac
 export class FreshdeskClient {
   readonly origin: string;
   private readonly authorization: string;
-  private readonly authors = new Map<number, 'agent' | 'customer'>();
+  private readonly authors = new Map<number, 'agent' | 'customer' | 'system'>();
 
   constructor(
     private readonly context: ConnectorContext<FreshdeskCredentials>,
@@ -49,10 +49,10 @@ export class FreshdeskClient {
     throw new ConnectorError('invalid-response');
   }
 
-  async authorKind(id: number): Promise<'agent' | 'customer'> {
+  async authorKind(id: number): Promise<'agent' | 'customer' | 'system'> {
     const cached = this.authors.get(id);
     if (cached) return cached;
-    let kind: 'agent' | 'customer';
+    let kind: 'agent' | 'customer' | 'system';
     const identity = z.object({ id: z.number().int().positive() });
     try {
       const author = await this.json(`/api/v2/agents/${id}`, identity);
@@ -60,9 +60,20 @@ export class FreshdeskClient {
       kind = 'agent';
     } catch (error) {
       if (!(error instanceof ConnectorError) || error.code !== 'record-unavailable') throw error;
-      const author = await this.json(`/api/v2/contacts/${id}`, identity);
-      if (author.id !== id) throw new ConnectorError('invalid-response');
-      kind = 'customer';
+      try {
+        const author = await this.json(`/api/v2/contacts/${id}`, identity);
+        if (author.id !== id) throw new ConnectorError('invalid-response');
+        kind = 'customer';
+      } catch (error) {
+        if (!(error instanceof ConnectorError) || error.code !== 'record-unavailable') throw error;
+        await this.context.log({
+          level: 'warning',
+          entity: 'message',
+          externalId: String(id),
+          message: 'import.message.author-unavailable',
+        });
+        kind = 'system';
+      }
     }
     if (this.authors.size >= 128) this.authors.clear();
     this.authors.set(id, kind);

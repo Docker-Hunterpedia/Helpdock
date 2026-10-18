@@ -1,1 +1,0 @@
-ALTER TABLE "hc_article_versions" ADD COLUMN "imported_published_description" text;

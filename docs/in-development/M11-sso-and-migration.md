@@ -133,9 +133,44 @@ Total for the 1.0 scope (M11-01 to M11-18): about **63 working days** for one
 person; SSO (M11-01 to 06) and import (M11-07 to 18) are independent and can run
 in parallel, which brings the calendar to roughly 6–7 weeks with two people.
 
+## Merge-blocking owner review, 2026-10-18
+
+PR #215 is back in draft. Earlier fixture and CI passes did not cover the upgrade,
+live-account mutation, retention, automation or missing UI cases below. Affected
+exit criteria are reopened; earlier evidence is historical, not merge approval.
+
+- [x] Upgrade a real pre-0054 database; consolidate unshipped 0054–0081 into 0054, retain shipped 0053, use enum text comparisons and index staging parent lookups.
+- [x] Apply the import arrival baseline to scheduled-rule SQL, condition facts and match identity; preserve status timestamps on content-only deltas.
+- [x] Show retention loss warnings in dry-run approval and invalidate approval on policy changes.
+- [x] Resume from durable vendor pages while source records change; prevent Freshdesk/Zoho pagination boundary omissions.
+- [x] Accept documented Freshdesk display-name senders; retain deleted-author history.
+- [x] Cover mapping editor, overview, controls and logs in unit/browser tests; retain controls during transient polling failures.
+- [x] Quietly reconcile activated SLAs after delta replies and status changes.
+- [x] Reuse bounded bundle preparation across attachments instead of downloading and indexing the archive for every file.
+- [x] Include Zendesk inline images, mark deleted users inactive, skip tickets deleted mid-run and respect Zoho daily credit exhaustion.
+- [x] Enforce the ADR outbox event allow-list and import boundaries beyond name-based loader scanning.
+
+Local remediation evidence (2026-10-18): the true 0052/0053 upgrade and RLS
+regression selection passed 937 cases; the complete writer, migration and rule
+batch passed 255 cases. Connector/tooling units passed 533 cases. EN/AR mapping,
+retention, overview, control/polling and log component tests pass. Browser checks
+for mapping review and overview/control/log flows passed in both locales with
+axe. These results do not close the reopened exit criteria until current-head
+required CI and native reference jobs pass. The real-API mapping edit also passed the wizard acceptance in EN/AR, with no
+sends observed. Full local API coverage was interrupted to finish the additional
+content-only delta status regression; required CI remains the coverage authority
+for this correction batch.
+
+Review guards for the correction batch:
+
+- `load-ticket.ts` — retain status time for content-only deltas.
+- `reconcile-sla.ts` — select the earliest qualifying reply per clock and exclude pre-reopen history from next-response satisfaction, without spreading a 100,000-message array into a function call.
+- `zendesk/client.ts` and thread readers — distinguish a missing ticket from an unavailable author so one missing person cannot discard an otherwise readable ticket.
+- `clean-code-guard`: 3 fixed, 0 flagged for author. `test-guard`: boundary fakes and real database assertions checked; no implementation-only fixtures added. `docs-guard`: final migration inventory, official vendor corrections, guide and ADR reconciled. Focused `security-audit`: new page-cache RLS/claim fencing, response-header minimization, cleanup and the strengthened outbox boundary reviewed; the 930-case tenant negative suite passes.
+
 ## Exit criteria
 
-Each is proved by a named test against the stand-ins (fake OIDC and SAML IdPs,
+Each requires proof by a named test against the stand-ins (fake OIDC and SAML IdPs,
 vendor stand-in servers) on real Postgres and Redis (Testcontainers), as M6 and
 M10 were. A run against real IdPs and real vendor accounts is recorded in this
 document by the owner (external dependencies), but is not a CI gate.
@@ -147,18 +182,18 @@ document by the owner (external dependencies), but is not a CI gate.
 - [x] With SSO enforced, password, magic link and Google/GitHub sign-in are
       refused for everyone except the break-glass install admin, and an invite is
       accepted through SSO.
-- [x] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
+- [ ] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
       same reference dataset: 500 tickets, 2 000 messages, attachments, notes,
       CSAT, 50 contacts, 10 companies, 20 articles in two languages) import into a
       brand with every ticket's thread, authors, dates, notes, attachments, tags,
       custom fields and assignee intact.
-- [x] During and after an import, the install sent nothing: the stand-in SMTP,
+- [ ] During and after an import, the install sent nothing: the stand-in SMTP,
       the webhook receiver, the Telegram and Graph stand-ins received no request;
       no `workflow_runs`, `ticket_sla_clocks`, `notifications`, `ai_calls` or
       `webhook_deliveries` rows reference an imported ticket.
 - [x] Reports for the imported range show the imported volume, first response,
       resolution and CSAT on their original days.
-- [x] Running the same import again writes nothing; a delta run brings only the
+- [ ] Running the same import again writes nothing; a delta run brings only the
       tickets changed since; killing the worker mid-load and resuming loses and
       duplicates nothing.
 - [x] A CSV export from a tool without a connector imports through the manual
@@ -166,8 +201,8 @@ document by the owner (external dependencies), but is not a CI gate.
 - [x] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6 negative
       suite); vendor credentials are never returned after save and are deleted
       when a run finishes.
-- [x] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
-- [x] After implementation, a separate full import-path review reconciles every
+- [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+- [ ] After implementation, a separate full import-path review reconciles every
       connector's source fixtures against loaded tickets, contacts, companies and
       knowledge content. Check thread order, authors, dates, notes, attachments,
       fields, tags, assignees, relationships, repeat/delta/resume behaviour and
@@ -182,7 +217,7 @@ published-head CI are distinguished in the
 [review checkpoint](#import-path-review-checkpoint-2026-10-18). The implementation
 notes below retain earlier checkpoints; an older "authored/unrun" or
 "unfinished" statement describes that checkpoint, not the current result in
-this index. These checkmarks record functional acceptance against the named fixtures. The
+this index. These checkmarks record fixture coverage; the owner review above reopened affected acceptance. The
 corrected publication still requires green CI before the PR leaves draft; the
 owner merges it. Real accounts/storage remain external acceptance, not a CI gate.
 
@@ -200,47 +235,31 @@ owner merges it. Real accounts/storage remain external acceptance, not a CI gate
 
 ## Migrations
 
-Numbers continue from `0052`. Each migration has its round-trip test, as every
-earlier one.
+Numbers continue from the released `0052`. The already merged `0053_sso`
+remains unchanged. The combined import PR adds one final `0054_imports` migration,
+regenerated from the 0053 snapshot, with fresh-install, true 0052/0053 upgrade and
+repeat/no-op coverage in `packages/db/src/migrate.integration.test.ts`.
 
-- `0053_sso` (M11-01): `sso_connections`, `sso_role_mappings`,
-  `user_sso_identities`; `brand_role_source` enum (`manual`, `sso`) and
-  `user_brand_roles.source` default `manual`, `sso_connection_id`, and a provenance check constraint.
-- `0054_imports` (M11-07): `import_runs`, `import_records`, `import_mappings`,
-  `import_external_ids`, `import_log`, `import_file_presets`, their RLS policies (`gen:rls`);
-  `ticket_messages.author_display varchar(200) null` (the name shown for an
-  imported agent kept as "name only");
-  `tickets.imported_at timestamptz`, `tickets.import_source text`;
-  `attachment_origin` enum (`upload`, `channel`, `import`) and
-  `attachments.origin` default `upload` (backfilled `channel` where
-  `uploader_type = 'system'`); `csat_answer_channel` value `import`.
-- `0058_imported_knowledge_metadata` (M11-09): private source descriptions for
-  help-center categories, sections and article versions, source category parent
-  references, and 500-character working/published article titles. Existing tenant
-  tables keep their FORCE RLS policies; no new table is introduced.
+`0054_imports` includes ten FORCE-RLS tenant tables: `import_runs`,
+`import_records`, `import_mappings`, `import_external_ids`, `import_log`,
+`import_file_presets`, `import_files`, `import_ticket_inventory`,
+`hc_import_assets` and `import_pages`. Composite brand/run or brand/media keys
+bind their children. Staging includes a `(run_id, parent_external_id, entity)`
+index for ticket-thread reads. Successful extraction pages are immutable and
+claim-fenced; a trigger removes them when extraction ends, fails or is cancelled.
 
-The complete ordered inventory is in `packages/db/drizzle/meta/_journal.json`.
-Follow-on M11 migrations `0055`–`0067` preserve source details, satisfaction,
-claims, activities/participants, knowledge ancestry, load receipts, account
-namespaces, original mail identity and reviewed dry-run identity. The remaining
-schema changes in the combined PR are:
+The same migration creates the final provenance, original message and satisfaction
+metadata, account namespaces, source knowledge descriptions, article asset and
+publication state, dry-run identity/media receipts, search/history indexes,
+worker claims and explicit SLA activation markers. Satisfaction checks cast
+`rated_via` to text so adding its `import` value and installing constraints in one
+transaction is safe. Existing system attachments are backfilled to channel origin.
+Native messages, answers, articles and staff publications remain intact.
 
-| Migration | Purpose |
-|---|---|
-| `0068_import_source_files` | Tenant-scoped source uploads and preparation state |
-| `0069_import_staging_retention` | Discarded-file state and finished-run retention index |
-| `0070_imported_sla_activation` | Explicit per-ticket SLA activation marker |
-| `0071_imported_sla_candidates` | Pending imported-ticket activation index |
-| `0072_imported_ticket_native_search` | Native-ID lookup index |
-| `0073_ticket_activity_history_cursor` | Stable activity history cursor index |
-| `0074_imported_unscored_satisfaction` | Preserve reviewed unscored imported answers |
-| `0075_import_ticket_inventory` | Tenant-scoped sealed ticket-ID inventories |
-| `0076_imported_message_provenance` | Original message metadata |
-| `0077_imported_article_assets` | Tenant-scoped article assets and prepared media |
-| `0078_imported_article_published_copy` | Separate original published description |
-| `0079_imported_article_translation_lookup` | Staged translation lookup index |
-| `0080_import_attachment_dry_run_media` | Private per-file dry-run receipts |
-| `0081_imported_article_embedding_deferral` | Per-language embedding deferral and brand-scoped backfill |
+The ordered inventory is `packages/db/drizzle/meta/_journal.json`. Earlier dated
+checkpoint notes below mention now-retired 0055–0081 identifiers; those were
+unshipped branch iterations, not additional upgrade steps. Their intermediate
+backfills and constraint churn have been removed from the delivery.
 
 ## Open questions
 
@@ -279,6 +298,7 @@ was; the admin screens in English, with the RTL rules of DESIGN §7.
 | `Admin/Login-SSO`, `Admin/Login-SSO-AR` | M11-05 | Sign-in with SSO buttons, email-first discovery ("Continue" sends you to Okta), enforced state where only SSO shows, the break-glass link | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import` | M11-16 | Brand › Import: runs table (source, started, status, counts), "New import" with source picker (connectors + Manual file), empty state | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-Wizard` | M11-16 | Steps 1–4 with StepProgress: Connect (credentials, Test), Scope (date range, entities, help center), Map (statuses, priorities, groups→departments, agents→staff, fields, tags), Dry run report | Drawn 2026-10-13, as on the canvas |
+| `Admin/Import-Wizard` retention warning and transient polling state | M11-16 | UI state not on the artboard: the existing dry-run issue list describes impending ticket/attachment retention loss and uses the existing acknowledgment. A failed poll retains the current progress and Pause/Cancel controls. EN/AR; no new component, layout or tokens | Implemented; component and browser regression checks recorded in the owner-review checkpoint |
 | `Admin/Import-Wizard` dry-run preview states | M11-16 | Sample contacts with identity/company links; sample ticket threads showing notes, authors, original dates and attachment availability; explicit completeness warnings and blocking errors. UI state not on the artboard: one existing Caption below each file for available/unavailable/blocked/not checked, including Arabic; no new layout or component | Implemented locally 2026-10-18 using the owner's missing-state rule and existing DESIGN components; focused component, database and EN/AR browser/axe checks pass, including the real-API wizard |
 | `Admin/Import-Wizard` Zoho connection | M11-14, M11-16 | UI state not on the artboard: regional data-center selector, string organization ID, OAuth client ID, masked client secret and refresh token, permissions/credit guidance, invalid/refused states; existing Field, Select and Banner patterns, EN/AR with LTR identifiers | Implemented locally 2026-10-18; EN/AR connection/refusal and axe browser checks pass; component/API acceptance follows the validation checkpoints |
 | `Admin/Import-Wizard` Zoho inventory fallback | M11-14, M11-16 | UI state not on the artboard: automatic archive discovery guidance and explicit optional reviewed-inventory checkbox; reveal the existing CSV mapper only when selected and reset confirmation after changes, EN/AR | Implemented locally 2026-10-18; focused API and EN/AR browser checks pass |
@@ -1567,6 +1587,19 @@ Vendor stand-ins, documented default mappings and extraction adapters remain
 pending; this deliverable is not complete.
 
 ## M11-12 Zendesk connector
+
+### Owner-review corrections verified against official docs, 2026-10-18
+
+[Ticket Comments](https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/)
+defaults `include_inline_images` to false. Thread reads now request true so inline
+media becomes managed attachments rather than remaining dependent on the source
+account. Deleted/inactive users remain inactive. A ticket becoming unavailable
+(404/410) during extraction is logged and its staged graph is omitted; unrelated
+taxonomy with the same external ID is retained. Ticket and thread enumeration use
+the same incremental page size and durable GET snapshots, avoiding a different
+moving ticket stream for each child entity.
+
+
 
 **Official contracts checked 2026-10-14.** Documentation establishes API contracts;
 stand-in tests do not prove access or completeness for a real account.
@@ -3182,6 +3215,21 @@ checkpoint does not complete M11-09, M11-10 or M11-12.
 
 ## M11-13 Freshdesk connector
 
+### Owner-review corrections verified against official docs, 2026-10-18
+
+[Freshdesk API](https://developers.freshdesk.com/api/) documents `created_at`
+ordering and display-name `from_email` values such as `"Agent Bob" <support@…>`.
+The connector extracts the validated mailbox from that single-address form.
+Unavailable authors retain the native ID as a name-only system attribution,
+without inventing a staff/contact identity; the log and dry run warn about it.
+Ticket lists now sort by immutable creation time, preserving the lower-bound
+`updated_since` filter. Updating an already scanned ticket cannot move an unread
+unchanged boundary ticket behind the offset. A nonempty page at the 300-page
+ceiling fails with the complete-inventory instruction; complete inventory mode
+bypasses that list limit. Earlier timestamp-window progress notes are superseded.
+
+
+
 Official reference checked **2026-10-17**:
 [API v2](https://developers.freshdesk.com/api/).
 
@@ -3321,6 +3369,21 @@ cross-run refusal and lazy-preview regression cases are authored, unrun.
 Archive inventory and equal-timestamp ceilings are implementation gaps to solve, **not accepted omissions**.
 
 ## M11-14 Zoho Desk connector
+
+### Owner-review corrections verified against official docs, 2026-10-18
+
+[Desk API reference](https://support.zoho.com/DeskAPIDocument) and
+[API credits](https://help.zoho.com/portal/en/kb/desk/developer-space/apidashboard/articles/working-with-api-credits)
+document creation-ordered ticket lists, `X-Rate-Limit-Remaining-v3`,
+`THRESHOLD_EXCEEDED` for daily exhaustion and `Retry-After` in seconds. Honor the
+provided delay; if daily exhaustion has no usable deadline, defer for a full
+24-hour data-center cycle rather than retry every second. The job persists the
+deadline and releases the worker. Delta ticket enumeration scans creation-ordered
+lists and filters source modified timestamps locally. It no longer pages a
+mutable bounded modified-time search; earlier window-splitting notes are
+superseded. Successful GET snapshots make partially consumed pages resumable.
+
+
 
 ### Native reference acceptance checkpoint (2026-10-18, passed locally)
 

@@ -29,6 +29,7 @@ export function zohoTestConnection(
     signal: new AbortController().signal,
     log: options.log ?? (async () => {}),
     http: new ImportHttp({
+      dailyCreditLimit: true,
       hosts: ['127.0.0.1'],
       limiter: new ImportRateLimiter({
         capacity: 10000,

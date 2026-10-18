@@ -1,1 +1,0 @@
-ALTER TABLE "tickets" ADD COLUMN "import_sla_started_at" timestamp with time zone;

@@ -114,7 +114,11 @@ export const loadTicketFacts = async (
     assigneeId: ticket.assigneeId,
     priority: ticket.priority,
     statusId: ticket.statusId,
-    statusChangedAt: ticket.statusChangedAt,
+    // Historical timestamps stay intact; automation time starts when history arrives.
+    statusChangedAt:
+      ticket.importedAt && ticket.importedAt > ticket.statusChangedAt
+        ? ticket.importedAt
+        : ticket.statusChangedAt,
     tagIds: tags.map((tag) => tag.tagId).sort(),
     contactId: ticket.contactId,
     contactEmails: contact.emails,

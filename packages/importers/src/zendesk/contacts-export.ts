@@ -67,7 +67,12 @@ export async function* exportZendeskContacts(
     for (let index = checkpoint.offset; index < page.users.length; index++) {
       const user = page.users[index];
       if (!user) throw new ConnectorError('invalid-response');
-      const record = zendeskContactRecord(user, await identities(client, user.id));
+      const sourceIdentities = await identities(client, user.id).catch(async (error: unknown) => {
+        if (!(error instanceof ConnectorError) || error.code !== 'record-unavailable') throw error;
+        await client.warnUnavailableContact(user.id);
+        return [];
+      });
+      const record = zendeskContactRecord(user, sourceIdentities);
       const continuation = z
         .record(z.string(), z.json())
         .parse({ ...checkpoint, offset: index + 1, fingerprint });

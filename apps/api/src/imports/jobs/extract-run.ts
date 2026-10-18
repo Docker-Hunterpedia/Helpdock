@@ -20,7 +20,11 @@ import {
   renewImportClaim,
 } from './claims.js';
 import { importConnectorLogSchema } from './connector-log.js';
-import { extractionCheckpointsSchema, storeImportPage } from './extract-page.js';
+import {
+  discardUnavailableTicket,
+  extractionCheckpointsSchema,
+  storeImportPage,
+} from './extract-page.js';
 import {
   completeExtraction,
   deferExtraction,
@@ -28,6 +32,7 @@ import {
   failExtraction,
   releaseExtraction,
 } from './extract-state.js';
+import { importExtractionPageCache } from './page-cache.js';
 import { extractionRetry } from './retry-state.js';
 
 type ExtractionOutcome =
@@ -53,12 +58,21 @@ class ExtractionSession<Credentials> {
   context(claim: ImportClaim): ConnectorContext<Credentials> {
     return {
       ...this.deps.context,
+      http: this.deps.context.http.withPageCache(
+        importExtractionPageCache(this.deps.db, claim, this.deps.jobId),
+      ),
       credentials: this.deps.connector.credentialsSchema.parse(this.deps.context.credentials),
       log: async (entry) => {
         const parsed = importConnectorLogSchema.parse(entry);
         await this.inRun(async (tx) => {
           await renewImportClaim(tx, claim);
           await tx.insert(importLog).values({ ...parsed, ...this.scope });
+          if (
+            parsed.entity === 'ticket' &&
+            parsed.externalId &&
+            parsed.message === 'import.record-unavailable'
+          )
+            await discardUnavailableTicket(tx, claim, parsed.externalId);
         });
       },
     };

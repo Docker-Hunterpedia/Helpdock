@@ -115,3 +115,42 @@ it.each([
       : screen.getByText(reason),
   ).toBeVisible();
 });
+
+it.each(['en', 'ar'] as const)(
+  'requires explicit review of impending history deletion in %s',
+  async (locale) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    const t = createI18n({ lng: locale }).getFixedT(locale, 'imports');
+    const report = {
+      ...mockDryRunReport(true, false),
+      errors: 0,
+      warnings: 1,
+      issues: [
+        {
+          area: 'record' as const,
+          level: 'warning' as const,
+          entity: 'ticket' as const,
+          externalId: 'old-2019',
+          code: 'retention-closed-history',
+        },
+      ],
+    };
+    const { user } = renderApp(
+      <ImportDryRun
+        run={await reviewedRun()}
+        report={report}
+        previews={[mockTicketPreview()]}
+        contacts={[mockContactPreview()]}
+        busy={false}
+        failed={false}
+        onStart={() => {}}
+        onRevalidate={() => {}}
+      />,
+    );
+    expect(screen.getByText(t('issues.retention'))).toBeVisible();
+    const start = screen.getByRole('button', { name: t('dryRun.start') });
+    expect(start).toBeDisabled();
+    await user.click(screen.getByRole('checkbox', { name: t('dryRun.acknowledge') }));
+    expect(start).toBeEnabled();
+  },
+);

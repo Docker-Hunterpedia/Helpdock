@@ -1,1 +1,0 @@
-ALTER TABLE "import_records" ADD COLUMN "dry_run_media" jsonb;

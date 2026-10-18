@@ -20,6 +20,8 @@ function issueKey(code: string) {
     case 'contact-plan-ambiguous':
     case 'organization-plan-ambiguous':
       return 'imports:issues.identity' as const;
+    case 'retention-closed-history':
+      return 'imports:issues.retention' as const;
     case 'phone-refused':
       return 'imports:issues.phone' as const;
     case 'field-capacity':

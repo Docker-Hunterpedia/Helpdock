@@ -36,9 +36,9 @@ for hours and must survive restarts.
 6. **Original times are kept** (`created_at`, message times, `closed_at`,
    `status_changed_at`); `tickets.imported_at` records when it arrived, and
    time-based rules measure from `greatest(status_changed_at, imported_at)`.
-7. **New ticket numbers by default**; the vendor's number is kept in
-   `import_external_ids` and shown on the ticket. Keeping vendor numbers is allowed
-   only into an empty brand, with the sequence moved past the highest.
+7. **New ticket numbers in 1.0**; the vendor's number is kept in
+   `import_external_ids`, shown on the ticket and searchable. This follows the
+   owner's selected default; importing does not replace the local sequence.
 8. **Idempotency through `import_external_ids`** (brand, source, entity, external
    id → Helpdock id, payload hash). A repeated run writes nothing; a delta run
    updates changed tickets and appends new messages, never rewriting old ones.
@@ -1413,3 +1413,83 @@ removes inventory rows in bounded batches before deleting their source file,
 so the foreign-key cascade cannot turn one file deletion into an unbounded job.
 Migration 0075 creates the parent composite unique key before its child foreign
 key; this ordering was corrected in generated SQL before applying it anywhere.
+
+### Owner review: resumable live extraction and upgrade boundary (2026-10-18)
+
+The unshipped import schema is one migration, `0054_imports`, generated from the
+already merged `0053_sso` snapshot. It creates the final schema directly, with no
+backfills for intermediate states that existed only on PR #215. Constraints
+compare the newly added satisfaction channel through `rated_via::text`, because
+Drizzle applies pending migrations in one transaction. Upgrade coverage starts
+from the actual migration prefix, with existing native tickets and answers.
+
+A page hash detects mutation but cannot make an offset within a live page
+resumable. Extraction therefore stores successful GET responses in a run-scoped
+`import_pages` tenant table before exposing them to the connector. The key is a
+hash of the request URL; request authorization headers are never persisted.
+Only pagination and content-type response headers are retained. Responses retain
+the existing 50 MiB limit, FORCE RLS and composite brand/run ownership. Claim
+renewal fences every read and write. A database trigger deletes snapshots when
+extraction ends or is cancelled/failed; pausing extraction preserves them. OAuth
+POSTs and attachment downloading outside extraction do not use this cache.
+This replaces earlier amendments that fail a run when a partially consumed live
+page changes. A resumed worker reuses its immutable response instead.
+
+Freshdesk ticket enumeration uses ascending `created_at` with `updated_since`
+instead of sorting by the mutable `updated_at`. A scanned ticket being updated
+therefore cannot shift an unchanged unread ticket behind the next offset. A
+nonempty page at the 300-page ceiling is refused; operators use the existing
+complete native-ID inventory mode rather than rely on timestamp windows to prove
+completeness. Zoho delta enumeration similarly scans the creation-ordered ticket
+list and filters its returned modified timestamps locally, avoiding mutable
+search-result membership. Snapshot consistency across different resource pages
+is not a vendor guarantee; subsequent deltas still reconcile newer source state.
+
+Dry-run warnings identify each closed ticket outside the mapped brand's current
+closed-ticket retention window. The existing warning acknowledgment is required
+before starting. Retention policy values participate in the destination review
+fingerprint; nightly job bookkeeping does not. This does not extend retention or
+change historical close timestamps.
+
+### Owner review: existing SLA clocks and bounded bundle reads (2026-10-18)
+
+An import still creates no SLA clocks until explicit admin activation. A later
+delta must reconcile clocks that activation already created: imported public
+agent replies satisfy response clocks; mapped paused, closed, excluded or moved
+statuses reconcile resolution clocks and their ticket summaries. The writer
+reuses the pure clock/calendar/policy functions and the database repository. It
+never calls `SlaService`, live lifecycle hooks or event producers. Historical
+replies cannot satisfy a clock before its activation instant. This changes the
+previous assumption that an inert writer could simply ignore existing clocks.
+
+Bundle attachment processing keeps at most one verified compressed source file
+(up to the existing 2 GiB cap), one validated ZIP directory index and one leased
+reader per worker process. Identity includes the storage instance, sealed object
+key, size and digest. Reads serialize while holding the lease. A source change
+closes/removes the old cache before another is prepared; idle expiry is one
+minute. Private temporary directories and read-only verified files contain the
+cache; normal exit removes it and a new preparation removes abandoned caches
+from dead worker processes. A crash requires one new download/hash/index, rather
+than doing that work again for every attachment. The final managed attachments
+still use the configured S3-compatible storage and existing authorization.
+
+Zendesk tickets unavailable during extraction are logged and their staged
+thread graph is discarded. Subsequent child pages for those same ticket IDs are
+ignored within the run. This never deletes existing Helpdock tickets or
+unrelated entities sharing the native ID. A deleted Freshdesk author is retained
+as a name-only system author using its native ID, with a review warning; no
+staff or contact identity is invented for an unavailable person.
+
+The static guard now checks direct outbox references, explicit allowed producer
+events, payload overrides and raw SQL inserts, as well as live lifecycle names.
+It scans dedicated import files outside `imports/` too. Explicit admin SLA
+activation scheduling remains allowed outside the strict writer. Runtime
+stand-in tripwires and negative domain-row assertions remain necessary alongside
+the static guard.
+
+
+Content-only deltas retain the existing status timestamp when the mapped status
+ID is unchanged. They cannot create a new scheduled-rule match key by rewriting
+an old source updated timestamp. Actual status transitions keep the existing
+database trigger's arrival-time baseline; the source's historical transition
+activity remains independently dated.

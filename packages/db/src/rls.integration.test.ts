@@ -52,6 +52,7 @@ import {
   importFiles,
   importLog,
   importMappings,
+  importPages,
   importRecords,
   importRuns,
   importTicketInventory,
@@ -193,6 +194,16 @@ const fixtures = [
       tx
         .insert(importRuns)
         .values({ id: importRunId[brandId], brandId, source: 'file', startedBy: userId }),
+  },
+  {
+    name: 'import_pages',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(importPages).values({
+        brandId,
+        runId: importRunId[brandId] ?? '',
+        requestHash: 'a'.repeat(64),
+        response: {},
+      }),
   },
   {
     name: 'import_records',

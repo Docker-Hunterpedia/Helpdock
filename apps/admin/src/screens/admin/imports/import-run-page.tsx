@@ -136,7 +136,7 @@ function ImportRunContent({ brandId, runId }: { brandId: string; runId: string }
   });
   const busy =
     dryRun.isPending || start.isPending || control.isPending || delta.isPending || filesBusy;
-  if (run.isError)
+  if (run.isError && !run.data)
     return (
       <AlertBanner tone="danger">
         {t('imports:loadFailed')}{' '}

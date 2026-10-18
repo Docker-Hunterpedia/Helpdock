@@ -191,6 +191,7 @@ type ConnectionInput<C> = {
   allowCidrs: readonly string[];
   log: ConnectorContext<C>['log'];
   transport?: TestTransport;
+  dailyCreditLimit?: boolean;
 };
 
 function importConnectionContext<C>(
@@ -203,6 +204,7 @@ function importConnectionContext<C>(
     credentials: input.credentials,
     signal: new AbortController().signal,
     http: new ImportHttp({
+      dailyCreditLimit: input.dailyCreditLimit ?? false,
       hosts: [...new Set([origin.hostname, ...hosts, ...extraHosts])],
       limiter: input.limiter,
       policy: {
@@ -261,6 +263,8 @@ export function createZohoImportConnection(
       ...(input.initialAccessToken ? { initialAccessToken: input.initialAccessToken } : {}),
       ...(input.saveAccessToken ? { saveAccessToken: input.saveAccessToken } : {}),
     }),
-    context: importConnectionContext({ ...input, credentials }, origin, [accounts.hostname]),
+    context: importConnectionContext({ ...input, credentials, dailyCreditLimit: true }, origin, [
+      accounts.hostname,
+    ]),
   };
 }

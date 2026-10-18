@@ -1,5 +1,5 @@
 {
-  "id": "e1fdf42a-1e63-4b6c-bdab-985b3687ec18",
+  "id": "53e7d4b9-04bd-4f11-b444-34ba1911df78",
   "prevId": "cfe18e1b-daad-4e1a-bb87-be0bb7cebb6e",
   "version": "7",
   "dialect": "postgresql",
@@ -19,6 +19,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "imported_details": {
+          "name": "imported_details",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -2964,6 +2970,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "imported_details": {
+          "name": "imported_details",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -3147,7 +3159,33 @@
           "name": "closed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "imported_source": {
+          "name": "imported_source",
+          "type": "import_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_source_account_key": {
+          "name": "import_source_account_key",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0000000000000000000000000000000000000000000000000000000000000000'"
+        },
+        "imported_external_id": {
+          "name": "imported_external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_details": {
+          "name": "imported_details",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "token_hash": {
           "name": "token_hash",
@@ -3224,6 +3262,41 @@
             }
           ],
           "isUnique": true,
+          "where": "\"csat_responses\".\"imported_external_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "csat_responses_import_key": {
+          "name": "csat_responses_import_key",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "imported_source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "import_source_account_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "imported_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"csat_responses\".\"imported_external_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3298,9 +3371,17 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "csat_responses_account_key_shape": {
+          "name": "csat_responses_account_key_shape",
+          "value": "\"csat_responses\".\"import_source_account_key\" ~ '^[0-9a-f]{64}$'"
+        },
+        "csat_responses_origin_shape": {
+          "name": "csat_responses_origin_shape",
+          "value": "(\"csat_responses\".\"imported_external_id\" IS NULL AND \"csat_responses\".\"imported_source\" IS NULL AND \"csat_responses\".\"closed_at\" IS NOT NULL AND \"csat_responses\".\"rated_via\"::text IS DISTINCT FROM 'import') OR (\"csat_responses\".\"imported_external_id\" IS NOT NULL AND \"csat_responses\".\"imported_source\" IS NOT NULL AND \"csat_responses\".\"rated_via\"::text IS NOT DISTINCT FROM 'import' AND (\"csat_responses\".\"rating\" IS NOT NULL OR coalesce(\"csat_responses\".\"imported_details\"->'ratingUnmapped' = 'true'::jsonb, false)) AND \"csat_responses\".\"rated_at\" IS NOT NULL)"
+        },
         "csat_responses_rating_shape": {
           "name": "csat_responses_rating_shape",
-          "value": "(\"csat_responses\".\"rating\" IS NULL AND \"csat_responses\".\"rated_at\" IS NULL) OR (\"csat_responses\".\"rating\" BETWEEN 1 AND 5 AND \"csat_responses\".\"rated_at\" IS NOT NULL)"
+          "value": "(\"csat_responses\".\"rating\" IS NULL AND \"csat_responses\".\"rated_at\" IS NULL) OR (\"csat_responses\".\"rating\" IS NOT NULL AND \"csat_responses\".\"rating\" BETWEEN 1 AND 5 AND \"csat_responses\".\"rated_at\" IS NOT NULL) OR (\"csat_responses\".\"rating\" IS NULL AND \"csat_responses\".\"rated_at\" IS NOT NULL AND \"csat_responses\".\"imported_external_id\" IS NOT NULL AND \"csat_responses\".\"imported_source\" IS NOT NULL AND \"csat_responses\".\"rated_via\"::text IS NOT DISTINCT FROM 'import' AND coalesce(\"csat_responses\".\"imported_details\"->'ratingUnmapped' = 'true'::jsonb, false))"
         }
       },
       "isRLSEnabled": false
@@ -4048,6 +4129,264 @@
       },
       "isRLSEnabled": false
     },
+    "public.hc_import_assets": {
+      "name": "hc_import_assets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "import_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_account_key": {
+          "name": "source_account_key",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_external_id": {
+          "name": "parent_external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asset_external_id": {
+          "name": "asset_external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "locale": {
+          "name": "locale",
+          "type": "locale",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "usage": {
+          "name": "usage",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_id": {
+          "name": "media_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "article_id": {
+          "name": "article_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "hc_import_assets_identity_key": {
+          "name": "hc_import_assets_identity_key",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_account_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "parent_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "locale",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "asset_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "usage",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "payload_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "content_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hc_import_assets_media_idx": {
+          "name": "hc_import_assets_media_idx",
+          "columns": [
+            {
+              "expression": "media_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hc_import_assets_article_idx": {
+          "name": "hc_import_assets_article_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "article_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "locale",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "hc_import_assets_created_idx": {
+          "name": "hc_import_assets_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hc_import_assets_brand_id_brands_id_fk": {
+          "name": "hc_import_assets_brand_id_brands_id_fk",
+          "tableFrom": "hc_import_assets",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "hc_import_assets_media_brand_fk": {
+          "name": "hc_import_assets_media_brand_fk",
+          "tableFrom": "hc_import_assets",
+          "tableTo": "hc_media",
+          "columnsFrom": ["brand_id", "media_id"],
+          "columnsTo": ["brand_id", "id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hc_import_assets_article_brand_fk": {
+          "name": "hc_import_assets_article_brand_fk",
+          "tableFrom": "hc_import_assets",
+          "tableTo": "hc_articles",
+          "columnsFrom": ["brand_id", "article_id"],
+          "columnsTo": ["brand_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "hc_import_assets_hashes_check": {
+          "name": "hc_import_assets_hashes_check",
+          "value": "\"hc_import_assets\".\"source_account_key\" ~ '^[0-9a-f]{64}$' AND \"hc_import_assets\".\"payload_hash\" ~ '^[0-9a-f]{64}$' AND \"hc_import_assets\".\"content_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "hc_import_assets_usage_check": {
+          "name": "hc_import_assets_usage_check",
+          "value": "\"hc_import_assets\".\"usage\" IN ('image', 'download')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.hc_article_versions": {
       "name": "hc_article_versions",
       "schema": "",
@@ -4095,7 +4434,7 @@
         },
         "title": {
           "name": "title",
-          "type": "varchar(200)",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": true
         },
@@ -4106,6 +4445,25 @@
           "notNull": true,
           "default": "''"
         },
+        "imported_description": {
+          "name": "imported_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_published_description": {
+          "name": "imported_published_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_embedding_deferred": {
+          "name": "import_embedding_deferred",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "body_html": {
           "name": "body_html",
           "type": "text",
@@ -4115,7 +4473,7 @@
         },
         "published_title": {
           "name": "published_title",
-          "type": "varchar(200)",
+          "type": "varchar(500)",
           "primaryKey": false,
           "notNull": false
         },
@@ -4405,7 +4763,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "hc_articles_brand_id_key": {
+          "name": "hc_articles_brand_id_key",
+          "nullsNotDistinct": false,
+          "columns": ["brand_id", "id"]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -4445,6 +4809,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
+        },
+        "imported_parent_external_id": {
+          "name": "imported_parent_external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_descriptions": {
+          "name": "imported_descriptions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "position": {
           "name": "position",
@@ -4542,6 +4918,27 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'image'"
+        },
+        "scan_status": {
+          "name": "scan_status",
+          "type": "attachment_scan_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'skipped'"
+        },
+        "imported_by_run_id": {
+          "name": "imported_by_run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "size": {
           "name": "size",
           "type": "bigint",
@@ -4623,6 +5020,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "hc_media_import_candidates_idx": {
+          "name": "hc_media_import_candidates_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"hc_media\".\"imported_by_run_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4637,9 +5056,20 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "hc_media_brand_id_key": {
+          "name": "hc_media_brand_id_key",
+          "nullsNotDistinct": false,
+          "columns": ["brand_id", "id"]
+        }
+      },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "hc_media_kind_check": {
+          "name": "hc_media_kind_check",
+          "value": "\"hc_media\".\"kind\" IN ('image', 'file')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.hc_sections": {
@@ -4676,6 +5106,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'{}'::jsonb"
+        },
+        "imported_descriptions": {
+          "name": "imported_descriptions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_parent_section_external_id": {
+          "name": "imported_parent_section_external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
         },
         "position": {
           "name": "position",
@@ -5176,7 +5618,7 @@
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "as": "lower(translate(regexp_replace(\"title\", '[\\u064B-\\u065F\\u0670\\u0640]', '', 'g'), '\u0623\u0625\u0622\u0671\u0649\u0629', '\u0627\u0627\u0627\u0627\u064a\u0647'))",
+            "as": "lower(translate(regexp_replace(\"title\", '[\\u064B-\\u065F\\u0670\\u0640]', '', 'g'), 'أإآٱىة', 'اااايه'))",
             "type": "stored"
           }
         },
@@ -5390,6 +5832,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source_account_key": {
+          "name": "source_account_key",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0000000000000000000000000000000000000000000000000000000000000000'"
+        },
         "entity": {
           "name": "entity",
           "type": "import_entity",
@@ -5483,6 +5932,33 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "import_external_ids_native_lookup_idx": {
+          "name": "import_external_ids_native_lookup_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -5497,14 +5973,18 @@
         }
       },
       "compositePrimaryKeys": {
-        "import_external_ids_brand_id_source_entity_external_id_pk": {
-          "name": "import_external_ids_brand_id_source_entity_external_id_pk",
-          "columns": ["brand_id", "source", "entity", "external_id"]
+        "import_external_ids_pk": {
+          "name": "import_external_ids_pk",
+          "columns": ["brand_id", "source", "source_account_key", "entity", "external_id"]
         }
       },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "import_external_ids_account_key_shape": {
+          "name": "import_external_ids_account_key_shape",
+          "value": "\"import_external_ids\".\"source_account_key\" ~ '^[0-9a-f]{64}$'"
+        },
         "import_external_ids_hash_shape": {
           "name": "import_external_ids_hash_shape",
           "value": "\"import_external_ids\".\"payload_hash\" ~ '^[0-9a-f]{64}$'"
@@ -5635,6 +6115,252 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.import_files": {
+      "name": "import_files",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "format": {
+          "name": "format",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity": {
+          "name": "entity",
+          "type": "import_entity",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "size": {
+          "name": "size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "upload_key": {
+          "name": "upload_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_key": {
+          "name": "source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "preparation_key": {
+          "name": "preparation_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "headers": {
+          "name": "headers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sample_rows": {
+          "name": "sample_rows",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mapping": {
+          "name": "mapping",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inventory_mapping": {
+          "name": "inventory_mapping",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inventory_validation": {
+          "name": "inventory_validation",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validation": {
+          "name": "validation",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "record_count": {
+          "name": "record_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "import_files_run_idx": {
+          "name": "import_files_run_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "import_files_work_idx": {
+          "name": "import_files_work_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "import_files_brand_id_brands_id_fk": {
+          "name": "import_files_brand_id_brands_id_fk",
+          "tableFrom": "import_files",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "import_files_brand_id_run_id_import_runs_brand_id_id_fk": {
+          "name": "import_files_brand_id_run_id_import_runs_brand_id_id_fk",
+          "tableFrom": "import_files",
+          "tableTo": "import_runs",
+          "columnsFrom": ["brand_id", "run_id"],
+          "columnsTo": ["brand_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "import_files_brand_run_id_key": {
+          "name": "import_files_brand_run_id_key",
+          "nullsNotDistinct": false,
+          "columns": ["brand_id", "run_id", "id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "import_files_size": {
+          "name": "import_files_size",
+          "value": "\"import_files\".\"size\" > 0 AND \"import_files\".\"size\" <= 2147483648"
+        },
+        "import_files_format": {
+          "name": "import_files_format",
+          "value": "(\"import_files\".\"format\" = 'csv' AND \"import_files\".\"entity\" IS NOT NULL) OR (\"import_files\".\"format\" = 'bundle' AND \"import_files\".\"entity\" IS NULL)"
+        },
+        "import_files_status": {
+          "name": "import_files_status",
+          "value": "\"import_files\".\"status\" IN ('pending', 'uploaded', 'ready', 'invalid', 'discarded')"
+        },
+        "import_files_sealed": {
+          "name": "import_files_sealed",
+          "value": "\"import_files\".\"status\" <> 'ready' OR (\"import_files\".\"source_key\" IS NOT NULL AND \"import_files\".\"sha256\" IS NOT NULL AND \"import_files\".\"sha256\" ~ '^[0-9a-f]{64}$')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.import_log": {
@@ -5844,6 +6570,79 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.import_pages": {
+      "name": "import_pages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "response": {
+          "name": "response",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "import_pages_brand_id_brands_id_fk": {
+          "name": "import_pages_brand_id_brands_id_fk",
+          "tableFrom": "import_pages",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "import_pages_brand_id_run_id_import_runs_brand_id_id_fk": {
+          "name": "import_pages_brand_id_run_id_import_runs_brand_id_id_fk",
+          "tableFrom": "import_pages",
+          "tableTo": "import_runs",
+          "columnsFrom": ["brand_id", "run_id"],
+          "columnsTo": ["brand_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "import_pages_request_key": {
+          "name": "import_pages_request_key",
+          "nullsNotDistinct": false,
+          "columns": ["run_id", "request_hash"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "import_pages_hash_shape": {
+          "name": "import_pages_hash_shape",
+          "value": "\"import_pages\".\"request_hash\" ~ '^[0-9a-f]{64}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.import_records": {
       "name": "import_records",
       "schema": "",
@@ -5897,6 +6696,30 @@
           "primaryKey": false,
           "notNull": true
         },
+        "load_hash": {
+          "name": "load_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dry_run_identity": {
+          "name": "dry_run_identity",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dry_run_media": {
+          "name": "dry_run_media",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prepared_assets": {
+          "name": "prepared_assets",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "import_record_status",
@@ -5919,6 +6742,33 @@
         }
       },
       "indexes": {
+        "import_records_parent_idx": {
+          "name": "import_records_parent_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "parent_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "import_records_load_idx": {
           "name": "import_records_load_idx",
           "columns": [
@@ -5948,6 +6798,34 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "import_records_article_translation_idx": {
+          "name": "import_records_article_translation_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(\"payload\" ->> 'translationOf')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"import_records\".\"entity\" = 'article'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6012,6 +6890,13 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
+        },
+        "source_account_key": {
+          "name": "source_account_key",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0000000000000000000000000000000000000000000000000000000000000000'"
         },
         "mode": {
           "name": "mode",
@@ -6111,9 +6996,38 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "claim_token": {
+          "name": "claim_token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paused_from": {
+          "name": "paused_from",
+          "type": "import_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
+        "import_runs_brand_claim_key": {
+          "name": "import_runs_brand_claim_key",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"import_runs\".\"claim_token\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "import_runs_brand_created_idx": {
           "name": "import_runs_brand_created_idx",
           "columns": [
@@ -6137,6 +7051,34 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "import_runs_brand_finished_idx": {
+          "name": "import_runs_brand_finished_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "finished_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"import_runs\".\"finished_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -6202,6 +7144,10 @@
       },
       "policies": {},
       "checkConstraints": {
+        "import_runs_account_key_shape": {
+          "name": "import_runs_account_key_shape",
+          "value": "\"import_runs\".\"source_account_key\" ~ '^[0-9a-f]{64}$'"
+        },
         "import_runs_parent_shape": {
           "name": "import_runs_parent_shape",
           "value": "(\"import_runs\".\"mode\" = 'full' AND \"import_runs\".\"parent_run_id\" IS NULL) OR (\"import_runs\".\"mode\" = 'delta' AND \"import_runs\".\"parent_run_id\" IS NOT NULL AND \"import_runs\".\"parent_run_id\" <> \"import_runs\".\"id\")"
@@ -6209,6 +7155,178 @@
         "import_runs_terminal_credentials": {
           "name": "import_runs_terminal_credentials",
           "value": "\"import_runs\".\"status\" NOT IN ('completed', 'failed', 'cancelled') OR \"import_runs\".\"credentials_encrypted\" IS NULL"
+        },
+        "import_runs_claim_shape": {
+          "name": "import_runs_claim_shape",
+          "value": "(\"import_runs\".\"claim_token\" IS NULL AND \"import_runs\".\"claimed_at\" IS NULL) OR (\"import_runs\".\"claim_token\" IS NOT NULL AND \"import_runs\".\"claimed_at\" IS NOT NULL AND \"import_runs\".\"status\" IN ('extracting', 'dry_run', 'loading', 'finishing'))"
+        },
+        "import_runs_pause_shape": {
+          "name": "import_runs_pause_shape",
+          "value": "(\"import_runs\".\"status\" = 'paused' AND \"import_runs\".\"paused_from\" IS NOT NULL AND \"import_runs\".\"paused_from\" IN ('extracting', 'dry_run', 'loading', 'finishing')) OR (\"import_runs\".\"status\" <> 'paused' AND \"import_runs\".\"paused_from\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.import_ticket_inventory": {
+      "name": "import_ticket_inventory",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_id": {
+          "name": "file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_hash": {
+          "name": "source_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location": {
+          "name": "location",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "line": {
+          "name": "line",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "import_ticket_inventory_native_key": {
+          "name": "import_ticket_inventory_native_key",
+          "columns": [
+            {
+              "expression": "file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "revision",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "import_ticket_inventory_run_idx": {
+          "name": "import_ticket_inventory_run_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "\"external_id\" COLLATE \"C\"",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "import_ticket_inventory_brand_id_brands_id_fk": {
+          "name": "import_ticket_inventory_brand_id_brands_id_fk",
+          "tableFrom": "import_ticket_inventory",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "import_ticket_inventory_file_fk": {
+          "name": "import_ticket_inventory_file_fk",
+          "tableFrom": "import_ticket_inventory",
+          "tableTo": "import_files",
+          "columnsFrom": ["brand_id", "run_id", "file_id"],
+          "columnsTo": ["brand_id", "run_id", "id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "import_ticket_inventory_id_shape": {
+          "name": "import_ticket_inventory_id_shape",
+          "value": "\"import_ticket_inventory\".\"external_id\" ~ '^[!-~]+$'"
+        },
+        "import_ticket_inventory_hash_shape": {
+          "name": "import_ticket_inventory_hash_shape",
+          "value": "\"import_ticket_inventory\".\"source_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "import_ticket_inventory_location": {
+          "name": "import_ticket_inventory_location",
+          "value": "\"import_ticket_inventory\".\"location\" IN ('active', 'archived', 'auto')"
+        },
+        "import_ticket_inventory_line": {
+          "name": "import_ticket_inventory_line",
+          "value": "\"import_ticket_inventory\".\"line\" > 0 AND \"import_ticket_inventory\".\"line\" <= 9007199254740991"
         }
       },
       "isRLSEnabled": false
@@ -10599,6 +11717,12 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": false,
@@ -10729,6 +11853,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "import_details": {
+          "name": "import_details",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "body_html": {
           "name": "body_html",
           "type": "text",
@@ -10751,6 +11881,12 @@
         "external_message_id": {
           "name": "external_message_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "import_source_account_key": {
+          "name": "import_source_account_key",
+          "type": "char(64)",
           "primaryKey": false,
           "notNull": false
         },
@@ -10847,6 +11983,34 @@
             }
           ],
           "isUnique": true,
+          "where": "\"ticket_messages\".\"external_message_id\" is not null AND \"ticket_messages\".\"import_source_account_key\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ticket_messages_reference_idx": {
+          "name": "ticket_messages_reference_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "channel",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "where": "\"ticket_messages\".\"external_message_id\" is not null",
           "concurrently": false,
           "method": "btree",
@@ -10915,7 +12079,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "ticket_messages_import_account_key_shape": {
+          "name": "ticket_messages_import_account_key_shape",
+          "value": "\"ticket_messages\".\"import_source_account_key\" IS NULL OR \"ticket_messages\".\"import_source_account_key\" ~ '^[0-9a-f]{64}$'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.ticket_participants": {
@@ -11966,6 +13135,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "import_sla_started_at": {
+          "name": "import_sla_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "subject": {
           "name": "subject",
           "type": "text",
@@ -12198,6 +13373,34 @@
         }
       },
       "indexes": {
+        "tickets_import_sla_pending_idx": {
+          "name": "tickets_import_sla_pending_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "import_source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"imported_at\" IS NOT NULL AND \"tickets\".\"import_sla_started_at\" IS NULL AND \"tickets\".\"deleted_at\" IS NULL AND \"tickets\".\"merged_into_id\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "tickets_visitor_idx": {
           "name": "tickets_visitor_idx",
           "columns": [
@@ -14279,7 +15482,8 @@
         "csat",
         "category",
         "section",
-        "article"
+        "article",
+        "activity"
       ]
     },
     "public.import_log_level": {
@@ -14468,7 +15672,7 @@
     "public.ticket_participant_source": {
       "name": "ticket_participant_source",
       "schema": "public",
-      "values": ["agent", "email", "merge"]
+      "values": ["agent", "email", "merge", "import"]
     },
     "public.ticket_priority": {
       "name": "ticket_priority",

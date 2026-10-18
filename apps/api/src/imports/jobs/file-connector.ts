@@ -12,7 +12,6 @@ import {
   type ImportCursor,
   type ImportPage,
   readImportBundle,
-  readImportBundleAttachment,
   readImportCsv,
 } from '@helpdock/importers';
 import {
@@ -24,6 +23,7 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { ObjectStorage } from '../../media/storage.js';
+import { cachedBundleAttachment } from './bundle-cache.js';
 
 export const fileCredentialsSchema = z.strictObject({ dataset: z.string().min(1).max(200) });
 type Credentials = z.infer<typeof fileCredentialsSchema>;
@@ -159,9 +159,7 @@ export class FileImportConnector implements Connector<Credentials> {
     const bundlePath = ref.bundlePath;
     return {
       stream: Readable.from(
-        withSource(this.storage, bundle, (path) =>
-          readImportBundleAttachment({ path, bundlePath, signal: context.signal }),
-        ),
+        cachedBundleAttachment(this.storage, bundle, bundlePath, context.signal),
       ),
       ...(ref.contentType ? { contentType: ref.contentType } : {}),
       ...(ref.size !== undefined ? { size: ref.size } : {}),

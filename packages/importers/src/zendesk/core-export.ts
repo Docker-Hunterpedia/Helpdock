@@ -37,8 +37,12 @@ export async function* exportZendeskTickets(
         : { cursor: checkpoint.after }),
     });
     const next = { after: page.after_cursor };
+    for (const ticket of page.tickets)
+      if (ticket.status === 'deleted') await client.warnUnavailableTicket(ticket.id);
     yield {
-      records: page.tickets.map((ticket) => zendeskTicketRecord(ticket, client.origin)),
+      records: page.tickets
+        .filter((ticket) => ticket.status !== 'deleted')
+        .map((ticket) => zendeskTicketRecord(ticket, client.origin)),
       cursor: page.end_of_stream ? null : next,
       ...(page.end_of_stream ? { deltaCursor: next } : {}),
     };

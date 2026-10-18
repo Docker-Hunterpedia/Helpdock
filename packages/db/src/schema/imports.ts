@@ -128,6 +128,7 @@ export const importRecords = pgTable(
     }).onDelete('cascade'),
     unique('import_records_external_key').on(table.runId, table.entity, table.externalId),
     check('import_records_hash_shape', sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
+    index('import_records_parent_idx').on(table.runId, table.parentExternalId, table.entity),
     index('import_records_load_idx').on(table.runId, table.entity, table.status, table.id),
     index('import_records_article_translation_idx')
       .on(table.brandId, table.runId, sql`(${table.payload} ->> 'translationOf')`)
@@ -346,5 +347,27 @@ export const importTicketInventory = pgTable(
       'import_ticket_inventory_line',
       sql`${table.line} > 0 AND ${table.line} <= 9007199254740991`,
     ),
+  ],
+);
+
+/** Immutable successful GET responses used only while extraction may resume. */
+export const importPages = pgTable(
+  'import_pages',
+  {
+    id: uuid('id').primaryKey().$defaultFn(uuidv7),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    requestHash: char('request_hash', { length: 64 }).notNull(),
+    response: jsonb('response').$type<Record<string, unknown>>().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.brandId, table.runId],
+      foreignColumns: [importRuns.brandId, importRuns.id],
+    }).onDelete('cascade'),
+    unique('import_pages_request_key').on(table.runId, table.requestHash),
+    check('import_pages_hash_shape', sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
   ],
 );

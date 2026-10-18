@@ -151,25 +151,7 @@ it('preserves contact identities, company ownership and inactive source-agent at
   ).toEqual([]);
 });
 
-it('overlaps the final timestamp at the page ceiling instead of treating its missing Link as completion', async () => {
-  fake.server.failNext({
-    path: '/api/v2/tickets',
-    status: 200,
-    json: freshdeskCoreFixture.tickets?.slice(2),
-  });
-  const pages = await collectAsync(
-    exportFreshdeskTickets(client, {
-      page: 300,
-      windowStart: '1970-01-01T00:00:00Z',
-      lastUpdatedAt: '2020-01-03T10:00:00Z',
-    }),
-  );
-  expect(pages[0]?.cursor).toEqual({ page: 1, windowStart: '2020-01-04T09:59:59.000Z' });
-  expect(pages[1]?.records.map((row) => row.payload.externalId)).toEqual(['3']);
-  expect(pages[1]?.cursor).toBeNull();
-});
-
-it('logs a completeness error and stops when timestamp ties prevent a safe next window', async () => {
+it('refuses a truncated creation-order scan at the vendor page ceiling; use a complete ID inventory', async () => {
   const log = vi.fn(async () => {});
   const loggingClient = new FreshdeskClient({ ...context, log }, fake.server.root);
   fake.server.failNext({
@@ -521,4 +503,56 @@ it('proposes documented priority/channel meanings and leaves unknown values for 
   });
   expect(freshdeskValueMapping('priority', '99')).toBeNull();
   expect(freshdeskValueMapping('channel', '99')).toBeNull();
+});
+
+it('preserves the mailbox in documented display-name senders and keeps deleted-author history', async () => {
+  fake.replaceFixture({
+    ...freshdeskCoreFixture,
+    conversations: {
+      '1': [
+        {
+          ...(freshdeskCoreFixture.conversations?.['1']?.[0] ?? {}),
+          id: 1001,
+          ticket_id: 1,
+          user_id: 999999,
+          incoming: false,
+          private: false,
+          from_email: '"Agent Bob" <support@example.test>',
+          created_at: '2020-01-01T10:00:00Z',
+          updated_at: '2020-01-01T10:00:00Z',
+        },
+      ],
+    },
+  });
+  const pages = await collectAsync(
+    exportFreshdeskThread(client, { mode: 'message', cursor: null }),
+  );
+  expect(pages.flatMap((page) => page.records)).toContainEqual(
+    expect.objectContaining({
+      entity: 'message',
+      payload: expect.objectContaining({
+        externalId: '1001',
+        authorName: '#999999',
+        authorKind: 'system',
+        email: expect.objectContaining({ from: 'support@example.test' }),
+      }),
+    }),
+  );
+});
+
+it('does not skip an unchanged page-boundary ticket when an earlier ticket is updated mid-scan', async () => {
+  const reader = exportFreshdeskTickets(client, null);
+  const first = await reader.next();
+  await reader.return(undefined);
+  fake.replaceFixture({
+    ...freshdeskCoreFixture,
+    tickets: (freshdeskCoreFixture.tickets ?? []).map((ticket) =>
+      ticket.id === 1 ? { ...ticket, updated_at: '2030-01-01T00:00:00Z' } : ticket,
+    ),
+  });
+  const resumed = await collectAsync(exportFreshdeskTickets(client, first.value?.cursor ?? null));
+  const ids = [...(first.value?.records ?? []), ...resumed.flatMap((page) => page.records)].map(
+    (record) => record.payload.externalId,
+  );
+  expect(new Set(ids)).toEqual(new Set(['1', '2', '3']));
 });

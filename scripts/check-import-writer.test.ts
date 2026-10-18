@@ -14,10 +14,10 @@ it.each([
   expect(findImportLifecycleViolations(source).length).toBeGreaterThan(0);
 });
 
-it('permits the reviewed outbox scheduling mechanism and safe HTTP client outside the writer', () => {
+it('permits explicitly allowed outbox events and safe HTTP outside the writer', () => {
   expect(
     findImportLifecycleViolations(
-      "await enqueueOutbox(tx, event); await safeFetch(url); // TicketsService\nconst body = 'fetch';",
+      "await enqueueOutbox(tx, { event: 'import.work_requested', payload }); await safeFetch(url); // TicketsService\nconst body = 'fetch';",
     ),
   ).toEqual([]);
   expect(findImportWriterViolations('enqueueOutbox(tx, event);').length).toBeGreaterThan(0);
@@ -77,4 +77,35 @@ it('allows reviewed article ownership checks and refuses other exports from thos
       `namespace/default imports are forbidden: ${module}`,
     ]);
   }
+});
+
+it.each([
+  "await tx.insert(outbox).values({ event: 'ticket.created', payload });",
+  "import { outbox as hidden } from '@helpdock/db'; tx.insert(hidden);",
+  "await enqueueOutbox(tx, { event: 'ticket.created', payload });",
+  'await enqueueOutbox(tx, { event: computedEvent, payload });',
+  'await enqueueOutbox(tx, payload);',
+  "import { enqueueOutbox as hidden } from '@helpdock/jobs';",
+])('refuses direct, computed and aliased live-event producers: %s', (source) => {
+  expect(findImportLifecycleViolations(source).length).toBeGreaterThan(0);
+});
+
+it.each([
+  "enqueueOutbox(tx, { event: 'import.work_requested', ...payload });",
+  "await tx.execute(sql`INSERT INTO outbox(event, payload) VALUES ('ticket.created', '{}')`);",
+])('refuses payload overrides and raw SQL outbox producers: %s', (source) => {
+  expect(findImportLifecycleViolations(source).length).toBeGreaterThan(0);
+});
+
+it('does not trust a locally spoofed allowed event constant', () => {
+  expect(
+    findImportLifecycleViolations(
+      "const HC_IMPORTED_EVENT = 'ticket.created'; enqueueOutbox(tx, { event: HC_IMPORTED_EVENT, payload });",
+    ),
+  ).toContain('unreviewed import outbox event');
+  expect(
+    findImportLifecycleViolations(
+      "const NEXT = 'import.work_requested'; enqueueOutbox(tx, { event: NEXT, payload });",
+    ),
+  ).toEqual([]);
 });

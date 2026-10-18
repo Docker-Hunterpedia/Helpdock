@@ -113,5 +113,15 @@ export async function importDestinationFingerprint(tx: DbTransaction, raw: Impor
     );
   if (!settings.length) throw new ImportLoadError('target-unavailable');
   digest.update(hashImportValue(settings));
+  // The nightly job also updates this row. Bind only the policy, not its run bookkeeping.
+  const retention = z
+    .array(z.strictObject({ days: z.int().nullable() }))
+    .max(1)
+    .parse(
+      await tx.execute(
+        sql`SELECT closed_ticket_days AS days FROM retention_settings WHERE brand_id = ${scope.brandId}`,
+      ),
+    );
+  digest.update(hashImportValue({ retention }));
   return digest.digest('hex');
 }

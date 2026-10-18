@@ -1,7 +1,0 @@
-DROP INDEX "csat_responses_ticket_close_key";--> statement-breakpoint
-ALTER TABLE "csat_responses" ALTER COLUMN "closed_at" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "csat_responses" ADD COLUMN "imported_source" "import_source";--> statement-breakpoint
-ALTER TABLE "csat_responses" ADD COLUMN "imported_external_id" varchar(200);--> statement-breakpoint
-CREATE UNIQUE INDEX "csat_responses_import_key" ON "csat_responses" USING btree ("brand_id","imported_source","imported_external_id") WHERE "csat_responses"."imported_external_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX "csat_responses_ticket_close_key" ON "csat_responses" USING btree ("ticket_id","closed_at") WHERE "csat_responses"."imported_external_id" IS NULL;--> statement-breakpoint
-ALTER TABLE "csat_responses" ADD CONSTRAINT "csat_responses_origin_shape" CHECK (("csat_responses"."imported_external_id" IS NULL AND "csat_responses"."imported_source" IS NULL AND "csat_responses"."closed_at" IS NOT NULL AND "csat_responses"."rated_via" IS DISTINCT FROM 'import') OR ("csat_responses"."imported_external_id" IS NOT NULL AND "csat_responses"."imported_source" IS NOT NULL AND "csat_responses"."rated_via" IS NOT DISTINCT FROM 'import' AND "csat_responses"."rating" IS NOT NULL AND "csat_responses"."rated_at" IS NOT NULL));

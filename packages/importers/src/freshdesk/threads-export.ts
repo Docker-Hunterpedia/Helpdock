@@ -97,16 +97,26 @@ async function conversationRecords(
   if (conversation.ticket_id !== ticketId) throw new ConnectorError('invalid-response');
   if (mode === 'attachment')
     return attachmentRecords(ticketId, conversation.id, conversation.attachments, page);
-  const email = conversation.from_email ? z.email().safeParse(conversation.from_email) : null;
+  const email = conversation.from_email
+    ? z
+        .email()
+        .safeParse(
+          conversation.from_email.match(/^[^<>\r\n]*<([^<>\r\n]+)>\s*$/)?.[1] ??
+            conversation.from_email,
+        )
+    : null;
   if (email && !email.success) throw new ConnectorError('invalid-response');
+  const authorKind = await client.authorKind(conversation.user_id);
   return [
     importRecordSchema.parse({
       entity: 'message',
       payload: {
         externalId: String(conversation.id),
         ticketExternalId: String(ticketId),
-        authorExternalId: String(conversation.user_id),
-        authorKind: await client.authorKind(conversation.user_id),
+        authorKind,
+        ...(authorKind === 'system'
+          ? { authorName: `#${conversation.user_id}` }
+          : { authorExternalId: String(conversation.user_id) }),
         public: !conversation.private,
         createdAt: conversation.created_at,
         ...(conversation.body == null ? {} : { bodyHtml: conversation.body }),

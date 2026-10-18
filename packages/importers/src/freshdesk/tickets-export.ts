@@ -15,7 +15,6 @@ import {
 const apiCursorSchema = z.strictObject({
   page: z.number().int().min(1).max(300),
   windowStart: z.iso.datetime({ offset: true }),
-  lastUpdatedAt: z.iso.datetime({ offset: true }).optional(),
 });
 export const freshdeskTicketCursorSchema = z.union([
   apiCursorSchema,
@@ -60,7 +59,7 @@ export function freshdeskTicketRecord(
   });
 }
 
-/** Overlapping windows never advance past timestamp ties at the vendor's hard page ceiling. */
+/** Creation order keeps updates from moving unread tickets behind the offset. */
 export async function readFreshdeskTicketPage(
   client: FreshdeskClient,
   checkpoint: z.infer<typeof freshdeskTicketCursorSchema>,
@@ -71,27 +70,28 @@ export async function readFreshdeskTicketPage(
     page: String(checkpoint.page),
     per_page: '100',
     updated_since: checkpoint.windowStart,
-    order_by: 'updated_at',
+    order_by: 'created_at',
     order_type: 'asc',
     include: 'description,stats',
   });
-  let last = checkpoint.lastUpdatedAt ?? checkpoint.windowStart;
   for (const row of result.rows) {
-    if (Date.parse(row.updated_at) < Date.parse(last) || row.archived || row.deleted || row.spam)
+    if (
+      Date.parse(row.updated_at) < Date.parse(checkpoint.windowStart) ||
+      row.archived ||
+      row.deleted ||
+      row.spam
+    )
       throw new ConnectorError('invalid-response');
-    last = row.updated_at;
   }
   let next: z.infer<typeof freshdeskTicketCursorSchema> | null = null;
-  if (checkpoint.page === 300 && result.rows.length) {
-    const boundary = new Date(Math.floor(Date.parse(last) / 1000) * 1000 - 1000).toISOString();
-    if (Date.parse(boundary) <= Date.parse(checkpoint.windowStart))
-      await client.refuseTimestampWindow();
-    next = { page: 1, windowStart: boundary };
+  if (checkpoint.page === 300 && result.rows.length > 0) {
+    // Changing updated_at cannot shift rows sorted by immutable creation time.
+    // The offset API still has a hard ceiling; a complete ID inventory avoids it.
+    await client.refuseTimestampWindow();
   } else if (result.nextPage !== null) {
     next = freshdeskTicketCursorSchema.parse({
       ...checkpoint,
       page: result.nextPage,
-      lastUpdatedAt: last,
     });
   }
   if (next === null && inventory) next = initialFreshdeskInventory(inventory);

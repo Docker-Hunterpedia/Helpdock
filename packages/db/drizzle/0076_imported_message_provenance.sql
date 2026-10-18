@@ -1,1 +1,0 @@
-ALTER TABLE "ticket_messages" ADD COLUMN "import_details" jsonb;

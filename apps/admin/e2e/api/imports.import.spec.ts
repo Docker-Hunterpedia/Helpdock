@@ -103,6 +103,21 @@ test('imports source history through the real wizard without sending anything', 
   }
   await api(importMappingsViewSchema, 'PUT', `imports/${runId}/mappings`, { mappings });
   await page.reload();
+  await page.getByRole('tab', { name: t('imports:mapping.kinds.priority'), exact: true }).click();
+  const priority = page
+    .getByRole('combobox', { name: t('imports:mapping.destination'), exact: true })
+    .first();
+  await priority.click();
+  await page.getByRole('option', { name: 'high', exact: true }).click();
+  await page.getByRole('button', { name: t('imports:mapping.save'), exact: true }).click();
+  await expect(
+    page.getByRole('tab', { name: t('imports:mapping.kinds.status'), exact: true }),
+  ).toBeEnabled();
+  expect(
+    (await api(importMappingsViewSchema, 'GET', `imports/${runId}/mappings`)).mappings.some(
+      (mapping) => mapping.kind === 'priority' && mapping.target.priority === 'high',
+    ),
+  ).toBe(true);
   await page.getByRole('button', { name: t('imports:dryRun.rerun') }).click();
   await expect
     .poll(

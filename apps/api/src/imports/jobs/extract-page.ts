@@ -1,4 +1,4 @@
-import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
+import { type DbTransaction, importLog, importRecords, importRuns } from '@helpdock/db';
 import {
   advanceImportTokenCycle,
   ConnectorError,
@@ -8,7 +8,7 @@ import {
   initialImportTokenCycle,
 } from '@helpdock/importers';
 import { type ImportEntity, importEntitySchema, importRecordSchema } from '@helpdock/schemas';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type ImportClaim, ImportClaimLost, renewImportClaim } from './claims.js';
 
@@ -138,6 +138,31 @@ export async function storeImportPage(
   if (!previous?.cycle && previous?.cursor)
     cycle = advanceImportTokenCycle(cycle, hashImportValue(previous.cursor));
   if (page.cursor !== null) cycle = advanceImportTokenCycle(cycle, hashImportValue(page.cursor));
+  const ticketRoot = (record: (typeof page.records)[number]) =>
+    record.entity === 'ticket'
+      ? record.payload.externalId
+      : ['message', 'attachment', 'activity', 'csat'].includes(record.entity)
+        ? importRecordParent(record)
+        : null;
+  const roots = [
+    ...new Set(page.records.map(ticketRoot).filter((id): id is string => id !== null)),
+  ];
+  const unavailable = roots.length
+    ? await tx
+        .select({ id: importLog.externalId })
+        .from(importLog)
+        .where(
+          and(
+            eq(importLog.runId, claim.runId),
+            eq(importLog.brandId, claim.brandId),
+            eq(importLog.entity, 'ticket'),
+            eq(importLog.message, 'import.record-unavailable'),
+            inArray(importLog.externalId, roots),
+          ),
+        )
+    : [];
+  const skipped = new Set(unavailable.map((row) => row.id));
+  page.records = page.records.filter((record) => !skipped.has(ticketRoot(record)));
   const added = await upsertExtractedRecords(tx, claim, {
     entity,
     page,
@@ -158,4 +183,40 @@ export async function storeImportPage(
     .update(importRuns)
     .set({ cursors: checkpoints, counts: { ...counts, extracted } })
     .where(eq(importRuns.id, claim.runId));
+}
+
+/** A disappearing source ticket is omitted with its graph; live destination history is untouched. */
+export async function discardUnavailableTicket(
+  tx: DbTransaction,
+  claim: ImportClaim,
+  externalId: string,
+) {
+  const removed = await tx
+    .delete(importRecords)
+    .where(
+      and(
+        eq(importRecords.brandId, claim.brandId),
+        eq(importRecords.runId, claim.runId),
+        or(
+          and(eq(importRecords.entity, 'ticket'), eq(importRecords.externalId, externalId)),
+          and(
+            inArray(importRecords.entity, ['message', 'attachment', 'activity', 'csat']),
+            eq(importRecords.parentExternalId, externalId),
+          ),
+        ),
+      ),
+    )
+    .returning({ entity: importRecords.entity });
+  const [run] = await tx
+    .select({ counts: importRuns.counts })
+    .from(importRuns)
+    .where(eq(importRuns.id, claim.runId));
+  if (!run) throw new ImportClaimLost();
+  const extracted = extractedCountsSchema.parse(run.counts.extracted ?? {});
+  for (const row of removed) extracted[row.entity] = Math.max(0, (extracted[row.entity] ?? 0) - 1);
+  if (removed.length)
+    await tx
+      .update(importRuns)
+      .set({ counts: { ...run.counts, extracted } })
+      .where(eq(importRuns.id, claim.runId));
 }

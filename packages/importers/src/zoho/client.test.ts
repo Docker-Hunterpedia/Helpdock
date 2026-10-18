@@ -33,6 +33,7 @@ function connection(input: ZohoCredentials = credentials, now?: () => number) {
     signal: new AbortController().signal,
     log: async () => {},
     http: new ImportHttp({
+      dailyCreditLimit: true,
       hosts: ['127.0.0.1'],
       limiter: new ImportRateLimiter({ capacity: 100, perMinute: 1000 }),
       policy: {
@@ -197,4 +198,16 @@ it('accepts documented HTTP 204 only as an empty list, never as a fabricated det
   await expect(
     client.list('/api/v1/articles', z.object({ data: z.array(z.object({ id: z.string() })) })),
   ).rejects.toMatchObject({ code: 'invalid-response' });
+});
+
+it('defers daily credit exhaustion for the documented reset instead of probing each second', async () => {
+  const { client } = connection();
+  fake.failNext({
+    path: '/api/v1/organizations',
+    status: 429,
+    json: { errorCode: 'THRESHOLD_EXCEEDED', message: 'Daily credit limit exceeded' },
+  });
+  await expect(client.request('/api/v1/organizations')).rejects.toMatchObject({
+    retryAfterMs: 86400000,
+  });
 });

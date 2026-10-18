@@ -887,3 +887,97 @@ it('refuses a changed organization page rather than skipping rows under an old c
     collectPages(connector.extract(context, 'organization', first.value.cursor)),
   ).rejects.toMatchObject({ code: 'invalid-response' });
 });
+
+it('includes documented inline images as managed attachments and marks deleted users inactive', async () => {
+  const fixture = structuredClone(zendeskCoreFixture);
+  fixture.comments = {
+    '101': [
+      {
+        id: 901,
+        author_id: 201,
+        public: true,
+        body: 'Inline history',
+        created_at: '2020-01-01T10:00:00Z',
+        attachments: [
+          {
+            id: 1102,
+            inline: true,
+            file_name: 'inline.png',
+            content_type: 'image/png',
+            size: 100,
+            content_url: 'https://demo.zendesk.com/attachments/inline.png',
+          },
+        ],
+      },
+    ],
+  };
+  fixture.users = (fixture.users ?? []).map((user) => ({ ...user, active: false }));
+  fake.replaceFixture(fixture);
+  const attachments = (await collectPages(connector.extract(context, 'attachment', null))).flatMap(
+    (page) => page.records,
+  );
+  expect(attachments).toContainEqual(
+    expect.objectContaining({
+      entity: 'attachment',
+      payload: expect.objectContaining({ externalId: '1102' }),
+    }),
+  );
+  const users = (await collectPages(connector.extract(context, 'user', null))).flatMap(
+    (page) => page.records,
+  );
+  expect(users.every((user) => user.entity === 'user' && user.payload.active === false)).toBe(true);
+});
+
+it('warns and continues when a ticket disappears while its thread is extracted', async () => {
+  const logs: unknown[] = [];
+  context.log = async (entry) => {
+    logs.push(entry);
+  };
+  fake.server.failNext({ path: '/api/v2/tickets/101/comments.json', status: 404 });
+  expect(
+    (await collectPages(connector.extract(context, 'message', null))).flatMap(
+      (page) => page.records,
+    ),
+  ).toEqual([]);
+  expect(logs).toContainEqual({
+    level: 'warning',
+    entity: 'ticket',
+    externalId: '101',
+    message: 'import.record-unavailable',
+  });
+});
+
+it('retains a readable ticket thread when only its author has disappeared', async () => {
+  fake.server.failNext({ path: '/api/v2/users/201.json', status: 404 });
+  const messages = (await collectPages(connector.extract(context, 'message', null))).flatMap(
+    (page) => page.records,
+  );
+  expect(messages).toContainEqual(
+    expect.objectContaining({
+      entity: 'message',
+      payload: expect.objectContaining({
+        externalId: '901',
+        authorKind: 'system',
+        authorName: '#201',
+      }),
+    }),
+  );
+  expect(messages).toHaveLength(2);
+});
+
+it('keeps available contact history when a deleted user no longer exposes identities', async () => {
+  fake.server.failNext({ path: '/api/v2/users/201/identities.json', status: 404 });
+  const contacts = (await collectPages(connector.extract(context, 'contact', null))).flatMap(
+    (page) => page.records,
+  );
+  expect(contacts).toContainEqual(
+    expect.objectContaining({
+      entity: 'contact',
+      payload: expect.objectContaining({
+        externalId: '201',
+        emails: ['customer@example.invalid'],
+        sourceIdentities: [],
+      }),
+    }),
+  );
+});

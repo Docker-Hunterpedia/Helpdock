@@ -1,11 +1,15 @@
 import { RateLimited } from './errors.js';
 
 /** Retry-After accepts delta-seconds or an HTTP date; invalid or elapsed values use one second. */
-export function retryAfterMs(header: string | undefined, now = Date.now()): number {
-  if (header === undefined) return 1000;
+export function retryAfterMs(
+  header: string | undefined,
+  now = Date.now(),
+  fallbackMs = 1000,
+): number {
+  if (header === undefined) return fallbackMs;
   const seconds = /^\d+$/.test(header.trim()) ? Number(header.trim()) : Number.NaN;
   const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - now;
-  return Number.isSafeInteger(delay) && delay > 0 ? delay : 1000;
+  return Number.isSafeInteger(delay) && delay > 0 ? delay : fallbackMs;
 }
 
 /** Non-blocking token bucket: the worker persists the next delay rather than holding a socket or timer. */

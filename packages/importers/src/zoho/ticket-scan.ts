@@ -114,11 +114,10 @@ export async function readZohoTicketScan(
   const query: Record<string, string> = {
     from: String(cursor.from),
     limit: '100',
-    sortBy: cursor.window ? 'modifiedTime' : 'createdTime',
+    sortBy: 'createdTime',
   };
-  if (cursor.window) query.modifiedTimeRange = `${cursor.window.start},${cursor.window.end}`;
   const page = await client.list(
-    cursor.window ? '/api/v1/tickets/search' : '/api/v1/tickets',
+    '/api/v1/tickets',
     z.object({ data: z.array(zohoTicketIndexSchema).max(100) }),
     query,
   );
@@ -126,39 +125,21 @@ export async function readZohoTicketScan(
     throw new ConnectorError('invalid-response');
   let lastTime = cursor.lastTime;
   for (const row of page.data) {
-    const time = new Date(cursor.window ? row.modifiedTime : row.createdTime).toISOString();
-    if (
-      (lastTime && time < lastTime) ||
-      (cursor.window && (time < cursor.window.start || time > cursor.window.end))
-    )
-      throw new ConnectorError('invalid-response');
+    const time = new Date(row.createdTime).toISOString();
+    if (lastTime && time < lastTime) throw new ConnectorError('invalid-response');
     lastTime = time;
-  }
-  if (cursor.window && cursor.from + page.data.length >= 5000) {
-    const start = Date.parse(cursor.window.start),
-      end = Date.parse(cursor.window.end);
-    if (end - start <= 1 || cursor.pending.length >= 64) return client.refuseTicketWindow();
-    const middle = new Date(start + Math.floor((end - start) / 2)).toISOString();
-    return {
-      id: null,
-      next: {
-        ...cursor,
-        from: 0,
-        ids: [],
-        offset: 0,
-        terminal: false,
-        lastTime: null,
-        window: { start: cursor.window.start, end: middle },
-        pending: [{ start: middle, end: cursor.window.end }, ...cursor.pending],
-      },
-    };
   }
   return {
     id: null,
     next: zohoTicketScanSchema.parse({
       ...cursor,
       from: cursor.from + page.data.length,
-      ids: page.data.map((row) => row.id),
+      ids: page.data
+        .filter(
+          (row) =>
+            !cursor.window || Date.parse(row.modifiedTime) >= Date.parse(cursor.window.start),
+        )
+        .map((row) => row.id),
       offset: 0,
       terminal: page.data.length < 100,
       lastTime,

@@ -175,33 +175,49 @@ export async function* readImportBundle(options: {
   }
 }
 
-/** Reads only a validated attachment member; callers own the surrounding temporary source file. */
+/** Keeps one validated directory index while several members of the same sealed bundle are read. */
+export async function openImportBundleAttachments(path: string, signal?: AbortSignal) {
+  if ((await stat(path)).size > MAX_BUNDLE_BYTES)
+    throw new ImportFileError('invalid-bundle', 'manifest.json');
+  const zip = await openBundle(path);
+  try {
+    const entries = await bundleIndex(zip, signal);
+    return {
+      close: () => zip.close(),
+      async *read(bundlePath: string, signal?: AbortSignal): AsyncGenerator<Buffer> {
+        const member = importBundlePathSchema.parse(bundlePath);
+        const entry = entries.get(member);
+        if (!entry || memberKind(entry) !== 'attachment')
+          throw new ImportFileError('invalid-bundle', member);
+        const stream = await zip.openReadStreamPromise(entry);
+        try {
+          for await (const chunk of stream) {
+            signal?.throwIfAborted();
+            yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          }
+        } catch (error) {
+          throw bundleFailure(error);
+        } finally {
+          stream.destroy();
+        }
+      },
+    };
+  } catch (error) {
+    zip.close();
+    throw bundleFailure(error);
+  }
+}
+
+/** Reads a single member when the caller does not retain a sealed bundle reader. */
 export async function* readImportBundleAttachment(options: {
   path: string;
   bundlePath: string;
   signal?: AbortSignal;
 }): AsyncGenerator<Buffer> {
-  const member = importBundlePathSchema.parse(options.bundlePath);
-  if ((await stat(options.path)).size > MAX_BUNDLE_BYTES)
-    throw new ImportFileError('invalid-bundle', 'manifest.json');
-  const zip = await openBundle(options.path);
+  const reader = await openImportBundleAttachments(options.path, options.signal);
   try {
-    const entries = await bundleIndex(zip, options.signal);
-    const entry = entries.get(member);
-    if (!entry || memberKind(entry) !== 'attachment')
-      throw new ImportFileError('invalid-bundle', member);
-    const stream = await zip.openReadStreamPromise(entry);
-    try {
-      for await (const chunk of stream) {
-        options.signal?.throwIfAborted();
-        yield Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      }
-    } finally {
-      stream.destroy();
-    }
-  } catch (error) {
-    throw bundleFailure(error);
+    yield* reader.read(options.bundlePath, options.signal);
   } finally {
-    zip.close();
+    reader.close();
   }
 }

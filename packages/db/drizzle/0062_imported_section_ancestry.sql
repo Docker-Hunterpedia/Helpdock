@@ -1,1 +1,0 @@
-ALTER TABLE "hc_sections" ADD COLUMN "imported_parent_section_external_id" varchar(200);

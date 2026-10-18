@@ -1,1 +1,0 @@
-CREATE INDEX "tickets_import_sla_pending_idx" ON "tickets" USING btree ("brand_id","import_source","id") WHERE "tickets"."imported_at" IS NOT NULL AND "tickets"."import_sla_started_at" IS NULL AND "tickets"."deleted_at" IS NULL AND "tickets"."merged_into_id" IS NULL;

@@ -62,13 +62,14 @@ export async function requireImportedTicket(
   tx: DbTransaction,
   input: TicketLoad,
   ticketId: string,
-): Promise<void> {
+) {
   const [found] = await tx
-    .select({ id: tickets.id })
+    .select({ id: tickets.id, departmentId: tickets.departmentId })
     .from(tickets)
     .where(availableImportedTicket(input, ticketId))
     .for('update');
   if (!found) throw new ImportLoadError('target-unavailable');
+  return found;
 }
 
 export async function createImportedTicket(
@@ -114,7 +115,11 @@ export async function updateImportedTicket(
 ): Promise<void> {
   const updated = await tx
     .update(tickets)
-    .set(changes)
+    .set({
+      ...changes,
+      // A content-only delta must not manufacture another stay in the same status.
+      statusChangedAt: sql`CASE WHEN ${tickets.statusId} = ${changes.statusId}::uuid THEN ${tickets.statusChangedAt} ELSE ${changes.statusChangedAt.toISOString()}::timestamptz END`,
+    })
     .where(availableImportedTicket(input, ticketId))
     .returning({ id: tickets.id });
   if (!updated.length) throw new ImportLoadError('target-unavailable');

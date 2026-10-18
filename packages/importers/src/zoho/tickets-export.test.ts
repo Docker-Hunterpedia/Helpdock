@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { ImportCursor } from '../connector.js';
 import { collectAsync } from '../testing/collect.js';
 import type { TicketInventory } from '../ticket-inventory.js';
@@ -150,12 +150,12 @@ it.each([429, 503])('does not consume a ticket when its read fails with %s', asy
   expect(records.map((record) => record.payload.externalId)).toEqual([archivedId]);
 });
 
-it('splits a capped delta window, overlaps its boundary and reaches records beyond the search ceiling', async () => {
-  const start = Date.parse('2020-01-01T00:00:00Z');
+it('scans beyond the search ceiling in immutable creation order, including timestamp ties', async () => {
+  const at = '2020-01-01T00:00:00.000Z';
   fake.fixture.tickets = Array.from({ length: 5100 }, (_, index) => ({
     id: String(10000 + index),
-    createdTime: '2013-01-01T00:00:00.000Z',
-    modifiedTime: new Date(start + index).toISOString(),
+    createdTime: at,
+    modifiedTime: at,
   }));
   const { client } = zohoTestConnection(fake);
   let scan = zohoTicketScanSchema.parse({
@@ -166,52 +166,48 @@ it('splits a capped delta window, overlaps its boundary and reaches records beyo
     terminal: false,
     lastTime: null,
     pending: [],
-    window: { start: new Date(start).toISOString(), end: new Date(start + 6000).toISOString() },
+    window: { start: at, end: at },
   });
-  const split = await readZohoTicketScan(client, scan);
-  expect(split.id).toBeNull();
-  expect(split.next).toMatchObject({
-    from: 0,
-    window: { end: new Date(start + 3000).toISOString() },
-    pending: [{ start: new Date(start + 3000).toISOString() }],
-  });
-  if (!split.next) throw new Error('Expected split cursor');
-  scan = split.next;
   const seen = new Set<string>();
-  for (let steps = 0; steps < 10000; steps++) {
+  for (let steps = 0; steps < 1000; steps++) {
     const next = await readZohoTicketScan(client, scan);
     if (next.id) seen.add(next.id);
     if (next.next === null) break;
     scan = next.next;
+    if (scan.stage !== 'active') break;
   }
-  expect([...seen].sort()).toEqual(fake.fixture.tickets.map((ticket) => ticket.id).sort());
+  expect([...seen].sort()).toEqual(
+    fake.fixture.tickets
+      .slice(4900)
+      .map((ticket) => ticket.id)
+      .sort(),
+  );
+  expect(
+    fake.calls
+      .filter((call) => call.path.includes('/tickets'))
+      .every((call) => call.path === '/api/v1/tickets' && call.query.sortBy === 'createdTime'),
+  ).toBe(true);
 });
 
-it('stops at an indivisible timestamp tie with an actionable complete-inventory diagnostic', async () => {
+it('does not lose an unchanged delta boundary ticket when an earlier result leaves the modified-time window', async () => {
   const at = '2020-01-01T00:00:00.000Z';
-  fake.fixture.tickets = Array.from({ length: 5000 }, (_, index) => ({
+  fake.fixture.tickets = Array.from({ length: 101 }, (_, index) => ({
     id: String(10000 + index),
     createdTime: at,
     modifiedTime: at,
   }));
-  const log = vi.fn();
-  const { client } = zohoTestConnection(fake, { log });
-  const scan = zohoTicketScanSchema.parse({
-    stage: 'active',
-    from: 4900,
-    ids: [],
-    offset: 0,
-    terminal: false,
-    lastTime: null,
-    pending: [],
-    window: { start: at, end: at },
-  });
-  await expect(readZohoTicketScan(client, scan)).rejects.toMatchObject({
-    code: 'invalid-response',
-  });
-  expect(log).toHaveBeenCalledWith({
-    level: 'error',
-    entity: 'ticket',
-    message: 'import.zoho.timestamp-window-exhausted',
-  });
+  const { client } = zohoTestConnection(fake);
+  let scan = initialZohoTicketScan(undefined, new Date(at), new Date('2020-01-02T00:00:00Z'));
+  const seen: string[] = [];
+  for (let steps = 0; steps < 200; steps++) {
+    const next = await readZohoTicketScan(client, scan);
+    if (next.id) seen.push(next.id);
+    if (seen.length === 100) {
+      const first = fake.fixture.tickets[0];
+      if (first) first.modifiedTime = '2030-01-01T00:00:00.000Z';
+    }
+    if (next.next?.stage !== 'active') break;
+    scan = next.next;
+  }
+  expect(new Set(seen)).toEqual(new Set(fake.fixture.tickets.map((ticket) => ticket.id)));
 });

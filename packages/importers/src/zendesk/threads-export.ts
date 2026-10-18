@@ -62,14 +62,17 @@ async function commentRecords(
       }),
     );
   const text = comment.plain_body ?? comment.body;
+  const authorKind = await client.authorKind(comment.author_id);
   return [
     importRecordSchema.parse({
       entity: 'message',
       payload: {
         externalId: String(comment.id),
         ticketExternalId: String(ticketId),
-        authorExternalId: String(comment.author_id),
-        authorKind: await client.authorKind(comment.author_id),
+        authorKind,
+        ...(authorKind === 'system'
+          ? { authorName: `#${comment.author_id}` }
+          : { authorExternalId: String(comment.author_id) }),
         public: comment.public,
         ...(comment.html_body == null ? {} : { bodyHtml: comment.html_body }),
         ...(text == null ? {} : { bodyText: text }),
@@ -92,10 +95,12 @@ async function* ticketComments(
   const path = `/api/v2/tickets/${ticketId}/comments.json`;
   let checkpoint = state;
   while (true) {
-    const page = await client.json(path, zendeskCommentPageSchema, {
+    const page = await client.ticketJson(ticketId, path, zendeskCommentPageSchema, {
       'page[size]': '100',
+      include_inline_images: 'true',
       ...(checkpoint.commentAfter === undefined ? {} : { 'page[after]': checkpoint.commentAfter }),
     });
+    if (!page) return;
     const fingerprint = hashImportValue(page.comments);
     if (
       (checkpoint.commentFingerprint && checkpoint.commentFingerprint !== fingerprint) ||
@@ -149,7 +154,7 @@ export async function* exportZendeskThread(
   });
   while (true) {
     const batch = await client.json('/api/v2/incremental/tickets/cursor.json', schema, {
-      per_page: '100',
+      per_page: '1000',
       support_type_scope: 'all',
       ...(checkpoint.tickets.after === undefined
         ? { start_time: String(checkpoint.tickets.startTime) }

@@ -27,6 +27,7 @@ import {
   importFiles,
   importLog,
   importMappings,
+  importPages,
   importRecords,
   importRuns,
   importTicketInventory,
@@ -34,13 +35,16 @@ import {
   outbox,
   reportAgentDaily,
   reportDaily,
+  retentionSettings,
   runMigrations,
   setEmbeddingDims,
+  slaPolicies,
   tags,
   teams,
   ticketActivity,
   ticketMessages,
   ticketParticipants,
+  ticketSlaClocks,
   ticketStatuses,
   tickets,
   ticketTags,
@@ -105,6 +109,8 @@ import { MediaRepository } from '../../media/media.repository.js';
 import { createObjectPurgeHandler } from '../../media/object-purge.js';
 import { createMediaProcessor } from '../../media/process.job.js';
 import { RollupRepository } from '../../reports/rollup.repository.js';
+import { SlaRepository } from '../../sla/sla.repository.js';
+import { SlaService } from '../../sla/sla.service.js';
 import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
 import { DbTicketStatsProvider } from '../../tickets/contact-providers.js';
@@ -139,8 +145,9 @@ import { runImportDryRunBatch } from '../jobs/dry-run-batch.js';
 import { runImportDryRunMediaBatch } from '../jobs/dry-run-media.js';
 import { runImportDryRunRecordBatch } from '../jobs/dry-run-records.js';
 import { importDryRunCheckpointSchema } from '../jobs/dry-run-state.js';
-import { storeImportPage } from '../jobs/extract-page.js';
+import { discardUnavailableTicket, storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
+import { completeExtraction } from '../jobs/extract-state.js';
 import { runImportFinishBatch } from '../jobs/finish-batch.js';
 import { beginImportFinishing } from '../jobs/finish-readiness.js';
 import { createImportProcessor } from '../jobs/import-processor.js';
@@ -154,6 +161,7 @@ import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedCsat } from '../jobs/load-staged-csat.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
+import { importExtractionPageCache } from '../jobs/page-cache.js';
 import { createImportArticlePreparer } from '../jobs/prepare-article.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { recoverBrandImports } from '../jobs/recover.js';
@@ -542,6 +550,288 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await redis?.quit();
     await redisContainer?.stop();
     await postgres?.stop();
+  });
+
+  it('omits a ticket deleted mid-extraction with its staged thread, preserving unrelated same-ID taxonomy', async () => {
+    const scope = { brandId: BRAND, runId: RUN };
+    await owner.db.update(importRuns).set({ status: 'extracting' }).where(eq(importRuns.id, RUN));
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!claim) throw new Error('Expected extraction claim');
+    const record = request('42').record;
+    await withSystem(app.db, BRAND, (tx) =>
+      storeImportPage(tx, claim, 'ticket', {
+        records: [{ entity: 'ticket', payload: record }],
+        cursor: null,
+      }),
+    );
+    await owner.db.insert(importRecords).values({
+      ...scope,
+      entity: 'section',
+      externalId: 'taxonomy',
+      parentExternalId: '42',
+      payload: {},
+      payloadHash: 'a'.repeat(64),
+    });
+    await withSystem(app.db, BRAND, async (tx) => {
+      await tx.insert(importLog).values({
+        ...scope,
+        entity: 'ticket',
+        externalId: '42',
+        level: 'warning',
+        message: 'import.record-unavailable',
+      });
+      await discardUnavailableTicket(tx, claim, '42');
+      await storeImportPage(tx, claim, 'message', {
+        records: request('42').messages.map((payload) => ({ entity: 'message', payload })),
+        cursor: null,
+      });
+    });
+    expect((await owner.db.select().from(importRecords)).map((row) => row.entity)).toEqual([
+      'section',
+    ]);
+    expect(
+      (await owner.db.select().from(importRuns).where(eq(importRuns.id, RUN)))[0]?.counts,
+    ).toMatchObject({ extracted: { ticket: 0, message: 0 } });
+  });
+
+  it('retains a received page across process contexts and pause, fences a stale worker and purges snapshots on completion', async () => {
+    const scope = { brandId: BRAND, runId: RUN };
+    await owner.db.update(importRuns).set({ status: 'extracting' }).where(eq(importRuns.id, RUN));
+    const claim = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!claim) throw new Error('Expected extraction claim');
+    const url = 'https://demo.zendesk.com/api/v2/tickets/1/comments.json?page=1';
+    const response = {
+      status: 200,
+      body: Buffer.from('{"comments":[{"id":1},{"id":2}]}'),
+      headers: { 'content-type': 'application/json', 'set-cookie': 'never-store-this' },
+      url,
+      redirects: [],
+    };
+    await importExtractionPageCache(app.db, claim, 'import.cache').write(url, response);
+    await withSystem(app.db, BRAND, (tx) => pauseImportRun(tx, scope));
+    expect(await owner.db.select().from(importPages)).toHaveLength(1);
+    await expect(
+      importExtractionPageCache(app.db, claim, 'import.stale').read(url),
+    ).rejects.toMatchObject({ name: 'ImportClaimLost' });
+    await withSystem(app.db, BRAND, (tx) => resumeImportRun(tx, scope));
+    const resumed = await withSystem(app.db, BRAND, (tx) =>
+      claimImportRun(tx, { ...scope, phase: 'extracting' }),
+    );
+    if (!resumed) throw new Error('Expected resumed claim');
+    const cache = importExtractionPageCache(app.db, resumed, 'import.resumed');
+    expect((await cache.read(url))?.body).toEqual(response.body);
+    expect(
+      await cache.write(url, { ...response, body: Buffer.from('{"comments":[{"id":2}]}') }),
+    ).toMatchObject({ body: response.body, headers: { 'content-type': 'application/json' } });
+    expect(JSON.stringify((await owner.db.select().from(importPages))[0]?.response)).not.toContain(
+      'never-store-this',
+    );
+    await withSystem(app.db, BRAND, (tx) => completeExtraction(tx, resumed));
+    expect(await owner.db.select().from(importPages)).toEqual([]);
+  });
+
+  it('quietly satisfies an activated response SLA and pauses then resumes resolution after vendor deltas', async () => {
+    const input = request('activated-delta');
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const target = { firstResponseMinutes: 60, resolutionMinutes: 480 };
+    await owner.db.insert(slaPolicies).values({
+      brandId: BRAND,
+      name: 'Live support',
+      timeMode: 'calendar',
+      conditions: [],
+      targets: { low: target, medium: target, high: target, urgent: target },
+      escalation: [],
+    });
+    const sla = new SlaService(new SlaRepository());
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        sla.activateImported(tx, { brandId: BRAND, ticketId: loaded.ticketId, at: new Date() }),
+      ),
+    ).toBe(true);
+    const events = await owner.db.execute(
+      sql`SELECT id,xmin::text AS revision FROM outbox ORDER BY id`,
+    );
+    const paused = uuidv7();
+    await owner.db.insert(ticketStatuses).values({
+      id: paused,
+      brandId: BRAND,
+      name: 'Waiting',
+      systemState: 'on_hold',
+      pausesSla: true,
+      color: 'info',
+    });
+    input.record.status = 'pending';
+    input.resolved.statusId = paused;
+    input.messages.push({
+      externalId: 'new-vendor-reply',
+      ticketExternalId: input.record.externalId,
+      authorExternalId: 'oldagent',
+      authorKind: 'agent',
+      public: true,
+      bodyText: 'Historical agent answer',
+      createdAt: '2020-01-01T00:00:00Z',
+      attachments: [],
+    });
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const clocks = await owner.db
+      .select()
+      .from(ticketSlaClocks)
+      .where(eq(ticketSlaClocks.ticketId, loaded.ticketId));
+    expect(clocks).toHaveLength(2);
+    expect(clocks.find((clock) => clock.kind === 'first_response')).toMatchObject({
+      satisfiedAt: expect.any(Date),
+      dueAt: null,
+      breachedAt: null,
+    });
+    expect(clocks.find((clock) => clock.kind === 'resolution')).toMatchObject({
+      pausedAt: expect.any(Date),
+      dueAt: null,
+      breachedAt: null,
+    });
+    input.record.status = 'open';
+    input.resolved.statusId = STATUS;
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      (
+        await owner.db
+          .select()
+          .from(ticketSlaClocks)
+          .where(
+            and(
+              eq(ticketSlaClocks.ticketId, loaded.ticketId),
+              eq(ticketSlaClocks.kind, 'resolution'),
+            ),
+          )
+      )[0],
+    ).toMatchObject({ pausedAt: null, dueAt: expect.any(Date), breachedAt: null });
+    const response = clocks.find((clock) => clock.kind === 'first_response');
+    if (!response) throw new Error('Missing response clock');
+    const startedAt = new Date();
+    await owner.db
+      .update(ticketSlaClocks)
+      .set({ isCurrent: false })
+      .where(eq(ticketSlaClocks.id, response.id));
+    const nextId = uuidv7();
+    await owner.db.insert(ticketSlaClocks).values({
+      ...response,
+      id: nextId,
+      kind: 'next_response',
+      cycle: 1,
+      isCurrent: true,
+      startedAt,
+      checkpointAt: startedAt,
+      satisfiedAt: null,
+      pausedAt: null,
+      dueAt: new Date(startedAt.getTime() + 3600000),
+    });
+    await owner.db.update(tickets).set({ slaCycle: 1 }).where(eq(tickets.id, loaded.ticketId));
+    input.record.subject = 'Changed after a staff reopen';
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      (await owner.db.select().from(ticketSlaClocks).where(eq(ticketSlaClocks.id, nextId)))[0]
+        ?.satisfiedAt,
+    ).toBeNull();
+    input.messages.push({
+      externalId: 'reply-after-reopen',
+      ticketExternalId: input.record.externalId,
+      authorExternalId: 'oldagent',
+      authorKind: 'agent',
+      public: true,
+      bodyText: 'Answer after reopen',
+      createdAt: new Date().toISOString(),
+      attachments: [],
+    });
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      (await owner.db.select().from(ticketSlaClocks).where(eq(ticketSlaClocks.id, nextId)))[0]
+        ?.satisfiedAt,
+    ).toBeInstanceOf(Date);
+    expect(
+      await owner.db.execute(sql`SELECT id,xmin::text AS revision FROM outbox ORDER BY id`),
+    ).toEqual(events);
+  });
+
+  it('warns before retention can erase old imported closed history and binds review to the retention policy', async () => {
+    const record = request('retention-risk').record;
+    await owner.db
+      .update(ticketStatuses)
+      .set({ systemState: 'closed' })
+      .where(eq(ticketStatuses.id, STATUS));
+    await owner.db.insert(importMappings).values([
+      {
+        brandId: BRAND,
+        runId: RUN,
+        kind: 'status',
+        externalValue: 'open',
+        target: { statusId: STATUS },
+      },
+      {
+        brandId: BRAND,
+        runId: RUN,
+        kind: 'group',
+        externalValue: '',
+        target: { departmentId: DEPARTMENT, teamId: null },
+      },
+      {
+        brandId: BRAND,
+        runId: RUN,
+        kind: 'priority',
+        externalValue: '',
+        target: { priority: 'medium' },
+      },
+      {
+        brandId: BRAND,
+        runId: RUN,
+        kind: 'channel',
+        externalValue: '',
+        target: { channel: 'email' },
+      },
+    ]);
+    await owner.db.insert(importRecords).values({
+      brandId: BRAND,
+      runId: RUN,
+      entity: 'ticket',
+      externalId: record.externalId,
+      payload: record,
+      payloadHash: hashImportValue(record),
+    });
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    const validate = () => withSystem(app.db, BRAND, (tx) => validateImportRecordPage(tx, scope));
+    expect(await validate()).toMatchObject({ warningCount: 0, warnings: [] });
+    const before = await withSystem(app.db, BRAND, (tx) =>
+      importDestinationFingerprint(tx, { brandId: BRAND, runId: RUN }),
+    );
+    await owner.db.insert(retentionSettings).values({ brandId: BRAND, closedTicketDays: 365 });
+    expect(await validate()).toMatchObject({
+      warningCount: 1,
+      warnings: [
+        { entity: 'ticket', externalId: record.externalId, code: 'retention-closed-history' },
+      ],
+    });
+    const after = await withSystem(app.db, BRAND, (tx) =>
+      importDestinationFingerprint(tx, { brandId: BRAND, runId: RUN }),
+    );
+    expect(after).not.toBe(before);
+    await owner.db
+      .update(retentionSettings)
+      .set({ lastRunAt: new Date(), lastRunCounts: { closedTickets: 1 } })
+      .where(eq(retentionSettings.brandId, BRAND));
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        importDestinationFingerprint(tx, { brandId: BRAND, runId: RUN }),
+      ),
+    ).toBe(after);
+    await owner.db
+      .update(ticketStatuses)
+      .set({ systemState: 'open' })
+      .where(eq(ticketStatuses.id, STATUS));
+    expect(await validate()).toMatchObject({ warningCount: 0, warnings: [] });
+    expect(await owner.db.select().from(tickets)).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
   it('replaces mappings in bounded batches and invalidates the previous dry-run approval', async () => {
@@ -1069,6 +1359,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     const [ticket] = await owner.db.select().from(tickets).where(eq(tickets.id, loaded.ticketId));
     expect(ticket?.subject).toBe(input.record.subject);
     expect(ticket?.createdAt.toISOString()).toBe('2019-01-01T00:00:00.000Z');
+    expect(ticket?.statusChangedAt.toISOString()).toBe('2019-01-03T00:00:00.000Z');
   });
 
   it('retains a source CC identity without inventing an email, refuses missing/foreign mappings and repeats without writes', async () => {

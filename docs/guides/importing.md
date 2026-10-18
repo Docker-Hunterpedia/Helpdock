@@ -347,8 +347,8 @@ organization. Enter its organization ID unchanged, along with the OAuth client
 ID, client secret and refresh token issued for that region. Client secret and
 refresh token are masked and cleared after a successful connection; an invalid
 organization ID is rejected before connecting. A refused connection keeps the
-masked values available for correction. This local UI is awaiting the batch's
-EN/AR browser and accessibility verification.
+masked values available for correction. EN/AR browser and accessibility evidence is recorded in the milestone; a real
+Zoho account remains an owner verification step.
 
 Successful Zoho email threads also read the original-mail resource to preserve
 Message-ID and the source mail date independently of the thread's timeline date.
@@ -361,8 +361,8 @@ and attachments and explicitly warns that Message-ID could not be recovered.
 Permission, malformed-response, rate-limit and server errors do not silently
 drop mail metadata. Unsent drafts are never sent or queried as original mail.
 The duplicate raw MIME response is discarded after its header metadata is read.
-These local cases are authored but await the batch's native/database/browser
-verification.
+The milestone records the stand-in, database and browser coverage for these
+cases and distinguishes it from real-provider verification.
 
 Article copies can declare `assetOrigin`, an HTTP(S) origin without a path,
 credentials, query or fragment, to resolve relative image URLs. The Zoho reader
@@ -648,10 +648,11 @@ whole-ticket receipt so a later source reversion is applied rather than missed.
 Changed answers trigger report rebuilding from their parent ticket's original day.
 
 Satisfaction native IDs are unique within a source account. Migration
-`0067_import_csat_source_accounts` backfills existing ownership from native-ID
-receipts. Legacy rows without a receipt keep the zero-key namespace. Conflicting
-account receipts for one answer stop the migration; they require reconciliation
-before retrying, rather than an arbitrary account assignment.
+The unshipped import schema is consolidated in `0054_imports`, after the already
+merged `0053_sso`. Imports created by intermediate PR #215 builds are development
+data and are not a released upgrade boundary. Released 0052 and merged 0053
+installations upgrade directly to the final schema without rewriting native
+satisfaction answers.
 
 ## Original message facts
 
@@ -719,3 +720,35 @@ contact tags and devices are preserved as JSON text when mapped. The original
 company-ticket visibility flag is historical data and never grants access to
 Helpdock tickets. Dropdowns with more than Helpdock’s 50 allowed choices are
 proposed as text fields; their stored values remain unchanged.
+
+
+### Review safeguards added after the merge-blocking audit
+
+Closed source tickets mapped to a closed Helpdock status are checked against the
+brand's Data retention window during the dry run. A warning states that the next
+retention job will permanently remove each affected ticket and its attachments.
+Change the retention policy before importing if you want to keep that history,
+then rerun validation. Warnings require explicit acknowledgment; a policy change
+invalidates the previous review. Imported close dates and the retention policy
+itself are not changed by the importer.
+
+Time-based rules measure their waiting period from the later of source status
+change and first import arrival. A delta that keeps the same status retains its
+existing status timestamp; updating the subject or thread does not start a new
+waiting period. If an admin has activated SLAs, subsequent deltas
+satisfy response clocks for imported agent replies and reconcile paused statuses
+without emitting live ticket hooks, notifications or new SLA timer events.
+
+A resumed extraction reuses successful source GET responses already captured for
+that run, with the original page boundaries. These private, tenant-isolated page
+snapshots are removed when extraction ends or is cancelled/failed. A new run
+fetches new source state; attachment downloads still refresh their signed URLs.
+Freshdesk scans in creation order; a nonempty 300th page requires the complete
+native-ID inventory mode. Zoho deltas scan creation-ordered tickets and filter
+modified timestamps locally instead of paging mutable search results.
+
+The worker retains at most one verified bundle and ZIP index for attachment
+reads, reusing it while the sealed object key, store, size and digest match. Its
+idle cache expires after one minute; a restart validates the source again.
+Attachments continue into the configured private S3-compatible bucket, subject
+to MIME/size checks and authorized downloads.

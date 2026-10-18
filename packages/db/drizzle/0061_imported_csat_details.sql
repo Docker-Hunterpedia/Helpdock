@@ -1,1 +1,0 @@
-ALTER TABLE "csat_responses" ADD COLUMN "imported_details" jsonb;

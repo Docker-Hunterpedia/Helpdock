@@ -48,7 +48,7 @@ export function zendeskUserRecord(user: z.infer<typeof zendeskUserSchema>): Impo
       kind: user.role === 'end-user' ? 'customer' : 'agent',
       name: user.name,
       role: user.role,
-      active: !user.suspended,
+      active: user.active !== false && !user.deleted && !user.suspended,
       ...(user.email == null ? {} : { email: user.email }),
       ...(user.phone == null ? {} : { phone: user.phone }),
     },

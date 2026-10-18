@@ -32,6 +32,8 @@ export const zendeskUserSchema = z.looseObject({
   email: z.email().nullish(),
   phone: z.string().nullish(),
   suspended: z.boolean().optional(),
+  active: z.boolean().optional(),
+  deleted: z.boolean().optional(),
   organization_id: nullId,
   locale: z.string().nullish(),
   iana_time_zone: z.string().nullish(),

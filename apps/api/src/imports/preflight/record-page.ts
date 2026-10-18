@@ -1,4 +1,11 @@
-import { type DbTransaction, importMappings, importRecords, importRuns } from '@helpdock/db';
+import {
+  type DbTransaction,
+  importMappings,
+  importRecords,
+  importRuns,
+  retentionSettings,
+  ticketStatuses,
+} from '@helpdock/db';
 import {
   type ImportRecord,
   importEntitySchema,
@@ -10,6 +17,7 @@ import { z } from 'zod';
 import { importRunRefSchema } from '../jobs/claims.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import type { ImportScope } from '../loader/external-ids.js';
+import { selectTicketMappings } from '../loader/ticket-mapping-selection.js';
 import { previewImportedContactSource } from './contact-source-plan.js';
 import { previewImportedCustom } from './custom-values.js';
 import {
@@ -176,6 +184,24 @@ export async function validateImportRecordPage(
       target: row.target,
     }),
   );
+  const [retention] = await tx
+    .select({ days: retentionSettings.closedTicketDays })
+    .from(retentionSettings)
+    .where(eq(retentionSettings.brandId, scope.brandId));
+  const retentionCutoff = retention?.days ? Date.now() - retention.days * 86_400_000 : null;
+  const closedStatuses =
+    retentionCutoff === null
+      ? []
+      : await tx
+          .select({ id: ticketStatuses.id })
+          .from(ticketStatuses)
+          .where(
+            and(
+              eq(ticketStatuses.brandId, scope.brandId),
+              eq(ticketStatuses.systemState, 'closed'),
+            ),
+          );
+  const closedStatusIds = new Set(closedStatuses.map((status) => status.id));
   const rows = await tx
     .select()
     .from(importRecords)
@@ -214,6 +240,24 @@ export async function validateImportRecordPage(
       mappings,
       defaultCallingCode,
     });
+    if (row.entity === 'ticket' && codes.length === 0 && retentionCutoff !== null) {
+      const record = validatedStagedRecord(row);
+      if (record.entity === 'ticket') {
+        const { statusId } = selectTicketMappings(record.payload, mappings);
+        const closedAt = Date.parse(
+          record.payload.closedAt ?? record.payload.solvedAt ?? record.payload.updatedAt,
+        );
+        if (closedStatusIds.has(statusId) && closedAt < retentionCutoff) {
+          warningCount++;
+          if (warnings.length < 100)
+            warnings.push({
+              entity: 'ticket',
+              externalId: row.externalId,
+              code: 'retention-closed-history',
+            });
+        }
+      }
+    }
     refusedPhones += refused;
     if (refused > 0) {
       warningCount++;

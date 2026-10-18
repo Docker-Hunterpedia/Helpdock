@@ -204,7 +204,8 @@
     "media": "The source no longer serves this attachment. Its absence will be recorded in the import history.",
     "mediaSafety": "This file fails the brand's size, type or content safety checks. Review the file or the brand's file policy.",
     "mediaUnreachable": "The file URL could not be reached under this install's outbound safety rules. Check source host access.",
-    "skippedRows": "This source file skips rows with validation errors. Review its omitted-row count before importing."
+    "skippedRows": "This source file skips rows with validation errors. Review its omitted-row count before importing.",
+    "retention": "This closed ticket is outside the brand’s retention window. The next retention run will permanently delete it and its attachments. Change Data retention before importing if you want to keep this history, then run the dry run again."
   },
   "entities": {
     "ticket": "Tickets",

@@ -27,6 +27,21 @@ test('reviews file availability and warnings before starting a quiet import', as
   await expect(progress.locator('[aria-current="step"]')).toContainText(t('imports:wizard.scope'));
   await page.getByRole('button', { name: t('imports:scope.extract') }).click();
   await expect(progress.locator('[aria-current="step"]')).toContainText(t('imports:wizard.map'));
+  await page.getByRole('tab', { name: t('imports:mapping.kinds.priority'), exact: true }).click();
+  const destination = page.getByRole('combobox', {
+    name: t('imports:mapping.destination'),
+    exact: true,
+  });
+  await destination.click();
+  await page.getByRole('option', { name: 'high', exact: true }).click();
+  await expect(
+    page.getByRole('tab', { name: t('imports:mapping.kinds.status'), exact: true }),
+  ).toBeDisabled();
+  await page.getByRole('button', { name: t('imports:mapping.save'), exact: true }).click();
+  await expect(
+    page.getByRole('tab', { name: t('imports:mapping.kinds.status'), exact: true }),
+  ).toBeEnabled();
+  await expect(destination).toHaveValue('high');
   await page.getByRole('button', { name: t('imports:dryRun.rerun') }).click();
   await expect(page.getByText(t('imports:dryRun.fileStates.not_checked')).first()).toBeVisible();
   await expect(page.getByText(t('imports:dryRun.fileStates.available')).first()).toBeVisible();

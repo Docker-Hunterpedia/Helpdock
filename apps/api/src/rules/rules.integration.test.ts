@@ -756,6 +756,97 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     await disableAll();
   });
 
+  it('waits from import arrival before time-based actions, including broad candidate scans and delta timestamps', async () => {
+    const rule = await saveRule({
+      name: 'Reminder for old pending history',
+      kind: 'scheduled',
+      intervalMinutes: 15,
+      conditions: {
+        match: 'all',
+        groups: [
+          {
+            match: 'all',
+            conditions: [
+              { field: 'status', operator: 'is', values: [awaitingStatus] },
+              {
+                field: 'time_in_status',
+                operator: 'more_than',
+                duration: { amount: 3, unit: 'days' },
+              },
+            ],
+          },
+        ],
+      },
+      actions: [{ type: 'set_priority', priority: 'high' }],
+    });
+    const ticket = await createTicket('Imported pending since 2021');
+    await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId: awaitingStatus });
+    await drain();
+    await inBrand((tx) =>
+      tx
+        .update(tickets)
+        .set({
+          statusChangedAt: new Date('2021-01-01'),
+          importedAt: new Date(),
+          importSource: 'zendesk',
+        })
+        .where(eq(tickets.id, ticket.id)),
+    );
+    const tick = () =>
+      inBrand((tx) => runScheduledRules(engine(), tx, { brandId: seeded.brandId }));
+    const due = () =>
+      inBrand((tx) => tx.execute(sql`UPDATE workflow_rules SET last_scheduled_run_at = NULL`));
+    expect(await tick()).toEqual({ applied: 0, failed: 0 });
+    expect((await ticketRow(ticket.id))?.priority).toBe('medium');
+    // An OR condition cannot narrow changedBefore in SQL: facts must use the arrival baseline too.
+    await inBrand((tx) =>
+      tx.execute(
+        sql`UPDATE workflow_rules SET conditions = ${JSON.stringify({
+          match: 'any',
+          groups: [
+            {
+              match: 'all',
+              conditions: [
+                {
+                  field: 'time_in_status',
+                  operator: 'more_than',
+                  duration: { amount: 3, unit: 'days' },
+                },
+              ],
+            },
+            {
+              match: 'all',
+              conditions: [{ field: 'priority', operator: 'is', values: ['urgent'] }],
+            },
+          ],
+        })}::jsonb WHERE id=${rule.id}`,
+      ),
+    );
+    await due();
+    expect(await tick()).toEqual({ applied: 0, failed: 0 });
+    await inBrand((tx) =>
+      tx
+        .update(tickets)
+        .set({ importedAt: sql`now() - interval '4 days'` })
+        .where(eq(tickets.id, ticket.id)),
+    );
+    await due();
+    expect(await tick()).toEqual({ applied: 1, failed: 0 });
+    // A delta correcting an ancient source timestamp must not create a new reminder match.
+    await inBrand((tx) =>
+      tx
+        .update(tickets)
+        .set({ statusChangedAt: new Date('2022-01-01') })
+        .where(eq(tickets.id, ticket.id)),
+    );
+    await due();
+    expect(await tick()).toEqual({ applied: 0, failed: 0 });
+    expect(
+      (await runsOf(ticket.id)).filter((run) => run.ruleId === rule.id && run.result === 'applied'),
+    ).toHaveLength(1);
+    await disableAll();
+  });
+
   it('test-runs a draft against a ticket without changing, sending or logging anything (M3-05)', async () => {
     const ticket = await createTicket('Refund for order 88412');
     await drain();

@@ -1,7 +1,12 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb, type DbHandle } from './client.js';
@@ -68,33 +73,6 @@ const MIGRATION_TAGS = [
   '0052_meta_deliveries_platform_ids',
   '0053_sso',
   '0054_imports',
-  '0055_import_source_details',
-  '0056_imported_csat',
-  '0057_import_worker_claims',
-  '0058_imported_knowledge_metadata',
-  '0059_imported_activity',
-  '0060_imported_participant_source',
-  '0061_imported_csat_details',
-  '0062_imported_section_ancestry',
-  '0063_import_record_load_receipts',
-  '0064_import_source_accounts',
-  '0065_import_message_identity',
-  '0066_import_dry_run_identity',
-  '0067_import_csat_source_accounts',
-  '0068_import_source_files',
-  '0069_import_staging_retention',
-  '0070_imported_sla_activation',
-  '0071_imported_sla_candidates',
-  '0072_imported_ticket_native_search',
-  '0073_ticket_activity_history_cursor',
-  '0074_imported_unscored_satisfaction',
-  '0075_import_ticket_inventory',
-  '0076_imported_message_provenance',
-  '0077_imported_article_assets',
-  '0078_imported_article_published_copy',
-  '0079_imported_article_translation_lookup',
-  '0080_import_attachment_dry_run_media',
-  '0081_imported_article_embedding_deferral',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -178,228 +156,61 @@ describe.skipIf(!hasDocker)('migrations', () => {
     expect(second.recorded).toEqual([...MIGRATION_TAGS].reverse());
   });
 
-  it.each(['known', 'unknown', 'ambiguous'] as const)(
-    'migrates %s satisfaction account ownership without guessing',
-    async (ownership) => {
-      const url = await migrated(`csat_upgrade_${ownership}`);
+  it.each([52, 53])(
+    'upgrades an existing install at migration %s in one transaction without losing live history',
+    async (prefix) => {
+      const url = await freshDatabase(`pre_import_upgrade_${prefix}`);
+      const folder = await mkdtemp(join(tmpdir(), 'helpdock-upgrade-'));
       const owner = postgres(url, { max: 1, onnotice: () => {} });
       try {
-        await owner`ALTER TABLE csat_responses DROP COLUMN import_source_account_key CASCADE`;
-        await owner`CREATE UNIQUE INDEX csat_responses_import_key ON csat_responses(brand_id, imported_source, imported_external_id) WHERE imported_external_id IS NOT NULL`;
-        const [brand] =
-          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'CSAT upgrade','CSA') RETURNING id`;
-        const [department] =
-          await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
-        const [status] =
-          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Open','open','info') RETURNING id`;
-        const [ticket] =
-          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel)
-        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'CSA','History',${status?.id},'email') RETURNING id`;
-        const [answer] =
-          await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,imported_source,imported_external_id,token_hash,expires_at,rating,rated_at,rated_via)
-        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'zendesk','rating-1','synthetic-migration-hash','1970-01-01',5,'2019-01-01','import') RETURNING id`;
-        if (ownership !== 'unknown')
-          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
-        VALUES(${brand?.id},'zendesk',${'a'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
-        if (ownership === 'ambiguous')
-          await owner`INSERT INTO import_external_ids(brand_id,source,source_account_key,entity,external_id,helpdock_id,payload_hash)
-        VALUES(${brand?.id},'zendesk',${'b'.repeat(64)},'csat','rating-1',${answer?.id},${'1'.repeat(64)})`;
-        const migration = readFileSync(
-          new URL('../drizzle/0067_import_csat_source_accounts.sql', import.meta.url),
-          'utf8',
+        const journal = JSON.parse(
+          readFileSync(new URL('../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
         );
-        const applied = owner.begin(async (tx) => {
-          for (const statement of migration.split('--> statement-breakpoint'))
-            if (statement.trim()) await tx.unsafe(statement);
-        });
-        if (ownership === 'ambiguous') {
-          await expect(applied).rejects.toThrow(
-            'Cannot assign imported satisfaction to multiple source accounts',
+        journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= prefix);
+        await mkdir(join(folder, 'meta'));
+        await writeFile(join(folder, 'meta/_journal.json'), JSON.stringify(journal));
+        for (const entry of journal.entries)
+          await cp(
+            new URL(`../drizzle/${entry.tag}.sql`, import.meta.url),
+            join(folder, `${entry.tag}.sql`),
           );
-          expect(
-            await owner`SELECT column_name FROM information_schema.columns WHERE table_name='csat_responses' AND column_name='import_source_account_key'`,
-          ).toHaveLength(0);
-        } else {
-          await applied;
-          expect(
-            await owner`SELECT import_source_account_key AS account FROM csat_responses WHERE id=${answer?.id}`,
-          ).toMatchObject([{ account: (ownership === 'known' ? 'a' : '0').repeat(64) }]);
-        }
-      } finally {
-        await owner.end();
-      }
-    },
-  );
-
-  it.each(['valid', 'collision'] as const)(
-    'backfills satisfaction history without resending or rewriting answers: %s',
-    async (kind) => {
-      const url = await migrated(`csat_history_${kind}`);
-      const owner = postgres(url, { max: 1, onnotice: () => {} });
-      try {
+        await owner`SELECT set_config('helpdock.app_password', ${APP_ROLE_PASSWORD}, false)`;
+        await migrate(drizzle(owner), { migrationsFolder: folder });
         const [brand] =
-          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Historical answers','CSH') RETURNING id`;
+          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Existing install','OLD') RETURNING id`;
         const [department] =
           await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
         const [status] =
-          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Open','open','info') RETURNING id`;
+          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Closed','closed','info') RETURNING id`;
         const [ticket] =
-          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel)
-        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'CSH','Old answer',${status?.id},'email') RETURNING id`;
-        const [answer] =
-          await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,imported_source,imported_external_id,token_hash,expires_at,rating,rated_at,rated_via,imported_details)
-        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'freshdesk','legacy:1','synthetic-history-hash','1970-01-01',5,'2019-01-01','import',${owner.json({ originalAnswers: [{ question_id: 'Q1', question_text: 'Original question', value: 103 }] })}) RETURNING id`;
-        await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,closed_at,token_hash,expires_at)
-        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'2026-10-17','synthetic-native-hash','2026-11-17')`;
+          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel,closed_at)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'OLD','Existing history',${status?.id},'email','2025-01-01') RETURNING id`;
+        await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,closed_at,token_hash,expires_at,rating,rated_at,rated_via)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'2025-01-01','existing-answer','2025-02-01',5,'2025-01-02','link')`;
         const before =
-          await owner`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${ticket?.id} ORDER BY id`;
-        if (kind === 'collision')
-          await owner`INSERT INTO ticket_activity(id,brand_id,department_id,ticket_id,actor_type,actor_id,action,via)
-        VALUES(${answer?.id},${brand?.id},${department?.id},${ticket?.id},'system','native','ticket.created','system')`;
-        const migration = readFileSync(
-          new URL('../drizzle/0074_imported_unscored_satisfaction.sql', import.meta.url),
-          'utf8',
+          await owner`SELECT id,rating,rated_at,rated_via,token_hash FROM csat_responses`;
+        const result = await runMigrations({
+          migrationUrl: url,
+          appRolePassword: APP_ROLE_PASSWORD,
+          log: () => {},
+        });
+        expect(result.applied).toEqual(
+          MIGRATION_TAGS.filter((tag) => Number(tag.slice(0, 4)) > prefix),
         );
-        const apply = () =>
-          owner.begin(async (tx) => {
-            for (const statement of migration.split('--> statement-breakpoint'))
-              if (statement.trim()) await tx.unsafe(statement);
-          });
-        if (kind === 'collision')
-          await expect(apply()).rejects.toThrow(
-            'Imported satisfaction history ID belongs to another activity',
-          );
-        else {
-          await apply();
-          expect(
-            await owner`SELECT id,action,"to",created_at FROM ticket_activity WHERE ticket_id=${ticket?.id}`,
-          ).toMatchObject([
-            {
-              id: answer?.id,
-              action: 'ticket.imported.event',
-              to: {
-                csat: { rating: 5, link: null },
-                sourceEvent: {
-                  action: 'csat.response',
-                  details: { originalAnswers: [{ value: 103 }] },
-                },
-              },
-              created_at: new Date('2019-01-01T00:00:00Z'),
-            },
-          ]);
-          const events =
-            await owner`SELECT id,xmin::text AS revision FROM ticket_activity WHERE ticket_id=${ticket?.id}`;
-          await apply();
-          expect(
-            await owner`SELECT id,xmin::text AS revision FROM ticket_activity WHERE ticket_id=${ticket?.id}`,
-          ).toEqual(events);
-          expect(
-            await owner`SELECT count(*)::int AS count FROM outbox WHERE brand_id=${brand?.id}`,
-          ).toMatchObject([{ count: 0 }]);
-        }
         expect(
-          await owner`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${ticket?.id} ORDER BY id`,
+          await owner`SELECT id,rating,rated_at,rated_via,token_hash FROM csat_responses`,
         ).toEqual(before);
+        expect(await owner`SELECT subject FROM tickets WHERE id=${ticket?.id}`).toEqual([
+          { subject: 'Existing history' },
+        ]);
+        expect(await owner`SELECT count(*)::int AS count FROM outbox`).toEqual([{ count: 0 }]);
+        expect((await runMigrations({ migrationUrl: url, log: () => {} })).applied).toEqual([]);
       } finally {
         await owner.end();
+        await rm(folder, { recursive: true, force: true });
       }
     },
   );
-
-  it('defers existing imported article languages without changing staff publications or another brand', async () => {
-    const url = await migrated('import_embedding_deferral');
-    const owner = postgres(url, { max: 1, onnotice: () => {} });
-    const brand = uuidv7(),
-      otherBrand = uuidv7(),
-      publisher = uuidv7();
-    const category = uuidv7(),
-      section = uuidv7(),
-      importedArticle = uuidv7(),
-      liveArticle = uuidv7();
-    try {
-      await owner`ALTER TABLE hc_article_versions DROP COLUMN import_embedding_deferred`;
-      await owner`INSERT INTO brands(id,name,prefix) VALUES (${brand},'Historical','MIG'),(${otherBrand},'Other','OTH')`;
-      await owner`INSERT INTO users(id,email,name) VALUES (${publisher},'publisher@example.test','Publisher')`;
-      await owner`INSERT INTO hc_categories(id,brand_id,slug) VALUES (${category},${brand},'category')`;
-      await owner`INSERT INTO hc_sections(id,brand_id,category_id,slug) VALUES (${section},${brand},${category},'section')`;
-      await owner`INSERT INTO hc_articles(id,brand_id,section_id,slug) VALUES
-        (${importedArticle},${brand},${section},'imported'),(${liveArticle},${brand},${section},'live')`;
-      await owner`INSERT INTO hc_article_versions(id,brand_id,article_id,locale,title,status,published_by) VALUES
-        (${uuidv7()},${brand},${importedArticle},'en','Original English','published',NULL),
-        (${uuidv7()},${brand},${importedArticle},'ar','Staff publication','published',${publisher}),
-        (${uuidv7()},${brand},${liveArticle},'en','Live article','published',NULL)`;
-      await owner`INSERT INTO import_external_ids(brand_id,source,entity,external_id,helpdock_id,payload_hash) VALUES
-        (${brand},'zendesk','article','native',${importedArticle},${'a'.repeat(64)}),
-        (${otherBrand},'zendesk','article','foreign-pointer',${liveArticle},${'b'.repeat(64)})`;
-      const migration = readFileSync(
-        new URL('../drizzle/0081_imported_article_embedding_deferral.sql', import.meta.url),
-        'utf8',
-      );
-      for (const statement of migration.split('--> statement-breakpoint'))
-        if (statement.trim()) await owner.unsafe(statement);
-      expect(
-        await owner`SELECT title,import_embedding_deferred FROM hc_article_versions ORDER BY title`,
-      ).toEqual([
-        { title: 'Live article', import_embedding_deferred: false },
-        { title: 'Original English', import_embedding_deferred: true },
-        { title: 'Staff publication', import_embedding_deferred: false },
-      ]);
-    } finally {
-      await owner.end();
-    }
-  });
-
-  it('backfills imported message and copy provenance while retaining live RFC uniqueness', async () => {
-    const url = await migrated('import_message_upgrade');
-    const owner = postgres(url, { max: 1, onnotice: () => {} });
-    try {
-      await owner`ALTER TABLE ticket_messages DROP COLUMN import_source_account_key CASCADE`;
-      await owner`DROP INDEX ticket_messages_reference_idx`;
-      await owner`CREATE UNIQUE INDEX ticket_messages_external_key ON ticket_messages(brand_id, channel, external_message_id) WHERE external_message_id IS NOT NULL`;
-      const [brand] =
-        await owner`INSERT INTO brands(id, name, prefix) VALUES (gen_random_uuid(), 'Header upgrade', 'REF') RETURNING id`;
-      const [department] =
-        await owner`INSERT INTO departments(id, brand_id, name) VALUES (gen_random_uuid(), ${brand?.id}, 'Support') RETURNING id`;
-      const [status] =
-        await owner`INSERT INTO ticket_statuses(id, brand_id, name, system_state, color) VALUES (gen_random_uuid(), ${brand?.id}, 'Open', 'open', 'info') RETURNING id`;
-      const [ticket] =
-        await owner`INSERT INTO tickets(id, brand_id, department_id, number, prefix, subject, status_id, channel)
-        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, 1, 'REF', 'Historical mail', ${status?.id}, 'email') RETURNING id`;
-      const [message] =
-        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
-        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 1, 'public', 'system', '<p>History</p>', 'History', 'email', 'original@vendor') RETURNING id`;
-      const [copy] =
-        await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, copied_from_message_id)
-        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 2, 'public', 'system', '<p>History</p>', 'History', 'email', ${message?.id}) RETURNING id`;
-      await owner`INSERT INTO import_external_ids(brand_id, source, source_account_key, entity, external_id, helpdock_id, payload_hash)
-        VALUES (${brand?.id}, 'zendesk', ${'a'.repeat(64)}, 'message', 'native-root', ${message?.id}, ${'b'.repeat(64)})`;
-      const migration = readFileSync(
-        new URL('../drizzle/0065_import_message_identity.sql', import.meta.url),
-        'utf8',
-      );
-      for (const statement of migration.split('--> statement-breakpoint')) {
-        if (statement.trim()) await owner.unsafe(statement);
-      }
-      const historical =
-        await owner`SELECT id, external_message_id, import_source_account_key FROM ticket_messages WHERE id IN (${message?.id}, ${copy?.id}) ORDER BY seq`;
-      expect(historical).toEqual([
-        {
-          id: message?.id,
-          external_message_id: 'original@vendor',
-          import_source_account_key: 'a'.repeat(64),
-        },
-        { id: copy?.id, external_message_id: null, import_source_account_key: 'a'.repeat(64) },
-      ]);
-      await owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
-        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 3, 'public', 'system', '<p>Live</p>', 'Live', 'email', 'original@vendor')`;
-      await expect(owner`INSERT INTO ticket_messages(id, brand_id, department_id, ticket_id, seq, kind, author_type, body_html, body_text, channel, external_message_id)
-        VALUES (gen_random_uuid(), ${brand?.id}, ${department?.id}, ${ticket?.id}, 4, 'public', 'system', '<p>Duplicate</p>', 'Duplicate', 'email', 'original@vendor')`).rejects.toMatchObject(
-        { code: '23505' },
-      );
-    } finally {
-      await owner.end();
-    }
-  });
 
   it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {
     const url = await migrated('import_claims');

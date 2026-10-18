@@ -1,9 +1,10 @@
 # Importing historical support data
 
-M11 is under development. The local implementation includes Zendesk, Freshdesk,
+M11 is implemented in [PR #215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215),
+awaiting review and merge. It includes Zendesk, Freshdesk,
 Zoho Desk and manual CSV/bundle sources, the bilingual wizard, mapping presets,
-dry-run previews and explicit approval. Full acceptance and CI are still in
-progress. Track scope and evidence in
+dry-run previews and explicit approval. Track scope, functional acceptance and
+current-head CI in
 [the milestone plan](../in-development/M11-sso-and-migration.md).
 
 Importing creates history without sending customer messages or starting rules,
@@ -13,6 +14,13 @@ when an older embedding job runs. Review and publish an article revision to
 resume ordinary embedding for that language. A changed source version in a
 later import defers the replacement again. Starting imported-ticket SLA clocks
 is also a separate, explicit admin action.
+
+Imported ticket attachments and article files are copied into Helpdock's
+configured private S3-compatible bucket (`S3_ENDPOINT`, `S3_BUCKET`), such as a
+self-hosted MinIO store or S3. The worker uses local disk for bounded temporary
+inspection and processing, then removes those files. Persistent media uses the
+object store; users receive authorized Helpdock downloads rather than a
+permanent dependency on an expiring vendor URL.
 
 ## Cutover runbook
 
@@ -78,7 +86,8 @@ The local admin implementation now mounts Brand › Import and individual run
 routes. It includes source availability, recent runs, connection/scope forms,
 progress, column/value mapping, saved presets and dry-run contact/ticket samples
 with file availability. Focused browser checks and the real-API import wizard
-pass in English and Arabic with axe; aggregate coverage and CI remain pending.
+pass in English and Arabic with axe; coverage and required current-head CI are
+recorded in the milestone and PR.
 The API contract below also supports scripted preparation and review.
 
 | Method | Path below `/api/brands/:brandId/imports` | Behavior |

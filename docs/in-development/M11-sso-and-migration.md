@@ -4479,7 +4479,7 @@ flows honor reduced motion and retain their normal-color axe checks.
 
 ## Pull requests
 
-- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–18 migration work in progress (draft; work continuing, not ready to merge). The owner deferred M11-19–23; their issues remain open.
+- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–18 implementation and gap fixes #213/#214/#218; current CI and review status are on the PR, with merge reserved for the owner. The owner deferred M11-19–23; their issues remain open.
 
 - [#217](https://github.com/Docker-Hunterpedia/Helpdock/pull/217) — M11-09/10 CI validation gap #216: required Docker probes fail explicitly in CI; local skips remain available (merged; all checks passed).
 

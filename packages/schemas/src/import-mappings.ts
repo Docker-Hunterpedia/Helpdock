@@ -78,6 +78,37 @@ export const importMappingsSchema = z
     { message: 'A source value has more than one mapping of the same kind' },
   );
 
+export const importMappingTargetChoiceSchema = z.strictObject({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(300),
+  nameAr: z.string().max(300).nullable(),
+  detail: z.string().max(320).nullable(),
+  selection: importMappingSchema,
+});
+
+/** The destination catalog id a mapping selects; `null` when it names no existing destination. */
+export function importMappingChoiceId(mapping: ImportMapping | null): string | null {
+  if (!mapping) return null;
+  switch (mapping.kind) {
+    case 'status':
+      return mapping.target.statusId;
+    case 'priority':
+      return mapping.target.priority;
+    case 'channel':
+      return mapping.target.channel;
+    case 'group':
+      return mapping.target.teamId
+        ? `team:${mapping.target.teamId}`
+        : `department:${mapping.target.departmentId}`;
+    case 'tag':
+      return mapping.target.tagId;
+    case 'agent':
+      return mapping.target.kind === 'existing' ? mapping.target.userId : null;
+    case 'field':
+      return mapping.target.kind === 'existing' ? mapping.target.fieldId : null;
+  }
+}
+
 export const importMappingValuesQuerySchema = z.strictObject({
   kind: importMappingKindSchema,
   after: externalValue.optional(),
@@ -100,6 +131,9 @@ export const importMappingValueSchema = z.strictObject({
     .nullable(),
   confirmed: importMappingSchema.nullable(),
   proposed: importMappingSchema.nullable(),
+  // Display names of the destinations above, so a closed picker needs no catalog search.
+  confirmedChoice: importMappingTargetChoiceSchema.nullable(),
+  proposedChoice: importMappingTargetChoiceSchema.nullable(),
 });
 export const importMappingValuesSchema = z.strictObject({
   kind: importMappingKindSchema,
@@ -128,13 +162,6 @@ export const importMappingTargetsQuerySchema = z.strictObject({
     .regex(/^[a-zA-Z0-9_:-]*$/)
     .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-});
-export const importMappingTargetChoiceSchema = z.strictObject({
-  id: z.string().min(1).max(80),
-  label: z.string().min(1).max(300),
-  nameAr: z.string().max(300).nullable(),
-  detail: z.string().max(320).nullable(),
-  selection: importMappingSchema,
 });
 export const importMappingTargetsSchema = z.strictObject({
   choices: z.array(importMappingTargetChoiceSchema).max(100),

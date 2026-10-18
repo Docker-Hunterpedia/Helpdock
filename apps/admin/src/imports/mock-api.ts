@@ -62,7 +62,11 @@ import {
   mockMappingValues,
   mockTicketPreview,
 } from './mock-data.js';
-import { type MockImportTargetApis, mockImportTargetChoices } from './mock-targets.js';
+import {
+  type MockImportTargetApis,
+  mockImportMappingChoices,
+  mockImportTargetChoices,
+} from './mock-targets.js';
 
 type Phase = ImportRunView['status'];
 type Scenario = 'happy' | 'blocked' | 'failed' | 'credentials-refused';
@@ -233,9 +237,20 @@ export class MockImportsApi implements ImportsApi {
             ? 1
             : 0,
       );
-    const values = choices.slice(0, query.limit).map((row) => ({
+    const page = choices.slice(0, query.limit).map((row) => ({
       ...row,
       confirmed: known.get(`${query.kind}\0${row.externalValue}`) ?? null,
+    }));
+    const choiceOf = await mockImportMappingChoices(
+      this.targetApis,
+      brandId,
+      query.kind,
+      page.flatMap((row) => [row.confirmed, row.proposed].filter((mapping) => mapping !== null)),
+    );
+    const values = page.map((row) => ({
+      ...row,
+      confirmedChoice: choiceOf(row.confirmed),
+      proposedChoice: choiceOf(row.proposed),
     }));
     return importMappingValuesSchema.parse({
       kind: query.kind,

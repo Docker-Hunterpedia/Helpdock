@@ -12,6 +12,7 @@ import { lockImportBrand } from '../jobs/claims.js';
 import { ImportMappingEditError } from '../jobs/save-mappings.js';
 import { observedImportValues, observedValueMetadata } from './mapping-observations.js';
 import { proposeImportMapping } from './mapping-proposals.js';
+import { importMappingChoices } from './mapping-target-choices.js';
 
 const rowSchema = z.object({
   value: z.string().max(300),
@@ -85,6 +86,8 @@ export async function importMappingValues(
         field: query.kind === 'field' ? field : null,
         confirmed: confirmed.get(row.value) ?? null,
         proposed: null,
+        confirmedChoice: null,
+        proposedChoice: null,
       };
     }),
     nextCursor: rows.length > query.limit ? (page.at(-1)?.value ?? null) : null,
@@ -97,5 +100,17 @@ export async function importMappingValues(
         query.kind,
         row,
       );
+  const choiceOf = await importMappingChoices(
+    tx,
+    scope,
+    query.kind,
+    response.values.flatMap((row) =>
+      [row.confirmed, row.proposed].filter((mapping) => mapping !== null),
+    ),
+  );
+  for (const row of response.values) {
+    row.confirmedChoice = choiceOf(row.confirmed);
+    row.proposedChoice = choiceOf(row.proposed);
+  }
   return importMappingValuesSchema.parse(response);
 }

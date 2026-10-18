@@ -1,6 +1,8 @@
 import {
+  type ImportMapping,
   type ImportMappingTargetChoice,
   type ImportMappingTargetsQuery,
+  importMappingChoiceId,
   importMappingTargetsQuerySchema,
   importMappingTargetsSchema,
   ticketChannelSchema,
@@ -113,6 +115,22 @@ async function choicesFor(
           },
         }));
   }
+}
+
+/** Mirrors the API: one catalog read names every destination on a page of mappings. */
+export async function mockImportMappingChoices(
+  apis: MockImportTargetApis | undefined,
+  brandId: string,
+  kind: ImportMapping['kind'],
+  mappings: readonly ImportMapping[],
+): Promise<(mapping: ImportMapping | null) => ImportMappingTargetChoice | null> {
+  const named = mappings.some((mapping) => importMappingChoiceId(mapping) !== null)
+    ? await choicesFor(apis, brandId, { kind, externalValue: '', search: '', limit: 100 })
+    : [];
+  return (mapping) => {
+    const choice = named.find((entry) => entry.id === importMappingChoiceId(mapping));
+    return mapping && choice ? { ...choice, selection: mapping } : null;
+  };
 }
 
 export async function mockImportTargetChoices(

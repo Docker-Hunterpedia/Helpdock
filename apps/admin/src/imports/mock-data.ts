@@ -61,6 +61,8 @@ export function mockMappingValues(kind: ImportMapping['kind']): ImportMappingVal
         : kind === 'channel'
           ? { kind, externalValue, target: { channel: 'email' } }
           : null,
+    confirmedChoice: null,
+    proposedChoice: null,
   }));
 }
 

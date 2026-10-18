@@ -1,7 +1,32 @@
 import { expect, it } from 'vitest';
-import { importMappingsSchema, importMappingValueSchema } from './import-mappings.js';
+import {
+  type ImportMapping,
+  importMappingChoiceId,
+  importMappingsSchema,
+  importMappingValueSchema,
+} from './import-mappings.js';
 
 const id = '0192a000-0000-7000-8000-000000000001';
+const teamId = '0192a000-0000-7000-8000-000000000002';
+
+it.each<[ImportMapping, string | null]>([
+  [{ kind: 'status', externalValue: 'closed', target: { statusId: id } }, id],
+  [{ kind: 'priority', externalValue: 'p1', target: { priority: 'high' } }, 'high'],
+  [{ kind: 'channel', externalValue: 'mail', target: { channel: 'email' } }, 'email'],
+  [
+    { kind: 'group', externalValue: 'g', target: { departmentId: id, teamId: null } },
+    `department:${id}`,
+  ],
+  [{ kind: 'group', externalValue: 'g', target: { departmentId: id, teamId } }, `team:${teamId}`],
+  [{ kind: 'tag', externalValue: 'vip', target: { tagId: id } }, id],
+  [{ kind: 'tag', externalValue: 'spam', target: { tagId: null } }, null],
+  [{ kind: 'agent', externalValue: 'a', target: { kind: 'existing', userId: id } }, id],
+  [{ kind: 'agent', externalValue: 'a', target: { kind: 'name' } }, null],
+  [{ kind: 'field', externalValue: 'f', target: { kind: 'existing', fieldId: id } }, id],
+  [{ kind: 'field', externalValue: 'f', target: { kind: 'skip' } }, null],
+])('names the destination catalog id a mapping selects: %j', (mapping, expected) => {
+  expect(importMappingChoiceId(mapping)).toBe(expected);
+});
 
 it('projects a refined selection field into count-only mapper metadata without losing its choice requirement', () => {
   const metadata = {
@@ -12,6 +37,8 @@ it('projects a refined selection field into count-only mapper metadata without l
     field: { target: 'ticket', key: 'region', type: 'select', optionsCount: 2 },
     confirmed: null,
     proposed: null,
+    confirmedChoice: null,
+    proposedChoice: null,
   };
   expect(importMappingValueSchema.parse(metadata)).toEqual(metadata);
   expect(

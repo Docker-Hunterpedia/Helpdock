@@ -2668,7 +2668,11 @@ empty-string defaults, with C-collated keyset pagination. It projects ticket
 metadata and bounded user/field summaries, not message bodies. The next cursor
 can itself be an empty string. Unused source group, agent, field and tag
 definitions remain available for mapping. Public responses distinguish confirmed
-targets from suggestions.
+targets from suggestions. Each value also carries `confirmedChoice` and
+`proposedChoice`, the display name (and Arabic name, where the destination has
+one) of those targets, resolved for the whole page in one brand-scoped catalog
+query. The wizard's closed destination pickers show those names instead of a
+generic "Selected destination" placeholder, without searching `mapping-targets`.
 
 Suggestions first consult same-brand/vendor/account native-ID receipts. Other
 matches use unambiguous local status semantics/names, department/team names,

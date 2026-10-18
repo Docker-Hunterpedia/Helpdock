@@ -1,10 +1,11 @@
-import type {
-  ImportMapping,
-  ImportMappingTargetChoice,
-  ImportMappingValue,
+import {
+  type ImportMapping,
+  type ImportMappingTargetChoice,
+  type ImportMappingValue,
+  importMappingChoiceId,
 } from '@helpdock/schemas';
 import { Autocomplete, Box, Button, TextField, Typography } from '@mui/material';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
@@ -12,29 +13,10 @@ import { useImportsApi } from '../../../imports/context.tsx';
 import { Field } from '../../../ui/field.js';
 import { useDebounced } from '../../../ui/use-debounced.js';
 
-export function mappingChoiceId(mapping: ImportMapping | null): string | null {
-  if (!mapping) return null;
-  switch (mapping.kind) {
-    case 'status':
-      return mapping.target.statusId;
-    case 'priority':
-      return mapping.target.priority;
-    case 'channel':
-      return mapping.target.channel;
-    case 'group':
-      return mapping.target.teamId
-        ? `team:${mapping.target.teamId}`
-        : `department:${mapping.target.departmentId}`;
-    case 'tag':
-      return mapping.target.tagId;
-    case 'agent':
-      return mapping.target.kind === 'existing' ? mapping.target.userId : null;
-    case 'field':
-      return mapping.target.kind === 'existing' ? mapping.target.fieldId : null;
-  }
-}
-
-/** Only an opened combobox searches the potentially large destination catalog. */
+/**
+ * Only an opened combobox searches the potentially large destination catalog; a closed one names
+ * its destination from the saved or proposed choice, or from the option the admin just picked.
+ */
 export function ImportMappingPicker({
   brandId,
   runId,
@@ -58,8 +40,9 @@ export function ImportMappingPicker({
   const id = useId();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [picked, setPicked] = useState<ImportMappingTargetChoice | null>(null);
   const settled = useDebounced(search, 250);
-  const selectedId = mappingChoiceId(value);
+  const selectedId = importMappingChoiceId(value);
   const query = { kind, externalValue: source.externalValue, search: settled, limit: 50 };
   const choices = useInfiniteQuery({
     queryKey: ['imports', brandId, 'run', runId, 'mapping-targets', query],
@@ -72,31 +55,10 @@ export function ImportMappingPicker({
     getNextPageParam: (page) => page.nextCursor,
     enabled: open && !disabled,
   });
-  // Resolve the selected destination on opening even when it lies outside the first page.
-  const selected = useQuery({
-    queryKey: [
-      'imports',
-      brandId,
-      'run',
-      runId,
-      'mapping-target',
-      kind,
-      source.externalValue,
-      selectedId,
-    ],
-    queryFn: () =>
-      api.mappingTargets(brandId, runId, {
-        kind,
-        externalValue: source.externalValue,
-        search: selectedId ?? '',
-        limit: 50,
-      }),
-    enabled: open && !disabled && selectedId !== null,
-  });
   const options = choices.data?.pages.flatMap((page) => page.choices) ?? [];
-  const found =
-    options.find((option) => option.id === selectedId) ??
-    selected.data?.choices.find((option) => option.id === selectedId);
+  const found = [picked, source.confirmedChoice, source.proposedChoice, ...options].find(
+    (option) => option?.id === selectedId,
+  );
   const selectedOption: ImportMappingTargetChoice | null =
     found ??
     (selectedId && value
@@ -138,7 +100,10 @@ export function ImportMappingPicker({
           onInputChange={(_event, input, reason) => {
             if (reason === 'input' || reason === 'clear') setSearch(input);
           }}
-          onChange={(_event, option) => onChange(option?.selection ?? null)}
+          onChange={(_event, option) => {
+            setPicked(option);
+            onChange(option?.selection ?? null);
+          }}
           renderOption={(props, option) => {
             const { key, ...rest } = props;
             return (
@@ -159,15 +124,8 @@ export function ImportMappingPicker({
           )}
         />
       </Field>
-      {choices.isError || selected.isError ? (
-        <Button
-          size="small"
-          disabled={disabled}
-          onClick={() => {
-            void choices.refetch();
-            if (selectedId) void selected.refetch();
-          }}
-        >
+      {choices.isError ? (
+        <Button size="small" disabled={disabled} onClick={() => void choices.refetch()}>
           {t('imports:retry')}
         </Button>
       ) : null}

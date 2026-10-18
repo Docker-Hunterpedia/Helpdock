@@ -32,6 +32,7 @@ test('reviews file availability and warnings before starting a quiet import', as
     name: t('imports:mapping.destination'),
     exact: true,
   });
+  await expect(destination).toHaveValue('medium');
   await destination.click();
   await page.getByRole('option', { name: 'high', exact: true }).click();
   await expect(

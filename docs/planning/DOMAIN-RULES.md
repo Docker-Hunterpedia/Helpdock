@@ -135,6 +135,12 @@ A new ticket created by this rule gets `parent_id` = the closed ticket, a system
 - New clocks start at split time under the new ticket's policy. Original ticket's clocks are untouched.
 - CSAT is sent per ticket on its own close.
 
+Imported history bypasses live ticket lifecycle hooks. Scheduled rules use the
+later of `status_changed_at` and `imported_at` for both candidate selection and
+condition evaluation. A content-only delta that retains the same mapped status
+must retain `status_changed_at`, so it cannot manufacture another scheduled-rule
+match. Actual status transitions keep the database trigger's arrival baseline.
+
 ### 2.5 Participants
 
 A ticket's participants are: the contact, CC addresses added by agents or present on inbound email, and staff. Participants define who may thread into the ticket by email (§4.3) and who receives public replies. Visitors, Telegram chats and Meta conversations (WhatsApp, Messenger, Instagram) are participants through their identity mapping, never by email address.
@@ -186,6 +192,13 @@ Bulk activation requires `brand:manage` and explicit acknowledgment. It covers
 the completed run's verified source account within that brand, using durable
 receipts; only tickets imported by the request time qualify. Revision/cursor
 fences and atomic clock/progress/outbox commits make replay and resume safe.
+
+A vendor delta reconciles clocks that an administrator already activated, using
+the pure clock/calendar functions and database writes only. Public agent replies
+satisfy the appropriate response clock; paused/closed/excluded status changes
+reconcile resolution clocks and ticket summaries. A reply older than a staff
+reopen cannot satisfy its next-response clock. This path emits no live ticket,
+SLA timer or notification events and does not start clocks on unactivated imports.
 
 Every ticket has at most two running clocks, each with `target_minutes`, `started_at`, `paused_total_ms`, `due_at`, `satisfied_at`, `breached_at`:
 

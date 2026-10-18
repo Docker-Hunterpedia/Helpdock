@@ -135,7 +135,7 @@ contacts(brand_id, primary_email, phone, telegram_chat_id, external_id, visitor_
 accounts
 tickets(brand_id, number, prefix, subject, status_id, priority, channel, department_id, team_id, assignee_id, merged_into_id, split_from_id,
         contact_id, sla_policy_id, first_response_due_at, resolution_due_at, sla_breached, closed_at, custom jsonb,
-        search tsvector, parent_id)
+        search tsvector, parent_id, imported_at, import_source, import_sla_started_at)
 ticket_messages(ticket_id, department_id /*denormalised for RLS*/, seq, client_id, kind: public|note|system|ai, author_type, author_id, body_html, body_text, channel,
                 external_message_id, ai_meta jsonb)
 attachments(message_id, s3_key, mime, size, kind: image|video|audio|file, variants jsonb, scan_status)
@@ -158,6 +158,9 @@ hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body
 hc_search_documents(version_id, locale, title, body_text, search tsvector, title_normalized), hc_search_log, hc_article_views, hc_article_feedback
 knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync_status)
 knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)
+import_runs, import_records, import_mappings, import_external_ids, import_log, import_file_presets, import_files, import_ticket_inventory   -- M11, ADR 0027
+hc_import_assets(brand_id, article_id, media_id, source, source_account_key, parent_external_id, locale, asset_external_id)
+import_pages(brand_id, run_id, request_hash, response jsonb)   -- immutable successful extraction GETs, claim-fenced and discarded when extraction ends
 outbox(id, brand_id, event, payload jsonb, created_at, published_at), job_receipts(key, completed_at)   -- DOMAIN-RULES §6
 ai_settings(brand_id, provider_id, model, embeddings_model, modes jsonb, guardrails jsonb, budget jsonb, system_prompt)
 ai_calls(brand_id, ticket_id, purpose, model, tokens_in, tokens_out, cost, sources jsonb)

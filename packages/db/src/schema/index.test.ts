@@ -68,6 +68,7 @@ describe('the schema', () => {
       'import_files',
       'import_log',
       'import_mappings',
+      'import_pages',
       'import_records',
       'import_runs',
       'import_ticket_inventory',

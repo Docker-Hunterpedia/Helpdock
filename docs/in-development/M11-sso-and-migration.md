@@ -156,7 +156,8 @@ batch passed 255 cases. Connector/tooling units passed 533 cases. EN/AR mapping,
 retention, overview, control/polling and log component tests pass. Browser checks
 for mapping review and overview/control/log flows passed in both locales with
 axe. These results do not close the reopened exit criteria until current-head
-required CI and native reference jobs pass. The real-API mapping edit also passed the wizard acceptance in EN/AR, with no
+required CI and native reference jobs pass. The complete shared unit/coverage run, including the corrected schema inventory,
+passes 3,876 tests with 91.14% line coverage. The real-API mapping edit also passed the wizard acceptance in EN/AR, with no
 sends observed. Full local API coverage was interrupted to finish the additional
 content-only delta status regression; required CI remains the coverage authority
 for this correction batch.

@@ -22,6 +22,23 @@ inspection and processing, then removes those files. Persistent media uses the
 object store; users receive authorized Helpdock downloads rather than a
 permanent dependency on an expiring vendor URL.
 
+## Limits to plan for
+
+- **Freshdesk accounts with more than 30,000 tickets need a complete ticket ID
+  inventory.** Freshdesk's ticket list stops at 300 pages of 100 tickets for one
+  `updated_since` window. When the 300th page is not empty, extraction stops
+  instead of skipping tickets. Start a run in **Complete ticket ID inventory**
+  mode and upload an export of every ticket ID (see
+  [Connect and map](#connect-and-map)). The same limit applies to a delta that
+  covers more than 30,000 changed tickets.
+- **Each Zoho Desk delta lists every ticket, so it costs about as many API credits
+  as a full import's ticket listing.** Zoho's change-time search pages are
+  unstable while tickets change, so a delta reads all tickets in creation order,
+  100 per request, keeps the changed ones and rescans every department's archive.
+  Check the account's daily credit allowance before scheduling deltas. When it
+  runs out, the run waits 24 hours, or until the time Zoho sends in `Retry-After`,
+  rather than retrying.
+
 ## Cutover runbook
 
 1. Record the source account, region, selected entities and expected active/archive
@@ -33,8 +50,9 @@ permanent dependency on an expiring vendor URL.
 2. Create the run in the target brand. Use read-only vendor permissions from the
    connector sections below. For manual files, choose a stable dataset label and
    keep it unchanged for later repeats. For Freshdesk ticket history, prepare and
-   confirm the archive or complete-ID inventory. Zoho's automatic archive reader
-   normally needs no CSV.
+   confirm the archive or complete-ID inventory; above 30,000 tickets only the
+   complete inventory works ([limits](#limits-to-plan-for)). Zoho's automatic
+   archive reader normally needs no CSV.
 3. Map departments, staff, statuses, priorities, channels, tags and custom fields.
    Choose existing staff, an invited person without sending an email, or a name
    only. Review contact/company matches and required fields. Tickets receive new

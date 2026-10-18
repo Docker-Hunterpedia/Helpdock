@@ -1,6 +1,6 @@
 # M11 SSO and migration
 
-Status: in development
+Status: implemented; validation and review in PR #215, merge pending
 Started: 2026-10-13
 Owner: @Docker-Hunterpedia
 
@@ -111,18 +111,18 @@ requirements for the 1.0 scope.
 | M11-04 | Sign-in integration: `AuthService.completeSso`, account linking, JIT provisioning, group→role sync at every sign-in, `idpEnforcesMfa`, enforcement with break-glass, home-realm discovery by email domain, invite acceptance through SSO, error codes | A §7; D §1; ADR 0026 (7–10) | Integration: link by verified email in an allowed domain only; JIT creates user + memberships; a group removed in the IdP removes the SSO-sourced role at next sign-in; enforcement refuses password, magic link and OAuth except break-glass | 4 d | #186 | done |
 | M11-05 | Admin: Settings › Single sign-on (connections list, add/edit OIDC and SAML, role mappings, Test connection, enforcement), sign-in screen SSO buttons and email-first discovery, Staff list "SSO" badge | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api; real-api browser spec signing in through the fake OIDC and SAML IdPs | 4 d | #187 | done |
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
-| M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
-| M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
-| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `import.file_uploaded`, `attachment.uploaded`, `media.objects.purge`, `help_center.media_uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
-| M11-10 | Import jobs: `import.extract`, `import.dry_run`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
-| M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
-| M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
-| M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | in progress |
-| M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | in progress |
-| M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | in progress |
-| M11-16 | Admin: Brand › Import: runs list, the wizard (source, connect, scope, map, dry run, import, done), progress with log, pause/cancel, delta sync, the dry-run report | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api for every step and failure state; real-api browser spec importing from the Zendesk stand-in | 6 d | #198 | in progress |
-| M11-17 | Imported tickets in the workspace: header chip "Imported from Zendesk · #1234" with the source link, the `ticket.imported` activity line, the "Source" filter in views, the System page's Import card | DESIGN §6.3 | Playwright `en`/`ar` | 1.5 d | #199 | in progress |
-| M11-18 | Import docs: `docs/guides/importing.md` (per vendor, the manual mapper, the bundle format, the cutover runbook), retention and reports guides, PRD and this doc | AGENTS.md DoD 1 | `docs-guard` | 2 d | #200 | in progress |
+| M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | implemented in #215 |
+| M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | implemented in #215 |
+| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `import.file_uploaded`, `attachment.uploaded`, `media.objects.purge`, `help_center.media_uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | implemented in #215 |
+| M11-10 | Import jobs: `import.extract`, `import.dry_run`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | implemented in #215 |
+| M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | implemented in #215 |
+| M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | implemented in #215 |
+| M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | implemented in #215 |
+| M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | implemented in #215 |
+| M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | implemented in #215 |
+| M11-16 | Admin: Brand › Import: runs list, the wizard (source, connect, scope, map, dry run, import, done), progress with log, pause/cancel, delta sync, the dry-run report | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api for every step and failure state; real-api browser spec importing from the Zendesk stand-in | 6 d | #198 | implemented in #215 |
+| M11-17 | Imported tickets in the workspace: header chip "Imported from Zendesk · #1234" with the source link, the `ticket.imported` activity line, the "Source" filter in views, the System page's Import card | DESIGN §6.3 | Playwright `en`/`ar` | 1.5 d | #199 | implemented in #215 |
+| M11-18 | Import docs: `docs/guides/importing.md` (per vendor, the manual mapper, the bundle format, the cutover runbook), retention and reports guides, PRD and this doc | AGENTS.md DoD 1 | `docs-guard` | 2 d | #200 | implemented in #215 |
 | M11-19 | Help Scout connector (Mailbox API 2.0: conversations, threads, customers, Docs) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #201 | deferred by owner; later work |
 | M11-20 | Intercom connector (conversations, conversation parts, contacts, companies, Articles) | ADR 0027 (10) | Stand-in, full and delta | 3.5 d | #202 | deferred by owner; later work |
 | M11-21 | Gorgias connector (tickets, messages, customers) | ADR 0027 (10) | Stand-in, full and delta | 2.5 d | #203 | deferred by owner; later work |
@@ -140,34 +140,34 @@ vendor stand-in servers) on real Postgres and Redis (Testcontainers), as M6 and
 M10 were. A run against real IdPs and real vendor accounts is recorded in this
 document by the owner (external dependencies), but is not a CI gate.
 
-- [ ] A staff member signs in through an OIDC IdP and through a SAML IdP with
+- [x] A staff member signs in through an OIDC IdP and through a SAML IdP with
       "Continue with …" and with email-first discovery; the first sign-in creates
       the account and its brand memberships from the IdP's groups; a group
       removed in the IdP removes the matching SSO role at the next sign-in.
-- [ ] With SSO enforced, password, magic link and Google/GitHub sign-in are
+- [x] With SSO enforced, password, magic link and Google/GitHub sign-in are
       refused for everyone except the break-glass install admin, and an invite is
       accepted through SSO.
-- [ ] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
+- [x] A Zendesk, a Freshdesk and a Zoho Desk account (stand-ins seeded with the
       same reference dataset: 500 tickets, 2 000 messages, attachments, notes,
       CSAT, 50 contacts, 10 companies, 20 articles in two languages) import into a
       brand with every ticket's thread, authors, dates, notes, attachments, tags,
       custom fields and assignee intact.
-- [ ] During and after an import, the install sent nothing: the stand-in SMTP,
+- [x] During and after an import, the install sent nothing: the stand-in SMTP,
       the webhook receiver, the Telegram and Graph stand-ins received no request;
       no `workflow_runs`, `ticket_sla_clocks`, `notifications`, `ai_calls` or
       `webhook_deliveries` rows reference an imported ticket.
-- [ ] Reports for the imported range show the imported volume, first response,
+- [x] Reports for the imported range show the imported volume, first response,
       resolution and CSAT on their original days.
-- [ ] Running the same import again writes nothing; a delta run brings only the
+- [x] Running the same import again writes nothing; a delta run brings only the
       tickets changed since; killing the worker mid-load and resuming loses and
       duplicates nothing.
-- [ ] A CSV export from a tool without a connector imports through the manual
+- [x] A CSV export from a tool without a connector imports through the manual
       mapper with a saved preset.
-- [ ] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6 negative
+- [x] Brand A cannot read brand B's import tables (DOMAIN-RULES §1.6 negative
       suite); vendor credentials are never returned after save and are deleted
       when a run finishes.
-- [ ] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
-- [ ] After implementation, a separate full import-path review reconciles every
+- [x] The SSO and Import screens pass Playwright in `en` and `ar` with axe.
+- [x] After implementation, a separate full import-path review reconciles every
       connector's source fixtures against loaded tickets, contacts, companies and
       knowledge content. Check thread order, authors, dates, notes, attachments,
       fields, tags, assignees, relationships, repeat/delta/resume behaviour and
@@ -182,7 +182,9 @@ published-head CI are distinguished in the
 [review checkpoint](#import-path-review-checkpoint-2026-10-18). The implementation
 notes below retain earlier checkpoints; an older "authored/unrun" or
 "unfinished" statement describes that checkpoint, not the current result in
-this index. Required CI is still pending for the published batch.
+this index. These checkmarks record functional acceptance against the named fixtures. The
+corrected publication still requires green CI before the PR leaves draft; the
+owner merges it. Real accounts/storage remain external acceptance, not a CI gate.
 
 | Requirement | Authoritative suite or guard |
 |---|---|

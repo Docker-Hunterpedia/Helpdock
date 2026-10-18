@@ -278,7 +278,8 @@ export const SETTING_DEFINITIONS = [
     default: '',
     secret: false,
     scope: 'install',
-    description: 'Embedding model. Changing it re-embeds every chunk (ADR 0005).',
+    description:
+      'Embedding model. Changing it re-embeds eligible chunks (ADR 0005); imported article languages stay deferred until staff publication (ADR 0027).',
   }),
   defineSetting({
     key: 'embedding.dims',

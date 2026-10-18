@@ -21,6 +21,10 @@ test('reads a managed imported file and the explicit unavailable-file state', as
   const label = createI18n({ lng: pageLocale }).t('imports:articleAssetUnavailable');
   await expect(main.getByText(`${label}: missing-manual.pdf`, { exact: true })).toBeVisible();
   await expect(main.getByRole('link', { name: /missing-manual/ })).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   const accessibility = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();

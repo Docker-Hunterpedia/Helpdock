@@ -69,15 +69,18 @@ here. In particular:
    each linking its GitHub issue (`Closes #n`) and following the Definition of done:
    unit tests, integration tests for anything touching Postgres, Redis, queues or
    a vendor, Playwright in `en` and `ar` for every screen, docs in the same PR.
-2. **Never improvise a screen.** Build from the named artboard. If a state is
-   missing from the artboard, stop and ask; do not invent layout.
+2. **Build from the named artboard.** Under the owner's implementation
+   instruction, missing loading/error/empty states use minimal existing
+   DESIGN.md components and artboard patterns, and are listed in this plan and
+   the PR. A new layout or component still needs a design decision.
 3. **New dependencies** only those listed in ADR 0026 / 0027, at the versions
    there, after checking them again with Context7 at the time of the PR.
 4. **Vendor API facts in this document are a starting point, not a contract.**
    The first task of every connector is to read the vendor's official API
    documentation and correct the connector's notes section below in the same PR
-   (endpoints, pagination, rate limits, field names). Several limits here come
-   from secondary sources and are marked *verify*.
+   (endpoints, pagination, rate limits, field names). The retained connectors'
+   sections record their official references and check dates; recheck those
+   contracts when changing a connector.
 5. **Every new tenant table** goes into `TENANT_TABLES` (`packages/db/src/rls.ts`),
    `pnpm --filter @helpdock/db gen:rls`, and a fixture in
    `packages/db/src/rls.integration.test.ts`. Install-scope tables (SSO) do not;
@@ -172,6 +175,27 @@ document by the owner (external dependencies), but is not a CI gate.
       data completeness warnings and blocking errors before approval. Record the
       evidence and resolved findings in this document and the final PR.
 
+### Evidence index, 2026-10-18
+
+The following suites are the current acceptance sources. Local results and
+published-head CI are distinguished in the
+[review checkpoint](#import-path-review-checkpoint-2026-10-18). The implementation
+notes below retain earlier checkpoints; an older "authored/unrun" or
+"unfinished" statement describes that checkpoint, not the current result in
+this index. Required CI is still pending for the published batch.
+
+| Requirement | Authoritative suite or guard |
+|---|---|
+| OIDC/SAML, JIT, group removal, manual-role preservation, enforcement and invite | `apps/api/src/sso/{oidc,saml,identity}.integration.test.ts`; `apps/admin/e2e/api/sso*.api.spec.ts` |
+| Complete native graph, managed bytes, unchanged repeat, delta and credential purge | `apps/api/src/imports/{zendesk-reference,native-reference}.integration.test.ts`; Freshdesk/Zoho also kill and replace the worker process |
+| Quiet sends and inert domain rows | `apps/admin/e2e/api/imports.import.spec.ts`; native/manual reference suites; `scripts/check-import-writer.ts` |
+| Original-day volume, response, resolution and CSAT | `apps/api/src/imports/loader/import-writer.integration.test.ts`: `rolls imported name-only replies, resolution and ratings onto their original days without inventing agent identities`, plus resumable report cases |
+| CSV preset and multiline/date transforms; bundle history | `apps/api/src/imports/manual-reference.integration.test.ts`; `packages/importers/src/{csv,file-mapper}.test.ts`; `apps/admin/e2e/import-files.spec.ts` |
+| Tenant isolation and upgrades | `packages/db/src/rls.integration.test.ts`; `packages/db/src/migrate.integration.test.ts` |
+| Wizard/dry-run review, imported provenance, Source filters and health | `apps/admin/e2e/import*.spec.ts`, `imported*.spec.ts`, `views.spec.ts`, `system.spec.ts`; real-API import spec |
+| Imported article file authorization and local indexing without AI | `apps/api/src/help-center/help-center.integration.test.ts`; writer integration; `apps/api/e2e/imported-article.spec.ts` |
+| Explicit SLA activation and stale-timer refusal | `apps/api/src/sla/sla.integration.test.ts`; `apps/admin/e2e/import-review.spec.ts` |
+
 ## Migrations
 
 Numbers continue from `0052`. Each migration has its round-trip test, as every
@@ -193,6 +217,29 @@ earlier one.
   references, and 500-character working/published article titles. Existing tenant
   tables keep their FORCE RLS policies; no new table is introduced.
 
+The complete ordered inventory is in `packages/db/drizzle/meta/_journal.json`.
+Follow-on M11 migrations `0055`–`0067` preserve source details, satisfaction,
+claims, activities/participants, knowledge ancestry, load receipts, account
+namespaces, original mail identity and reviewed dry-run identity. The remaining
+schema changes in the combined PR are:
+
+| Migration | Purpose |
+|---|---|
+| `0068_import_source_files` | Tenant-scoped source uploads and preparation state |
+| `0069_import_staging_retention` | Discarded-file state and finished-run retention index |
+| `0070_imported_sla_activation` | Explicit per-ticket SLA activation marker |
+| `0071_imported_sla_candidates` | Pending imported-ticket activation index |
+| `0072_imported_ticket_native_search` | Native-ID lookup index |
+| `0073_ticket_activity_history_cursor` | Stable activity history cursor index |
+| `0074_imported_unscored_satisfaction` | Preserve reviewed unscored imported answers |
+| `0075_import_ticket_inventory` | Tenant-scoped sealed ticket-ID inventories |
+| `0076_imported_message_provenance` | Original message metadata |
+| `0077_imported_article_assets` | Tenant-scoped article assets and prepared media |
+| `0078_imported_article_published_copy` | Separate original published description |
+| `0079_imported_article_translation_lookup` | Staged translation lookup index |
+| `0080_import_attachment_dry_run_media` | Private per-file dry-run receipts |
+| `0081_imported_article_embedding_deferral` | Per-language embedding deferral and brand-scoped backfill |
+
 ## Open questions
 
 **Should an imported ticket that is still open get an SLA?** Default proposed:
@@ -200,12 +247,11 @@ no clocks for imported tickets, closed or open; the Import screen's last step
 offers "Start SLA clocks for the N open imported tickets now", which calls
 `SlaService.sync` for them and starts the clocks at that moment. *Status (2026-10-13): default approved by the owner in the implementation instruction.*
 
-**Should imported tickets keep the old tool's numbers?** Default proposed: no.
+**Should imported tickets keep the old tool's numbers?** Approved default: no.
 Every imported ticket gets a new number from the brand's sequence; the old number
-is shown on the "Imported from …" chip and is searchable. Keeping numbers is
-offered only when the brand has no tickets yet, the brand prefix is chosen to
-match, and no vendor number collides; the loader then `setval`s the sequence
-past the highest. *Status: default approved by the owner in the implementation instruction.*
+is shown on the "Imported from …" chip and is searchable. The implementation
+does not offer an old-number preservation mode or reset the live sequence.
+*Status: default approved by the owner in the implementation instruction.*
 
 **Are imported agents created as staff?** Default proposed: the Map step offers,
 per vendor agent, "Map to an existing person", "Create an invited person" (no
@@ -292,7 +338,7 @@ Written down before the work starts, so nobody discovers them in review.
 | **Attachments the vendor no longer serves** (expired, deleted, private without access) are skipped with a log line and a placeholder note on the message. | Nothing to fetch. |
 | **History older than 400 days is imported but not in reports** unless the admin chooses "Rebuild all reports" (a longer job). | The rollup's normal backfill window (M8). |
 | **Contact merges and duplicate suggestions are not created by the import.** An imported email that already belongs to a contact attaches to that contact; anything ambiguous is logged, not merged. | Merging is a human decision (M1-13). |
-| **Vendor API limits make large imports slow.** Zendesk's incremental export allows about 10 requests a minute (*verify*); 100 000 tickets take hours. The progress screen says so and the job runs unattended. | The vendors' limits. |
+| **Vendor API limits bound import throughput.** Background jobs preserve progress and obey the documented vendor limits and `Retry-After`; large imports can require a long-running job. | The vendors' limits, documented in each connector section. |
 
 ## External dependencies
 
@@ -3274,7 +3320,7 @@ Archive inventory and equal-timestamp ceilings are implementation gaps to solve,
 
 ## M11-14 Zoho Desk connector
 
-### Native reference acceptance checkpoint (2026-10-18, authored, unrun)
+### Native reference acceptance checkpoint (2026-10-18, passed locally)
 
 Freshdesk and Zoho now have native 500-ticket wire fixtures alongside the
 expanded Zendesk reference. Each includes 50 contacts, ten companies, five
@@ -3304,16 +3350,17 @@ does not validate these current files.
 CI's API-scoped `import-reference` matrix now selects Zendesk, Freshdesk and
 Zoho separately, with one Vitest worker per job. Both large acceptance test
 files are excluded from the instrumented API run; production import code stays
-under the existing coverage gate. None of the newly authored reference cases
-has run yet. This checkpoint does not satisfy the exit criteria, replace the
-final import-path review, or prove real-vendor behavior.
+under the existing coverage gate. All three expanded reference sequences now
+pass locally, including unchanged repeat and delta. Freshdesk and Zoho exercise
+worker-process kill/recovery. Final published-head CI remains required; these
+fixtures do not prove real-vendor behavior.
 
 The same review identified [#218](https://github.com/Docker-Hunterpedia/Helpdock/issues/218):
 an already queued SLA timer could escalate a ticket quietly closed by a source
 delta after explicit SLA activation. The local fix locks the parent before
 reading it and refuses closed, deleted, merged, excluded and unactivated imported
-tickets before touching clocks or emitting actions. Real-database regression
-cases are authored, unrun. The import writer still never invokes SLA hooks;
+tickets before touching clocks or emitting actions. All 29 SLA database cases
+pass locally, including these regressions. The import writer still never invokes SLA hooks;
 the activation marker is preserved. This is a timer safety correction, not a new
 import activation policy.
 
@@ -3322,8 +3369,8 @@ Official references checked **2026-10-17**: [Desk API](https://desk.zoho.com/Des
 and [offline consent guidance](https://help.zoho.com/portal/en/kb/accounts/faqs-troubleshooting/faqs/oauth/articles/how-to-automate-oauth-token-generation-without-browser-intervention-30-5-2021).
 The regional OAuth/client boundary, normalized connector, API/worker runtime,
 admin connection card and independent HTTP stand-in are implemented locally.
-Remaining native completeness work and acceptance are unfinished; authored
-regressions are unrun.
+The full native reference and focused EN/AR connection/axe acceptance pass
+locally; final published-head CI and owner-account runs remain separate.
 
 - **Authentication:** server-based OAuth code flow; request offline access and
   explicit consent when a refresh token is needed. Exchange/refresh through the
@@ -4277,7 +4324,7 @@ status, `context.tsx`).
 Wizard steps (StepProgress, DESIGN §6.2): **Source** (connector cards + Manual
 file) → **Connect** (credential form per connector from its schema; Test shows
 the account name; Zoho runs the OAuth popup) → **Scope** (date range, entities,
-help center, keep numbers when allowed, rebuild all reports) → **Extract**
+help center, rebuild all reports) → **Extract**
 (progress, can leave the page) → **Map** (tables per mapping kind with proposed
 values highlighted; agents: existing person / create invited / name only) →
 **Dry run** (counts, warnings, blocking issues with fix links, three sample
@@ -4320,9 +4367,9 @@ page, provides previous/next and return-to-latest controls in English/Arabic,
 and shows loading, retry and expired states using existing System components. Missing/expired/malformed readings display
 unknown rather than a measured zero. Logs remain subject to staging retention.
 
-Regression cases for source-number/native-ID search, department isolation,
+Regression suites cover source-number/native-ID search, department isolation,
 provenance after mutation, former-agent display, signed-link redaction, URL/view
-filter round trips and install-only health readings are authored but not run.
+filter round trips and install-only health readings.
 Historical activity pagination now has a local implementation: bounded pages,
 ticket-scoped UUID anchors and native PostgreSQL timestamp comparisons avoid
 dropping entries with equal/sub-millisecond dates. Migration 0073 adds the ID
@@ -4331,10 +4378,12 @@ time, and realtime refresh preserves the newest activity cursor. Imported
 provenance/source audit events are now included in the thread's event allowlist;
 previously the renderer existed but those actions never reached it. A 205-event
 database case covers multiple pages, timestamp ties, duplicates/completeness and
-foreign cursor refusal. It is authored but not run. Browser/axe acceptance and
-final runtime verification remain unfinished. Install-brand summary pagination
-and its 57-brand real-Redis regression are implemented locally but unrun. This
-does not complete M11-17.
+foreign cursor refusal. Install-brand summary pagination has a 57-brand
+real-Redis regression. The published `3890b74` API coverage run passes 5,254
+cases with 91.39% lines, including these database regressions; its browser jobs
+also pass. The separate local EN/AR Source-view, import-health, SLA and imported
+ticket checks pass with axe. Final CI remains required on the combined PR's
+latest head.
 
 Artboard: `Admin/Ticket-Imported`. The ticket header chip (from `import_source` +
 `import_external_ids.source_number/source_url`, added to `ticketSchema` as
@@ -4410,6 +4459,21 @@ both failures; the corrected tests read `error.message` and explicitly check
 the refusal status. All 23 HTTP import cases now pass. The broad instrumented
 run was stopped after finding these failures; it is not a completed coverage
 result. The required API coverage gate remains for final CI.
+
+Published head `3890b74` now passes both API shards and the coverage merge:
+5,254 tests pass with 91.39% line coverage against the unchanged 90% gate. The
+one skipped case is the explicitly optional real-Keycloak smoke test; fake-IdP
+and database suites run. Admin CI passes all 2,075 cases at 85.93% lines, and
+the browser jobs pass. CI's shared-unit run catches a stale registry description
+behind the generated configuration guide: the registry now describes eligible
+chunks and imported-language deferral. Its focused seven-case test and the
+subsequent full 3,860-case package coverage run pass locally at 91.22% lines.
+The connector reference jobs and final CI on the corrected head remain pending.
+
+Additional EN/AR checks pass at 640 CSS pixels on the wizard and 320 pixels on
+the public article, with no document-level horizontal overflow. The SLA dialog
+returns focus on cancellation and remains usable under forced colors. Both
+flows honor reduced motion and retain their normal-color axe checks.
 
 ## Pull requests
 

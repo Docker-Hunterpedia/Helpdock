@@ -36,6 +36,10 @@ test('reviews file availability and warnings before starting a quiet import', as
   await expect(
     progress.getByRole('link', { name: t('imports:wizard.map'), exact: true }),
   ).toHaveAttribute('href', '#import-mappings-heading');
+  await page.setViewportSize({ width: 640, height: 900 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   expect(
     (
       await new AxeBuilder({ page })
@@ -61,7 +65,9 @@ test('reviews file availability and warnings before starting a quiet import', as
   await expect(confirmation).toBeVisible();
   await confirmation.getByRole('button', { name: t('common:actions.cancel') }).click();
   await expect(confirmation).not.toBeVisible();
+  await expect(activate).toBeFocused();
   await expect(clocks.getByRole('status')).toHaveCount(0);
+  await page.emulateMedia({ forcedColors: 'active' });
   await activate.click();
   expect(
     (
@@ -78,6 +84,7 @@ test('reviews file availability and warnings before starting a quiet import', as
     timeout: 10000,
   });
   await expect(clocks.getByRole('button')).toBeDisabled();
+  await page.emulateMedia({ forcedColors: 'none' });
   expect(
     (
       await new AxeBuilder({ page })

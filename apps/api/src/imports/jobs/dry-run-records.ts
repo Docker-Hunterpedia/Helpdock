@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { validateImportIdentityPlan } from '../preflight/identity-plan-state.js';
+import { sampleImportIssues } from '../preflight/issue-sample.js';
 import { validateImportMappingPlan } from '../preflight/mapping-plan.js';
 import { validateImportRecordPage } from '../preflight/record-page.js';
 import { ImportClaimLost, importClaimSchema, renewImportClaim } from './claims.js';
@@ -167,7 +168,7 @@ export async function runImportDryRunRecordBatch(
         checked: prior.checked + page.checked,
         issueCount: prior.issueCount + page.issueCount,
         recordWarningCount: prior.recordWarningCount + page.warningCount,
-        recordWarnings: [...prior.recordWarnings, ...page.warnings].slice(0, 100),
+        recordWarnings: sampleImportIssues([...prior.recordWarnings, ...page.warnings], 100),
         refusedPhones: prior.refusedPhones + page.refusedPhones,
         issues: [...prior.issues, ...page.issues].slice(0, 100),
       });

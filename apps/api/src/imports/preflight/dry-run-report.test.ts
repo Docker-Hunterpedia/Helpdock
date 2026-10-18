@@ -43,13 +43,6 @@ describe('public dry-run report', () => {
         code: 'author-unmapped',
         level: 'error',
       },
-      {
-        area: 'record',
-        entity: 'contact',
-        externalId: 'omitted-phones',
-        code: 'phone-refused',
-        level: 'warning',
-      },
       { area: 'field', externalId: 'age', code: 'mapping-invalid', level: 'error' },
       {
         area: 'identity',
@@ -57,6 +50,13 @@ describe('public dry-run report', () => {
         externalId: 'person',
         code: 'identity-ambiguous',
         level: 'error',
+      },
+      {
+        area: 'record',
+        entity: 'contact',
+        externalId: 'omitted-phones',
+        code: 'phone-refused',
+        level: 'warning',
       },
       {
         area: 'media',
@@ -70,6 +70,33 @@ describe('public dry-run report', () => {
     expect(report).not.toHaveProperty('after');
     expect(report).not.toHaveProperty('destinationFingerprint');
     expect(report.reviewToken).toMatch(/^[0-9a-f]{64}$/);
+  });
+  it('keeps retention risk and blocking errors visible ahead of crowded source warnings', () => {
+    const report = importDryRunReportView(
+      importDryRunCheckpointSchema.parse({
+        ...checkpoint,
+        sourceWarningCount: 100,
+        sourceWarnings: Array.from({ length: 100 }, (_, index) => ({
+          entity: 'ticket',
+          externalId: `source-${index}`,
+          code: 'file-rows-skipped',
+        })),
+        recordWarningCount: 101,
+        recordWarnings: [
+          { entity: 'ticket', externalId: 'old-ticket', code: 'retention-closed-history' },
+        ],
+      }),
+      'awaiting_mapping',
+    );
+    expect(report.issues[0]).toMatchObject({ code: 'retention-closed-history' });
+    expect(report.issues.slice(0, 20)).toContainEqual({
+      area: 'record',
+      entity: 'ticket',
+      externalId: '42',
+      code: 'author-unmapped',
+      level: 'error',
+    });
+    expect(report.warnings).toBe(206);
   });
   it.each(['dry_run', 'paused', 'failed', 'cancelled'] as const)(
     'does not label an unfinished or terminal %s run as ready for review',

@@ -6,6 +6,7 @@ import type { z } from 'zod';
 import { type ImportRunRef, importRunRefSchema, lockImportBrand } from '../jobs/claims.js';
 import { importDryRunCheckpointSchema } from '../jobs/dry-run-state.js';
 import { ImportLoadError } from '../loader/contracts.js';
+import { sampleImportIssues } from './issue-sample.js';
 
 /** Publish safe counters and bounded issue codes, never leases, source payloads or credentials. */
 export async function importDryRunReport(tx: DbTransaction, raw: ImportRunRef) {
@@ -43,13 +44,16 @@ export function importDryRunReportView(
       report.issueCount + report.planIssueCount + report.identityIssueCount + report.mediaErrors,
     warnings: report.mediaWarnings + report.recordWarningCount + report.sourceWarningCount,
     refusedPhones: report.refusedPhones,
-    issues: [
-      ...report.sourceWarnings.map((issue) => ({ ...issue, area: 'source', level: 'warning' })),
-      ...report.issues.map((issue) => ({ ...issue, area: 'record', level: 'error' })),
-      ...report.recordWarnings.map((issue) => ({ ...issue, area: 'record', level: 'warning' })),
-      ...report.planIssues.map((issue) => ({ ...issue, level: 'error' })),
-      ...report.identityIssues.map((issue) => ({ ...issue, area: 'identity', level: 'error' })),
-      ...report.mediaIssues.map((issue) => ({ ...issue, area: 'media' })),
-    ].slice(0, 500),
+    issues: sampleImportIssues(
+      [
+        ...report.sourceWarnings.map((issue) => ({ ...issue, area: 'source', level: 'warning' })),
+        ...report.issues.map((issue) => ({ ...issue, area: 'record', level: 'error' })),
+        ...report.recordWarnings.map((issue) => ({ ...issue, area: 'record', level: 'warning' })),
+        ...report.planIssues.map((issue) => ({ ...issue, level: 'error' })),
+        ...report.identityIssues.map((issue) => ({ ...issue, area: 'identity', level: 'error' })),
+        ...report.mediaIssues.map((issue) => ({ ...issue, area: 'media' })),
+      ],
+      500,
+    ),
   });
 }

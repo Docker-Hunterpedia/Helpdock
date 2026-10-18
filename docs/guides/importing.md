@@ -547,7 +547,9 @@ by the server; connector credentials and source rows are not added to presets.
    Pause/resume retains committed progress; recovery also handles abandoned claims.
 
 The report exposes checked counters, full error/warning totals and at most 500
-issue samples. Totals can exceed displayed samples. `refusedPhones` counts phone
+issue samples. Retention loss warnings appear first, followed by blocking errors
+and other warnings. This priority also applies to bounded checkpoint samples.
+Totals can exceed displayed samples. `refusedPhones` counts phone
 numbers that cannot be normalized; each affected contact contributes one
 `phone-refused` warning without exposing phone values. A completed report can
 contain blocking errors. `complete: true` alone never authorizes loading.

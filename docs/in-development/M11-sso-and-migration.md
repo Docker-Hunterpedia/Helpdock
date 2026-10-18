@@ -144,7 +144,7 @@ The owner still reviews and merges; this is functional acceptance, not a release
 
 - [x] Upgrade a real pre-0054 database; consolidate unshipped 0054–0081 into 0054, retain shipped 0053, use enum text comparisons and index staging parent lookups.
 - [x] Apply the import arrival baseline to scheduled-rule SQL, condition facts and match identity; preserve status timestamps on content-only deltas.
-- [x] Show retention loss warnings in dry-run approval and invalidate approval on policy changes.
+- [x] Show retention loss warnings in dry-run approval and invalidate approval on policy changes. Prioritize retention loss and blocking errors ahead of ordinary warnings in bounded checkpoint/public samples so early warnings cannot crowd them out of the screen.
 - [x] Resume from durable vendor pages while source records change; prevent Freshdesk/Zoho pagination boundary omissions.
 - [x] Accept documented Freshdesk display-name senders; retain deleted-author history.
 - [x] Cover mapping editor, overview, controls and logs in unit/browser tests; retain controls during transient polling failures.
@@ -164,6 +164,11 @@ passes 3,876 tests with 91.14% line coverage. The real-API mapping edit also pas
 sends observed. Full local API coverage was interrupted to finish the additional
 content-only delta status regression; required CI remains the coverage authority
 for this correction batch; the API gate passed at 91.4%.
+
+Final sampling regression: 100 earlier source/record warnings cannot hide a later
+retention warning; blocking errors also precede ordinary warnings in the public
+report. Nine focused report/sample unit tests pass, including a regression that
+failed before the priority fix. Final-head CI remains required before readiness.
 
 Review guards for the correction batch:
 

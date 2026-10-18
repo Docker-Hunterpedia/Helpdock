@@ -1449,7 +1449,9 @@ Dry-run warnings identify each closed ticket outside the mapped brand's current
 closed-ticket retention window. The existing warning acknowledgment is required
 before starting. Retention policy values participate in the destination review
 fingerprint; nightly job bookkeeping does not. This does not extend retention or
-change historical close timestamps.
+change historical close timestamps. Bounded checkpoint and public issue samples
+prioritize retention loss, then blocking errors, ahead of ordinary warnings so
+earlier warnings cannot crowd deletion risk out of the review screen.
 
 ### Owner review: existing SLA clocks and bounded bundle reads (2026-10-18)
 

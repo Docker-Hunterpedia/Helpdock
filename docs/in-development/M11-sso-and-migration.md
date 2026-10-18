@@ -168,7 +168,9 @@ for this correction batch; the API gate passed at 91.4%.
 Final sampling regression: 100 earlier source/record warnings cannot hide a later
 retention warning; blocking errors also precede ordinary warnings in the public
 report. Nine focused report/sample unit tests pass, including a regression that
-failed before the priority fix. Final-head CI remains required before readiness.
+failed before the priority fix. The controls browser test waits for the filter
+menu to unmount before scanning contrast, avoiding scans during its closing
+animation. Final-head CI remains required before readiness.
 
 Review guards for the correction batch:
 

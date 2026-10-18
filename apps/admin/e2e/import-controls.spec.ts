@@ -40,6 +40,7 @@ test('pauses, resumes and cancels extraction, filters the log and reopens histor
   await log.getByRole('combobox', { name: t('imports:log.filter') }).click();
   await page.getByRole('option', { name: t('imports:log.levels.error'), exact: true }).click();
   await expect(log.getByText(t('imports:log.empty'))).toBeVisible();
+  await expect(page.getByRole('listbox', { includeHidden: true })).toHaveCount(0);
   expect(
     (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
       .violations,

@@ -190,7 +190,13 @@ The local wizard mapping editor uses `mapping-values`. Choose `kind`
 from `status`, `priority`, `channel`, `group`, `agent`, `field` or `tag`.
 Responses contain at most 100 values (50 by default), counts where applicable,
 source names/agent metadata, a bounded field summary, and separate `confirmed`
-and `proposed` mappings. `nextCursor` is the last returned source value. Pass it
+and `proposed` mappings. `confirmedChoice` and `proposedChoice` name those
+mappings' destinations in the same shape as a `mapping-targets` choice (`id`,
+`label`, `nameAr`, `detail`, `selection`). They are `null` when there is no
+mapping or it names no destination in this brand's catalog, such as a name-only
+agent, a skipped field or tag, or a deleted status. The Map screen uses
+them so each row shows its destination's name, in Arabic where one is set, before
+the picker is opened. `nextCursor` is the last returned source value. Pass it
 as `after` for the next page; an empty string is a valid default-value cursor.
 Counts use ticket metadata and source definitions, without loading message
 bodies into the API response.

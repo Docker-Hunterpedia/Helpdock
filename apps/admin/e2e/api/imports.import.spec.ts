@@ -103,10 +103,18 @@ test('imports source history through the real wizard without sending anything', 
   }
   await api(importMappingsViewSchema, 'PUT', `imports/${runId}/mappings`, { mappings });
   await page.reload();
-  await page.getByRole('tab', { name: t('imports:mapping.kinds.priority'), exact: true }).click();
+  const priorityTab = page.getByRole('tab', {
+    name: t('imports:mapping.kinds.priority'),
+    exact: true,
+  });
+  await priorityTab.click();
   const priority = page
     .getByRole('combobox', { name: t('imports:mapping.destination'), exact: true })
     .first();
+  const confirmedPriority = mappings.find((mapping) => mapping.kind === 'priority');
+  if (confirmedPriority?.kind !== 'priority') throw new Error('Missing confirmed priority');
+  // A closed row names its saved destination without opening the catalog search.
+  await expect(priority).toHaveValue(confirmedPriority.target.priority);
   await priority.click();
   await page.getByRole('option', { name: 'high', exact: true }).click();
   await page.getByRole('button', { name: t('imports:mapping.save'), exact: true }).click();
@@ -118,6 +126,9 @@ test('imports source history through the real wizard without sending anything', 
       (mapping) => mapping.kind === 'priority' && mapping.target.priority === 'high',
     ),
   ).toBe(true);
+  await page.reload();
+  await priorityTab.click();
+  await expect(priority).toHaveValue('high');
   await page.getByRole('button', { name: t('imports:dryRun.rerun') }).click();
   await expect
     .poll(

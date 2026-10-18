@@ -29,6 +29,7 @@ export const publishVersion = async (
 ): Promise<HcArticleVersion> => {
   const published = await repository.updateVersion(tx, version.id, {
     status: 'published',
+    importEmbeddingDeferred: false,
     scheduledAt: null,
     publishedTitle: version.title,
     publishedDescription: version.description,

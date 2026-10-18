@@ -15,6 +15,7 @@ const PLURAL_PATTERN = new RegExp(`_(${PLURAL_SUFFIXES.join('|')})$`);
 
 const ENGLISH_PLURAL_FORMS = ['one', 'other'];
 const ARABIC_PLURAL_FORMS = [...PLURAL_SUFFIXES];
+const INVARIANT_PRODUCT_NAMES = new Set(['Zoho Desk', 'Help Scout']);
 
 type Catalog = Record<string, unknown>;
 
@@ -179,7 +180,12 @@ describe('the catalogs as a whole', () => {
         const english = en.get(key);
         // Brand names, product names and technical placeholders are the same in
         // both languages, so only Latin-script prose counts as untranslated.
-        if (english && english === arabic && /[a-z]{4,}\s+[a-z]{4,}/i.test(english)) {
+        if (
+          english &&
+          english === arabic &&
+          !INVARIANT_PRODUCT_NAMES.has(english) &&
+          /[a-z]{4,}\s+[a-z]{4,}/i.test(english)
+        ) {
           untranslated.push(`${namespace}:${key}`);
         }
       }

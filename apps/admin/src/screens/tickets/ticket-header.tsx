@@ -1,6 +1,7 @@
 import type { Ticket, TicketViewingActivity } from '@helpdock/schemas';
-import { Box, Button, IconButton, Typography } from '@mui/material';
-import { Eye, PanelRightOpen, PenLine } from 'lucide-react';
+import { importSourceLink } from '@helpdock/schemas';
+import { Box, Button, Chip, IconButton, Typography } from '@mui/material';
+import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -59,6 +60,7 @@ export function TicketHeader({
   const t = useT();
   const tokens = useSemanticTokens();
   const [first, ...rest] = viewers;
+  const importedUrl = importSourceLink(ticket.imported?.url);
 
   return (
     <Box
@@ -109,6 +111,29 @@ export function TicketHeader({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <StatusBadge status={ticket.status} />
         <PriorityBadge priority={ticket.priority} />
+        {ticket.imported ? (
+          <Chip
+            size="small"
+            variant="outlined"
+            label={t(
+              ticket.imported.number ? 'tickets:header.importedNumber' : 'tickets:header.imported',
+              {
+                source: t(`imports:sources.${ticket.imported.source}`),
+                number: ticket.imported.number,
+              },
+            )}
+            {...(importedUrl
+              ? {
+                  component: 'a' as const,
+                  href: importedUrl,
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                  clickable: true,
+                  icon: <ExternalLink size={14} aria-hidden="true" />,
+                }
+              : {})}
+          />
+        ) : null}
         <SlaTimer ticket={ticket} now={now} />
         <ChannelLabel
           channel={ticket.channel}

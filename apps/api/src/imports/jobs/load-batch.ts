@@ -1,9 +1,13 @@
 import { type Db, type DbTransaction, importRecords } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { HC_BODY_MAX, type importArticleSchema, importRecordSchema } from '@helpdock/schemas';
+import { type importArticleSchema, importRecordSchema } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
+import {
+  type PreparedImportArticle,
+  preparedImportArticleResultSchema,
+} from '../article-prepared.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportClaim, ImportClaimLost, importClaimSchema } from './claims.js';
 import { prepareApprovedImportLoad } from './load-approval.js';
@@ -50,7 +54,7 @@ type Dependencies = {
     claim: ImportClaim;
     recordId: string;
     record: ImportArticle;
-  }) => Promise<string>;
+  }) => Promise<string | PreparedImportArticle>;
 };
 
 async function nextRecord(tx: DbTransaction, request: z.infer<typeof requestSchema>) {
@@ -155,22 +159,22 @@ export async function runImportLoadBatch(
           recordId: next.recordId,
           processed,
         });
-      const preparedBodyHtml = z
-        .string()
-        .max(HC_BODY_MAX)
-        .parse(
-          await deps.prepareArticle({
-            claim: parsed.claim,
-            recordId: next.recordId,
-            record: next.record,
-          }),
-        );
+      const prepared = preparedImportArticleResultSchema.parse(
+        await deps.prepareArticle({
+          claim: parsed.claim,
+          recordId: next.recordId,
+          record: next.record,
+        }),
+      );
       await inRun((tx) =>
         loadPreparedStagedRecord(tx, {
           claim: parsed.claim,
           defaultCallingCode: parsed.defaultCallingCode,
           recordId: next.recordId,
-          preparedBodyHtml,
+          preparedBodyHtml: prepared.bodyHtml,
+          ...(prepared.publishedBodyHtml === undefined
+            ? {}
+            : { preparedPublishedBodyHtml: prepared.publishedBodyHtml }),
         }),
       );
       processed++;

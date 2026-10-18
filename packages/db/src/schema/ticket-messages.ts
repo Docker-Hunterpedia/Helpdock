@@ -69,6 +69,8 @@ export const ticketMessages = pgTable(
      */
     authorId: text('author_id'),
     authorDisplay: varchar('author_display', { length: 200 }),
+    /** Inert imported status/channel/author facts; never interpreted as lifecycle commands. */
+    importDetails: jsonb('import_details').$type<Record<string, unknown>>(),
     /** Sanitised on the way in (REQUIREMENTS §5.1). Never stored as it arrived. */
     bodyHtml: text('body_html').notNull(),
     /** The same body as plain text: what search, notifications and digests read. */

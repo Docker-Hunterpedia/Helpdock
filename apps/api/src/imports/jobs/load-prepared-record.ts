@@ -24,6 +24,7 @@ const requestSchema = z.strictObject({
   claim: importClaimSchema,
   recordId: z.uuid(),
   preparedBodyHtml: z.string().max(HC_BODY_MAX).optional(),
+  preparedPublishedBodyHtml: z.string().max(HC_BODY_MAX).optional(),
   defaultCallingCode: z
     .string()
     .regex(/^\d{0,4}$/)
@@ -123,7 +124,14 @@ async function preparedOperation(
       if (request.preparedBodyHtml === undefined) throw new ImportLoadError('mapping-invalid');
       return {
         entity: 'article',
-        input: { ...scope, record: record.payload, preparedBodyHtml: request.preparedBodyHtml },
+        input: {
+          ...scope,
+          record: record.payload,
+          preparedBodyHtml: request.preparedBodyHtml,
+          ...(request.preparedPublishedBodyHtml === undefined
+            ? {}
+            : { preparedPublishedBodyHtml: request.preparedPublishedBodyHtml }),
+        },
       };
     default:
       throw new ImportLoadError('mapping-invalid');
@@ -137,6 +145,7 @@ export async function loadPreparedStagedRecord(
     claim: ImportClaim;
     recordId: string;
     preparedBodyHtml?: string;
+    preparedPublishedBodyHtml?: string;
     defaultCallingCode?: string;
   },
 ) {

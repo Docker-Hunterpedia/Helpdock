@@ -1,6 +1,8 @@
 import { CacheProvider } from '@emotion/react';
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
 import { createHelpdockTheme, createLtrCache, createRtlCache } from '@helpdock/ui';
+import type { ImportsApi } from '../imports/api.js';
+import { ImportsApiProvider } from '../imports/context.tsx';
 import type { SsoApi } from '../sso/api.js';
 import { SsoApiProvider } from '../sso/context.tsx';
 import '@helpdock/ui/fonts.css';
@@ -150,6 +152,7 @@ export interface AppProvidersProps {
   /** Defaults to the matching adapter. Only install Settings reads it. */
   readonly settingsApi?: SettingsApi;
   readonly ssoApi?: SsoApi;
+  readonly importsApi?: ImportsApi;
   /** Defaults to the matching adapter. Channels › Telegram and a Telegram ticket read it (M6). */
   readonly telegramApi?: TelegramApi;
   /** Defaults to the matching adapter. Channels › Meta and a Meta ticket read it (M10). */
@@ -197,6 +200,7 @@ export function AppProviders({
   systemApi,
   settingsApi,
   ssoApi,
+  importsApi,
   telegramApi,
   metaApi,
   assistApi,
@@ -216,6 +220,7 @@ export function AppProviders({
   // fixture, so building them apart would break both of those guarantees.
   const [fallback] = useState(createApis);
   const api = authApi ?? fallback.auth;
+  const imports = importsApi ?? fallback.imports;
   const staff = staffApi ?? fallback.staff;
   const contacts = contactsApi ?? fallback.contacts;
   const ticketing = ticketingApi ?? fallback.ticketing;
@@ -316,13 +321,15 @@ export function AppProviders({
                                   <ReportsApiProvider api={reports}>
                                     <SystemApiProvider api={system}>
                                       <SsoApiProvider api={sso}>
-                                        <SettingsApiProvider api={settings}>
-                                          <NotificationsProvider api={notifications} push={push}>
-                                            <ToastProvider>
-                                              <Router>{children}</Router>
-                                            </ToastProvider>
-                                          </NotificationsProvider>
-                                        </SettingsApiProvider>
+                                        <ImportsApiProvider api={imports}>
+                                          <SettingsApiProvider api={settings}>
+                                            <NotificationsProvider api={notifications} push={push}>
+                                              <ToastProvider>
+                                                <Router>{children}</Router>
+                                              </ToastProvider>
+                                            </NotificationsProvider>
+                                          </SettingsApiProvider>
+                                        </ImportsApiProvider>
                                       </SsoApiProvider>
                                     </SystemApiProvider>
                                   </ReportsApiProvider>

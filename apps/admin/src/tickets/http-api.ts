@@ -8,6 +8,7 @@ import type {
   RenderedMacro,
   Ticket,
   TicketActivityList,
+  TicketActivityQuery,
   TicketAiCalls,
   TicketAiState,
   TicketCcRequest,
@@ -37,6 +38,7 @@ import {
   macroRunResponseSchema,
   renderedMacroSchema,
   ticketActivityListSchema,
+  ticketActivityQuerySchema,
   ticketAiCallsSchema,
   ticketAiStateSchema,
   ticketDetailSchema,
@@ -101,9 +103,21 @@ export class HttpTicketsApi implements TicketsApi {
     );
   }
 
-  async activity(brandId: string, ticketId: string): Promise<TicketActivityList> {
+  async activity(
+    brandId: string,
+    ticketId: string,
+    query?: TicketActivityQuery,
+  ): Promise<TicketActivityList> {
+    const parsed = ticketActivityQuerySchema.parse(query ?? {});
+    const search = new URLSearchParams({
+      limit: String(parsed.limit),
+      ...(parsed.before ? { before: parsed.before } : {}),
+    });
     return ticketActivityListSchema.parse(
-      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/activity`),
+      await this.#transport.request(
+        'GET',
+        `${this.#ticket(brandId, ticketId)}/activity${query ? `?${search}` : ''}`,
+      ),
     );
   }
 

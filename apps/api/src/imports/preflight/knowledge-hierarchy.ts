@@ -13,6 +13,7 @@ import {
   type ImportRecord,
 } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
+import { importedArticleSiblingTarget } from '../loader/article-group-target.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportScope, importedIdentity } from '../loader/external-ids.js';
 import {
@@ -29,6 +30,7 @@ type KnowledgeNode = ImportHierarchyNode & {
   containerKey: string | null;
   destinationId: string | null;
   locale: 'en' | 'ar' | null;
+  ownsDestination: boolean;
 };
 type Issue = Exclude<ReferenceIssue['code'], 'reference-self'>;
 
@@ -63,7 +65,10 @@ async function knowledgeDestination(
   externalId: string,
 ) {
   const pointer = await importedIdentity(tx, scope, entity, externalId);
-  if (!pointer) return null;
+  const targetId =
+    pointer?.helpdockId ??
+    (entity === 'article' ? await importedArticleSiblingTarget(tx, scope, externalId) : undefined);
+  if (!targetId) return null;
   const table =
     entity === 'category' ? hcCategories : entity === 'section' ? hcSections : hcArticles;
   const [target] = await tx
@@ -83,9 +88,9 @@ async function knowledgeDestination(
             : sql<string | null>`NULL`,
     })
     .from(table)
-    .where(and(eq(table.brandId, scope.brandId), eq(table.id, pointer.helpdockId)));
+    .where(and(eq(table.brandId, scope.brandId), eq(table.id, targetId)));
   if (!target) throw new ImportLoadError('target-unavailable');
-  return target;
+  return { ...target, owned: pointer !== undefined };
 }
 
 async function containerBinding(
@@ -117,6 +122,7 @@ async function stagedNode(
     ...importHierarchyNode(record),
     containerKey,
     destinationId: target?.id ?? null,
+    ownsDestination: target?.owned ?? false,
     locale: record.entity === 'article' ? record.payload.locale : null,
     key:
       record.entity === 'article'
@@ -142,6 +148,7 @@ async function knowledgeNode(
     parentExternalId: target.parentExternalId,
     containerKey: target.containerId ? `existing:${target.containerId}` : null,
     destinationId: target.id,
+    ownsDestination: target.owned,
     locale: null,
     key: entity === 'article' ? externalId : `existing:${target.id}`,
   };
@@ -209,7 +216,7 @@ class KnowledgeHierarchyValidation {
 
   private async occupiedLocaleIssue(): Promise<Issue | null> {
     const { tx, scope, record, root } = this.context;
-    if (record.entity !== 'article' || root.destinationId || !this.articleId) return null;
+    if (record.entity !== 'article' || root.ownsDestination || !this.articleId) return null;
     const [occupied] = await tx
       .select({ id: hcArticleVersions.id })
       .from(hcArticleVersions)

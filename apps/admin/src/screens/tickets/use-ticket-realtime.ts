@@ -68,7 +68,7 @@ export function useTicketRoom(
 
       queryClient.setQueryData<TicketDetail>(
         key,
-        detailAfterCatchUp(held, ticket, page, activity.activity),
+        detailAfterCatchUp(held, ticket, page, activity.activity, activity.nextBefore),
       );
     };
 
@@ -140,6 +140,7 @@ export const detailAfterCatchUp = (
   read: TicketDetail,
   page: TicketMessagePage,
   activity: TicketDetail['activity'],
+  activityNextBefore: TicketDetail['activityNextBefore'] = read.activityNextBefore,
 ): TicketDetail => ({
   ...read,
   messages: {
@@ -147,6 +148,7 @@ export const detailAfterCatchUp = (
     nextAfter: page.nextAfter,
   },
   activity,
+  activityNextBefore,
 });
 
 /**

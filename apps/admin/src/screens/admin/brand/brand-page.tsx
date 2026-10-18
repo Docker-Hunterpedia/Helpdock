@@ -11,6 +11,8 @@ import { currentBrand, useSession, useTicketingApi } from '../../../auth/session
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
+import { ImportOverview } from '../imports/import-overview.js';
+import { ImportRunPage } from '../imports/import-run-page.js';
 import { DeleteBrandCard, PendingDeletionBanner, useBrandDeletion } from './brand-deletion.tsx';
 import { DomainsTab } from './domains-tab.tsx';
 import { GeneralTab } from './general-tab.tsx';
@@ -31,6 +33,7 @@ import { RetentionCard } from './retention-card.tsx';
 const BRAND_TABS = [
   { key: 'general', segment: 'general' },
   { key: 'domains', segment: 'domains' },
+  { key: 'import', segment: 'import' },
   { key: 'danger', segment: 'danger' },
 ] as const;
 const DEFAULT_BRAND_TAB = BRAND_TABS[0];
@@ -40,18 +43,23 @@ export function BrandPage(): ReactNode {
   const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
-  const { tab: segment } = useParams();
+  const { tab: segment, runId } = useParams();
   const deletion = useBrandDeletion(brand.id, session.user.installAdmin);
   const pending = deletion.data?.status === 'deleting';
 
-  const tab = BRAND_TABS.find((candidate) => candidate.segment === segment);
+  const tab = BRAND_TABS.find((candidate) => candidate.segment === (runId ? 'import' : segment));
   if (tab === undefined) {
     return <Navigate to={brandRoute(DEFAULT_BRAND_TAB.segment)} replace />;
   }
 
   return (
     <>
-      <PageHeader title={t('brand:title')} caption={t('brand:subtitle', { brand: brand.name })} />
+      <PageHeader
+        title={t(tab.key === 'import' ? 'imports:title' : 'brand:title')}
+        caption={t(tab.key === 'import' ? 'imports:brandCaption' : 'brand:subtitle', {
+          brand: brand.name,
+        })}
+      />
 
       <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
         <Tabs
@@ -93,6 +101,13 @@ export function BrandPage(): ReactNode {
       >
         {tab.key === 'general' ? <GeneralTab /> : null}
         {tab.key === 'domains' ? <DomainsTab /> : null}
+        {tab.key === 'import' ? (
+          runId ? (
+            <ImportRunPage key={`${brand.id}:${runId}`} runId={runId} />
+          ) : (
+            <ImportOverview key={brand.id} />
+          )
+        ) : null}
         {tab.key === 'danger' ? (
           <DangerZone brand={brand} installAdmin={session.user.installAdmin} pending={pending} />
         ) : null}

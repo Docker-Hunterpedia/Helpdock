@@ -28,3 +28,40 @@ it('refuses invalid UTF-8 in a manifest before accepting the bundle', async () =
     collectAsync(readImportBundle({ path: fixture('invalid-encoding') })),
   ).rejects.toMatchObject({ code: 'invalid-encoding', file: 'manifest.json' });
 });
+
+it('retains an article file reference only when its bundled member exists', async () => {
+  const events = await collectAsync(readImportBundle({ path: fixture('article-attachments') }));
+  expect(events[1]).toMatchObject({
+    type: 'record',
+    record: {
+      entity: 'article',
+      payload: {
+        attachments: [{ externalId: 'original-file', bundlePath: 'attachments/manual.pdf' }],
+      },
+    },
+  });
+  await expect(
+    collectAsync(readImportBundle({ path: fixture('article-missing-attachment') })),
+  ).rejects.toMatchObject({ code: 'invalid-bundle', file: 'article.ndjson' });
+});
+
+it('validates the public snapshot file set independently of working article attachments', async () => {
+  const events = await collectAsync(readImportBundle({ path: fixture('article-two-copies') }));
+  expect(events[1]).toMatchObject({
+    type: 'record',
+    record: {
+      entity: 'article',
+      payload: {
+        attachments: [{ externalId: 'original-file' }],
+        published: {
+          bodyHtml: '<p>Published answer</p>',
+          publishedAt: null,
+          attachments: [{ externalId: 'published-file', bundlePath: 'attachments/public.pdf' }],
+        },
+      },
+    },
+  });
+  await expect(
+    collectAsync(readImportBundle({ path: fixture('article-missing-published-file') })),
+  ).rejects.toMatchObject({ code: 'invalid-bundle', file: 'article.ndjson' });
+});

@@ -1503,6 +1503,16 @@ export const importExtractJob = defineJob({
   schema: importRunPayloadSchema,
   options: importRetryOptions,
 });
+export const importFilePreparePayloadSchema = importRunPayloadSchema.extend({
+  fileId: z.uuid(),
+  revision: z.uuid(),
+});
+export const importFilePrepareJob = defineJob({
+  name: 'import.file_prepare',
+  queue: QUEUE_NAMES.import,
+  schema: importFilePreparePayloadSchema,
+  options: importRetryOptions,
+});
 export const importDryRunJob = defineJob({
   name: 'import.dry_run',
   queue: QUEUE_NAMES.import,
@@ -1527,6 +1537,16 @@ export const importFinishJob = defineJob({
   schema: importRunPayloadSchema,
   options: importRetryOptions,
 });
+export const importSlaActivatePayloadSchema = importRunPayloadSchema.extend({
+  revision: z.uuid(),
+  after: z.uuid().nullable(),
+});
+export const importSlaActivateJob = defineJob({
+  name: 'import.sla_activate',
+  queue: QUEUE_NAMES.import,
+  schema: importSlaActivatePayloadSchema,
+  options: importRetryOptions,
+});
 export const IMPORT_RECOVERY_CRON = '* * * * *';
 export const importRecoverJob = defineJob({
   name: 'import.recover',
@@ -1541,6 +1561,8 @@ export const importRecoverJob = defineJob({
 });
 
 export const JOB_DEFINITIONS = Object.freeze({
+  [importSlaActivateJob.name]: importSlaActivateJob,
+  [importFilePrepareJob.name]: importFilePrepareJob,
   [importRecoverJob.name]: importRecoverJob,
   [importExtractJob.name]: importExtractJob,
   [importDryRunJob.name]: importDryRunJob,

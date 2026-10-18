@@ -47,6 +47,7 @@ export class FakeZendesk {
       pageSize?: number;
     },
   ) {
+    z.number().finite().parse(options.now);
     this.fixture = fixtureSchema.parse(fixture);
     this.server = new VendorServer((url, authorization) => this.route(url, authorization));
   }

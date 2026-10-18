@@ -39,7 +39,7 @@ describe('Brand › Domains', () => {
     await renderDomains();
 
     const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
-    expect(tabs).toEqual(['General', 'Domains', 'Danger zone']);
+    expect(tabs).toEqual(['General', 'Domains', 'Import', 'Danger zone']);
     expect(screen.getByRole('tab', { name: 'Domains' })).toHaveAttribute('aria-selected', 'true');
   });
 

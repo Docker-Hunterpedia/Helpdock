@@ -1,11 +1,36 @@
 import type { Ticket as TicketRow, TicketStatus as TicketStatusRow } from '@helpdock/db';
 import { ticketSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { ticketContactOf, toTicket } from './ticket-view.js';
+import { ticketContactOf, toTicket, toTicketActivity } from './ticket-view.js';
 
 const CONTACT = '01937f5e-7e53-7000-8000-0000000000d1';
 const STRANGER = '01937f5e-7e53-7000-8000-0000000000d2';
 const AT = new Date('2026-09-24T10:00:00.000Z');
+
+it('does not expose signed source queries from the imported activity payload', () => {
+  const activity = toTicketActivity({
+    id: CONTACT,
+    brandId: CONTACT,
+    departmentId: CONTACT,
+    ticketId: CONTACT,
+    actorType: 'system',
+    actorId: 'import',
+    action: 'ticket.imported',
+    from: null,
+    to: {
+      source: 'zendesk',
+      number: '0039812',
+      url: 'https://support.example/tickets/39812?token=private#secret',
+    },
+    via: 'system',
+    createdAt: AT,
+  });
+  expect(activity.to).toEqual({
+    source: 'zendesk',
+    number: '0039812',
+    url: 'https://support.example/tickets/39812',
+  });
+});
 
 const status: TicketStatusRow = {
   id: '01937f5e-7e53-7000-8000-000000000021',
@@ -38,6 +63,7 @@ const row = (contactId: string | null): TicketRow => ({
   channel: 'email',
   importSource: null,
   importedAt: null,
+  importSlaStartedAt: null,
   teamId: null,
   assigneeId: null,
   contactId,

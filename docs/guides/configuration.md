@@ -460,7 +460,7 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_PUSH_VAPID_PUBLIC_KEY` | `push.vapidPublicKey` | install | no | — | VAPID public key served to the admin app as applicationServerKey (ADR 0002). |
 | `HD_PUSH_VAPID_PRIVATE_KEY` | `push.vapidPrivateKey` | install | yes | — | VAPID private key used to sign web push messages. |
 | `HD_EMBEDDING_PROVIDER` | `embedding.provider` | install | no | — | Embedding provider for knowledge retrieval. One per install (ADR 0005). |
-| `HD_EMBEDDING_MODEL` | `embedding.model` | install | no | — | Embedding model. Changing it re-embeds every chunk (ADR 0005). |
+| `HD_EMBEDDING_MODEL` | `embedding.model` | install | no | — | Embedding model. Changing it re-embeds eligible chunks (ADR 0005); imported article languages stay deferred until staff publication (ADR 0027). |
 | `HD_EMBEDDING_DIMS` | `embedding.dims` | install | no | `0` | Dimension of the embedding column, derived from the model when it is first saved. |
 | `HD_EMBEDDING_BASE_URL` | `embedding.baseUrl` | install | no | — | OpenAI-compatible embeddings endpoint, for example https://api.openai.com/v1 or http://ollama:11434/v1. |
 | `HD_EMBEDDING_API_KEY` | `embedding.apiKey` | install | yes | — | API key for the embeddings endpoint. Empty for a local server that asks for none. |

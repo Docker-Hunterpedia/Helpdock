@@ -9,6 +9,9 @@ export class ImportFileError extends Error {
       | 'line-too-large'
       | 'invalid-json'
       | 'invalid-record'
+      | 'invalid-csv'
+      | 'invalid-csv-header'
+      | 'file-too-large'
       | 'invalid-bundle'
       | 'invalid-encoding',
     readonly file: string,

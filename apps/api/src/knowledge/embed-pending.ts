@@ -2,6 +2,7 @@ import type { Ai } from '@helpdock/ai';
 import { type Db, embeddingTarget, knowledgeChunks, toVectorLiteral } from '@helpdock/db';
 import { and, asc, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { withSystemJob } from '../tenant/system-job.js';
+import { articleEmbeddingEligible } from './article-embedding-eligibility.js';
 
 /**
  * Embeds one brand's chunks that have no vector in the install's target model
@@ -47,6 +48,7 @@ export const embedPending = async ({
         .where(
           and(
             eq(knowledgeChunks.brandId, brandId),
+            articleEmbeddingEligible(),
             or(
               isNull(knowledgeChunks.embeddingModel),
               ne(knowledgeChunks.embeddingModel, target.model),

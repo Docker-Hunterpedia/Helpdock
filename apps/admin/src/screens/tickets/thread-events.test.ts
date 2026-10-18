@@ -12,6 +12,42 @@ const names: ThreadNames = {
 const en = createI18n({ lng: 'en' }).getFixedT('en') as unknown as Translate;
 const ar = createI18n({ lng: 'ar' }).getFixedT('ar') as unknown as Translate;
 
+it.each([
+  ['en', en],
+  ['ar', ar],
+] as const)(
+  'describes original source changes with preserved author/date in %s',
+  (locale, translate) => {
+    const source: TicketActivityEntry = {
+      id: '0193b000-0000-7000-8000-000000000911',
+      ticketId: '0193b000-0000-7000-8000-000000000913',
+      actorType: 'system',
+      actorId: 'import:zendesk:42',
+      action: 'ticket.imported.event',
+      via: 'system',
+      createdAt: '2024-03-14T10:02:00Z',
+      from: { field: 'status', value: 'open' },
+      to: {
+        changes: { field: 'status', value: 'closed' },
+        sourceEvent: { source: 'zendesk', action: 'zendesk.Change', authorDisplay: 'Sara Ali' },
+      },
+    };
+    expect(buildThread([], [source], [])).toMatchObject([{ kind: 'event', entry: source }]);
+    const text = describeEvent(
+      source,
+      names,
+      translate,
+      locale,
+      Date.parse('2026-10-15T00:00:00Z'),
+    );
+    expect(text).toContain('Sara Ali');
+    expect(text).toContain('Zendesk');
+    expect(text).toContain('open');
+    expect(text).toContain('closed');
+    expect(text).toContain('2024');
+  },
+);
+
 const entry: TicketActivityEntry = {
   id: '0193b000-0000-7000-8000-000000000901',
   ticketId: '0193b000-0000-7000-8000-000000000903',

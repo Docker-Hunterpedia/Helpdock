@@ -103,6 +103,7 @@ export async function createImportedTicket(
       externalId: input.record.externalId,
       number: input.record.number ?? null,
       url: input.record.sourceUrl ?? null,
+      createdAt: input.record.createdAt,
     },
   });
 }

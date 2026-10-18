@@ -10,6 +10,7 @@ import arDevelopers from '../locales/ar/developers.json' with { type: 'json' };
 import arEmail from '../locales/ar/email.json' with { type: 'json' };
 import arHcSite from '../locales/ar/hcSite.json' with { type: 'json' };
 import arHelpCenter from '../locales/ar/helpCenter.json' with { type: 'json' };
+import arImports from '../locales/ar/imports.json' with { type: 'json' };
 import arMacros from '../locales/ar/macros.json' with { type: 'json' };
 import arMe from '../locales/ar/me.json' with { type: 'json' };
 import arMeta from '../locales/ar/meta.json' with { type: 'json' };
@@ -38,6 +39,7 @@ import enDevelopers from '../locales/en/developers.json' with { type: 'json' };
 import enEmail from '../locales/en/email.json' with { type: 'json' };
 import enHcSite from '../locales/en/hcSite.json' with { type: 'json' };
 import enHelpCenter from '../locales/en/helpCenter.json' with { type: 'json' };
+import enImports from '../locales/en/imports.json' with { type: 'json' };
 import enMacros from '../locales/en/macros.json' with { type: 'json' };
 import enMe from '../locales/en/me.json' with { type: 'json' };
 import enMeta from '../locales/en/meta.json' with { type: 'json' };
@@ -69,6 +71,7 @@ export const NAMESPACES = [
   'wizard',
   'settings',
   'sso',
+  'imports',
   'staff',
   'contacts',
   'tickets',
@@ -123,6 +126,7 @@ export const resources = {
     wizard: enWizard,
     settings: enSettings,
     sso: enSso,
+    imports: enImports,
     staff: enStaff,
     contacts: enContacts,
     tickets: enTickets,
@@ -153,6 +157,7 @@ export const resources = {
     wizard: arWizard,
     settings: arSettings,
     sso: arSso,
+    imports: arImports,
     staff: arStaff,
     contacts: arContacts,
     tickets: arTickets,

@@ -9,6 +9,8 @@ import { ConnectorError, RateLimited } from './errors.js';
 import { type ImportRateLimiter, retryAfterMs } from './rate-limiter.js';
 import { isInvalidUtf8 } from './utf8.js';
 
+type RequestOptions = { followRedirects?: boolean };
+
 export class ImportHttp {
   constructor(
     private readonly options: {
@@ -18,10 +20,15 @@ export class ImportHttp {
     },
   ) {}
 
-  async request(url: string, init: SafeFetchInit = {}): Promise<SafeFetchResponse> {
+  async request(
+    url: string,
+    init: SafeFetchInit = {},
+    options: RequestOptions = {},
+  ): Promise<SafeFetchResponse> {
     this.options.limiter.reserve();
     const response = await safeFetch(url, init, {
       ...this.options.policy,
+      ...(options.followRedirects === false ? { maxRedirects: 0 } : {}),
       allowedHosts: this.options.hosts,
       totalTimeoutMs: 30000,
       maxBodyBytes: Math.min(
@@ -49,8 +56,22 @@ export class ImportHttp {
     return response;
   }
 
-  async json<T>(url: string, schema: z.ZodType<T>, init: SafeFetchInit = {}): Promise<T> {
-    const response = await this.request(url, init);
+  async json<T>(
+    url: string,
+    schema: z.ZodType<T>,
+    init: SafeFetchInit = {},
+    options: RequestOptions = {},
+  ): Promise<T> {
+    return (await this.jsonResponse(url, schema, init, options)).data;
+  }
+
+  async jsonResponse<T>(
+    url: string,
+    schema: z.ZodType<T>,
+    init: SafeFetchInit = {},
+    options: RequestOptions = {},
+  ): Promise<{ data: T; headers: SafeFetchResponse['headers'] }> {
+    const response = await this.request(url, init, options);
     let decoded: unknown;
     try {
       decoded = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(response.body));
@@ -61,6 +82,6 @@ export class ImportHttp {
     }
     const parsed = schema.safeParse(decoded);
     if (!parsed.success) throw new ConnectorError('invalid-response');
-    return parsed.data;
+    return { data: parsed.data, headers: response.headers };
   }
 }

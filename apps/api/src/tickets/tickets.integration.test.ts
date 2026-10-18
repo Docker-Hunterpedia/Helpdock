@@ -8,6 +8,7 @@ import {
   type DbHandle,
   type DbTransaction,
   departments,
+  importExternalIds,
   metaAccounts,
   metaConversations,
   outbox,
@@ -31,6 +32,7 @@ import {
   SOCKET_IO_PATH,
   STAFF_NAMESPACE,
   type Ticket,
+  type TicketActivityList,
   type TicketDetail,
   type TicketList,
   type TicketMessage,
@@ -43,7 +45,7 @@ import {
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -444,6 +446,162 @@ describe.skipIf(!hasDocker)('tickets', () => {
   });
 
   // --------------------------------------------------------------- creating
+
+  describe('imported provenance and source filters', () => {
+    it('pages all historical activity through equal/sub-millisecond timestamps and refuses another ticket cursor', async () => {
+      const visible = await createTicket(sam);
+      const hidden = await createTicket(bo, { departmentId: billing });
+      const eventIds = Array.from({ length: 205 }, () => uuidv7());
+      const path = `${brandPath(seeded.brandId)}/tickets/${visible.ticket.id}`;
+      try {
+        await withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await tx.insert(ticketActivity).values(
+            eventIds.map((id, index) => ({
+              id,
+              brandId: seeded.brandId,
+              departmentId: support,
+              ticketId: visible.ticket.id,
+              actorType: 'system' as const,
+              actorId: 'import:zendesk:old-author',
+              action: 'ticket.imported.event',
+              from: { field: 'status', value: 'open' },
+              to: {
+                changes: { field: 'status', value: 'closed' },
+                sourceEvent: {
+                  source: 'zendesk',
+                  action: 'zendesk.Change',
+                  authorDisplay: 'Sara Ali',
+                },
+              },
+              via: 'system' as const,
+              createdAt:
+                index % 2
+                  ? sql`'2001-01-01T10:00:00.123456Z'::timestamptz`
+                  : sql`'2001-01-01T10:00:00.123789Z'::timestamptz`,
+            })),
+          );
+        });
+        const first = await call<TicketDetail>('GET', path, sam);
+        expect(first.body.activity).toHaveLength(100);
+        const rows = [...first.body.activity];
+        let before = first.body.activityNextBefore;
+        for (let page = 0; page < 4 && before; page++) {
+          const next = await call<TicketActivityList>(
+            'GET',
+            `${path}/activity?before=${before}&limit=100`,
+            sam,
+          );
+          expect(next.status).toBe(200);
+          expect(next.body.activity.length).toBeLessThanOrEqual(100);
+          rows.push(...next.body.activity);
+          before = next.body.nextBefore;
+        }
+        expect(before).toBeNull();
+        expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+        expect(rows.filter((row) => eventIds.includes(row.id))).toHaveLength(eventIds.length);
+        const foreignCursor = hidden.activity[0]?.id;
+        if (!foreignCursor) throw new Error('Missing activity cursor fixture');
+        expect((await call('GET', `${path}/activity?before=${foreignCursor}`, sam)).status).toBe(
+          400,
+        );
+        expect((await call('GET', `${path}/activity?limit=101`, sam)).status).toBe(400);
+        expect(
+          (
+            await call(
+              'GET',
+              `${brandPath(seeded.brandId)}/tickets/${hidden.ticket.id}/activity`,
+              sam,
+            )
+          ).status,
+        ).toBe(404);
+      } finally {
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.delete(tickets).where(inArray(tickets.id, [visible.ticket.id, hidden.ticket.id])),
+        );
+      }
+    });
+
+    it('resolves source numbers and former-agent names without widening department reads, including after an edit', async () => {
+      const visible = await createTicket(sam);
+      const hidden = await createTicket(bo, { departmentId: billing });
+      const native = await createTicket(sam);
+      const ids = [visible.ticket.id, hidden.ticket.id, native.ticket.id];
+      const sourceNumber = '999000001';
+      try {
+        await withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await tx
+            .update(tickets)
+            .set({ importedAt: new Date('2015-01-01T00:00:00Z'), importSource: 'zendesk' })
+            .where(inArray(tickets.id, ids.slice(0, 2)));
+          await tx.insert(importExternalIds).values(
+            ids.slice(0, 2).map((id) => ({
+              brandId: seeded.brandId,
+              source: 'zendesk' as const,
+              sourceAccountKey: 'a'.repeat(64),
+              entity: 'ticket' as const,
+              externalId: `archive-${id}`,
+              helpdockId: id,
+              sourceNumber,
+              sourceUrl: `https://support.example/agent/tickets/${sourceNumber}?token=private#secret`,
+              payloadHash: 'f'.repeat(64),
+            })),
+          );
+          await tx
+            .update(ticketMessages)
+            .set({ authorType: 'system', authorId: null, authorDisplay: 'سارة القديمة' })
+            .where(eq(ticketMessages.ticketId, visible.ticket.id));
+        });
+        const detail = await call<TicketDetail>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets/${visible.ticket.id}`,
+          sam,
+        );
+        expect(detail.body.ticket.imported).toEqual({
+          source: 'zendesk',
+          number: sourceNumber,
+          url: `https://support.example/agent/tickets/${sourceNumber}`,
+        });
+        expect(detail.body.messages.messages[0]).toMatchObject({ authorDisplay: 'سارة القديمة' });
+        for (const query of [
+          `q=${sourceNumber}`,
+          `q=archive-${visible.ticket.id}`,
+          'imported=true',
+        ]) {
+          const response = await call<TicketList>(
+            'GET',
+            `${brandPath(seeded.brandId)}/tickets?${query}`,
+            sam,
+          );
+          expect(response.body.tickets.map((ticket) => ticket.id)).toContain(visible.ticket.id);
+          expect(response.body.tickets.map((ticket) => ticket.id)).not.toContain(hidden.ticket.id);
+        }
+        const onlyNative = await call<TicketList>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets?imported=false`,
+          sam,
+        );
+        expect(onlyNative.body.tickets.map((ticket) => ticket.id)).toContain(native.ticket.id);
+        expect(onlyNative.body.tickets.map((ticket) => ticket.id)).not.toContain(visible.ticket.id);
+        const edited = await call<Ticket>(
+          'PATCH',
+          `${brandPath(seeded.brandId)}/tickets/${visible.ticket.id}`,
+          sam,
+          { subject: 'Updated imported ticket' },
+        );
+        expect(edited.status).toBe(200);
+        expect(edited.body.imported).toEqual(detail.body.ticket.imported);
+        expect(
+          (await call('GET', `${brandPath(seeded.brandId)}/tickets/${hidden.ticket.id}`, sam))
+            .status,
+        ).toBe(404);
+      } finally {
+        await withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await tx.delete(importExternalIds).where(inArray(importExternalIds.helpdockId, ids));
+          await tx.delete(tickets).where(inArray(tickets.id, ids));
+        });
+      }
+    });
+  });
 
   describe('creating a ticket', () => {
     it('writes the ticket, its first message, its activity row and its outbox row', async () => {

@@ -26,7 +26,7 @@ export const importDryRunReportSchema = z.strictObject({
   issues: z
     .array(
       z.strictObject({
-        area: z.enum(['record', 'mapping', 'field', 'invitation', 'identity', 'media']),
+        area: z.enum(['record', 'mapping', 'field', 'invitation', 'identity', 'media', 'source']),
         entity: importEntitySchema.optional(),
         externalId: z.string().max(300),
         code: z.string().min(1).max(100),

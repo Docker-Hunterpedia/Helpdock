@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,8 @@ import {
   hcArticles,
   hcArticleVersions,
   hcCategories,
+  hcImportAssets,
+  hcMedia,
   hcSections,
   outbox,
   userBrandRoles,
@@ -30,27 +33,37 @@ import {
   type HcMediaPresignResponse,
   type HcSection,
   type HcStructure,
+  hcImportAssetPath,
   hcMediaPath,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
+import { decodeJwt } from 'jose';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
+import { RefreshStore } from '../auth/session/refresh-store.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import {
+  createObjectPurgeHandler,
+  OBJECT_PURGE_EVENT,
+  objectPurgePayloadSchema,
+} from '../media/object-purge.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage, silentJobLogger } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { HelpCenterContentService } from './content.service.js';
 import { HelpCenterRepository } from './help-center.repository.js';
+import { markImportedHcMediaFailed } from './import-media-failure.js';
 import { hcMediaKey } from './media.service.js';
 import { createHcMediaProcessor } from './media-process.job.js';
 import { publishDue } from './publish.js';
 import { createHelpCenterKnowledgeProcessor, hourOf } from './publish-due.job.js';
+import { STAFF_COOKIE } from './site/staff-access.js';
 
 /**
  * M5-01, M5-02 and M5-09 against a real Postgres, over real sessions.
@@ -142,6 +155,7 @@ describe.skipIf(!hasDocker)('the help center content (M5-01, M5-02, M5-09)', () 
     url: string,
     who: Person | null,
     payload?: unknown,
+    extraHeaders: Record<string, string> = {},
   ): Promise<{ status: number; body: T; headers: Record<string, unknown> }> =>
     app
       .inject({
@@ -150,6 +164,7 @@ describe.skipIf(!hasDocker)('the help center content (M5-01, M5-02, M5-09)', () 
         headers: {
           ...(who === null ? {} : { authorization: `Bearer ${who.token}` }),
           ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
+          ...extraHeaders,
         },
         ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
       })
@@ -713,6 +728,341 @@ describe.skipIf(!hasDocker)('the help center content (M5-01, M5-02, M5-09)', () 
   });
 
   describe('article images', () => {
+    async function importingFile() {
+      const bytes = Buffer.from('%PDF-1.4\nOriginal historical manual\n%%EOF');
+      const mediaId = uuidv7();
+      const key = hcMediaKey(seeded.brandId, mediaId, 'original');
+      await owner.db.insert(hcMedia).values({
+        id: mediaId,
+        brandId: seeded.brandId,
+        s3Key: key,
+        originalName: 'original-manual.pdf',
+        mime: 'application/pdf',
+        size: bytes.length,
+        kind: 'file',
+        status: 'processing',
+        importedByRunId: uuidv7(),
+      });
+      const [asset] = await owner.db
+        .insert(hcImportAssets)
+        .values({
+          brandId: seeded.brandId,
+          source: 'file',
+          sourceAccountKey: 'a'.repeat(64),
+          parentExternalId: `article:${mediaId}`,
+          assetExternalId: 'original-manual',
+          locale: 'en',
+          usage: 'download',
+          payloadHash: 'b'.repeat(64),
+          contentHash: createHash('sha256').update(bytes).digest('hex'),
+          mediaId,
+        })
+        .returning({ id: hcImportAssets.id });
+      if (!asset) throw new Error('Missing importing-file asset');
+      await storage.put(key, bytes);
+      return { mediaId, assetId: asset.id, key, bytes };
+    }
+
+    async function purgeImportedOriginal(key: string) {
+      const events = await owner.db
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.brandId, seeded.brandId), eq(outbox.event, OBJECT_PURGE_EVENT)));
+      const event = events.find((entry) => {
+        const parsed = objectPurgePayloadSchema.safeParse(entry.payload);
+        return parsed.success && parsed.data.keys.includes(key);
+      });
+      if (!event) throw new Error('Missing committed source cleanup');
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        createObjectPurgeHandler(storage)({
+          brandId: seeded.brandId,
+          outboxId: event.id,
+          event: event.event,
+          payload: event.payload,
+          tx,
+          log: silentJobLogger,
+        }),
+      );
+    }
+
+    async function fileArticle(locale: 'en' | 'ar') {
+      const file = await importingFile();
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        createHcMediaProcessor(storage).run({
+          payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+          tx,
+          log: silentJobLogger,
+        }),
+      );
+      const target = hcImportAssetPath(seeded.brandId, file.assetId);
+      expect((await call('GET', target, null)).status).toBe(404);
+      const title = locale === 'ar' ? 'الملف الأصلي' : 'Original file';
+      const article = await newArticle(refunds.id, title, locale);
+      await save(article.id, locale, title, `<p><a href="${target}">original-manual.pdf</a></p>`);
+      await owner.db
+        .update(hcImportAssets)
+        .set({ articleId: article.id, locale })
+        .where(eq(hcImportAssets.id, file.assetId));
+      return { ...file, target, article, title };
+    }
+
+    it.each(['en', 'ar'] as const)(
+      'authorizes %s article files against live publication, readership, locale and actual links',
+      async (locale) => {
+        const file = await fileArticle(locale);
+        expect((await call('GET', file.target, null)).status).toBe(404);
+        expect((await setStatus(file.article.id, locale, { status: 'published' })).status).toBe(
+          200,
+        );
+        const downloaded = await call('GET', file.target, null);
+        expect(downloaded.status).toBe(302);
+        expect(downloaded.headers['cache-control']).toBe('private, no-store');
+        expect(downloaded.headers.location).toContain('https://bucket.test/');
+        expect(storage.presignedDownloads.at(-1)).toMatchObject({
+          key: file.key,
+          inline: false,
+          contentType: 'application/pdf',
+          fileName: 'original-manual.pdf',
+        });
+        await setVisibility(file.article.id, locale, 'internal');
+        expect((await call('GET', file.target, null)).status).toBe(404);
+        await setVisibility(file.article.id, locale, 'public');
+        const wrongLocale = locale === 'en' ? 'ar' : 'en';
+        await owner.db
+          .update(hcImportAssets)
+          .set({ locale: wrongLocale })
+          .where(eq(hcImportAssets.id, file.assetId));
+        expect((await call('GET', file.target, null)).status).toBe(404);
+        await owner.db
+          .update(hcImportAssets)
+          .set({ locale })
+          .where(eq(hcImportAssets.id, file.assetId));
+        await save(
+          file.article.id,
+          locale,
+          file.title,
+          `<pre>&lt;a href="${file.target}"&gt;Example&lt;/a&gt;</pre>`,
+        );
+        expect((await call('GET', file.target, null)).status).toBe(302);
+        await setStatus(file.article.id, locale, { status: 'published' });
+        expect((await call('GET', file.target, null)).status).toBe(404);
+      },
+    );
+
+    it('uses the help-center staff session for private previews and refuses it immediately after refresh-family revocation', async () => {
+      const file = await fileArticle('en');
+      const staff = { ...tia, token: await signIn(tia.email, STAFF_PASSWORD) };
+      const pass = await ok<{ url: string }>('POST', hc('/staff-pass'), staff, {
+        preview: { articleId: file.article.id, locale: 'en' },
+      });
+      const entryUrl = new URL(pass.url);
+      const entry = await call('GET', `${entryUrl.pathname}${entryUrl.search}`, null);
+      const header = entry.headers['set-cookie'];
+      const cookies =
+        typeof header === 'string'
+          ? [header]
+          : Array.isArray(header)
+            ? header.filter((value): value is string => typeof value === 'string')
+            : [];
+      const cookie = cookies.find((value) => value.startsWith(`${STAFF_COOKIE}=`))?.split(';')[0];
+      if (!cookie) throw new Error('Missing live help-center staff cookie');
+      expect(cookies.find((value) => value.startsWith(`${STAFF_COOKIE}=`))).toContain(
+        `Path=/hc/${seeded.brandId}`,
+      );
+      const fallbackTarget = `/hc/${seeded.brandId}/_hd/assets/${file.assetId}`;
+      const landing = entry.headers.location;
+      if (typeof landing !== 'string') throw new Error('Missing staff preview redirect');
+      const preview = await app.inject({ method: 'GET', url: landing, headers: { cookie } });
+      expect(preview.statusCode).toBe(200);
+      expect(preview.body).toContain(`href="${fallbackTarget}"`);
+      expect((await call('GET', fallbackTarget, null)).status).toBe(404);
+      expect((await call('GET', fallbackTarget, null, undefined, { cookie })).status).toBe(302);
+      expect((await call('GET', file.target, null, undefined, { cookie })).status).toBe(302);
+      expect(
+        (await call('GET', file.target, null, undefined, { cookie: `${cookie}tampered` })).status,
+      ).toBe(404);
+      const familyId = decodeJwt(staff.token).fam;
+      if (typeof familyId !== 'string') throw new Error('Missing staff refresh family');
+      await new RefreshStore(runtime.redis).revokeFamily(familyId);
+      expect((await call('GET', file.target, null, undefined, { cookie })).status).toBe(404);
+      expect((await call('GET', fallbackTarget, null, undefined, { cookie })).status).toBe(404);
+    });
+
+    it('records exhausted importing-media processing without rewriting native uploads or an already-recorded failure', async () => {
+      const file = await importingFile();
+      const payload = { brandId: seeded.brandId, mediaId: file.mediaId };
+      await markImportedHcMediaFailed(runtime.db, payload);
+      const [row] = await owner.db.select().from(hcMedia).where(eq(hcMedia.id, file.mediaId));
+      expect(row).toMatchObject({ status: 'rejected', rejectReason: 'processing_failed' });
+      const before = await owner.db.execute(
+        sql`SELECT xmin::text AS revision FROM hc_media WHERE id = ${file.mediaId}`,
+      );
+      await markImportedHcMediaFailed(runtime.db, payload);
+      expect(
+        await owner.db.execute(
+          sql`SELECT xmin::text AS revision FROM hc_media WHERE id = ${file.mediaId}`,
+        ),
+      ).toEqual(before);
+      const native = uuidv7();
+      await owner.db.insert(hcMedia).values({
+        id: native,
+        brandId: seeded.brandId,
+        s3Key: hcMediaKey(seeded.brandId, native, 'original'),
+        originalName: 'native.png',
+        mime: 'image/png',
+        size: 123,
+        status: 'processing',
+      });
+      await markImportedHcMediaFailed(runtime.db, { brandId: seeded.brandId, mediaId: native });
+      expect((await owner.db.select().from(hcMedia).where(eq(hcMedia.id, native)))[0]?.status).toBe(
+        'processing',
+      );
+    });
+
+    it.each(['clean', 'infected', 'error', 'skipped'] as const)(
+      'handles imported article files with a %s scanner verdict without turning failures into ready downloads',
+      async (verdict) => {
+        const file = await importingFile();
+        const scanner = verdict === 'skipped' ? undefined : { scan: async () => verdict };
+        const operation = () =>
+          withSystem(runtime.db, seeded.brandId, (tx) =>
+            createHcMediaProcessor(storage, scanner).run({
+              payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+              tx,
+              log: silentJobLogger,
+            }),
+          );
+        if (verdict === 'error')
+          await expect(operation()).rejects.toMatchObject({ name: 'HcFileScanUnavailable' });
+        else
+          expect(await operation()).toEqual(
+            verdict === 'infected'
+              ? { status: 'rejected', reason: 'infected' }
+              : { status: 'ready' },
+          );
+        const [row] = await owner.db.select().from(hcMedia).where(eq(hcMedia.id, file.mediaId));
+        expect(row).toMatchObject({
+          status:
+            verdict === 'error' ? 'processing' : verdict === 'infected' ? 'rejected' : 'ready',
+          scanStatus:
+            verdict === 'clean' ? 'clean' : verdict === 'infected' ? 'infected' : 'skipped',
+          webpKey: null,
+        });
+        expect(await storage.read(file.key)).toEqual(file.bytes);
+        if (verdict === 'infected') {
+          await purgeImportedOriginal(file.key);
+          expect(await storage.head(file.key)).toBeUndefined();
+        }
+        expect((await call('GET', hcMediaPath(seeded.brandId, file.mediaId), null)).status).toBe(
+          404,
+        );
+      },
+    );
+
+    it('rejects changed private bytes even when source size and MIME still match, and keeps files out of image confirmation routes', async () => {
+      const file = await importingFile();
+      expect((await call('POST', hc(`/media/${file.mediaId}/confirm`), tia)).status).toBe(404);
+      const changed = Buffer.from(file.bytes);
+      changed[20] = 88;
+      await storage.put(file.key, changed);
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          createHcMediaProcessor(storage).run({
+            payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+            tx,
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'rejected', reason: 'integrity_mismatch' });
+      expect(await storage.read(file.key)).toEqual(changed);
+      await purgeImportedOriginal(file.key);
+      expect(await storage.head(file.key)).toBeUndefined();
+    });
+
+    it('rejects an imported image whose stored bytes differ from the staged source digest', async () => {
+      const file = await importingFile();
+      const png = await sharp({
+        create: { width: 12, height: 8, channels: 3, background: '#ffffff' },
+      })
+        .png()
+        .toBuffer();
+      await owner.db
+        .update(hcMedia)
+        .set({ kind: 'image', mime: 'image/png', size: png.length })
+        .where(eq(hcMedia.id, file.mediaId));
+      await storage.put(file.key, png);
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          createHcMediaProcessor(storage).run({
+            payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+            tx,
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'rejected', reason: 'integrity_mismatch' });
+      const [row] = await owner.db.select().from(hcMedia).where(eq(hcMedia.id, file.mediaId));
+      expect(row).toMatchObject({ status: 'rejected', webpKey: null });
+      expect((await call('GET', hcMediaPath(seeded.brandId, file.mediaId), null)).status).toBe(404);
+    });
+
+    it('can retry imported image conversion after a rolled-back ready state without losing its original bytes', async () => {
+      const file = await importingFile();
+      const png = await sharp({
+        create: { width: 12, height: 8, channels: 3, background: '#ffffff' },
+      })
+        .png()
+        .toBuffer();
+      await owner.db
+        .update(hcMedia)
+        .set({ kind: 'image', mime: 'image/png', size: png.length })
+        .where(eq(hcMedia.id, file.mediaId));
+      await owner.db
+        .update(hcImportAssets)
+        .set({ contentHash: createHash('sha256').update(png).digest('hex') })
+        .where(eq(hcImportAssets.id, file.assetId));
+      await storage.put(file.key, png);
+      const process = createHcMediaProcessor(storage);
+      const rollback = new Error('fixture.transaction-rolled-back');
+      await expect(
+        withSystem(runtime.db, seeded.brandId, async (tx) => {
+          expect(
+            await process.run({
+              tx,
+              payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+              log: silentJobLogger,
+            }),
+          ).toEqual({ status: 'ready' });
+          throw rollback;
+        }),
+      ).rejects.toBe(rollback);
+      expect(await storage.read(file.key)).toEqual(png);
+      expect(
+        (await owner.db.select().from(hcMedia).where(eq(hcMedia.id, file.mediaId)))[0]?.status,
+      ).toBe('processing');
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          process.run({
+            tx,
+            payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'ready' });
+      expect(await storage.read(file.key)).toEqual(png);
+      await purgeImportedOriginal(file.key);
+      expect(await storage.head(file.key)).toBeUndefined();
+      expect(await storage.head(hcMediaKey(seeded.brandId, file.mediaId, 'webp'))).toBeDefined();
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          process.run({
+            tx,
+            payload: { brandId: seeded.brandId, mediaId: file.mediaId },
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'skipped' });
+    });
+
     it('converts an upload to WebP and serves it by redirect', async () => {
       const png = await sharp({
         create: { width: 40, height: 20, channels: 3, background: '#0f766e' },

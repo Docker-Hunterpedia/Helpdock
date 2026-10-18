@@ -11,6 +11,7 @@ import { exportZendeskGroups, exportZendeskTickets, exportZendeskUsers } from '.
 import { exportZendeskCsat } from './csat-export.js';
 import { exportZendeskFields } from './fields-export.js';
 import { exportZendeskGuide } from './guide-export.js';
+import { zendeskValueMapping } from './mappings.js';
 import { exportZendeskOrganizations } from './organizations-export.js';
 import { exportZendeskTags } from './tags-export.js';
 import { exportZendeskThread } from './threads-export.js';
@@ -103,22 +104,16 @@ export class ZendeskConnector implements Connector<ZendeskCredentials> {
   }
 
   defaultMappings(sample: readonly ImportRecord[]): ProposedMapping[] {
-    const priorities = { low: 'low', normal: 'medium', high: 'high', urgent: 'urgent' };
-    const channels = { email: 'email', web: 'form', api: 'api', chat: 'chat' };
     const mappings = new Map<string, ProposedMapping>();
     for (const record of sample) {
       if (record.entity !== 'ticket') continue;
-      for (const [kind, choices, source] of [
-        ['priority', priorities, record.payload.priority],
-        ['channel', channels, record.payload.channel],
+      for (const [kind, source] of [
+        ['priority', record.payload.priority],
+        ['channel', record.payload.channel],
       ] as const) {
-        if (source === undefined || !Object.hasOwn(choices, source)) continue;
-        const target = choices[source as keyof typeof choices];
-        mappings.set(`${kind}:${source}`, {
-          kind,
-          externalValue: source,
-          target: { [kind]: target },
-        });
+        if (source === undefined) continue;
+        const proposal = zendeskValueMapping(kind, source);
+        if (proposal) mappings.set(`${kind}:${source}`, proposal);
       }
     }
     return [...mappings.values()];

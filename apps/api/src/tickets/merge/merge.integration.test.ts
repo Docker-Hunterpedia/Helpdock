@@ -814,6 +814,7 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
               ...(origin === 'import'
                 ? {
                     importSourceAccountKey: 'e'.repeat(64),
+                    importDetails: { status: 'SUCCESS', channel: 'EMAIL', authorKind: 'agent' },
                     externalMessageId: 'split-original@example.com',
                     email: {
                       from: { address: 'historical@example.com', name: null },
@@ -866,6 +867,9 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
         );
         expect(stored?.copiedFromMessageId).toBe(second.id);
         expect(stored?.authorDisplay).toBe(authorDisplay);
+        expect(stored?.importDetails).toEqual(
+          origin === 'import' ? { status: 'SUCCESS', channel: 'EMAIL', authorKind: 'agent' } : null,
+        );
         expect(stored?.importSourceAccountKey).toBe(origin === 'import' ? 'e'.repeat(64) : null);
         expect(stored?.externalMessageId).toBe(
           origin === 'import' ? 'split-original@example.com' : null,

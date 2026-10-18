@@ -1,19 +1,15 @@
 import type { Connector, ConnectorContext } from '@helpdock/importers';
 import { ConnectorError } from '@helpdock/importers';
 import { SafeFetchError } from '@helpdock/net';
-import type { ContentPolicy, ImportAttachmentRef } from '@helpdock/schemas';
-import { z } from 'zod';
+import {
+  type ContentPolicy,
+  type ImportAttachmentRef,
+  importMediaInspectionOutcomeSchema,
+} from '@helpdock/schemas';
 import { PolicyRefusal } from '../../media/content-policy.js';
 import { withPreparedImportFile } from './prepare-file.js';
 
-const outcomeSchema = z.discriminatedUnion('state', [
-  z.strictObject({
-    state: z.literal('available'),
-    size: z.int().positive(),
-    mime: z.string().max(255),
-  }),
-  z.strictObject({ state: z.enum(['warning', 'error']), code: z.string().min(1).max(100) }),
-]);
+const outcomeSchema = importMediaInspectionOutcomeSchema;
 
 /** Inspect bounded bytes in a temporary file; no objects, attachment rows or media jobs are created. */
 export async function inspectDryRunFile<C>(
@@ -27,7 +23,7 @@ export async function inspectDryRunFile<C>(
     };
     const downloaded = await deps.connector.fetchAttachment(context, request.ref);
     const contentType = request.ref.contentType ?? downloaded.contentType;
-    const declaredSize = downloaded.size;
+    const declaredSize = request.ref.size ?? downloaded.size;
     return await withPreparedImportFile(
       {
         stream: downloaded.stream,
@@ -36,7 +32,12 @@ export async function inspectDryRunFile<C>(
         ...(contentType === undefined ? {} : { contentType }),
         ...(declaredSize === undefined ? {} : { declaredSize }),
       },
-      async (file) => outcomeSchema.parse({ state: 'available', size: file.size, mime: file.mime }),
+      async (file) =>
+        outcomeSchema.parse(
+          request.ref.size !== undefined && request.ref.size !== file.size
+            ? { state: 'error', code: 'media-size-mismatch' }
+            : { state: 'available', size: file.size, mime: file.mime },
+        ),
     );
   } catch (error) {
     if (error instanceof ConnectorError && error.code === 'record-unavailable')

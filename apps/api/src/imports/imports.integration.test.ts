@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as waitForQueue } from 'node:timers/promises';
 import { createKeyring, decodeMasterKey, decryptSecret } from '@helpdock/config';
 import {
@@ -8,9 +11,12 @@ import {
   createDb,
   type DbHandle,
   importExternalIds,
+  importFiles,
+  importLog,
   importMappings,
   importRecords,
   importRuns,
+  importTicketInventory,
   outbox,
   userBrandRoles,
   users,
@@ -18,9 +24,22 @@ import {
   withSystem,
 } from '@helpdock/db';
 import { hashImportValue, ImportRateLimiter } from '@helpdock/importers';
-import { FakeZendesk } from '@helpdock/importers/testing';
+import {
+  FakeFreshdesk,
+  FakeZendesk,
+  FakeZoho,
+  freshdeskCoreFixture,
+  zohoCoreFixture,
+} from '@helpdock/importers/testing';
 import { JOB_DEFINITIONS, silentLogger as silentJobLogger } from '@helpdock/jobs';
-import { contentPolicySchema, type ImportRunView, importRecordSchema } from '@helpdock/schemas';
+import {
+  contentPolicySchema,
+  freshdeskCredentialsSchema,
+  type ImportRunView,
+  importRecordSchema,
+  zendeskCredentialsSchema,
+  zohoCredentialsSchema,
+} from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { Queue, Worker } from 'bullmq';
@@ -29,18 +48,32 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import {
+  IMPORT_HEALTH_KEY,
+  IMPORT_HEALTH_TTL_SECONDS,
+  publishImportHealthSnapshot,
+  readImportHealth,
+  writeImportHealth,
+  writeImportHealthBrand,
+} from '../observability/import-health.js';
 import { seedDevInstall } from '../seed/dev-seed.js';
+import { FakeStorage } from '../testing/media.js';
 import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { createImportWorkHandler } from './import-events.js';
+import { readBrandImportHealth } from './import-health.js';
 import {
+  createFreshdeskImportConnection,
   createImportConnectorRuntime,
   createZendeskImportConnection,
+  createZohoImportConnection,
 } from './jobs/connector-runtime.js';
 import { importDestinationFingerprint } from './jobs/destination-fingerprint.js';
 import { importDryRunCheckpointSchema } from './jobs/dry-run-state.js';
 import { createImportProcessor } from './jobs/import-processor.js';
 import { importInputFingerprint } from './jobs/input-fingerprint.js';
+import { prepareImportSourceFile } from './jobs/prepare-source-file.js';
+import { importVendorSourceWarnings } from './jobs/vendor-source-warnings.js';
 
 const masterKey = Buffer.alloc(32, 19).toString('base64');
 const password = 'import-test-password';
@@ -56,10 +89,18 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
   let adminToken: string;
   const restrictedTokens: string[] = [];
   let adminId: string;
+  let installToken: string;
   const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+  const freshdesk = new FakeFreshdesk(freshdeskCoreFixture, {
+    authorization: `Basic ${Buffer.from('synthetic-key:X').toString('base64')}`,
+    now: 0,
+  });
+  const zoho = new FakeZoho(structuredClone(zohoCoreFixture));
+  let storage: FakeStorage;
+  let storageDirectory: string;
   const root = () => `/api/brands/${brandId}/imports`;
   const call = (
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
     token?: string,
     payload?: Record<string, unknown>,
@@ -77,6 +118,10 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
     postgres = await startPostgres();
     redisContainer = await startRedis();
     await fake.server.start();
+    await freshdesk.server.start();
+    await zoho.start();
+    storageDirectory = await mkdtemp(join(tmpdir(), 'helpdock-inventory-http-'));
+    storage = new FakeStorage(storageDirectory);
     const env = metaEnv({
       masterKey,
       postgres,
@@ -93,24 +138,50 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
     app = await createApiApp({
       runtime,
       imports: {
-        connection: (request) =>
-          createZendeskImportConnection({
+        storage,
+        connection: (request, source) => {
+          const apiRoot =
+            source === 'zohodesk'
+              ? zoho.root
+              : source === 'freshdesk'
+                ? freshdesk.server.root
+                : fake.server.root;
+          const common = {
             ...request,
             allowCidrs: [],
-            limiter: new ImportRateLimiter({ capacity: 10, perMinute: 1000 }),
+            limiter: new ImportRateLimiter({
+              capacity: source === 'zohodesk' ? 20 : 10,
+              perMinute: 1000,
+            }),
             log: async () => {},
             transport: {
-              apiRoot: fake.server.root,
+              apiRoot,
               policy: {
-                allowedPorts: [Number(new URL(fake.server.root).port)],
+                allowedPorts: [Number(new URL(apiRoot).port)],
                 allowCidrs: ['127.0.0.1/32'],
               },
             },
-          }),
+          };
+          return source === 'zohodesk'
+            ? createZohoImportConnection({
+                ...common,
+                credentials: zohoCredentialsSchema.parse(request.credentials),
+              })
+            : source === 'freshdesk'
+              ? createFreshdeskImportConnection({
+                  ...common,
+                  credentials: freshdeskCredentialsSchema.parse(request.credentials),
+                })
+              : createZendeskImportConnection({
+                  ...common,
+                  credentials: zendeskCredentialsSchema.parse(request.credentials),
+                });
+        },
       },
     });
     owner = createDb({ url: postgres.getConnectionUri(), max: 1 });
     const seeded = await seedDevInstall({ db: runtime.db, env });
+    installToken = await signInForTest(app, { email: seeded.email, password: seeded.password });
     brandId = seeded.brandId;
     otherBrandId = uuidv7();
     await owner.db
@@ -146,8 +217,72 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
     await runtime?.close();
     await owner?.close();
     await fake.server.close();
+    await freshdesk.server.close();
+    await zoho.close();
+    if (storageDirectory) await rm(storageDirectory, { recursive: true, force: true });
     await redisContainer?.stop();
     await postgres?.stop();
+  });
+
+  it('starts automatic Zoho extraction without a CSV and refuses an unreviewed inventory opt-in', async () => {
+    const created = await call('POST', root(), adminToken, { source: 'zohodesk' });
+    expect(created.statusCode).toBe(201);
+    const run = created.json<ImportRunView>();
+    const path = `${root()}/${run.id}`;
+    const credentials = {
+      region: 'us',
+      orgId: zoho.fixture.orgId,
+      clientId: zoho.fixture.clientId,
+      clientSecret: zoho.fixture.clientSecret,
+      refreshToken: zoho.fixture.refreshToken,
+    };
+    const connected = await call('PUT', `${path}/connection`, adminToken, { credentials });
+    expect(connected.statusCode).toBe(200);
+    expect(connected.json().run).toMatchObject({
+      sourceAccount: `us:${zoho.fixture.orgId}`,
+      hasCredentials: true,
+    });
+    expect(JSON.stringify(connected.json())).not.toContain(credentials.refreshToken);
+    expect(JSON.stringify(connected.json())).not.toContain(credentials.clientSecret);
+    expect((await call('GET', `${path}/files`, adminToken)).json().files).toEqual([]);
+    const optingIn = await call('PUT', `${path}/scope`, adminToken, {
+      entities: ['ticket'],
+      useTicketInventory: true,
+      inventoryMode: 'complete',
+      inventoryConfirmed: false,
+    });
+    expect(optingIn.statusCode).toBe(200);
+    const unreviewed = await call('POST', `${path}/extract`, adminToken);
+    expect(unreviewed.statusCode).toBe(409);
+    expect(unreviewed.json().error.message).toBe('import.inventory-confirm-required');
+    expect(
+      (
+        await call('PUT', `${path}/scope`, adminToken, {
+          entities: ['ticket'],
+          useTicketInventory: true,
+          inventoryMode: 'complete',
+          inventoryConfirmed: true,
+        })
+      ).statusCode,
+    ).toBe(409);
+    const automatic = await call('PUT', `${path}/scope`, adminToken, {
+      entities: ['ticket', 'message', 'attachment', 'tag'],
+      useTicketInventory: false,
+    });
+    expect(automatic.statusCode).toBe(200);
+    expect(automatic.json().scope).toMatchObject({
+      useTicketInventory: false,
+      inventoryConfirmed: false,
+    });
+    const extracting = await call('POST', `${path}/extract`, adminToken);
+    expect(extracting.statusCode).toBe(200);
+    expect(extracting.json().status).toBe('extracting');
+    const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect(stored?.options.inventoryReviewFingerprint).toBeNull();
+    expect(
+      await owner.db.select().from(importRecords).where(eq(importRecords.runId, run.id)),
+    ).toEqual([]);
+    expect((await call('POST', `${path}/cancel`, adminToken)).statusCode).toBe(200);
   });
 
   it('requires real staff authentication and brand management for every registered route', async () => {
@@ -159,6 +294,10 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ['GET', `${root()}/${id}/preview/ticket?externalId=42`, undefined],
       ['GET', `${root()}/${id}/preview/contact?externalId=42`, undefined],
       ['GET', `${root()}/${id}/preview/samples`, undefined],
+      ['GET', `${root()}/${id}/log`, undefined],
+      ['GET', `${root()}/${id}/log/export`, undefined],
+      ['GET', `${root()}/${id}/sla`, undefined],
+      ['POST', `${root()}/${id}/sla/start`, { acknowledge: true }],
       [
         'PUT',
         `${root()}/${id}/connection`,
@@ -174,6 +313,21 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ['POST', `${root()}/${id}/cancel`, undefined],
       ['GET', `${root()}/${id}/mappings`, undefined],
       ['PUT', `${root()}/${id}/mappings`, { mappings: [] }],
+      ['GET', `${root()}/${id}/files`, undefined],
+      ['GET', `${root()}/${id}/files/${id}`, undefined],
+      ['PUT', `${root()}/${id}/file-source`, { dataset: 'source-export' }],
+      [
+        'POST',
+        `${root()}/${id}/files/presign`,
+        { format: 'csv', entity: 'ticket', fileName: 'source.csv', size: 12 },
+      ],
+      ['POST', `${root()}/${id}/files/${id}/confirm`, undefined],
+      [
+        'PUT',
+        `${root()}/${id}/files/${id}/inventory-mapping`,
+        { mapping: { idColumn: 'ID', location: 'auto' } },
+      ],
+      ['DELETE', `${root()}/${id}/files/${id}`, undefined],
     ] as const;
     for (const [method, url, body] of routes) {
       expect((await call(method, url, undefined, body)).statusCode).toBe(401);
@@ -189,6 +343,273 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       payload: { source: 'zendesk' },
     });
     expect(csrf.statusCode).toBe(401);
+  });
+
+  it('reports worker-cached import health only to install admins and expires unknown readings instead of reporting zero', async () => {
+    const runId = uuidv7();
+    await owner.db
+      .insert(importRuns)
+      .values({ id: runId, brandId, source: 'zendesk', status: 'failed', startedBy: adminId });
+    await owner.db
+      .insert(importLog)
+      .values({ brandId, runId, level: 'error', message: 'import.vendor-unavailable' });
+    const health = await withSystem(runtime.db, brandId, (tx) =>
+      readBrandImportHealth(tx, brandId),
+    );
+    expect(health?.lastError).toMatchObject({ runId, code: 'import.vendor-unavailable' });
+    if (!health) throw new Error('Missing import health fixture');
+    await writeImportHealth(runtime.redis, {
+      configured: true,
+      observedAt: new Date().toISOString(),
+      totalBrands: 1,
+      active: health.active,
+      paused: health.paused,
+      brands: [health],
+    });
+    expect(await runtime.redis.ttl(IMPORT_HEALTH_KEY)).toBeGreaterThan(0);
+    expect(await runtime.redis.ttl(IMPORT_HEALTH_KEY)).toBeLessThanOrEqual(
+      IMPORT_HEALTH_TTL_SECONDS,
+    );
+    expect((await call('GET', '/api/install/system', adminToken)).statusCode).toBe(403);
+    const status = await call('GET', '/api/install/system', installToken);
+    expect(status.statusCode).toBe(200);
+    expect(status.json<{ imports: { brands: unknown[] } }>().imports.brands).toEqual([health]);
+    await runtime.redis.del(IMPORT_HEALTH_KEY);
+    expect(await readImportHealth(runtime.redis)).toEqual({ configured: false });
+  });
+
+  it('pages immutable install snapshots beyond fifty brands and refuses partial or expired readings', async () => {
+    const snapshotId = uuidv7();
+    const newerId = uuidv7();
+    const rows = Array.from({ length: 57 }, (_, index) => ({
+      brandId: uuidv7(),
+      brandName: `Snapshot brand ${index}`,
+      active: 57 - index,
+      paused: 0,
+      lastError: null,
+    }));
+    const summary = {
+      configured: true as const,
+      snapshotId,
+      observedAt: new Date().toISOString(),
+      totalBrands: rows.length,
+      active: rows.reduce((sum, row) => sum + row.active, 0),
+      paused: 0,
+      brands: rows.slice(0, 50),
+    };
+    const keys = [
+      IMPORT_HEALTH_KEY,
+      ...[snapshotId, newerId].flatMap((id) => [
+        `${IMPORT_HEALTH_KEY}:${id}:data`,
+        `${IMPORT_HEALTH_KEY}:${id}:order`,
+      ]),
+    ];
+    const pageUrl = `/api/install/system/imports?snapshotId=${snapshotId}&page=2`;
+    try {
+      await writeImportHealthBrand(runtime.redis, snapshotId, rows[0]!);
+      await expect(publishImportHealthSnapshot(runtime.redis, summary)).rejects.toThrow(
+        'import.health-snapshot-incomplete',
+      );
+      for (const row of rows.slice(1)) await writeImportHealthBrand(runtime.redis, snapshotId, row);
+      await publishImportHealthSnapshot(runtime.redis, summary);
+      expect((await call('GET', pageUrl, adminToken)).statusCode).toBe(403);
+      expect(
+        (await call('GET', '/api/install/system/imports?page=0', installToken)).statusCode,
+      ).toBe(400);
+      const second = await call('GET', pageUrl, installToken);
+      expect(second.statusCode).toBe(200);
+      expect(second.json()).toMatchObject({
+        snapshotId,
+        page: 2,
+        hasNext: false,
+        brands: rows.slice(50),
+      });
+      await publishImportHealthSnapshot(runtime.redis, {
+        ...summary,
+        snapshotId: newerId,
+        totalBrands: 0,
+        active: 0,
+        brands: [],
+      });
+      expect((await call('GET', pageUrl, installToken)).json()).toEqual(second.json());
+      for (const key of keys.slice(1, 3)) {
+        expect(await runtime.redis.ttl(key)).toBeGreaterThan(0);
+        expect(await runtime.redis.ttl(key)).toBeLessThanOrEqual(IMPORT_HEALTH_TTL_SECONDS);
+      }
+      await runtime.redis.hdel(`${IMPORT_HEALTH_KEY}:${snapshotId}:data`, rows[50]!.brandId);
+      expect((await call('GET', pageUrl, installToken)).json()).toEqual({ configured: false });
+      await runtime.redis.hset(
+        `${IMPORT_HEALTH_KEY}:${snapshotId}:data`,
+        rows[50]!.brandId,
+        JSON.stringify(rows[50]),
+      );
+      await runtime.redis.del(`${IMPORT_HEALTH_KEY}:${snapshotId}:order`);
+      expect((await call('GET', pageUrl, installToken)).json()).toEqual({ configured: false });
+      await runtime.redis.del(`${IMPORT_HEALTH_KEY}:${snapshotId}:data`);
+      expect((await call('GET', pageUrl, installToken)).json()).toEqual({ configured: false });
+    } finally {
+      await runtime.redis.del(...keys);
+    }
+  });
+
+  it('keeps every distinct extraction warning in the review count while bounding samples and respecting run/brand/scope', async () => {
+    const runId = uuidv7();
+    const otherRunId = uuidv7();
+    await owner.db.insert(importRuns).values([
+      { id: runId, brandId, source: 'zendesk', startedBy: adminId },
+      { id: otherRunId, brandId: otherBrandId, source: 'zendesk', startedBy: adminId },
+    ]);
+    await owner.db.insert(importLog).values([
+      ...Array.from({ length: 105 }, (_, index) => ({
+        brandId,
+        runId,
+        level: 'warning' as const,
+        entity: 'message' as const,
+        externalId: `m-${String(index).padStart(3, '0')}`,
+        message: 'import.message.author-unavailable',
+      })),
+      {
+        brandId,
+        runId,
+        level: 'warning',
+        entity: 'message',
+        externalId: 'm-000',
+        message: 'import.message.author-unavailable',
+      },
+      {
+        brandId,
+        runId,
+        level: 'error',
+        entity: 'message',
+        externalId: 'error',
+        message: 'import.message.author-unavailable',
+      },
+      {
+        brandId,
+        runId,
+        level: 'warning',
+        entity: 'article',
+        externalId: 'article',
+        message: 'import.knowledge.readership-restricted',
+      },
+      {
+        brandId,
+        runId,
+        level: 'warning',
+        entity: 'article',
+        externalId: 'article-fr',
+        message: 'import.knowledge.locale-unsupported',
+      },
+      {
+        brandId,
+        runId,
+        level: 'warning',
+        entity: 'message',
+        externalId: 'retry',
+        message: 'import.rate-limited',
+      },
+      {
+        brandId: otherBrandId,
+        runId: otherRunId,
+        level: 'warning',
+        entity: 'message',
+        externalId: 'foreign',
+        message: 'import.message.author-unavailable',
+      },
+    ]);
+    const report = await withSystem(runtime.db, brandId, (tx) =>
+      importVendorSourceWarnings(tx, { brandId, runId, entities: ['message'] }),
+    );
+    expect(report.sourceWarningCount).toBe(105);
+    expect(report.sourceWarnings).toHaveLength(100);
+    expect(report.sourceWarnings[0]).toEqual({
+      entity: 'message',
+      externalId: 'm-000',
+      code: 'import.message.author-unavailable',
+    });
+    expect(report.sourceWarnings.at(-1)?.externalId).toBe('m-099');
+    const knowledgeWarnings = await withSystem(runtime.db, brandId, (tx) =>
+      importVendorSourceWarnings(tx, { brandId, runId, entities: ['article'] }),
+    );
+    expect(knowledgeWarnings.sourceWarningCount).toBe(2);
+    expect(knowledgeWarnings.sourceWarnings).toEqual(
+      expect.arrayContaining([
+        {
+          entity: 'article',
+          externalId: 'article-fr',
+          code: 'import.knowledge.locale-unsupported',
+        },
+      ]),
+    );
+    expect(
+      await withSystem(runtime.db, otherBrandId, (tx) =>
+        importVendorSourceWarnings(tx, { brandId: otherBrandId, runId, entities: ['message'] }),
+      ),
+    ).toEqual({ sourceWarningCount: 0, sourceWarnings: [] });
+  });
+
+  it('pages a brand/run log at a fixed boundary and exports every page with spreadsheet-safe IDs', async () => {
+    const runId = uuidv7();
+    const foreignRun = uuidv7();
+    await owner.db.insert(importRuns).values([
+      { id: runId, brandId, source: 'zendesk', startedBy: adminId },
+      { id: foreignRun, brandId: otherBrandId, source: 'zendesk', startedBy: adminId },
+    ]);
+    await owner.db.insert(importLog).values(
+      Array.from({ length: 520 }, (_, index) => ({
+        brandId,
+        runId,
+        level: index % 2 ? ('warning' as const) : ('info' as const),
+        externalId: index === 0 ? '=2+2' : `record-${index}`,
+        message: 'import.mapping.unknown-value',
+      })),
+    );
+    const first = await call('GET', `${root()}/${runId}/log?direction=asc&limit=2`, adminToken);
+    expect(first.statusCode).toBe(200);
+    const page = first.json<{
+      through: number;
+      nextCursor: number;
+      entries: { externalId: string }[];
+    }>();
+    expect(page.entries.map((entry) => entry.externalId)).toEqual(['=2+2', 'record-1']);
+    await owner.db.insert(importLog).values([
+      {
+        brandId,
+        runId,
+        level: 'warning',
+        externalId: 'later-record',
+        message: 'import.record-unavailable',
+      },
+      {
+        brandId: otherBrandId,
+        runId: foreignRun,
+        level: 'error',
+        externalId: 'foreign-record',
+        message: 'foreign-only',
+      },
+    ]);
+    const bounded = await call(
+      'GET',
+      `${root()}/${runId}/log?direction=asc&after=${page.nextCursor}&through=${page.through}&limit=500&level=warning`,
+      adminToken,
+    );
+    expect(bounded.statusCode).toBe(200);
+    expect(
+      bounded
+        .json<{ entries: { level: string; externalId: string }[] }>()
+        .entries.every((entry) => entry.level === 'warning' && entry.externalId !== 'later-record'),
+    ).toBe(true);
+    const exported = await call('GET', `${root()}/${runId}/log/export`, adminToken);
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers['content-type']).toContain('text/csv');
+    expect(exported.body).toContain(",'=2+2,");
+    expect(exported.body).toContain(',record-519,');
+    expect(exported.body).toContain(',later-record,');
+    expect(exported.body).not.toContain('foreign-only');
+    expect((await call('GET', `${root()}/${foreignRun}/log`, adminToken)).statusCode).toBe(404);
+    expect((await call('GET', `${root()}/${foreignRun}/log/export`, adminToken)).statusCode).toBe(
+      404,
+    );
   });
 
   it('serves validated paged previews only within the authenticated admin brand without source URLs', async () => {
@@ -1218,5 +1639,131 @@ describe.skipIf(!hasDocker)('M11 staff import HTTP boundary', () => {
       ).statusCode,
     ).toBe(400);
     expect((await call('GET', `${root()}/${run.id}/mappings`, adminToken)).json()).toEqual(result);
+  });
+
+  it('seals a Freshdesk inventory, validates the entire selected ID column and binds extraction approval to its revision', async () => {
+    const created = await call('POST', root(), adminToken, { source: 'freshdesk' });
+    expect(created.statusCode).toBe(201);
+    const run = created.json<ImportRunView>();
+    const path = `${root()}/${run.id}`;
+    const connected = await call('PUT', `${path}/connection`, adminToken, {
+      credentials: { domain: 'demo', apiKey: 'synthetic-key', csatApi: 'modern' },
+    });
+    expect(connected.statusCode).toBe(200);
+    expect(JSON.stringify(connected.json())).not.toContain('synthetic-key');
+    const body = Buffer.from(
+      'Ticket ID,Subject\n9001,Archived question\n9001,Duplicate question\n',
+    );
+    const allocated = await call('POST', `${path}/files/presign`, adminToken, {
+      format: 'csv',
+      entity: 'ticket',
+      fileName: 'archive.csv',
+      size: body.length,
+      inventoryMapping: { idColumn: null, location: 'archived' },
+    });
+    expect(allocated.statusCode).toBe(201);
+    const fileId = allocated.json<{ file: { id: string } }>().file.id;
+    const storedFile = async () => {
+      const [file] = await owner.db.select().from(importFiles).where(eq(importFiles.id, fileId));
+      if (!file) throw new Error('Missing inventory file');
+      return file;
+    };
+    await storage.put((await storedFile()).uploadKey, body);
+    expect((await call('POST', `${path}/files/${fileId}/confirm`, adminToken)).statusCode).toBe(
+      200,
+    );
+    const prepare = async () =>
+      prepareImportSourceFile(
+        { db: runtime.db, storage },
+        { brandId, runId: run.id, fileId, revision: (await storedFile()).revision },
+      );
+    await prepare();
+    expect(await storedFile()).toMatchObject({
+      status: 'ready',
+      inventoryValidation: null,
+      headers: ['Ticket ID', 'Subject'],
+    });
+    const visible = await call('GET', `${path}/files`, adminToken);
+    expect(visible.statusCode).toBe(200);
+    expect(visible.json().files[0]).toMatchObject({
+      id: fileId,
+      hasHeaders: true,
+      readyForExtraction: false,
+      validationPending: false,
+    });
+    for (const field of ['headers', 'sampleRows', 'mapping', 'validation'])
+      expect(visible.json().files[0]).not.toHaveProperty(field);
+    expect(JSON.stringify(visible.json())).not.toContain('sourceKey');
+    expect(JSON.stringify(visible.json())).not.toContain('sha256');
+    const detail = await call('GET', `${path}/files/${fileId}`, adminToken);
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      headers: ['Ticket ID', 'Subject'],
+      sampleRows: [
+        { line: 2, cells: ['9001', 'Archived question'] },
+        { line: 3, cells: ['9001', 'Duplicate question'] },
+      ],
+    });
+    expect(detail.json()).not.toHaveProperty('sourceKey');
+    expect(detail.json()).not.toHaveProperty('uploadKey');
+    expect(
+      (await call('GET', `${root()}/${uuidv7()}/files/${fileId}`, adminToken)).statusCode,
+    ).toBe(404);
+    await storage.put(
+      (await storedFile()).uploadKey,
+      Buffer.from(body.toString().replaceAll('9001', '9002')),
+    );
+    const map = (idColumn: string, location = 'archived') =>
+      call('PUT', `${path}/files/${fileId}/inventory-mapping`, adminToken, {
+        mapping: { idColumn, location },
+      });
+    expect((await map('Missing')).statusCode).toBe(400);
+    expect((await map('Subject')).statusCode).toBe(200);
+    await prepare();
+    expect(await storedFile()).toMatchObject({
+      status: 'invalid',
+      error: 'invalid-record:2',
+      inventoryValidation: null,
+    });
+    expect((await map('Ticket ID')).statusCode).toBe(200);
+    await prepare();
+    expect(await storedFile()).toMatchObject({
+      status: 'ready',
+      inventoryValidation: { kind: 'ticket-inventory', records: 1, sourceRows: 2, duplicates: 1 },
+    });
+    expect((await call('GET', `${path}/files`, adminToken)).json().files[0]).toMatchObject({
+      readyForExtraction: true,
+      validationPending: false,
+    });
+    const active = await storedFile();
+    expect(
+      await owner.db
+        .select({ externalId: importTicketInventory.externalId })
+        .from(importTicketInventory)
+        .where(
+          and(
+            eq(importTicketInventory.fileId, fileId),
+            eq(importTicketInventory.revision, active.revision),
+          ),
+        ),
+    ).toEqual([{ externalId: '9001' }]);
+    const scope = { entities: ['ticket'], inventoryMode: 'complete', inventoryConfirmed: true };
+    expect((await call('PUT', `${path}/scope`, adminToken, scope)).statusCode).toBe(200);
+    expect((await map('Ticket ID', 'auto')).statusCode).toBe(200);
+    await prepare();
+    const stale = await call('POST', `${path}/extract`, adminToken);
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.message).toBe('import.inventory-stale');
+    expect((await call('PUT', `${path}/scope`, adminToken, scope)).statusCode).toBe(200);
+    const extracting = await call('POST', `${path}/extract`, adminToken);
+    expect(extracting.statusCode).toBe(200);
+    expect(extracting.json()).toMatchObject({ status: 'extracting' });
+    expect((await map('Ticket ID')).statusCode).toBe(409);
+    expect(
+      await owner.db
+        .select({ id: importRecords.id })
+        .from(importRecords)
+        .where(eq(importRecords.runId, run.id)),
+    ).toEqual([]);
   });
 });

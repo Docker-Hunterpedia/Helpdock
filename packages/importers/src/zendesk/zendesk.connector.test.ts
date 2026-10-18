@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { ConnectorContext, ImportPage } from '../connector.js';
 import { ImportHttp } from '../http.js';
 import { ImportRateLimiter } from '../rate-limiter.js';
@@ -14,6 +15,15 @@ async function collectPages(source: AsyncIterable<ImportPage>): Promise<ImportPa
 }
 
 const NOW = Date.parse('2026-10-14T00:00:00Z') / 1000;
+
+it.each(['user', 'contact'] as const)(
+  'exports %s pages that cross the API JSON boundary without coercion',
+  async (entity) => {
+    for await (const page of connector.extract(context, entity, null)) {
+      expect(() => z.json().parse(page)).not.toThrow();
+    }
+  },
+);
 let fake: FakeZendesk;
 let connector: ZendeskConnector;
 let context: ConnectorContext<ZendeskCredentials>;

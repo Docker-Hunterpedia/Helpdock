@@ -17,10 +17,20 @@ const knowledgeScope = z.strictObject({
 });
 export const categoryLoadSchema = knowledgeScope.extend({ record: importCategorySchema });
 export const sectionLoadSchema = knowledgeScope.extend({ record: importSectionSchema });
-export const articleLoadSchema = knowledgeScope.extend({
-  record: importArticleSchema,
-  preparedBodyHtml: hcVersionSaveRequestSchema.shape.bodyHtml,
-});
+export const articleLoadSchema = knowledgeScope
+  .extend({
+    record: importArticleSchema,
+    preparedBodyHtml: hcVersionSaveRequestSchema.shape.bodyHtml,
+    preparedPublishedBodyHtml: hcVersionSaveRequestSchema.shape.bodyHtml.optional(),
+  })
+  .superRefine((input, ctx) => {
+    if ((input.record.published != null) !== (input.preparedPublishedBodyHtml !== undefined))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['preparedPublishedBodyHtml'],
+        message: 'Prepared published content must match the explicit source snapshot',
+      });
+  });
 export type CategoryLoad = z.infer<typeof categoryLoadSchema>;
 export type SectionLoad = z.infer<typeof sectionLoadSchema>;
 export type ArticleLoad = z.infer<typeof articleLoadSchema>;

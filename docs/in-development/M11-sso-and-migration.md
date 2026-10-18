@@ -65,7 +65,7 @@ from the artboards listed under [Artboards to draw](#artboards-to-draw) and
 Read [AGENTS.md](../../AGENTS.md) first; its rules apply to every deliverable
 here. In particular:
 
-1. **All remaining M11-07–23 deliverables share one pull request (owner instruction); related deliverables may share a pull request** (owner approved larger PRs on 2026-10-13), in the order of [Build order](#build-order),
+1. **All remaining 1.0 deliverables M11-07–18 share one pull request (owner instruction); related deliverables may share a pull request** (owner approved larger PRs on 2026-10-13), in the order of [Build order](#build-order),
    each linking its GitHub issue (`Closes #n`) and following the Definition of done:
    unit tests, integration tests for anything touching Postgres, Redis, queues or
    a vendor, Playwright in `en` and `ar` for every screen, docs in the same PR.
@@ -92,6 +92,14 @@ Estimates are working days for one experienced contributor, Definition of done
 included. Ids M11-01 to M11-18 are the 1.0 scope; M11-19 to M11-23 are further
 connectors on the same SDK and **may ship after 1.0**.
 
+**Owner scope update, 2026-10-17:** finish Zoho Desk as the remaining automated
+connector for this implementation batch. Keep the existing Zendesk, Freshdesk
+and manual-import work. Defer M11-19–23 (Help Scout, Intercom, Gorgias, Zammad and
+Front) to later work; they are not required for this combined PR and their
+issues remain open. This changes the earlier request to implement all 23 in
+one batch, while preserving the shared engine, dry-run UI and import safety
+requirements for the 1.0 scope.
+
 | Id | Deliverable | Spec | Tests beyond unit | Estimate | Issue | Status |
 |---|---|---|---|---|---|---|
 | M11-01 | SSO schema, settings and the shared SSO service: `sso_connections`, `sso_role_mappings`, `user_sso_identities` (install scope), `user_brand_roles.source`, the `sso.*` settings, `SsoService` (connection CRUD, secret encryption, the SP signing key, the Redis request store), audit events | A §7; R §5.1; ADR 0026 (1–4) | Integration: CRUD, secrets never returned, key generated once under a lock | 3 d | #183 | done |
@@ -102,21 +110,21 @@ connectors on the same SDK and **may ship after 1.0**.
 | M11-06 | SSO docs: `docs/guides/sso.md` (Okta, Entra ID, Google Workspace, Keycloak walk-throughs), authentication guide, configuration guide, `.env.example` | AGENTS.md DoD 1 | `docs-guard` | 1.5 d | #188 | done |
 | M11-07 | Import schema: `import_runs`, `import_records`, `import_mappings`, `import_external_ids`, `import_log` (tenant tables, RLS), `tickets.imported_at`, `tickets.import_source`, `attachments.origin`, `csat_answer_channel` value `import`, the `import` queue | A §5, §13; ADR 0027 (1–3) | Integration: RLS negative suite; migration round-trip | 2 d | #189 | in progress |
 | M11-08 | Normalised import records and the bundle format: Zod schemas in `packages/schemas/src/import.ts` for users, contacts, organisations, groups, fields, tickets, messages, attachment refs, tags, CSAT, categories, sections, articles, source activity; the Helpdock import bundle (zip of NDJSON + attachments) and its validator | ADR 0027 (2) | Schema tests over fixtures from all three vendors | 2 d | #190 | in progress |
-| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `attachment.uploaded`, `media.objects.purge` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
+| M11-09 | The loader: `ImportWriter` writes tickets, messages, activity, tags, participants, contacts, identities, accounts, CSAT and help-center rows directly, with no lifecycle hooks and no outbox events except media processing and one `help_center.imported`; idempotent through `import_external_ids`; original dates kept; report rollups rebuilt over the imported range | D §2, §4, §7; ADR 0027 (4–8) | Integration on Testcontainers: a 500-ticket bundle loads; a second load writes nothing; the outbox holds only `import.work_requested`, `import.file_uploaded`, `attachment.uploaded`, `media.objects.purge`, `help_center.media_uploaded` and `help_center.imported`; no email, rule run, SLA clock, notification or webhook delivery exists afterwards; reports count the history on its original days | 5 d | #191 | in progress |
 | M11-10 | Import jobs: `import.extract`, `import.dry_run`, `import.load`, `import.attachments`, `import.finish` on the `import` queue; resumable cursors, 429 back-off from `Retry-After`, cancel, pause, progress counters, per-line log, dry run, delta sync, credential purge on finish | A §13; ADR 0027 (9) | Integration: kill the worker mid-load and resume without duplicates; a 429 delays the job by `Retry-After`; cancel stops within one batch; delta brings only changed tickets | 3 d | #192 | in progress |
 | M11-11 | Connector SDK and stand-ins: `packages/importers` (new workspace), the `Connector` interface, the rate limiter, `safeFetch` with a vendor host allow-list, attachment fetching, and a stand-in server per vendor for tests | ADR 0027 (10) | The stand-ins' own suites | 2 d | #193 | in progress |
 | M11-12 | Zendesk connector: OAuth, with labelled legacy API-token compatibility; incremental tickets, users, organisations; groups, fields, comments, attachments, satisfaction ratings, Help Center; mapping defaults | ADR 0027 (10) | Integration against the Zendesk stand-in: a full extract and a delta; 429 handling; archived ticket comments | 4 d | #194 | in progress |
-| M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | planned |
-| M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | planned |
-| M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | planned |
+| M11-13 | Freshdesk connector: API key; tickets, conversations, contacts, companies, agents, groups, fields, satisfaction ratings, Solutions; mapping defaults | ADR 0027 (10) | Integration against the Freshdesk stand-in, full and delta | 3.5 d | #195 | in progress |
+| M11-14 | Zoho Desk connector: OAuth per data centre, `orgId`; tickets, threads, comments, contacts, accounts, agents, departments, Knowledge Base; mapping defaults | ADR 0027 (10) | Integration against the Zoho Desk stand-in, full and delta | 4 d | #196 | in progress |
+| M11-15 | The manual mapper: upload CSV files or a bundle, detect columns, map them to Helpdock fields with transforms (date format, split name, status values), preview 20 rows with validation, save and reuse mapping presets | ADR 0027 (2, 11) | Integration: a CSV with odd dates and a quoted multiline body imports; a preset re-applies; Playwright `en`/`ar` | 4 d | #197 | in progress |
 | M11-16 | Admin: Brand › Import: runs list, the wizard (source, connect, scope, map, dry run, import, done), progress with log, pause/cancel, delta sync, the dry-run report | R §4.10; DESIGN §6 | Playwright `en`/`ar` on mock api for every step and failure state; real-api browser spec importing from the Zendesk stand-in | 6 d | #198 | in progress |
-| M11-17 | Imported tickets in the workspace: header chip "Imported from Zendesk · #1234" with the source link, the `ticket.imported` activity line, the "Source" filter in views, the System page's Import card | DESIGN §6.3 | Playwright `en`/`ar` | 1.5 d | #199 | planned |
-| M11-18 | Import docs: `docs/guides/importing.md` (per vendor, the manual mapper, the bundle format, the cutover runbook), retention and reports guides, PRD and this doc | AGENTS.md DoD 1 | `docs-guard` | 2 d | #200 | planned |
-| M11-19 | Help Scout connector (Mailbox API 2.0: conversations, threads, customers, Docs) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #201 | later (may ship after 1.0) |
-| M11-20 | Intercom connector (conversations, conversation parts, contacts, companies, Articles) | ADR 0027 (10) | Stand-in, full and delta | 3.5 d | #202 | later (may ship after 1.0) |
-| M11-21 | Gorgias connector (tickets, messages, customers) | ADR 0027 (10) | Stand-in, full and delta | 2.5 d | #203 | later (may ship after 1.0) |
-| M11-22 | Zammad connector (tickets, articles, users, organisations, knowledge base) | ADR 0027 (10) | Stand-in, full and delta | 2.5 d | #204 | later (may ship after 1.0) |
-| M11-23 | Front connector (conversations, messages, comments, contacts) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #205 | later (may ship after 1.0) |
+| M11-17 | Imported tickets in the workspace: header chip "Imported from Zendesk · #1234" with the source link, the `ticket.imported` activity line, the "Source" filter in views, the System page's Import card | DESIGN §6.3 | Playwright `en`/`ar` | 1.5 d | #199 | in progress |
+| M11-18 | Import docs: `docs/guides/importing.md` (per vendor, the manual mapper, the bundle format, the cutover runbook), retention and reports guides, PRD and this doc | AGENTS.md DoD 1 | `docs-guard` | 2 d | #200 | in progress |
+| M11-19 | Help Scout connector (Mailbox API 2.0: conversations, threads, customers, Docs) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #201 | deferred by owner; later work |
+| M11-20 | Intercom connector (conversations, conversation parts, contacts, companies, Articles) | ADR 0027 (10) | Stand-in, full and delta | 3.5 d | #202 | deferred by owner; later work |
+| M11-21 | Gorgias connector (tickets, messages, customers) | ADR 0027 (10) | Stand-in, full and delta | 2.5 d | #203 | deferred by owner; later work |
+| M11-22 | Zammad connector (tickets, articles, users, organisations, knowledge base) | ADR 0027 (10) | Stand-in, full and delta | 2.5 d | #204 | deferred by owner; later work |
+| M11-23 | Front connector (conversations, messages, comments, contacts) | ADR 0027 (10) | Stand-in, full and delta | 3 d | #205 | deferred by owner; later work |
 
 Total for the 1.0 scope (M11-01 to M11-18): about **63 working days** for one
 person; SSO (M11-01 to 06) and import (M11-07 to 18) are independent and can run
@@ -223,15 +231,50 @@ was; the admin screens in English, with the RTL rules of DESIGN §7.
 | `Admin/Login-SSO`, `Admin/Login-SSO-AR` | M11-05 | Sign-in with SSO buttons, email-first discovery ("Continue" sends you to Okta), enforced state where only SSO shows, the break-glass link | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import` | M11-16 | Brand › Import: runs table (source, started, status, counts), "New import" with source picker (connectors + Manual file), empty state | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-Wizard` | M11-16 | Steps 1–4 with StepProgress: Connect (credentials, Test), Scope (date range, entities, help center), Map (statuses, priorities, groups→departments, agents→staff, fields, tags), Dry run report | Drawn 2026-10-13, as on the canvas |
-| `Admin/Import-Wizard` dry-run preview states | M11-16 | Sample contacts with identity/company links; sample ticket threads showing notes, authors, original dates and attachment availability; explicit completeness warnings and blocking errors | Owner requested 2026-10-14; extend the existing artboard with DESIGN components before implementation |
+| `Admin/Import-Wizard` dry-run preview states | M11-16 | Sample contacts with identity/company links; sample ticket threads showing notes, authors, original dates and attachment availability; explicit completeness warnings and blocking errors. UI state not on the artboard: one existing Caption below each file for available/unavailable/blocked/not checked, including Arabic; no new layout or component | Implemented locally 2026-10-18 using the owner's missing-state rule and existing DESIGN components; focused component, database and EN/AR browser/axe checks pass, including the real-API wizard |
+| `Admin/Import-Wizard` Zoho connection | M11-14, M11-16 | UI state not on the artboard: regional data-center selector, string organization ID, OAuth client ID, masked client secret and refresh token, permissions/credit guidance, invalid/refused states; existing Field, Select and Banner patterns, EN/AR with LTR identifiers | Implemented locally 2026-10-18; EN/AR connection/refusal and axe browser checks pass; component/API acceptance follows the validation checkpoints |
+| `Admin/Import-Wizard` Zoho inventory fallback | M11-14, M11-16 | UI state not on the artboard: automatic archive discovery guidance and explicit optional reviewed-inventory checkbox; reveal the existing CSV mapper only when selected and reset confirmation after changes, EN/AR | Implemented locally 2026-10-18; focused API and EN/AR browser checks pass |
 | `Admin/Import-Run` | M11-16, M11-17 | Running import (progress per entity, live log, pause/cancel), done summary with warnings, delta-sync button, "Start SLA clocks" offer | Drawn 2026-10-13, as on the canvas |
 | `Admin/Import-FileMapper` | M11-15 | Upload, detected columns, mapping table with transforms, 20-row preview with row errors, save preset | Drawn 2026-10-13, as on the canvas |
+| `Admin/Import-FileMapper` source inventory | M11-13, M11-16 | UI states not on the artboard: CSV ticket-ID selector, active/archive/auto location, ID-only preview, invalid-row hint, unique/duplicate counts, correction without reupload, and Scope confirmation reset after inventory or mode changes; existing fields, tables, buttons and banners, EN/AR | Implemented locally; focused EN/AR browser and axe checks pass |
+| `Admin/Ticket-Imported` satisfaction detail | M11-13, M11-17 | UI state not on the artboard: unscored imported response with original question/answer disclosure in the existing Satisfaction card and dated timeline cards and native details element, EN/AR | Implemented locally; focused EN/AR browser and axe validation passes |
+| `Admin/Ticket-Imported` message provenance | M11-14, M11-17 | UI state not on the artboard: native disclosure under ordinary/email message cards for original source status/channel/direction/author facts; source-only customer names use neutral original-author wording, EN/AR | Implemented locally; focused component and EN/AR browser/axe checks pass |
+| `Admin/Ticket-Imported` original mail headers | M11-14, M11-17 | UI state not on the artboard: original email subject/date/return path as inert text inside the existing message-provenance disclosure, EN/AR, bidirectional isolation | Implemented locally 2026-10-18; EN/AR original-message provenance and axe browser checks pass; component/API acceptance follows the validation checkpoints |
 | `Admin/Ticket-Imported` | M11-17 | The ticket header chip "Imported from Zendesk · #1234", the `ticket.imported` activity line | Drawn 2026-10-13, as on the canvas |
+| Help center article, imported files | M11-08, M11-09 | UI state not on the artboard: ordinary file links and one localized paragraph naming each unavailable file, using the existing article typography, EN/AR; no new layout or component | Implemented locally; EN/AR browser downloads and unavailable-state axe checks pass, alongside database authorization tests |
+| `Admin/System-1.0`, import readings | M11-17 | UI states not on the artboard: the existing Card/Table/Caption/Button/Alert patterns for a worker snapshot, brand paging, failed-page retry and expired/unknown readings, EN/AR | Implemented locally; focused EN/AR browser and axe checks pass |
+| `Admin/Import-Run`, SLA activation | M11-09, M11-17 | UI state not on the artboard: existing ConfirmDialog for the drawn SLA-clock offer, cancellation, queued/running/completed feedback and disabled completion, EN/AR | Implemented locally; EN/AR browser and axe checks pass, with database activation/timer regressions |
 
 Additional M11-05 UI states absent from the artboards: loading/network/save
 errors, invalid form values, unsaved-test hint, blocked popup, invitation password
 form hidden under enforcement, protected preview refusal and Arabic settings.
 These use existing DESIGN components and the artboards' form/table patterns.
+
+Additional M11-16 dry-run states to draw: warning acknowledgment tied to the
+current review token, failed/loading reports, pending ticket previews and the
+bounded issue-sample notice. The local implementation uses the existing
+Checkbox, Banner, Skeleton and caption patterns; no new visual component.
+The routed source chooser also draws Front as its own card using the same card
+grid, and disables cards absent from the server capability response. Cancel
+confirmation uses the existing DESIGN confirmation dialog. These additions
+await visual/browser review with the rest of the local batch.
+The mapping editor adds a Channels tab beside the existing mapping categories,
+bounded source pagination and a searchable destination combobox. Invited-person
+department selection, optional Arabic field labels, over-limit field-option
+warnings and unsaved-edit messaging use existing DESIGN fields, checkboxes and
+banners. These necessary states also await artboard/browser review.
+The CSV mapper adds constant/multiple-column sources, paged rules, ordered
+transform controls, exact-header preset choices and validation-in-progress/error
+states using existing DESIGN components. Rules can be duplicated to map a date
+column to both created/updated timestamps. These states still need the same
+visual/accessibility verification.
+The imported-ticket Source filter adds all/imported/native choices using the
+existing toggle-chip group. The System Imports card uses the existing card/table
+anatomy for worker readings, unavailable readings and bounded brand rows. These
+necessary M11-17 states require visual/axe review with the local batch.
+Historical activity adds older/newer/latest controls and loading/error captions
+using the existing thread buttons, caption and banner patterns. These pagination
+states also await the same browser/axe review.
 
 ## Gaps accepted up front
 
@@ -695,6 +738,56 @@ external-provider acceptance remains owner-run, as documented in the SSO guide.
 
 ## M11-07 Import schema
 
+Article asset schema checkpoint: generated migration
+`0077_imported_article_assets.sql` adds brand-scoped `hc_import_assets`, composite
+brand/media and brand/article foreign keys, immutable source/content identity
+indexes and FORCE RLS policies. Parent composite unique constraints precede their
+foreign keys in the SQL. Existing `hc_media` rows retain image defaults; new
+fields distinguish download-only files, scanner outcomes and an audit-only
+importing-run identifier. `import_records.prepared_assets` is reserved for
+run-specific preparation checkpoints. Asset content survives staging-run
+retention; the audit identifier is not a run-ownership foreign key. The negative
+RLS fixture and explicit cross-brand media/article FK regressions are authored,
+unrun. This migration has been generated, not applied. Local code now connects
+claim-fenced article preparation, media processing, sealed-manifest validation,
+atomic parent binding and authorized downloads. Preparation processes one file
+per continuation; saved source refusals are monotonic and logged in the same
+transaction. Images and files recheck immutable source digests before conversion
+or scanning. Download URLs require the current article/locale, published public
+readership or a live help-center staff preview session, and an actual parsed
+file link. Escaped examples do not grant access. Ready image IDs are parsed as
+UUIDs before SQL and must identify same-brand WebP image rows.
+
+Prepared content hashes exclude temporary transport URLs while retaining source
+metadata and the managed body. Unavailable files lose their original download
+links and receive an EN/AR availability message. Infrastructure failures remain
+failures. Nightly retention now removes unreferenced importing assets after the
+same 30-day grace, protects working/published references and active/paused
+imports, and queues canonical-key cleanup through the existing outbox handler.
+Media-row locks serialize processing with cleanup; native uploads are excluded.
+The new DB/vendor-stand-in pipeline, scanner/integrity, download/session and
+retention regressions are authored but unrun. Full crash recovery, real storage
+and bilingual browser acceptance remain required before completion.
+
+Dry-run media inspection now includes article attachment references, remote
+images and inline raster data. Its persisted asset index processes one file per
+continuation without storage writes, media rows or jobs. Native attachment
+inspection now also checks the source-declared size against the actual bytes.
+The input-fingerprint revision changes from 1 to 2 so reviews that omitted
+article media cannot authorize this path. EN/AR review copy explains MIME/size,
+policy and outbound-access failures. Mixed ticket/article media and no-write
+regressions are authored but unrun.
+
+The article-file recovery review found two further gaps, fixed locally. Fallback
+help-center HTML now rebases file links under `/hc/<brand>/_hd/assets/<asset>`
+so browsers send the existing narrowly scoped staff cookie; the route shares
+the API download authorization service. Imported image originals and rejected
+file objects now use transactional-outbox deletion after their media-state
+commit. A rolled-back conversion keeps its source bytes and can retry. Native
+image behavior is unchanged. Cookie-path rendering/revocation and conversion
+rollback regressions are authored but unrun; actual worker-kill/browser proof
+is still pending.
+
 **Database** (`packages/db/src/schema/imports.ts`, migration `0054_imports`). All
 tenant tables (brand_id + forced RLS), added to `TENANT_TABLES` and the negative
 suite.
@@ -762,6 +855,15 @@ of a staff name when `author_type = 'system'` and it is set);
 `entity import_entity`, `header_fingerprint char(64)`, `mapping jsonb`,
 `created_by`, `created_at`; unique `(brand_id, lower(name))`.
 
+`import_ticket_inventory` (migration 0075): brand/run/file ownership, mapping
+revision, sealed source SHA-256, native ticket ID, active/archive/auto hint and
+source line. A composite foreign key binds the file to the same brand/run;
+FORCE RLS and a negative-suite fixture cover the new tenant table. Unique
+file/revision/hash/native-ID rows deduplicate repeated CSV entries. A byte-order
+index supports bounded keyset reads. `import_files.inventory_mapping` records the
+explicit native-ID column and location hint. Rows from a prior source hash or
+mapping revision cannot participate in the active manifest.
+
 **Queue**: `import` added to `packages/jobs/src/queues.ts`, concurrency 1 per
 worker for `import.load` (one brand's import never races itself; different
 brands proceed in parallel through the BullMQ group or a per-brand Redis lock
@@ -825,7 +927,7 @@ importCsatSchema        { externalId, ticketExternalId, rating: 1|2|3|4|5, comme
 importActivitySchema    { externalId, ticketExternalId, authorExternalId?, authorKind: 'agent'|'customer'|'system', action,
                           from?: Record<string, unknown>, to?: Record<string, unknown>, details?: Record<string, unknown>, createdAt }
 importCategorySchema / importSectionSchema { externalId, parentExternalId?, names: { en?, ar? }, descriptions?: { en?, ar? } }
-importArticleSchema     { externalId, sectionExternalId, locale: 'en'|'ar', title, bodyHtml, description?, draft: boolean, internal: boolean, createdAt, updatedAt, translationOf? }
+importArticleSchema     { externalId, sectionExternalId, locale: 'en'|'ar', title, bodyHtml, description?, draft: boolean, internal: boolean, createdAt, updatedAt, translationOf?, attachments?: importAttachmentRefSchema[] }
 ```
 
 Normalisation rules (helpers in `packages/importers/src/normalise.ts`): vendor
@@ -840,6 +942,29 @@ one `<entity>.ndjson` per entity (one normalised record per line), and
 extraction to memory); validated record by record with line numbers in errors.
 
 ## M11-09 The loader
+
+Article file processing checkpoint: the existing media worker now has a
+download-only importing-file branch. It checks exact stored size, MIME magic
+bytes, the source-account asset's recorded SHA-256 and the current brand media
+policy before publishing `ready`. Image MIME values cannot use this branch to
+avoid WebP re-encoding. Configured ClamAV scanning uses the same existing scanner
+settings as ticket files; absent scanning remains explicitly `skipped`, and
+scanner outages throw for worker retry instead of becoming clean. Infected or
+invalid private objects are removed and rejected. Native image confirm/read
+paths exclude file rows; the public image redirect cannot serve them. Real
+Postgres/Redis regressions for clean/infected/error/skipped outcomes, intact
+bytes, altered content and image-route refusal are authored but unrun. The
+prepared manifest, continuation/recovery, parent-authorized file links and
+abandoned-object cleanup are still required before article-file importing works.
+
+Prepared body checkpoint: `sanitizeImportedArticleHtml` now rewrites decoded
+HTML image/file locators only to explicitly supplied managed paths of the same
+brand. It uses the normal article sanitizer, retaining script/event-handler
+removal and HTML complexity limits. Native editing still has no remote-image
+allowlist bypass. The shared file-path helper creates a locator, not an access
+grant; the future download handler must authorize the current parent. Rewriting
+and foreign-brand mapping regressions are authored but unrun. This helper alone
+does not prove assets exist, preserve unlinked files or complete preparation.
 
 `apps/api/src/imports/loader/` — `import-writer.ts` (all SQL), `load-ticket.ts`,
 `load-contacts.ts`, `load-help-center.ts`, `load-csat.ts`, `rebuild-reports.ts`.
@@ -1161,6 +1286,20 @@ required-field rollback. This prepares source relationship conversion; vendor
 hydration and the wizard's completeness presentation remain unimplemented.
 
 ## M11-10 Import jobs
+
+Continuation memory/restart checkpoint: the shared extractor no longer retains a
+set of every cursor visited during a long history export. The same constant-size
+cycle detector used by token pagination now lives in each entity's persisted
+checkpoint, committed atomically with staged rows. It detects continuation loops
+even when each iteration is interrupted by a worker deferral. Legacy checkpoints
+without detector metadata initialize from their saved cursor; completed entities
+discard the detector. Immediate cursor repetition remains refused. Source
+connectors cannot supply or replace this worker-owned metadata. The detector's
+counter supports more than the previous two-million-page ceiling without retaining
+raw tokens. A real PostgreSQL/Redis regression for a loop spanning deferrals and
+boundary tests for checkpoint consistency/counter rollover are authored but unrun.
+This addresses cursor bookkeeping; complete extraction memory evidence and the
+remaining worker acceptance gates are still required.
 
 `packages/jobs/src/jobs.ts`: `import.extract`, `import.load`, `import.attachments`,
 `import.finish`, all on queue `import`, payload `{ brandId, runId }`, job id
@@ -1493,8 +1632,9 @@ use a strict OAuth/API-token discriminant and validated subdomain. Pagination
 links must match the source origin and endpoint before another authenticated
 request is made. Ticket CC user references and custom status category/ID pairs
 remain explicit rather than becoming guessed emails or standard statuses.
-Known priority/channel values produce mapping proposals; status, group and
-other proposals remain required.
+The SDK proposes known priority/channel values. The local paged mapping catalog
+described below adds destination-aware status, group, staff, field and tag
+suggestions; its implementation still awaits the final batch tests.
 
 Contacts checkpoint individually. A resumed contact page compares its validated
 source payload fingerprint before skipping completed profiles; changed pages
@@ -1945,7 +2085,8 @@ reference/process-kill acceptance remain required. M11-09/10/12 stay in progress
 ### Pause checkpoint — 2026-10-14
 
 The owner requested a draft PR now and will resume later. The combined PR's
-intended scope remains M11-07 through M11-23; no incomplete deliverable or exit
+intended scope at that checkpoint was M11-07 through M11-23; the owner deferred
+M11-19–23 on 2026-10-17 as recorded above. No required 1.0 deliverable or exit
 criterion is marked done. The current work is not ready to merge.
 
 The latest attachment regression reproduced a false rejected-placeholder result
@@ -2088,14 +2229,14 @@ Default handling validates the payload, page-cache handling invalidates the bran
 and search/knowledge subscribers read distinct same-brand imported article targets
 in keyset pages of ten. Deleted targets are skipped through the article join.
 Published en/ar versions are indexed and converted to knowledge documents;
-draft versions schedule no embeddings. Existing knowledge queue behavior only
-schedules embeddings when chunks were written. This event is not registered with
-the webhook subscriber.
+imported language versions defer embeddings until staff publication. Neither
+drafts nor published imported text schedules provider work. This event is not
+registered with the webhook subscriber.
 
 The writer suite passes 117 real PostgreSQL/Redis cases. New cases prove the
 credential/audit/event rollback, terminal retries, no event on unchanged imports,
 original report completion, brand isolation, ten-plus-two article pages, en/ar
-search/knowledge output and no repeated embedding scheduling. Focused help-center
+search/knowledge output and idempotent local indexing. Focused help-center
 subscriber unit tests and the strict event-payload schema test cover registration
 and input rejection. These primitives are not yet registered as BullMQ import
 handlers or exposed through the import API/UI; worker-kill and 500-ticket acceptance
@@ -2364,7 +2505,32 @@ GET/PUT mappings now return confirmed mappings and an input fingerprint. Both
 routes require brand:manage; invited-agent confirmation also checks staff:manage.
 The existing replacement engine validates unique kind/source keys, batches writes,
 returns ready runs to awaiting_mapping and removes obsolete dry-run reports.
-Automatic proposals remain pending; GET currently returns confirmed mappings only.
+GET `/mappings` returns confirmed mappings only. The local `/mapping-values`
+catalog now exposes read-only proposals separately from those confirmations.
+
+### Paged source mapping catalog (M11-11/M11-16, local implementation batch)
+
+`GET /:runId/mapping-values` groups observed values by mapping kind, including
+empty-string defaults, with C-collated keyset pagination. It projects ticket
+metadata and bounded user/field summaries, not message bodies. The next cursor
+can itself be an empty string. Unused source group, agent, field and tag
+definitions remain available for mapping. Public responses distinguish confirmed
+targets from suggestions.
+
+Suggestions first consult same-brand/vendor/account native-ID receipts. Other
+matches use unambiguous local status semantics/names, department/team names,
+staff email, field key/type/options and tag names. Staff matches are limited to
+eligible existing memberships; unmatched agents can remain names. No automatic
+invitation, role change, field creation or unmatched-tag deletion occurs. Source
+selection remains an explicit admin action. Zendesk priority/channel defaults
+share one SDK helper with the catalog instead of fabricating source tickets.
+
+`PATCH /:runId/mappings` upserts only its 1–100 submitted keys, preserving every
+other page. A brand lock fences phase checks, the 50,000-entry capacity check,
+upserts and dry-run invalidation. Invited-person targets require `staff:manage`.
+The original whole-set PUT remains available for complete API clients. New
+schemas, HTTP/mock adapters and docs are local; DB, pagination, permission,
+proposal and UI tests remain deferred with the rest of the implementation batch.
 
 The fingerprint holds the brand lock and scans metadata in 500-row pages ordered
 by existing run/entity/external-ID and run/kind/external-value indexes. It covers
@@ -2968,50 +3134,852 @@ checkpoint does not complete M11-09, M11-10 or M11-12.
 
 ## M11-13 Freshdesk connector
 
-*First task: confirm against developers.freshdesk.com/api and fix this section.*
+Official reference checked **2026-10-17**:
+[API v2](https://developers.freshdesk.com/api/).
 
-- **Auth**: API key as basic-auth user, `X` as password; credentials
-  `{ domain, apiKey }`; host `{domain}.freshdesk.com`.
-- **Tickets**: `GET /api/v2/tickets?updated_since=<iso>&order_by=updated_at&order_type=asc&per_page=100&page=n&include=description,requester,stats`.
-  Without `updated_since` only 30 days are listed; the list caps the page number
-  (reported around 300 pages — *verify*), so extract windows by `updated_since`:
-  when a window reaches the cap, start a new window at the last `updated_at`.
-- **Conversations**: `GET /api/v2/tickets/{id}/conversations` (`private`, `incoming`,
-  `body`, `user_id`, `created_at`, `attachments[].attachment_url`); the ticket's own
-  `description` is message 1.
-- **Contacts**, **companies**, **agents**, **groups**, **ticket_fields**,
-  `GET /api/v2/surveys/satisfaction_ratings`, Solutions
-  (`/api/v2/solutions/categories`, `/folders`, `/articles`).
-- **Default mappings**: status 2 Open, 3 Pending → Awaiting customer, 4 Resolved and
-  5 Closed → Closed; custom statuses from `ticket_fields` mapped by name; priority
-  1–4 → low/medium/high/urgent; `source` 1 email, 2 portal → form, 3 phone → manual,
-  7 chat, 9 feedback widget → form, 10 outbound email → email.
-- **Rate limits**: per-plan per-minute, read `X-RateLimit-Remaining` and
-  `Retry-After`.
+- **Authentication:** `{ domain, apiKey }`, Basic `apiKey:X`, HTTPS
+  `{domain}.freshdesk.com`; permissions follow the agent. `/api/v2/agents/me`
+  alone proves authentication, not admin/global export access; probe `/agents`.
+- **Pagination:** array responses; `page` starts at 1, `per_page` defaults to 30,
+  maximum 100; `Link` carries the next URL. Tickets stop at 300 pages/30,000.
+- **Tickets:** `/api/v2/tickets`, explicit `updated_since` (default otherwise
+  covers only thirty days), `order_by=updated_at&order_type=asc`,
+  `include=description,stats`. Preserve `requester_id`, `responder_id`,
+  `company_id`, `group_id`, `cc_emails`, `tags`, `custom_fields`, original dates.
+  `/tickets/{id}/conversations` supplies `private`, `incoming`, `user_id`, body,
+  dates and `attachments[].attachment_url`; description is the first message.
+- **Other lists:** `/contacts`, `/companies` support `updated_since`; `/agents`,
+  `/groups`, `/ticket_fields` supply mapping metadata. Paths use `/api/v2`.
+- **Satisfaction:** new responses retain all original question/answer values and dates. The API does not bind the listed question schema to historical `survey_version_id`; preserve an unscored answer with an acknowledged dry-run warning, excluded from score averages (ADR 0027 amendment). Legacy `/surveys/satisfaction_ratings` uses `created_since`;
+  rescan for edited answers. New `/customer-satisfaction/surveys/{id}/responses`
+  uses `paging.next`/`next_token`, structured answers and survey versions.
+- **Solutions:** `/categories`, `/categories/{id}/folders`,
+  `/folders/{id}/subfolders`, `/folders/{id}/articles`, article detail/translations
+  (all under `/api/v2/solutions`). Restricted folder audiences must stay private.
+- **Values:** statuses 2/open, 3/pending, 4/resolved, 5/closed; priorities 1–4;
+  sources 1/email, 2/portal, 3/phone, 7/chat, 9/widget, 10/outbound-email.
+- **Limits:** inspect `X-RateLimit-Total`, `-Remaining`, `-Used-CurrentRequest`;
+  includes cost extra credits. On 429, persist `Retry-After` seconds.
+
+[Official archive guidance](https://support.freshdesk.com/support/solutions/articles/212901-ticket-archiving)
+(checked 2026-10-17) describes automatic archiving after 120 inactive closed days,
+read-only records, and an Archive export. The API documents individual archived
+records at `/api/v2/tickets/archived/{id}` and their `/conversations`; it does not
+document a general archived-ticket list. Account export explicitly supports
+`archive_tickets` with notes/attachments; its published job example does not
+specify a completed export download contract. Deleted/spam tickets and deleted
+contacts are absent from default lists; unavailable records must be reported,
+never inferred to mean an instruction to delete local history.
+
+Local implementation decisions (not vendor guarantees): ticket windows overlap
+by one second at the page ceiling. A boundary that cannot advance must stop with
+a completeness error, rather than skip equal timestamps. Source IDs deduplicate
+window overlaps. Attachment downloads carry no API authorization; expired links
+are refreshed by rereading their original ticket/conversation. Keep unknown
+status/priority/channel values for explicit mapping, with an import warning.
+
+Contracts, the core stand-in and validated transport are implemented locally;
+the stand-in models Link paging, ticket default date limits/page ceiling,
+archived detail routes, private conversations, expired media and injected
+429/5xx. Regression cases are authored but unrun. The connector facade and new-CSAT response extraction are implemented locally;
+archive inventory input, runtime/UI enablement and database acceptance remain
+unfinished. Ticket normalization and overlapping window rollover now
+have a local implementation and authored resume/boundary regressions; they
+have not been run. Contact/company/group and staff/customer exports now retain
+alternate email/phone identities, custom values, source dates and assignment
+references. Thread extraction preserves description-first messages, private
+notes and resolved author kinds with bounded resume cursors/fingerprints.
+Attachment references carry stable native-parent IDs and a validated source-page
+hint for bounded URL refresh without API credentials on downloads. Source
+transport hints are excluded from message business hashes. Vendor extraction
+warnings now enter the dry-run review receipt instead of remaining only in
+the log. Tag extraction emits at most 1,000 records per checkpoint and resumes
+within large ticket-list pages. Legacy satisfaction rescans include edited old
+answers, preserve every original rating/question value and feedback in source
+metadata, and normalize documented positive/neutral/negative sentiments to
+5/3/1 with an acknowledgement warning. Priority/channel defaults remain
+proposals requiring brand-admin confirmation. The stand-in's wire fixtures are
+independent of production response parsers. These paths and their regressions
+are local and unrun. Field definitions now cover ticket/contact/company lists,
+legacy string and modern object dropdown choices, native key namespaces, and
+nested scalar field projections with explicit semantic warnings. Solutions now
+traverse paged categories/folders/subfolders/article indexes with bounded caches
+and resumable cursors. Canonical ancestor privacy walks checkpoint one hop at a
+time; restricted descendants stay internal even in child-first listings. Source
+language settings determine English/Arabic primary and translated content,
+including independent draft states and original dates. Missing optional
+translations warn; unsupported/colliding locale configurations and cyclic or
+inaccessible ancestry stop extraction. Corresponding stand-in cases are authored
+but unrun. New satisfaction responses preserve structured original answers,
+versions, partial/completed state and dates without guessing a score. Source
+credentials explicitly select legacy or modern CSAT (modern by default); an
+access refusal never silently selects another API. Token links are constrained
+to the same origin and resource. Each changed imported answer writes one inert
+timeline row at its original date; exact repeats write neither answer nor event.
+The live-survey query stays native-only, with a separate historical display
+fallback. Migration 0074 backfills existing imported answer history while
+preserving answer rows and tokens, rejecting activity-ID ownership collisions
+and publishing no outbox events. Upgrade/replay regressions are authored, unrun. Ticket extraction now checkpoints status-definition pages before
+ticket pages and carries original labels for custom status mapping. All of these
+changes and their authored regressions are local and unrun. Full database/browser
+acceptance remains unfinished.
+Native contact/company attributes without destination columns now appear as
+namespaced mapper fields, including additional-company/device/social JSON
+values. Company visibility is historical data only and grants no permissions.
+Native/custom key collisions stop extraction. Regression cases are authored and
+unrun. Survey token cursors detect cycles with constant checkpoint space.
+EN/AR browser and axe coverage for imported satisfaction history is authored,
+not executed.
+The inventory reader now supports complete-ID mode (bypasses capped live lists)
+and archive-only mode (appends archive hydration after live listing). The same
+reader drives tickets, tags, descriptions, conversations and attachments;
+archived conversation/description requests use the documented archive routes.
+Each inventory ticket yields a durable checkpoint, with source-fingerprint,
+strict ordering and native-ID validation. Missing records and authorization
+failures stop extraction; only auto-location 404 permits archive fallback.
+
+Migration 0075, the streaming native-ID CSV parser, DB manifest/keyset adapter and
+bounded retention are implemented locally. Manifest validation checks ready,
+sealed files and exact staged counts, ignores stale hash/revision rows, binds the
+verified account and refuses conflicting per-ID locations. Source account
+rebinding is blocked once a file exists. Retention drains inventory rows before
+source-file deletion, preventing an unbounded cascading delete. Archive/history,
+resume, CSV, ownership, stale-row and retention cases are authored but unrun.
+Private CSV upload, sealing and background inventory preparation now use the
+existing outbox worker. The inventory mapping endpoint selects one native ID
+column and active/archive/auto location; corrected mappings reuse the private
+sealed file. IDs remain strings, with vendor-specific numeric safety checks.
+Invalid rows report their line without copying source values into logs. Preparation
+heartbeats and restart recovery use the same revision/hash guards as the manifest.
+The admin mapper previews only the chosen ID column, shows validated unique and
+duplicate counts, and blocks extraction until the selected inventory and mode are
+explicitly confirmed. A server-generated review fingerprint binds that confirmation
+to the sealed files and source account; remapping invalidates it. Conflicting
+locations across overlapping files are refused during approval, before extraction.
+Profiles-only scopes do not require ticket inventories. Freshdesk is registered in
+the local API capability response, connection form and worker runtime; connection
+tests require both ticket and agent read access. The connection form explicitly
+selects the satisfaction API and clears the saved secret. HTTP integration cases
+cover sealing, wrong-column correction, stale confirmations and run-phase locks;
+EN/AR component and browser/axe cases cover the corresponding UI. All are authored
+but unrun. Full connector database/browser acceptance remains unfinished.
+File polling now selects lightweight summaries in SQL, excluding preview rows,
+headers, full mappings and validation payloads. The mapper loads one file's details
+through a brand/run-scoped endpoint, with retry/loading states and no retained
+inactive preview cache. This bounds browser/API memory independently of the number
+of uploaded previews. Readiness is computed from validation results, including
+explicit skipped-invalid-row approval for manual files. Route authorization,
+cross-run refusal and lazy-preview regression cases are authored, unrun.
+Archive inventory and equal-timestamp ceilings are implementation gaps to solve, **not accepted omissions**.
 
 ## M11-14 Zoho Desk connector
 
-*First task: confirm against desk.zoho.com/DeskAPIDocument and fix this section.*
+### Native reference acceptance checkpoint (2026-10-18, authored, unrun)
 
-- **Auth**: OAuth 2.0 per data centre (`accounts.zoho.com|.eu|.in|.com.au|.jp|.ca|.sa`),
-  a server-based client the admin creates in the Zoho API console; the wizard runs
-  the code flow and stores the refresh token (encrypted, purged on finish). Scopes
-  (read only): `Desk.tickets.READ`, `Desk.contacts.READ`, `Desk.basic.READ`,
-  `Desk.settings.READ`, `Desk.articles.READ` — *verify*. Header `orgId` on every call.
-  Hosts `desk.zoho.<dc>`.
-- **Tickets**: `GET /api/v1/tickets?from=<n>&limit=100&sortBy=modifiedTime` (offset
-  paging; modified-time windows for delta).
-- **Threads**: `GET /api/v1/tickets/{id}/threads`, then
-  `GET /api/v1/tickets/{id}/threads/{threadId}` for full `content` and
-  `attachments[].href`; private comments `GET /api/v1/tickets/{id}/comments`.
-- **Contacts**, **accounts**, **agents**, **departments** (→ Helpdock departments),
-  Knowledge Base `GET /api/v1/articles` with categories.
-- **Default mappings**: `statusType` Open/On Hold/Closed → Open/Awaiting customer/Closed;
-  priority names; `channel` Email/Web/Phone/Chat/Twitter/Facebook → email/form/manual/chat/manual/manual.
-- **Rate limits**: credit-based per day per plan — *verify*; the connector reads
-  remaining credits where exposed and slows down at 10 %.
+Freshdesk and Zoho now have native 500-ticket wire fixtures alongside the
+expanded Zendesk reference. Each includes 50 contacts, ten companies, five
+groups/departments, 2,000 messages (500 private notes), 500 ticket files and
+500 old satisfaction answers, plus 20 articles in both EN and AR (40 language
+versions). Shared requester profiles exercise repeated identity relationships
+rather than creating one customer per ticket. Zoho IDs
+exceed JavaScript's safe integer range and remain strings. Its fixtures include
+disabled-department archives, original email headers and separate working/public
+article copies with a private working-copy file. Freshdesk's native archive
+inventory is uploaded and sealed through the real file-preparation path.
+
+SDK cases exercise serialized cursor restarts, expired attachment access and
+old archived-ticket/rating deltas. The database acceptance cases use real
+Postgres/Redis and an owned BullMQ worker process. They hold a source download,
+send SIGKILL to that process, expire only its claim timestamp, invoke production
+recovery and start a replacement. Assertions cover the graph, managed file bytes,
+credential purge, forbidden side-effect rows/events, unchanged business-row
+values and `xmin` on repeat, and new private history on delta. The only vendor
+mutation permitted by the stand-in assertion is Zoho's OAuth token exchange.
+
+Zendesk's real-queue acceptance now also loads its Guide records through the
+shared article preparer. The expanded fixtures supersede the smaller core-only
+dataset used by the historical passing checkpoint below; that earlier evidence
+does not validate these current files.
+
+CI's API-scoped `import-reference` matrix now selects Zendesk, Freshdesk and
+Zoho separately, with one Vitest worker per job. Both large acceptance test
+files are excluded from the instrumented API run; production import code stays
+under the existing coverage gate. None of the newly authored reference cases
+has run yet. This checkpoint does not satisfy the exit criteria, replace the
+final import-path review, or prove real-vendor behavior.
+
+The same review identified [#218](https://github.com/Docker-Hunterpedia/Helpdock/issues/218):
+an already queued SLA timer could escalate a ticket quietly closed by a source
+delta after explicit SLA activation. The local fix locks the parent before
+reading it and refuses closed, deleted, merged, excluded and unactivated imported
+tickets before touching clocks or emitting actions. Real-database regression
+cases are authored, unrun. The import writer still never invokes SLA hooks;
+the activation marker is preserved. This is a timer safety correction, not a new
+import activation policy.
+
+Official references checked **2026-10-17**: [Desk API](https://desk.zoho.com/DeskAPIDocument),
+[server-based token refresh](https://www.zoho.com/developer/oauth/web-server-apps/refresh-access-token.html),
+and [offline consent guidance](https://help.zoho.com/portal/en/kb/accounts/faqs-troubleshooting/faqs/oauth/articles/how-to-automate-oauth-token-generation-without-browser-intervention-30-5-2021).
+The regional OAuth/client boundary, normalized connector, API/worker runtime,
+admin connection card and independent HTTP stand-in are implemented locally.
+Remaining native completeness work and acceptance are unfinished; authored
+regressions are unrun.
+
+- **Authentication:** server-based OAuth code flow; request offline access and
+  explicit consent when a refresh token is needed. Exchange/refresh through the
+  validated regional Accounts server using form bodies, with secrets encrypted
+  under `APP_MASTER_KEY`. Desk accepts `Zoho-oauthtoken` or Bearer. Token binding
+  text makes `orgId` optional, while the Organizations introduction calls it
+  mandatory. Send a validated matching `orgId` on ordinary API reads; discover
+  the token's accessible organizations before binding an immutable account key.
+- **Regions:** use the token response's validated Desk `api_domain`. Official
+  bases are `desk.zoho.com`, `.eu`, `.in`, `.com.au`, `.jp`, `.sa`, `.com.cn`,
+  `.sg`, `.ae`, and **`desk.zohocloud.ca`**. Never derive every host using a
+  `desk.zoho.<region>` template or fetch an arbitrary callback/token domain.
+  Accounts generic `api_domain` examples differ from Desk-specific hosts; the
+  normalization and authenticated organization probe must be explicit.
+  The local boundary requires that response domain to be the selected region's
+  exact Desk origin, with no credentials, path, query or fragment. Generic
+  `api.zoho.*`/`www.zohoapis.*` responses are refused rather than converted using
+  an undocumented Desk mapping. This discrepancy with generic OAuth examples
+  still requires a real Desk token check. Accounts hosts use a separate explicit
+  ten-region allowlist, including `accounts.zohocloud.ca`; see
+  [Accounts data centres](https://help.zoho.com/portal/en/kb/accounts/manage-your-zoho-account/articles/data-center-for-zoho-account)
+  and the [Accounts server-domain table](https://www.zoho.com/communityspaces/api/oauth-authentication-server-domains.html),
+  checked **2026-10-17**.
+- **Read grants:** endpoint annotations include `Desk.tickets.READ`,
+  `Desk.contacts.READ`, `Desk.accounts.READ`, `Desk.agents.READ`,
+  `Desk.departments.READ`, `Desk.organization.READ`, `Desk.basic.READ`,
+  `Desk.fields.READ`, `Desk.search.READ`, `Desk.articles.READ` and
+  `Desk.permissions.READ`. Probe actual
+  export capabilities; a successful token exchange does not prove these grants.
+  The documented `/myProfile` response describes the current permission profile,
+  not the current agent: its `type` example is Administrator and its `permissions`
+  object includes tickets/contacts/accounts/knowledge view/export, cross-department
+  access, recycle-bin access and agent-field visibility. Its profile ID must not
+  be treated as an agent ID. Endpoint scopes list `Desk.permissions.READ` and
+  `Desk.basic.READ`; checked against the same official reference on **2026-10-17**.
+- **Tickets:** `/api/v1/tickets` returns `{data:[...]}`, with `from`/`limit`
+  (up to 100). Its documented sort fields include `createdTime`,
+  `responseDueDate`, `customerResponseTime`; **not `modifiedTime`**. Hydrate
+  `/tickets/{id}` for full descriptions/custom values. IDs remain decimal
+  strings, including `ticketNumber`; preserve `status`, `statusType`, `priority`,
+  `channel`, requester/account/department/team/assignee references and dates.
+- **Delta:** `/tickets/search` documents `modifiedTimeRange=start,end`,
+  millisecond ISO timestamps and `sortBy=modifiedTime`; its displayed URI instead
+  names `sortField`. Use the parameter table's documented `sortBy` and model the
+  discrepancy in the stand-in. Search `from` is capped at 0–4999. Fix the window
+  end, split dense windows before the cap, overlap boundaries and deduplicate
+  native IDs. A timestamp tie that cannot be split requires a complete source
+  inventory; never advance the watermark after a capped result.
+- **History:** `/tickets/{id}/threads?from=0&limit=200&sortBy=sendDateTime`, then
+  `/threads/{threadId}?include=plainText`. Detail itself can return
+  `isContentTruncated:true`; retrieve and validate `fullContentURL` before
+  claiming complete content. `/originalContent` is distinct and supplies original
+  MIME/header information. The documented JSON example includes `messageId`,
+  `date`, `from`, `to`, `subject`, `returnPath` and a duplicate raw MIME `content`
+  string. `GET /tickets/{id}/threads/{threadId}/originalContent?inline=false`
+  uses `Desk.tickets.READ` and costs 1 credit; re-read **2026-10-18**. Original
+  mail is separate from the rendered-body fallback. `/tickets/{id}/comments` pages up to 100 and includes
+  both public and private comments (`isPublic`), original `commentedTime`,
+  nullable modification time and attachments. Do not also load the combined
+  `/conversations` listing without native type/ID deduplication.
+- **Attachments:** string IDs, names, numeric-string sizes and `href`; examples
+  use authenticated thread/comment `/attachments/{id}/content` routes. Bind
+  authenticated downloads to the validated regional account origin and native
+  parent path. Re-read metadata after expiry; no signed lifetime is promised.
+- **People/companies/fields:** contacts and accounts list/detail endpoints are
+  separate from the install organization. Lists page up to 100; hydrate details
+  for full `cf` and profile values. Ordinary contact/account sort does not
+  promise modified-time deltas. Agent list supports active, disabled, deleted
+  and imported states; `emailId` is the agent email field. Departments include
+  disabled historical departments; teams remain distinct. `/fields?module=`
+  supplies ticket/contact/account definitions, native API names and types.
+  Preserve unsupported/encrypted/lookup semantics explicitly; never silently
+  discard those values or convert vendor roles into Helpdock permissions.
+- **Archived/deleted:** `/tickets/archivedTickets` is a separate per-department
+  archive list, with `from` 0–4999, `limit` 1–100 and required `departmentId`;
+  scopes are `Desk.search.READ` and `Desk.tickets.READ`, base cost 3 credits.
+  Its compact example omits `modifiedTime`, so discovery validates only native
+  ID, department and `isArchived:true` before hydrating ordinary ticket detail.
+  The reference was re-read on **2026-10-18**. It has no documented modified-time
+  partition here; an archive whose end cannot be proven below that ceiling
+  needs an explicit complete inventory.
+  Deletion/trash/spam flags and inaccessible source records never instruct local
+  deletion. Source freeze and final reconciliation remain necessary; list APIs
+  do not promise a transactionally frozen snapshot or universal tombstone feed.
+- **Satisfaction:** `/customerHappiness?department=allDepartment&limit=50`,
+  `from`, original `ratedTime`, `customerRatedTime`, timezone offset, feedback and
+  native parent/author IDs. The response example uses `GOOD`, `OKAY`, `BAD`;
+  query filters use `good`, `ok`, `bad` (the neutral spelling differs). The local
+  normalizer also retains `OK` as a neutral source value. Filters use lower
+  case. Preserve original values; documented sentiment may be proposed as 5/3/1
+  with acknowledgement, and unknown scales remain unscored. Rescan old answers
+  to catch edits. This endpoint costs **50 credits per call**.
+  Full feedback content is read through
+  `/customerHappiness/{thread_id}/content` (one credit, `Desk.tickets.READ`),
+  not an invented feedback-ID detail endpoint. List read scopes are
+  `Desk.search.READ` and `Desk.tickets.READ`. Source credentials remain in
+  authorization headers; the obsolete `authtoken` query in the reference's
+  example is never used.
+- **Knowledge:** `/kbRootCategories`, nested `/kbSections`, `/articles` and
+  `/articles/{id}/translations/{locale}`. Article pages max 50; list status values
+  include Draft, Published, Review, Expired, Unpublished. Permission values are
+  ALL, REGISTEREDUSERS, AGENTS; restricted content stays internal. Article lists
+  support modified-time ranges. Category hierarchy, translation bodies and image
+  completeness must be checked before implementation; do not assume `/categories`.
+  The documented root-category list starts at **`from=1`**, with a maximum
+  `limit` of 700; section listing is
+  `/kbRootCategories/{rootCategoryId}/sections`, also positive `from`, maximum
+  50, optionally filtered by `parentCategoryId`. Both return a `data` envelope;
+  section records identify `rootCategoryId` and `parentCategoryId`. Detail reads
+  use `/kbRootCategories/{id}` and `/kbSections/{id}`. Taxonomy states are
+  SHOW_IN_HELPCENTER, HIDE_IN_HELPCENTER and DISABLED, independently of
+  `isTrashed`. Root/section visibility is separate from article permission:
+  AGENTS, GROUP_USERS, ALL_USERS, NONE, and PRIVATE_IP (listed for sections).
+  Each taxonomy translation carries native `id`, `categoryId`, `locale`, `name`
+  and optional `description`; detail hydration retains full localized labels.
+  These reads require `Desk.articles.READ`. Article/translation list tables say
+  positive `from`, while the article request example uses zero; that discrepancy
+  must be handled explicitly rather than reusing taxonomy offsets blindly.
+  Rechecked the same [official reference](https://desk.zoho.com/DeskAPIDocument)
+  on **2026-10-17**: article and translation detail both accept `version` and
+  return full HTML in `answer`, plus `currentVersion`, `latestVersion`,
+  `latestPublishedVersion`, `status`, `latestVersionStatus`, `locale`, native
+  article/translation IDs and source timestamps. A published article may have a
+  newer draft: hydrate the latest working version and last published version
+  separately, validate their identities/version numbers and never publish a
+  draft merely because the overall article status is Published. The current
+  normalized contract now has a local dual-copy projection; retaining only a
+  list summary is insufficient. Connector/runtime wiring and acceptance remain
+  pending.
+  The `modifiedTimeRange` description on the translation list says **created**,
+  so delta imports rescan translation listings instead of assuming it detects
+  edits. For list offset ambiguity, omit `from` for the first page and compare a
+  bounded `from=1` probe against it to establish zero/one-based behavior before
+  advancing; persist the result and refuse inconsistent pages.
+
+  Article detail attachments use alphanumeric `resourceId`, `name`, string
+  `size`, and `downloadUrl`/`viewUrl`. Authenticated bytes come only from the
+  documented exact parent path
+  `/articles/{id}/translations/{locale}/attachments/{resourceId}/content`;
+  its optional `inline` query accepts true/false. The separate paged attachment
+  list allows 30 records, uses string `filesize` in its example and returns a
+  **single object example despite advertising pagination**. Treat that envelope
+  discrepancy explicitly; do not invent a guaranteed `{data:[]}` contract or
+  follow credential-bearing `/support/DocsDisplay` links. The external-image
+  endpoint returns `{externalImageUrls:[...]}` and accepts `version`; its
+  third-party image URLs receive no Desk credentials. Mutating external-image
+  migration endpoints are never called.
+
+  Recycle-bin translations have a separate documented read endpoint,
+  `/articleTranslations/trashedTranslations`: positive `from`, max 50,
+  `sortBy=deletedTime`, `Desk.articles.READ`. Trashed taxonomy is also available
+  at `/kbCategory/trashedCategories` with the same offset/page limit. No restore
+  or delete endpoint is used by an import. The read-only `/answer` endpoint
+  returns `{answer:string}` and also supports a pinned `version`. These facts
+  now inform the stand-in and local recycle readers described below. Their
+  remaining native completeness checks and acceptance remain
+  pending.
+- **Credits:** `X-Rate-Limit-Request-Weight-v3` and
+  `X-Rate-Limit-Remaining-v3`; daily-budget 429 carries Retry-After seconds.
+  Concurrency refusals can lack it. Credits depend on endpoint and offset depth.
+  Remaining credits alone do not establish a 10% threshold or total entitlement;
+  do not invent a denominator from the customer's edition.
+
+Local OAuth foundation: refresh parameters travel in a form body through the
+safe HTTP client, never a query string. Refresh redirects are refused, including
+307/308 same-origin form replay. Authenticated Desk JSON reads also refuse redirects,
+so an asset-host response cannot replace an organization or source record.
+Sessions coalesce concurrent refreshes and reuse
+access tokens until a 30-second expiry margin; token responses validate region,
+token type, lifetime and header-safe values. JSON OAuth error bodies become safe
+error keys. Desk requests send `orgId` and refresh once after 401; 403 never
+triggers token refresh. Organization discovery checks membership and binds
+`region:orgId`, preserving long native IDs as strings. The independent stand-in
+models form refresh, organization binding, strict read-only Desk endpoints,
+ticket list/detail shapes, credit headers and queued HTTP failures. Regional,
+expiry, concurrent-refresh, redirect, credential refusal, 429 and 5xx cases are
+authored but unrun. The local normalized connector/runtime and encrypted access
+token reuse are now wired as described below; final acceptance remains unfinished.
+
+Runtime checkpoint: `ZohoConnector` dispatches all 13 supported import entities,
+including ticket-derived tags, native history, satisfaction, taxonomy and article
+copies. The API/worker factories validate the regional organization account key,
+use the shared public credential schema and enforce reviewed ticket-inventory
+confirmation when that optional fallback is selected. Unknown/custom priorities and channels remain explicit
+mapping work; known source labels get proposals, and social posts do not invent
+a Helpdock messaging account. Status proposals resolve the brand's own built-in
+IDs; all proposals still require the ordinary mapper confirmation.
+
+The connection probe requires an Administrator permission profile with the
+documented cross-department, export, recycle-bin and agent-field permissions. It
+also probes the actual read endpoints for tickets/search, contacts, accounts,
+agents, departments, fields, knowledge, recycle bins and satisfaction. It makes
+no vendor mutation other than OAuth refresh. One satisfaction probe costs 50
+Zoho credits. The connection request budget allows the complete bounded probe;
+worker pacing and `Retry-After` behavior remain on the shared importer transport.
+
+Access tokens now persist only within the run's existing AES-256-GCM encrypted
+credential blob, after validating and renewing the exact worker claim. The
+public connection boundary rejects the internal snapshot field. Runtime
+continuations and replacement workers can reuse a token until its expiry
+margin; cancellation/terminal cleanup purges the same blob and stale refreshes
+cannot recreate it. No process-wide plaintext refresh-credential cache is kept.
+Access-token validation also now rejects non-ASCII/control characters before
+constructing an authorization header. Token reuse, failed-save behavior,
+concurrent refresh, malformed headers, profile/grant refusals, read-only probes,
+tag/mapping extraction and real-DB restart/cancellation cases are authored,
+unrun.
+
+Admin connection checkpoint, **2026-10-18**: the existing connection card now
+accepts Zoho's data-center region, exact string organization ID and OAuth client
+ID/secret/refresh token. Both secrets are masked, are not mutation arguments,
+and clear on successful connection. Invalid fields stop before the API boundary;
+refused connections retain masked input for correction. The form explains the
+Administrator/read grants and 50-credit satisfaction probe. Source-picker
+fixtures now advertise Zoho and its supported scope. EN/AR component and
+Playwright/axe cases are authored but unrun; no real-account claim is made.
+
+Automatic archive checkpoint, **2026-10-18**: shared ticket/tag/history traversal
+now appends per-department archive discovery when no inventory is selected.
+Enabled and disabled departments use bounded overlapping pages; native archive
+pages also overlap their last ID and reject shifted/repeated pages, cross-parent
+rows and the unprovable 5,000-result boundary. Full and delta runs use the same
+archive traversal; no undocumented modified-time filter is sent. Complete
+inventory bypass remains available, and archive-only inventory replaces native
+archive discovery with the reviewed IDs. The default Zoho UI/API/worker path
+no longer requires a CSV. Scope's explicit `useTicketInventory` flag reveals the
+existing mapper and restores seal/fingerprint/confirmation checks. Existing
+confirmed Zoho run options without that flag retain their inventory behavior.
+Freshdesk's mandatory archive inventory is unchanged. Archive/resume, disabled
+departments, rate-limit/error, depth/shift, EN/AR UI and real-DB HTTP boundary
+cases are authored, unrun. No completeness or acceptance criterion is ticked.
+Archive hydration also checks that the detail remains archived in the discovered
+department before staging tickets or history. A move/unarchive between discovery
+and hydration stops rather than silently accepting a changed source snapshot.
+
+Required next work: remaining native completeness checks and the full, repeat,
+delta, error/rate-limit, archive-cap
+and crash/resume acceptance cases. Research gaps above remain implementation
+work, not accepted omissions.
+
+Knowledge detail checkpoint: native article/translation schemas and versioned
+stand-in fixtures now distinguish the current working answer from its last
+published answer, including per-version attachment sets. Native list reads
+enumerate all five publishing states, establish the offset origin from a
+bounded first-page probe, and retain page fingerprints across continuations.
+Version hydration pins one detail read per step and refuses mismatched parent,
+locale, version or changed source metadata. Zero/one-based 51-record paging,
+serialized version hydration, source drift and rate-limit cases are authored,
+unrun. Image completeness and acceptance still need completion;
+the local normalized projection, recycle readers and file-list reconciliation
+are described below.
+
+The normalized article contract and local loader/preparer now support separate
+working/published copies, with per-copy file ownership checks before loading.
+Migration `0078_imported_article_published_copy.sql` retains the original full
+published description separately from its bounded display excerpt; generated,
+not applied. Both prepared bodies are sealed together and source download URLs
+remain outside content receipts. A regression also fixes undefined attachment
+properties breaking hashes of inline-image-only articles. Bundle missing-file,
+per-copy manifest, real-DB public-read and source-content hash tests are authored,
+unrun. Publication time stays null when the source cannot establish it. Final
+end-to-end privacy and import acceptance remain pending.
+
+Normalized article extraction checkpoint: the local reader now walks each native
+article's translations, checkpoints ancestor privacy checks and hydrates pinned
+working/published versions before emitting a normalized record. It retains
+English/Arabic links, source timestamps, separate attachment sets and unknown
+publication times. Unsupported languages warn; two regional variants targeting
+the same Helpdock language stop instead of overwriting one another. Hidden,
+disabled, trashed or restricted ancestry cannot become public. Full/resume,
+Arabic, restricted-reader, locale-collision and version-rate-limit cases are
+authored, unrun. Source file view/download aliases are rewrite-only and do not
+change content identity or authorize HTTP; Zoho downloads use the exact native
+article/locale/resource path. Ambiguous aliases within a copy stop preparation.
+Collection readers now distinguish documented HTTP 204 from a malformed HTTP
+200 or missing detail body. Image completeness and full acceptance remain pending;
+the completed local translation-identity reconciliation is described below.
+
+Relative-image checkpoint, **2026-10-18**: normalized working and published
+copies now accept an optional strict `assetOrigin`; Zoho supplies the selected
+regional Desk origin on each copy. The shared parser resolves decoded relative
+image sources before native-alias matching, retains raw locators for HTML
+rewriting and coalesces equivalent absolute/relative image requests. Each copy
+owns its own origin and file set; the source hash/review includes this field.
+The origin is not a host grant and does not change existing safe HTTP rules.
+Relative bundle members keep their existing archive behavior.
+
+Generic gallery/display URLs are fetched without OAuth, even on the regional
+Desk host. The official reference shows `/DocsDisplay` and `/support/ImageDisplay`
+examples but does not document a parent-bound OAuth download API for gallery
+images. Do not invent one or call the mutating image-migration endpoint.
+Unauthenticated image 401/403 responses now produce an explicit unavailable-file
+outcome/warning, rather than a false connector-credential failure. Native-file
+permission failures and source 429/5xx retain their existing error/retry behavior.
+The ordinary inaccessible-source warning requires dry-run review; it is not a
+new accepted omission or a guarantee that private vendor galleries are publicly
+downloadable.
+
+Authored cases cover per-copy origins, relative aliases, duplicate-image
+coalescing, unsafe origins, credential-free HTTP, denied images, native-file
+permission failures and off-host redirects. A real-Postgres/Redis case prepares
+valid image bytes across replacement preparers, converts them to WebP, records
+an inaccessible private image explicitly and checks that public article reads
+contain only the published image. These cases are unrun. Full native dataset
+acceptance and real-vendor image availability still need verification.
+
+Recycle-bin checkpoint: the local taxonomy reader now supplements ordinary
+listings with `/kbCategory/trashedCategories`, preserving recoverable root/section
+labels, descriptions and parent relationships. Its native example omits
+`isTrashed`; membership in this read-only feed supplies that fact. The article
+reader also traverses `/articleTranslations/trashedTranslations`; its rows omit
+`rootCategoryId`, so a validated translation detail supplies the parent before
+extraction. Both readers retain a page fingerprint across one-record
+continuations, advance positive offsets in pages of 50, and refuse shifted,
+backwards or repeated full pages. The same repeat-page guard now protects ordinary
+article/root/section traversal.
+
+Article grouping collects at most two supported indices before output. Native
+`availableLocaleTranslations` hints recover deleted siblings missing from live
+lists, with exact parent/translation/locale/trash/version checks. Some documented
+recycle hints omit `latestVersion`; detail hydration resolves and pins it rather
+than inventing a version. Active primary articles are already traversed by the
+ordinary feed; otherwise one deleted native representative traverses the group.
+English/Arabic source primaries stay the anchor regardless of publishing-status
+sort order, including when the second language is added later. Deleted copies
+remain internal drafts with their separately retained historical published copy.
+No restore/delete endpoint is called. Entirely trashed and mixed active/deleted
+articles, Arabic anchors, wrong-native-ID rejection, 51-record recycle paging,
+source drift, read-only methods and rate-limit/error resume cases are authored,
+unrun.
+
+Remaining identity gap found during this work: if the native primary language is
+outside English/Arabic and adding a supported language changes the fallback
+anchor, destination identity must still resolve to the existing article. The
+implementation decision is now recorded in ADR 0027: infer the group destination
+from one validated staged opposite-language sibling with an existing receipt in
+the same brand/vendor/source account, while preserving source IDs and refusing
+unowned occupied locales. Preflight and loading share that lookup; a partial
+index supports the reverse relationship query on the existing staging table.
+The shared lookup is now implemented locally in preflight and loading; an
+inferred destination does not count as ownership of an occupied locale. It
+validates staging hashes, current relationships, opposite languages and
+brand/vendor/source-account receipts, refusing skipped, ambiguous, corrupt,
+redirected or missing targets. Source IDs and receipt target IDs remain intact.
+Migration `0079_imported_article_translation_lookup.sql` adds the partial reverse
+relationship index; generated, not applied. Real-DB cases for changed-anchor
+delta/repeat, unowned manual content, foreign brands/accounts/vendors, bad
+relationships and deleted targets are authored, unrun. A native Zoho case also
+covers adding English after Arabic under a French source primary. The gap is
+implemented but not proven until the combined acceptance passes; it is not an
+accepted omission. Final privacy audit also covers taxonomy labels and all
+public knowledge/file read paths.
+
+Article-file reconciliation now requests one item per positive offset to handle
+the documented singleton example without assuming a 30-item envelope. A
+validated one-item `data` envelope is also accepted with an explicit warning in
+the log and dry run, localized in English and Arabic. Each native resource must
+match the pinned working detail's ID, name, size, extension and creation time;
+duplicate or missing entries stop extraction. A final pinned-detail read checks
+the content snapshot again, ignoring only signed view/download URL rotation.
+The unversioned list never overwrites the older published copy's attachment
+set. Singleton/envelope, 31-file serialized traversal, incomplete or repeated
+pages, concurrent edits and rate-limit resume cases are authored, unrun.
+
+History format gap solved locally: the native `html`/`plainText` labels now map
+to their actual MIME equivalents before comparing a full-content response.
+Previously the truncated-content path accepted only an already MIME-shaped
+native label, although ordinary bodies supported both spellings. The reader
+still refuses mismatched MIME, unsupported envelopes and invalid UTF-8; it never
+falls back to truncated text. Complete HTML/plain-text variants are authored,
+unrun.
+
+Ticket extraction checkpoint: the local reader persists a bounded native-ID page
+and hydrates each detail plus `/tickets/{id}/tags` before yielding a normalized
+ticket. The tags response is `{tags:[...]}`, not `{data:[...]}`; its numeric tag
+IDs are not used as ticket IDs. Long ticket/contact/agent/department/company IDs
+stay strings, while original ticket numbers remain distinct. Known string-valued
+deletion flags are parsed explicitly; deleted, trashed or spam ticket details stop
+extraction rather than changing or deleting local history. Full runs use the
+documented created-time ordering. Delta runs commit a fixed search end before any
+HTTP, split a saturated 5,000-result time window, and overlap the split boundary.
+An indivisible timestamp tie stops with a complete-inventory diagnostic. A
+complete ID inventory bypasses lists for both full and delta runs; archive-only
+inventories append detail hydration after active listing. Detail hydration uses
+the documented `/tickets/{id}` resource; no undocumented archive-detail route is
+invented. Serialized resume, long-ID provenance, tags, window splitting, dense
+ties, source errors and inventory fingerprint cases are authored but unrun.
+
+The normalized message boundary also now accepts a source-only author display.
+This uses the existing `author_display` column and appears in dry-run previews;
+it never associates an unresolved source author with a local staff account.
+Writer repeat/correction and storage-bound regressions are authored, unrun.
+History hydration, source-native metadata projections, people, knowledge,
+satisfaction acceptance and remaining native completeness checks remain unfinished.
+
+History preparation now validates thread detail identity and refuses to treat a
+truncated body as complete. `fullContentURL` is bound to the exact ticket/thread
+path, regional origin and matching optional `orgId`; redirects are refused.
+The reference provides that URL but no response-envelope contract. The local
+implementation accepts only bounded, valid UTF-8 text with a matching HTML/plain
+response MIME and emits a review warning about that inference. JSON or mismatched
+formats, missing full content and invalid UTF-8 stop extraction rather than
+retaining the truncated text. This format inference requires a real-vendor check;
+the stand-in labels its MIME fixtures as an assumption, not a documented JSON
+response. Thread/comment projection preserves source dates, visibility, names,
+confirmed identities and recipients; ambiguous email lists or conflicting IDs
+are refused. Draft/failed/pending threads remain private history, with warning
+and inert original-state metadata, never a delivery request.
+
+Original-mail checkpoint, **2026-10-18**: successful email threads now read that
+parent-bound endpoint and retain original Message-ID, sender/recipient lists,
+mail date, subject and return path. Sender/recipient metadata supplied by both
+endpoints must agree. The normalized `email.sentAt` is optional/nullable: legacy
+inputs without it retain their existing thread-date fallback; an explicitly
+unparseable mail date remains null and its source text is preserved in inert
+message provenance, with a review warning. Loading retains the timeline's
+original thread date and stores the separate email metadata; repeats remain
+receipt-based. Missing original-mail resources (404/410) warn explicitly without
+inventing Message-ID. Permission refusals, unsafe/malformed headers, throttling
+and source server errors propagate. Unsent/non-email threads do not request it.
+The duplicate MIME `content` field is stripped at the response boundary, never
+staged, logged or used to extract duplicate attachment copies.
+
+The existing ordinary/email-card provenance disclosure now includes source mail
+subject/date/return path as inert text in EN/AR. Native header parsing/failure
+cases, real-DB metadata/repeat/correction cases and UI/axe cases are authored,
+unrun. This is not a real-vendor or end-to-end acceptance claim.
+OAuth token endpoint 404/410 responses now remain protocol failures rather than
+being mistaken for an unavailable original-mail business resource; native
+regressions are authored, unrun. The core stand-in dataset also now includes the
+secondary contact already referenced by its ticket CC list, so completeness
+acceptance does not depend on a dangling synthetic identity.
+
+Migration 0076 adds nullable message provenance; the writer and API retain its
+allowlisted fields and transport, and EN/AR ordinary/email cards show a native
+disclosure. System source displays cannot resolve a local user accidentally;
+source-only customers are not labeled former agents. Report rollups exclude
+unknown/customer source displays from staff first-response measurements, while
+legacy name-only agents retain their historical interpretation. Split copies
+retain provenance. Full-body, author, unsafe-locator, unsent-status, disclosure,
+report and split regressions are authored but unrun.
+
+The paged thread/comment extractor now shares the native-ID scanner with ticket
+extraction, including archive and complete-inventory delta coverage. It explicitly
+requests ascending `sendDateTime` for threads (the vendor default is descending)
+and `commentedTime` for comments. It reads up to 200 thread indexes or 100 comments
+per source page, hydrates thread detail separately, and checkpoints one source
+item at a time. A single validated page is cached only inside that iterator;
+after restart it is re-read and checked against the durable fingerprint. Download
+URLs are excluded from comment fingerprints, while changed history/index metadata
+stops resume rather than moving an old offset into a different page. Description
+threads are not duplicated. A non-empty ticket description with no matching
+thread is retained as a private system-attributed note at the ticket's original
+date, with an explicit review warning because the source supplies no original
+author/visibility proof for that fallback. Attachment-only extraction does not
+fetch or interpret truncated message bodies.
+
+Thread/comment downloads validate the exact account, ticket, message and asset
+path before sending credentials. A 403/404/410 asset refusal causes one parent
+metadata refresh and retry; continued asset refusal becomes unavailable, while
+401, rate limiting and server failures remain credential/retry failures. Metadata
+name/size changes and transferred-size mismatches stop extraction rather than
+publishing bytes against a stale source reference. The stand-in models authenticated
+binary content and the documented thread/comment page limits and sorting defaults.
+Cases covering 201 threads plus 101 comments, serialized continuation, changed
+pages, archived history, private/public notes, recipient/author facts, attachment
+refusal recovery, exact bytes and retryable errors are authored but unrun.
+Original MIME headers, final vendor-wide
+acceptance and the rest of the Zoho connector remain implementation work; they
+are not accepted omissions.
+
+Profile extraction checkpoint: contacts and accounts now page source IDs in
+created-time order and hydrate one detail per checkpoint, preserving full
+descriptions, primary/secondary emails, phones, company links, source dates and
+custom fields. Ordinary profile APIs do not document modified-time delta filters,
+so deltas rescan those collections and rely on account-scoped load receipts.
+Agents explicitly enumerate ACTIVE, DISABLED, DELETED and IMPORTED, using
+`emailId` and preserving source role text only for review. Departments explicitly
+page both enabled and disabled states so historical routing remains mappable.
+The stand-in enforces the documented 100-record profile and 200-record
+agent/department limits and returns thin profile lists, requiring detail hydration.
+
+Native profile attributes without destination columns are explicit mapper fields:
+addresses, profile classifications, social/CRM references, company contact facts,
+revenue, source lifecycle flags and associated SLA IDs. These grant no permissions
+or SLA behavior. A source website is retained as metadata and is not treated as
+proof of email-domain ownership for automatic account merging. Accessible
+deleted/trashed/spam profiles are retained with original flags and a review warning;
+they never instruct local deletion or grant access. Ticket statusType, team ID and
+resolution are also namespaced source values. Native/custom key collisions stop
+extraction. Compound values serialize with stable object-key order while preserving
+array order; Freshdesk native compound fields now use that same serializer to
+avoid false source changes. Unsafe numeric native IDs are refused rather than
+rounded; original string IDs remain intact. Profile hydration, 101-contact resume,
+201-agent/department page boundaries, inactive states, wrong-detail identity,
+native field collisions and stable compound-value cases are authored but unrun.
+Field metadata checkpoint (official [Desk API documentation](https://desk.zoho.com/DeskAPIDocument),
+checked 2026-10-17): `GET /api/v1/fields?module=tickets|contacts|accounts`
+returns a `data` array of all module fields, with `id`, `apiName`, `displayLabel`,
+`type`, `isCustomField` and, for selections, `allowedValues[].value`. The listed
+read scopes are `Desk.basic.READ` and `Desk.fields.READ`. No `from`/`limit`
+pagination is documented for this endpoint. The local exporter reads that
+envelope and checkpoints at most 500 normalized fields per page; a fingerprint
+refuses changed definitions during a resumed catalog. Custom values in hydrated
+tickets, contacts and accounts use the same metadata as the mapper definitions.
+Exact booleans, safe integral numbers, ISO calendar dates and declared selection
+values are normalized explicitly. String multiselect delimiters are undocumented
+and are not guessed; ambiguous values or missing definitions stop extraction.
+Currency/decimal/percent values retain original text precision; timestamps retain
+their source timezone in text. Lookups/formulas and other unsupported semantics
+remain inert canonical text, with a review warning. Empty or oversized selection
+catalogs also use text with a warning. Encrypted/computed metadata is flagged for
+review; it cannot grant local behavior or claim masked source values are recovered.
+The official legacy example incorrectly marks one `cf_*` field as non-custom;
+such keys are retained with a warning rather than silently discarded. Field
+normalization, large-catalog resume and changed-catalog tests are authored but
+unrun. Final connector wiring remains unfinished alongside source completeness
+and acceptance work above.
+
+Satisfaction extraction checkpoint: the local stand-in and exporter now implement
+50-answer pages, full feedback content by thread ID, one-answer checkpoints and
+page fingerprints checked on resume. A fixed millisecond end time is committed
+before HTTP; scans explicitly request the full epoch-to-end range and no rating
+or default period filter. New extractions rescan old answers to catch content
+edits; source-account receipts decide whether a destination write is needed.
+All source sentiment, timestamps, timezone text, parent/author references and list
+feedback remain in provenance. `customerRatedTime` is selected when present,
+otherwise `ratedTime`, preserving the original instant string; the differing
+Z-labelled timestamps in the reference are not subjected to guessed offset
+arithmetic. This requires a dry-run timestamp warning and real-account checking.
+Known sentiments propose 5/3/1 with a normalization warning; unknown values remain
+unscored and reviewable. Missing full feedback or source errors stop extraction,
+and 429/5xx failures reach the resumable worker. Full-content, 51-answer resume,
+edited-old-answer, shifted-page, unknown-score and rate/error tests are authored,
+unrun. Credit-aware runtime integration and full connector acceptance remain
+required; this is not evidence of a complete Zoho connector.
+
+Ticket-level file checkpoint: `GET /tickets/{ticket_id}/attachments` now follows
+the documented `from`, `limit=100`, `sortBy=createdTime`, `include=creator` contract
+without filtering either public or private files. The `data` envelope includes
+`id`, `name`, string `size`, `href`, `createdTime`, `isPublic`, `creatorId` and
+optional creator details. Ticket-only files become attachment-only historical
+messages with original creation dates and visibility, empty bodies, source-only
+creator names and native creator references; an untyped creator never becomes a
+local staff account or staff-response metric. Conflicting creator IDs stop import.
+Separate root/thread/comment parent relationships retain separate stable import
+identities: their documented collections are not assumed disjoint, and a file
+is not discarded because its native ID appeared under another parent. Resuming
+an individual relationship does not create another relationship.
+
+Root downloads bind to the exact ticket/file content path before token retrieval.
+One refusal refreshes metadata through the original 100-entry page using a
+transport-only page hint. Missing/moved entries, wrong name/size or changed source
+pages stop as stale snapshots; no undocumented single-file metadata resource is
+used. Name and byte-count checks apply before accepting content. The stand-in
+supports authenticated root downloads and both visibility states. Ticket-only
+history, 101-file resume, bounded refresh, exact bytes, stale metadata, forged
+parents and conflicting-creator tests are authored but unrun. Full database and
+browser acceptance remains required with the rest of the connector.
+
+Knowledge taxonomy checkpoint: the local exporter now enumerates each documented
+activation state for both ordinary and trashed root/section records, using
+positive 50-record pages and one hydrated record per checkpoint. Thin stand-in
+list responses require detail hydration. Source IDs, translated English/Arabic
+labels and nested section parent relationships are preserved; a changed source
+page or mismatched detail identity/parent stops extraction. Unsupported language
+labels produce the existing locale warning, while a taxonomy record with no
+supported label stops instead of inventing a translation. Conflicting regional
+variants cannot overwrite each other silently. The native section collection is
+read without a parent filter to include nested records under the root; no
+undocumented `/categories` resource is invented.
+
+Article ancestry preparation now has a serializable, bounded parent walk. Each
+section/root hop returns state for its caller to persist separately, preserving restrictions
+through rate-limit retries. Group, agent, private-IP, hidden, disabled, trashed
+and unknown visibility must never turn into a public article. Known restricted
+ancestors force internal readership; hidden/disabled/trashed ancestors also
+force draft. Cross-root links, cycles, mismatched identities and unsupported
+visibility values stop. Source memberships are never copied to local roles.
+The independent knowledge fixtures and tests cover bilingual hydration, nested
+parents, 51-root resume, shifted pages, unsupported/conflicting locales,
+serialized privacy inheritance and invalid ancestry. These tests are authored
+but unrun. Local article/translation extraction, managed image/file preparation
+and connector registration are described in the subsequent checkpoints; image
+completeness and full acceptance remain unfinished.
+
+Article file boundary checkpoint (M11-08/09): normalized articles now retain an
+optional `attachments` array with native file identities and validated URL/bundle
+locators, using the same reference schema as message files. Existing article
+records keep their previous shape. Duplicate asset identities are refused, and
+bundle validation requires every referenced article file member to exist. Schema,
+complete/missing bundle-member and database regressions are authored, unrun.
+Until a verified prepared-asset manifest is implemented, the loader refuses
+nonempty article file references rather than marking a file-losing article as
+loaded. This is an unfinished preparation path to complete in the combined PR,
+not an accepted omission or a claim that downloadable article files work yet.
 
 ## M11-15 The manual mapper
+
+The local run screen now includes CSV/entity or bundle selection, bounded-size
+upload with progress/cancellation, preparation polling and file removal using
+the existing DESIGN confirmation dialog. Extraction remains blocked until all
+active files are ready and validated. The injected mock PUT driver simulates
+upload progress without network access; it is not evidence of real file parsing.
+Column mapping, twenty-row validation UI and preset controls now also have a
+local implementation. Rules expose normalized destination fields, first-message
+projection, optional custom keys, column/constant sources and ordered transforms.
+The editor renders twenty rules at a time; edits remain in memory across pages.
+A sole exact-header/entity preset is proposed automatically; multiple matching
+presets require a choice. Applying one still requires explicit save and complete
+file validation. Preview counters describe all rows, separately from the first
+twenty shown. Explicitly skipping invalid rows is off by default; when enabled,
+those rows are omitted during extraction, counted in a source warning and require
+warning acknowledgment in the dry-run receipt. Malformed CSV structure or unsafe
+bundles are always refused, independently of this option.
+All new upload/UI checks remain deferred with the local implementation batch.
+
+Implementation checkpoint: `packages/importers/src/csv.ts` now streams decoded
+CSV cells for the mapper, with strict UTF-8 and BOM-selected UTF-16 LE/BE,
+header-based comma/semicolon/tab detection, quoted multiline values, and
+unchanged string values. It rejects malformed encodings, duplicate/blank
+headers, inconsistent row widths and records over 4 MiB; errors omit cell
+contents. It closes the source on cancellation or early preview termination.
+Fourteen focused reader cases passed before the owner requested deferring further
+tests until the implementation batch is complete. The local batch now also has
+column/literal mappings, date/name/list/value/boolean transforms, attachment URL
+lists, first-message projection, twenty-row previews and whole-file validation
+with bounded issue samples. Preset create/list/delete routes use the existing
+tenant table and compute the ordered-header fingerprint on the server. These
+additions have not yet been tested. Upload allocation/confirmation, private
+source sealing and background mapping validation now have a local implementation
+too: migration 0068 adds `import_files`, including FORCE RLS and its negative-suite
+fixture; the `import.file_prepare` job is published only through the outbox.
+The worker retains no complete source file in memory. Its private sealed object
+and mapping revision fence the validation result against browser overwrites and
+concurrent mapping edits. The shared S3 downloader now honors disk backpressure;
+its former manual pump ignored `push(false)` and could buffer a large source.
+The local file adapter now supplies resumable entity pages to the existing
+extract/dry-run/load pipeline. CSV row offsets and file offsets survive worker
+restart; all records are revalidated against the mapping, and the source checksum
+is checked on every read. A run accepts up to 100 CSV files or one bundle;
+conflicting repeated native IDs cannot overwrite another file's history silently.
+Manual deltas rescan their supplied snapshot, using the existing source-account
+receipts to suppress unchanged domain writes. Bundle attachment members stream
+through validated ZIP entries; remote CSV attachments use the approved-host HTTP
+client. Preparing jobs can be recovered after an hour without a checkpoint.
+Source-object/staging retention now has a local implementation too: migration
+0069 adds the terminal-run cutoff index and the discarded-file state. Retention
+deletes bounded batches 30 days after finish/discard, publishing object cleanup
+atomically while preserving run summaries, presets and native-ID receipts.
+The admin HTTP adapter and upload client now cover the backend endpoints with
+Zod input/output validation and the existing progress/cancellation PUT driver.
+The local UI now covers upload, mapping, transforms, presets and validation
+previews. Transform/history/preview boundary tests have been authored but not run.
+DB/queue/client/browser verification and complete end-to-end acceptance remain
+unfinished; this checkpoint does not complete M11-15.
 
 Artboard: `Admin/Import-FileMapper`.
 
@@ -3033,6 +4001,271 @@ Artboard: `Admin/Import-FileMapper`.
   (3.x, streaming, no full extraction); both added by ADR 0027 and the stack table.
 
 ## M11-16 Admin: Brand › Import
+
+Local implementation checkpoint: `ImportDryRun` and `ImportIssues` follow the
+existing `Admin/Import-Wizard` card, six-count summary and ticket-sample layout.
+They include English/Arabic catalogs, bidi isolation for source identifiers and
+dates, existing DESIGN components for loading/errors and a warning-acknowledgment
+checkbox. Start remains disabled for incomplete/failed reports, blocking errors,
+unacknowledged warnings or an unavailable run phase. Acknowledgment is bound to
+the current review token rather than carried across reports. Samples use plain
+message text and original authors/dates. These are now mounted through the Brand
+Import tab and `/admin/brand/import/:runId`, alongside the source chooser, recent
+runs, connection/scope forms, entity progress, pause/resume/cancel and delta
+creation. API responses include the creator's public ID/name, verified source
+label and whether a dry-run exists; credentials and leases remain excluded.
+The chooser reads `/sources` instead of enabling unsupported adapters. The
+HTTP/mock APIs share the app's provider pattern; the mock scripts extraction,
+validation, load, finish, pause/resume and refusal states. It is a UI fixture,
+not evidence of real extraction or file validation.
+
+The source-value mapping editor is now mounted for editable runs: seven category
+tabs, bounded source pages/counts, lazy destination search, explicit per-page
+confirmation and discard. It preserves mappings on other pages, distinguishes
+suggestions from confirmed values and invalidates the dry-run receipt after a
+save. Uncommitted changes block dry-run/start and switching category/page. Agent
+choices include existing staff, silent invitation with selected departments, or
+source name only. Fields support existing destinations, explicit skip and a
+validated definition for creation during loading, without truncating options.
+This implementation checkpoint preceded validation. Subsequent unit, EN/AR
+browser and axe results are recorded below; final CI remains required for
+M11-16.
+
+Ticket samples now page through messages and private notes in groups of twenty,
+show original authors/dates and attachment names, and allow expanding a long
+plain-text message. Contact samples show the planned create/link/update action,
+normalized identifiers, organization match and refused-phone count. A default
+country calling code is editable; changing it blocks Start until another dry
+run. The preview uses the report's calling code and refreshes for its review
+token. Source markup is never inserted into the DOM. These paths remain untested.
+
+The local run screen now also has a severity-filtered log, recent-page polling,
+snapshot pagination, latest-page return and CSV download. Server pages are
+bounded and output-validated; exports read 500 entries per short tenant
+transaction under the requesting administrator's captured tenant context.
+The log integration case covers multiple export pages, appended entries after a
+snapshot, formula-like source IDs and foreign-run refusal; it is authored but
+not run. Standard 30-day staging retention still applies.
+
+The local wizard now renders the artboard's seven-step StepProgress from durable
+run phases, including the public `pausedFrom` phase during a pause (never its
+private claim token or lease). Only visible sections are linked;
+completed extraction cannot reopen frozen source/scope edits. Busy actions and
+unsaved mappings disable its links. Done steps include a check and an accessible
+text label; the current step uses `aria-current="step"`, with EN/AR captions.
+
+Ticket file previews now expose available, unavailable, blocked and not-checked
+states. Migration 0080 adds temporary per-attachment inspection receipts, saved
+with the media cursor under the live claim. The read side checks the current
+review, payload hash, policy hash and cursor, so a file omitted from the first
+100 report samples cannot look available by default. Metadata is selected by
+name: signed URLs and native paging hints are excluded. New dry runs clear old
+receipts. A real-database 101-missing-file case, proof-binding unit cases and
+EN/AR UI/browser/axe cases are authored, unrun. ADR 0027 records this decision.
+The validation checkpoints below distinguish the checks executed after the
+implementation batch from the acceptance work still pending.
+
+Validation checkpoint (2026-10-18): the local implementation batch has reached
+validation. All ten shared packages build, and application/package typechecks
+plus the root test/tooling typecheck have passed after fixing the initial
+integration errors. A focused run passes 58 tests in nine files: EN/AR wizard
+progress, file-status captions, warning-acknowledgment renewal, blocked/stale/
+failed dry-run gates, mapper labels, public metadata contracts, inspection seals
+and JSON cursor validation. The run reproduced and fixed refined-Zod projection
+startup, unnamed mapper selects and busy anchors retaining their URLs. Exported
+Freshdesk/Zoho checkpoints now pass strict JSON validation before leaving their
+native exporters; optional TypeScript properties do not weaken the cursor type.
+These checks do not prove the database inspection case, browser/axe behavior,
+full native reference migrations, coverage gates or CI. Those remain pending.
+
+The subsequent validation pass builds all ten shared packages and passes all
+24 workspace typechecks plus the root typecheck. The complete importer SDK
+suite passes 402 tests; mapper and credential checks pass 23 tests; tooling
+passes 102 tests. Route permissions, route validation, module boundaries and
+the import writer/lifecycle side-effect guard pass. The guard admits only the
+reviewed article ownership, preparation and HTML-link inspection exports;
+regressions still refuse unreviewed exports and namespace imports.
+The broader API/schema/SDK run passes 4,916 tests and exposes three search
+assertions that predate original-reference lookup plus a missing test-subpath
+alias. The focused rerun passes all 63 affected tests after correcting these
+checks and the alias. This is not yet an all-green aggregate run. Lint passes
+with warnings.
+
+Real-database validation now passes all 919 RLS cases with migrations through
+0080 applied to a disposable Postgres, and all 223 direct-history writer cases
+with real Postgres and Redis. Each writer case now resets its own container
+fixtures rather than inheriting earlier cases' imports, outbox rows or profile
+identities. This proves the 101-file inspection receipts and stale-policy
+invalidation, inert history writes, unchanged repeats and the covered deltas.
+System messages retain system authorship even when their external identifier
+also names a mapped agent; they do not adopt that agent's display name. The
+large native reference runs, routed browser/axe behavior, coverage and CI are
+still separate, pending acceptance checks.
+
+The first Zoho native reference run found a real article-file integration gap:
+the preparer handed the full loading claim to a runtime resolver whose strict
+contract accepts only the brand and run IDs. Extraction and dry-run succeeded,
+but loading an article file stopped with `invalid-response`. A focused database
+regression first reproduced the refusal, then passed after the caller projected
+the two-field run reference. The reference harness now also stops promptly on a
+terminal import before its planned worker-kill point, and reports article
+validation codes/paths without input values. Full reference acceptance still
+requires a successful rerun after this fix.
+
+That rerun completes the full import after its planned worker crash: assertions
+for 500 ticket graphs, 2,000 messages, 500 ready PDF attachments and their bytes,
+50 contacts, 10 companies and 40 EN/AR article versions pass. It then exposes a
+fixture assertion selecting an arbitrary published English article instead of
+the source article under test. The assertion now resolves the article through
+its source receipt. The repeat and delta checks were not reached; the complete
+reference test remained unpassed at that checkpoint. The subsequent full Zoho
+reference run now passes: the first import, worker kill/recovery, unchanged
+repeat with identical business-row revisions, and active/archived delta all
+complete on real Postgres and Redis. It verifies original ticket/message dates,
+authors, private notes, tags, fields, assignees, 500 managed files and their
+bytes, 50 contacts, 10 companies and 20 bilingual articles, plus quiet outbox/
+domain tables and terminal credential purge.
+
+Twelve routed Playwright checks now pass in both `en` and `ar`, with axe:
+manual CSV mapping/presets and invalid-edit gating, Freshdesk inventory,
+Zoho connection/refusal, dry-run file availability and warning acknowledgment,
+imported satisfaction, and original message details. This pass fixes missing
+accessible names on the saved-preset and log-level dropdowns. Accessibility
+checks wait for the extraction button's existing state transition to finish,
+so contrast is measured on its settled DESIGN colors. These use UI fixtures;
+coverage/CI remain separate acceptance gates.
+
+The dedicated real-API browser suite now also passes both locales. It signs in
+with the seeded password and TOTP, refuses invalid vendor credentials, extracts
+from the Zendesk stand-in and confirms mapping choices through the authenticated
+API before reviewing and approving the dry run in the wizard. The dry-run and
+imported-ticket screens pass axe. The test checks original dates, private notes,
+attachment availability and managed PDF bytes; a repeated source leaves one
+ticket. It also checks terminal credential purge, zero SMTP/webhook/Telegram/
+Graph requests, no unexpected outbox events and no imported-ticket rows in the
+five forbidden side-effect tables. Postgres, Redis, API, queues and workers are
+real; the vendor and object-storage boundary use local stand-ins. This does not
+replace separate object-storage integration or real-vendor acceptance. CI runs
+`pnpm --filter @helpdock/admin e2e:imports --workers=1` with the affected API
+browser job. A failed Docker probe skips locally and fails CI.
+
+The broad admin unit run passes 2,068 cases and finds seven failures across
+three files. Their focused rerun passes all 24 cases after correcting the tab
+list expectation for Import, keeping the scope callback to its declared run
+argument, and displaying the year as well as the original clock time on
+imported event captions. The subsequent complete admin aggregate passes 2,075 tests with 85.93% lines
+against the unchanged 85% gate, including those fixes.
+
+The manual-file database acceptance now passes both scenarios through sealed
+uploads, real Redis queues and a separate import worker using the RLS runtime
+role. A payload-only NDJSON bundle loads 500 tickets, 1,000 messages including
+500 private notes, a contact and a managed PDF whose bytes match the bundled
+member. Re-importing that dataset preserves business and report row values and
+`xmin` revisions. A second case saves and retrieves a column-bound CSV preset,
+then imports a quoted multiline Arabic body and an explicit Riyadh local date
+with its contact reference. Both assert an inert outbox and empty forbidden
+side-effect tables. The synthetic fixture is
+`packages/importers/fixtures/bundles/reference-500.zip`; the test is
+`apps/api/src/imports/manual-reference.integration.test.ts`. The worker stand-in
+now supplies storage to its file resolver, matching production worker wiring.
+
+The Freshdesk native dataset exposes a separate loader gap: its stand-in rotates
+signed download URLs on each wire response, so independently extracted message
+and attachment records carry different URLs for the same file. Dry-run accepts
+their stable native identity, but the thread checkpoint compared complete refs
+and refused the first ticket with `mapping-invalid`. Four focused database cases
+reproduce refusal of rotated URLs/refresh-page hints and retain refusal of a
+changed file name or bundle member. The checkpoint now uses the existing
+attachment identity plus the exact bundle path for membership, while the staged
+attachment remains the approved canonical download input. All 227 writer
+integration cases now pass, including those four regressions. The complete
+Freshdesk native reference rerun now also passes: worker kill/recovery, 500
+ticket histories and files, unchanged business/report revisions on repeat and
+active/archive delta, with original dates, private notes, authors, contacts,
+companies and bilingual knowledge retained. ADR 0027's
+attachment-refresh amendment records the boundary; exact-host fetch policy,
+payload fingerprints and parent-reference checks remain enforced.
+
+The current shared-package coverage run passes all 3,860 tests across 262 files,
+with 91.22% line coverage against the unchanged 80% gate. The aggregate first
+caught three new tenant tables missing from the explicit schema inventory and
+the catalog heuristic mistaking the proper names `Zoho Desk` and `Help Scout`
+for untranslated prose. The inventory now lists the migrated tables, and the
+catalog check exempts only those exact product names while keeping prose
+checks. Workspace plus root typechecks, lint and the import-boundary/route
+guards pass. The later admin coverage result is recorded below; API coverage
+and final CI remain separate gates.
+
+The import-path review also finds that `help_center.imported` scheduled embeddings
+for published text, contradicting quiet-import behavior. A changed expectation
+first reproduces that provider-queue request. Migration `0081` adds an internal
+per-language embedding deferral, including a backfill for earlier imported
+versions without a staff publisher. The import subscriber still indexes and
+re-chunks locally but schedules no embeddings. Both pending and full-reembedding
+jobs read the live version's deferral before selecting provider input, so an old
+queued job cannot send the imported text. Staff publication, including scheduled
+publication, clears that language's flag. Unchanged imports retain the choice;
+changed source content defers its replacement again. The focused real-database
+scenario passes with a configured embedding target and a provider boundary:
+zero calls before staff publication, one English publication becomes eligible
+while Arabic remains deferred, and a later changed source blocks embedding again.
+All 227 writer cases also pass after the guard, before the final adoption/repeat
+assertions were added; their focused rerun passes. RLS generation finds every
+existing tenant policy present. The new migration has run only on disposable
+test databases. The surrounding knowledge, AI and help-center integration suites
+now pass all 86 cases. The migration/RLS run passes 937 cases, including the
+upgrade's imported-language backfill, preservation of an existing staff publisher
+and refusal to act on another brand's pointer. Workspace and root typechecks,
+lint and route/import guards pass after the change. The later admin coverage
+result is recorded below; API coverage and final CI still require completion.
+
+The upgraded Zendesk reference sequence now passes as well: 500 tickets, 2,000
+messages, 500 managed files, 50 contacts, 10 companies and 20 bilingual articles,
+followed by an unchanged repeat and changed history delta on real Postgres and
+Redis. Together with Freshdesk and Zoho, all three retained native connectors
+have passed their complete reference sequences. Freshdesk/Zoho additionally
+exercise an actual worker-process kill and recovery. This does not establish a
+real-vendor account run or green CI for the unpublished local batch.
+
+All 29 SLA integration cases now pass on the real HTTP/Postgres/Redis install,
+including explicit import activation, bulk activation after staging retention,
+stale timers on closed/deleted/merged/unactivated imports, and re-reading a
+ticket after waiting for a concurrent close. The fixture's owner connection now
+uses the migrated `helpdock` database. The HTTP activation regression then
+exposed a raw Date parameter in its cutoff predicate; the typed Drizzle timestamp
+comparison fixes that serialization failure. This validates the guard in #218;
+it does not complete the remaining native reference or coverage/CI gates.
+
+After these fixes, all 24 workspace typechecks, the root test/tooling typecheck,
+lint, route permissions, route validation, module boundaries, the import
+writer/lifecycle guard and whitespace checks pass again. No new vendor beyond
+Zoho is added; M11-19–23 remain explicitly deferred by the owner.
+
+SLA gap found locally: ordinary lifecycle synchronization and policy/calendar
+recomputation could start clocks on an imported ticket without an administrator
+opting in. Migration 0070 adds `tickets.import_sla_started_at`. Imported tickets
+without that marker now remain inert across sync/reopen/recompute; the SLA
+service exposes an explicit, ticket-locked, idempotent activation operation.
+It starts applicable clocks at activation time, preserving the historical
+creation date, and refuses deleted/merged/closed tickets or absent policies.
+The regression was authored before this guard, but has not been run per the
+owner's deferred-test workflow. The run API/job/UI for bulk activation now has
+a local implementation too. The confirmation covers open imported tickets from
+the completed run's verified source account, including older runs. It uses
+durable native-ID receipts so staging retention does not remove this ability.
+`requestedAt` excludes tickets imported after confirmation. The job processes
+fifty tickets per transaction; clock markers, counters, cursor and the next
+outbox continuation commit together. Replayed/stale revisions or cursors do
+nothing. Last-attempt failure exposes a safe failed state; explicit retry resumes
+its saved cursor. Recovery republishes queued/running cursors after five minutes
+without progress. A partial pending-ticket index (migration 0071) supports the
+candidate scan. Tickets with no matching policy are counted as skipped and can
+be reconsidered by another explicit request after policy configuration changes.
+An additional database regression exercises more than one batch, repeated
+delivery, continuation, post-request tickets, foreign accounts and live tickets;
+it is written but not run. Actual queue/browser/restart acceptance remains
+outstanding. Activated-ticket behavior during a later delta is also part of the
+remaining full import-path review, not an accepted omission.
 
 Artboards: `Admin/Import`, `Admin/Import-Wizard`, `Admin/Import-Run`.
 
@@ -3059,6 +4292,49 @@ retention warning, a failed run with its log); real api
 stand-in and opening one.
 
 ## M11-17 Imported tickets in the workspace
+
+Local implementation: ticket reads resolve original numbers/URLs in one lookup
+for a list page, joined through authorized parent tickets. Ambiguous receipts
+return no guessed number/link. Mutation responses retain provenance. Header
+chips link only to HTTP(S) navigation paths without credentials, query strings
+or fragments. `ticket.imported` activity names the source, original number and
+dates; imported audit events show their source/actor and scalar field changes.
+Stored `authorDisplay` reaches the message response and the thread, where a
+name-only former agent keeps staff-bubble styling and a former-agent label.
+
+The imported boolean filters live/native tickets through the existing list/view
+predicate. It survives URL, saved-view and clear operations. Searching the
+original source number or native ID uses indexed receipt lookups before the
+normal parent-ticket RLS filter; migration 0072 adds the native-ID search index.
+The completed-run link opens the imported-ticket workspace filter.
+
+The System page reads a worker-produced Redis snapshot, not tenant import tables
+from install scope. Recovery samples each active brand inside its existing
+audited transaction, publishes global active/paused counts and a first page of
+fifty prioritized brand summaries with their latest retained error code, and
+expires the snapshot after 180 seconds. Versioned Redis hashes and ordered
+indexes retain every brand in bounded pages. The install-only page endpoint
+reads the same immutable version while the worker publishes newer snapshots;
+missing hash/index members invalidate the reading. The UI retains one selected
+page, provides previous/next and return-to-latest controls in English/Arabic,
+and shows loading, retry and expired states using existing System components. Missing/expired/malformed readings display
+unknown rather than a measured zero. Logs remain subject to staging retention.
+
+Regression cases for source-number/native-ID search, department isolation,
+provenance after mutation, former-agent display, signed-link redaction, URL/view
+filter round trips and install-only health readings are authored but not run.
+Historical activity pagination now has a local implementation: bounded pages,
+ticket-scoped UUID anchors and native PostgreSQL timestamp comparisons avoid
+dropping entries with equal/sub-millisecond dates. Migration 0073 adds the ID
+tie-breaker to the activity index. The workspace retains one older page at a
+time, and realtime refresh preserves the newest activity cursor. Imported
+provenance/source audit events are now included in the thread's event allowlist;
+previously the renderer existed but those actions never reached it. A 205-event
+database case covers multiple pages, timestamp ties, duplicates/completeness and
+foreign cursor refusal. It is authored but not run. Browser/axe acceptance and
+final runtime verification remain unfinished. Install-brand summary pagination
+and its 57-brand real-Redis regression are implemented locally but unrun. This
+does not complete M11-17.
 
 Artboard: `Admin/Ticket-Imported`. The ticket header chip (from `import_source` +
 `import_external_ids.source_number/source_url`, added to `ticketSchema` as
@@ -3103,9 +4379,41 @@ The boundary regression uses a disposable executable on `PATH`, without a
 real daemon, and verifies required-CI refusal, optional local absence and a
 successful daemon response.
 
+## Import-path review checkpoint, 2026-10-18
+
+The source review follows connection/file upload, extraction, mappings, dry run,
+approval, direct loading, media processing, completion/reports, repeat/delta and
+retention. It checks the HTTP/queue serializers and permission declarations;
+brand/account/department boundaries; secret purge and stale refresh fencing;
+exact-host `safeFetch` including redirects; sealed file hashes and ZIP/CSV
+limits; claim revocation; and the downstream rule/SLA/transcription/knowledge
+paths. The strict writer/import guard still forbids live-ticket creation hooks.
+
+Two production gaps found in this review are fixed and covered by database
+regressions: independently rotated attachment locators no longer fail thread
+membership, and imported published knowledge cannot schedule or be selected by
+embedding work before staff publication. The latter also covers old queued
+embedding/reembedding jobs and preserves the choice across unchanged repeats.
+The new migration's backfill is brand-scoped and preserves existing staff
+publications. Native connector, manual-file, RLS/migration and focused downstream
+acceptance pass. Admin aggregate coverage passes 2,075 tests across 216 files
+with 85.93% lines against the unchanged 85% gate; shared-package coverage passes
+3,860 tests across 262 files with 91.22% lines against the unchanged 80% gate.
+EN/AR browser checks with axe also pass for saved-view Source filter persistence,
+import-health pagination/retry/expiry, explicit SLA activation and public imported
+article file availability. API aggregate coverage, final CI and owner runs with
+real accounts/storage remain separate gates.
+
+The API coverage attempt found two HTTP inventory assertions reading the
+wrong error-envelope field. The focused real-database rerun first reproduced
+both failures; the corrected tests read `error.message` and explicitly check
+the refusal status. All 23 HTTP import cases now pass. The broad instrumented
+run was stopped after finding these failures; it is not a completed coverage
+result. The required API coverage gate remains for final CI.
+
 ## Pull requests
 
-- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–23 migration work in progress (draft; work continuing, not ready to merge).
+- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–18 migration work in progress (draft; work continuing, not ready to merge). The owner deferred M11-19–23; their issues remain open.
 
 - [#217](https://github.com/Docker-Hunterpedia/Helpdock/pull/217) — M11-09/10 CI validation gap #216: required Docker probes fail explicitly in CI; local skips remain available (merged; all checks passed).
 

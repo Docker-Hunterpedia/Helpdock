@@ -374,6 +374,13 @@ export const hcMediaPath = (brandId: string, mediaId: string): string =>
 export const HC_MEDIA_PATH_PATTERN =
   /^\/api\/help-center\/brands\/[0-9a-f-]{36}\/media\/[0-9a-f-]{36}$/;
 
+/** A locator only; the download route must authorize the current parent article. */
+export const hcImportAssetPath = (brandId: string, assetId: string): string =>
+  `/api/help-center/brands/${brandId}/assets/${assetId}`;
+export const HC_IMPORT_ASSET_PATH_PATTERN =
+  /^\/api\/help-center\/brands\/[0-9a-f-]{36}\/assets\/[0-9a-f-]{36}$/;
+export const hcImportAssetParamSchema = z.strictObject({ brandId: z.uuid(), assetId: z.uuid() });
+
 /** The two kinds of callout the editor offers, and the only two the sanitiser keeps. */
 export const CALLOUT_KINDS = ['tip', 'caution'] as const;
 export type CalloutKind = (typeof CALLOUT_KINDS)[number];

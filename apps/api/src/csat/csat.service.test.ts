@@ -66,7 +66,8 @@ const service = ({ stored, allowed = true }: { stored?: CsatResponse; allowed?: 
   new CsatService({
     db: untouchable,
     repository: {
-      latestForTicket: () => Promise.resolve(stored),
+      latestForTicket: () => Promise.resolve(stored?.importedSource === null ? stored : undefined),
+      latestImportedForTicket: () => Promise.resolve(stored?.importedSource ? stored : undefined),
     } as unknown as CsatRepository,
     tokens: rotated,
     limiter: { consume: () => Promise.resolve(allowed) } as unknown as RateLimiter,
@@ -77,6 +78,32 @@ const service = ({ stored, allowed = true }: { stored?: CsatResponse; allowed?: 
 const tx = {} as DbTransaction;
 
 describe('CsatService.forTicket', () => {
+  it('preserves original imported answers without a fabricated score or live survey link', async () => {
+    const originalAnswers = [
+      { question_id: 'Q_1', question_text: 'How was the support?', value: 7 },
+    ];
+    const summary = await service({
+      stored: survey({
+        importedSource: 'freshdesk',
+        importedExternalId: 'survey:answer',
+        ratedVia: 'import',
+        ratedAt: NOW,
+        importedDetails: {
+          ratingUnmapped: true,
+          originalAnswers,
+          privateVendorField: 'not a response field',
+        },
+      }),
+    }).forTicket(tx, BRAND, TICKET);
+    expect(summary).toMatchObject({
+      state: 'imported_unscored',
+      rating: null,
+      ratedAt: NOW.toISOString(),
+      link: null,
+      originalAnswers,
+    });
+    expect(summary).not.toHaveProperty('privateVendorField');
+  });
   it('is null for a ticket that has never been asked', async () => {
     expect(await service({}).forTicket(tx, BRAND, TICKET)).toBeNull();
   });

@@ -58,3 +58,23 @@ it('allows only the reviewed transactional file cleanup helper within the writer
     findImportWriterViolations("import { enqueueOutbox } from '@helpdock/jobs';").length,
   ).toBeGreaterThan(0);
 });
+
+it('allows reviewed article ownership checks and refuses other exports from those modules', () => {
+  const reviewed = [
+    ['../preflight/staged-record.js', 'validatedStagedRecord'],
+    ['../article-asset-proof.js', 'readArticleAssetProof, requireReadyArticleAsset'],
+    ['../article-asset-requests.js', 'articleCopyAssetRequests, importArticleAssetRequests'],
+    ['../article-asset-state.js', 'importArticlePreparationSchema'],
+    ['../article-prepared.js', 'preparedImportArticleHash'],
+    ['@helpdock/channels', 'articleLinkTargets'],
+  ];
+  for (const [module, exports] of reviewed) {
+    expect(findImportWriterViolations(`import { ${exports} } from '${module}';`)).toEqual([]);
+    expect(findImportWriterViolations(`import { sendMail } from '${module}';`)).toEqual([
+      `unreviewed export: ${module}:sendMail`,
+    ]);
+    expect(findImportWriterViolations(`import * as helpers from '${module}';`)).toEqual([
+      `namespace/default imports are forbidden: ${module}`,
+    ]);
+  }
+});

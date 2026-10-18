@@ -40,6 +40,7 @@ import {
   hcArticleVersions,
   hcArticleViews,
   hcCategories,
+  hcImportAssets,
   hcMedia,
   hcSearchDocuments,
   hcSearchLog,
@@ -48,10 +49,12 @@ import {
   holidays,
   importExternalIds,
   importFilePresets,
+  importFiles,
   importLog,
   importMappings,
   importRecords,
   importRuns,
+  importTicketInventory,
   inboundParseSettings,
   knowledgeChunks,
   knowledgeDocuments,
@@ -144,6 +147,7 @@ const accountId = (brandId: string): string => idFor(brandId, 'a');
 const contactId = (brandId: string): string => idFor(brandId, 'c');
 const otherContactId = (brandId: string): string => idFor(brandId, 'd');
 const perBrand = (): Record<string, string> => ({ [brandA]: uuidv7(), [brandB]: uuidv7() });
+const importFileId = perBrand();
 const departmentId = perBrand();
 const teamId = perBrand();
 const statusId = perBrand();
@@ -157,6 +161,7 @@ const ruleId = perBrand();
 const hcCategoryId = perBrand();
 const hcSectionId = perBrand();
 const hcArticleId = perBrand();
+const hcMediaId = perBrand();
 const hcVersionId = perBrand();
 const knowledgeSourceId = perBrand();
 const knowledgeDocumentId = perBrand();
@@ -232,6 +237,34 @@ const fixtures = [
         runId: importRunId[brandId] ?? '',
         level: 'info',
         message: 'Fixture staged',
+      }),
+  },
+  {
+    name: 'import_files',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(importFiles).values({
+        id: importFileId[brandId] ?? '',
+        brandId,
+        runId: importRunId[brandId] ?? '',
+        fileName: 'tickets.csv',
+        format: 'csv',
+        entity: 'ticket',
+        size: 12,
+        uploadKey: `brands/${brandId}/imports/upload`,
+      }),
+  },
+  {
+    name: 'import_ticket_inventory',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(importTicketInventory).values({
+        brandId,
+        runId: importRunId[brandId] ?? '',
+        fileId: importFileId[brandId] ?? '',
+        revision: uuidv7(),
+        sourceHash: 'a'.repeat(64),
+        externalId: '1',
+        location: 'archived',
+        line: 2,
       }),
   },
   {
@@ -797,11 +830,29 @@ const fixtures = [
     name: 'hc_media',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(hcMedia).values({
+        id: hcMediaId[brandId] ?? '',
         brandId,
         s3Key: `hc/${brandId}/${uuidv7()}/original`,
         originalName: 'screenshot.png',
         mime: 'image/png',
         size: 1024,
+      }),
+  },
+  {
+    name: 'hc_import_assets',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(hcImportAssets).values({
+        brandId,
+        source: 'file',
+        sourceAccountKey: 'a'.repeat(64),
+        parentExternalId: 'original-article',
+        assetExternalId: 'original-file',
+        locale: 'en',
+        usage: 'download',
+        payloadHash: 'b'.repeat(64),
+        contentHash: 'c'.repeat(64),
+        mediaId: hcMediaId[brandId] ?? '',
+        articleId: hcArticleId[brandId] ?? '',
       }),
   },
   // M5-05, M5-08. Search and feedback: brand-scoped like the content.
@@ -1185,6 +1236,40 @@ describe.skipIf(!hasDocker)('row-level security', () => {
       TENANT_TABLES.map((table) => table.name).sort(),
     );
   });
+
+  it.each(['media', 'article'] as const)(
+    'refuses an importing article asset bound to another brand through its %s parent',
+    async (parent) => {
+      const [local] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.brandId, brandA));
+      const [foreign] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.brandId, brandB));
+      if (!local || !foreign) throw new Error('Missing article-asset isolation fixtures');
+      const rejection = await withSystem(db, brandA, (tx) =>
+        tx.insert(hcImportAssets).values({
+          brandId: brandA,
+          source: 'file',
+          sourceAccountKey: 'a'.repeat(64),
+          parentExternalId: 'new-source-article',
+          assetExternalId: uuidv7(),
+          locale: 'en',
+          usage: 'download',
+          payloadHash: 'b'.repeat(64),
+          contentHash: 'c'.repeat(64),
+          mediaId: parent === 'media' ? foreign.mediaId : local.mediaId,
+          articleId: parent === 'article' ? foreign.articleId : local.articleId,
+        }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+      expect(rejection?.cause?.message).toContain(`hc_import_assets_${parent}_brand_fk`);
+    },
+  );
 
   describe.each(fixtures)('$name', ({ name, insert, ...fixture }) => {
     const refusal = 'refusal' in fixture ? fixture.refusal : /row-level security/i;

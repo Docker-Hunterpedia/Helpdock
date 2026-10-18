@@ -99,13 +99,13 @@ export const csatResponses = pgTable(
     ),
     check(
       'csat_responses_origin_shape',
-      sql`(${table.importedExternalId} IS NULL AND ${table.importedSource} IS NULL AND ${table.closedAt} IS NOT NULL AND ${table.ratedVia} IS DISTINCT FROM 'import') OR (${table.importedExternalId} IS NOT NULL AND ${table.importedSource} IS NOT NULL AND ${table.ratedVia} IS NOT DISTINCT FROM 'import' AND ${table.rating} IS NOT NULL AND ${table.ratedAt} IS NOT NULL)`,
+      sql`(${table.importedExternalId} IS NULL AND ${table.importedSource} IS NULL AND ${table.closedAt} IS NOT NULL AND ${table.ratedVia} IS DISTINCT FROM 'import') OR (${table.importedExternalId} IS NOT NULL AND ${table.importedSource} IS NOT NULL AND ${table.ratedVia} IS NOT DISTINCT FROM 'import' AND (${table.rating} IS NOT NULL OR coalesce(${table.importedDetails}->'ratingUnmapped' = 'true'::jsonb, false)) AND ${table.ratedAt} IS NOT NULL)`,
     ),
     uniqueIndex('csat_responses_token_hash_key').on(table.tokenHash),
-    // A rating and its timestamp arrive together or not at all.
+    // Unscored historical answers require explicit provenance; native surveys stay paired.
     check(
       'csat_responses_rating_shape',
-      sql`(${table.rating} IS NULL AND ${table.ratedAt} IS NULL) OR (${table.rating} BETWEEN 1 AND 5 AND ${table.ratedAt} IS NOT NULL)`,
+      sql`(${table.rating} IS NULL AND ${table.ratedAt} IS NULL) OR (${table.rating} IS NOT NULL AND ${table.rating} BETWEEN 1 AND 5 AND ${table.ratedAt} IS NOT NULL) OR (${table.rating} IS NULL AND ${table.ratedAt} IS NOT NULL AND ${table.importedExternalId} IS NOT NULL AND ${table.importedSource} IS NOT NULL AND ${table.ratedVia} IS NOT DISTINCT FROM 'import' AND coalesce(${table.importedDetails}->'ratingUnmapped' = 'true'::jsonb, false))`,
     ),
     index('csat_responses_brand_department_idx').on(table.brandId, table.departmentId),
   ],

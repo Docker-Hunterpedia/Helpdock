@@ -226,6 +226,27 @@ export function FilterPopover({
             }}
           />
         </Group>
+        <Group label={t('tickets:filters.source')}>
+          <FilterChip
+            label={t('tickets:filters.allSources')}
+            on={filters.imported === undefined}
+            onToggle={() => onChange({ ...filters, imported: undefined })}
+          />
+          <FilterChip
+            label={t('tickets:filters.imported')}
+            on={filters.imported === true}
+            onToggle={() =>
+              onChange({ ...filters, imported: filters.imported === true ? undefined : true })
+            }
+          />
+          <FilterChip
+            label={t('tickets:filters.native')}
+            on={filters.imported === false}
+            onToggle={() =>
+              onChange({ ...filters, imported: filters.imported === false ? undefined : false })
+            }
+          />
+        </Group>
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button

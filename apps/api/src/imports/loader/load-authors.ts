@@ -7,14 +7,19 @@ export type ImportedAuthor = Awaited<ReturnType<typeof importedAuthor>>;
 
 export async function importedAuthor(
   tx: DbTransaction,
-  input: TicketLoad,
-  source: Pick<ImportMessage, 'authorExternalId' | 'authorKind'>,
+  input: Pick<TicketLoad, 'brandId' | 'authors'>,
+  source: Pick<ImportMessage, 'authorExternalId' | 'authorKind' | 'authorName'>,
 ) {
+  if (source.authorKind === 'system')
+    return {
+      authorType: 'system' as const,
+      authorId: null,
+      authorDisplay: source.authorName ?? null,
+    };
   const author =
     source.authorExternalId === undefined ? undefined : input.authors[source.authorExternalId];
   if (!author) {
-    if (source.authorKind !== 'system') throw new ImportLoadError('author-unmapped');
-    return { authorType: 'system' as const, authorId: null, authorDisplay: null };
+    throw new ImportLoadError('author-unmapped');
   }
   if (
     (source.authorKind === 'customer' && author.kind !== 'contact') ||

@@ -1,0 +1,1 @@
+CREATE INDEX "import_external_ids_native_lookup_idx" ON "import_external_ids" USING btree ("brand_id","entity","external_id");

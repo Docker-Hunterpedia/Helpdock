@@ -145,6 +145,15 @@ A delta reconciles only import-owned membership and preserves manually added
 participants. A known source email may fill an import-owned null address, but
 must not replace a manually chosen address. Importing a participant sends nothing.
 
+Imported satisfaction answers are historical rows with expired random tokens;
+native delivery and survey selection never select them. A response whose source
+scale cannot be established keeps a null comparable rating, its original date
+and answers, and an explicit `ratingUnmapped: true` provenance marker. It never
+counts as a zero or enters score averages. Staff may read it as
+`imported_unscored`, with no share link. Each changed imported answer writes an
+inert dated history event; repeats change neither row. Importing an answer emits
+no native `csat.received` action, workflow, notification or vendor send.
+
 ### 2.6 Reply windows on the Meta channels
 
 WhatsApp, Messenger and Instagram let a business write to a customer only for a time after the customer's last message; outside it the platform refuses the send. Helpdock enforces the window itself, before the reply is written and again when it is sent, because a reply that cannot leave the desk must not be written as if it had (M10-06, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)).
@@ -166,6 +175,17 @@ WhatsApp, Messenger and Instagram let a business write to a customer only for a 
 ## 3. SLA calculation
 
 ### 3.1 Clocks
+
+Imported tickets are exempt from automatic clock creation until an administrator
+explicitly activates them. `tickets.import_sla_started_at` records that opt-in;
+sync, reopen and policy/calendar recomputation leave unactivated imported tickets
+without clocks. Activation is idempotent and starts applicable clocks at the
+activation time, preserving the original ticket creation date. Deleted, merged
+or closed tickets and tickets without a matching policy are not activated.
+Bulk activation requires `brand:manage` and explicit acknowledgment. It covers
+the completed run's verified source account within that brand, using durable
+receipts; only tickets imported by the request time qualify. Revision/cursor
+fences and atomic clock/progress/outbox commits make replay and resume safe.
 
 Every ticket has at most two running clocks, each with `target_minutes`, `started_at`, `paused_total_ms`, `due_at`, `satisfied_at`, `breached_at`:
 
@@ -344,6 +364,7 @@ Socket.IO does not guarantee delivery. The REST API is the source of truth; sock
 - `knowledge_chunks.embedding` is `vector(<dims>)`; the column and its HNSW index are created by `knowledge.configure` when the model is first saved, not by a static migration. Every chunk stores `embedding_model`; retrieval filters `embedding_model = current` so vectors from two models are never ranked together even if their dimensions match.
 - Changing the model: admin action → `knowledge.reembed` job. It sets `ai.retrieval_status = reindexing` (auto-reply and suggestions fall back to full-text only, with a banner in admin), drops the index, alters the column to the new dimension, re-embeds every source in order, rebuilds the index, and flips the status back. Progress is visible per source. A failed re-embed leaves the status at `reindexing` and never serves mixed results.
 - Dimension limit: 2000 (pgvector HNSW). Models above that are rejected at configuration time with an explanation.
+- Imported article language versions set `hc_article_versions.import_embedding_deferred`. Import completion may index and re-chunk them locally, but never schedules embeddings. Pending and full-reembedding workers exclude deferred versions before provider calls, even for previously queued work. Full-text retrieval remains available. Staff publication, including an explicitly scheduled publication, clears that language's deferral; changed source imports defer their replacement again. See ADR 0027.
 
 ---
 

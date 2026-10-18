@@ -278,6 +278,9 @@ importers:
       '@helpdock/channels':
         specifier: workspace:*
         version: link:../../packages/channels
+      '@helpdock/importers':
+        specifier: workspace:*
+        version: link:../../packages/importers
       '@peculiar/x509':
         specifier: 2.1.0
         version: 2.1.0

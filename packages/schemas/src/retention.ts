@@ -78,6 +78,7 @@ export const retentionCategorySchema = z.enum([
   'metaDeliveries',
   'idempotencyKeys',
   'outbox',
+  'importStaging',
 ]);
 export type RetentionCategory = z.infer<typeof retentionCategorySchema>;
 

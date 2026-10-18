@@ -4,6 +4,7 @@ import type {
   TicketLink,
   TicketMessage,
 } from '@helpdock/schemas';
+import { importSourceSchema } from '@helpdock/schemas';
 import { Box, Link as MuiLink } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef } from 'react';
@@ -14,12 +15,15 @@ import { ticketRoute } from '../../app/route-paths.js';
 import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
 import type { ThreadItem } from '../../tickets/thread.js';
+import { formatClock, formatDay } from '../../ui/format.js';
 import { AiEventText } from './ai/ai-event.tsx';
 import { AutoReplyMessage } from './ai/auto-reply-message.tsx';
 import type { ThreadAi } from './ai/use-ticket-ai.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { EmailMessageCard, ThreadMismatch } from './email-message-card.tsx';
 import { messageTime, ticketReference } from './format.js';
+import { ImportedCsatEvent } from './imported-csat-event.js';
+import { ImportedMessageDetails } from './imported-message-details.js';
 import { MergedBlock } from './merged-block.tsx';
 import {
   type BubbleKind,
@@ -175,7 +179,12 @@ export function Thread({
                 }}
               />
             ) : item.kind === 'event' ? (
-              <SystemEvent>{describeEvent(item.entry, names, translate, locale, now)}</SystemEvent>
+              <>
+                <SystemEvent>
+                  {describeEvent(item.entry, names, translate, locale, now)}
+                </SystemEvent>
+                <ImportedCsatEvent entry={item.entry} />
+              </>
             ) : item.kind === 'message' ? (
               item.message.kind === 'system' && item.message.email?.mismatch != null ? (
                 <ThreadMismatch
@@ -344,7 +353,14 @@ const intoReferenceOf = (merged: MergedTicket, merges: ThreadMerges | undefined)
 export const translator = (t: ReturnType<typeof useT>): Translate => t as unknown as Translate;
 
 const bubbleKindOf = (message: TicketMessage): BubbleKind =>
-  BUBBLE_KIND[message.kind] ?? (message.authorType === 'staff' ? 'staff' : 'contact');
+  BUBBLE_KIND[message.kind] ??
+  (message.importDetails?.authorKind && message.authorType === 'system'
+    ? message.importDetails.authorKind === 'agent'
+      ? 'staff'
+      : 'contact'
+    : message.authorType === 'staff' || message.authorDisplay
+      ? 'staff'
+      : 'contact');
 
 /**
  * `Mona Khalil · mona@example.com · Tue 11:48`, with the address in a `<bdi>`
@@ -407,7 +423,13 @@ function SentMessage({
   const located = telegram === undefined && meta === undefined ? undefined : splitLocation(html);
   const time = messageTime(message.createdAt, locale, now);
   const author =
-    names.nameFor(message.authorType, message.authorId) ??
+    (message.authorDisplay
+      ? `${message.authorDisplay} · ${t(
+          message.importDetails?.authorKind && message.importDetails.authorKind !== 'agent'
+            ? 'tickets:thread.sourceAuthor'
+            : 'tickets:thread.formerAgent',
+        )}`
+      : names.nameFor(message.authorType, message.authorId)) ??
     t(`tickets:thread.${message.authorType === 'ai' ? 'system' : 'contact'}`);
   const drawFile = (attachment: TicketMessage['attachments'][number]): ReactNode => {
     const fromTelegram = telegram?.attachmentFor(attachment, time);
@@ -454,7 +476,14 @@ function SentMessage({
       bodyHtml={located?.html ?? html}
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}
-      footer={footer}
+      footer={
+        <>
+          {message.importDetails ? (
+            <ImportedMessageDetails details={message.importDetails} />
+          ) : null}
+          {footer}
+        </>
+      }
       {...(extra === undefined ? {} : { extra })}
       {...(files.length === 0 ? {} : { attachments: files })}
     />
@@ -476,8 +505,70 @@ export const describeEvent = (
 ): string => {
   const actor = names.nameFor(entry.actorType, entry.actorId) ?? t('tickets:event.someone');
   const moved = { ...entry.from, ...entry.to };
-  const at = messageTime(entry.createdAt, locale, now);
+  const at =
+    entry.action === 'ticket.imported.event'
+      ? `${formatDay(entry.createdAt, locale)} ${formatClock(entry.createdAt, locale)}`
+      : messageTime(entry.createdAt, locale, now);
   const via = t(`tickets:event.via.${entry.via}`);
+  if (entry.action === 'ticket.imported') {
+    const source = importSourceSchema.safeParse(entry.to?.source);
+    const number = entry.to?.number ?? entry.to?.externalId;
+    const created =
+      typeof entry.to?.createdAt === 'string' && Number.isFinite(Date.parse(entry.to.createdAt))
+        ? formatDay(entry.to.createdAt, locale)
+        : null;
+    return t(created ? 'tickets:event.importedCreated' : 'tickets:event.imported', {
+      source: source.success
+        ? t(`imports:sources.${source.data}`)
+        : t('tickets:event.importedSource'),
+      number: typeof number === 'string' ? number : '—',
+      importedAt: formatDay(entry.createdAt, locale),
+      createdAt: created,
+    });
+  }
+  if (entry.action === 'ticket.imported.event') {
+    const sourceEvent = entry.to?.sourceEvent;
+    if (sourceEvent && typeof sourceEvent === 'object' && !Array.isArray(sourceEvent)) {
+      const data = sourceEvent as Record<string, unknown>;
+      const source = importSourceSchema.safeParse(data.source);
+      if (data.action === 'csat.response')
+        return `${t('tickets:event.importedCsat', {
+          source: source.success
+            ? t(`imports:sources.${source.data}`)
+            : t('tickets:event.importedSource'),
+        })} · ${at}`;
+      const originalActor = typeof data.authorDisplay === 'string' ? data.authorDisplay : actor;
+      const changes = entry.to?.changes;
+      const values =
+        changes && typeof changes === 'object' && !Array.isArray(changes)
+          ? (changes as Record<string, unknown>)
+          : {};
+      const field =
+        typeof values.field === 'string'
+          ? values.field
+          : typeof entry.from?.field === 'string'
+            ? entry.from.field
+            : null;
+      const value = (item: unknown): string =>
+        typeof item === 'string'
+          ? item.slice(0, 300)
+          : typeof item === 'number' || typeof item === 'boolean'
+            ? String(item)
+            : item === null || item === undefined
+              ? '—'
+              : t('tickets:event.structuredValue');
+      return `${t(field ? 'tickets:event.importedChange' : 'tickets:event.importedHistory', {
+        actor: originalActor,
+        source: source.success
+          ? t(`imports:sources.${source.data}`)
+          : t('tickets:event.importedSource'),
+        action: typeof data.action === 'string' ? data.action : '',
+        field,
+        from: value(entry.from?.value),
+        to: value(values.value),
+      })} · ${at}`;
+    }
+  }
 
   // M3-06: one entry for everything a macro did, "via macro Shipping delay".
   if (entry.action === 'ticket.macro_applied') {

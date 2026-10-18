@@ -8,6 +8,7 @@ import type {
   RenderedMacro,
   Ticket,
   TicketActivityList,
+  TicketActivityQuery,
   TicketAiCalls,
   TicketAiState,
   TicketCcRequest,
@@ -63,7 +64,11 @@ export interface TicketsApi {
   ticket(brandId: string, ticketId: string): Promise<TicketDetail>;
   /** The catch-up read of DOMAIN-RULES §7: everything after a `seq`. */
   messages(brandId: string, ticketId: string, after?: number): Promise<TicketMessagePage>;
-  activity(brandId: string, ticketId: string): Promise<TicketActivityList>;
+  activity(
+    brandId: string,
+    ticketId: string,
+    query?: TicketActivityQuery,
+  ): Promise<TicketActivityList>;
 
   create(brandId: string, request: TicketCreateRequest): Promise<TicketDetail>;
   update(brandId: string, ticketId: string, request: TicketUpdateRequest): Promise<Ticket>;
@@ -193,6 +198,7 @@ export interface TicketQuery {
   readonly tagIds?: readonly string[];
   /** Only tickets whose SLA has run out (M1-05). */
   readonly overdue?: boolean;
+  readonly imported?: boolean;
   /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   readonly q?: string;
   readonly sort?: TicketSort;

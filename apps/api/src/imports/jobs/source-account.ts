@@ -1,4 +1,4 @@
-import { type DbTransaction, importRecords, importRuns } from '@helpdock/db';
+import { type DbTransaction, importFiles, importRecords, importRuns } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
 import { importSourceSchema } from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
@@ -57,6 +57,12 @@ export async function bindImportSourceAccount(
     .where(and(eq(importRecords.brandId, input.brandId), eq(importRecords.runId, input.runId)))
     .limit(1);
   if (record) throw new ImportLoadError('mapping-invalid');
+  const [file] = await tx
+    .select({ id: importFiles.id })
+    .from(importFiles)
+    .where(and(eq(importFiles.brandId, input.brandId), eq(importFiles.runId, input.runId)))
+    .limit(1);
+  if (file) throw new ImportLoadError('mapping-invalid');
   await tx.update(importRuns).set({ sourceAccountKey: key }).where(predicate);
   return key;
 }

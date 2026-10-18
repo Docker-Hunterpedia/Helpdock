@@ -765,15 +765,35 @@ Unit tests are Vitest, colocated as `src/**/*.test.ts`. `pnpm test` runs one Vit
 
 ### Coverage gates
 
-The large migration reference fixture runs separately from instrumented API
-coverage, using `pnpm exec vitest run --project integration apps/api/src/imports/zendesk-reference.integration.test.ts --maxWorkers=1`.
-CI requires both `api` and `import-reference` for affected API changes; the latter
+The large migration reference fixtures run separately from instrumented API
+coverage. Run Zendesk with `pnpm exec vitest run --project integration apps/api/src/imports/zendesk-reference.integration.test.ts --maxWorkers=1`.
+Run Freshdesk or Zoho with `pnpm exec vitest run --project integration apps/api/src/imports/native-reference.integration.test.ts --testNamePattern freshdesk --maxWorkers=1`
+(replace `freshdesk` with `zohodesk` for Zoho). Build workspace packages first:
+the disposable worker process uses their normal `dist/` exports.
+CI requires both `api` and the `import-reference` matrix for affected API changes; the latter
 is skipped for changes confined to unrelated workspaces, such as admin UI.
 The API coverage gate still includes every production import file, exercised by
-the smaller real-database integration cases. Only the large reference test file
-is excluded from that instrumented run. Its separate job has a 45-minute budget
+the smaller real-database integration cases. Only the two large reference test files
+are excluded from that instrumented run. Each source job has a 45-minute budget
 for full extraction, dry run, loading, repeat and delta; it does not contact a
-real vendor. This avoids timing out a valid import under coverage overhead.
+real vendor. The Freshdesk/Zoho cases also kill an owned worker process during
+attachment I/O and restart it through production claim recovery. They advance
+only the dead claim's timestamp to avoid waiting the 30-minute lease timeout;
+they do not modify cursors, receipts or business records to simulate recovery.
+
+Run the import wizard against the real API in both languages with
+`pnpm --filter @helpdock/admin e2e:imports --workers=1`. Build the workspace
+packages and API first. This separate Playwright configuration starts its own
+Postgres and Redis, a compiled API process and the import/media workers. It
+signs in through real TOTP, reads from the Zendesk stand-in, confirms mapping
+choices over the public API, and reviews/approves the import through the wizard.
+It checks original history and managed file bytes, plus SMTP/HTTP tripwires,
+quiet domain/outbox rows and credential purge. Its storage driver is the local
+test stand-in, so this does not replace the real object-storage integration
+suite. Docker absence may skip this suite locally; a failed probe fails CI.
+The fixture's vendor DNS mapping accepts only the named local test hosts; the
+browser must still approve the stand-in's separate attachment CDN host.
+These newly authored cases still require a passing run before acceptance is claimed.
 
 Coverage uses `@vitest/coverage-v8`. There are three gates, all on lines, all
 run by their own CI job — a drop below any of them fails that job, and with it
@@ -949,10 +969,10 @@ command you can run locally:
 | `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
 | `api` | `pnpm --filter @helpdock/api test:coverage`: API unit and representative real-DB integration suites with the 90 % gate |
-| `import-reference` | The full 500-ticket import/repeat/delta acceptance suite on real Postgres/Redis, one Vitest worker, without coverage instrumentation |
+| `import-reference (source)` | Zendesk, Freshdesk and Zoho 500-ticket import/repeat/delta suites on real Postgres/Redis; one worker per source, without coverage instrumentation; Freshdesk/Zoho include a real worker kill |
 | `integration` | `vitest run --project=integration packages/`: the packages' integration suites (Testcontainers) |
 | `e2e (1/4)` … `e2e (4/4)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/4`: browser tests, `en` and `ar`, against the fixture |
-| `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, then `e2e:api` against a real api, Postgres and Redis |
+| `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, `e2e:api`, and `e2e:imports --workers=1` against a real API, Postgres and Redis |
 | `image` | the image for `linux/amd64`, loaded not pushed, then [`scripts/compose-smoke.sh`](#the-whole-stack-from-your-working-copy) against it |
 
 Pull requests select suites with [`scripts/ci-scope.ts`](../../scripts/ci-scope.ts).

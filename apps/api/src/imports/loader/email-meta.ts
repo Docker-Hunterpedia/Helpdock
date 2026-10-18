@@ -9,7 +9,7 @@ export function importEmailMeta(message: ImportMessage) {
     from: address(email.from),
     to: (email.to ?? []).map(address),
     cc: (email.cc ?? []).map(address),
-    date: new Date(message.createdAt).toISOString(),
+    date: email.sentAt === null ? null : new Date(email.sentAt ?? message.createdAt).toISOString(),
     quotedHtml: null,
     remoteImages: [],
     remoteImagePolicy: 'block',

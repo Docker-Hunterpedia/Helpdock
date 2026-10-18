@@ -46,6 +46,33 @@ it('accepts full destination bounds but refuses bodies that cannot be stored int
   ).toBe(false);
 });
 
+it('requires both prepared copies when the source has distinct working and published bodies', () => {
+  const twoCopies = {
+    ...article,
+    record: {
+      ...article.record,
+      published: {
+        title: 'Published title',
+        bodyHtml: '<p>Published body</p>',
+        publishedAt: null,
+      },
+    },
+  };
+  expect(articleLoadSchema.safeParse(twoCopies).success).toBe(false);
+  expect(
+    articleLoadSchema.safeParse({
+      ...twoCopies,
+      preparedPublishedBodyHtml: '<p>Prepared published body</p>',
+    }).success,
+  ).toBe(true);
+  expect(
+    articleLoadSchema.safeParse({
+      ...article,
+      preparedPublishedBodyHtml: '<p>Invented public copy</p>',
+    }).success,
+  ).toBe(false);
+});
+
 it('keeps full source descriptions separately from bounded bilingual display excerpts', () => {
   const descriptions = {
     en: `${'x'.repeat(HC_CATEGORY_DESCRIPTION_MAX - 1)}😀tail`,

@@ -81,6 +81,20 @@ const MIGRATION_TAGS = [
   '0065_import_message_identity',
   '0066_import_dry_run_identity',
   '0067_import_csat_source_accounts',
+  '0068_import_source_files',
+  '0069_import_staging_retention',
+  '0070_imported_sla_activation',
+  '0071_imported_sla_candidates',
+  '0072_imported_ticket_native_search',
+  '0073_ticket_activity_history_cursor',
+  '0074_imported_unscored_satisfaction',
+  '0075_import_ticket_inventory',
+  '0076_imported_message_provenance',
+  '0077_imported_article_assets',
+  '0078_imported_article_published_copy',
+  '0079_imported_article_translation_lookup',
+  '0080_import_attachment_dry_run_media',
+  '0081_imported_article_embedding_deferral',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -216,6 +230,124 @@ describe.skipIf(!hasDocker)('migrations', () => {
       }
     },
   );
+
+  it.each(['valid', 'collision'] as const)(
+    'backfills satisfaction history without resending or rewriting answers: %s',
+    async (kind) => {
+      const url = await migrated(`csat_history_${kind}`);
+      const owner = postgres(url, { max: 1, onnotice: () => {} });
+      try {
+        const [brand] =
+          await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Historical answers','CSH') RETURNING id`;
+        const [department] =
+          await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support') RETURNING id`;
+        const [status] =
+          await owner`INSERT INTO ticket_statuses(id,brand_id,name,system_state,color) VALUES(gen_random_uuid(),${brand?.id},'Open','open','info') RETURNING id`;
+        const [ticket] =
+          await owner`INSERT INTO tickets(id,brand_id,department_id,number,prefix,subject,status_id,channel)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},1,'CSH','Old answer',${status?.id},'email') RETURNING id`;
+        const [answer] =
+          await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,imported_source,imported_external_id,token_hash,expires_at,rating,rated_at,rated_via,imported_details)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'freshdesk','legacy:1','synthetic-history-hash','1970-01-01',5,'2019-01-01','import',${owner.json({ originalAnswers: [{ question_id: 'Q1', question_text: 'Original question', value: 103 }] })}) RETURNING id`;
+        await owner`INSERT INTO csat_responses(id,brand_id,department_id,ticket_id,closed_at,token_hash,expires_at)
+        VALUES(gen_random_uuid(),${brand?.id},${department?.id},${ticket?.id},'2026-10-17','synthetic-native-hash','2026-11-17')`;
+        const before =
+          await owner`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${ticket?.id} ORDER BY id`;
+        if (kind === 'collision')
+          await owner`INSERT INTO ticket_activity(id,brand_id,department_id,ticket_id,actor_type,actor_id,action,via)
+        VALUES(${answer?.id},${brand?.id},${department?.id},${ticket?.id},'system','native','ticket.created','system')`;
+        const migration = readFileSync(
+          new URL('../drizzle/0074_imported_unscored_satisfaction.sql', import.meta.url),
+          'utf8',
+        );
+        const apply = () =>
+          owner.begin(async (tx) => {
+            for (const statement of migration.split('--> statement-breakpoint'))
+              if (statement.trim()) await tx.unsafe(statement);
+          });
+        if (kind === 'collision')
+          await expect(apply()).rejects.toThrow(
+            'Imported satisfaction history ID belongs to another activity',
+          );
+        else {
+          await apply();
+          expect(
+            await owner`SELECT id,action,"to",created_at FROM ticket_activity WHERE ticket_id=${ticket?.id}`,
+          ).toMatchObject([
+            {
+              id: answer?.id,
+              action: 'ticket.imported.event',
+              to: {
+                csat: { rating: 5, link: null },
+                sourceEvent: {
+                  action: 'csat.response',
+                  details: { originalAnswers: [{ value: 103 }] },
+                },
+              },
+              created_at: new Date('2019-01-01T00:00:00Z'),
+            },
+          ]);
+          const events =
+            await owner`SELECT id,xmin::text AS revision FROM ticket_activity WHERE ticket_id=${ticket?.id}`;
+          await apply();
+          expect(
+            await owner`SELECT id,xmin::text AS revision FROM ticket_activity WHERE ticket_id=${ticket?.id}`,
+          ).toEqual(events);
+          expect(
+            await owner`SELECT count(*)::int AS count FROM outbox WHERE brand_id=${brand?.id}`,
+          ).toMatchObject([{ count: 0 }]);
+        }
+        expect(
+          await owner`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${ticket?.id} ORDER BY id`,
+        ).toEqual(before);
+      } finally {
+        await owner.end();
+      }
+    },
+  );
+
+  it('defers existing imported article languages without changing staff publications or another brand', async () => {
+    const url = await migrated('import_embedding_deferral');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    const brand = uuidv7(),
+      otherBrand = uuidv7(),
+      publisher = uuidv7();
+    const category = uuidv7(),
+      section = uuidv7(),
+      importedArticle = uuidv7(),
+      liveArticle = uuidv7();
+    try {
+      await owner`ALTER TABLE hc_article_versions DROP COLUMN import_embedding_deferred`;
+      await owner`INSERT INTO brands(id,name,prefix) VALUES (${brand},'Historical','MIG'),(${otherBrand},'Other','OTH')`;
+      await owner`INSERT INTO users(id,email,name) VALUES (${publisher},'publisher@example.test','Publisher')`;
+      await owner`INSERT INTO hc_categories(id,brand_id,slug) VALUES (${category},${brand},'category')`;
+      await owner`INSERT INTO hc_sections(id,brand_id,category_id,slug) VALUES (${section},${brand},${category},'section')`;
+      await owner`INSERT INTO hc_articles(id,brand_id,section_id,slug) VALUES
+        (${importedArticle},${brand},${section},'imported'),(${liveArticle},${brand},${section},'live')`;
+      await owner`INSERT INTO hc_article_versions(id,brand_id,article_id,locale,title,status,published_by) VALUES
+        (${uuidv7()},${brand},${importedArticle},'en','Original English','published',NULL),
+        (${uuidv7()},${brand},${importedArticle},'ar','Staff publication','published',${publisher}),
+        (${uuidv7()},${brand},${liveArticle},'en','Live article','published',NULL)`;
+      await owner`INSERT INTO import_external_ids(brand_id,source,entity,external_id,helpdock_id,payload_hash) VALUES
+        (${brand},'zendesk','article','native',${importedArticle},${'a'.repeat(64)}),
+        (${otherBrand},'zendesk','article','foreign-pointer',${liveArticle},${'b'.repeat(64)})`;
+      const migration = readFileSync(
+        new URL('../drizzle/0081_imported_article_embedding_deferral.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint'))
+        if (statement.trim()) await owner.unsafe(statement);
+      expect(
+        await owner`SELECT title,import_embedding_deferred FROM hc_article_versions ORDER BY title`,
+      ).toEqual([
+        { title: 'Live article', import_embedding_deferred: false },
+        { title: 'Original English', import_embedding_deferred: true },
+        { title: 'Staff publication', import_embedding_deferred: false },
+      ]);
+    } finally {
+      await owner.end();
+    }
+  });
 
   it('backfills imported message and copy provenance while retaining live RFC uniqueness', async () => {
     const url = await migrated('import_message_upgrade');

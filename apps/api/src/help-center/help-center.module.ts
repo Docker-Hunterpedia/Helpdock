@@ -20,6 +20,8 @@ import { HelpCenterInsightsService } from './feedback/insights.service.js';
 import { HelpCenterController } from './help-center.controller.js';
 import { HelpCenterRepository } from './help-center.repository.js';
 import { HelpCenterMediaController } from './help-center-media.controller.js';
+import { HelpCenterImportAssetsController } from './import-assets.controller.js';
+import { HelpCenterImportAssetsService } from './import-assets.service.js';
 import { HelpCenterMediaService } from './media.service.js';
 import {
   HELP_CENTER_FEEDBACK,
@@ -94,6 +96,7 @@ export class HelpCenterModule {
       controllers: [
         HelpCenterController,
         HelpCenterMediaController,
+        HelpCenterImportAssetsController,
         HelpCenterInsightsController,
         HelpCenterSiteSettingsController,
         HelpCenterSiteController,
@@ -112,6 +115,10 @@ export class HelpCenterModule {
           useFactory: () => new HelpCenterSettingsService(repository),
         },
         { provide: HelpCenterMediaService, useFactory: () => new HelpCenterMediaService(storage) },
+        {
+          provide: HelpCenterImportAssetsService,
+          useFactory: () => new HelpCenterImportAssetsService(storage, staffAccess),
+        },
         {
           provide: HelpCenterContentService,
           inject: [DB],

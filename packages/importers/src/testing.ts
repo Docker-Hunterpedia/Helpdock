@@ -1,5 +1,12 @@
+export * from './freshdesk/testing/core-fixture.js';
+export * from './freshdesk/testing/fake-freshdesk.js';
+export * from './freshdesk/testing/reference-fixture.js';
+export * from './testing/browser-install.js';
+export type { VendorRequestGate } from './testing/request-gate.js';
 export * from './testing/vendor-server.js';
 export * from './zendesk/testing/core-fixture.js';
 export * from './zendesk/testing/fake-zendesk.js';
-
 export * from './zendesk/testing/reference-fixture.js';
+export * from './zoho/testing/core-fixture.js';
+export * from './zoho/testing/fake-zoho.js';
+export * from './zoho/testing/reference-fixture.js';

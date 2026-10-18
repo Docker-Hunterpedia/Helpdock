@@ -82,14 +82,38 @@ export class SlaService {
     await this.#syncOne(tx, brand, change);
   }
 
+  /** An explicit admin action starts imported work from this moment, never from its historical creation date. */
+  async activateImported(tx: DbTransaction, change: SlaSync): Promise<boolean> {
+    await this.#repository.lockTicket(tx, change.ticketId);
+    const found = await this.#repository.findTicket(tx, change.ticketId);
+    if (
+      !found ||
+      found.ticket.brandId !== change.brandId ||
+      !found.ticket.importedAt ||
+      found.ticket.importSlaStartedAt ||
+      found.ticket.deletedAt ||
+      found.ticket.mergedIntoId ||
+      found.status.systemState === 'closed' ||
+      found.status.excludedFromReports
+    )
+      return false;
+    const brand = await this.#brand(tx, change.brandId);
+    if (!this.#applied(brand, found.ticket)) return false;
+    await this.#repository.markImportedActivated(tx, change.brandId, change.ticketId, change.at);
+    await this.#syncOne(tx, brand, change);
+    return true;
+  }
+
   /** §3.5: a closed ticket came back. The response clock becomes a next-response clock. */
   async reopen(tx: DbTransaction, change: SlaSync): Promise<void> {
     const brand = await this.#brand(tx, change.brandId);
+    await this.#repository.lockTicket(tx, change.ticketId);
     const found = await this.#repository.findTicket(tx, change.ticketId);
     if (found === undefined) {
       return;
     }
-    await this.#repository.lockTicket(tx, change.ticketId);
+    if ((found.ticket.importedAt || found.ticket.importSource) && !found.ticket.importSlaStartedAt)
+      return;
 
     const before = await this.#repository.currentClocks(tx, change.ticketId);
     const facts = await this.#facts(tx, found.ticket, found.status, before, change);
@@ -239,11 +263,13 @@ export class SlaService {
   // ---------------------------------------------------------------- internals
 
   async #syncOne(tx: DbTransaction, brand: BrandSla, change: SlaSync): Promise<void> {
+    await this.#repository.lockTicket(tx, change.ticketId);
     const found = await this.#repository.findTicket(tx, change.ticketId);
     if (found === undefined) {
       return;
     }
-    await this.#repository.lockTicket(tx, change.ticketId);
+    if ((found.ticket.importedAt || found.ticket.importSource) && !found.ticket.importSlaStartedAt)
+      return;
 
     const before = await this.#repository.currentClocks(tx, change.ticketId);
     const facts = await this.#facts(tx, found.ticket, found.status, before, change);

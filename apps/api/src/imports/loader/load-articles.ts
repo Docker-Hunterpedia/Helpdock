@@ -1,6 +1,5 @@
 import { articleImageSources, sanitizeArticleHtml } from '@helpdock/channels';
 import { type DbTransaction, hcArticles, hcMedia, importLog, uuidv7 } from '@helpdock/db';
-import { hashImportValue } from '@helpdock/importers';
 import {
   HC_DESCRIPTION_MAX,
   HC_MAX_ARTICLES,
@@ -8,8 +7,11 @@ import {
   hcVersionSaveRequestSchema,
 } from '@helpdock/schemas';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { z } from 'zod';
 import { HelpCenterRepository } from '../../help-center/help-center.repository.js';
 import { resolveSlug } from '../../help-center/slugs.js';
+import { importedArticleContentHash } from './article-content-hash.js';
+import { importedArticleSiblingTarget } from './article-group-target.js';
 import { ImportLoadError } from './contracts.js';
 import { importedIdentity, rememberImported } from './external-ids.js';
 import { type ArticleLoad, articleLoadSchema } from './knowledge-contracts.js';
@@ -18,17 +20,19 @@ import {
   importedSectionTarget,
   lockImportedKnowledge,
 } from './knowledge-targets.js';
+import { bindArticleAssets, verifiedArticleAssets } from './load-article-assets.js';
 import { requireLoadingRun } from './run-scope.js';
 
 const repository = new HelpCenterRepository();
 
-async function preparedArticleBody(tx: DbTransaction, input: ArticleLoad) {
-  const sources = [...new Set(articleImageSources(input.preparedBodyHtml))];
+async function preparedArticleBody(tx: DbTransaction, input: ArticleLoad, html: string) {
+  const sources = [...new Set(articleImageSources(html))];
   const prefix = `/api/help-center/brands/${input.brandId}/media/`;
   if (sources.some((src) => !src.startsWith(prefix))) throw new ImportLoadError('mapping-invalid');
   const ids = sources.map((src) => src.slice(prefix.length));
   if (ids.length) {
-    if (ids.some((id) => !/^[0-9a-f-]{36}$/.test(id))) throw new ImportLoadError('mapping-invalid');
+    if (ids.some((id) => !z.uuid().safeParse(id).success))
+      throw new ImportLoadError('mapping-invalid');
     const ready = await tx
       .select({ id: hcMedia.id })
       .from(hcMedia)
@@ -37,6 +41,8 @@ async function preparedArticleBody(tx: DbTransaction, input: ArticleLoad) {
           eq(hcMedia.brandId, input.brandId),
           inArray(hcMedia.id, ids),
           eq(hcMedia.status, 'ready'),
+          eq(hcMedia.kind, 'image'),
+          eq(hcMedia.mime, 'image/webp'),
           isNotNull(hcMedia.webpKey),
         ),
       );
@@ -46,7 +52,7 @@ async function preparedArticleBody(tx: DbTransaction, input: ArticleLoad) {
     )
       throw new ImportLoadError('mapping-invalid');
   }
-  return sanitizeArticleHtml(input.preparedBodyHtml, { brandId: input.brandId });
+  return sanitizeArticleHtml(html, { brandId: input.brandId });
 }
 
 async function articleIdentity(
@@ -58,7 +64,10 @@ async function articleIdentity(
   const translated = input.record.translationOf
     ? await importedArticleTarget(tx, input, input.record.translationOf)
     : undefined;
-  const id = knownId ?? translated?.id;
+  const id =
+    knownId ??
+    translated?.id ??
+    (await importedArticleSiblingTarget(tx, input, input.record.externalId));
   if (id) {
     const [article] = await tx
       .select()
@@ -98,25 +107,67 @@ function articleContent(input: ArticleLoad, bodyHtml: string) {
   });
 }
 
+function publishedContent(
+  input: ArticleLoad,
+  body: ReturnType<typeof sanitizeArticleHtml>,
+  publishedBody: ReturnType<typeof sanitizeArticleHtml> | undefined,
+) {
+  if (input.record.published === undefined)
+    return input.record.draft
+      ? null
+      : {
+          ...articleContent(input, body.html),
+          text: body.text,
+          at: new Date(input.record.updatedAt),
+        };
+  const snapshot = input.record.published;
+  if (snapshot === null) return null;
+  if (!publishedBody) throw new ImportLoadError('mapping-invalid');
+  const description = (snapshot.description ?? '')
+    .slice(0, HC_DESCRIPTION_MAX)
+    .replace(/[\uD800-\uDBFF]$/, '');
+  return {
+    ...hcVersionSaveRequestSchema.parse({
+      title: snapshot.title,
+      description,
+      bodyHtml: publishedBody.html,
+    }),
+    text: publishedBody.text,
+    at: snapshot.publishedAt === null ? null : new Date(snapshot.publishedAt),
+  };
+}
+
 async function saveImportedVersion(
   tx: DbTransaction,
-  input: ArticleLoad,
-  target: { articleId: string; existingId: string | undefined },
-  body: ReturnType<typeof sanitizeArticleHtml>,
+  target: {
+    input: ArticleLoad;
+    articleId: string;
+    existingId: string | undefined;
+    body: ReturnType<typeof sanitizeArticleHtml>;
+    publishedBody: ReturnType<typeof sanitizeArticleHtml> | undefined;
+  },
 ) {
+  const { input, body, publishedBody } = target;
   const content = articleContent(input, body.html);
-  const published = !input.record.draft;
+  const published = publishedContent(input, body, publishedBody);
   const updatedAt = new Date(input.record.updatedAt);
   const version = {
     ...content,
     importedDescription: input.record.description ?? null,
-    status: published ? ('published' as const) : ('draft' as const),
+    importEmbeddingDeferred: true,
+    importedPublishedDescription:
+      input.record.published === undefined
+        ? input.record.draft
+          ? null
+          : (input.record.description ?? null)
+        : (input.record.published?.description ?? null),
+    status: input.record.draft ? ('draft' as const) : ('published' as const),
     visibility: input.record.internal ? ('internal' as const) : ('public' as const),
-    publishedTitle: published ? content.title : null,
-    publishedDescription: published ? content.description : null,
-    publishedBodyHtml: published ? body.html : null,
-    publishedBodyText: published ? body.text : null,
-    publishedAt: published ? updatedAt : null,
+    publishedTitle: published?.title ?? null,
+    publishedDescription: published?.description ?? null,
+    publishedBodyHtml: published?.bodyHtml ?? null,
+    publishedBodyText: published?.text ?? null,
+    publishedAt: published?.at ?? null,
     publishedBy: null,
     updatedBy: null,
     scheduledAt: null,
@@ -135,7 +186,11 @@ async function saveImportedVersion(
 }
 
 async function logArticleDescription(tx: DbTransaction, input: ArticleLoad) {
-  if ((input.record.description?.length ?? 0) <= HC_DESCRIPTION_MAX) return;
+  if (
+    (input.record.description?.length ?? 0) <= HC_DESCRIPTION_MAX &&
+    (input.record.published?.description?.length ?? 0) <= HC_DESCRIPTION_MAX
+  )
+    return;
   await tx.insert(importLog).values({
     brandId: input.brandId,
     runId: input.runId,
@@ -152,19 +207,27 @@ export async function loadImportedArticle(tx: DbTransaction, request: ArticleLoa
   await requireLoadingRun(tx, input);
   await lockImportedKnowledge(tx, input, 'articles');
   const section = await importedSectionTarget(tx, input, input.record.sectionExternalId);
-  const body = await preparedArticleBody(tx, input);
-  const payloadHash = hashImportValue({
-    record: input.record,
-    bodyHtml: body.html,
-    sectionId: section.id,
-  });
+  const body = await preparedArticleBody(tx, input, input.preparedBodyHtml);
+  const publishedBody =
+    input.preparedPublishedBodyHtml === undefined
+      ? undefined
+      : await preparedArticleBody(tx, input, input.preparedPublishedBodyHtml);
+  const assets = await verifiedArticleAssets(tx, input, body.html, publishedBody?.html);
+  const payloadHash = importedArticleContentHash(input, body.html, section.id, assets.prepared);
   const known = await importedIdentity(tx, input, 'article', input.record.externalId);
   const article = await articleIdentity(tx, input, section.id, known?.helpdockId);
   const existing = await repository.version(tx, article.id, input.record.locale);
+  await bindArticleAssets(tx, assets.assets, article.id);
   if (known?.payloadHash === payloadHash && existing)
     return { id: article.id, outcome: 'unchanged' as const };
   if (existing && !known) throw new ImportLoadError('mapping-invalid');
-  await saveImportedVersion(tx, input, { articleId: article.id, existingId: existing?.id }, body);
+  await saveImportedVersion(tx, {
+    input,
+    articleId: article.id,
+    existingId: existing?.id,
+    body,
+    publishedBody,
+  });
   const updatedAt = new Date(input.record.updatedAt);
   await repository.updateArticle(tx, article.id, {
     sectionId: section.id,

@@ -29,6 +29,36 @@ export const importEntitySchema = z.enum([
 ]);
 export type ImportSource = z.infer<typeof importSourceSchema>;
 export type ImportEntity = z.infer<typeof importEntitySchema>;
+export const FRESHDESK_IMPORT_ENTITIES: readonly ImportEntity[] = [
+  'user',
+  'contact',
+  'organization',
+  'group',
+  'field',
+  'tag',
+  'ticket',
+  'message',
+  'attachment',
+  'csat',
+  'category',
+  'section',
+  'article',
+];
+export const ZOHODESK_IMPORT_ENTITIES: readonly ImportEntity[] = [
+  'user',
+  'contact',
+  'organization',
+  'group',
+  'field',
+  'tag',
+  'ticket',
+  'message',
+  'attachment',
+  'csat',
+  'category',
+  'section',
+  'article',
+];
 
 const externalId = z.string().min(1).max(200).regex(/\S/);
 const shortText = z.string().max(300);
@@ -137,6 +167,7 @@ export const importTicketSchema = z
     number: z.string().max(50).optional(),
     subject: z.string().min(1).max(10000),
     status: shortText,
+    statusLabel: z.string().min(1).max(300).optional(),
     priority: shortText.optional(),
     channel: shortText.optional(),
     requesterExternalId: externalId.optional(),
@@ -166,14 +197,33 @@ export const importAttachmentRefSchema = z
     size: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     url: importUrlSchema.optional(),
     bundlePath: importBundlePathSchema.optional(),
+    /** Transport-only hint for bounded metadata refresh; never part of business identity. */
+    sourcePage: z.number().int().min(1).max(1000000).optional(),
+    /** Vendor-provided locators rewritten to the managed file; never independent fetch authority. */
+    sourceUrls: z.array(importUrlSchema).min(1).max(8).optional(),
   })
   .refine(
     (attachment) => !!attachment.url !== !!attachment.bundlePath,
     'An attachment requires exactly one URL or bundle path',
+  )
+  .refine(
+    (attachment) => attachment.sourceUrls === undefined || attachment.url !== undefined,
+    'URL aliases require a URL attachment',
   );
 export const importAttachmentSchema = importAttachmentRefSchema.safeExtend({
   ticketExternalId: externalId,
   messageExternalId: externalId.optional(),
+});
+export const importMessageDetailsSchema = z.strictObject({
+  status: shortText.optional(),
+  channel: shortText.optional(),
+  direction: shortText.optional(),
+  authorKind: z.enum(['agent', 'customer', 'system', 'unknown']).optional(),
+  authorType: shortText.optional(),
+  via: shortText.optional(),
+  mailSubject: z.string().max(10000).optional(),
+  mailDate: z.string().max(1000).optional(),
+  mailReturnPath: z.string().max(1000).optional(),
 });
 export const importMessageSchema = z
   .strictObject({
@@ -181,6 +231,8 @@ export const importMessageSchema = z
     ticketExternalId: externalId,
     authorExternalId: externalId.optional(),
     authorKind: z.enum(['agent', 'customer', 'system']),
+    authorName: name.optional(),
+    sourceDetails: importMessageDetailsSchema.optional(),
     public: z.boolean(),
     bodyHtml: body.optional(),
     bodyText: body.optional(),
@@ -197,6 +249,7 @@ export const importMessageSchema = z
         from: z.email().optional(),
         to: emails.optional(),
         cc: emails.optional(),
+        sentAt: instant.nullable().optional(),
       })
       .optional(),
     attachments: z.array(importAttachmentRefSchema).max(1000),
@@ -205,15 +258,20 @@ export const importMessageSchema = z
     (message) => message.bodyHtml !== undefined || message.bodyText !== undefined,
     'A message requires HTML or plain text',
   );
-export const importCsatSchema = z.strictObject({
-  externalId,
-  ticketExternalId: externalId,
-  rating: z.number().int().min(1).max(5),
-  comment: body.optional(),
-  ratedAt: instant,
-  closedAt: instant.optional(),
-  sourceDetails: custom.optional(),
-});
+export const importCsatSchema = z
+  .strictObject({
+    externalId,
+    ticketExternalId: externalId,
+    rating: z.number().int().min(1).max(5).nullable(),
+    comment: body.optional(),
+    ratedAt: instant,
+    closedAt: instant.optional(),
+    sourceDetails: custom.optional(),
+  })
+  .refine(
+    (answer) => answer.rating !== null || answer.sourceDetails?.ratingUnmapped === true,
+    'An unscored imported answer requires an explicit unmapped-rating marker',
+  );
 export const importActivitySchema = z.strictObject({
   externalId,
   ticketExternalId: externalId,
@@ -240,6 +298,31 @@ export const importSectionSchema = importCategorySchema.safeExtend({
   parentExternalId: externalId,
   parentSectionExternalId: externalId.optional(),
 });
+const assetOrigin = importUrlSchema
+  .refine((address) => {
+    const parsed = new URL(address);
+    return parsed.pathname === '/' && !parsed.search && !parsed.hash;
+  }, 'Expected an origin without a path, query or fragment')
+  .transform((address) => new URL(address).origin);
+
+export const importPublishedArticleSchema = z
+  .strictObject({
+    title: z.string().min(1).max(500),
+    bodyHtml: body,
+    assetOrigin: assetOrigin.optional(),
+    description: z.string().max(20000).optional(),
+    publishedAt: instant.nullable(),
+    attachments: z.array(importAttachmentRefSchema).max(1000).optional(),
+  })
+  .refine(
+    (snapshot) =>
+      new Set(snapshot.attachments?.map((file) => file.externalId) ?? []).size ===
+      (snapshot.attachments?.length ?? 0),
+    {
+      path: ['attachments'],
+      message: 'A published snapshot repeats an attachment identity',
+    },
+  );
 export const importArticleSchema = z
   .strictObject({
     externalId,
@@ -247,12 +330,28 @@ export const importArticleSchema = z
     locale: z.enum(['en', 'ar']),
     title: z.string().min(1).max(500),
     bodyHtml: body,
+    assetOrigin: assetOrigin.optional(),
     description: z.string().max(20000).optional(),
     draft: z.boolean(),
     internal: z.boolean(),
     createdAt: instant,
     updatedAt: instant,
     translationOf: externalId.optional(),
+    attachments: z.array(importAttachmentRefSchema).max(1000).optional(),
+    published: importPublishedArticleSchema.nullable().optional(),
+  })
+  .refine(
+    (article) =>
+      new Set(article.attachments?.map((file) => file.externalId) ?? []).size ===
+      (article.attachments?.length ?? 0),
+    {
+      path: ['attachments'],
+      message: 'An article repeats an attachment identity',
+    },
+  )
+  .refine((article) => article.published !== null || article.draft, {
+    path: ['published'],
+    message: 'A public article must have a published copy',
   })
   .refine((article) => Date.parse(article.updatedAt) >= Date.parse(article.createdAt), {
     path: ['updatedAt'],

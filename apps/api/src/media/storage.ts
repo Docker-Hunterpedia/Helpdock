@@ -1,6 +1,6 @@
 import { createWriteStream } from 'node:fs';
 import { open, rm } from 'node:fs/promises';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
   DeleteObjectCommand,
@@ -270,52 +270,23 @@ export class S3ObjectStorage implements ObjectStorage {
     }
 
     let read = 0;
-    const counted = new Readable({
-      read() {
-        /* c8 ignore next -- the pipeline below pulls; this is the required stub. */
+    const source = body as unknown as AsyncIterable<Uint8Array>;
+    const counted = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        read += chunk.length;
+        callback(read > maxBytes ? new ObjectTooLargeError(key, maxBytes) : null, chunk);
       },
     });
-
-    const source = body as unknown as AsyncIterable<Uint8Array>;
-    const pump = (async (): Promise<void> => {
-      for await (const chunk of source) {
-        read += chunk.byteLength;
-        if (read > maxBytes) {
-          throw new ObjectTooLargeError(key, maxBytes);
-        }
-        counted.push(chunk);
-      }
-      counted.push(null);
-    })();
-
-    // Both are settled before anything is rethrown, and the second rejection is
-    // swallowed on purpose. When the cap trips, `pump` rejects and `counted` is
-    // destroyed, which makes `pipeline` reject too; leaving that second promise
-    // unobserved is an unhandled rejection, and Node ends the worker process on
-    // one. The cap firing must stop an upload, not the worker.
-    const written = pipeline(counted, createWriteStream(path));
-    const [pumped, sunk] = await Promise.allSettled([
-      pump.catch((error: unknown) => {
-        counted.destroy(error as Error);
-        throw error;
-      }),
-      written,
-    ]);
-
-    // The pump's reason is the interesting one — it is the size cap — and the
-    // sink's is usually the destroy that followed it.
-    const failure =
-      pumped.status === 'rejected'
-        ? pumped.reason
-        : sunk.status === 'rejected'
-          ? sunk.reason
-          : undefined;
-
-    if (failure !== undefined) {
-      // A partial file is worse than none: the next step would sniff it and
-      // reject bytes that were merely truncated.
+    try {
+      // Pipeline propagates disk backpressure to the S3 body instead of buffering the full object.
+      await pipeline(
+        Readable.from(source, { objectMode: false }),
+        counted,
+        createWriteStream(path),
+      );
+    } catch (error) {
       await rm(path, { force: true });
-      throw failure;
+      throw error;
     }
   }
 

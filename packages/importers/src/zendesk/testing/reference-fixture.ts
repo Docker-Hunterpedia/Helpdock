@@ -19,8 +19,8 @@ export function zendeskReferenceFixture(attachmentRoot: string): ZendeskFixture 
       subject: `Reference ticket ${id}`,
       status: index >= 400 ? 'closed' : 'pending',
       custom_status_id: index >= 400 ? null : 701,
-      requester_id: 20001 + index,
-      organization_id: 401 + (index % 10),
+      requester_id: 20001 + (index % 47),
+      organization_id: 401 + ((index % 47) % 10),
       group_id: 501 + (index % 5),
       priority: ['low', 'normal', 'high', 'urgent'][index % 4],
       tags: ['migration', `team-${index % 5}`],
@@ -28,7 +28,7 @@ export function zendeskReferenceFixture(attachmentRoot: string): ZendeskFixture 
       updated_at: new Date(created.getTime() + 2 * 86400000).toISOString(),
     };
   });
-  const customers = tickets.map((source, index) => ({
+  const customers = tickets.slice(0, 47).map((source, index) => ({
     id: 20001 + index,
     name: `Customer ${index}`,
     email: `customer-${index}@example.invalid`,
@@ -71,6 +71,24 @@ export function zendeskReferenceFixture(attachmentRoot: string): ZendeskFixture 
           html_body: `<p>Private note ${index}</p>`,
           plain_body: `Private note ${index}`,
           created_at: new Date(Date.parse(source.created_at) + 86400000).toISOString(),
+          attachments: [],
+        },
+        {
+          id: source.id * 100 + 4,
+          author_id: 301,
+          public: true,
+          html_body: `<p>Original agent reply ${index}</p>`,
+          plain_body: `Original agent reply ${index}`,
+          created_at: new Date(Date.parse(source.created_at) + 90000000).toISOString(),
+          attachments: [],
+        },
+        {
+          id: source.id * 100 + 5,
+          author_id: source.requester_id,
+          public: true,
+          html_body: `<p>Original customer follow-up ${index}</p>`,
+          plain_body: `Original customer follow-up ${index}`,
+          created_at: new Date(Date.parse(source.created_at) + 93000000).toISOString(),
           attachments: [],
         },
       ],
@@ -121,9 +139,33 @@ export function zendeskReferenceFixture(attachmentRoot: string): ZendeskFixture 
       ],
     ]),
   );
+  const articleTemplate = zendeskCoreFixture.articles?.[0];
+  const translationTemplates = zendeskCoreFixture.translations?.['articles:1603'];
+  if (!articleTemplate || translationTemplates?.length !== 2)
+    throw new Error('Missing Zendesk bilingual article templates');
+  const articles = Array.from({ length: 20 }, (_, index) => ({
+    ...articleTemplate,
+    id: 1603 + index,
+  }));
   return {
     ...structuredClone(zendeskCoreFixture),
     tickets,
+    articles,
+    translations: {
+      ...zendeskCoreFixture.translations,
+      ...Object.fromEntries(
+        articles.map((article, index) => [
+          `articles:${article.id}`,
+          translationTemplates.map((translation, localeIndex) => ({
+            ...translation,
+            id: 200000 + index * 2 + localeIndex,
+            source_id: article.id,
+            title: `${translation.title} ${index}`,
+          })),
+        ]),
+      ),
+    },
+    article_attachments: Object.fromEntries(articles.map((article) => [String(article.id), []])),
     users: [...(zendeskCoreFixture.users ?? []), ...customers],
     organizations: Array.from({ length: 10 }, (_, index) => ({
       ...company,
@@ -182,7 +224,7 @@ export function zendeskReferenceDelta(fixture: ZendeskFixture): ZendeskFixture {
       '101': [
         ...(fixture.comments?.['101'] ?? []),
         {
-          id: 10104,
+          id: 10106,
           author_id: 301,
           public: false,
           body: 'Delta internal note',

@@ -463,6 +463,104 @@
       "when": 1792074059564,
       "tag": "0067_import_csat_source_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1792076923503,
+      "tag": "0068_import_source_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792077650310,
+      "tag": "0069_import_staging_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1792082461625,
+      "tag": "0070_imported_sla_activation",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792083197371,
+      "tag": "0071_imported_sla_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792141521394,
+      "tag": "0072_imported_ticket_native_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1792143352429,
+      "tag": "0073_ticket_activity_history_cursor",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1792248379587,
+      "tag": "0074_imported_unscored_satisfaction",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1792252708990,
+      "tag": "0075_import_ticket_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1792255815042,
+      "tag": "0076_imported_message_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1792261572760,
+      "tag": "0077_imported_article_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1792266222215,
+      "tag": "0078_imported_article_published_copy",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1792268886953,
+      "tag": "0079_imported_article_translation_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1792275070296,
+      "tag": "0080_import_attachment_dry_run_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792284012321,
+      "tag": "0081_imported_article_embedding_deferral",
+      "breakpoints": true
     }
   ]
 }

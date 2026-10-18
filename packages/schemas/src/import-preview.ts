@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { importContactSchema, importMessageSchema, importTicketSchema } from './import.js';
+import { importAttachmentAvailabilitySchema } from './import-media.js';
 
 const previewExternalIdSchema = importTicketSchema.shape.externalId.refine(
   (id) => !id.includes('\u0000'),
@@ -43,6 +44,7 @@ export const importTicketPreviewSchema = z.strictObject({
               fileName: z.string().min(1).max(255),
               contentType: z.string().max(255).optional(),
               size: z.int().nonnegative().optional(),
+              availability: importAttachmentAvailabilitySchema.optional(),
             }),
           )
           .max(1000),

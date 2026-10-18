@@ -1,9 +1,12 @@
+import { setTimeout as waitForLock } from 'node:timers/promises';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
   type Db,
   type DbHandle,
   departments,
+  importExternalIds,
+  importRuns,
   notifications,
   outbox,
   tags,
@@ -27,6 +30,8 @@ import {
   type BrandSettings,
   type BusinessHoursOverview,
   type Holiday,
+  type ImportSlaOverview,
+  importSlaActivationStateSchema,
   isWithinBusinessHours,
   REALTIME_EVENTS,
   type SlaPolicy,
@@ -45,6 +50,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { activateImportedSlaBatch } from '../imports/jobs/activate-sla.js';
 import { createLogger } from '../logging/logger.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
@@ -285,6 +291,10 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
 
     owner = createDb({ url: postgres.getConnectionUri(), max: 2 });
     await owner.db.execute(sql.raw('CREATE DATABASE helpdock'));
+    await owner.close();
+    const ownerUrl = new URL(postgres.getConnectionUri());
+    ownerUrl.pathname = '/helpdock';
+    owner = createDb({ url: ownerUrl.toString(), max: 2 });
 
     runtime = await createRuntime({
       env: envFor(),
@@ -600,6 +610,157 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
   // ------------------------------------------------------------ the clocks
 
   describe('clocks', () => {
+    it('activates a completed source account after staging retention, resumes a cursor and excludes later/foreign/live tickets', async () => {
+      const runId = uuidv7();
+      const account = 'a'.repeat(64);
+      const ids = Array.from({ length: 58 }, () => uuidv7());
+      const completedAt = new Date('2019-01-01T00:00:00Z');
+      try {
+        await owner.db.insert(importRuns).values({
+          id: runId,
+          brandId: seeded.brandId,
+          source: 'zendesk',
+          sourceAccountKey: account,
+          status: 'completed',
+          finishedAt: completedAt,
+          startedBy: ada.id,
+        });
+        await owner.db.insert(tickets).values(
+          ids.map((id, index) => ({
+            id,
+            brandId: seeded.brandId,
+            departmentId: support,
+            number: 2000000 + index,
+            prefix: 'ACT',
+            subject: `Activation ${index}`,
+            statusId: index === 55 ? closed : open,
+            deletedAt: index === 56 ? new Date() : null,
+            mergedIntoId: index === 57 ? (ids[0] ?? null) : null,
+            channel: 'manual' as const,
+            createdAt: new Date('2000-01-01T00:00:00Z'),
+            importedAt: index === 53 ? null : new Date('2010-01-01T00:00:00Z'),
+            importSource: index === 53 ? null : ('zendesk' as const),
+          })),
+        );
+        await owner.db.insert(importExternalIds).values(
+          ids.map((id, index) => ({
+            brandId: seeded.brandId,
+            source: 'zendesk' as const,
+            sourceAccountKey: index === 52 ? 'b'.repeat(64) : account,
+            entity: 'ticket' as const,
+            externalId: id,
+            helpdockId: id,
+            payloadHash: 'f'.repeat(64),
+          })),
+        );
+        const path = `${brandPath()}/imports/${runId}/sla`;
+        expect((await call('POST', `${path}/start`, ada, { acknowledge: false })).status).toBe(400);
+        const requested = await call<ImportSlaOverview>('POST', `${path}/start`, ada, {
+          acknowledge: true,
+        });
+        expect(requested.status).toBe(200);
+        expect(requested.body.activation?.status).toBe('queued');
+        const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+        const initial = importSlaActivationStateSchema.parse(run?.options.slaActivation);
+        // This ticket arrived after the explicit request, so it retains the default even within the same account.
+        const laterId = ids[54];
+        if (!laterId) throw new Error('Missing activation fixture ticket');
+        await owner.db
+          .update(tickets)
+          .set({ importedAt: new Date(Date.parse(initial.requestedAt) + 1) })
+          .where(eq(tickets.id, laterId));
+        const first = { brandId: seeded.brandId, runId, revision: initial.revision, after: null };
+        await activateImportedSlaBatch(runtime.db, first, 'activation-first');
+        await activateImportedSlaBatch(runtime.db, first, 'activation-replay');
+        const [midRun] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+        const mid = importSlaActivationStateSchema.parse(midRun?.options.slaActivation);
+        expect(mid).toMatchObject({ status: 'running', checked: 50, started: 50, skipped: 0 });
+        await activateImportedSlaBatch(
+          runtime.db,
+          { ...first, after: mid.after },
+          'activation-resume',
+        );
+        const summary = await call<ImportSlaOverview>('GET', path, ada);
+        expect(summary.body.activation).toMatchObject({
+          status: 'completed',
+          checked: 52,
+          started: 52,
+          skipped: 0,
+        });
+        const stored = await owner.db.select().from(tickets).where(inArray(tickets.id, ids));
+        expect(stored.filter((ticket) => ticket.importSlaStartedAt !== null)).toHaveLength(52);
+        expect(
+          stored.every((ticket) => ticket.createdAt.toISOString() === '2000-01-01T00:00:00.000Z'),
+        ).toBe(true);
+        for (const id of ids.slice(52)) expect(await clocksOf(id)).toEqual([]);
+      } finally {
+        await owner.db
+          .delete(importExternalIds)
+          .where(
+            and(
+              eq(importExternalIds.brandId, seeded.brandId),
+              inArray(importExternalIds.helpdockId, ids),
+            ),
+          );
+        await owner.db.delete(tickets).where(inArray(tickets.id, ids));
+        await owner.db.delete(importRuns).where(eq(importRuns.id, runId));
+      }
+    });
+
+    it('keeps imported history without clocks across sync/reopen/policy changes until explicit activation', async () => {
+      const { ticket } = await createTicket();
+      const createdAt = new Date('2010-01-01T00:00:00Z');
+      const at = new Date();
+      const sla = new SlaService(new SlaRepository());
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx.delete(ticketSlaClocks).where(eq(ticketSlaClocks.ticketId, ticket.id));
+        await tx
+          .update(tickets)
+          .set({
+            importedAt: at,
+            importSource: 'zendesk',
+            importSlaStartedAt: null,
+            createdAt,
+            slaPolicyId: null,
+            firstResponseDueAt: null,
+            resolutionDueAt: null,
+            slaBreached: false,
+          })
+          .where(eq(tickets.id, ticket.id));
+      });
+      const scheduled = (await outboxOf(SLA_SCHEDULE_EVENT)).filter((payload) =>
+        (payload.ticketIds as string[]).includes(ticket.id),
+      ).length;
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await sla.sync(tx, { brandId: seeded.brandId, ticketId: ticket.id, at });
+        await sla.reopen(tx, { brandId: seeded.brandId, ticketId: ticket.id, at });
+        await sla.recompute(tx, seeded.brandId, at, async () => undefined);
+      });
+      expect(await clocksOf(ticket.id)).toEqual([]);
+      expect(
+        (await outboxOf(SLA_SCHEDULE_EVENT)).filter((payload) =>
+          (payload.ticketIds as string[]).includes(ticket.id),
+        ),
+      ).toHaveLength(scheduled);
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        expect(
+          await sla.activateImported(tx, { brandId: seeded.brandId, ticketId: ticket.id, at }),
+        ).toBe(true);
+        expect(
+          await sla.activateImported(tx, {
+            brandId: seeded.brandId,
+            ticketId: ticket.id,
+            at: new Date(at.getTime() + MINUTE),
+          }),
+        ).toBe(false);
+      });
+      const clocks = await clocksOf(ticket.id);
+      expect(clocks.map((clock) => clock.kind).sort()).toEqual(['first_response', 'resolution']);
+      expect(clocks.every((clock) => clock.startedAt.getTime() === at.getTime())).toBe(true);
+      const [stored] = await owner.db.select().from(tickets).where(eq(tickets.id, ticket.id));
+      expect(stored).toMatchObject({ createdAt, importSlaStartedAt: at });
+    });
+
     it('starts both clocks on a new ticket and shows them on the card and the list', async () => {
       const created = await createTicket();
       const ticketId = created.ticket.id;
@@ -769,6 +930,101 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
   // ------------------------------------------------------------ timers
 
   describe('timers', () => {
+    it('re-reads the parent after waiting for a concurrent quiet close', async () => {
+      const { ticket } = await createTicket({ priority: 'medium' });
+      const clock = await clockOf(ticket.id, 'resolution');
+      const locked = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const close = withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await new SlaRepository().lockTicket(tx, ticket.id);
+        locked.resolve();
+        await release.promise;
+        await tx
+          .update(tickets)
+          .set({ statusId: closed, closedAt: clock.startedAt })
+          .where(eq(tickets.id, ticket.id));
+      });
+      await locked.promise;
+      const fire = withSystem(runtime.db, seeded.brandId, (tx) =>
+        fireSlaTimer(
+          tx,
+          slaDeps(),
+          { brandId: seeded.brandId, ticketId: ticket.id, clock: 'resolution', stepPercent: 100 },
+          new Date(clock.startedAt.getTime() + 481 * MINUTE),
+        ),
+      );
+      try {
+        const deadline = Date.now() + 10000;
+        let waiting = false;
+        while (Date.now() < deadline && !waiting) {
+          const [observed] = await owner.db.execute(sql`
+            SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+              WHERE wait_event_type = 'Lock' AND query ILIKE '%tickets%FOR UPDATE%') AS waiting
+          `);
+          waiting = observed?.waiting === true;
+          if (!waiting) await waitForLock(20);
+        }
+        expect(waiting, 'timer must reach the parent lock before the close commits').toBe(true);
+      } finally {
+        release.resolve();
+        await close;
+      }
+      expect(await fire).toEqual({ kind: 'done' });
+      expect(await clockOf(ticket.id, 'resolution')).toEqual(clock);
+      expect(
+        (await outboxOf('sla.breached')).filter((event) => event.ticketId === ticket.id),
+      ).toEqual([]);
+      expect(
+        (await outboxOf('ticket.escalated')).filter((event) => event.ticketId === ticket.id),
+      ).toEqual([]);
+    });
+
+    it.each(['closed', 'deleted', 'merged', 'unactivated-import'] as const)(
+      'ignores a stale timer when a quiet import or concurrent change leaves the ticket %s',
+      async (state) => {
+        const { ticket } = await createTicket({ priority: 'medium' });
+        const mergeTargetId = state === 'merged' ? (await createTicket()).ticket.id : undefined;
+        const started = (await clockOf(ticket.id, 'resolution')).startedAt;
+        // The historical writer deliberately bypasses lifecycle hooks. A queued
+        // timer must recheck the parent rather than trust its old counting clock.
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(tickets)
+            .set({
+              importedAt: started,
+              importSource: 'zohodesk',
+              importSlaStartedAt: state === 'unactivated-import' ? null : started,
+              ...(state === 'closed' ? { statusId: closed, closedAt: started } : {}),
+              ...(state === 'deleted' ? { deletedAt: started } : {}),
+              ...(mergeTargetId ? { mergedIntoId: mergeTargetId } : {}),
+            })
+            .where(eq(tickets.id, ticket.id)),
+        );
+        const beforeClocks = await clocksOf(ticket.id);
+        const beforeEvents = await owner.db
+          .select()
+          .from(outbox)
+          .where(eq(outbox.brandId, seeded.brandId));
+        const beforeTicket = await owner.db.select().from(tickets).where(eq(tickets.id, ticket.id));
+        const outcome = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          fireSlaTimer(
+            tx,
+            slaDeps(),
+            { brandId: seeded.brandId, ticketId: ticket.id, clock: 'resolution', stepPercent: 100 },
+            new Date(started.getTime() + 481 * MINUTE),
+          ),
+        );
+        expect(outcome).toEqual({ kind: 'done' });
+        expect(await clocksOf(ticket.id)).toEqual(beforeClocks);
+        expect(await owner.db.select().from(tickets).where(eq(tickets.id, ticket.id))).toEqual(
+          beforeTicket,
+        );
+        expect(
+          await owner.db.select().from(outbox).where(eq(outbox.brandId, seeded.brandId)),
+        ).toEqual(beforeEvents);
+      },
+    );
+
     it('schedules one delayed job per clock and step, keyed as §3.4 says', async () => {
       const { ticket } = await createTicket();
       await schedule([ticket.id]);

@@ -1,0 +1,1 @@
+CREATE INDEX "import_records_article_translation_idx" ON "import_records" USING btree ("brand_id","run_id",("payload" ->> 'translationOf')) WHERE "import_records"."entity" = 'article';

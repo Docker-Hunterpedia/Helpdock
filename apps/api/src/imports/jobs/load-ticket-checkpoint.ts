@@ -1,11 +1,17 @@
 import { type DbTransaction, importExternalIds, importRecords, importRuns } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { importAttachmentSchema, importEntitySchema, importRecordSchema } from '@helpdock/schemas';
+import {
+  type ImportAttachmentRef,
+  importAttachmentSchema,
+  importEntitySchema,
+  importRecordSchema,
+} from '@helpdock/schemas';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { ImportLoadError, type TicketLoad, ticketLoadSchema } from '../loader/contracts.js';
 import { importSourceAccountKey } from '../loader/external-ids.js';
 import { ImportWriter } from '../loader/import-writer.js';
+import { importAttachmentHash } from '../loader/load-attachments.js';
 import { requireImportedTicket } from '../loader/load-ticket.js';
 import {
   type ImportClaim,
@@ -89,6 +95,14 @@ export async function previewStagedTicketChildren(
   return stagedChildrenQuery(tx, scope, externalId);
 }
 
+function threadAttachmentHash(ref: ImportAttachmentRef) {
+  // Signed URLs and refresh-page hints can change between independent entity reads.
+  return hashImportValue({
+    identity: importAttachmentHash(ref),
+    bundlePath: ref.bundlePath ?? null,
+  });
+}
+
 function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
   for (const child of children) {
     const parsed = importRecordSchema.parse({ entity: child.entity, payload: child.payload });
@@ -123,7 +137,7 @@ function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
   const hashesByMessage = new Map(
     input.messages.map((message) => [
       message.externalId,
-      new Set(message.attachments.map(hashImportValue)),
+      new Set(message.attachments.map(threadAttachmentHash)),
     ]),
   );
   const allHashes = new Set([...hashesByMessage.values()].flatMap((hashes) => [...hashes]));
@@ -135,7 +149,7 @@ function validateStagedThread(children: StagedRow[], input: TicketLoad): void {
     } = importAttachmentSchema.parse(row.payload);
     const allowed =
       messageExternalId === undefined ? allHashes : hashesByMessage.get(messageExternalId);
-    if (!allowed?.has(hashImportValue(ref))) throw new ImportLoadError('mapping-invalid');
+    if (!allowed?.has(threadAttachmentHash(ref))) throw new ImportLoadError('mapping-invalid');
   }
 }
 

@@ -38,6 +38,7 @@ const ticket = (n: number, links: Partial<TicketRow> = {}): TicketRow => ({
   channel: 'email',
   importSource: null,
   importedAt: null,
+  importSlaStartedAt: null,
   teamId: null,
   assigneeId: null,
   contactId: null,

@@ -1,0 +1,3 @@
+ALTER TABLE "import_files" DROP CONSTRAINT "import_files_status";--> statement-breakpoint
+CREATE INDEX "import_runs_brand_finished_idx" ON "import_runs" USING btree ("brand_id","finished_at","id") WHERE "import_runs"."finished_at" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "import_files" ADD CONSTRAINT "import_files_status" CHECK ("import_files"."status" IN ('pending', 'uploaded', 'ready', 'invalid', 'discarded'));

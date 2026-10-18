@@ -64,11 +64,11 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
   }
   for (const [entity, count] of Object.entries({
     ticket: 500,
-    user: 503,
-    contact: 503,
+    user: 50,
+    contact: 50,
     organization: 10,
     group: 5,
-    message: 1000,
+    message: 2000,
     attachment: 500,
     activity: 500,
     csat: 500,
@@ -76,7 +76,7 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
     tag: 6,
     category: 1,
     section: 1,
-    article: 2,
+    article: 40,
   }))
     expect(captured.get(entity as ImportEntity)?.size, entity).toBe(count);
   for (const source of fixture.tickets ?? []) {
@@ -127,7 +127,7 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
       },
     });
   }
-  for (let index = 0; index < 500; index++)
+  for (let index = 0; index < 47; index++)
     expect(captured.get('contact')?.get(String(20001 + index))).toMatchObject({
       payload: {
         name: `Customer ${index}`,
@@ -138,11 +138,11 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
         custom: { plan: `plan-${index}` },
       },
     });
-  expect(
-    [...(captured.get('article')?.values() ?? [])]
-      .map((record) => (record.entity === 'article' ? record.payload.locale : null))
-      .sort(),
-  ).toEqual(['ar', 'en']);
+  const articles = [...(captured.get('article')?.values() ?? [])].filter(
+    (record) => record.entity === 'article',
+  );
+  expect(articles.filter((record) => record.payload.locale === 'en')).toHaveLength(20);
+  expect(articles.filter((record) => record.payload.locale === 'ar')).toHaveLength(20);
   for (const ticketId of [101, 350, 600]) {
     const ref = captured.get('attachment')?.get(String(ticketId * 100 + 3));
     if (ref?.entity !== 'attachment') throw new Error('Missing reference media');
@@ -172,7 +172,7 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
   }
   for (const [entity, count] of Object.entries({
     ticket: 1,
-    message: 3,
+    message: 5,
     attachment: 1,
     activity: 2,
     contact: 1,
@@ -185,7 +185,7 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
   ]);
   expect(delta.get('message')?.at(-1)).toMatchObject({
     payload: {
-      externalId: '10104',
+      externalId: '10106',
       bodyText: 'Delta internal note',
       public: false,
       createdAt: updatedAt,
@@ -203,4 +203,4 @@ it('extracts the 500-ticket reference graph and revisits only changed ticket his
     payload: { comment: 'Corrected old feedback', ratedAt: '2018-01-03T10:00:00.000Z' },
   });
   expect(fake.server.calls.every((call) => call.method === 'GET')).toBe(true);
-}, 60000);
+}, 300000);

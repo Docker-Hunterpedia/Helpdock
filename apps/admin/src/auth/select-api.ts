@@ -25,6 +25,9 @@ import { MockEmailApi } from '../email/mock-api.js';
 import type { HelpCenterApi } from '../help-center/api.js';
 import { HttpHelpCenterApi } from '../help-center/http-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
+import type { ImportsApi } from '../imports/api.js';
+import { HttpImportsApi } from '../imports/http-api.js';
+import { MockImportsApi } from '../imports/mock-api.js';
 import type { KnowledgeApi } from '../knowledge/api.js';
 import { HttpKnowledgeApi } from '../knowledge/http-api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
@@ -73,6 +76,7 @@ export type AuthApiAdapter = (typeof AUTH_API_ADAPTERS)[number];
 
 /** The adapters the app is built from, always from the same source. */
 export interface AdminApis {
+  readonly imports: ImportsApi;
   readonly sso: SsoApi;
   readonly auth: AuthApi;
   readonly staff: StaffApi;
@@ -146,6 +150,7 @@ export function createApis(
     const transport = new HttpTransport();
 
     return {
+      imports: new HttpImportsApi(transport),
       sso: new HttpSsoApi(transport),
       auth: new HttpAuthApi(transport),
       staff: new HttpStaffApi(transport),
@@ -192,6 +197,7 @@ export function createApis(
   const auth = new MockAuthApi(staff);
 
   return {
+    imports: new MockImportsApi('happy', { ticketing, staff }),
     sso: new MockSsoApi(auth),
     auth,
     staff,

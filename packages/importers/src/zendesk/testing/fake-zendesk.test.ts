@@ -298,3 +298,11 @@ it('serves the documented authenticated Show Attachment resource for refreshing 
     http.json(`${fake.server.root}/api/v2/attachments/999999`, schema, auth),
   ).rejects.toMatchObject({ code: 'record-unavailable' });
 });
+it.each([undefined, Number.NaN, Number.POSITIVE_INFINITY])(
+  'refuses an invalid fixture clock before it can produce corrupt export pages: %s',
+  (now) => {
+    expect(() =>
+      Reflect.construct(FakeZendesk, [{}, { authorization: 'Bearer synthetic-token', now }]),
+    ).toThrow();
+  },
+);

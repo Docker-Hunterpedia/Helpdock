@@ -197,3 +197,37 @@ customer records. Profiles merged into the erased survivor are included. Source
 identity pointers remain so another import cannot silently recreate an erased
 contact. Company source details remain with the company row and disappear with
 brand/account deletion. Import loading is still in development.
+
+### Import staging (M11, local implementation batch)
+
+The fixed staging window is 30 days after a run completes, fails or is cancelled.
+Nightly retention removes staged records, confirmed mappings, import logs and
+source-file metadata. It queues deletion of private upload, sealed-source and
+unfinished preparation objects in the same transaction. Each batch is bounded;
+a retry removes only what remains. The `importStaging` count in the retention
+audit/last-run summary counts deleted database rows, rather than objects awaiting
+the outbox consumer.
+
+Imported article media has a separate 30-day grace measured from candidate or
+asset creation. Cleanup protects references in every current working and
+published article body and defers while a brand has an active or paused import.
+It removes obsolete asset mappings and unreferenced importing media, queues
+deletion of their canonical original/WebP keys through the outbox, and leaves
+native uploads alone. Media processing and cleanup lock the same media row so
+a queued conversion cannot recreate a purged object. These removed rows are
+included in `importStaging`; referenced article assets outlive staging cleanup.
+
+Discarding an uploaded file before extraction hides it immediately and revokes
+its mapping revision. Cleanup retains its object pointers for 30 days from
+discard, so a browser upload already in flight is still known to retention.
+Active or paused import staging does not expire. Run summaries, native-ID
+receipts and reusable file presets remain after staging cleanup; those receipts
+keep repeat/delta identity stable. Imported tickets and contacts follow their
+ordinary retention/erasure rules. This implementation awaits the final M11
+batch tests.
+
+Native ticket inventories use the same 30-day staging window. Cleanup removes
+inventory ID rows in bounded batches before deleting their source-file metadata
+and queuing private-object removal. Old mapping revisions and source hashes are
+staging too; they do not survive source-file cleanup. Inventory upload/runtime
+support is still under development, and these changes await the M11 batch tests.

@@ -180,20 +180,12 @@ export const createKnowledgeHandlers = (
 export const createArticleKnowledgeHandlers = (
   queues: Pick<KnowledgeQueues, 'addEmbed'>,
 ): { article: OutboxEventHandler; brand: OutboxEventHandler; imported: OutboxEventHandler } => {
-  const after = async (
-    brandId: string,
-    outboxId: string,
-    counts: { written: number; removed: number },
-  ): Promise<void> => {
-    if (counts.written > 0) {
-      await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
-    }
-  };
   return {
     article: async ({ tx, brandId, payload, outboxId, event, log }) => {
-      const { articleId } = hcArticleChangedPayloadSchema.parse(payload);
+      const { articleId, change } = hcArticleChangedPayloadSchema.parse(payload);
       const counts = await syncArticleKnowledge(tx, brandId, [articleId]);
-      await after(brandId, outboxId, counts);
+      if (change === 'published' || counts.written > 0)
+        await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
       log.info({ event, outboxId, brandId, articleId, ...counts }, 'article knowledge synced');
     },
     imported: async ({ tx, brandId, payload, outboxId, event, log }) => {
@@ -204,12 +196,11 @@ export const createArticleKnowledgeHandlers = (
         counts.written += batch.written;
         counts.removed += batch.removed;
       });
-      await after(brandId, outboxId, counts);
       log.info({ event, outboxId, brandId, runId, ...counts }, 'imported article knowledge synced');
     },
     brand: async ({ tx, brandId, outboxId, event, log }) => {
       const counts = await syncArticleKnowledge(tx, brandId);
-      await after(brandId, outboxId, counts);
+      if (counts.written > 0) await queues.addEmbed({ brandId }, knowledgeEmbedJobId(outboxId));
       log.info({ event, outboxId, brandId, ...counts }, 'article knowledge synced');
     },
   };

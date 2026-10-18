@@ -1,8 +1,10 @@
 # Helpdock import engine boundaries
 
 This workspace holds the M11 connector contract, bounded vendor HTTP transport,
-rate limiting and streaming file readers. The connectors and API jobs are still
-being implemented; this foundation alone does not import a brand.
+rate limiting and streaming file readers. The API uses these readers and the
+Zendesk, Freshdesk and Zoho Desk connectors inside its resumable, tenant-scoped
+import jobs. See the [importing guide](../../docs/guides/importing.md) for the
+wizard and cutover procedure.
 
 `Connector` yields `{ records, cursor }` pages. Every record is a shared
 `{ entity, payload }` discriminated union; `payload.externalId` retains the vendor's
@@ -83,3 +85,11 @@ chunk or member.
 Unit tests use local HTTP servers and small ZIP fixtures. Database/RLS and job
 integration tests live in the API/DB workspaces and use real infrastructure.
 Vendor stand-ins must follow each vendor's current official documentation.
+
+`fixtures/bundles/reference-500.zip` is the synthetic manual-path acceptance
+fixture: 500 tickets, 1,000 messages (500 private notes), one agent, one contact,
+one group and one attachment with bundled PDF bytes. Each NDJSON member contains
+payloads directly. `apps/api/src/imports/manual-reference.integration.test.ts`
+loads it through sealed source preparation and real import/media queues, then
+compares business and report revisions after an unchanged repeat. The same suite
+checks saved CSV presets with quoted multiline Arabic and explicit local dates.

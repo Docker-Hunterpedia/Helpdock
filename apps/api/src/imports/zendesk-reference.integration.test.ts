@@ -14,6 +14,8 @@ import {
   customFieldDefs,
   type DbHandle,
   departments,
+  hcArticles,
+  hcArticleVersions,
   importExternalIds,
   importRecords,
   importRuns,
@@ -40,6 +42,7 @@ import {
   type ImportMappingsRequest,
   type ImportRunCreate,
   importMappingsRequestSchema,
+  zendeskCredentialsSchema,
 } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
@@ -60,6 +63,7 @@ import {
   createZendeskImportConnection,
 } from './jobs/connector-runtime.js';
 import { createImportProcessor } from './jobs/import-processor.js';
+import { createImportArticlePreparer } from './jobs/prepare-article.js';
 
 const brandId = uuidv7();
 const userId = uuidv7();
@@ -158,6 +162,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     service = new ImportsService(keyring, (request) =>
       createZendeskImportConnection({
         ...request,
+        credentials: zendeskCredentialsSchema.parse(request.credentials),
         allowCidrs: [],
         limiter,
         transport,
@@ -168,12 +173,22 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     storage = new FakeStorage(directory);
     const queueName = `m11-reference-${uuidv7()}`;
     queue = new Queue(queueName, { connection: redis });
+    const resolve = createImportConnectorRuntime(
+      { db: app.db, keyring, allowCidrs: [] },
+      transport,
+    );
     worker = new Worker(
       queueName,
       createImportProcessor({
         db: app.db,
         storage,
-        resolve: createImportConnectorRuntime({ db: app.db, keyring, allowCidrs: [] }, transport),
+        resolve,
+        prepareArticle: createImportArticlePreparer({
+          db: app.db,
+          storage,
+          resolve,
+          mediaJobState: async () => undefined,
+        }),
       }),
       { connection: redis, concurrency: 1 },
     );
@@ -356,6 +371,12 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       'csat_responses',
       'report_daily',
       'report_agent_daily',
+      'hc_categories',
+      'hc_sections',
+      'hc_articles',
+      'hc_article_versions',
+      'hc_media',
+      'hc_import_assets',
     ]) {
       const [snapshot] = await owner.db.execute(sql`
         SELECT count(*)::int AS total,
@@ -389,6 +410,9 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
           'tag',
           'activity',
           'csat',
+          'category',
+          'section',
+          'article',
         ],
         rebuildAllReports: true,
       }),
@@ -433,11 +457,11 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       .select()
       .from(ticketMessages)
       .where(eq(ticketMessages.brandId, brandId));
-    expect(messages).toHaveLength(1000);
+    expect(messages).toHaveLength(2000);
     expect(messages.filter((message) => message.kind === 'note')).toHaveLength(500);
     expect(
       messages.filter((message) => message.authorType === 'staff' && message.authorId === userId),
-    ).toHaveLength(500);
+    ).toHaveLength(1000);
     const files = await owner.db.select().from(attachments).where(eq(attachments.brandId, brandId));
     expect(files).toHaveLength(500);
     for (const file of files) {
@@ -450,7 +474,17 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       expect(await storage.head(file.s3Key)).toMatchObject({ size: zendeskReferenceMedia.length });
     }
     const profiles = await owner.db.select().from(contacts).where(eq(contacts.brandId, brandId));
-    expect(profiles).toHaveLength(503);
+    expect(profiles).toHaveLength(50);
+    expect(
+      await owner.db.select().from(hcArticles).where(eq(hcArticles.brandId, brandId)),
+    ).toHaveLength(20);
+    const versions = await owner.db
+      .select()
+      .from(hcArticleVersions)
+      .where(eq(hcArticleVersions.brandId, brandId));
+    expect(versions).toHaveLength(40);
+    expect(versions.filter((version) => version.locale === 'en')).toHaveLength(20);
+    expect(versions.filter((version) => version.locale === 'ar')).toHaveLength(20);
     const identities = await owner.db
       .select()
       .from(contactIdentities)
@@ -479,9 +513,12 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       events
         .filter(
           (event) =>
-            !['import.work_requested', 'attachment.uploaded', 'media.objects.purge'].includes(
-              event.event,
-            ),
+            ![
+              'import.work_requested',
+              'attachment.uploaded',
+              'media.objects.purge',
+              'help_center.imported',
+            ].includes(event.event),
         )
         .map((event) => event.event),
     ).toEqual([]);
@@ -529,7 +566,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       .select()
       .from(ticketMessages)
       .where(eq(ticketMessages.ticketId, identity.helpdockId));
-    expect(thread).toHaveLength(3);
+    expect(thread).toHaveLength(5);
     expect(thread.find((message) => message.bodyText === 'Delta internal note')).toMatchObject({
       kind: 'note',
       authorType: 'staff',
@@ -548,7 +585,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
       .select()
       .from(contacts)
       .where(eq(contacts.brandId, brandId));
-    expect(changedProfiles).toHaveLength(503);
+    expect(changedProfiles).toHaveLength(50);
     expect(
       changedProfiles.find((profile) => profile.importedDetails?.notes === 'Delta contact note'),
     ).toBeDefined();
@@ -562,7 +599,7 @@ describe.skipIf(!hasDocker)('M11 Zendesk reference migration', () => {
     ).toBeDefined();
     const afterDelta = await businessSnapshot();
     expect(afterDelta.tickets).toMatchObject({ total: 500 });
-    expect(afterDelta.ticket_messages).toMatchObject({ total: 1001 });
+    expect(afterDelta.ticket_messages).toMatchObject({ total: 2001 });
     expect(afterDelta.attachments).toEqual(beforeRepeat.attachments);
     for (const table of [
       'workflow_runs',

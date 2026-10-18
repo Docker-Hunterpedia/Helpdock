@@ -50,7 +50,8 @@ async function completeDryRun(deps: { db: Db; jobId: string }, claim: ImportClai
           checkpoint.planIssueCount +
           checkpoint.identityIssueCount +
           checkpoint.mediaErrors,
-        warnings: checkpoint.mediaWarnings + checkpoint.recordWarningCount,
+        warnings:
+          checkpoint.mediaWarnings + checkpoint.recordWarningCount + checkpoint.sourceWarningCount,
         refusedPhones: checkpoint.refusedPhones,
       },
     });

@@ -14,6 +14,7 @@ import type {
   TicketSlaSummary,
   TicketStatus,
 } from '@helpdock/schemas';
+import { importMessageDetailsSchema, importSourceLink } from '@helpdock/schemas';
 import { toTicketMessageAi } from '../ai/auto-reply/ai-meta.js';
 import { toTicketAiState } from '../ai/auto-reply/ai-pause.js';
 import { toEmailView } from '../channels/email-view.js';
@@ -86,11 +87,18 @@ export const toTicket = (
   tags: readonly Tag[] = [],
   contact?: TicketContact | null,
   sla?: TicketSlaSummary | null,
+  imported?: Ticket['imported'],
 ): Ticket => ({
   id: ticket.id,
   number: ticket.number,
   prefix: ticket.prefix,
   subject: ticket.subject,
+  imported:
+    imported === undefined
+      ? ticket.importSource
+        ? { source: ticket.importSource, number: null, url: null }
+        : null
+      : imported,
   status: toTicketStatus(status),
   priority: ticket.priority,
   channel: ticket.channel,
@@ -132,6 +140,10 @@ export const toTicketMessage = (
   clientId: row.clientId,
   kind: row.kind,
   authorType: row.authorType,
+  authorDisplay: row.authorDisplay,
+  ...(row.importDetails == null
+    ? {}
+    : { importDetails: importMessageDetailsSchema.parse(row.importDetails) }),
   authorId: row.authorId,
   bodyHtml: row.bodyHtml,
   bodyText: row.bodyText,
@@ -162,7 +174,10 @@ export const toTicketActivity = (row: TicketActivityRow): TicketActivityEntry =>
   actorId: row.actorId,
   action: row.action,
   from: row.from,
-  to: row.to,
+  to:
+    row.action === 'ticket.imported' && row.to
+      ? { ...row.to, url: importSourceLink(row.to.url) }
+      : row.to,
   via: row.via,
   createdAt: row.createdAt.toISOString(),
 });

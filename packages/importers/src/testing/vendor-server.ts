@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { VendorRequestGates } from './request-gate.js';
 
 export type VendorAnswer = {
   status: number;
@@ -20,11 +21,17 @@ export class VendorServer {
   readonly calls: VendorCall[] = [];
   private readonly failures: VendorFailure[] = [];
   private readonly server: Server;
+  private readonly gates = new VendorRequestGates();
 
   constructor(
     private readonly route: (url: URL, authorization: string | undefined) => VendorAnswer,
   ) {
-    this.server = createServer((request, response) => this.respond(request, response));
+    this.server = createServer((request, response) => {
+      void this.respond(request, response).catch(() => {
+        if (!response.headersSent) response.writeHead(500);
+        response.end();
+      });
+    });
   }
 
   get root(): string {
@@ -45,6 +52,7 @@ export class VendorServer {
   }
 
   async close(): Promise<void> {
+    this.gates.close();
     this.server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
       this.server.close((error) => (error ? reject(error) : resolve())),
@@ -55,7 +63,11 @@ export class VendorServer {
     this.failures.push(failure);
   }
 
-  private respond(request: IncomingMessage, response: ServerResponse): void {
+  holdNextRequest(path: string) {
+    return this.gates.hold(path);
+  }
+
+  private async respond(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', this.root);
     this.calls.push({
       method: request.method ?? '',
@@ -63,6 +75,7 @@ export class VendorServer {
       query: Object.fromEntries(url.searchParams),
       authenticated: Boolean(request.headers.authorization),
     });
+    await this.gates.wait(url.pathname);
     const failedIndex = this.failures.findIndex((failure) => failure.path === url.pathname);
     const failure = failedIndex < 0 ? undefined : this.failures.splice(failedIndex, 1)[0];
     const answer =

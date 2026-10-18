@@ -10,6 +10,7 @@ import {
   importSourceAccountKey,
   rememberImported,
 } from './external-ids.js';
+import { loadImportedCsatHistory } from './load-csat-history.js';
 
 type CsatLoad = Pick<TicketLoad, 'brandId' | 'runId' | 'source' | 'csat'> & {
   resolved: Pick<TicketLoad['resolved'], 'departmentId'>;
@@ -105,6 +106,15 @@ export async function loadImportedCsat(
         scope: input,
       });
     else await insertImportedAnswer(tx, { input, id, ticketId, rating });
+    await loadImportedCsatHistory(tx, {
+      id,
+      brandId: input.brandId,
+      ticketId,
+      departmentId: input.resolved.departmentId,
+      source: input.source,
+      answer: rating,
+      unchanged: identity?.payloadHash === payloadHash,
+    });
     if (identity?.payloadHash === payloadHash) continue;
     changed = true;
     await rememberImported(tx, {

@@ -22,6 +22,21 @@ import {
 } from './views.js';
 
 const TAG = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+it.each([true, false])(
+  'keeps the imported=%s source choice across URLs, saved views and clearing filters',
+  (imported) => {
+    const filters = { ...EMPTY_FILTERS, imported };
+    const params = withFilters(new URLSearchParams(), filters);
+    expect(filtersFromParams(params).imported).toBe(imported);
+    expect(filtersOfView(ticketViewFiltersSchema.parse(viewFiltersOf(filters))).imported).toBe(
+      imported,
+    );
+    expect(queryOf(filters).imported).toBe(imported);
+    expect(activeFilterCount(filters)).toBe(1);
+    expect(sameFilters(filters, EMPTY_FILTERS)).toBe(false);
+    expect(filtersFromParams(withoutFilters(params)).imported).toBeUndefined();
+  },
+);
 
 const view = (overrides: Partial<TicketView> & Pick<TicketView, 'id'>): TicketView => ({
   name: overrides.id,

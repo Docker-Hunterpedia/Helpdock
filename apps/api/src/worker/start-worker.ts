@@ -28,9 +28,12 @@ import {
   importAttachmentsJob,
   importDryRunJob,
   importExtractJob,
+  importFilePrepareJob,
   importFinishJob,
   importLoadJob,
   importRecoverJob,
+  importSlaActivateJob,
+  isLastAttempt,
   type JobLogger,
   knowledgeConfigureJob,
   knowledgeEmbedJob,
@@ -123,6 +126,7 @@ import { createEmailSendHandler, createEmailSendProcessor } from '../email/email
 import { OutboundEmailService } from '../email/outbound-email.service.js';
 import { type InstallSmtp, SettingsInstallSmtp, smtpTransportFactory } from '../email/transport.js';
 import { registerHelpCenterEventHandlers } from '../help-center/events.js';
+import { markImportedHcMediaFailed } from '../help-center/import-media-failure.js';
 import { createHcMediaProcessor } from '../help-center/media-process.job.js';
 import { createHelpCenterKnowledgeProcessor } from '../help-center/publish-due.job.js';
 import {
@@ -131,10 +135,13 @@ import {
 } from '../help-center/search/search-events.js';
 import { registerPageCacheHandlers } from '../help-center/site/cache-events.js';
 import { RedisPageCache } from '../help-center/site/page-cache.js';
+import { registerImportFileEvents } from '../imports/file-events.js';
 import { registerImportEventHandlers } from '../imports/import-events.js';
 import { createImportConnectorRuntime } from '../imports/jobs/connector-runtime.js';
 import { createImportProcessor } from '../imports/jobs/import-processor.js';
+import { createImportArticlePreparer } from '../imports/jobs/prepare-article.js';
 import { recoverImportWork } from '../imports/jobs/recover.js';
+import { registerSlaActivationEvents } from '../imports/sla-activation-events.js';
 import { createPlaywrightRenderer } from '../knowledge/crawl-renderer.js';
 import { readOAuthApps } from '../knowledge/credentials.js';
 import { createEmbeddingSpaceProcessor } from '../knowledge/embedding-space.job.js';
@@ -573,6 +580,22 @@ export const workerDependencies: WorkerDependencies = {
     // may: it runs after the confirm committed, and `jobId = attachmentId`
     // makes a redelivery a no-op (`media/attachment-events.ts`).
     const imports = new Queue(QUEUE_NAMES.import, { connection: redis });
+    registerSlaActivationEvents({
+      add: async (payload, jobId) => {
+        await imports.add(importSlaActivateJob.name, importSlaActivateJob.schema.parse(payload), {
+          ...importSlaActivateJob.options,
+          jobId,
+        });
+      },
+    });
+    registerImportFileEvents({
+      add: async (payload, jobId) => {
+        await imports.add(importFilePrepareJob.name, importFilePrepareJob.schema.parse(payload), {
+          ...importFilePrepareJob.options,
+          jobId,
+        });
+      },
+    });
     const importDefinitions = {
       extract: importExtractJob,
       dry_run: importDryRunJob,
@@ -917,15 +940,32 @@ export const workerDependencies: WorkerDependencies = {
     return worker;
   },
   createImportWorker: ({ redis, db, log, env }) => {
+    const storage = storageFor(env);
+    const resolve = createImportConnectorRuntime({
+      db,
+      storage,
+      keyring: createKeyring(env),
+      allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+    });
+    const mediaQueue = new Queue(QUEUE_NAMES.media, { connection: redis });
     const worker = new Worker(
       QUEUE_NAMES.import,
       createImportProcessor({
         db,
-        storage: storageFor(env),
-        resolve: createImportConnectorRuntime({
+        storage,
+        resolve,
+        prepareArticle: createImportArticlePreparer({
           db,
-          keyring: createKeyring(env),
-          allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
+          storage,
+          resolve,
+          mediaJobState: async ({ brandId, mediaId }) => {
+            const job = await mediaQueue.getJob(`${helpCenterMediaProcessJob.name}.${mediaId}`);
+            if (!job) return undefined;
+            const payload = helpCenterMediaProcessJob.schema.parse(job.data);
+            if (payload.brandId !== brandId || payload.mediaId !== mediaId)
+              throw new Error('import.article.media-job-scope');
+            return job.getState();
+          },
         }),
       }),
       { connection: redis, concurrency: 1 },
@@ -933,7 +973,15 @@ export const workerDependencies: WorkerDependencies = {
     worker.on('failed', (job) =>
       log.error({ job: job?.name, jobId: job?.id }, 'import job failed'),
     );
-    return worker;
+    return {
+      close: async () => {
+        try {
+          await worker.close();
+        } finally {
+          await mediaQueue.close();
+        }
+      },
+    };
   },
   createMediaWorker: ({ redis, db, log, env }) => {
     const storage = storageFor(env);
@@ -949,14 +997,23 @@ export const workerDependencies: WorkerDependencies = {
     // M5-02: article images share the queue and its budget.
     const articleImages = createJobProcessor(
       helpCenterMediaProcessJob,
-      createHcMediaProcessor(storage),
+      createHcMediaProcessor(storage, scannerFor(env)),
       { db, log },
     );
     const worker = new Worker(
       QUEUE_NAMES.media,
       async (job) => {
         if (job.name === helpCenterMediaProcessJob.name) {
-          return articleImages(job);
+          try {
+            return await articleImages(job);
+          } catch (error) {
+            if (isLastAttempt(helpCenterMediaProcessJob, job, error))
+              await markImportedHcMediaFailed(
+                db,
+                parseJobPayloadOrFail(helpCenterMediaProcessJob, job.data),
+              );
+            throw error;
+          }
         }
         return attachments(job);
       },
@@ -1095,7 +1152,7 @@ export const workerDependencies: WorkerDependencies = {
       async (job) => {
         if (job.name === importRecoverJob.name) {
           parseJobPayloadOrFail(importRecoverJob, job.data);
-          await recoverImportWork({ db, jobId: job.id ?? importRecoverJob.name });
+          await recoverImportWork({ db, redis, jobId: job.id ?? importRecoverJob.name });
           return;
         }
         // Retention fails a job it does not know, so it stays last.

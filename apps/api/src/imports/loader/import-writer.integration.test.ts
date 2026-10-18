@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as waitForQueue } from 'node:timers/promises';
+import type { Ai } from '@helpdock/ai';
 import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import {
   accounts,
@@ -18,19 +19,23 @@ import {
   hcArticles,
   hcArticleVersions,
   hcCategories,
+  hcImportAssets,
   hcMedia,
   hcSearchDocuments,
   hcSections,
   importExternalIds,
+  importFiles,
   importLog,
   importMappings,
   importRecords,
   importRuns,
+  importTicketInventory,
   knowledgeDocuments,
   outbox,
   reportAgentDaily,
   reportDaily,
   runMigrations,
+  setEmbeddingDims,
   tags,
   teams,
   ticketActivity,
@@ -39,6 +44,7 @@ import {
   ticketStatuses,
   tickets,
   ticketTags,
+  updateEmbeddingSpace,
   userBrandRoles,
   users,
   uuidv7,
@@ -55,7 +61,13 @@ import {
   RateLimited,
   ZendeskConnector,
 } from '@helpdock/importers';
-import { FakeZendesk, zendeskCoreFixture } from '@helpdock/importers/testing';
+import {
+  FakeZendesk,
+  FakeZoho,
+  VendorServer,
+  zendeskCoreFixture,
+  zohoCoreFixture,
+} from '@helpdock/importers/testing';
 import { importLoadJob, JOB_DEFINITIONS } from '@helpdock/jobs';
 import {
   contentPolicySchema,
@@ -65,20 +77,28 @@ import {
   importRecordSchema,
   MAX_CUSTOM_FIELDS_PER_TARGET,
   ticketCcSchema,
+  zendeskCredentialsSchema,
 } from '@helpdock/schemas';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { Queue, Worker } from 'bullmq';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import sharp from 'sharp';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ContactMergesRepository } from '../../contacts/contact-merges.repository.js';
 import { ContactsRepository } from '../../contacts/contacts.repository.js';
 import { CsatRepository } from '../../csat/csat.repository.js';
+import { HelpCenterRepository } from '../../help-center/help-center.repository.js';
+import { markImportedHcMediaFailed } from '../../help-center/import-media-failure.js';
 import { forEachImportedArticleBatch } from '../../help-center/imported-articles.js';
+import { createHcMediaProcessor } from '../../help-center/media-process.job.js';
+import { publishVersion } from '../../help-center/publish.js';
 import { importedArticlesHandler } from '../../help-center/search/search-events.js';
+import { readableVersions } from '../../help-center/visibility.js';
+import { embedPending } from '../../knowledge/embed-pending.js';
+import { reembedChunks } from '../../knowledge/embedding-space.job.js';
 import { createArticleKnowledgeHandlers } from '../../knowledge/knowledge-events.js';
 import { objectKeyBeside } from '../../media/keys.js';
 import { MediaRepository } from '../../media/media.repository.js';
@@ -87,15 +107,25 @@ import { createMediaProcessor } from '../../media/process.job.js';
 import { RollupRepository } from '../../reports/rollup.repository.js';
 import { FakeStorage, fakeTools, silentJobLogger } from '../../testing/media.js';
 import { hasDocker, startPostgres, startRedis } from '../../testing/meta-install.js';
+import { DbTicketStatsProvider } from '../../tickets/contact-providers.js';
 import { runTranscription } from '../../transcription/transcribe.job.js';
 import { createTranscriptionHandler } from '../../transcription/transcription-events.js';
+import { importArticleAssetMetadataHash } from '../article-asset-requests.js';
+import { purgeImportedArticleAssetsBatch } from '../article-asset-retention.js';
+import { ImportArticleAssetsPending } from '../article-asset-state.js';
+import { preparedImportArticleSchema } from '../article-prepared.js';
 import { createImportWorkHandler, enqueueImportWork } from '../import-events.js';
 import { ImportsService } from '../imports.service.js';
+import {
+  readArticlePreparation,
+  saveArticlePreparation,
+} from '../jobs/article-asset-checkpoint.js';
 import { runImportAttachmentBatch } from '../jobs/attachment-batch.js';
 import {
   claimImportRun,
   IMPORT_CLAIM_TIMEOUT_MS,
   ImportClaimLost,
+  importRunRefSchema,
   renewImportClaim,
 } from '../jobs/claims.js';
 import { completeImportRun } from '../jobs/complete-run.js';
@@ -108,6 +138,7 @@ import { downloadStagedImportAttachment } from '../jobs/download-attachment.js';
 import { runImportDryRunBatch } from '../jobs/dry-run-batch.js';
 import { runImportDryRunMediaBatch } from '../jobs/dry-run-media.js';
 import { runImportDryRunRecordBatch } from '../jobs/dry-run-records.js';
+import { importDryRunCheckpointSchema } from '../jobs/dry-run-state.js';
 import { storeImportPage } from '../jobs/extract-page.js';
 import { runImportExtraction } from '../jobs/extract-run.js';
 import { runImportFinishBatch } from '../jobs/finish-batch.js';
@@ -123,11 +154,21 @@ import { loadStagedRecord } from '../jobs/load-record-checkpoint.js';
 import { loadStagedReference } from '../jobs/load-reference.js';
 import { loadStagedCsat } from '../jobs/load-staged-csat.js';
 import { loadStagedTicket } from '../jobs/load-ticket-checkpoint.js';
+import { createImportArticlePreparer } from '../jobs/prepare-article.js';
 import { rebuildImportReportsBatch } from '../jobs/rebuild-reports.js';
 import { recoverBrandImports } from '../jobs/recover.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from '../jobs/run-control.js';
 import { saveImportMappings } from '../jobs/save-mappings.js';
 import { bindImportSourceAccount, sourceAccountKey } from '../jobs/source-account.js';
+import {
+  createImportTicketInventory,
+  importTicketInventoryManifest,
+} from '../jobs/ticket-inventory.js';
+import { decodedZohoCredentials, saveZohoAccessToken } from '../jobs/zoho-credentials.js';
+import {
+  attachmentPreview,
+  attachmentReviewBinding,
+} from '../preflight/attachment-availability.js';
 import { validateContactIdentityPlan } from '../preflight/contact-identity-plan.js';
 import { previewImportedContact } from '../preflight/contact-plan.js';
 import { previewImportedContactSource } from '../preflight/contact-source-plan.js';
@@ -141,6 +182,7 @@ import { validateImportRecordPage } from '../preflight/record-page.js';
 import { validateImportReferences } from '../preflight/record-references.js';
 import { previewImportedTicket } from '../preflight/ticket-preview.js';
 import { validateImportTicketRouting } from '../preflight/ticket-routing.js';
+import { purgeImportStagingBatch } from '../retention.js';
 import { type TicketLoad, ticketLoadSchema } from './contracts.js';
 import { fieldLoadSchema } from './field-contracts.js';
 import { ImportWriter } from './import-writer.js';
@@ -221,6 +263,134 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   let app: DbHandle;
   let redis: Redis;
   const writer = new ImportWriter();
+
+  it('stores original email identity and sent-time provenance, repeats without writes and retains unknown mail dates on correction', async () => {
+    const input = request('original-mail-metadata');
+    const original = input.messages[0];
+    if (!original) throw new Error('Missing original mail message');
+    original.email = {
+      messageId: '<original.7001@source.example.test>',
+      from: 'customer@example.test',
+      to: ['support@example.test'],
+      cc: ['copy@example.test'],
+      sentAt: '2013-11-01T09:30:00.000Z',
+    };
+    original.sourceDetails = {
+      mailSubject: 'Original mail subject',
+      mailDate: 'Fri, 01 Nov 2013 15:00:00 +0530',
+      mailReturnPath: '<bounce@example.test>',
+    };
+    input.messages = [original];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [stored] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId));
+    if (!stored) throw new Error('Missing stored mail metadata');
+    expect(stored).toMatchObject({
+      externalMessageId: original.email.messageId,
+      createdAt: new Date(original.createdAt),
+      email: {
+        from: { address: 'customer@example.test' },
+        to: [{ address: 'support@example.test' }],
+        cc: [{ address: 'copy@example.test' }],
+        date: original.email.sentAt,
+      },
+      importDetails: original.sourceDetails,
+    });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id=${loaded.ticketId}`,
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id=${loaded.ticketId}`,
+      ),
+    ).toEqual(before);
+    original.email.sentAt = null;
+    original.sourceDetails.mailDate = 'Unknown source time';
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [corrected] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.id, stored.id));
+    expect(corrected).toMatchObject({
+      externalMessageId: original.email.messageId,
+      createdAt: stored.createdAt,
+      email: { date: null },
+      importDetails: { mailDate: 'Unknown source time' },
+    });
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('keeps source-only author names on history, repeats without message writes and never attaches a staff identity', async () => {
+    const input = request('source-only-author');
+    input.messages = [
+      {
+        externalId: 'source-only-message',
+        ticketExternalId: input.record.externalId,
+        authorKind: 'system',
+        authorExternalId: 'staff',
+        authorName: 'Original source author',
+        sourceDetails: {
+          status: 'FAILED',
+          channel: 'EMAIL',
+          authorKind: 'customer',
+          authorType: 'END_USER',
+        },
+        via: 'zoho:EMAIL:out:FAILED',
+        public: false,
+        bodyText: 'Original private history',
+        attachments: [],
+        createdAt: '2019-01-02T00:00:00Z',
+      },
+    ];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const [message] = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId));
+    if (!message) throw new Error('Missing source-only author message');
+    expect(message).toMatchObject({
+      authorType: 'system',
+      authorId: null,
+      authorDisplay: 'Original source author',
+      importDetails: {
+        status: 'FAILED',
+        channel: 'EMAIL',
+        authorKind: 'customer',
+        authorType: 'END_USER',
+        via: 'zoho:EMAIL:out:FAILED',
+      },
+      kind: 'note',
+      bodyText: 'Original private history',
+      createdAt: new Date('2019-01-02T00:00:00Z'),
+    });
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id=${loaded.ticketId}`,
+    );
+    expect(await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).toMatchObject({
+      outcome: 'unchanged',
+    });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM ticket_messages WHERE ticket_id=${loaded.ticketId}`,
+      ),
+    ).toEqual(before);
+    const source = input.messages[0];
+    if (!source) throw new Error('Missing source-only author input');
+    source.authorName = 'Corrected original name';
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(
+      (await owner.db.select().from(ticketMessages).where(eq(ticketMessages.id, message.id)))[0],
+    ).toMatchObject({
+      authorId: null,
+      authorDisplay: 'Corrected original name',
+      createdAt: message.createdAt,
+    });
+  });
 
   async function stagedTicketScenario(
     externalId: string,
@@ -321,6 +491,11 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     runtimeUrl.username = 'helpdock_app';
     runtimeUrl.password = 'import-tests';
     app = createDb({ url: runtimeUrl.toString(), max: 2 });
+  }, 300000);
+  beforeEach(async () => {
+    // This suite owns both containers; every case starts with the same independent fixture.
+    await owner.db.execute(sql`TRUNCATE TABLE ${brands}, ${users} CASCADE`);
+    await redis.flushdb();
     await owner.db
       .insert(users)
       .values({ id: USER, email: 'importer@example.com', name: 'Importer', status: 'active' });
@@ -360,13 +535,6 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await owner.db
       .insert(importRuns)
       .values({ id: RUN, brandId: BRAND, source: 'zendesk', status: 'loading', startedBy: USER });
-  }, 300000);
-  afterEach(async () => {
-    // A failed lease assertion must not hold the brand hostage for later scenarios.
-    await owner?.db
-      .update(importRuns)
-      .set({ claimToken: null, claimedAt: null })
-      .where(isNotNull(importRuns.claimToken));
   });
   afterAll(async () => {
     await app?.close();
@@ -1116,6 +1284,225 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     ).toEqual(beforeCc);
   });
 
+  it('drains a large expired inventory in bounded batches before deleting its source file', async () => {
+    const inventoryBrand = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: inventoryBrand, name: 'Inventory retention', prefix: 'INV' });
+    try {
+      const runId = uuidv7();
+      const fileId = uuidv7();
+      const revision = uuidv7();
+      const now = new Date('2030-01-01T00:00:00Z');
+      const sourceKey = `brands/${inventoryBrand}/imports/${runId}/files/${fileId}/sealed-source`;
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: inventoryBrand,
+        source: 'freshdesk',
+        status: 'completed',
+        startedBy: USER,
+        finishedAt: new Date('2029-01-01T00:00:00Z'),
+      });
+      await owner.db.insert(importFiles).values({
+        id: fileId,
+        brandId: inventoryBrand,
+        runId,
+        revision,
+        fileName: 'archive.csv',
+        format: 'csv',
+        entity: 'ticket',
+        size: 12,
+        uploadKey: `brands/${inventoryBrand}/imports/${runId}/files/${fileId}/upload`,
+        sourceKey,
+        sha256: 'a'.repeat(64),
+        status: 'ready',
+      });
+      await owner.db.insert(importTicketInventory).values(
+        Array.from({ length: 51 }, (_, index) => ({
+          brandId: inventoryBrand,
+          runId,
+          fileId,
+          revision,
+          sourceHash: 'a'.repeat(64),
+          externalId: String(index + 1),
+          location: 'archived',
+          line: index + 2,
+        })),
+      );
+      const purge = () =>
+        withSystem(app.db, inventoryBrand, (tx) =>
+          purgeImportStagingBatch(tx, { brandId: inventoryBrand, now, limit: 7 }),
+        );
+      expect(await purge()).toBe(7);
+      expect(
+        await owner.db
+          .select({ id: importTicketInventory.id })
+          .from(importTicketInventory)
+          .where(eq(importTicketInventory.fileId, fileId)),
+      ).toHaveLength(44);
+      expect(
+        await owner.db
+          .select({ id: importFiles.id })
+          .from(importFiles)
+          .where(eq(importFiles.id, fileId)),
+      ).toHaveLength(1);
+      let finished = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const removed = await purge();
+        expect(removed).toBeLessThanOrEqual(7);
+        if (
+          !(
+            await owner.db
+              .select({ id: importFiles.id })
+              .from(importFiles)
+              .where(eq(importFiles.id, fileId))
+          ).length
+        ) {
+          finished = true;
+          break;
+        }
+      }
+      expect(finished).toBe(true);
+      expect(
+        await owner.db
+          .select({ id: importTicketInventory.id })
+          .from(importTicketInventory)
+          .where(eq(importTicketInventory.fileId, fileId)),
+      ).toEqual([]);
+      const events = await owner.db
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.brandId, inventoryBrand), eq(outbox.event, 'media.objects.purge')));
+      expect(
+        events.filter(
+          (row) => Array.isArray(row.payload.keys) && row.payload.keys.includes(sourceKey),
+        ),
+      ).toHaveLength(1);
+      expect(
+        await owner.db
+          .select({ id: importRuns.id })
+          .from(importRuns)
+          .where(eq(importRuns.id, runId)),
+      ).toHaveLength(1);
+    } finally {
+      await owner.db.delete(brands).where(eq(brands.id, inventoryBrand));
+    }
+  });
+
+  it('preserves an unscored imported answer, excludes it from live-survey selection and makes replay a no-op', async () => {
+    const input = request('unscored-rating');
+    input.csat = [
+      {
+        externalId: 'modern-response',
+        ticketExternalId: 'unscored-rating',
+        rating: null,
+        ratedAt: '2019-01-04T10:00:00Z',
+        sourceDetails: {
+          ratingUnmapped: true,
+          originalAnswers: [{ question_id: 'Q_1', question_text: 'Support rating', value: 7 }],
+        },
+      },
+    ];
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const rows = await owner.db
+      .select()
+      .from(csatResponses)
+      .where(eq(csatResponses.ticketId, loaded.ticketId));
+    expect(rows).toMatchObject([
+      {
+        rating: null,
+        ratedAt: new Date('2019-01-04T10:00:00Z'),
+        importedDetails: input.csat[0]?.sourceDetails,
+      },
+    ]);
+    const repository = new CsatRepository();
+    expect(
+      await withSystem(app.db, BRAND, (tx) => repository.latestForTicket(tx, loaded.ticketId)),
+    ).toBeUndefined();
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        repository.latestImportedForTicket(tx, loaded.ticketId),
+      ),
+    ).toMatchObject({ id: rows[0]?.id, rating: null });
+    const revisions = () =>
+      owner.db.execute(
+        sql`SELECT id,xmin::text AS revision FROM csat_responses WHERE ticket_id=${loaded.ticketId}`,
+      );
+    const before = await revisions();
+    const historyRevisions = () =>
+      owner.db.execute(
+        sql`SELECT id,xmin::text AS revision FROM ticket_activity WHERE id=${rows[0]?.id}`,
+      );
+    const historyBefore = await historyRevisions();
+    const [event] = await owner.db
+      .select()
+      .from(ticketActivity)
+      .where(eq(ticketActivity.id, rows[0]?.id ?? ''));
+    expect(event).toMatchObject({
+      ticketId: loaded.ticketId,
+      action: 'ticket.imported.event',
+      createdAt: new Date('2019-01-04T10:00:00Z'),
+      to: {
+        csat: {
+          state: 'imported_unscored',
+          rating: null,
+          link: null,
+          originalAnswers: input.csat[0]?.sourceDetails?.originalAnswers,
+        },
+      },
+    });
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    expect(await revisions()).toEqual(before);
+    expect(await historyRevisions()).toEqual(historyBefore);
+    await expect(
+      owner.db
+        .update(csatResponses)
+        .set({ importedDetails: {} })
+        .where(eq(csatResponses.ticketId, loaded.ticketId)),
+    ).rejects.toThrow();
+    await expect(
+      owner.db
+        .update(csatResponses)
+        .set({
+          importedExternalId: null,
+          importedSource: null,
+          ratedVia: null,
+          closedAt: new Date('2019-01-03T00:00:00Z'),
+        })
+        .where(eq(csatResponses.ticketId, loaded.ticketId)),
+    ).rejects.toThrow();
+  });
+
+  it('excludes unscored source answers from the contact satisfaction denominator', async () => {
+    const contactId = uuidv7();
+    await owner.db
+      .insert(contacts)
+      .values({ id: contactId, brandId: BRAND, name: 'Historical response customer' });
+    const input = request('unscored-contact-stats');
+    input.resolved.contactId = contactId;
+    input.authors.customer = { kind: 'contact', id: contactId };
+    input.csat = [
+      {
+        externalId: 'unscored-stats',
+        ticketExternalId: input.record.externalId,
+        rating: null,
+        ratedAt: '2019-01-04T10:00:00Z',
+        sourceDetails: { ratingUnmapped: true },
+      },
+      {
+        externalId: 'scored-stats',
+        ticketExternalId: input.record.externalId,
+        rating: 5,
+        ratedAt: '2019-01-05T10:00:00Z',
+      },
+    ];
+    await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const stats = await withSystem(app.db, BRAND, (tx) =>
+      new DbTicketStatsProvider().forContacts(tx, BRAND, [contactId]),
+    );
+    expect(stats.get(contactId)?.csat).toBe(100);
+  });
+
   it('keeps distinct historical ratings without inventing closes or exposing them as live surveys', async () => {
     const input = request('ratings');
     input.csat = [
@@ -1254,6 +1641,27 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         public: true,
         bodyText: 'System receipt',
         createdAt: '2018-01-01T12:00:00Z',
+        attachments: [],
+      },
+      {
+        externalId: 'historical-unresolved-customer',
+        ticketExternalId: 'reported-history',
+        authorKind: 'system',
+        authorName: 'Original customer without a stable source ID',
+        sourceDetails: { authorKind: 'customer' },
+        public: true,
+        bodyText: 'Customer clarification',
+        createdAt: '2018-01-01T13:00:00Z',
+        attachments: [],
+      },
+      {
+        externalId: 'historical-unresolved-author',
+        ticketExternalId: 'reported-history',
+        authorKind: 'system',
+        authorName: 'Unresolved original author',
+        public: true,
+        bodyText: 'Historical clarification',
+        createdAt: '2018-01-01T14:00:00Z',
         attachments: [],
       },
       {
@@ -1675,6 +2083,13 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   });
 
   it('requires explicit field reuse or skip and refuses duplicate keys, foreign fields and wrong targets', async () => {
+    await owner.db.insert(customFieldDefs).values({
+      brandId: OTHER_BRAND,
+      target: 'ticket',
+      key: 'foreign_field',
+      label: 'Foreign field',
+      type: 'text',
+    });
     const [existing] = await owner.db
       .select()
       .from(customFieldDefs)
@@ -2427,6 +2842,40 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     },
   );
 
+  it('persists constant-size continuation cycle detection across worker deferrals instead of forgetting previously visited cursors', async () => {
+    const runId = uuidv7();
+    await owner.db.insert(importRuns).values({
+      id: runId,
+      brandId: BRAND,
+      source: 'zendesk',
+      status: 'extracting',
+      startedBy: USER,
+      credentialsEncrypted: 'encrypted-fixture',
+    });
+    const harness = extractionHarness(runId, async function* (_context, _entity, cursor) {
+      yield { records: [], cursor: { after: cursor?.after === 'a' ? 'b' : 'a' } };
+      throw new RateLimited(1000);
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(await runImportExtraction(harness.deps)).toEqual({
+        state: 'deferred',
+        retryAfterMs: 1000,
+      });
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      expect(run?.cursors.group).toMatchObject({
+        cycle: { anchor: expect.any(String), power: 2, distance: attempt },
+      });
+      expect(JSON.stringify(run?.cursors.group).length).toBeLessThan(250);
+      await owner.db
+        .update(importRuns)
+        .set({ counts: { ...run?.counts, retryAt: '2000-01-01T00:00:00.000Z' } })
+        .where(eq(importRuns.id, runId));
+    }
+    expect(await runImportExtraction(harness.deps)).toEqual({ state: 'failed' });
+    const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+    expect(run).toMatchObject({ error: 'invalid-response', credentialsEncrypted: null });
+  });
+
   it('purges credentials after three consecutive vendor outages but retains progress for retry before that', async () => {
     const runId = uuidv7();
     await owner.db.insert(importRuns).values({
@@ -2561,6 +3010,59 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         externalId: 'deleted-group',
       },
     ]);
+  });
+
+  it('refuses article loading that would discard declared source files without a prepared asset manifest', async () => {
+    const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.category(
+        tx,
+        categoryLoadSchema.parse({
+          ...scope,
+          record: { externalId: 'file-category', names: { en: 'Source files' } },
+        }),
+      ),
+    );
+    await withSystem(app.db, BRAND, (tx) =>
+      writer.section(
+        tx,
+        sectionLoadSchema.parse({
+          ...scope,
+          record: {
+            externalId: 'file-section',
+            parentExternalId: 'file-category',
+            names: { en: 'Original documents' },
+          },
+        }),
+      ),
+    );
+    const input = articleLoadSchema.parse({
+      ...scope,
+      preparedBodyHtml: '<p>Original body</p>',
+      record: {
+        externalId: 'file-article',
+        sectionExternalId: 'file-section',
+        locale: 'en',
+        title: 'Original article',
+        bodyHtml: '<p>Original body</p>',
+        draft: true,
+        internal: true,
+        createdAt: '2013-11-01T00:00:00Z',
+        updatedAt: '2020-01-01T00:00:00Z',
+        attachments: [
+          {
+            externalId: 'original-file',
+            fileName: 'manual.pdf',
+            url: 'https://vendor.invalid/manual.pdf',
+          },
+        ],
+      },
+    });
+    await expect(
+      withSystem(app.db, BRAND, (tx) => writer.article(tx, input)),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(await owner.db.select().from(hcArticles)).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
   it('imports bilingual knowledge with source dates, stable slugs, draft/private copies and no publish side effects', async () => {
@@ -3317,6 +3819,59 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     return scenario;
   }
 
+  it.each([
+    { change: 'signed-url', accepted: true },
+    { change: 'refresh-page', accepted: true },
+    { change: 'file-name', accepted: false },
+    { change: 'bundle-path', accepted: false },
+  ])(
+    'matches independently extracted attachments after $change without accepting another file',
+    async ({ change, accepted }) => {
+      // The Freshdesk reference import exposed URL rotation between independent entity reads.
+      const scenario = await mappedHistoryScenario(`attachment-${change}`);
+      const [attachment] = await owner.db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.runId, scenario.input.runId),
+            eq(importRecords.entity, 'attachment'),
+          ),
+        );
+      if (!attachment) throw new Error('Missing staged attachment');
+      const payload = { ...attachment.payload };
+      if (change === 'signed-url')
+        payload.url = 'https://vendor.example/history.pdf?signature=renewed';
+      if (change === 'refresh-page') payload.sourcePage = 2;
+      if (change === 'file-name') payload.fileName = 'different.pdf';
+      if (change === 'bundle-path') {
+        delete payload.url;
+        payload.bundlePath = 'attachments/different.pdf';
+      }
+      await owner.db
+        .update(importRecords)
+        .set({ payload, payloadHash: hashImportValue(payload) })
+        .where(eq(importRecords.id, attachment.id));
+      const loading = withSystem(app.db, BRAND, (tx) =>
+        loadAssembledStagedTicket(tx, { claim: scenario.claim, recordId: scenario.recordId }),
+      );
+      if (accepted) {
+        const loaded = await loading;
+        expect(loaded).toMatchObject({ state: 'loaded', messages: 2 });
+        expect(
+          await owner.db
+            .select()
+            .from(attachments)
+            .where(eq(attachments.ticketId, loaded.ticketId)),
+        ).toMatchObject([{ originalName: 'history.pdf', status: 'pending', origin: 'import' }]);
+      } else {
+        await expect(loading).rejects.toMatchObject({ code: 'mapping-invalid' });
+        expect(await owner.db.select().from(tickets)).toEqual([]);
+      }
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
+
   it('assembles staged history and confirmed authors without caller-supplied thread data', async () => {
     const scenario = await mappedHistoryScenario('assembled-history');
     const checkpoint = { claim: scenario.claim, recordId: scenario.recordId };
@@ -3448,6 +4003,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         runId,
         entity: record.entity,
         externalId: record.payload.externalId,
+        parentExternalId: importRecordParent(record),
         payload: record.payload,
         payloadHash: hashImportValue(record.payload),
       });
@@ -3457,6 +4013,768 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     if (!claim) throw new Error('Missing knowledge batch claim');
     return { claim, runId, records };
   }
+
+  async function articleAssetCheckpoint(prefix: string) {
+    const scenario = await stagedKnowledgeBatch(prefix);
+    const [row] = await owner.db
+      .select()
+      .from(importRecords)
+      .where(
+        and(
+          eq(importRecords.runId, scenario.runId),
+          eq(importRecords.externalId, `${prefix}-primary`),
+        ),
+      );
+    if (!row) throw new Error('Missing staged article');
+    const record = importArticleSchema.parse({
+      ...row.payload,
+      attachments: [
+        {
+          externalId: 'native-manual',
+          fileName: 'original.pdf',
+          url: 'https://vendor.invalid/original.pdf',
+        },
+      ],
+    });
+    await owner.db
+      .update(importRecords)
+      .set({ payload: record, payloadHash: hashImportValue(record) })
+      .where(eq(importRecords.id, row.id));
+    const input = { claim: scenario.claim, recordId: row.id, record };
+    const snapshot = await withSystem(app.db, BRAND, (tx) => readArticlePreparation(tx, input));
+    const request = snapshot.requests[0];
+    if (!request) throw new Error('Missing article asset request');
+    return { ...scenario, input, snapshot, request };
+  }
+
+  it('resumes article asset outcomes without forgetting committed failures and refuses stale source content', async () => {
+    const scenario = await articleAssetCheckpoint('asset-outcome');
+    const state = {
+      ...scenario.snapshot.preparation,
+      outcomes: [
+        {
+          key: scenario.request.key,
+          state: 'unavailable' as const,
+          reason: 'source-unavailable' as const,
+        },
+      ],
+    };
+    await withSystem(app.db, BRAND, (tx) => saveArticlePreparation(tx, scenario.input, state));
+    const resumed = await withSystem(app.db, BRAND, (tx) =>
+      readArticlePreparation(tx, JSON.parse(JSON.stringify(scenario.input))),
+    );
+    expect(resumed.preparation).toEqual(state);
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        saveArticlePreparation(tx, scenario.input, { ...state, outcomes: [] }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        readArticlePreparation(tx, {
+          ...scenario.input,
+          record: { ...scenario.input.record, title: 'Changed caller data' },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    const changed = { ...scenario.input.record, bodyHtml: '<p>Changed staged source</p>' };
+    await owner.db
+      .update(importRecords)
+      .set({ payload: changed, payloadHash: hashImportValue(changed) })
+      .where(eq(importRecords.id, scenario.input.recordId));
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        readArticlePreparation(tx, { ...scenario.input, record: changed }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+  });
+
+  it('fences article assets by source account and cannot seal a processing candidate as a ready file', async () => {
+    const scenario = await articleAssetCheckpoint('asset-proof');
+    const mediaId = uuidv7(),
+      assetId = uuidv7(),
+      foreignId = uuidv7();
+    await owner.db.insert(hcMedia).values({
+      id: mediaId,
+      brandId: BRAND,
+      importedByRunId: scenario.runId,
+      kind: 'file',
+      s3Key: `brands/${BRAND}/help-center/${mediaId}/original`,
+      originalName: 'original.pdf',
+      mime: 'application/pdf',
+      size: 123,
+      status: 'processing',
+    });
+    const asset = {
+      brandId: BRAND,
+      source: 'zendesk' as const,
+      parentExternalId: scenario.input.record.externalId,
+      locale: 'en' as const,
+      assetExternalId: scenario.request.identity.externalId,
+      usage: 'download' as const,
+      payloadHash: importArticleAssetMetadataHash(scenario.request),
+      contentHash: 'c'.repeat(64),
+      mediaId,
+    };
+    await owner.db.insert(hcImportAssets).values([
+      { ...asset, id: assetId, sourceAccountKey: scenario.snapshot.accountKey },
+      { ...asset, id: foreignId, sourceAccountKey: 'f'.repeat(64) },
+    ]);
+    const state = {
+      ...scenario.snapshot.preparation,
+      outcomes: [{ key: scenario.request.key, state: 'processing' as const, assetId }],
+    };
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        saveArticlePreparation(tx, scenario.input, {
+          ...state,
+          outcomes: [{ ...state.outcomes[0]!, assetId: foreignId }],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    await withSystem(app.db, BRAND, (tx) => saveArticlePreparation(tx, scenario.input, state));
+    const ready = {
+      ...state,
+      outcomes: [{ key: scenario.request.key, state: 'prepared' as const, assetId }],
+      bodyHash: hashImportValue('<p>Prepared</p>'),
+    };
+    await expect(
+      withSystem(app.db, BRAND, (tx) => saveArticlePreparation(tx, scenario.input, ready)),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    await owner.db
+      .update(hcMedia)
+      .set({ status: 'ready', scanStatus: 'clean', processedAt: new Date() })
+      .where(eq(hcMedia.id, mediaId));
+    await withSystem(app.db, BRAND, (tx) => saveArticlePreparation(tx, scenario.input, ready));
+    expect(
+      (await withSystem(app.db, BRAND, (tx) => readArticlePreparation(tx, scenario.input)))
+        .preparation,
+    ).toEqual(ready);
+    await expect(
+      withSystem(app.db, BRAND, (tx) => saveArticlePreparation(tx, scenario.input, state)),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+  });
+
+  it('prepares a vendor article file across continuations, refuses altered HTML and binds the scanned file with its article', async () => {
+    const scenario = await articleAssetCheckpoint('asset-pipeline');
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-article-assets-'));
+    try {
+      const bytes = Buffer.from('%PDF-1.7\nOriginal knowledge attachment');
+      const url = fake.addAttachment('native-manual', bytes);
+      const record = importArticleSchema.parse({
+        ...scenario.input.record,
+        attachments: [
+          {
+            externalId: 'native-manual',
+            fileName: 'original.pdf',
+            contentType: 'application/pdf',
+            size: bytes.length,
+            url,
+          },
+        ],
+      });
+      await owner.db
+        .update(importRecords)
+        .set({ payload: record, payloadHash: hashImportValue(record) })
+        .where(eq(importRecords.id, scenario.input.recordId));
+      const input = { ...scenario.input, record };
+      const storage = new FakeStorage(directory);
+      const connection = downloadHarness(fake, storage);
+      const prepare = () =>
+        createImportArticlePreparer({
+          db: app.db,
+          storage,
+          resolve: async (scope) => {
+            expect(importRunRefSchema.parse(scope)).toEqual({
+              brandId: BRAND,
+              runId: scenario.runId,
+            });
+            return connection;
+          },
+          mediaJobState: async () => 'waiting',
+        });
+      await expect(prepare()(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const [asset] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.parentExternalId, record.externalId));
+      if (!asset) throw new Error('Missing prepared asset');
+      expect(asset.articleId).toBeNull();
+      const media = createHcMediaProcessor(storage, { scan: async () => 'clean' });
+      await withSystem(app.db, BRAND, (tx) =>
+        media.run({
+          tx,
+          payload: { brandId: BRAND, mediaId: asset.mediaId },
+          log: silentJobLogger,
+        }),
+      );
+      // Reconstruct the preparer to prove that no in-memory state is needed after processing.
+      await expect(prepare()(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const html = await prepare()(input);
+      if (typeof html !== 'string')
+        throw new Error('Legacy source unexpectedly gained a published snapshot');
+      expect(html).toContain(`/assets/${asset.id}`);
+      expect(html).not.toContain(fake.server.root);
+      const batch = (body: string) =>
+        runImportLoadBatch(
+          {
+            db: app.db,
+            jobId: 'import.article.asset-test',
+            prepareArticle: async ({ record: next }) =>
+              next.externalId === record.externalId ? body : next.bodyHtml,
+          },
+          { claim: scenario.claim },
+        );
+      await expect(batch(`${html}<p>Unreviewed content</p>`)).rejects.toMatchObject({
+        code: 'mapping-invalid',
+      });
+      expect(await owner.db.select().from(hcArticles)).toEqual([]);
+      expect(await batch(html)).toMatchObject({ state: 'records_loaded' });
+      const [bound] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.id, asset.id));
+      expect(bound?.articleId).toBeTruthy();
+      const revisions = await owner.db.execute(
+        sql`SELECT id, xmin::text FROM hc_import_assets WHERE id = ${asset.id}::uuid`,
+      );
+      expect(await batch(html)).toMatchObject({ state: 'records_loaded', processed: 0 });
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, xmin::text FROM hc_import_assets WHERE id = ${asset.id}::uuid`,
+        ),
+      ).toEqual(revisions);
+      expect((await owner.db.select().from(outbox)).map((entry) => entry.event)).toEqual([
+        'help_center.media_uploaded',
+      ]);
+    } finally {
+      await fake.server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves separate working and published article bodies and files without exposing an unpublished edit through public reads', async () => {
+    const scenario = await articleAssetCheckpoint('article-two-copies');
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-article-two-copies-'));
+    try {
+      const workingUrl = fake.addAttachment(
+        'working-manual',
+        Buffer.from('%PDF-1.7\nUnpublished draft attachment'),
+      );
+      const publishedUrl = fake.addAttachment(
+        'published-manual',
+        Buffer.from('%PDF-1.7\nPublished original attachment'),
+      );
+      const record = importArticleSchema.parse({
+        ...scenario.input.record,
+        draft: false,
+        internal: false,
+        bodyHtml: '<p>Unpublished staff edit</p>',
+        attachments: [{ externalId: 'working-manual', fileName: 'draft.pdf', url: workingUrl }],
+        published: {
+          title: 'Original published title',
+          description: 'p'.repeat(300),
+          bodyHtml: '<p>Published original answer</p>',
+          publishedAt: null,
+          attachments: [
+            { externalId: 'published-manual', fileName: 'public.pdf', url: publishedUrl },
+          ],
+        },
+      });
+      await owner.db
+        .update(importRecords)
+        .set({ payload: record, payloadHash: hashImportValue(record) })
+        .where(eq(importRecords.id, scenario.input.recordId));
+      const input = { ...scenario.input, record },
+        storage = new FakeStorage(directory);
+      const prepare = createImportArticlePreparer({
+        db: app.db,
+        storage,
+        resolve: async () => downloadHarness(fake, storage),
+        mediaJobState: async () => 'waiting',
+      });
+      await expect(prepare(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      await expect(prepare(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const assets = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.parentExternalId, record.externalId));
+      expect(assets).toHaveLength(2);
+      for (const asset of assets)
+        await withSystem(app.db, BRAND, (tx) =>
+          createHcMediaProcessor(storage, { scan: async () => 'clean' }).run({
+            tx,
+            payload: { brandId: BRAND, mediaId: asset.mediaId },
+            log: silentJobLogger,
+          }),
+        );
+      await expect(prepare(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      await expect(prepare(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const prepared = preparedImportArticleSchema.parse(await prepare(input));
+      const draftAsset = assets.find((asset) => asset.assetExternalId === 'working-manual');
+      const publicAsset = assets.find((asset) => asset.assetExternalId === 'published-manual');
+      if (!draftAsset || !publicAsset) throw new Error('Missing per-copy media');
+      expect(prepared.bodyHtml).toContain(draftAsset.id);
+      expect(prepared.publishedBodyHtml).toContain(publicAsset.id);
+      expect(prepared.publishedBodyHtml).not.toContain(draftAsset.id);
+      expect(prepared.publishedBodyHtml).not.toContain('Unpublished');
+      expect(
+        await runImportLoadBatch(
+          {
+            db: app.db,
+            jobId: 'import.article.two-copies',
+            prepareArticle: async ({ record: next }) =>
+              next.externalId === record.externalId ? prepared : next.bodyHtml,
+          },
+          { claim: scenario.claim },
+        ),
+      ).toMatchObject({ state: 'records_loaded' });
+      const [version] = await owner.db
+        .select()
+        .from(hcArticleVersions)
+        .where(and(eq(hcArticleVersions.locale, 'en'), eq(hcArticleVersions.title, record.title)));
+      expect(version).toMatchObject({
+        status: 'published',
+        bodyHtml: `<p>Unpublished staff edit</p><p><a href="/api/help-center/brands/${BRAND}/assets/${draftAsset.id}" rel="noopener noreferrer">draft.pdf</a></p>`,
+        publishedBodyHtml: `<p>Published original answer</p><p><a href="/api/help-center/brands/${BRAND}/assets/${publicAsset.id}" rel="noopener noreferrer">public.pdf</a></p>`,
+        publishedTitle: 'Original published title',
+        publishedAt: null,
+        importedPublishedDescription: 'p'.repeat(300),
+      });
+      if (!version) throw new Error('Missing imported version');
+      const publicRows = await withSystem(app.db, BRAND, (tx) =>
+        tx.execute(
+          sql`WITH ${readableVersions('public')} SELECT body_html FROM readable WHERE article_id = ${version.articleId}::uuid AND locale = 'en'`,
+        ),
+      );
+      expect(publicRows).toEqual([{ body_html: version.publishedBodyHtml }]);
+      expect(JSON.stringify(publicRows)).not.toContain('Unpublished');
+    } finally {
+      await fake.server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('prepares relative images for both article copies, keeps unavailable private gallery images explicit and never publishes draft image bytes', async () => {
+    const scenario = await articleAssetCheckpoint('relative-article-images');
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#ffffff' } })
+      .png()
+      .toBuffer();
+    const server = new VendorServer((url, authorization) => {
+      if (authorization) return { status: 403 };
+      if (['/working.png', '/public.png'].includes(url.pathname))
+        return { status: 200, bytes: png, headers: { 'content-type': 'image/png' } };
+      return { status: 403 };
+    });
+    await server.start();
+    const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-relative-article-images-'));
+    try {
+      const record = importArticleSchema.parse({
+        ...scenario.input.record,
+        draft: false,
+        internal: false,
+        attachments: [],
+        assetOrigin: server.root,
+        bodyHtml: '<p>Unpublished image edit</p><img src="/working.png"><img src="/private.png">',
+        published: {
+          title: 'Published original images',
+          bodyHtml: '<p>Published original answer</p><img src="/public.png">',
+          publishedAt: null,
+          assetOrigin: server.root,
+        },
+      });
+      await owner.db
+        .update(importRecords)
+        .set({ payload: record, payloadHash: hashImportValue(record) })
+        .where(eq(importRecords.id, scenario.input.recordId));
+      const input = { ...scenario.input, record },
+        storage = new FakeStorage(directory);
+      const connection = createZendeskImportConnection({
+        credentials: { auth: 'oauth', subdomain: 'demo', accessToken: 'synthetic-token' },
+        downloadHosts: [],
+        allowCidrs: [],
+        log: async () => {},
+        limiter: new ImportRateLimiter({ capacity: 100, perMinute: 1000 }),
+        transport: {
+          apiRoot: server.root,
+          policy: {
+            allowedPorts: [Number(new URL(server.root).port)],
+            allowCidrs: ['127.0.0.1/32'],
+          },
+        },
+      });
+      let prepared: z.infer<typeof preparedImportArticleSchema> | undefined;
+      for (let attempt = 0; attempt < 20 && !prepared; attempt++) {
+        try {
+          // Each attempt constructs a new preparer to exercise persisted continuation state.
+          prepared = preparedImportArticleSchema.parse(
+            await createImportArticlePreparer({
+              db: app.db,
+              storage,
+              resolve: async () => connection,
+              mediaJobState: async () => 'waiting',
+            })(input),
+          );
+        } catch (error) {
+          if (!(error instanceof ImportArticleAssetsPending)) throw error;
+          const processing = await owner.db
+            .select()
+            .from(hcMedia)
+            .where(
+              and(
+                eq(hcMedia.brandId, BRAND),
+                eq(hcMedia.importedByRunId, scenario.runId),
+                eq(hcMedia.status, 'processing'),
+              ),
+            );
+          for (const media of processing)
+            await withSystem(app.db, BRAND, (tx) =>
+              createHcMediaProcessor(storage, { scan: async () => 'clean' }).run({
+                tx,
+                payload: { brandId: BRAND, mediaId: media.id },
+                log: silentJobLogger,
+              }),
+            );
+        }
+      }
+      if (!prepared) throw new Error('Relative image preparation did not complete');
+      const assets = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.parentExternalId, record.externalId));
+      expect(assets).toHaveLength(2);
+      const working = assets.find(
+        (asset) =>
+          asset.assetExternalId === `inline:${hashImportValue(`${server.root}/working.png`)}`,
+      );
+      const published = assets.find(
+        (asset) =>
+          asset.assetExternalId === `inline:${hashImportValue(`${server.root}/public.png`)}`,
+      );
+      if (!working || !published) throw new Error('Missing copy-specific image ownership');
+      expect(prepared.bodyHtml).toContain(working.mediaId);
+      expect(prepared.bodyHtml).toContain('File unavailable during import');
+      expect(prepared.publishedBodyHtml).toContain(published.mediaId);
+      expect(prepared.publishedBodyHtml).not.toContain(working.mediaId);
+      expect(JSON.stringify(prepared)).not.toContain(server.root);
+      for (const asset of assets) {
+        const [media] = await owner.db.select().from(hcMedia).where(eq(hcMedia.id, asset.mediaId));
+        if (!media?.webpKey) throw new Error('Missing converted image');
+        expect(await sharp(await storage.read(media.webpKey)).metadata()).toMatchObject({
+          format: 'webp',
+          width: 8,
+          height: 8,
+        });
+      }
+      expect(
+        await owner.db
+          .select()
+          .from(importLog)
+          .where(
+            and(
+              eq(importLog.runId, scenario.runId),
+              eq(importLog.message, 'import.article.asset-unavailable'),
+            ),
+          ),
+      ).toHaveLength(1);
+      expect(server.calls).toHaveLength(3);
+      expect(server.calls.every((call) => !call.authenticated)).toBe(true);
+      const sealed = prepared;
+      expect(
+        await runImportLoadBatch(
+          {
+            db: app.db,
+            jobId: 'import.article.relative-images',
+            prepareArticle: async ({ record: next }) =>
+              next.externalId === record.externalId ? sealed : next.bodyHtml,
+          },
+          { claim: scenario.claim },
+        ),
+      ).toMatchObject({ state: 'records_loaded' });
+      const [version] = await owner.db
+        .select()
+        .from(hcArticleVersions)
+        .where(and(eq(hcArticleVersions.locale, 'en'), eq(hcArticleVersions.title, record.title)));
+      if (!version) throw new Error('Missing image article version');
+      const publicRows = await withSystem(app.db, BRAND, (tx) =>
+        tx.execute(
+          sql`WITH ${readableVersions('public')} SELECT body_html FROM readable WHERE article_id = ${version.articleId}::uuid AND locale = 'en'`,
+        ),
+      );
+      expect(publicRows).toEqual([{ body_html: prepared.publishedBodyHtml }]);
+      expect(JSON.stringify(publicRows)).not.toContain('Unpublished');
+      expect(
+        (await owner.db.select().from(outbox)).every((event) =>
+          ['help_center.media_uploaded', 'media.objects.purge'].includes(event.event),
+        ),
+      ).toBe(true);
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('retries an unbound rejected article asset in a new run without changing its source identity or reusing a broken media attempt', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-article-retry-'));
+    try {
+      const storage = new FakeStorage(directory),
+        bytes = Buffer.from('%PDF-1.7\nOriginal source bytes');
+      const url = fake.addAttachment('native-manual', bytes);
+      const prepare = createImportArticlePreparer({
+        db: app.db,
+        storage,
+        resolve: async () => downloadHarness(fake, storage),
+        mediaJobState: async () => 'failed',
+      });
+      async function stagedAttempt() {
+        const attempt = await articleAssetCheckpoint('asset-retry');
+        const record = importArticleSchema.parse({
+          ...attempt.input.record,
+          attachments: [
+            {
+              externalId: 'native-manual',
+              fileName: 'original.pdf',
+              contentType: 'application/pdf',
+              size: bytes.length,
+              url,
+            },
+          ],
+        });
+        await owner.db
+          .update(importRecords)
+          .set({ payload: record, payloadHash: hashImportValue(record) })
+          .where(eq(importRecords.id, attempt.input.recordId));
+        return { ...attempt.input, record };
+      }
+      const first = await stagedAttempt();
+      await expect(prepare(first)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const [original] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.parentExternalId, first.record.externalId));
+      if (!original) throw new Error('Missing original asset');
+      await expect(
+        withSystem(app.db, BRAND, (tx) =>
+          createHcMediaProcessor(storage, { scan: async () => 'error' }).run({
+            tx,
+            payload: { brandId: BRAND, mediaId: original.mediaId },
+            log: silentJobLogger,
+          }),
+        ),
+      ).rejects.toMatchObject({ name: 'HcFileScanUnavailable' });
+      await markImportedHcMediaFailed(app.db, { brandId: BRAND, mediaId: original.mediaId });
+      await expect(prepare(first)).rejects.toMatchObject({ code: 'target-unavailable' });
+      await owner.db
+        .update(importRuns)
+        .set({ status: 'failed', claimToken: null, claimedAt: null })
+        .where(eq(importRuns.id, first.claim.runId));
+      const retry = await stagedAttempt();
+      await expect(prepare(retry)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      const [replaced] = await owner.db
+        .select()
+        .from(hcImportAssets)
+        .where(eq(hcImportAssets.id, original.id));
+      if (!replaced) throw new Error('Missing retried asset');
+      expect(replaced).toMatchObject({
+        id: original.id,
+        contentHash: original.contentHash,
+        payloadHash: original.payloadHash,
+        sourceAccountKey: original.sourceAccountKey,
+        parentExternalId: original.parentExternalId,
+        articleId: null,
+      });
+      expect(replaced.mediaId).not.toBe(original.mediaId);
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          createHcMediaProcessor(storage, { scan: async () => 'clean' }).run({
+            tx,
+            payload: { brandId: BRAND, mediaId: replaced.mediaId },
+            log: silentJobLogger,
+          }),
+        ),
+      ).toEqual({ status: 'ready' });
+      await expect(prepare(retry)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+      expect(await prepare(retry)).toContain(`/assets/${original.id}`);
+    } finally {
+      await fake.server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['en', 'ar'] as const)(
+    'keeps a durable %s availability message and warning when a source article file is gone',
+    async (locale) => {
+      const scenario = await articleAssetCheckpoint(`asset-missing-${locale}`);
+      const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+      await fake.server.start();
+      const directory = await mkdtemp(path.join(tmpdir(), 'helpdock-article-missing-'));
+      try {
+        const url = `${fake.server.root}/attachments/token/missing/file`;
+        const record = importArticleSchema.parse({
+          ...scenario.input.record,
+          locale,
+          bodyHtml: `<p><a href="${url}">Historical manual</a></p>`,
+          attachments: [{ externalId: 'missing-manual', fileName: '<original>.pdf', url }],
+        });
+        await owner.db
+          .update(importRecords)
+          .set({ payload: record, payloadHash: hashImportValue(record) })
+          .where(eq(importRecords.id, scenario.input.recordId));
+        const input = { ...scenario.input, record },
+          storage = new FakeStorage(directory);
+        const prepare = createImportArticlePreparer({
+          db: app.db,
+          storage,
+          resolve: async () => downloadHarness(fake, storage),
+          mediaJobState: async () => undefined,
+        });
+        await expect(prepare(input)).rejects.toBeInstanceOf(ImportArticleAssetsPending);
+        const html = await prepare(input);
+        if (typeof html !== 'string')
+          throw new Error('Legacy source unexpectedly gained a published snapshot');
+        expect(html).toContain(
+          locale === 'en' ? 'File unavailable during import' : 'ملف غير متاح عند الاستيراد',
+        );
+        expect(html).toContain('&lt;original&gt;.pdf');
+        expect(html).not.toContain(fake.server.root);
+        expect(html).toContain('Historical manual');
+        expect(await prepare(input)).toBe(html);
+        expect(await owner.db.select().from(hcMedia)).toEqual([]);
+        expect(await owner.db.select().from(outbox)).toEqual([]);
+        expect(
+          await owner.db
+            .select({ message: importLog.message })
+            .from(importLog)
+            .where(eq(importLog.runId, scenario.runId)),
+        ).toEqual([{ message: 'import.article.asset-unavailable' }]);
+      } finally {
+        await fake.server.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('retains article assets during paused imports and while referenced, then purges only old importing media through the outbox', async () => {
+    const scenario = await stagedKnowledgeBatch('asset-retention');
+    await owner.db.update(importRuns).set({ status: 'completed' }).where(eq(importRuns.id, RUN));
+    expect(
+      await runImportLoadBatch(
+        {
+          db: app.db,
+          jobId: 'import.assets.retention',
+          prepareArticle: async ({ record }) => record.bodyHtml,
+        },
+        { claim: scenario.claim },
+      ),
+    ).toMatchObject({ state: 'records_loaded' });
+    const [article] = await owner.db.select().from(hcArticles);
+    if (!article) throw new Error('Missing retained article');
+    const old = new Date('2000-01-01T00:00:00Z');
+    const mediaId = uuidv7(),
+      nativeId = uuidv7(),
+      recentId = uuidv7();
+    await owner.db.insert(hcMedia).values([
+      {
+        id: mediaId,
+        brandId: BRAND,
+        s3Key: `brands/${BRAND}/help-center/${mediaId}/original`,
+        originalName: 'manual.pdf',
+        mime: 'application/pdf',
+        size: 100,
+        kind: 'file',
+        importedByRunId: scenario.runId,
+        status: 'ready',
+        createdAt: old,
+      },
+      {
+        id: nativeId,
+        brandId: BRAND,
+        s3Key: `brands/${BRAND}/help-center/${nativeId}/original`,
+        originalName: 'native.png',
+        mime: 'image/png',
+        size: 100,
+        createdAt: old,
+      },
+      {
+        id: recentId,
+        brandId: BRAND,
+        s3Key: `brands/${BRAND}/help-center/${recentId}/original`,
+        originalName: 'recent.pdf',
+        mime: 'application/pdf',
+        size: 100,
+        kind: 'file',
+        importedByRunId: scenario.runId,
+      },
+    ]);
+    const [asset] = await owner.db
+      .insert(hcImportAssets)
+      .values({
+        brandId: BRAND,
+        source: 'zendesk',
+        sourceAccountKey: 'c'.repeat(64),
+        parentExternalId: 'asset-retention-primary',
+        assetExternalId: 'manual',
+        locale: 'en',
+        usage: 'download',
+        payloadHash: 'a'.repeat(64),
+        contentHash: 'b'.repeat(64),
+        mediaId,
+        articleId: article.id,
+        createdAt: old,
+      })
+      .returning();
+    if (!asset) throw new Error('Missing retained file');
+    const purge = () =>
+      withSystem(app.db, BRAND, (tx) =>
+        purgeImportedArticleAssetsBatch(tx, {
+          brandId: BRAND,
+          cutoff: new Date('2001-01-01T00:00:00Z'),
+          limit: 10,
+        }),
+      );
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'paused', pausedFrom: 'loading', claimToken: null, claimedAt: null })
+      .where(eq(importRuns.id, scenario.runId));
+    expect(await purge()).toBe(0);
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed', pausedFrom: null })
+      .where(eq(importRuns.id, scenario.runId));
+    await owner.db
+      .update(hcArticleVersions)
+      .set({
+        bodyHtml: `<p><a href="/api/help-center/brands/${BRAND}/assets/${asset.id}">Manual</a></p>`,
+      })
+      .where(and(eq(hcArticleVersions.articleId, article.id), eq(hcArticleVersions.locale, 'en')));
+    expect(await purge()).toBe(0);
+    await owner.db
+      .update(hcArticleVersions)
+      .set({ bodyHtml: '<p>File removed by editor</p>', publishedBodyHtml: null })
+      .where(eq(hcArticleVersions.articleId, article.id));
+    expect(await purge()).toBe(2);
+    expect(
+      (await owner.db.select({ id: hcMedia.id }).from(hcMedia)).map((row) => row.id).sort(),
+    ).toEqual([nativeId, recentId].sort());
+    expect(await owner.db.select().from(hcImportAssets)).toEqual([]);
+    const [event] = await owner.db.select().from(outbox);
+    expect(event).toMatchObject({
+      event: 'media.objects.purge',
+      payload: {
+        keys: [
+          `brands/${BRAND}/help-center/${mediaId}/original`,
+          `brands/${BRAND}/help-center/${mediaId}/webp`,
+        ],
+      },
+    });
+    expect(await purge()).toBe(0);
+  });
 
   it('prepares knowledge outside record transactions and loads a reversed translation after its primary', async () => {
     const scenario = await stagedKnowledgeBatch('batch-knowledge');
@@ -3517,12 +4835,156 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
-  async function boundAccountRun(account: string, brandId = BRAND) {
+  it('binds a sealed inventory to its account, revision and content hash and reads distinct IDs in byte order', async () => {
+    const brandId = uuidv7();
+    await owner.db
+      .insert(brands)
+      .values({ id: brandId, name: 'Inventory manifest', prefix: 'IMA' });
+    try {
+      const runId = uuidv7();
+      const fileId = uuidv7();
+      const revision = uuidv7();
+      await owner.db
+        .insert(importRuns)
+        .values({ id: runId, brandId, source: 'freshdesk', status: 'connecting', startedBy: USER });
+      const accountKey = await withSystem(app.db, brandId, (tx) =>
+        bindImportSourceAccount(tx, { brandId, runId, verifiedAccount: 'original-account' }),
+      );
+      await owner.db.insert(importFiles).values({
+        id: fileId,
+        brandId,
+        runId,
+        revision,
+        fileName: 'archive.csv',
+        format: 'csv',
+        entity: 'ticket',
+        size: 12,
+        uploadKey: `brands/${brandId}/imports/${runId}/files/${fileId}/upload`,
+        sourceKey: `brands/${brandId}/imports/${runId}/files/${fileId}/sealed-source`,
+        sha256: 'a'.repeat(64),
+        status: 'ready',
+        recordCount: 2,
+        inventoryMapping: { idColumn: 'Ticket ID', location: 'archived' },
+        inventoryValidation: { kind: 'ticket-inventory', sourceRows: 3, records: 2, duplicates: 1 },
+      });
+      const row = {
+        brandId,
+        runId,
+        fileId,
+        revision,
+        sourceHash: 'a'.repeat(64),
+        location: 'archived',
+        line: 2,
+      };
+      await owner.db.insert(importTicketInventory).values([
+        { ...row, externalId: '10' },
+        { ...row, externalId: '2' },
+        { ...row, externalId: '1', sourceHash: 'b'.repeat(64) },
+        { ...row, externalId: '3', revision: uuidv7() },
+      ]);
+      const complete = await createImportTicketInventory(
+        { db: app.db },
+        { brandId, runId },
+        'complete',
+      );
+      expect(await complete.next(null)).toEqual({ externalId: '10', location: 'archived' });
+      expect(await complete.next('10')).toEqual({ externalId: '2', location: 'archived' });
+      expect(await complete.next('2')).toBeNull();
+      const archives = await createImportTicketInventory(
+        { db: app.db },
+        { brandId, runId },
+        'archives',
+      );
+      expect(archives.fingerprint).not.toBe(complete.fingerprint);
+      const [originalFile] = await owner.db
+        .select()
+        .from(importFiles)
+        .where(eq(importFiles.id, fileId));
+      if (!originalFile) throw new Error('Missing inventory fixture');
+      const overlappingFileId = uuidv7();
+      await owner.db.insert(importFiles).values({
+        ...originalFile,
+        id: overlappingFileId,
+        uploadKey: `brands/${brandId}/imports/${runId}/files/${overlappingFileId}/upload`,
+        sourceKey: `brands/${brandId}/imports/${runId}/files/${overlappingFileId}/sealed-source`,
+        inventoryMapping: { idColumn: 'Ticket ID', location: 'active' },
+        recordCount: 1,
+        inventoryValidation: {
+          kind: 'ticket-inventory',
+          sourceRows: 1,
+          records: 1,
+          duplicates: 0,
+        },
+      });
+      await owner.db
+        .insert(importTicketInventory)
+        .values({ ...row, fileId: overlappingFileId, externalId: '10', location: 'active' });
+      await expect(
+        withSystem(app.db, brandId, (tx) =>
+          importTicketInventoryManifest(tx, { brandId, runId }, 'complete'),
+        ),
+      ).rejects.toMatchObject({ code: 'invalid-response' });
+      await owner.db
+        .update(importFiles)
+        .set({ inventoryMapping: { idColumn: 'Ticket ID', location: 'archived' } })
+        .where(eq(importFiles.id, overlappingFileId));
+      // The file's declared location and every prepared row must agree as well.
+      await expect(
+        withSystem(app.db, brandId, (tx) =>
+          importTicketInventoryManifest(tx, { brandId, runId }, 'complete'),
+        ),
+      ).rejects.toMatchObject({ code: 'invalid-response' });
+      await owner.db
+        .update(importTicketInventory)
+        .set({ location: 'archived' })
+        .where(eq(importTicketInventory.fileId, overlappingFileId));
+      const overlapping = await createImportTicketInventory(
+        { db: app.db },
+        { brandId, runId },
+        'complete',
+      );
+      expect(await overlapping.next(null)).toEqual({ externalId: '10', location: 'archived' });
+      expect(await overlapping.next('10')).toEqual({ externalId: '2', location: 'archived' });
+      expect(await overlapping.next('2')).toBeNull();
+      await owner.db.delete(importFiles).where(eq(importFiles.id, overlappingFileId));
+      await expect(
+        withSystem(app.db, brandId, (tx) =>
+          bindImportSourceAccount(tx, { brandId, runId, verifiedAccount: 'different-account' }),
+        ),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+      expect(
+        (
+          await owner.db
+            .select({ key: importRuns.sourceAccountKey })
+            .from(importRuns)
+            .where(eq(importRuns.id, runId))
+        )[0]?.key,
+      ).toBe(accountKey);
+      await owner.db
+        .delete(importTicketInventory)
+        .where(
+          and(eq(importTicketInventory.fileId, fileId), eq(importTicketInventory.externalId, '2')),
+        );
+      await expect(
+        withSystem(app.db, brandId, (tx) =>
+          importTicketInventoryManifest(tx, { brandId, runId }, 'complete'),
+        ),
+      ).rejects.toMatchObject({ code: 'invalid-response' });
+    } finally {
+      await owner.db.delete(brands).where(eq(brands.id, brandId));
+    }
+  });
+
+  async function boundAccountRun(
+    account: string,
+    brandId = BRAND,
+    source: 'zendesk' | 'freshdesk' = 'zendesk',
+  ) {
     const runId = uuidv7();
     await owner.db.insert(importRuns).values({
       id: runId,
       brandId: brandId,
-      source: 'zendesk',
+      source,
       status: 'connecting',
       startedBy: USER,
     });
@@ -3532,6 +4994,352 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
     return { runId, key };
   }
+
+  async function changedArticleAnchor(
+    scenario: 'same-account' | 'foreign-account' | 'foreign-brand' | 'foreign-vendor',
+  ) {
+    const priorBrand = scenario === 'foreign-brand' ? OTHER_BRAND : BRAND;
+    const priorAccount = scenario === 'foreign-account' ? 'other-anchor-account' : 'anchor-account';
+    const priorSource =
+      scenario === 'foreign-vendor' ? ('freshdesk' as const) : ('zendesk' as const);
+    const priorRun = await boundAccountRun(priorAccount, priorBrand, priorSource);
+    const priorScope = { brandId: priorBrand, runId: priorRun.runId, source: priorSource };
+    const category = { externalId: 'anchor-category', names: { en: 'History' } };
+    const section = {
+      externalId: 'anchor-section',
+      parentExternalId: category.externalId,
+      names: { en: 'Answers' },
+    };
+    await withSystem(app.db, priorBrand, (tx) =>
+      writer.category(tx, categoryLoadSchema.parse({ ...priorScope, record: category })),
+    );
+    await withSystem(app.db, priorBrand, (tx) =>
+      writer.section(tx, sectionLoadSchema.parse({ ...priorScope, record: section })),
+    );
+    const original = importArticleSchema.parse({
+      externalId: 'anchor-ar',
+      sectionExternalId: section.externalId,
+      locale: 'ar',
+      title: 'الإجابة الأصلية',
+      bodyHtml: '<p>السجل الأصلي</p>',
+      draft: true,
+      internal: true,
+      createdAt: '2018-01-01T00:00:00Z',
+      updatedAt: '2019-01-01T00:00:00Z',
+    });
+    const prior = await withSystem(app.db, priorBrand, (tx) =>
+      writer.article(
+        tx,
+        articleLoadSchema.parse({
+          ...priorScope,
+          record: original,
+          preparedBodyHtml: original.bodyHtml,
+        }),
+      ),
+    );
+    await owner.db
+      .update(importRuns)
+      .set({ status: 'completed' })
+      .where(eq(importRuns.id, priorRun.runId));
+    const current = await boundAccountRun('anchor-account');
+    const scope = { brandId: BRAND, runId: current.runId, source: 'zendesk' as const };
+    if (scenario === 'same-account')
+      await owner.db
+        .update(importRuns)
+        .set({ mode: 'delta', parentRunId: priorRun.runId })
+        .where(eq(importRuns.id, current.runId));
+    else {
+      await withSystem(app.db, BRAND, (tx) =>
+        writer.category(tx, categoryLoadSchema.parse({ ...scope, record: category })),
+      );
+      await withSystem(app.db, BRAND, (tx) =>
+        writer.section(tx, sectionLoadSchema.parse({ ...scope, record: section })),
+      );
+    }
+    const english = importArticleSchema.parse({
+      ...original,
+      externalId: 'anchor-en',
+      locale: 'en',
+      title: 'New English translation',
+      bodyHtml: '<p>New translation</p>',
+      createdAt: '2019-01-01T00:00:00Z',
+      updatedAt: '2020-01-01T00:00:00Z',
+    });
+    const arabic = importArticleSchema.parse({ ...original, translationOf: english.externalId });
+    for (const payload of [english, arabic]) {
+      const record = importRecordSchema.parse({ entity: 'article', payload });
+      await owner.db.insert(importRecords).values({
+        brandId: BRAND,
+        runId: current.runId,
+        entity: 'article',
+        externalId: payload.externalId,
+        parentExternalId: importRecordParent(record),
+        payload,
+        payloadHash: hashImportValue(payload),
+      });
+    }
+    return { prior, scope, english, arabic, currentKey: current.key };
+  }
+
+  it('reuses an imported article when a delta adds a new translation anchor, then repeats without writing or publishing anything', async () => {
+    const fixture = await changedArticleAnchor('same-account');
+    for (const payload of [fixture.english, fixture.arabic])
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          validateImportReferences(tx, fixture.scope, { entity: 'article', payload }),
+        ),
+      ).toEqual([]);
+    for (const record of [fixture.english, fixture.arabic])
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          writer.article(
+            tx,
+            articleLoadSchema.parse({
+              ...fixture.scope,
+              record,
+              preparedBodyHtml: record.bodyHtml,
+            }),
+          ),
+        ),
+      ).toMatchObject({ id: fixture.prior.id });
+    expect(await owner.db.select().from(hcArticles)).toHaveLength(1);
+    const versions = await owner.db
+      .select()
+      .from(hcArticleVersions)
+      .where(eq(hcArticleVersions.articleId, fixture.prior.id));
+    expect(versions.map((row) => row.locale).sort()).toEqual(['ar', 'en']);
+    expect(versions.find((row) => row.locale === 'ar')?.bodyHtml).toBe(fixture.arabic.bodyHtml);
+    expect(versions.find((row) => row.locale === 'ar')?.createdAt.toISOString()).toBe(
+      '2018-01-01T00:00:00.000Z',
+    );
+    expect(versions.find((row) => row.locale === 'ar')?.updatedAt.toISOString()).toBe(
+      '2019-01-01T00:00:00.000Z',
+    );
+    const before = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+    );
+    const articleRevisions = await owner.db.execute(
+      sql`SELECT id, xmin::text AS revision FROM hc_articles ORDER BY id`,
+    );
+    const receipts = await owner.db.execute(
+      sql`SELECT external_id, helpdock_id, xmin::text AS revision FROM import_external_ids WHERE entity = 'article' ORDER BY external_id`,
+    );
+    for (const record of [fixture.english, fixture.arabic])
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          writer.article(
+            tx,
+            articleLoadSchema.parse({
+              ...fixture.scope,
+              record,
+              preparedBodyHtml: record.bodyHtml,
+            }),
+          ),
+        ),
+      ).toMatchObject({ id: fixture.prior.id, outcome: 'unchanged' });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(
+      await owner.db.execute(sql`SELECT id, xmin::text AS revision FROM hc_articles ORDER BY id`),
+    ).toEqual(articleRevisions);
+    expect(
+      await owner.db.execute(
+        sql`SELECT external_id, helpdock_id, xmin::text AS revision FROM import_external_ids WHERE entity = 'article' ORDER BY external_id`,
+      ),
+    ).toEqual(receipts);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('rejects an occupied unowned language during both dry run and loading after resolving the prior sibling', async () => {
+    const fixture = await changedArticleAnchor('same-account');
+    await owner.db.insert(hcArticleVersions).values({
+      brandId: BRAND,
+      articleId: fixture.prior.id,
+      locale: 'en',
+      title: 'Manually written English',
+      bodyHtml: '<p>Keep this manual content</p>',
+    });
+    const before = await owner.db.execute(
+      sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+    );
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        validateImportReferences(tx, fixture.scope, {
+          entity: 'article',
+          payload: fixture.english,
+        }),
+      ),
+    ).toMatchObject([{ code: 'reference-invalid' }]);
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.article(
+          tx,
+          articleLoadSchema.parse({
+            ...fixture.scope,
+            record: fixture.english,
+            preparedBodyHtml: fixture.english.bodyHtml,
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'mapping-invalid' });
+    expect(
+      await owner.db.execute(
+        sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+      ),
+    ).toEqual(before);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it('refuses a deleted sibling destination instead of recreating its article under a new translation anchor', async () => {
+    const fixture = await changedArticleAnchor('same-account');
+    await owner.db.delete(hcArticles).where(eq(hcArticles.id, fixture.prior.id));
+    expect(
+      await withSystem(app.db, BRAND, (tx) =>
+        validateImportReferences(tx, fixture.scope, {
+          entity: 'article',
+          payload: fixture.english,
+        }),
+      ),
+    ).toMatchObject([{ code: 'reference-invalid' }]);
+    await expect(
+      withSystem(app.db, BRAND, (tx) =>
+        writer.article(
+          tx,
+          articleLoadSchema.parse({
+            ...fixture.scope,
+            record: fixture.english,
+            preparedBodyHtml: fixture.english.bodyHtml,
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'target-unavailable' });
+    expect(await owner.db.select().from(hcArticles)).toEqual([]);
+    expect(await owner.db.select().from(outbox)).toEqual([]);
+  });
+
+  it.each(['foreign-account', 'foreign-brand', 'foreign-vendor'] as const)(
+    'does not adopt a staged sibling receipt from a %s',
+    async (scenario) => {
+      const fixture = await changedArticleAnchor(scenario);
+      const before = await owner.db.execute(
+        sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions WHERE article_id = ${fixture.prior.id}::uuid ORDER BY id`,
+      );
+      const created = await withSystem(app.db, BRAND, (tx) =>
+        writer.article(
+          tx,
+          articleLoadSchema.parse({
+            ...fixture.scope,
+            record: fixture.english,
+            preparedBodyHtml: fixture.english.bodyHtml,
+          }),
+        ),
+      );
+      expect(created.id).not.toBe(fixture.prior.id);
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions WHERE article_id = ${fixture.prior.id}::uuid ORDER BY id`,
+        ),
+      ).toEqual(before);
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
+
+  it.each([
+    'same-language',
+    'different-section',
+    'skipped',
+    'corrupt-hash',
+    'redirected-staging-target',
+    'ambiguous',
+  ] as const)(
+    'refuses a %s prior sibling before adopting its destination in dry run or loading',
+    async (scenario) => {
+      const fixture = await changedArticleAnchor('same-account');
+      const predicate = and(
+        eq(importRecords.runId, fixture.scope.runId),
+        eq(importRecords.externalId, fixture.arabic.externalId),
+      );
+      if (scenario === 'same-language' || scenario === 'different-section') {
+        const payload = {
+          ...fixture.arabic,
+          ...(scenario === 'same-language'
+            ? { locale: 'en' }
+            : { sectionExternalId: 'different-section' }),
+        };
+        const native = importRecordSchema.parse({ entity: 'article', payload });
+        await owner.db
+          .update(importRecords)
+          .set({
+            payload: native.payload,
+            payloadHash: hashImportValue(native.payload),
+            parentExternalId: importRecordParent(native),
+          })
+          .where(predicate);
+      } else if (scenario === 'skipped')
+        await owner.db.update(importRecords).set({ status: 'skipped' }).where(predicate);
+      else if (scenario === 'corrupt-hash')
+        await owner.db
+          .update(importRecords)
+          .set({ payloadHash: '0'.repeat(64) })
+          .where(predicate);
+      else if (scenario === 'redirected-staging-target')
+        await owner.db.update(importRecords).set({ helpdockId: uuidv7() }).where(predicate);
+      else {
+        const payload = { ...fixture.arabic, externalId: 'second-owned-sibling' };
+        const native = importRecordSchema.parse({ entity: 'article', payload });
+        await owner.db.insert(importRecords).values({
+          brandId: BRAND,
+          runId: fixture.scope.runId,
+          entity: 'article',
+          externalId: payload.externalId,
+          parentExternalId: importRecordParent(native),
+          payload,
+          payloadHash: hashImportValue(payload),
+        });
+        await owner.db.insert(importExternalIds).values({
+          brandId: BRAND,
+          source: 'zendesk',
+          sourceAccountKey: fixture.currentKey,
+          entity: 'article',
+          externalId: payload.externalId,
+          helpdockId: fixture.prior.id,
+          payloadHash: hashImportValue(payload),
+        });
+      }
+      const before = await owner.db.execute(
+        sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+      );
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          validateImportReferences(tx, fixture.scope, {
+            entity: 'article',
+            payload: fixture.english,
+          }),
+        ),
+      ).toMatchObject([{ code: 'reference-invalid' }]);
+      await expect(
+        withSystem(app.db, BRAND, (tx) =>
+          writer.article(
+            tx,
+            articleLoadSchema.parse({
+              ...fixture.scope,
+              record: fixture.english,
+              preparedBodyHtml: fixture.english.bodyHtml,
+            }),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: 'mapping-invalid' });
+      expect(
+        await owner.db.execute(
+          sql`SELECT id, body_html, xmin::text AS revision FROM hc_article_versions ORDER BY id`,
+        ),
+      ).toEqual(before);
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+    },
+  );
 
   it('separates identical ticket, message, contact, satisfaction and attachment IDs across accounts and reuses the original namespace on repeats', async () => {
     const results = [];
@@ -3877,6 +5685,83 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       await queue.close();
       await connection.quit();
       await owner.db.delete(outbox).where(eq(outbox.id, eventId));
+    }
+  });
+
+  it('reuses an encrypted Zoho token after a runtime restart and cannot restore credentials after cancellation', async () => {
+    const fake = new FakeZoho(structuredClone(zohoCoreFixture));
+    await fake.start();
+    try {
+      const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 33).toString('base64') });
+      const credentials = {
+        region: 'us' as const,
+        orgId: fake.fixture.orgId,
+        clientId: fake.fixture.clientId,
+        clientSecret: fake.fixture.clientSecret,
+        refreshToken: fake.fixture.refreshToken,
+      };
+      const runId = uuidv7(),
+        scope = { brandId: BRAND, runId };
+      await owner.db.insert(importRuns).values({
+        id: runId,
+        brandId: BRAND,
+        source: 'zohodesk',
+        status: 'connecting',
+        startedBy: USER,
+        options: { entities: ['user'] },
+        credentialsEncrypted: encryptSecret(JSON.stringify(credentials), keyring),
+      });
+      await withSystem(app.db, BRAND, (tx) =>
+        bindImportSourceAccount(tx, { ...scope, verifiedAccount: `us:${credentials.orgId}` }),
+      );
+      await owner.db.update(importRuns).set({ status: 'loading' }).where(eq(importRuns.id, runId));
+      const claim = await withSystem(app.db, BRAND, (tx) =>
+        claimImportRun(tx, { ...scope, phase: 'loading' }),
+      );
+      if (!claim) throw new Error('Missing Zoho worker claim');
+      const deps = { db: app.db, keyring, allowCidrs: [] };
+      const transport = {
+        apiRoot: fake.root,
+        policy: {
+          allowedPorts: [Number(new URL(fake.root).port)],
+          allowCidrs: ['127.0.0.1/32'],
+          lookup: async () => [{ address: '127.0.0.1', family: 4 as const }],
+        },
+      };
+      const first = await createImportConnectorRuntime(deps, transport)(scope);
+      const reader = first.connector.extract(first.context, 'user', null)[Symbol.asyncIterator]();
+      const firstPage = await reader.next();
+      await reader.return?.();
+      expect(firstPage.value?.records[0]?.entity).toBe('user');
+      const [stored] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      if (!stored?.credentialsEncrypted) throw new Error('Missing encrypted token snapshot');
+      const cached = decodedZohoCredentials(
+        JSON.parse(decryptSecret(stored.credentialsEncrypted, keyring)),
+      );
+      if (!cached.accessToken) throw new Error('Missing saved access token');
+      expect(cached.credentials).toEqual(credentials);
+      expect(stored.credentialsEncrypted).not.toContain(credentials.refreshToken);
+      expect(stored.credentialsEncrypted).not.toContain(cached.accessToken.value);
+      const restarted = await createImportConnectorRuntime(deps, transport)(scope);
+      const resumedReader = restarted.connector
+        .extract(restarted.context, 'user', null)
+        [Symbol.asyncIterator]();
+      expect((await resumedReader.next()).value?.records[0]?.entity).toBe('user');
+      await resumedReader.return?.();
+      expect(fake.calls.filter((call) => call.path === '/oauth/v2/token')).toHaveLength(1);
+      expect(await withSystem(app.db, BRAND, (tx) => cancelImportRun(tx, scope))).toBe(true);
+      await expect(
+        saveZohoAccessToken(deps, { claim, credentials, accessToken: cached.accessToken }),
+      ).rejects.toBeInstanceOf(ImportClaimLost);
+      expect(
+        (await owner.db.select().from(importRuns).where(eq(importRuns.id, runId)))[0]
+          ?.credentialsEncrypted,
+      ).toBeNull();
+      await expect(createImportConnectorRuntime(deps, transport)(scope)).rejects.toMatchObject({
+        code: 'credentials-refused',
+      });
+    } finally {
+      await fake.close();
     }
   });
 
@@ -4943,7 +6828,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 
-  it('pages imported article targets and reindexes published en/ar versions without repeating embedding work', async () => {
+  it('pages imported article targets and reindexes published en/ar versions without scheduling embeddings', async () => {
     const scenario = await stagedKnowledgeBatch('published-completion');
     const rows = await owner.db
       .select()
@@ -5045,15 +6930,148 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         .from(knowledgeDocuments)
         .where(eq(knowledgeDocuments.articleId, original.id)),
     ).toHaveLength(2);
-    expect(embeddings).toBe(1);
+    expect(embeddings).toBe(0);
     await deliver();
-    expect(embeddings).toBe(1);
+    expect(embeddings).toBe(0);
     expect(
       await owner.db
         .select()
         .from(hcSearchDocuments)
         .where(eq(hcSearchDocuments.articleId, original.id)),
     ).toEqual(indexed);
+    await setEmbeddingDims(owner.db, 3);
+    await updateEmbeddingSpace(owner.db, {
+      status: 'reindexing',
+      targetProvider: 'openai-compatible',
+      targetModel: 'migration-model',
+      targetDims: 3,
+      columnDims: 3,
+    });
+    const providerInputs: string[][] = [];
+    const ai: Pick<Ai, 'embed'> = {
+      embed: async ({ texts }) => {
+        providerInputs.push([...texts]);
+        return { vectors: texts.map(() => [1, 0, 0]), model: 'migration-model', dims: 3 };
+      },
+    };
+    try {
+      expect(
+        await embedPending({ db: app.db, ai, brandId: BRAND, jobId: 'stale-import-embedding' }),
+      ).toBe(0);
+      expect(await reembedChunks({ db: app.db, ai, jobId: 'stale-import-reembedding' })).toEqual({
+        embedded: 0,
+        ready: true,
+      });
+      expect(providerInputs).toEqual([]);
+      const repository = new HelpCenterRepository();
+      await withSystem(app.db, BRAND, async (tx) => {
+        const version = await repository.version(tx, original.id, 'en');
+        if (!version) throw new Error('Missing imported English version');
+        expect(version.importEmbeddingDeferred).toBe(true);
+        await publishVersion(tx, repository, {
+          version,
+          actor: { type: 'staff', id: USER },
+          now: new Date('2026-10-18T00:00:00Z'),
+        });
+      });
+      const [publication] = await owner.db
+        .select()
+        .from(outbox)
+        .where(eq(outbox.event, 'help_center.article_changed'));
+      if (!publication) throw new Error('Missing explicit publication');
+      const handler = createArticleKnowledgeHandlers({
+        addEmbed: async () => {
+          embeddings++;
+        },
+      }).article;
+      await withSystem(app.db, BRAND, (tx) =>
+        handler({
+          tx,
+          brandId: BRAND,
+          event: publication.event,
+          payload: publication.payload,
+          outboxId: publication.id,
+          log: silentJobLogger,
+        }),
+      );
+      expect(embeddings).toBe(1);
+      expect(
+        await embedPending({ db: app.db, ai, brandId: BRAND, jobId: 'explicit-staff-publication' }),
+      ).toBeGreaterThan(0);
+      expect(providerInputs).toHaveLength(1);
+      const versions = await owner.db
+        .select()
+        .from(hcArticleVersions)
+        .where(eq(hcArticleVersions.articleId, original.id));
+      expect(versions.find((version) => version.locale === 'en')?.importEmbeddingDeferred).toBe(
+        false,
+      );
+      expect(versions.find((version) => version.locale === 'ar')?.importEmbeddingDeferred).toBe(
+        true,
+      );
+      const [source] = await owner.db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.runId, scenario.runId),
+            eq(importRecords.externalId, 'published-completion-primary'),
+          ),
+        );
+      if (!source) throw new Error('Missing imported English source');
+      const native = importRecordSchema.parse({ entity: source.entity, payload: source.payload });
+      if (native.entity !== 'article') throw new Error('Expected imported article');
+      const repeatRunId = uuidv7();
+      await owner.db.insert(importRuns).values({
+        id: repeatRunId,
+        brandId: BRAND,
+        source: 'zendesk',
+        status: 'loading',
+        startedBy: USER,
+      });
+      const repeat = {
+        brandId: BRAND,
+        runId: repeatRunId,
+        source: 'zendesk' as const,
+        record: native.payload,
+        preparedBodyHtml: native.payload.bodyHtml,
+      };
+      expect(await withSystem(app.db, BRAND, (tx) => writer.article(tx, repeat))).toMatchObject({
+        outcome: 'unchanged',
+      });
+      expect(
+        (await withSystem(app.db, BRAND, (tx) => repository.version(tx, original.id, 'en')))
+          ?.importEmbeddingDeferred,
+      ).toBe(false);
+      expect(
+        await withSystem(app.db, BRAND, (tx) =>
+          writer.article(tx, {
+            ...repeat,
+            record: { ...native.payload, title: 'Changed source publication' },
+          }),
+        ),
+      ).toMatchObject({ outcome: 'updated' });
+      expect(
+        (await withSystem(app.db, BRAND, (tx) => repository.version(tx, original.id, 'en')))
+          ?.importEmbeddingDeferred,
+      ).toBe(true);
+      expect(
+        await embedPending({ db: app.db, ai, brandId: BRAND, jobId: 'changed-source-embedding' }),
+      ).toBe(0);
+      expect(providerInputs).toHaveLength(1);
+    } finally {
+      await updateEmbeddingSpace(owner.db, {
+        status: 'unconfigured',
+        activeModel: null,
+        activeDims: null,
+        targetProvider: null,
+        targetModel: null,
+        targetDims: null,
+        startedAt: null,
+        finishedAt: null,
+        lastError: null,
+      });
+    }
     await owner.db.delete(outbox).where(eq(outbox.id, event.id));
   });
 
@@ -5476,6 +7494,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         runId,
         entity: record.entity,
         externalId: record.payload.externalId,
+        parentExternalId: importRecordParent(record),
         payload: record.payload,
         payloadHash: hashImportValue(record.payload),
       });
@@ -5731,6 +7750,26 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
 
   it('accepts only ready same-brand images and refuses missing knowledge parents without leaving content', async () => {
     const scope = { brandId: BRAND, runId: RUN, source: 'zendesk' as const };
+    await withSystem(app.db, BRAND, async (tx) => {
+      await writer.category(
+        tx,
+        categoryLoadSchema.parse({
+          ...scope,
+          record: { externalId: 'kb-category', names: { en: 'Knowledge' } },
+        }),
+      );
+      await writer.section(
+        tx,
+        sectionLoadSchema.parse({
+          ...scope,
+          record: {
+            externalId: 'kb-section',
+            parentExternalId: 'kb-category',
+            names: { en: 'Answers' },
+          },
+        }),
+      );
+    });
     const mediaId = uuidv7();
     const foreignId = uuidv7();
     await owner.db.insert(hcMedia).values([
@@ -5780,6 +7819,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       'https://vendor.invalid/image.png',
       `/api/help-center/brands/${OTHER_BRAND}/media/${foreignId}`,
       `/api/help-center/brands/${BRAND}/media/${foreignId}`,
+      `/api/help-center/brands/${BRAND}/media/${'-'.repeat(36)}`,
     ]) {
       await expect(
         withSystem(app.db, BRAND, (tx) =>
@@ -6042,6 +8082,14 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
   });
 
   it('refuses conflicting identities instead of merging contacts', async () => {
+    await owner.db.insert(contactIdentities).values({
+      brandId: BRAND,
+      contactId: CONTACT,
+      kind: 'email',
+      value: 'local@example.com',
+      verified: true,
+      source: 'agent',
+    });
     const second = uuidv7();
     await owner.db.insert(contacts).values({ id: second, brandId: BRAND, name: 'Second' });
     await owner.db.insert(contactIdentities).values({
@@ -9083,6 +11131,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       const service = new ImportsService(keyring, (request) =>
         createZendeskImportConnection({
           ...request,
+          credentials: zendeskCredentialsSchema.parse(request.credentials),
           limiter: new ImportRateLimiter({ capacity: 10, perMinute: 1000 }),
           allowCidrs: [],
           log: async () => {},
@@ -9339,7 +11388,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     };
   }
 
-  it('checks dry-run media availability and policy failures without creating attachments or outbox work', async () => {
+  it('checks ticket and article files across dry-run continuations without creating attachments or outbox work', async () => {
     const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
     await fake.server.start();
     const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-dry-media-'));
@@ -9381,6 +11430,35 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
           payloadHash: hashImportValue(payload),
         });
       }
+      const article = importArticleSchema.parse({
+        externalId: 'dry-article',
+        sectionExternalId: 'source-section',
+        locale: 'en',
+        title: 'Source manual',
+        bodyHtml: `<p>Manual</p><img src="data:image/png;base64,${png.toString('base64')}">`,
+        draft: true,
+        internal: true,
+        createdAt: '2019-01-01T00:00:00Z',
+        updatedAt: '2019-01-01T00:00:00Z',
+        attachments: [
+          {
+            externalId: 'source-manual',
+            fileName: 'manual.pdf',
+            contentType: 'application/pdf',
+            url: urls[0],
+          },
+          { externalId: 'missing-manual', fileName: 'missing.pdf', url: urls[2] },
+        ],
+      });
+      await owner.db.insert(importRecords).values({
+        brandId,
+        runId,
+        entity: 'article',
+        externalId: article.externalId,
+        parentExternalId: article.sectionExternalId,
+        payload: article,
+        payloadHash: hashImportValue(article),
+      });
       const claim = await withSystem(app.db, brandId, (tx) =>
         claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
       );
@@ -9393,7 +11471,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({
         state: 'identities_checked',
       });
-      for (let index = 0; index < 3; index++)
+      for (let index = 0; index < 6; index++)
         expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({ state: 'more', checked: 1 });
       expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
         state: 'media_checked',
@@ -9402,8 +11480,8 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
       expect(run?.status).toBe('dry_run');
       expect(run?.dryRunReport).toMatchObject({
-        mediaChecked: 3,
-        mediaWarnings: 1,
+        mediaChecked: 6,
+        mediaWarnings: 2,
         mediaErrors: 1,
         mediaIssues: expect.arrayContaining([
           {
@@ -9418,8 +11496,35 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
             level: 'warning',
             code: 'media-unavailable',
           },
+          {
+            entity: 'article',
+            externalId: 'dry-article',
+            level: 'warning',
+            code: 'media-unavailable',
+          },
         ]),
       });
+      const filePreviews = await withSystem(app.db, brandId, async (tx) => {
+        const binding = await attachmentReviewBinding(tx, { brandId, runId });
+        const rows = await tx
+          .select()
+          .from(importRecords)
+          .where(and(eq(importRecords.runId, runId), eq(importRecords.entity, 'attachment')))
+          .orderBy(importRecords.id);
+        return rows.map((row) => {
+          const record = importRecordSchema.parse({ entity: row.entity, payload: row.payload });
+          if (record.entity !== 'attachment') throw new Error('Missing attachment fixture');
+          return attachmentPreview(record.payload, row, binding);
+        });
+      });
+      expect(filePreviews.map((file) => file.availability.state)).toEqual([
+        'available',
+        'rejected',
+        'unavailable',
+      ]);
+      expect(JSON.stringify(filePreviews)).not.toMatch(
+        /token\/|payloadHash|policyHash|fingerprint/,
+      );
       const requests = fake.server.calls.length;
       expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
         state: 'media_checked',
@@ -9430,6 +11535,10 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
         await owner.db.select().from(attachments).where(eq(attachments.brandId, brandId)),
       ).toEqual([]);
       expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await owner.db.select().from(hcMedia).where(eq(hcMedia.brandId, brandId))).toEqual([]);
+      expect(
+        await owner.db.select().from(hcImportAssets).where(eq(hcImportAssets.brandId, brandId)),
+      ).toEqual([]);
       expect(await readdir(dir)).toEqual([]);
       expect(JSON.stringify(run?.dryRunReport)).not.toContain(fake.server.root);
       await owner.db
@@ -9462,6 +11571,154 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('keeps per-file availability beyond the 100 issue samples and invalidates it with its review or policy', async () => {
+    const fake = new FakeZendesk({}, { authorization: 'Bearer synthetic-token', now: 0 });
+    await fake.server.start();
+    const dir = await mkdtemp(path.join(tmpdir(), 'helpdock-file-availability-'));
+    try {
+      const brandId = uuidv7(),
+        runId = uuidv7();
+      await owner.db
+        .insert(brands)
+        .values({ id: brandId, name: 'File availability', prefix: 'FAV' });
+      await owner.db
+        .insert(importRuns)
+        .values({ id: runId, brandId, source: 'zendesk', status: 'dry_run', startedBy: USER });
+      const date = '2019-01-01T00:00:00Z';
+      const refs = Array.from({ length: 101 }, (_, index) => ({
+        externalId: `file-${index}`,
+        fileName: `history-${index}.pdf`,
+        contentType: 'application/pdf',
+        url: `${fake.server.root}/attachments/token/missing-${index}/file`,
+        sourcePage: 1,
+      }));
+      const records = [
+        importRecordSchema.parse({
+          entity: 'ticket',
+          payload: {
+            externalId: 'root',
+            subject: 'Historical files',
+            status: 'open',
+            ccEmails: [],
+            tags: [],
+            custom: {},
+            createdAt: date,
+            updatedAt: date,
+          },
+        }),
+        importRecordSchema.parse({
+          entity: 'message',
+          payload: {
+            externalId: 'message',
+            ticketExternalId: 'root',
+            authorKind: 'system',
+            public: false,
+            bodyText: 'Original files',
+            createdAt: date,
+            attachments: refs,
+          },
+        }),
+        ...refs.map((ref) =>
+          importRecordSchema.parse({
+            entity: 'attachment',
+            payload: {
+              ...ref,
+              ticketExternalId: 'root',
+              messageExternalId: 'message',
+            },
+          }),
+        ),
+      ];
+      await owner.db.insert(importRecords).values(
+        records.map((record) => ({
+          brandId,
+          runId,
+          entity: record.entity,
+          externalId: record.payload.externalId,
+          parentExternalId: record.entity === 'ticket' ? null : 'root',
+          payload: record.payload,
+          payloadHash: hashImportValue(record.payload),
+        })),
+      );
+      const claim = await withSystem(app.db, brandId, (tx) =>
+        claimImportRun(tx, { brandId, runId, phase: 'dry_run' }),
+      );
+      if (!claim) throw new Error('Missing file-availability claim');
+      const deps = downloadHarness(fake, new FakeStorage(dir));
+      for (let page = 0; page < 4; page++)
+        expect(await runImportDryRunRecordBatch(deps, { claim })).toEqual({ state: 'more' });
+      for (const state of ['records_checked', 'plans_checked', 'identities_checked'])
+        expect(await runImportDryRunRecordBatch(deps, { claim })).toMatchObject({ state });
+      for (const _ref of refs)
+        expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({ state: 'more', checked: 1 });
+      expect(await runImportDryRunMediaBatch(deps, claim)).toEqual({
+        state: 'media_checked',
+        checked: 0,
+      });
+      const [run] = await owner.db.select().from(importRuns).where(eq(importRuns.id, runId));
+      const report = importDryRunCheckpointSchema.parse(run?.dryRunReport);
+      expect(report.mediaWarnings).toBe(101);
+      expect(report.mediaIssues).toHaveLength(100);
+      expect(report.mediaIssues.some((issue) => issue.externalId === 'file-100')).toBe(false);
+      const preview = () =>
+        withSystem(app.db, brandId, (tx) =>
+          previewImportedTicket(tx, { brandId, runId, externalId: 'root' }),
+        );
+      const checked = await preview();
+      expect(checked.messages[0]?.attachments).toHaveLength(101);
+      expect(
+        checked.messages[0]?.attachments.every(
+          (file) => file.availability?.state === 'unavailable',
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(checked)).not.toMatch(
+        /token\/|sourcePage|dryRunMedia|payloadHash|policyHash/,
+      );
+      await expect(
+        withSystem(app.db, OTHER_BRAND, (tx) =>
+          previewImportedTicket(tx, { brandId: OTHER_BRAND, runId, externalId: 'root' }),
+        ),
+      ).rejects.toMatchObject({ code: 'target-unavailable' });
+      await owner.db
+        .update(importRuns)
+        .set({ dryRunReport: { ...report, mediaAfter: null, phase: 'identities_checked' } })
+        .where(eq(importRuns.id, runId));
+      expect(
+        (await preview()).messages[0]?.attachments.every(
+          (file) => file.availability?.state === 'not_checked',
+        ),
+      ).toBe(true);
+      await owner.db
+        .update(importRuns)
+        .set({ dryRunReport: report })
+        .where(eq(importRuns.id, runId));
+      await owner.db
+        .update(brands)
+        .set({
+          settings: {
+            contentPolicy: {
+              ...contentPolicySchema.parse({}),
+              file: { ...contentPolicySchema.parse({}).file, enabled: false },
+            },
+          },
+        })
+        .where(eq(brands.id, brandId));
+      expect(
+        (await preview()).messages[0]?.attachments.every(
+          (file) => file.availability?.state === 'not_checked',
+        ),
+      ).toBe(true);
+      expect(
+        await owner.db.select().from(attachments).where(eq(attachments.brandId, brandId)),
+      ).toEqual([]);
+      expect(await owner.db.select().from(outbox)).toEqual([]);
+      expect(await readdir(dir)).toEqual([]);
+    } finally {
+      await fake.server.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 180000);
 
   it.each([
     { status: 429, expected: { name: 'RateLimited' } },
@@ -10268,21 +12525,20 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
     expect(calledAi).toBe(0);
   });
 
-  it('refuses a system message mapped to an old agent name rather than fabricating a reportable reply', async () => {
+  it('preserves a system message without adopting a mapped agent name or fabricating a staff reply', async () => {
     const input = request('system-name-mismatch');
     const note = input.messages.find((message) => message.authorExternalId === 'oldagent');
     if (!note) throw new Error('Missing old-agent fixture');
     note.authorKind = 'system';
     note.public = true;
-    await expect(withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input))).rejects.toMatchObject(
-      { code: 'mapping-invalid' },
-    );
+    const loaded = await withSystem(app.db, BRAND, (tx) => writer.ticket(tx, input));
+    const messages = await owner.db
+      .select()
+      .from(ticketMessages)
+      .where(eq(ticketMessages.ticketId, loaded.ticketId));
     expect(
-      await owner.db
-        .select()
-        .from(importExternalIds)
-        .where(eq(importExternalIds.externalId, input.record.externalId)),
-    ).toEqual([]);
+      messages.find((message) => message.kind === 'public' && message.seq === 2),
+    ).toMatchObject({ authorType: 'system', authorId: null, authorDisplay: null });
   });
 
   it('rolls back a ticket and its prior messages when a later author is unmapped', async () => {

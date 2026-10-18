@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
-import { type DbTransaction, importMappings, importRecords, importRuns } from '@helpdock/db';
+import {
+  type DbTransaction,
+  importFiles,
+  importMappings,
+  importRecords,
+  importRuns,
+} from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import { and, eq, gt, or } from 'drizzle-orm';
+import { and, eq, gt, ne, or } from 'drizzle-orm';
 import { ImportLoadError } from '../loader/contracts.js';
 import { type ImportRunRef, importRunRefSchema, lockImportBrand } from './claims.js';
 
@@ -20,7 +26,32 @@ export async function importInputFingerprint(tx: DbTransaction, raw: ImportRunRe
     .from(importRuns)
     .where(and(eq(importRuns.brandId, scope.brandId), eq(importRuns.id, scope.runId)));
   if (!run) throw new ImportLoadError('target-unavailable');
-  const digest = createHash('sha256').update(hashImportValue({ version: 1, ...scope, ...run }));
+  // Revision 2 requires article media to be reviewed too; an attachment-only approval cannot authorize it.
+  const digest = createHash('sha256').update(hashImportValue({ version: 2, ...scope, ...run }));
+  const files = await tx
+    .select({
+      id: importFiles.id,
+      revision: importFiles.revision,
+      sourceKey: importFiles.sourceKey,
+      sha256: importFiles.sha256,
+      format: importFiles.format,
+      entity: importFiles.entity,
+      mapping: importFiles.mapping,
+      inventoryMapping: importFiles.inventoryMapping,
+      inventoryValidation: importFiles.inventoryValidation,
+    })
+    .from(importFiles)
+    .where(
+      and(
+        eq(importFiles.brandId, scope.brandId),
+        eq(importFiles.runId, scope.runId),
+        ne(importFiles.status, 'discarded'),
+      ),
+    )
+    .orderBy(importFiles.id)
+    .limit(101);
+  if (files.length > 100) throw new ImportLoadError('mapping-invalid');
+  for (const file of files) digest.update(hashImportValue({ type: 'source-file', ...file }));
   let recordAfter: Pick<typeof importRecords.$inferSelect, 'entity' | 'externalId'> | undefined;
   while (true) {
     const rows = await tx

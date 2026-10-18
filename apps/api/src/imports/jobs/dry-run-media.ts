@@ -1,9 +1,11 @@
 import { brands, type Db, type DbTransaction, importRecords, importRuns } from '@helpdock/db';
 import { type Connector, type ConnectorContext, hashImportValue } from '@helpdock/importers';
-import { and, eq, gt } from 'drizzle-orm';
+import type { ImportRecord } from '@helpdock/schemas';
+import { and, eq, gt, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { readContentPolicy } from '../../media/content-policy.js';
 import { withSystemJob } from '../../tenant/system-job.js';
+import { importArticleAssetRequests } from '../article-asset-requests.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { validatedStagedRecord } from '../preflight/staged-record.js';
 import {
@@ -14,12 +16,19 @@ import {
 } from './claims.js';
 import { importDryRunCheckpointSchema, storeImportDryRunCheckpoint } from './dry-run-state.js';
 import { importInputFingerprint } from './input-fingerprint.js';
+import { inspectDryRunArticleAsset } from './inspect-dry-run-article-asset.js';
 import { inspectDryRunFile } from './inspect-dry-run-file.js';
+import { importMediaInspectionSchema } from './media-inspection.js';
 
 const resultSchema = z.strictObject({
   state: z.enum(['more', 'media_checked', 'invalidated', 'stopped']),
   checked: z.int().min(0).max(1),
 });
+
+function attachmentReference(payload: Extract<ImportRecord, { entity: 'attachment' }>['payload']) {
+  const { ticketExternalId: _ticket, messageExternalId: _message, ...ref } = payload;
+  return ref;
+}
 
 async function mediaRun(tx: DbTransaction, claim: ImportClaim) {
   await renewImportClaim(tx, claim);
@@ -74,7 +83,7 @@ export async function runImportDryRunMediaBatch<C>(
           and(
             eq(importRecords.brandId, claim.brandId),
             eq(importRecords.runId, claim.runId),
-            eq(importRecords.entity, 'attachment'),
+            inArray(importRecords.entity, ['attachment', 'article']),
             checkpoint.mediaAfter ? gt(importRecords.id, checkpoint.mediaAfter) : undefined,
           ),
         )
@@ -91,19 +100,51 @@ export async function runImportDryRunMediaBatch<C>(
         return resultSchema.parse({ state: 'media_checked', checked: 0 });
       }
       const native = validatedStagedRecord(row);
-      if (native.entity !== 'attachment') throw new ImportLoadError('mapping-invalid');
-      const { ticketExternalId: _ticket, messageExternalId: _message, ...ref } = native.payload;
+      if (native.entity !== 'attachment' && native.entity !== 'article')
+        throw new ImportLoadError('mapping-invalid');
+      const assets =
+        native.entity === 'article'
+          ? importArticleAssetRequests(native.payload, claim.brandId, run.source)
+          : [];
+      const asset = assets[checkpoint.mediaAssetIndex];
+      if (native.entity === 'article' && !asset) {
+        if (checkpoint.mediaAssetIndex !== 0) throw new ImportLoadError('mapping-invalid');
+        await storeImportDryRunCheckpoint(tx, claim, {
+          ...checkpoint,
+          mediaAfter: row.id,
+          mediaAssetIndex: 0,
+          mediaPolicyHash: policyHash,
+        });
+        return resultSchema.parse({ state: 'more', checked: 0 });
+      }
+      const ref = native.entity === 'attachment' ? attachmentReference(native.payload) : undefined;
+      if (ref && checkpoint.mediaAssetIndex !== 0) throw new ImportLoadError('mapping-invalid');
       await storeImportDryRunCheckpoint(tx, claim, { ...checkpoint, mediaPolicyHash: policyHash });
-      return { row, ref, policy, policyHash, after: checkpoint.mediaAfter };
+      return {
+        row,
+        ref,
+        asset,
+        policy,
+        policyHash,
+        after: checkpoint.mediaAfter,
+        index: checkpoint.mediaAssetIndex,
+        count: Math.max(1, assets.length),
+        entity: native.entity,
+      };
     });
     if ('state' in selected) return selected;
-    const outcome = await inspectDryRunFile(deps, { ref: selected.ref, policy: selected.policy });
+    const outcome = selected.asset
+      ? await inspectDryRunArticleAsset(deps, { asset: selected.asset, policy: selected.policy })
+      : selected.ref
+        ? await inspectDryRunFile(deps, { ref: selected.ref, policy: selected.policy })
+        : undefined;
+    if (!outcome) throw new ImportLoadError('mapping-invalid');
     return await inRun(async (tx) => {
       const { checkpoint, policyHash } = await mediaRun(tx, claim);
       if (checkpoint.phase === 'media_checked')
         return resultSchema.parse({ state: 'media_checked', checked: 0 });
       if (checkpoint.phase !== 'identities_checked') throw new ImportLoadError('mapping-invalid');
-      if (checkpoint.mediaAfter !== selected.after)
+      if (checkpoint.mediaAfter !== selected.after || checkpoint.mediaAssetIndex !== selected.index)
         return resultSchema.parse({ state: 'more', checked: 0 });
       const [current] = await tx
         .select({ hash: importRecords.payloadHash })
@@ -117,12 +158,31 @@ export async function runImportDryRunMediaBatch<C>(
         );
       if (current?.hash !== selected.row.payloadHash || policyHash !== selected.policyHash)
         return invalidateMedia(tx, claim, checkpoint);
+      if (selected.entity === 'attachment')
+        await tx
+          .update(importRecords)
+          .set({
+            dryRunMedia: importMediaInspectionSchema.parse({
+              version: 1,
+              fingerprint: checkpoint.fingerprint,
+              payloadHash: selected.row.payloadHash,
+              policyHash,
+              outcome,
+            }),
+          })
+          .where(
+            and(
+              eq(importRecords.brandId, claim.brandId),
+              eq(importRecords.runId, claim.runId),
+              eq(importRecords.id, selected.row.id),
+            ),
+          );
       const issue =
         outcome.state === 'available'
           ? []
           : [
               {
-                entity: 'attachment' as const,
+                entity: selected.entity,
                 externalId: selected.row.externalId,
                 code: outcome.code,
                 level: outcome.state,
@@ -133,7 +193,8 @@ export async function runImportDryRunMediaBatch<C>(
         claim,
         importDryRunCheckpointSchema.parse({
           ...checkpoint,
-          mediaAfter: selected.row.id,
+          mediaAfter: selected.index + 1 < selected.count ? selected.after : selected.row.id,
+          mediaAssetIndex: selected.index + 1 < selected.count ? selected.index + 1 : 0,
           mediaChecked: checkpoint.mediaChecked + 1,
           mediaWarnings: checkpoint.mediaWarnings + (outcome.state === 'warning' ? 1 : 0),
           mediaErrors: checkpoint.mediaErrors + (outcome.state === 'error' ? 1 : 0),

@@ -7,6 +7,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import type { CsatBrand, CsatSubmitRequest, CsatSurveyView, TicketCsat } from '@helpdock/schemas';
+import { csatOriginalAnswerSchema } from '@helpdock/schemas';
 import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import { publicHelpCenterUrl } from '../help-center/site/site-url.js';
@@ -88,12 +89,20 @@ export class CsatService {
     brandId: string,
     ticketId: string,
   ): Promise<TicketCsat | null> {
-    const survey = await this.#options.repository.latestForTicket(tx, ticketId);
+    const survey =
+      (await this.#options.repository.latestForTicket(tx, ticketId)) ??
+      (await this.#options.repository.latestImportedForTicket(tx, ticketId));
     if (survey === undefined) {
       return null;
     }
 
     const state = this.#agentState(survey);
+    const originalAnswers = csatOriginalAnswerSchema
+      .array()
+      .max(1000)
+      .safeParse(
+        survey.importedSource === null ? undefined : survey.importedDetails?.originalAnswers,
+      );
 
     return {
       state,
@@ -102,6 +111,7 @@ export class CsatService {
       link: state === 'pending' || state === 'sent' ? this.#linkFor(brandId, survey) : null,
       expiresAt: survey.expiresAt.toISOString(),
       ratedAt: survey.ratedAt?.toISOString() ?? null,
+      ...(originalAnswers.success ? { originalAnswers: originalAnswers.data } : {}),
     };
   }
 
@@ -217,6 +227,9 @@ export class CsatService {
   }
 
   #agentState(survey: CsatResponse): TicketCsat['state'] {
+    if (survey.importedSource !== null && survey.ratedAt !== null && survey.rating === null) {
+      return 'imported_unscored';
+    }
     if (survey.ratedAt !== null) {
       return 'rated';
     }

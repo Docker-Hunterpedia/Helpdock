@@ -447,7 +447,7 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M1, M3, M5, M8. Part 
 | M11-16 | Admin: Brand › Import with the wizard (source, connect, scope, map, dry run, import, done) | R §4.10 |
 | M11-17 | Imported tickets in the workspace: "Imported from" chip, activity line, view filter, System page card | DESIGN §6.3 |
 | M11-18 | Import docs: `docs/guides/importing.md` with the cutover runbook; retention, reports, tickets guides | A §2 |
-| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. May ship after 1.0 | |
+| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. Deferred to later work by the owner on 2026-10-17; not required for the current combined M11 PR | |
 
 Exit criteria:
 

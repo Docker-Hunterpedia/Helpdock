@@ -13,8 +13,10 @@ function canonicalJson(payload: JsonValue): string {
 }
 
 /** Object key order is irrelevant; arrays and source timestamps retain their meaning. */
+export function serializeImportValue(payload: unknown): string {
+  return canonicalJson(z.json().parse(payload));
+}
+
 export function hashImportValue(payload: unknown): string {
-  return createHash('sha256')
-    .update(canonicalJson(z.json().parse(payload)))
-    .digest('hex');
+  return createHash('sha256').update(serializeImportValue(payload)).digest('hex');
 }

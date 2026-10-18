@@ -200,7 +200,8 @@ export class RollupRepository {
           SELECT min(m.created_at) AS at FROM ticket_messages m
           WHERE m.ticket_id = c.id AND m.kind = 'public'
             AND (m.author_type = 'staff' OR (c.imported_at IS NOT NULL
-              AND m.author_type = 'system' AND m.author_display IS NOT NULL))
+              AND m.author_type = 'system' AND m.author_display IS NOT NULL
+              AND coalesce(m.import_details->>'authorKind', 'agent') = 'agent'))
         ) r
         WHERE r.at IS NOT NULL
           AND NOT EXISTS (

@@ -22,14 +22,15 @@ export class ImportApprovalError extends Error {
 }
 
 export function reviewedImportCheckpoint(
-  run: Pick<typeof importRuns.$inferSelect, 'status' | 'credentialsEncrypted' | 'dryRunReport'>,
+  run: Pick<typeof importRuns.$inferSelect, 'status' | 'credentialsEncrypted' | 'dryRunReport'> &
+    Partial<Pick<typeof importRuns.$inferSelect, 'source'>>,
   request: ImportStartRequest,
 ) {
   const input = importStartRequestSchema.parse(request);
   const parsed = importDryRunCheckpointSchema.safeParse(run.dryRunReport);
   if (
     !['awaiting_mapping', 'ready'].includes(run.status) ||
-    !run.credentialsEncrypted ||
+    (!run.credentialsEncrypted && run.source !== 'file') ||
     !parsed.success
   )
     throw new ImportApprovalError('phase-invalid');

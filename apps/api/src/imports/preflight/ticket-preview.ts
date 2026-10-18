@@ -10,13 +10,15 @@ import { type ImportRunRef, lockImportBrand } from '../jobs/claims.js';
 import { previewStagedTicketChildren } from '../jobs/load-ticket-checkpoint.js';
 import { ImportLoadError } from '../loader/contracts.js';
 import { importedMessageBody } from '../loader/message-body.js';
+import { attachmentPreview, attachmentReviewBinding } from './attachment-availability.js';
 import { requireImportPreviewRun } from './preview-run.js';
 import { validatedStagedRecord } from './staged-record.js';
 
 const MAX_PREVIEW_PAGE_BYTES = 4 * 1024 * 1024;
 
 async function sourceAuthorName(tx: DbTransaction, scope: ImportRunRef, message: ImportMessage) {
-  if (message.authorKind === 'system' || !message.authorExternalId) return null;
+  if (message.authorKind === 'system' || !message.authorExternalId)
+    return message.authorName ?? null;
   const entity = message.authorKind === 'agent' ? 'user' : 'contact';
   const [row] = await tx
     .select()
@@ -29,7 +31,7 @@ async function sourceAuthorName(tx: DbTransaction, scope: ImportRunRef, message:
         eq(importRecords.externalId, message.authorExternalId),
       ),
     );
-  if (!row) return null;
+  if (!row) return message.authorName ?? null;
   const native = validatedStagedRecord(row);
   if (native.entity !== 'user' && native.entity !== 'contact')
     throw new ImportLoadError('mapping-invalid');
@@ -67,6 +69,10 @@ export async function previewImportedTicket(
   await lockImportBrand(tx, request.brandId);
   const sourceTicket = await previewTicketRoot(tx, scope, request.externalId);
   const children = await previewStagedTicketChildren(tx, scope, sourceTicket.externalId);
+  const binding = await attachmentReviewBinding(tx, scope);
+  const files = new Map(
+    children.filter((row) => row.entity === 'attachment').map((row) => [row.externalId, row]),
+  );
   const messages: ImportMessage[] = [];
   for (const child of children) {
     const record = validatedStagedRecord(child);
@@ -91,8 +97,8 @@ export async function previewImportedTicket(
       createdAt: message.createdAt,
       bodyHtml: body.html,
       bodyText: body.text,
-      attachments: message.attachments.map(
-        ({ url: _url, bundlePath: _bundle, ...metadata }) => metadata,
+      attachments: message.attachments.map((ref) =>
+        attachmentPreview(ref, files.get(ref.externalId), binding),
       ),
     };
     const bytes = Buffer.byteLength(JSON.stringify(preview));

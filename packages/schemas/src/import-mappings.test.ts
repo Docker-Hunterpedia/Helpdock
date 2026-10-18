@@ -1,7 +1,26 @@
 import { expect, it } from 'vitest';
-import { importMappingsSchema } from './import-mappings.js';
+import { importMappingsSchema, importMappingValueSchema } from './import-mappings.js';
 
 const id = '0192a000-0000-7000-8000-000000000001';
+
+it('projects a refined selection field into count-only mapper metadata without losing its choice requirement', () => {
+  const metadata = {
+    externalValue: 'ticket:region',
+    label: 'Region',
+    occurrences: null,
+    person: null,
+    field: { target: 'ticket', key: 'region', type: 'select', optionsCount: 2 },
+    confirmed: null,
+    proposed: null,
+  };
+  expect(importMappingValueSchema.parse(metadata)).toEqual(metadata);
+  expect(
+    importMappingValueSchema.safeParse({
+      ...metadata,
+      field: { ...metadata.field, optionsCount: 0 },
+    }).success,
+  ).toBe(false);
+});
 
 it('keeps identical source values distinct by mapping kind and supports explicit unassigned groups', () => {
   const mappings = [

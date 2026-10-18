@@ -241,5 +241,26 @@
     "restored": "{{name}} is restored.",
     "restoreFailed": "Could not restore {{name}}. Try again.",
     "footer": "While pending, the brand is disabled: its widget, help center and channels answer 410. Restore brings it back as it was. On the purge date every row, S3 prefix, Redis key and custom domain of the brand is removed for good; its ticket prefix stays reserved."
+  },
+  "imports": {
+    "title": "Imports",
+    "unavailable": "The worker has not reported an import snapshot recently.",
+    "counts": "{{active}} active runs · {{paused}} paused",
+    "measured": "Measured",
+    "empty": "No retained import runs in active brands.",
+    "brand": "Brand",
+    "active": "Active",
+    "paused": "Paused",
+    "lastError": "Latest retained error",
+    "noRetainedError": "No retained error",
+    "shown": "Showing {{from}}–{{to}} of {{total}} brands; active runs appear first.",
+    "openCurrent": "Open imports for the selected brand",
+    "loading": "Reading the import snapshot",
+    "failed": "Could not read this import snapshot.",
+    "retry": "Try again",
+    "previous": "Previous brands",
+    "next": "Next brands",
+    "latest": "Return to latest snapshot",
+    "waitForSnapshot": "More brands will be available when the worker publishes a paged snapshot."
   }
 }

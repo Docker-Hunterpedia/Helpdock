@@ -21,6 +21,7 @@ export * from './departments.js';
 export * from './email-deliveries.js';
 export * from './email-outbound-settings.js';
 export * from './enums.js';
+export * from './hc-import-assets.js';
 export * from './help-center.js';
 export * from './help-center-search.js';
 export * from './imports.js';

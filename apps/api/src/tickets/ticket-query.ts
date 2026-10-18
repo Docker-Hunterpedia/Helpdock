@@ -1,4 +1,11 @@
-import { contacts, ticketSearchTokens, ticketStatuses, tickets, ticketTags } from '@helpdock/db';
+import {
+  contacts,
+  importExternalIds,
+  ticketSearchTokens,
+  ticketStatuses,
+  tickets,
+  ticketTags,
+} from '@helpdock/db';
 import {
   TICKET_ASSIGNEE_ME,
   TICKET_ASSIGNEE_UNASSIGNED,
@@ -6,7 +13,21 @@ import {
   type TicketSort,
   type TicketSortDirection,
 } from '@helpdock/schemas';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, type SQL, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
 import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cursor.js';
 
@@ -263,6 +284,19 @@ const searchFilter = (brandId: string, term: string, mode: SearchMode): SQL => {
   ];
 
   const number = referenceNumber(term);
+  const originalNumbers = [
+    ...new Set([
+      term,
+      term.startsWith('#') ? term.slice(1) : term,
+      ...(number === null ? [] : [String(number)]),
+    ]),
+  ];
+  matches.push(sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
+    WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
+      AND ${inArray(importExternalIds.sourceNumber, originalNumbers)})`);
+  matches.push(sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
+    WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
+      AND ${inArray(importExternalIds.externalId, originalNumbers)})`);
   if (number !== null) {
     matches.push(
       sql`(SELECT ${byNumber.id} FROM ${BY_NUMBER}
@@ -378,6 +412,8 @@ export const ticketFilters = ({
   if (filters.channel !== undefined && filters.channel.length > 0) {
     clauses.push(inArray(tickets.channel, [...filters.channel]));
   }
+  if (filters.imported !== undefined)
+    clauses.push(filters.imported ? isNotNull(tickets.importedAt) : isNull(tickets.importedAt));
   if (filters.assigneeId !== undefined && filters.assigneeId.length > 0) {
     clauses.push(assigneeFilter(filters.assigneeId, viewerId));
   }

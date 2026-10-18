@@ -5,16 +5,21 @@ import {
   importAttachmentsJob,
   importDryRunJob,
   importExtractJob,
+  importFilePrepareJob,
   importFinishJob,
   importLoadJob,
+  importSlaActivateJob,
+  isLastAttempt,
   parseJobPayloadOrFail,
 } from '@helpdock/jobs';
 import type { Job } from 'bullmq';
 import { z } from 'zod';
 import type { ObjectStorage } from '../../media/storage.js';
 import { withSystemJob } from '../../tenant/system-job.js';
+import { ImportArticleAssetsPending } from '../article-asset-state.js';
 import { enqueueImportWork, type ImportWorkStep, importWorkRunnable } from '../import-events.js';
 import { ImportLoadError } from '../loader/contracts.js';
+import { activateImportedSlaBatch, failImportedSlaActivation } from './activate-sla.js';
 import { runImportAttachmentBatch } from './attachment-batch.js';
 import {
   claimImportRun,
@@ -30,6 +35,7 @@ import { runImportExtraction } from './extract-run.js';
 import { extractionRun } from './extract-state.js';
 import { runImportFinishBatch } from './finish-batch.js';
 import { runImportLoadBatch } from './load-batch.js';
+import { prepareImportSourceFile } from './prepare-source-file.js';
 
 type Dependencies<C> = {
   db: Db;
@@ -132,6 +138,12 @@ class ImportExecution<C> {
   }
   async failure(claim: ImportClaim, error: unknown, step: ImportWorkStep) {
     if (error instanceof ImportClaimLost) return;
+    if (error instanceof ImportArticleAssetsPending) {
+      await this.inRun((tx) =>
+        continueImportWork(tx, { claim, step, delayMs: error.delayMs, preserveFailures: true }),
+      );
+      return;
+    }
     if (error instanceof RateLimited) {
       const deadline = new Date(Date.now() + error.retryAfterMs);
       if (!Number.isFinite(deadline.getTime()) || deadline.getUTCFullYear() > 9999)
@@ -167,7 +179,29 @@ class ImportExecution<C> {
 
 /** Queue boundary only: all I/O drivers retain their own fenced transactions. */
 export function createImportProcessor<C>(deps: Dependencies<C>) {
-  return async (job: Pick<Job, 'name' | 'data' | 'id'>) => {
+  return async (
+    job: Pick<Job, 'name' | 'data' | 'id'> & Partial<Pick<Job, 'attemptsMade' | 'opts'>>,
+  ) => {
+    if (job.name === importSlaActivateJob.name) {
+      const input = parseJobPayloadOrFail(importSlaActivateJob, job.data);
+      const jobId = job.id ?? importSlaActivateJob.name;
+      try {
+        return await activateImportedSlaBatch(deps.db, input, jobId);
+      } catch (error) {
+        if (
+          isLastAttempt(
+            importSlaActivateJob,
+            { attemptsMade: job.attemptsMade ?? 0, opts: job.opts ?? importSlaActivateJob.options },
+            error,
+          )
+        )
+          await failImportedSlaActivation(deps.db, input, jobId);
+        throw error;
+      }
+    }
+    if (job.name === importFilePrepareJob.name) {
+      return prepareImportSourceFile(deps, parseJobPayloadOrFail(importFilePrepareJob, job.data));
+    }
     if (!Object.hasOwn(definitions, job.name)) throw new Error('import.unknown-job');
     const name = job.name as keyof typeof definitions;
     const scope = parseJobPayloadOrFail(definitions[name], job.data);

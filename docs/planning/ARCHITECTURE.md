@@ -154,7 +154,7 @@ meta_deliveries(brand_id, department_id /*denormalised for RLS*/, ticket_id, tic
                 sent_at, delivered_at, read_at, failed_at)
 api_keys(brand_id, hash, scopes[], rate_limit, last_used_at, expires_at)
 webhooks, webhook_deliveries
-hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility), hc_settings, hc_media
+hc_categories, hc_sections, hc_articles, hc_article_versions(locale, title, body, status, visibility, import_embedding_deferred), hc_settings, hc_media
 hc_search_documents(version_id, locale, title, body_text, search tsvector, title_normalized), hc_search_log, hc_article_views, hc_article_feedback
 knowledge_sources(kind: article|file|crawl|notion|gdrive, config_encrypted, sync_status)
 knowledge_chunks(source_id, locale, content, embedding vector(<dims>), embedding_model, visibility, meta jsonb)   -- HNSW index; dims set by knowledge.configure (DOMAIN-RULES §8)

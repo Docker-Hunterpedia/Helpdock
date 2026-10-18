@@ -1,9 +1,16 @@
 import { z } from 'zod';
 import { importEntitySchema, importSourceSchema } from './import.js';
 import { importMappingsSchema } from './import-mappings.js';
+import { zohoCredentialsSchema } from './import-zoho.js';
 
 export const importRunParamSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
 export const importBrandParamSchema = z.strictObject({ brandId: z.uuid() });
+export const importSupportedSourcesSchema = z.strictObject({
+  sources: z
+    .array(importSourceSchema)
+    .max(9)
+    .refine((sources) => new Set(sources).size === sources.length),
+});
 export const importRunCreateSchema = z
   .strictObject({
     source: importSourceSchema,
@@ -34,10 +41,43 @@ export const zendeskCredentialsSchema = z.discriminatedUnion('auth', [
   }),
 ]);
 export type ZendeskCredentials = z.infer<typeof zendeskCredentialsSchema>;
+export const freshdeskCredentialsSchema = z.strictObject({
+  domain: z
+    .string()
+    .min(1)
+    .max(63)
+    .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/),
+  apiKey: z
+    .string()
+    .min(1)
+    .max(4096)
+    .refine(
+      (token) =>
+        !token.includes(':') &&
+        Array.from(token).every(
+          (character) => character.charCodeAt(0) > 32 && character.charCodeAt(0) !== 127,
+        ),
+    ),
+  csatApi: z.enum(['legacy', 'modern']).optional(),
+});
+export type FreshdeskCredentials = z.infer<typeof freshdeskCredentialsSchema>;
 export const importConnectionRequestSchema = z.strictObject({
-  credentials: zendeskCredentialsSchema,
+  credentials: z.union([
+    zendeskCredentialsSchema,
+    freshdeskCredentialsSchema,
+    zohoCredentialsSchema,
+  ]),
   downloadHosts: z.array(importDownloadHostSchema).max(32).default([]),
 });
+export const importFileSourceRequestSchema = z.strictObject({
+  dataset: z
+    .string()
+    .min(1)
+    .max(200)
+    .regex(/^[a-z0-9][a-z0-9._-]*$/),
+  downloadHosts: z.array(importDownloadHostSchema).max(32).default([]),
+});
+export type ImportFileSourceRequest = z.infer<typeof importFileSourceRequestSchema>;
 export const importProgressCountsSchema = z.partialRecord(
   importEntitySchema,
   z.int().nonnegative(),
@@ -52,6 +92,9 @@ export const importScopeSchema = z.strictObject({
       message: 'import.entities-duplicate',
     }),
   rebuildAllReports: z.boolean().default(false),
+  inventoryMode: z.enum(['archives', 'complete']).optional(),
+  inventoryConfirmed: z.boolean().optional(),
+  useTicketInventory: z.boolean().optional(),
 });
 export type ImportScope = z.infer<typeof importScopeSchema>;
 export const importRunViewSchema = z.strictObject({
@@ -75,6 +118,13 @@ export const importRunViewSchema = z.strictObject({
     'cancelled',
   ]),
   hasCredentials: z.boolean(),
+  pausedFrom: z.enum(['extracting', 'dry_run', 'loading', 'finishing']).nullable().default(null),
+  hasDryRun: z.boolean().default(false),
+  sourceAccount: z.string().min(1).max(200).nullable().default(null),
+  startedBy: z
+    .strictObject({ id: z.uuid(), name: z.string().min(1).max(200) })
+    .nullable()
+    .default(null),
   scope: importScopeSchema,
   createdAt: z.iso.datetime(),
   startedAt: z.iso.datetime().nullable(),

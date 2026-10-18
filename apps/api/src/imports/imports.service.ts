@@ -1,26 +1,36 @@
 import { encryptSecret, type Keyring } from '@helpdock/config';
-import { auditLog, importMappings, importRecords, importRuns } from '@helpdock/db';
-import type { Connector, ConnectorContext, ZendeskCredentials } from '@helpdock/importers';
+import { auditLog, importMappings, importRecords, importRuns, users } from '@helpdock/db';
+import { type Connector, type ConnectorContext, ConnectorError } from '@helpdock/importers';
 import {
+  FRESHDESK_IMPORT_ENTITIES,
   type ImportConnectionRequest,
   type ImportContactPreviewQuery,
   type ImportDryRunRequest,
+  type ImportMappingFieldQuery,
+  type ImportMappingPageRequest,
   type ImportMappingsRequest,
+  type ImportMappingTargetsQuery,
+  type ImportMappingValuesQuery,
   type ImportRunCreate,
   type ImportScope,
+  type ImportSource,
   type ImportStartRequest,
   type ImportTicketPreviewQuery,
   importConnectionRequestSchema,
   importConnectionResultSchema,
   importContactPreviewQuerySchema,
   importDryRunRequestSchema,
+  importMappingFieldQuerySchema,
+  importMappingPageRequestSchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
+  importRequiresTicketInventory,
   importRunCreateSchema,
   importRunListSchema,
   importScopeSchema,
   importStartRequestSchema,
   importTicketPreviewQuerySchema,
+  ZOHODESK_IMPORT_ENTITIES,
 } from '@helpdock/schemas';
 import {
   BadRequestException,
@@ -29,6 +39,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { roleHasPermission } from '../auth/permissions.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import { enqueueImportWork } from './import-events.js';
@@ -37,19 +48,34 @@ import { ImportApprovalError, requireCurrentImportApproval } from './jobs/approv
 import { lockImportBrand } from './jobs/claims.js';
 import { importDestinationFingerprint } from './jobs/destination-fingerprint.js';
 import { importDryRunCheckpointSchema } from './jobs/dry-run-state.js';
+import { preparedImportFiles } from './jobs/file-runtime.js';
 import { importInputFingerprint } from './jobs/input-fingerprint.js';
 import { cancelImportRun, pauseImportRun, resumeImportRun } from './jobs/run-control.js';
-import { ImportMappingEditError, saveImportMappings } from './jobs/save-mappings.js';
+import {
+  ImportMappingEditError,
+  saveImportMappingPage,
+  saveImportMappings,
+} from './jobs/save-mappings.js';
 import { bindImportSourceAccount } from './jobs/source-account.js';
+import { importTicketInventoryManifest } from './jobs/ticket-inventory.js';
 import { ImportLoadError } from './loader/contracts.js';
 import { previewImportedContactRecord } from './preflight/contact-preview.js';
 import { importDryRunReport } from './preflight/dry-run-report.js';
+import {
+  importMappingFieldDefinition,
+  importMappingTargetChoices,
+} from './preflight/mapping-target-choices.js';
+import { importMappingValues } from './preflight/mapping-values.js';
 import { importPreviewSamples } from './preflight/preview-samples.js';
 import { previewImportedTicket } from './preflight/ticket-preview.js';
+import { AVAILABLE_IMPORT_SOURCES } from './sources.js';
 
-export type ImportConnectionFactory = (request: ImportConnectionRequest) => {
-  connector: Connector<ZendeskCredentials>;
-  context: ConnectorContext<ZendeskCredentials>;
+export type ImportConnectionFactory = (
+  request: ImportConnectionRequest,
+  source?: ImportSource,
+) => {
+  connector: Connector<unknown>;
+  context: ConnectorContext<unknown>;
 };
 
 function importPreviewHttpError(error: unknown) {
@@ -59,6 +85,25 @@ function importPreviewHttpError(error: unknown) {
     : new ConflictException(`import.${error.code}`);
 }
 
+function requireStaffMappingPermission(
+  context: TicketingContext,
+  mappings: ImportMappingsRequest['mappings'],
+) {
+  if (
+    mappings.some((mapping) => mapping.kind === 'agent' && mapping.target.kind === 'invited') &&
+    !roleHasPermission(context.actor.role, 'staff:manage')
+  )
+    throw new ForbiddenException('import.staff-permission-required');
+}
+
+function mappingHttpError(error: unknown) {
+  if (error instanceof ImportMappingEditError)
+    return error.code === 'run-unavailable'
+      ? new NotFoundException('import.run-not-found')
+      : new ConflictException('import.phase-invalid');
+  return importPreviewHttpError(error);
+}
+
 export class ImportsService {
   constructor(
     readonly keyring: Keyring,
@@ -66,12 +111,13 @@ export class ImportsService {
   ) {}
 
   async get({ tx, brandId }: TicketingContext, runId: string) {
-    const [run] = await tx
-      .select()
+    const [row] = await tx
+      .select({ run: importRuns, actor: { id: users.id, name: users.name } })
       .from(importRuns)
+      .leftJoin(users, eq(users.id, importRuns.startedBy))
       .where(and(eq(importRuns.brandId, brandId), eq(importRuns.id, runId)));
-    if (!run) throw new NotFoundException('import.run-not-found');
-    return importRunView(run);
+    if (!row) throw new NotFoundException('import.run-not-found');
+    return importRunView(row.run, row.actor);
   }
   async previewTicket(context: TicketingContext, runId: string, raw: ImportTicketPreviewQuery) {
     const query = importTicketPreviewQuerySchema.parse(raw);
@@ -83,12 +129,15 @@ export class ImportsService {
   }
   async list({ tx, brandId }: TicketingContext) {
     const runs = await tx
-      .select()
+      .select({ run: importRuns, actor: { id: users.id, name: users.name } })
       .from(importRuns)
+      .leftJoin(users, eq(users.id, importRuns.startedBy))
       .where(eq(importRuns.brandId, brandId))
       .orderBy(desc(importRuns.createdAt), desc(importRuns.id))
       .limit(100);
-    return importRunListSchema.parse({ runs: runs.map(importRunView) });
+    return importRunListSchema.parse({
+      runs: runs.map((row) => importRunView(row.run, row.actor)),
+    });
   }
   async previewContact(context: TicketingContext, runId: string, raw: ImportContactPreviewQuery) {
     const query = importContactPreviewQuerySchema.parse(raw);
@@ -111,7 +160,8 @@ export class ImportsService {
   }
   async create(context: TicketingContext, raw: ImportRunCreate) {
     const input = importRunCreateSchema.parse(raw);
-    if (input.source !== 'zendesk') throw new BadRequestException('import.source-unavailable');
+    if (!AVAILABLE_IMPORT_SOURCES.includes(input.source))
+      throw new BadRequestException('import.source-unavailable');
     if (input.parentRunId) {
       const parent = await this.get(context, input.parentRunId);
       if (parent.status !== 'completed' || parent.source !== input.source)
@@ -135,10 +185,19 @@ export class ImportsService {
     const input = importConnectionRequestSchema.parse(raw);
     await lockImportBrand(context.tx, context.brandId);
     const run = await this.get(context, runId);
-    if (run.source !== 'zendesk') throw new BadRequestException('import.source-unavailable');
+    if (!['zendesk', 'freshdesk', 'zohodesk'].includes(run.source))
+      throw new BadRequestException('import.source-unavailable');
     if (!['draft', 'connecting'].includes(run.status))
       throw new ConflictException('import.phase-invalid');
-    const runtime = this.connection(input);
+    let runtime: ReturnType<ImportConnectionFactory>;
+    try {
+      runtime = this.connection(input, run.source);
+    } catch (error) {
+      if (error instanceof z.ZodError) throw new BadRequestException('import.credentials-invalid');
+      throw error;
+    }
+    if (runtime.connector.source !== run.source)
+      throw new BadRequestException('import.source-unavailable');
     const tested = await runtime.connector.test(runtime.context);
     if (!tested.ok) throw new BadRequestException(`import.${tested.reason}`);
     try {
@@ -157,7 +216,7 @@ export class ImportsService {
       .set({
         status: 'connecting',
         credentialsEncrypted: encryptSecret(JSON.stringify(input.credentials), this.keyring),
-        options: sql`${importRuns.options} || ${JSON.stringify({ downloadHosts: input.downloadHosts })}::jsonb`,
+        options: sql`${importRuns.options} || ${JSON.stringify({ downloadHosts: input.downloadHosts, sourceAccountLabel: tested.account })}::jsonb`,
       })
       .where(and(eq(importRuns.brandId, context.brandId), eq(importRuns.id, runId)));
     await this.audit(context, 'import.connected', runId);
@@ -169,8 +228,37 @@ export class ImportsService {
   async extract(context: TicketingContext, runId: string) {
     await lockImportBrand(context.tx, context.brandId);
     const run = await this.get(context, runId);
-    if (run.status !== 'connecting' || !run.hasCredentials)
+    if (run.status !== 'connecting' || (!run.hasCredentials && run.source !== 'file'))
       throw new ConflictException('import.phase-invalid');
+    if (run.source === 'file') {
+      try {
+        await preparedImportFiles(context.tx, { brandId: context.brandId, runId });
+      } catch (error) {
+        if (error instanceof ConnectorError) throw new ConflictException('import.file-not-ready');
+        throw error;
+      }
+    }
+    if (importRequiresTicketInventory(run.source, run.scope)) {
+      if (run.scope.inventoryConfirmed !== true)
+        throw new ConflictException('import.inventory-confirm-required');
+      try {
+        const manifest = await importTicketInventoryManifest(
+          context.tx,
+          { brandId: context.brandId, runId },
+          run.scope.inventoryMode ?? 'archives',
+        );
+        const [proof] = await context.tx
+          .select({ options: importRuns.options })
+          .from(importRuns)
+          .where(and(eq(importRuns.brandId, context.brandId), eq(importRuns.id, runId)));
+        if (proof?.options.inventoryReviewFingerprint !== manifest.fingerprint)
+          throw new ConflictException('import.inventory-stale');
+      } catch (error) {
+        if (error instanceof ConnectorError || error instanceof z.ZodError)
+          throw new ConflictException('import.inventory-not-ready');
+        throw error;
+      }
+    }
     await context.tx
       .update(importRuns)
       .set({ status: 'extracting', startedAt: new Date() })
@@ -185,10 +273,40 @@ export class ImportsService {
     const run = await this.get(context, runId);
     if (!['draft', 'connecting'].includes(run.status))
       throw new ConflictException('import.phase-invalid');
+    const supportedEntities =
+      run.source === 'freshdesk'
+        ? FRESHDESK_IMPORT_ENTITIES
+        : run.source === 'zohodesk'
+          ? ZOHODESK_IMPORT_ENTITIES
+          : null;
+    if (supportedEntities && scope.entities.some((entity) => !supportedEntities.includes(entity)))
+      throw new BadRequestException('import.entities-unsupported');
+    let inventoryReviewFingerprint: string | null = null;
+    const inventoryRequired = importRequiresTicketInventory(run.source, scope);
+    if (inventoryRequired && scope.inventoryConfirmed === true) {
+      try {
+        inventoryReviewFingerprint = (
+          await importTicketInventoryManifest(
+            context.tx,
+            { brandId: context.brandId, runId },
+            scope.inventoryMode ?? 'archives',
+          )
+        ).fingerprint;
+      } catch (error) {
+        if (error instanceof ConnectorError || error instanceof z.ZodError)
+          throw new ConflictException('import.inventory-not-ready');
+        throw error;
+      }
+    }
     await context.tx
       .update(importRuns)
       .set({
-        options: sql`${importRuns.options} || ${JSON.stringify(scope)}::jsonb`,
+        options: sql`${importRuns.options} || ${JSON.stringify({
+          ...scope,
+          useTicketInventory: run.source === 'zohodesk' && scope.useTicketInventory === true,
+          inventoryConfirmed: inventoryRequired && scope.inventoryConfirmed === true,
+          inventoryReviewFingerprint,
+        })}::jsonb`,
         dryRunReport: null,
       })
       .where(and(eq(importRuns.brandId, context.brandId), eq(importRuns.id, runId)));
@@ -207,7 +325,10 @@ export class ImportsService {
     const { tx, brandId } = context;
     await lockImportBrand(tx, brandId);
     const run = await this.get(context, runId);
-    if (!['awaiting_mapping', 'ready'].includes(run.status) || !run.hasCredentials)
+    if (
+      !['awaiting_mapping', 'ready'].includes(run.status) ||
+      (!run.hasCredentials && run.source !== 'file')
+    )
       throw new ConflictException('import.phase-invalid');
     const scope = { brandId, runId };
     const checkpoint = importDryRunCheckpointSchema.parse({
@@ -223,7 +344,7 @@ export class ImportsService {
     });
     await tx
       .update(importRecords)
-      .set({ dryRunIdentity: null })
+      .set({ dryRunIdentity: null, dryRunMedia: null })
       .where(and(eq(importRecords.brandId, brandId), eq(importRecords.runId, runId)));
     await tx
       .update(importRuns)
@@ -330,15 +451,61 @@ export class ImportsService {
       fingerprint: await importInputFingerprint(context.tx, { brandId: context.brandId, runId }),
     });
   }
+  async mappingValues(context: TicketingContext, runId: string, query: ImportMappingValuesQuery) {
+    try {
+      return await importMappingValues(context.tx, { brandId: context.brandId, runId }, query);
+    } catch (error) {
+      if (!(error instanceof ImportMappingEditError)) throw error;
+      throw error.code === 'run-unavailable'
+        ? new NotFoundException('import.run-not-found')
+        : new ConflictException('import.phase-invalid');
+    }
+  }
+  async updateMappings(context: TicketingContext, runId: string, raw: ImportMappingPageRequest) {
+    const input = importMappingPageRequestSchema.parse(raw);
+    requireStaffMappingPermission(context, input.mappings);
+    await this.get(context, runId);
+    try {
+      const result = await saveImportMappingPage(
+        context.tx,
+        { brandId: context.brandId, runId },
+        input,
+      );
+      await this.audit(context, 'import.mappings-confirmed', runId);
+      return result;
+    } catch (error) {
+      if (!(error instanceof ImportMappingEditError)) throw error;
+      throw error.code === 'mapping-capacity'
+        ? new BadRequestException('import.mapping-capacity')
+        : new ConflictException('import.phase-invalid');
+    }
+  }
+  async mappingTargets(context: TicketingContext, runId: string, query: ImportMappingTargetsQuery) {
+    try {
+      return await importMappingTargetChoices(
+        context.tx,
+        { brandId: context.brandId, runId },
+        query,
+      );
+    } catch (error) {
+      throw mappingHttpError(error);
+    }
+  }
+  async mappingField(context: TicketingContext, runId: string, raw: ImportMappingFieldQuery) {
+    const query = importMappingFieldQuerySchema.parse(raw);
+    try {
+      return await importMappingFieldDefinition(
+        context.tx,
+        { brandId: context.brandId, runId },
+        query.externalId,
+      );
+    } catch (error) {
+      throw mappingHttpError(error);
+    }
+  }
   async confirmMappings(context: TicketingContext, runId: string, raw: ImportMappingsRequest) {
     const input = importMappingsRequestSchema.parse(raw);
-    if (
-      input.mappings.some(
-        (mapping) => mapping.kind === 'agent' && mapping.target.kind === 'invited',
-      ) &&
-      !roleHasPermission(context.actor.role, 'staff:manage')
-    )
-      throw new ForbiddenException('import.staff-permission-required');
+    requireStaffMappingPermission(context, input.mappings);
     await this.get(context, runId);
     try {
       await saveImportMappings(context.tx, { brandId: context.brandId, runId }, input.mappings);

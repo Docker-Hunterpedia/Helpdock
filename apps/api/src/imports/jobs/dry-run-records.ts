@@ -1,4 +1,5 @@
 import { type Db, importRecords, importRuns } from '@helpdock/db';
+import { importScopeSchema } from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { withSystemJob } from '../../tenant/system-job.js';
@@ -9,7 +10,9 @@ import { validateImportRecordPage } from '../preflight/record-page.js';
 import { ImportClaimLost, importClaimSchema, renewImportClaim } from './claims.js';
 import { importDestinationFingerprint } from './destination-fingerprint.js';
 import { importDryRunCheckpointSchema, storeImportDryRunCheckpoint } from './dry-run-state.js';
+import { importFileSourceWarnings } from './file-source-warnings.js';
 import { importInputFingerprint } from './input-fingerprint.js';
+import { importVendorSourceWarnings } from './vendor-source-warnings.js';
 
 const callingCodeSchema = z.string().regex(/^\d{0,4}$/);
 const requestSchema = z.strictObject({
@@ -62,7 +65,7 @@ export async function runImportDryRunRecordBatch(
       if (!run.dryRunReport)
         await tx
           .update(importRecords)
-          .set({ dryRunIdentity: null })
+          .set({ dryRunIdentity: null, dryRunMedia: null })
           .where(
             and(eq(importRecords.brandId, claim.brandId), eq(importRecords.runId, claim.runId)),
           );
@@ -77,6 +80,21 @@ export async function runImportDryRunRecordBatch(
           checked: 0,
           issueCount: 0,
           issues: [],
+          ...(run.source === 'file'
+            ? await importFileSourceWarnings(tx, {
+                ...scope,
+                entities: importScopeSchema.parse({
+                  entities: run.options.entities,
+                  rebuildAllReports: run.options.rebuildAllReports,
+                }).entities,
+              })
+            : await importVendorSourceWarnings(tx, {
+                ...scope,
+                entities: importScopeSchema.parse({
+                  entities: run.options.entities,
+                  rebuildAllReports: run.options.rebuildAllReports,
+                }).entities,
+              })),
         },
       );
       if (prior.defaultCallingCode !== request.defaultCallingCode)

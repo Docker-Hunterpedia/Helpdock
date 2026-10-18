@@ -11,6 +11,7 @@ import type { FileScanner, ScanVerdict } from '../media/scanner.js';
 import type {
   ObjectHead,
   ObjectStorage,
+  PresignDownloadOptions,
   PresignedDownload,
   PresignedUpload,
 } from '../media/storage.js';
@@ -28,6 +29,7 @@ export class FakeStorage implements ObjectStorage {
   readonly #root: string;
   /** Every key ever deleted, so a suite can assert the original was discarded. */
   readonly removed: string[] = [];
+  readonly presignedDownloads: PresignDownloadOptions[] = [];
 
   constructor(root: string) {
     this.#root = root;
@@ -55,7 +57,9 @@ export class FakeStorage implements ObjectStorage {
     };
   }
 
-  async presignDownload({ key }: { key: string }): Promise<PresignedDownload> {
+  async presignDownload(options: PresignDownloadOptions): Promise<PresignedDownload> {
+    this.presignedDownloads.push({ ...options });
+    const { key } = options;
     return {
       url: `https://bucket.test/${encodeURIComponent(key)}`,
       expiresAt: new Date(Date.now() + 300_000),

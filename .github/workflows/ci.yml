@@ -382,11 +382,15 @@ jobs:
           retention-days: 1
 
   import-reference:
-    name: import-reference
+    name: import-reference (${{ matrix.source }})
     needs: scope
     if: needs.scope.outputs.run_api == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [Zendesk, freshdesk, zohodesk]
     env:
       DOCKERHUB_CONFIGURED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
       # No account: pull through Google's mirror (see the top of this file).
@@ -423,6 +427,8 @@ jobs:
         run: >-
           pnpm exec vitest run --project integration
           apps/api/src/imports/zendesk-reference.integration.test.ts
+          apps/api/src/imports/native-reference.integration.test.ts
+          --testNamePattern '${{ matrix.source }}'
           --maxWorkers=1
 
   api-coverage:
@@ -671,6 +677,9 @@ jobs:
 
       - name: Browser tests against the real api
         run: pnpm --filter @helpdock/admin e2e:api
+
+      - name: Import browser tests against the real api (en and ar)
+        run: pnpm --filter @helpdock/admin e2e:imports --workers=1
 
       # The pages the api renders itself: the hosted web form and the help
       # center, in `en` and `ar`. They previously extended the slowest mocked

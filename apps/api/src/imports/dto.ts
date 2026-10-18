@@ -6,8 +6,16 @@ import {
   importContactPreviewSchema,
   importDryRunReportSchema,
   importDryRunRequestSchema,
+  importFieldSchema,
+  importMappingFieldQuerySchema,
+  importMappingPageRequestSchema,
+  importMappingPageResultSchema,
   importMappingsRequestSchema,
   importMappingsViewSchema,
+  importMappingTargetsQuerySchema,
+  importMappingTargetsSchema,
+  importMappingValuesQuerySchema,
+  importMappingValuesSchema,
   importPreviewSamplesSchema,
   importRunCreateSchema,
   importRunListSchema,
@@ -15,11 +23,13 @@ import {
   importRunViewSchema,
   importScopeSchema,
   importStartRequestSchema,
+  importSupportedSourcesSchema,
   importTicketPreviewQuerySchema,
   importTicketPreviewSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 export class ImportBrandParamDto extends createZodDto(importBrandParamSchema) {}
+export class ImportSupportedSourcesDto extends createZodDto(importSupportedSourcesSchema) {}
 export class ImportRunParamDto extends createZodDto(importRunParamSchema) {}
 export class ImportRunCreateDto extends createZodDto(importRunCreateSchema) {}
 export class ImportConnectionRequestDto extends createZodDto(importConnectionRequestSchema) {}
@@ -30,6 +40,14 @@ export class ImportConnectionResultDto extends createZodDto(importConnectionResu
 export class ImportScopeDto extends createZodDto(importScopeSchema) {}
 
 export class ImportMappingsRequestDto extends createZodDto(importMappingsRequestSchema) {}
+export class ImportMappingValuesQueryDto extends createZodDto(importMappingValuesQuerySchema) {}
+export class ImportMappingValuesDto extends createZodDto(importMappingValuesSchema) {}
+export class ImportMappingTargetsQueryDto extends createZodDto(importMappingTargetsQuerySchema) {}
+export class ImportMappingTargetsDto extends createZodDto(importMappingTargetsSchema) {}
+export class ImportMappingFieldQueryDto extends createZodDto(importMappingFieldQuerySchema) {}
+export class ImportMappingSourceFieldDto extends createZodDto(importFieldSchema) {}
+export class ImportMappingPageRequestDto extends createZodDto(importMappingPageRequestSchema) {}
+export class ImportMappingPageResultDto extends createZodDto(importMappingPageResultSchema) {}
 export class ImportMappingsViewDto extends createZodDto(importMappingsViewSchema) {}
 export class ImportTicketPreviewQueryDto extends createZodDto(importTicketPreviewQuerySchema) {}
 export class ImportTicketPreviewDto extends createZodDto(importTicketPreviewSchema) {}

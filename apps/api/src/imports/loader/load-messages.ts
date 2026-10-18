@@ -1,6 +1,6 @@
 import { type DbTransaction, ticketMessages, uuidv7 } from '@helpdock/db';
 import { hashImportValue } from '@helpdock/importers';
-import type { ImportMessage } from '@helpdock/schemas';
+import { type ImportMessage, importMessageDetailsSchema } from '@helpdock/schemas';
 import { and, eq, sql } from 'drizzle-orm';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import { importEmailMeta } from './email-meta.js';
@@ -18,8 +18,20 @@ export function importMessageHash(message: ImportMessage): string {
   return hashImportValue({
     ...message,
     attachments: message.attachments.map(
-      ({ url: _url, bundlePath: _path, ...identity }) => identity,
+      ({ url: _url, bundlePath: _path, sourcePage: _page, sourceUrls: _aliases, ...identity }) =>
+        identity,
     ),
+  });
+}
+
+export function importMessageDetails(message: ImportMessage) {
+  const sourceOnlyAuthor = message.authorKind === 'system' && message.authorName !== undefined;
+  if (message.sourceDetails === undefined && message.via === undefined && !sourceOnlyAuthor)
+    return null;
+  return importMessageDetailsSchema.parse({
+    ...(sourceOnlyAuthor ? { authorKind: 'unknown' } : {}),
+    ...message.sourceDetails,
+    ...(message.via === undefined ? {} : { via: message.via }),
   });
 }
 
@@ -39,6 +51,7 @@ async function insertImportedMessage(
     seq: options.sequence,
     kind: message.public ? 'public' : 'note',
     ...author,
+    importDetails: importMessageDetails(message),
     bodyHtml: messageBody.html,
     bodyText: messageBody.text,
     channel: input.resolved.channel,
@@ -80,6 +93,7 @@ async function updateImportedMessage(
     .update(ticketMessages)
     .set({
       ...author,
+      importDetails: importMessageDetails(message),
       kind: message.public ? 'public' : 'note',
       bodyHtml: messageBody.html,
       bodyText: messageBody.text,

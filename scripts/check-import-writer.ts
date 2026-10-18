@@ -3,6 +3,11 @@ import path from 'node:path';
 import { SyntaxKind, type Token, tokenize } from './controller-scan.ts';
 
 const ALLOWED_MODULES = new Set([
+  '../preflight/staged-record.js',
+  '../article-asset-proof.js',
+  '../article-asset-requests.js',
+  '../article-asset-state.js',
+  '../article-prepared.js',
   '../../help-center/help-center.repository.js',
   '../../help-center/slugs.js',
   '../../media/keys.js',
@@ -20,9 +25,21 @@ const PURE_CHANNEL_EXPORTS = new Set([
   'sanitizeMessageHtml',
   'sanitizeArticleHtml',
   'articleImageSources',
+  'articleLinkTargets',
   'htmlToText',
 ]);
 const REVIEWED_EXPORTS = new Map([
+  ['../preflight/staged-record.js', new Set(['validatedStagedRecord'])],
+  [
+    '../article-asset-proof.js',
+    new Set(['ArticleAssetProof', 'readArticleAssetProof', 'requireReadyArticleAsset']),
+  ],
+  [
+    '../article-asset-requests.js',
+    new Set(['articleCopyAssetRequests', 'importArticleAssetRequests']),
+  ],
+  ['../article-asset-state.js', new Set(['importArticlePreparationSchema'])],
+  ['../article-prepared.js', new Set(['preparedImportArticleHash'])],
   ['@helpdock/channels', PURE_CHANNEL_EXPORTS],
   ['@helpdock/importers', new Set(['hashImportValue'])],
   ['../../help-center/help-center.repository.js', new Set(['HelpCenterRepository'])],

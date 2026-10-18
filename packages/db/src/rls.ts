@@ -37,6 +37,8 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'import_external_ids', departmentScoped: false },
   { name: 'import_log', departmentScoped: false },
   { name: 'import_file_presets', departmentScoped: false },
+  { name: 'import_files', departmentScoped: false },
+  { name: 'import_ticket_inventory', departmentScoped: false },
   { name: 'user_brand_roles', departmentScoped: false },
   { name: 'departments', departmentScoped: false },
   // Not department-scoped: §1.3 lists the six ticket-scoped tables and neither
@@ -160,6 +162,7 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'hc_article_versions', departmentScoped: false },
   { name: 'hc_settings', departmentScoped: false },
   { name: 'hc_media', departmentScoped: false },
+  { name: 'hc_import_assets', departmentScoped: false },
   // M5-05, M5-08. The search index, the search log, views and feedback: the
   // brand's, like the content they describe. Who may match a search is the
   // live version's visibility, joined at query time (§5).

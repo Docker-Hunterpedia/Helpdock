@@ -404,12 +404,36 @@ export class TicketRepository {
     tx: DbTransaction,
     ticketId: string,
     limit: number,
+    before?: string,
   ): Promise<TicketActivityRow[]> {
     return tx
       .select()
       .from(ticketActivity)
-      .where(eq(ticketActivity.ticketId, ticketId))
+      .where(
+        and(
+          eq(ticketActivity.ticketId, ticketId),
+          before
+            ? sql`(${ticketActivity.createdAt}, ${ticketActivity.id}) < (
+        SELECT cursor_entry.created_at, cursor_entry.id FROM ticket_activity cursor_entry
+        WHERE cursor_entry.ticket_id = ${ticketId}::uuid AND cursor_entry.id = ${before}::uuid
+      )`
+            : undefined,
+        ),
+      )
       .orderBy(desc(ticketActivity.createdAt), desc(ticketActivity.id))
       .limit(limit);
+  }
+
+  async activityCursorExists(
+    tx: DbTransaction,
+    ticketId: string,
+    before: string,
+  ): Promise<boolean> {
+    const rows = await tx
+      .select({ id: ticketActivity.id })
+      .from(ticketActivity)
+      .where(and(eq(ticketActivity.ticketId, ticketId), eq(ticketActivity.id, before)))
+      .limit(1);
+    return rows.length > 0;
   }
 }

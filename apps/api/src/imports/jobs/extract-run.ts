@@ -3,7 +3,6 @@ import {
   type Connector,
   type ConnectorContext,
   ConnectorError,
-  hashImportValue,
   type ImportCursor,
   type ImportPage,
   RateLimited,
@@ -127,8 +126,6 @@ class ExtractionSession<Credentials> {
     const previous = extractionCheckpointsSchema.parse(run.cursors)[entity];
     if (previous?.done) return;
     context.signal.throwIfAborted();
-    const seen = new Set<string>();
-    if (previous?.cursor) seen.add(hashImportValue(previous.cursor));
     let done = false;
     for await (const page of this.pages(claim, context, {
       entity,
@@ -136,14 +133,12 @@ class ExtractionSession<Credentials> {
       since: delta.since,
     })) {
       context.signal.throwIfAborted();
-      if (done || (page.cursor !== null && seen.has(hashImportValue(page.cursor))))
-        throw new ConnectorError('invalid-response');
+      if (done) throw new ConnectorError('invalid-response');
       await this.inRun((tx) => storeImportPage(tx, claim, entity, page));
       if (page.cursor === null) {
         done = true;
         break;
       }
-      seen.add(hashImportValue(page.cursor));
     }
     if (!done) throw new ConnectorError('invalid-response');
   }

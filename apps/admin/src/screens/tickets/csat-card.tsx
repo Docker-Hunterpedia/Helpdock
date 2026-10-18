@@ -64,6 +64,35 @@ export function CsatCard({
         </Typography>
       )}
 
+      {csat.originalAnswers?.length ? (
+        <Box component="details">
+          <Typography component="summary" variant="body2" sx={{ cursor: 'pointer' }}>
+            {t('tickets:csat.originalAnswers')}
+          </Typography>
+          <Box component="dl" sx={{ margin: 0, paddingBlockStart: 2 }}>
+            {csat.originalAnswers.map((answer) => (
+              <Box key={answer.question_id} sx={{ paddingBlock: 1 }}>
+                <Typography component="dt" variant="body2">
+                  {answer.question_text || answer.question_id}
+                </Typography>
+                <Typography
+                  component="dd"
+                  variant="body2"
+                  sx={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    overflowWrap: 'anywhere',
+                    color: 'text.secondary',
+                  }}
+                >
+                  {Array.isArray(answer.value) ? answer.value.join(', ') : String(answer.value)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      ) : null}
+
       {link === null ? null : (
         <>
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>

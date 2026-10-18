@@ -82,4 +82,25 @@ describe('public dry-run report', () => {
       importDryRunReportView({ ...checkpoint, phase: 'invalidated' }, 'awaiting_mapping').complete,
     ).toBe(false);
   });
+  it('includes omitted source rows in warning totals and binds their count to the review token', () => {
+    const first = importDryRunCheckpointSchema.parse({
+      ...checkpoint,
+      sourceWarningCount: 105,
+      sourceWarnings: [
+        { entity: 'ticket', externalId: 'source-file-id', code: 'file-rows-skipped' },
+      ],
+    });
+    const report = importDryRunReportView(first, 'awaiting_mapping');
+    expect(report.warnings).toBe(112);
+    expect(report.issues).toContainEqual({
+      entity: 'ticket',
+      externalId: 'source-file-id',
+      code: 'file-rows-skipped',
+      area: 'source',
+      level: 'warning',
+    });
+    expect(report.reviewToken).not.toBe(
+      importDryRunReportView({ ...first, sourceWarningCount: 106 }, 'awaiting_mapping').reviewToken,
+    );
+  });
 });

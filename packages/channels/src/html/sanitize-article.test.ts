@@ -1,11 +1,73 @@
+import { hcImportAssetPath, hcMediaPath } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { SanitizeLimitError } from './sanitize.js';
-import { ARTICLE_MAX_TAGS, articleImageSources, sanitizeArticleHtml } from './sanitize-article.js';
+import {
+  ARTICLE_MAX_TAGS,
+  articleImageSources,
+  articleLinkTargets,
+  sanitizeArticleHtml,
+  sanitizeImportedArticleHtml,
+} from './sanitize-article.js';
 
 const BRAND = '0192a000-0000-7000-8000-000000000001';
 const OTHER = '0192a000-0000-7000-8000-000000000002';
 const MEDIA = '0192a000-0000-7000-8000-00000000000a';
 const clean = (html: string): string => sanitizeArticleHtml(html, { brandId: BRAND }).html;
+
+describe('imported article resource rewriting', () => {
+  it('removes unavailable source download links without removing their text or unrelated links', () => {
+    const html = sanitizeImportedArticleHtml(
+      '<a href="https://vendor.test/file?secret=temporary&amp;id=1">Original manual</a><a href="https://example.test/help">Help</a>',
+      {
+        brandId: BRAND,
+        unavailableLinks: new Set(['https://vendor.test/file?secret=temporary&id=1']),
+      },
+    ).html;
+    expect(html).not.toContain('vendor.test');
+    expect(html).toContain('Original manual');
+    expect(html).toContain('href="https://example.test/help"');
+  });
+  it('recognizes parsed anchor targets without granting access from escaped code examples', () => {
+    const path = hcImportAssetPath(BRAND, MEDIA);
+    expect(
+      articleLinkTargets(
+        `<pre>&lt;a href="${path}"&gt;Example&lt;/a&gt;</pre><a href="${path}">Original file</a><a href="https://vendor.test/a?x=1&amp;y=2">Other</a>`,
+      ),
+    ).toEqual([path, 'https://vendor.test/a?x=1&y=2']);
+  });
+  it('rewrites decoded image/file locators through managed paths while retaining article sanitization', () => {
+    const image = hcMediaPath(BRAND, MEDIA),
+      download = hcImportAssetPath(BRAND, MEDIA);
+    const prepared = sanitizeImportedArticleHtml(
+      '<p>Original <a href="https://vendor.test/file?x=1&amp;y=2" target="self">Manual</a></p><img src="https://vendor.test/image?x=1&amp;y=2" onerror="unsafe()"><script>unsafe()</script><a href="https://example.test/help">Related site</a>',
+      {
+        brandId: BRAND,
+        images: new Map([['https://vendor.test/image?x=1&y=2', image]]),
+        links: new Map([['https://vendor.test/file?x=1&y=2', download]]),
+      },
+    );
+    expect(prepared.html).toContain(`src="${image}"`);
+    expect(prepared.html).toContain(`href="${download}"`);
+    expect(prepared.html).toContain('href="https://example.test/help"');
+    expect(prepared.html).not.toContain('vendor.test');
+    expect(prepared.html).not.toContain('unsafe');
+    expect(prepared.text).toContain('Manual');
+  });
+
+  it.each(['images', 'links'] as const)(
+    'rejects a foreign-brand %s mapping rather than treating a prepared locator as authority',
+    (kind) => {
+      const foreign =
+        kind === 'images' ? hcMediaPath(OTHER, MEDIA) : hcImportAssetPath(OTHER, MEDIA);
+      expect(() =>
+        sanitizeImportedArticleHtml('<p>Source body</p>', {
+          brandId: BRAND,
+          [kind]: new Map([['https://vendor.test/original', foreign]]),
+        }),
+      ).toThrow(RangeError);
+    },
+  );
+});
 
 describe('articleImageSources', () => {
   it('decodes attributes before import media authorization and preserves source order', () => {

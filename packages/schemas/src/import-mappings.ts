@@ -1,6 +1,17 @@
 import { z } from 'zod';
 import { customFieldCreateRequestSchema } from './custom-fields.js';
+import { importFieldSchema, importUserSchema } from './import.js';
 import { ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
+
+export const importMappingKindSchema = z.enum([
+  'status',
+  'priority',
+  'channel',
+  'group',
+  'agent',
+  'field',
+  'tag',
+]);
 
 export const importStaffTargetSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('existing'), userId: z.uuid() }),
@@ -66,3 +77,76 @@ export const importMappingsSchema = z
       mappings.length,
     { message: 'A source value has more than one mapping of the same kind' },
   );
+
+export const importMappingValuesQuerySchema = z.strictObject({
+  kind: importMappingKindSchema,
+  after: externalValue.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export const importMappingValueSchema = z.strictObject({
+  externalValue,
+  label: z.string().max(300),
+  occurrences: z.int().nonnegative().nullable(),
+  person: importUserSchema.pick({ name: true, email: true, kind: true, active: true }).nullable(),
+  // Metadata excludes the options themselves, so it needs a count-based rule.
+  field: z
+    .strictObject({
+      target: importFieldSchema.shape.target,
+      key: importFieldSchema.shape.key,
+      type: importFieldSchema.shape.type,
+      optionsCount: z.int().nonnegative(),
+    })
+    .refine((field) => !['select', 'multiselect'].includes(field.type) || field.optionsCount > 0)
+    .nullable(),
+  confirmed: importMappingSchema.nullable(),
+  proposed: importMappingSchema.nullable(),
+});
+export const importMappingValuesSchema = z.strictObject({
+  kind: importMappingKindSchema,
+  values: z.array(importMappingValueSchema).max(100),
+  nextCursor: externalValue.nullable(),
+});
+export const importMappingPageRequestSchema = z.strictObject({
+  mappings: importMappingsSchema.min(1).max(100),
+});
+export const importMappingPageResultSchema = z.strictObject({ saved: z.int().min(1).max(100) });
+export type ImportMappingValuesQuery = z.infer<typeof importMappingValuesQuerySchema>;
+export type ImportMappingValue = z.infer<typeof importMappingValueSchema>;
+export type ImportMappingPageRequest = z.infer<typeof importMappingPageRequestSchema>;
+
+export const importMappingTargetsQuerySchema = z.strictObject({
+  kind: importMappingKindSchema,
+  externalValue,
+  search: z
+    .string()
+    .max(200)
+    .regex(/^[^\0]*$/)
+    .default(''),
+  after: z
+    .string()
+    .max(80)
+    .regex(/^[a-zA-Z0-9_:-]*$/)
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export const importMappingTargetChoiceSchema = z.strictObject({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(300),
+  nameAr: z.string().max(300).nullable(),
+  detail: z.string().max(320).nullable(),
+  selection: importMappingSchema,
+});
+export const importMappingTargetsSchema = z.strictObject({
+  choices: z.array(importMappingTargetChoiceSchema).max(100),
+  nextCursor: z.string().max(80).nullable(),
+});
+export const importMappingFieldQuerySchema = z.strictObject({
+  externalId: z
+    .string()
+    .min(1)
+    .max(200)
+    .regex(/^[^\0]*$/),
+});
+export type ImportMappingTargetsQuery = z.infer<typeof importMappingTargetsQuerySchema>;
+export type ImportMappingFieldQuery = z.infer<typeof importMappingFieldQuerySchema>;
+export type ImportMappingTargetChoice = z.infer<typeof importMappingTargetChoiceSchema>;

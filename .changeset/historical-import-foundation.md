@@ -4,9 +4,31 @@
 
 Prepare tenant-isolated import staging, historical ticket and attachment provenance, and validated normalized records for support-platform migrations. Restrict importer HTTP requests to explicitly allowed vendor hosts on every redirect hop.
 
+Add private, size-bound manual source uploads, sealed source preparation, CSV mappings and transforms, bounded previews, full-file validation, and brand-scoped reusable mapping presets. Feed prepared CSV files and bundles into resumable import phases without synthetic credentials. Honor object-download backpressure for large source files.
+
+Expire source-file and import staging rows thirty days after finish or discard, and publish private-object cleanup through the outbox while retaining run summaries and native-ID receipts for future deltas.
+
+Add the bilingual Brand import area with runtime source availability, creator/account labels, connection and scope controls, phase progress, pause/resume/cancel, delta creation and dry-run ticket samples. Keep Start disabled until the current report and previews are available, blocking issues are resolved and warnings are acknowledged for that report.
+
+Page observed source mapping values with explicit defaults and read-only match suggestions. Save a mapping page atomically without replacing other pages, and invalidate prior approval whenever mappings change.
+
+Add local CSV column/constant mapping, ordered transforms, exact-header presets, validation previews and explicit skipped-row warnings. Review paged source threads and contact matches before loading. Expose severity-filtered import logs and CSV downloads.
+
+Show wizard progress and per-file dry-run availability in English and Arabic. Bind temporary inspection results to the reviewed source and file policy, including files beyond the report's issue samples.
+
+Keep imported tickets outside automatic SLA synchronization until explicitly activated; starting clocks preserves their original history dates.
+
+Refuse stale SLA timer actions after a quiet source update closes an imported ticket, and read timer eligibility while holding the parent lock.
+
+Show imported ticket provenance and former-agent names, search original numbers/native IDs under ticket RLS, and save imported/native Source filters in views. Report import health through expiring worker snapshots on the install System page.
+
+Page older ticket activity under the parent ticket's scope, preserving events with equal or sub-millisecond timestamps and rendering imported audit events in the thread.
+
 Preserve bilingual imported knowledge versions and source descriptions, and raise help-center article titles to 500 characters. Reject malformed UTF-8 rather than silently altering imported text.
 
 Process shared historical attachments without live events or AI transcription, and preserve imported author names and file origin when splitting tickets.
+
+Keep imported knowledge searchable without scheduling AI embeddings. Previously queued embedding and re-embedding work skips imported language versions until staff explicitly publishes them.
 
 Commit historical ticket/thread progress atomically, retain changed source subjects on delta, and refuse deleted migration targets rather than reporting them as imported.
 
@@ -115,3 +137,53 @@ Bind import approval to the reviewed report, require explicit warning acknowledg
 Validate effective staged/live knowledge ancestry and locale conflicts before importing. Refuse aliased category/section self-cycles in both preflight and loading, while allowing valid staged reparenting and shared article translations. Include article version changes in approval freshness.
 
 Preserve report rows on unchanged repeats and reconcile satisfaction-only deltas against existing imported tickets. Retain original answer dates, refuse unavailable parents and invalidate aggregate receipts so reverted source answers are reapplied. Namespace satisfaction rows by vendor account and backfill ownership without guessing ambiguous receipts.
+
+Preserve original source references and former-agent names in imported ticket views, add imported/native filters and source-number search, and page long historical activity without dropping timestamp ties.
+
+Add worker-cached install import summaries with immutable brand pagination and unknown/expired states. Include connector extraction warnings in the reviewed dry-run receipt and preserve attachment page hints independently of historical message identity.
+
+Preserve unscored historical satisfaction answers and original question values without distorting score averages. Show imported answers in dated inert history and a separate staff display fallback, while leaving native survey delivery selection unchanged. Retain native status IDs and source labels for custom status mapping.
+
+Add sealed native-ticket inventory staging, FORCE RLS, strict streaming CSV ID parsing and bounded cleanup. Freshdesk extraction can hydrate archived histories or use a complete ID inventory to bypass list ceilings. Connect Freshdesk through the admin source picker, map and validate private ticket-ID CSV files, and require explicit inventory confirmation before extracting ticket history. Mapping or mode changes require a fresh confirmation; server fingerprints reject stale approvals.
+
+Poll lightweight source-file summaries and load preview/mapping details for only the selected file, reducing API and browser memory during large migration setup.
+
+Retain original message state, transport and author facts as inert provenance, visible in English/Arabic message disclosures and preserved on ticket splits. Keep source-only author names without assigning a local identity or counting unresolved customer messages as staff responses. Retain unsent source replies as private history rather than sending them.
+
+Preserve Zoho profile history and source-only native fields without applying source roles, lifecycle flags or SLA references as local behavior. Use stable JSON serialization for compound Zoho/Freshdesk fields so response-key reordering does not create false updates.
+
+Read Zoho's module field catalogs for mapper definitions and hydrated custom values, with bounded resume checkpoints. Keep exact booleans, dates and declared selections; preserve unsupported semantics and precision-sensitive values as reviewable source text.
+
+Preserve full historical Zoho satisfaction feedback and original time/sentiment provenance, with bounded resume checkpoints and reviewed normalization. Unknown sentiments remain unscored.
+
+Include files uploaded directly to Zoho tickets alongside thread/comment files, retaining source visibility, creation dates and source-only creator names. Refresh refused downloads through the checked source page without inventing metadata endpoints.
+
+Bound extraction cursor bookkeeping independently of history size and detect continuation loops across worker deferrals using atomically persisted cycle state.
+
+Preserve Zoho's bilingual knowledge taxonomy and nested section relationships, including inactive source states. Prepare inherited readership through resumable ancestry checks so source restrictions cannot become public access.
+
+Retain explicit article attachment references in normalized bundles, reject missing archive members and prevent article loading from silently discarding declared source files while asset preparation is completed.
+
+Add durable private article-asset identities, resumable preparation and sealed-manifest loading. Check source hashes before image conversion or file scanning, authorize downloads against the current article and live readership, and clean abandoned importing objects through retention and the outbox. Keep unavailable files visible in the import log and localized article content.
+
+Preserve separate working and published article content and files, so importing a published article with a newer draft cannot expose unpublished edits. Keep full source descriptions and unknown publication dates without inventing a migration timestamp.
+
+Retain source file view/download links as rewrite aliases while keeping authenticated Zoho downloads bound to the exact native resource. Reject ambiguous aliases and distinguish empty Zoho collections from missing detail responses.
+
+Reconcile paged Zoho article files against their pinned working snapshot, checkpoint each file and stop on incomplete or changed metadata. Expose inferred list envelopes in the import log and dry-run review in English and Arabic.
+
+Read recoverable Zoho recycle-bin taxonomy and article translations without restoring source data. Keep deleted copies private, preserve language relationships across active/deleted siblings, and refuse shifted or repeated pagination.
+
+Keep translations on their existing imported article when a later language changes the source anchor. Resolve the destination through validated same-account sibling ownership, with matching dry-run checks and protection for unowned manual content.
+
+Connect Zoho's normalized readers to the API and worker runtime, validate its export profile and read grants, and reuse access tokens through the run's encrypted credential blob. Keep internal token snapshots outside public credential input and preserve terminal credential purge after worker restarts or late refreshes.
+
+Add English and Arabic Zoho connection fields with a regional data-center selector, exact organization IDs and masked OAuth credentials. Explain the export permissions and connection-check credit cost, and clear secrets after connecting.
+
+Discover Zoho archives automatically across enabled and disabled departments for full and delta imports. Retain reviewed ticket-ID inventories as an explicit fallback, and refuse archive depth limits or shifted pages before loading incomplete history.
+
+Preserve original Zoho email Message-IDs and separate sent dates, show source subject/date/return-path metadata in the existing EN/AR disclosure, and expose unavailable or unparseable source mail as reviewed warnings without sending anything.
+
+Resolve relative article images using a validated per-copy asset origin, retain native file authority for matching aliases, and keep vendor credentials off remote image requests. Report inaccessible gallery images explicitly while preserving API permission failures and retryable source errors.
+
+Rewrite prepared article image/file references through the existing sanitizer using only explicit paths of the same brand.

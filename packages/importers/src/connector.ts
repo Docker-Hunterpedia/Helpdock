@@ -33,7 +33,7 @@ export type ConnectorContext<Credentials> = {
   }) => Promise<void>;
 };
 export interface Connector<Credentials> {
-  readonly source: Exclude<ImportSource, 'file'>;
+  readonly source: ImportSource;
   readonly credentialsSchema: z.ZodType<Credentials>;
   readonly entities: readonly ImportEntity[];
   test(

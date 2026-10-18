@@ -1,0 +1,35 @@
+const MESSAGE_KEYS = {
+  'import.run-created': 'created',
+  'import.record-unavailable': 'recordUnavailable',
+  'import.vendor-unavailable': 'vendorUnavailable',
+  'import.attachment.expired': 'attachmentExpired',
+  'import.attachment.unavailable': 'attachmentUnavailable',
+  'import.attachment.rejected': 'attachmentRejected',
+  'import.article.asset-unavailable': 'articleAssetUnavailable',
+  'import.article.description-shortened': 'articleDescriptionShortened',
+  'import.mapping.unknown-value': 'unknownMapping',
+  'import.field.unsupported-semantics': 'unsupportedField',
+  'import.csat.timestamp-inferred': 'inferredDate',
+  'import.csat.scale-normalized': 'normalizedRating',
+  'import.csat.rating-unmapped': 'unmappedRating',
+  'import.knowledge.readership-restricted': 'restrictedArticle',
+  'import.freshdesk.timestamp-window-exhausted': 'timestampWindowExhausted',
+  'import.zoho.timestamp-window-exhausted': 'zohoTimestampWindowExhausted',
+  'import.zoho.archive-window-exhausted': 'zohoArchiveWindowExhausted',
+  'import.message.author-unavailable': 'authorUnavailable',
+  'import.message.identity-unavailable': 'identityUnavailable',
+  'import.message.unsent-thread': 'unsentThread',
+  'import.zoho.full-content-unsupported': 'fullContentUnsupported',
+  'import.zoho.full-content-format-inferred': 'fullContentInferred',
+  'import.zoho.original-mail-unavailable': 'originalMailUnavailable',
+  'import.zoho.mail-date-unparsed': 'mailDateUnparsed',
+  'import.zoho.article-files-envelope-inferred': 'articleFilesEnvelopeInferred',
+  'import.zoho.history-page-changed': 'historyPageChanged',
+  'import.zoho.description-fallback': 'descriptionFallback',
+  'import.profile.inactive-source': 'inactiveProfile',
+  'import.knowledge.locale-unsupported': 'knowledgeLocaleUnsupported',
+} as const;
+
+export function importLogMessageKey(code: string) {
+  return Object.hasOwn(MESSAGE_KEYS, code) ? MESSAGE_KEYS[code as keyof typeof MESSAGE_KEYS] : null;
+}

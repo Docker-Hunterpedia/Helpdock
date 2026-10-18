@@ -1,10 +1,12 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   bigserial,
   char,
   check,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -91,6 +93,9 @@ export const importRuns = pgTable(
       .on(table.brandId)
       .where(sql`${table.claimToken} IS NOT NULL`),
     index('import_runs_brand_created_idx').on(table.brandId, table.createdAt, table.id),
+    index('import_runs_brand_finished_idx')
+      .on(table.brandId, table.finishedAt, table.id)
+      .where(sql`${table.finishedAt} IS NOT NULL`),
     index('import_runs_claim_idx').on(table.status, table.claimedAt),
   ],
 );
@@ -110,6 +115,8 @@ export const importRecords = pgTable(
     payloadHash: char('payload_hash', { length: 64 }).notNull(),
     loadHash: char('load_hash', { length: 64 }),
     dryRunIdentity: jsonb('dry_run_identity').$type<Record<string, unknown>>(),
+    dryRunMedia: jsonb('dry_run_media').$type<Record<string, unknown>>(),
+    preparedAssets: jsonb('prepared_assets').$type<Record<string, unknown>>(),
     status: importRecordStatusEnum('status').notNull().default('staged'),
     helpdockId: uuid('helpdock_id'),
     error: text('error'),
@@ -122,6 +129,9 @@ export const importRecords = pgTable(
     unique('import_records_external_key').on(table.runId, table.entity, table.externalId),
     check('import_records_hash_shape', sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
     index('import_records_load_idx').on(table.runId, table.entity, table.status, table.id),
+    index('import_records_article_translation_idx')
+      .on(table.brandId, table.runId, sql`(${table.payload} ->> 'translationOf')`)
+      .where(sql`${table.entity} = 'article'`),
   ],
 );
 
@@ -182,6 +192,11 @@ export const importExternalIds = pgTable(
     check('import_external_ids_hash_shape', sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`),
     index('import_external_ids_helpdock_idx').on(table.brandId, table.entity, table.helpdockId),
     index('import_external_ids_number_idx').on(table.brandId, table.sourceNumber),
+    index('import_external_ids_native_lookup_idx').on(
+      table.brandId,
+      table.entity,
+      table.externalId,
+    ),
   ],
 );
 
@@ -228,5 +243,108 @@ export const importFilePresets = pgTable(
   (table) => [
     uniqueIndex('import_file_presets_name_key').on(table.brandId, sql`lower(${table.name})`),
     index('import_file_presets_headers_idx').on(table.brandId, table.headerFingerprint),
+  ],
+);
+
+export const importFiles = pgTable(
+  'import_files',
+  {
+    id: uuid('id').primaryKey().$defaultFn(uuidv7),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    revision: uuid('revision').notNull().$defaultFn(uuidv7),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    format: varchar('format', { length: 10 }).notNull(),
+    entity: importEntityEnum('entity'),
+    size: bigint('size', { mode: 'number' }).notNull(),
+    uploadKey: text('upload_key').notNull(),
+    sourceKey: text('source_key'),
+    preparationKey: text('preparation_key'),
+    sha256: char('sha256', { length: 64 }),
+    status: varchar('status', { length: 16 }).notNull().default('pending'),
+    headers: jsonb('headers').$type<string[]>(),
+    sampleRows:
+      jsonb('sample_rows').$type<{ cells: string[]; line: number; truncated: boolean }[]>(),
+    mapping: jsonb('mapping').$type<Record<string, unknown>>(),
+    inventoryMapping: jsonb('inventory_mapping').$type<Record<string, unknown>>(),
+    inventoryValidation: jsonb('inventory_validation').$type<Record<string, unknown>>(),
+    validation: jsonb('validation').$type<Record<string, unknown>>(),
+    recordCount: integer('record_count'),
+    error: varchar('error', { length: 100 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.brandId, table.runId],
+      foreignColumns: [importRuns.brandId, importRuns.id],
+    }).onDelete('cascade'),
+    index('import_files_run_idx').on(table.brandId, table.runId, table.id),
+    unique('import_files_brand_run_id_key').on(table.brandId, table.runId, table.id),
+    index('import_files_work_idx').on(table.status, table.updatedAt),
+    check('import_files_size', sql`${table.size} > 0 AND ${table.size} <= 2147483648`),
+    check(
+      'import_files_format',
+      sql`(${table.format} = 'csv' AND ${table.entity} IS NOT NULL) OR (${table.format} = 'bundle' AND ${table.entity} IS NULL)`,
+    ),
+    check(
+      'import_files_status',
+      sql`${table.status} IN ('pending', 'uploaded', 'ready', 'invalid', 'discarded')`,
+    ),
+    check(
+      'import_files_sealed',
+      sql`${table.status} <> 'ready' OR (${table.sourceKey} IS NOT NULL AND ${table.sha256} IS NOT NULL AND ${table.sha256} ~ '^[0-9a-f]{64}$')`,
+    ),
+  ],
+);
+
+/** Native-ID inventories are staging only; they cannot carry URLs or bypass source authentication. */
+export const importTicketInventory = pgTable(
+  'import_ticket_inventory',
+  {
+    id: uuid('id').primaryKey().$defaultFn(uuidv7),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    fileId: uuid('file_id').notNull(),
+    revision: uuid('revision').notNull(),
+    sourceHash: char('source_hash', { length: 64 }).notNull(),
+    externalId: varchar('external_id', { length: 200 }).notNull(),
+    location: varchar('location', { length: 8 }).notNull(),
+    line: bigint('line', { mode: 'number' }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'import_ticket_inventory_file_fk',
+      columns: [table.brandId, table.runId, table.fileId],
+      foreignColumns: [importFiles.brandId, importFiles.runId, importFiles.id],
+    }).onDelete('cascade'),
+    uniqueIndex('import_ticket_inventory_native_key').on(
+      table.fileId,
+      table.revision,
+      table.sourceHash,
+      table.externalId,
+    ),
+    index('import_ticket_inventory_run_idx').on(
+      table.brandId,
+      table.runId,
+      sql`${table.externalId} COLLATE "C"`,
+    ),
+    check('import_ticket_inventory_id_shape', sql`${table.externalId} ~ '^[!-~]+$'`),
+    check('import_ticket_inventory_hash_shape', sql`${table.sourceHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      'import_ticket_inventory_location',
+      sql`${table.location} IN ('active', 'archived', 'auto')`,
+    ),
+    check(
+      'import_ticket_inventory_line',
+      sql`${table.line} > 0 AND ${table.line} <= 9007199254740991`,
+    ),
   ],
 );

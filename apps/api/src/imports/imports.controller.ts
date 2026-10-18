@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Requires } from '../auth/route-declaration.js';
 import { requireTicketingContext } from '../ticketing/ticketing-context.js';
@@ -10,8 +21,16 @@ import {
   ImportContactPreviewQueryDto,
   ImportDryRunReportDto,
   ImportDryRunRequestDto,
+  ImportMappingFieldQueryDto,
+  ImportMappingPageRequestDto,
+  ImportMappingPageResultDto,
+  ImportMappingSourceFieldDto,
   ImportMappingsRequestDto,
   ImportMappingsViewDto,
+  ImportMappingTargetsDto,
+  ImportMappingTargetsQueryDto,
+  ImportMappingValuesDto,
+  ImportMappingValuesQueryDto,
   ImportPreviewSamplesDto,
   ImportRunCreateDto,
   ImportRunListDto,
@@ -19,14 +38,22 @@ import {
   ImportRunViewDto,
   ImportScopeDto,
   ImportStartRequestDto,
+  ImportSupportedSourcesDto,
   ImportTicketPreviewDto,
   ImportTicketPreviewQueryDto,
 } from './dto.js';
 import { ImportsService } from './imports.service.js';
+import { AVAILABLE_IMPORT_SOURCES } from './sources.js';
 
 @Controller('api/brands/:brandId/imports')
 export class ImportsController {
   constructor(@Inject(ImportsService) readonly imports: ImportsService) {}
+  @Get('sources')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportSupportedSourcesDto)
+  sources(@Param(new ZodValidationPipe(ImportBrandParamDto)) _params: ImportBrandParamDto) {
+    return { sources: [...AVAILABLE_IMPORT_SOURCES] };
+  }
   @Get()
   @Requires('brand:manage')
   @ZodSerializerDto(ImportRunListDto)
@@ -149,6 +176,42 @@ export class ImportsController {
   @ZodSerializerDto(ImportMappingsViewDto)
   mappings(@Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto) {
     return this.imports.mappings(requireTicketingContext(), runId);
+  }
+  @Get(':runId/mapping-values')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingValuesDto)
+  mappingValues(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Query(new ZodValidationPipe(ImportMappingValuesQueryDto)) query: ImportMappingValuesQueryDto,
+  ) {
+    return this.imports.mappingValues(requireTicketingContext(), runId, query);
+  }
+  @Patch(':runId/mappings')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingPageResultDto)
+  updateMappings(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Body(new ZodValidationPipe(ImportMappingPageRequestDto)) body: ImportMappingPageRequestDto,
+  ) {
+    return this.imports.updateMappings(requireTicketingContext(), runId, body);
+  }
+  @Get(':runId/mapping-targets')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingTargetsDto)
+  mappingTargets(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Query(new ZodValidationPipe(ImportMappingTargetsQueryDto)) query: ImportMappingTargetsQueryDto,
+  ) {
+    return this.imports.mappingTargets(requireTicketingContext(), runId, query);
+  }
+  @Get(':runId/mapping-field')
+  @Requires('brand:manage')
+  @ZodSerializerDto(ImportMappingSourceFieldDto)
+  mappingField(
+    @Param(new ZodValidationPipe(ImportRunParamDto)) { runId }: ImportRunParamDto,
+    @Query(new ZodValidationPipe(ImportMappingFieldQueryDto)) query: ImportMappingFieldQueryDto,
+  ) {
+    return this.imports.mappingField(requireTicketingContext(), runId, query);
   }
   @Put(':runId/mappings')
   @Requires('brand:manage')

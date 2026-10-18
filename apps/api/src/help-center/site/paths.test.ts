@@ -1,3 +1,4 @@
+import { hcImportAssetPath } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { parseSitePath, SiteLinks } from './paths.js';
 
@@ -62,5 +63,14 @@ describe('SiteLinks', () => {
     expect(fallback.bodyHref('/en/articles/refunds')).toBe(`/hc/${BRAND}/en/articles/refunds`);
     expect(fallback.bodyHref('/contact')).toBe('/contact');
     expect(host.bodyHref('/en/articles/refunds')).toBe('/en/articles/refunds');
+  });
+
+  it('keeps private file links inside the fallback staff-cookie path without rebasing another brand', () => {
+    const file = hcImportAssetPath(BRAND, BRAND);
+    expect(fallback.bodyHref(file)).toBe(`/hc/${BRAND}/_hd/assets/${BRAND}`);
+    expect(host.bodyHref(file)).toBe(file);
+    const foreign = hcImportAssetPath('0192a000-0000-7000-8000-000000000002', BRAND);
+    expect(fallback.bodyHref(foreign)).toBe(foreign);
+    expect(fallback.bodyHref(`${file}/extra`)).toBe(`${file}/extra`);
   });
 });

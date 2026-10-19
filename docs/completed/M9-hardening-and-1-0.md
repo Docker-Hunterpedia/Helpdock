@@ -538,4 +538,4 @@ Closed, each with unit and integration tests and its guide updated (the last row
 - #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates and the recorded AI evaluation
 - #236 chore: version packages: `1.0.0`, whose merge tagged `v1.0.0` and published the image (M9-09)
 - #240 docs: refresh the README for 1.0
-- PR_PLACEHOLDER docs: mark M9 Hardening and 1.0 shipped: this record moves to `docs/completed/` with the release evidence (M9-09)
+- #241 docs: mark M9 Hardening and 1.0 shipped: this record moves to `docs/completed/` with the release evidence (M9-09)

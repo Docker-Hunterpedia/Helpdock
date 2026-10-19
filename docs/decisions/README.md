@@ -35,6 +35,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0025](0025-meta-channels-through-one-graph-adapter.md) | Meta channels through one Graph adapter: one module, Instagram Login, one webhook per install, the reply window enforced at compose time and at send time | accepted |
 | [0026](0026-staff-sso-over-saml-and-oidc.md) | Staff single sign-on over SAML 2.0 and OpenID Connect, with JIT provisioning and group-to-role sync | accepted |
 | [0027](0027-imports-through-one-normalised-record-engine.md) | Imports through one engine of normalised records, written without side effects | proposed |
+| [0051](0051-oauth-identities-bound-by-subject.md) | OAuth sign-in identities bound by subject, and Microsoft as a third provider | accepted |
 
 ## Template
 

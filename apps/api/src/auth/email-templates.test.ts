@@ -159,6 +159,20 @@ describe('the security notice (ASVS 2.2.3)', () => {
     expect(ar.text).not.toBe(en.text);
   });
 
+  it('names the provider a connection notice is about (1.0.1)', () => {
+    const connected = renderAuthEmail({
+      kind: 'securityChange',
+      to: 'lina@helpdock.com',
+      url: 'https://support.example.com/me/security',
+      locale: 'en',
+      values: { change: 'oauthConnected', provider: 'GitHub' },
+    });
+
+    expect(connected.text).toContain(
+      'A GitHub account was connected to lina@helpdock.com. It can now be used to sign in.',
+    );
+  });
+
   it('tells a person who did not make the change what to do', () => {
     expect(notice('password').text).toContain(
       'If it was not you, reset your password now and tell your administrator.',

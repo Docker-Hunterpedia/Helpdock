@@ -23,8 +23,9 @@ import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import type { AuthFailure } from './auth-failure.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
-import type { OauthService } from './oauth/oauth.service.js';
+import type { OauthCompletion, OauthIdentity, OauthService } from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
+import type { OauthIdentityRepository, OauthLink } from './oauth/oauth-identity.repository.js';
 import { derivePepper, PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
 import { RefreshStore } from './session/refresh-store.js';
@@ -189,7 +190,7 @@ class RecordingAudit implements AuthAuditTrail {
 /** Enabled for neither provider unless a test says otherwise. */
 class FakeOauthService {
   enabled = false;
-  identity: { email: string; name: string | undefined } | Error = new OauthError('nope');
+  identity: OauthIdentity | Error = new OauthError('nope');
 
   isEnabled(): Promise<boolean> {
     return Promise.resolve(this.enabled);
@@ -205,17 +206,49 @@ class FakeOauthService {
     });
   }
 
-  complete(): Promise<{ email: string; name: string | undefined }> {
+  complete(): Promise<OauthCompletion> {
     if (this.identity instanceof Error) {
       return Promise.reject(this.identity);
     }
-    return Promise.resolve(this.identity);
+    return Promise.resolve({ identity: this.identity, linkUserId: undefined });
   }
 }
+
+/** `user_oauth_identities` in memory; the real table is exercised in oauth-identity.integration.test.ts. */
+class FakeOauthIdentities {
+  readonly links: OauthLink[] = [];
+
+  userFor(provider: string, subject: string): Promise<string | undefined> {
+    return Promise.resolve(
+      this.links.find((link) => link.provider === provider && link.subject === subject)?.userId,
+    );
+  }
+
+  hasProvider(userId: string, provider: string): Promise<boolean> {
+    return Promise.resolve(
+      this.links.some((link) => link.userId === userId && link.provider === provider),
+    );
+  }
+
+  link(link: OauthLink): Promise<'linked'> {
+    this.links.push(link);
+    return Promise.resolve('linked');
+  }
+}
+
+const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity => ({
+  provider: 'google',
+  subject: '1049',
+  email: 'lina@helpdock.com',
+  name: 'Lina',
+  authoritative: true,
+  ...overrides,
+});
 
 let stub: RedisStub;
 let staff: FakeStaffRepository;
 let oauth: FakeOauthService;
+let oauthIdentities: FakeOauthIdentities;
 let mail: CollectingAuthMail;
 let audit: RecordingAudit;
 let settings: Settings;
@@ -273,6 +306,7 @@ beforeEach(async () => {
   stub = created.stub;
   staff = new FakeStaffRepository();
   oauth = new FakeOauthService();
+  oauthIdentities = new FakeOauthIdentities();
   mail = new CollectingAuthMail();
   audit = new RecordingAudit();
   hasher = new PasswordHasher(MASTER_KEY);
@@ -328,6 +362,7 @@ beforeEach(async () => {
     exchanges: new ExchangeStore(created.redis),
     limiter: new RateLimiter(created.redis),
     oauth: oauth as unknown as OauthService,
+    oauthIdentities: oauthIdentities as unknown as OauthIdentityRepository,
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
     mail,
@@ -928,9 +963,10 @@ describe('OAuth', () => {
     });
   });
 
-  it('signs in an address this install already knows', async () => {
-    staff.add(await newUser());
-    oauth.identity = { email: 'lina@helpdock.com', name: 'Lina' };
+  it('signs in an address Google vouches for, and binds the Google account to it', async () => {
+    const lina = await newUser();
+    staff.add(lina);
+    oauth.identity = googleIdentity();
 
     await expect(
       service.completeOauth({
@@ -941,10 +977,31 @@ describe('OAuth', () => {
         userAgent: 'Firefox',
       }),
     ).resolves.toMatchObject({ kind: 'session' });
+    expect(oauthIdentities.links).toEqual([
+      { userId: lina.id, provider: 'google', subject: '1049', email: 'lina@helpdock.com' },
+    ]);
+    expect(audit.actions()).toContain('auth.oauth.linked');
+    expect(mail.sent.map((sent) => sent.values?.change)).toContain('oauthConnected');
+  });
+
+  it('asks a provider that does not vouch for the address to be connected from a session', async () => {
+    staff.add(await newUser());
+    oauth.identity = googleIdentity({ provider: 'github', subject: '7', authoritative: false });
+
+    await expect(
+      service.completeOauth({
+        provider: 'github',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
+    ).rejects.toMatchObject({ auth: { code: 'oauth-link-required' } });
+    expect(oauthIdentities.links).toEqual([]);
   });
 
   it('refuses an address that belongs to nobody, and creates no account', async () => {
-    oauth.identity = { email: 'stranger@example.com', name: 'Stranger' };
+    oauth.identity = googleIdentity({ email: 'stranger@example.com' });
 
     await expect(
       service.completeOauth({

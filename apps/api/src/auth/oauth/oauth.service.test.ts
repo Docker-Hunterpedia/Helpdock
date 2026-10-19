@@ -7,6 +7,7 @@ import {
 } from '@helpdock/config';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authRedis } from '../../testing/auth-redis.js';
+import { createFakeGoogle, fakeGithubFetch } from '../../testing/fake-oauth-providers.js';
 import type { RedisStub } from '../../testing/redis-stub.js';
 import { silentLogger } from '../../testing/silent-logger.js';
 import { hashToken, oauthStateKey } from '../redis-keys.js';
@@ -215,15 +216,86 @@ describe('complete', () => {
             ]),
           ),
         )
-        .mockResolvedValueOnce(new Response(JSON.stringify({ name: 'Lina', login: 'lina' }))),
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 583231, name: 'Lina', login: 'lina' })),
+        ),
     );
 
     await expect(
       service.complete({ provider: 'github', code: 'c', state, browserNonce }),
     ).resolves.toEqual({
-      email: 'lina@helpdock.com',
-      name: 'Lina',
+      identity: {
+        provider: 'github',
+        subject: '583231',
+        email: 'lina@helpdock.com',
+        name: 'Lina',
+        // GitHub never vouches for an address (1.0.1): it links from a session only.
+        authoritative: false,
+      },
+      linkUserId: undefined,
     });
+  });
+
+  it.each([
+    ['a Workspace account on its own domain', { hd: 'helpdock.com' }, 'lina@helpdock.com', true],
+    ['a consumer account on a third-party address', {}, 'lina@helpdock.com', false],
+    ['a Gmail address', {}, 'lina@gmail.com', true],
+    ['an unverified Gmail address', { email_verified: false }, 'lina@gmail.com', false],
+  ])(
+    'binds Google by subject and says whether it controls %s',
+    async (_case, extra, email, authoritative) => {
+      await configure('google');
+      const google = await createFakeGoogle();
+      const { state, browserNonce } = await started('google');
+      vi.stubGlobal(
+        'fetch',
+        google.fetch(await google.idToken({ sub: '1049', email, email_verified: true, ...extra })),
+      );
+
+      const { identity } = await service.complete({
+        provider: 'google',
+        code: 'c',
+        state,
+        browserNonce,
+      });
+
+      expect(identity).toMatchObject({ provider: 'google', subject: '1049', email, authoritative });
+    },
+  );
+
+  it('refuses a Google id token minted for another application', async () => {
+    await configure('google');
+    const google = await createFakeGoogle();
+    const { state, browserNonce } = await started('google');
+    vi.stubGlobal(
+      'fetch',
+      google.fetch(
+        await google.idToken(
+          { sub: '1049', email: 'lina@gmail.com', email_verified: true },
+          'other',
+        ),
+      ),
+    );
+
+    await expect(
+      service.complete({ provider: 'google', code: 'c', state, browserNonce }),
+    ).rejects.toBeInstanceOf(OauthError);
+  });
+
+  it('hands back the account that started a connect flow, and only from its own state', async () => {
+    await configure('github');
+    const linkUserId = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
+    const { url, browserNonce } = await service.start('github', { linkUserId });
+    vi.stubGlobal('fetch', fakeGithubFetch({ id: 7, email: 'lina@helpdock.com' }));
+
+    const completed = await service.complete({
+      provider: 'github',
+      code: 'c',
+      state: stateOf(url),
+      browserNonce,
+    });
+
+    expect(completed.linkUserId).toBe(linkUserId);
   });
 
   it('refuses a GitHub account whose primary address is unverified', async () => {

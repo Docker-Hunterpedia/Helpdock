@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { Navigate, Link as RouterLink, useSearchParams } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { ROUTES, safeReturnTo } from '../app/route-paths.js';
+import { oauthErrorKey } from '../auth/oauth-error.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { ssoErrorKey } from '../auth/sso-error.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
@@ -89,6 +90,7 @@ export function AuthComplete(): ReactNode {
   }
 
   const ssoFailure = ssoErrorKey(failure);
+  const oauthFailure = oauthErrorKey(failure);
   const failed = failure !== null || exchange.isError;
   const subtitle = provider.success
     ? t('auth:oauth.body', { provider: t(PROVIDER_LABELS[provider.data]) })
@@ -110,9 +112,11 @@ export function AuthComplete(): ReactNode {
         <AlertBanner tone="danger">
           {ssoFailure
             ? t(ssoFailure)
-            : failure === 'no-account'
-              ? t('auth:noAccount')
-              : t('auth:completing.failed')}
+            : oauthFailure
+              ? t(oauthFailure)
+              : failure === 'no-account'
+                ? t('auth:noAccount')
+                : t('auth:completing.failed')}
         </AlertBanner>
       ) : (
         <Box

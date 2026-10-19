@@ -113,6 +113,7 @@ describe('the schema', () => {
       'ticket_time_entries',
       'tickets',
       'user_brand_roles',
+      'user_oauth_identities',
       'user_sso_identities',
       'users',
       'views',

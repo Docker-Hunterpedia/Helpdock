@@ -35,6 +35,18 @@ test.describe('signing in', () => {
     await expect(page.getByLabel(t('auth:signIn.emailLabel'))).toHaveValue(MOCK_EMAIL);
   });
 
+  test('a provider account that is not connected yet says how to connect it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await page.goto('/oauth/callback?error=oauth-link-required&provider=github');
+
+    await expect(page.getByRole('alert')).toHaveText(t('auth:oauth.errors.oauth-link-required'));
+    await expect(page.getByRole('link', { name: t('auth:backToSignIn') })).toBeVisible();
+  });
+
   test('the sign-in link confirms where it was sent and can be sent again', async ({
     page,
     appLocale: locale,

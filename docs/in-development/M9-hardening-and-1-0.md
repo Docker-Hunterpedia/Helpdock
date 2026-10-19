@@ -108,9 +108,10 @@ Copied from the PRD, ticked as they are met.
 - ~~**Handshake address budget (M9-01 N1).**~~ Fixed: the `/widget` handshake's
   address is resolved under `TRUST_PROXY`, with a test through a trusted proxy
   ([review](#m9-01-internal-pre-pentest-review)).
-- **Telegram empty welcome (M6 gaps).** `Admin/Channels-Telegram` says an empty
-  welcome skips the welcome in that language; the code and the guide send the
-  catalog's. A decision picks which one changes.
+- ~~**Telegram empty welcome (M6 gaps).**~~ Settled: an empty welcome sends
+  the default welcome in that language, as the code and the guide do; a bot
+  that says nothing after `/start` looks broken. `Admin/Channels-Telegram`'s
+  hint now says so.
 - **"AI answered" on the ticket list (M7 gaps).** It also covers a conversation the
   assistant was handed back to before it answered. Telling them apart takes an
   `answeredAt` (`tickets.ai_answered_at`) on `ticketAiStateSchema`.

@@ -136,8 +136,8 @@ Optional. HTTP port the api listens on. Defaults to 3000.
 | `TRUST_PROXY` | no | `false` | `false` |
 
 Optional. Which reverse proxies the api believes `x-forwarded-*` and
-`x-request-id` from, and so what `request.ip` and every per-address rate limit
-see. `false` believes none, the safe default. A comma-separated list of
+`x-request-id` from, and so what `request.ip`, the widget socket handshake and
+every per-address rate limit see. `false` believes none, the safe default. A comma-separated list of
 addresses, CIDRs or the names `loopback`, `linklocal` and `uniquelocal` (the
 private ranges) believes a hop only when its address is listed: the shipped
 Compose stack sets `uniquelocal`, for its Caddy. `true` believes every hop, so

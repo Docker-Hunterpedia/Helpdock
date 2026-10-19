@@ -69,7 +69,11 @@ import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
-import { WIDGET_SOCKET_EVENT_RULE, WIDGET_VISITOR_WRITE_RULE } from './widget-gate.js';
+import {
+  WIDGET_IP_RULE,
+  WIDGET_SOCKET_EVENT_RULE,
+  WIDGET_VISITOR_WRITE_RULE,
+} from './widget-gate.js';
 import { RedisWidgetBroadcast } from './widget-relay.js';
 
 /**
@@ -164,7 +168,9 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       PORT: 0,
-      TRUST_PROXY: false,
+      // The suite dials the api from loopback, so loopback stands where Caddy
+      // stands in Compose (`uniquelocal`): its `x-forwarded-for` is believed.
+      TRUST_PROXY: ['loopback'],
       DATABASE_URL: `postgres://helpdock_app:${APP_ROLE_PASSWORD}@${postgres.getHost()}:${postgres.getPort()}/helpdock`,
       DATABASE_MIGRATION_URL: `postgres://${postgres.getUsername()}:${postgres.getPassword()}@${postgres.getHost()}:${postgres.getPort()}/helpdock`,
       REDIS_URL: redisContainer.getConnectionUrl(),
@@ -315,12 +321,20 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     return rows.map((row) => row.event);
   };
 
-  const connect = (visitor: Visitor, origin = SHOP, brandId = seeded.brandId): Promise<Socket> => {
+  const connect = (
+    visitor: Visitor,
+    origin = SHOP,
+    brandId = seeded.brandId,
+    forwardedFor?: string,
+  ): Promise<Socket> => {
     const socket = io(`${url}${WIDGET_NAMESPACE}`, {
       path: SOCKET_IO_PATH,
       transports: ['websocket'],
       auth: { brandId, visitorSecret: visitor.secret },
-      extraHeaders: { origin },
+      extraHeaders: {
+        origin,
+        ...(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
+      },
       reconnection: false,
     });
     open.push(socket);
@@ -1126,6 +1140,35 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       const otherSocket = await connect(bystander);
       expect(await otherSocket.emitWithAck(WIDGET_EVENTS.leave, { conversationId })).toMatchObject({
         ok: true,
+      });
+    });
+
+    it('gives each visitor behind the proxy a handshake budget of their own (N1, M9-01)', async () => {
+      const busy = '203.0.113.20';
+      const neighbour = '203.0.113.21';
+      // From their own addresses, so the suite's loopback session budget is not spent.
+      const visitor = await newVisitor({}, busy);
+      const bystander = await newVisitor({}, neighbour);
+
+      const statuses = await Promise.all(
+        // The session above was the first of the busy address's budget.
+        Array.from({ length: WIDGET_IP_RULE.limit - 1 }, () =>
+          app
+            .inject({
+              method: 'GET',
+              url: `/api/widget/${seeded.brandId}/config`,
+              headers: { origin: SHOP, 'x-forwarded-for': busy },
+            })
+            .then((response) => response.statusCode),
+        ),
+      );
+      expect(statuses.every((status) => status === 200)).toBe(true);
+
+      await expect(connect(visitor, SHOP, seeded.brandId, busy)).rejects.toMatchObject({
+        data: { code: 'rate_limited' },
+      });
+      await expect(connect(bystander, SHOP, seeded.brandId, neighbour)).resolves.toMatchObject({
+        connected: true,
       });
     });
 

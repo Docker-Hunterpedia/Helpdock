@@ -180,7 +180,9 @@ export class SlaService {
    * policy. Every counting clock visible to the transaction is checkpointed
    * under the calendars in force **before** `change` runs, so the time already
    * consumed stays counted as it was (§3.3); then every open ticket is brought
-   * in line with the new world.
+   * in line with the new world. Every ticket it visits is locked first, in id
+   * order, so it queues behind a timer or a ticket change rather than
+   * deadlocking with one (see `lockRecomputedTickets`).
    */
   async recompute<T>(
     tx: DbTransaction,
@@ -189,6 +191,7 @@ export class SlaService {
     change: () => Promise<T>,
   ): Promise<T> {
     const old = await this.#brand(tx, brandId);
+    await this.#repository.lockRecomputedTickets(tx);
     for (const ticketId of await this.#repository.runningTicketIds(tx)) {
       const found = await this.#repository.findTicket(tx, ticketId);
       if (found === undefined) {

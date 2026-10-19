@@ -195,7 +195,9 @@ export class TicketsService {
     { withContacts }: { readonly withContacts: boolean },
   ): Promise<TicketList> {
     const tx = getTx();
-    const { rows, search } = await this.#read(() => this.#tickets.listTickets(tx, reader, query));
+    const { rows, search, named } = await this.#read(() =>
+      this.#tickets.listTickets(tx, reader, query),
+    );
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
     const imported = await importedTicketSources(
@@ -240,7 +242,8 @@ export class TicketsService {
               { id: last.ticket.id, sortValue: sortValueOf(last.ticket, query.sort) },
               query.sort,
               query.direction,
-              search,
+              // The page's last row is one of the named tickets when they fill it.
+              { search, named: named >= query.limit },
             )
           : null,
     };

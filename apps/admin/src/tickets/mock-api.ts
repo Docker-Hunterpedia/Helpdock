@@ -835,7 +835,17 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   async list(_brandId: string, query: TicketQuery = {}): Promise<TicketList> {
-    const matches = this.#matching(query).sort(comparator(query));
+    const term = searchTermOf(query);
+    // #221: the tickets the term names come first, whatever the view's filters.
+    const named = this.#tickets
+      .filter((ticket) => namesTicket(ticket, term))
+      .sort(comparator(query));
+    const matches = [
+      ...named,
+      ...this.#matching(query)
+        .filter((ticket) => !named.includes(ticket))
+        .sort(comparator(query)),
+    ];
 
     const limit = query.limit ?? TICKET_PAGE_SIZE_DEFAULT;
     const from = decodeCursor(query.cursor);
@@ -882,7 +892,7 @@ export class MockTicketsApi implements TicketsApi {
 
   /** Every ticket a query matches, as the api's `WHERE` would, before paging. */
   #matching(query: TicketQuery): Ticket[] {
-    const term = query.q?.trim().toLowerCase() ?? '';
+    const term = searchTermOf(query);
 
     return this.#tickets.filter((ticket) => matchesQuery(ticket, query, term, this.#now));
   }
@@ -1914,10 +1924,33 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
     (query.overdue !== true || isOverdue(ticket, now)) &&
     (query.imported === undefined || Boolean(ticket.imported) === query.imported) &&
-    (term === '' ||
-      ticket.subject.toLowerCase().includes(term) ||
-      ticket.imported?.number?.toLowerCase() === (term.startsWith('#') ? term.slice(1) : term) ||
-      `${ticket.prefix}-${ticket.number}`.toLowerCase().includes(term))
+    (term === '' || ticket.subject.toLowerCase().includes(term))
+  );
+};
+
+const searchTermOf = (query: TicketQuery): string => query.q?.trim().toLowerCase() ?? '';
+
+/** `hd-1042`, `#1042` or `1042`, as the api's `referenceNumber` reads a lower-cased term. */
+// A string rather than a literal: `pnpm check:routes` scans this file with the
+// compiler's scanner, which reads a bare `/` as division and stalls.
+// biome-ignore lint/complexity/useRegexLiterals: a literal stalls that scanner.
+const REFERENCE = new RegExp('^(?:[a-z][a-z0-9]{0,9}-|#)?(\\d{1,15})$');
+
+/**
+ * Whether a search term names the ticket (#221), as the api's
+ * `namedTicketIds` reads it: its reference or bare number, or an imported
+ * ticket's original number. The list puts a named ticket ahead of the view's
+ * matches and does not apply the view's filters to it.
+ */
+const namesTicket = (ticket: Ticket, term: string): boolean => {
+  if (term === '') {
+    return false;
+  }
+  const reference = REFERENCE.exec(term)?.[1];
+
+  return (
+    (reference !== undefined && Number(reference) === ticket.number) ||
+    ticket.imported?.number?.toLowerCase() === (term.startsWith('#') ? term.slice(1) : term)
   );
 };
 

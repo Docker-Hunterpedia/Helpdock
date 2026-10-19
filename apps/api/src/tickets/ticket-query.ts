@@ -260,15 +260,16 @@ const fuzzyTicketIds = (brandId: string, words: string): SQL => sql`(
 )`;
 
 /**
- * The search: the words (exact, or fuzzy on the fallback), the contact's name
- * and a reference (M1-09: the merge dialog searches "by reference, subject or
- * contact"), each as a set of ticket ids that an index answers, joined by
- * `UNION ALL` rather than `OR`. An `OR` of subqueries is a filter Postgres
- * checks on every visible ticket; a union of index lookups is a short list of
- * ids, and an empty one when nothing matches.
+ * The search: the words (exact, or fuzzy on the fallback) and the contact's
+ * name (M1-09: the merge dialog searches "by reference, subject or contact"),
+ * each as a set of ticket ids that an index answers, joined by `UNION ALL`
+ * rather than `OR`. An `OR` of subqueries is a filter Postgres checks on every
+ * visible ticket; a union of index lookups is a short list of ids, and an
+ * empty one when nothing matches. A reference is not one of the halves: it is
+ * {@link namedTicketIds}, which the list reads past the view's filters.
  *
  * Every half reads a table under the same policies as `tickets` (`contacts` is
- * brand-scoped, the other two department-scoped like `tickets`), so each can
+ * brand-scoped, the token table department-scoped like `tickets`), so each can
  * only narrow what the reader already sees. The `brand_id = …` equalities are
  * for the planner, as in {@link ticketFilters}.
  */
@@ -283,27 +284,6 @@ const searchFilter = (brandId: string, term: string, mode: SearchMode): SQL => {
       ))`,
   ];
 
-  const number = referenceNumber(term);
-  const originalNumbers = [
-    ...new Set([
-      term,
-      term.startsWith('#') ? term.slice(1) : term,
-      ...(number === null ? [] : [String(number)]),
-    ]),
-  ];
-  matches.push(sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
-    WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
-      AND ${inArray(importExternalIds.sourceNumber, originalNumbers)})`);
-  matches.push(sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
-    WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
-      AND ${inArray(importExternalIds.externalId, originalNumbers)})`);
-  if (number !== null) {
-    matches.push(
-      sql`(SELECT ${byNumber.id} FROM ${BY_NUMBER}
-        WHERE ${byNumber.brandId} = ${brandId} AND ${byNumber.number} = ${number})`,
-    );
-  }
-
   const found = sql`${tickets.id} IN (${sql.join(matches, sql` UNION ALL `)})`;
   if (exclude === '') {
     return found;
@@ -314,6 +294,44 @@ const searchFilter = (brandId: string, term: string, mode: SearchMode): SQL => {
     SELECT ${tokens.ticketId} FROM ${TOKENS}
     WHERE ${tokens.brandId} = ${brandId} AND ${tokens.token} = ANY(${lexemesOf(exclude)})
   ))`;
+};
+
+/**
+ * The tickets a term names (#221): its reference or bare number, or an
+ * imported ticket's original number or native id (M11). Somebody who types
+ * one wants that ticket whatever its status, so the list reads these past the
+ * view's filters, ahead of the view's own matches ({@link namedTicketFilters}).
+ *
+ * Each half is an index lookup (`import_external_ids_number_idx`,
+ * `import_external_ids_native_lookup_idx`, `tickets_brand_number_key`), so the
+ * set is a handful of ids. It only names candidates: the statement it goes
+ * into reads `tickets`, whose policies still decide which the reader may see.
+ */
+const namedTicketIds = (brandId: string, term: string): SQL => {
+  const number = referenceNumber(term);
+  const originalNumbers = [
+    ...new Set([
+      term,
+      term.startsWith('#') ? term.slice(1) : term,
+      ...(number === null ? [] : [String(number)]),
+    ]),
+  ];
+  const named = [
+    sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
+      WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
+        AND ${inArray(importExternalIds.sourceNumber, originalNumbers)})`,
+    sql`(SELECT ${importExternalIds.helpdockId} FROM ${importExternalIds}
+      WHERE ${importExternalIds.brandId} = ${brandId} AND ${importExternalIds.entity} = 'ticket'
+        AND ${inArray(importExternalIds.externalId, originalNumbers)})`,
+  ];
+  if (number !== null) {
+    named.push(
+      sql`(SELECT ${byNumber.id} FROM ${BY_NUMBER}
+        WHERE ${byNumber.brandId} = ${brandId} AND ${byNumber.number} = ${number})`,
+    );
+  }
+
+  return sql`(${sql.join(named, sql` UNION ALL `)})`;
 };
 
 /**
@@ -371,6 +389,45 @@ export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direc
   readonly search?: SearchMode;
 }
 
+/** What every list read asks, whatever the view: this brand, and no deleted ticket. */
+const liveTicketsOf = (brandId: string): SQL[] => [
+  // Not isolation — the policy's `brand_id = ANY(app.brand_ids)` already
+  // decides that, and this cannot widen it. It is what lets the planner read
+  // `tickets_brand_updated_idx` *in order* and stop after one page: against
+  // an array it cannot know that one brand is involved, so it has to fetch
+  // every visible ticket and sort them, which at 50k tickets is the whole
+  // latency budget (M1-15, docs/guides/tickets.md "Performance").
+  eq(tickets.brandId, brandId),
+  // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It
+  // is unconditional rather than a filter the caller may ask for, because
+  // "all views" includes the ones added after this line was written.
+  isNull(tickets.deletedAt),
+];
+
+/**
+ * The read of the tickets a search term names (#221), under none of the
+ * view's filters: only the brand, the soft-delete rule and the policies. The
+ * list reads it ahead of {@link ticketFilters}, which leaves these tickets out,
+ * so no ticket is on two pages and each read is an ordinary keyset read of the
+ * same ordering.
+ */
+export const namedTicketFilters = ({
+  brandId,
+  q,
+  sort,
+  direction,
+  cursor,
+}: Pick<TicketFilterInput, 'brandId' | 'sort' | 'direction' | 'cursor'> & {
+  readonly q: string;
+}): SQL =>
+  and(
+    ...liveTicketsOf(brandId),
+    sql`${tickets.id} IN ${namedTicketIds(brandId, q)}`,
+    ...(cursor === undefined
+      ? []
+      : [keysetFilter(decodeTicketCursor(cursor, { sort, direction }))]),
+  ) as SQL;
+
 /** Every condition of one list read, or `undefined` when the reader asked for none. */
 export const ticketFilters = ({
   brandId,
@@ -381,19 +438,7 @@ export const ticketFilters = ({
   cursor,
   search = 'exact',
 }: TicketFilterInput): SQL | undefined => {
-  const clauses: (SQL | undefined)[] = [
-    // Not isolation — the policy's `brand_id = ANY(app.brand_ids)` already
-    // decides that, and this cannot widen it. It is what lets the planner read
-    // `tickets_brand_updated_idx` *in order* and stop after one page: against
-    // an array it cannot know that one brand is involved, so it has to fetch
-    // every visible ticket and sort them, which at 50k tickets is the whole
-    // latency budget (M1-15, docs/guides/tickets.md "Performance").
-    eq(tickets.brandId, brandId),
-    // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views". It
-    // is unconditional rather than a filter the caller may ask for, because
-    // "all views" includes the ones added after this line was written.
-    isNull(tickets.deletedAt),
-  ];
+  const clauses: (SQL | undefined)[] = [...liveTicketsOf(brandId)];
 
   if (filters.statusId !== undefined && filters.statusId.length > 0) {
     clauses.push(inArray(tickets.statusId, [...filters.statusId]));
@@ -428,6 +473,8 @@ export const ticketFilters = ({
   }
   if (filters.q !== undefined) {
     clauses.push(searchFilter(brandId, filters.q, search));
+    // Read ahead of this by `namedTicketFilters`, past the view's filters.
+    clauses.push(sql`${tickets.id} NOT IN ${namedTicketIds(brandId, filters.q)}`);
   }
   if (cursor !== undefined) {
     clauses.push(keysetFilter(decodeTicketCursor(cursor, { sort, direction })));
@@ -449,13 +496,17 @@ export const ticketOrder = (sort: TicketSort, direction: TicketSortDirection): S
 
 /**
  * The cursor that asks for the row after `row`, given the ordering it was read
- * under, and the search half it was read with.
+ * under, the search half it was read with, and whether it is one of the
+ * tickets the search term names.
  */
 export const cursorAfter = (
   row: { readonly id: string; readonly sortValue: string | number | Date },
   sort: TicketSort,
   direction: TicketSortDirection,
-  search: SearchMode = 'exact',
+  {
+    search = 'exact',
+    named = false,
+  }: { readonly search?: SearchMode; readonly named?: boolean } = {},
 ): string =>
   encodeTicketCursor({
     sort,
@@ -463,6 +514,7 @@ export const cursorAfter = (
     value: row.sortValue instanceof Date ? row.sortValue.toISOString() : row.sortValue,
     id: row.id,
     ...(search === 'fuzzy' ? { fuzzy: true } : {}),
+    ...(named ? { named: true } : {}),
   });
 
 /** The column whose value goes into the next cursor, read off a returned row. */

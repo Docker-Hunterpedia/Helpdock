@@ -333,7 +333,8 @@ export function ContactPage(): ReactNode {
             <Typography
               variant="caption"
               sx={{
-                display: 'inline-flex',
+                // Its own line: inline, it ran into the segmented control after it.
+                display: 'flex',
                 alignItems: 'center',
                 gap: 1,
                 color: tokens['status.warning.text'],

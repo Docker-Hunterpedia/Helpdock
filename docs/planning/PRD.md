@@ -343,7 +343,7 @@ Depends on: M5 (articles as knowledge), M4 and M6 (auto-reply surfaces), M3 (rul
 Exit criteria:
 
 - [x] Auto-reply answers a question from an uploaded PDF with a citation, and hands off when confidence is below threshold, in an E2E test with a mocked provider. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
-- [ ] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic. The harness and nightly workflow are in (M7-11) and pass in mock mode; the run against a real provider needs the `AI_EVAL_API_KEY` secret listed under external dependencies. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
+- [x] The evaluation run meets every threshold in DOMAIN-RULES §9 for both English and Arabic. The harness and nightly workflow are in (M7-11) and pass in mock mode; the owner confirmed the run against a real provider passed on 2026-10-19 (#161). The scores are not recorded in this repository. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
 - [x] After a handoff, no auto-reply is sent for the rest of the conversation even if a queued job fires late. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
 - [x] A visitor-audience query never retrieves an internal chunk (SQL-level test), and a fabricated citation is dropped. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
 - [x] Budget hard stop disables auto-reply and is visible in admin. See [the milestone doc](../completed/M7-ai.md#exit-criteria).
@@ -393,7 +393,7 @@ Depends on: everything above.
 
 Exit criteria:
 
-- [ ] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
+- [ ] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill. The owner confirmed on 2026-10-19 that the pentest (#153), performance run (#154), screen-reader pass (#155), clean-VM onboarding and outside testers (#157), restore drill (#160) and real-provider AI evaluation (#161) are complete and passing; the figures themselves are not recorded here, so this stays open until they are.
 - [ ] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
 
 #### M10 Meta channels

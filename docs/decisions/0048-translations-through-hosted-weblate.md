@@ -1,6 +1,6 @@
 # 0048 Translations through Hosted Weblate
 
-Status: proposed
+Status: accepted (owner decision D-47, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

@@ -1,6 +1,6 @@
 # 0033 Helpdock is an MCP server with a hand-wired OAuth 2.1 authorization server
 
-Status: proposed
+Status: accepted (owner decision D-11, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

@@ -1,6 +1,6 @@
 # 0032 The assistant may use tools: reads run, changes wait for a person
 
-Status: proposed
+Status: accepted (owner decision D-01, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

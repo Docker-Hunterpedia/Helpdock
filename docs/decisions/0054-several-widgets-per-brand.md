@@ -1,6 +1,6 @@
 # 0054 Several widgets per brand, with an optional widget id in the protocol
 
-Status: proposed
+Status: accepted (owner decision D-58, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

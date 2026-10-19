@@ -1,6 +1,6 @@
 # 0053 Break-glass may use a passkey
 
-Status: proposed
+Status: accepted (owner decision D-50, 2026-10-20)
 Date: 2026-10-20
 
 Amends [0026](0026-staff-sso-over-saml-and-oidc.md), decision 10.

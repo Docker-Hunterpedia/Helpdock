@@ -1,6 +1,6 @@
 # 0040 Automatic updates are opt-in, patch-only and delayed
 
-Status: proposed
+Status: accepted (owner decision D-34, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

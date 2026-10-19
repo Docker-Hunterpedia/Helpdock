@@ -1,6 +1,6 @@
 # 0052 A built-in proof-of-work CAPTCHA provider
 
-Status: proposed
+Status: accepted (owner decision D-51, 2026-10-20)
 Date: 2026-10-20
 
 Amends [0003](0003-turnstile-default-captcha.md).

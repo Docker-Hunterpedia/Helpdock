@@ -1,6 +1,6 @@
 # 0055 A custom HTML email layout behind the existing sanitiser
 
-Status: proposed
+Status: accepted (owner decision D-56, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

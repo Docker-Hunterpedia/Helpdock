@@ -1,6 +1,6 @@
 # 0056 Public npm packages for the widget client and the React Native SDK
 
-Status: proposed
+Status: accepted (owner decision D-61, 2026-10-20)
 Date: 2026-10-20
 
 ## Context

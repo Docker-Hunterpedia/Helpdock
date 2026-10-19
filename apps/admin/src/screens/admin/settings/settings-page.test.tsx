@@ -21,6 +21,18 @@ describe('SettingsPage', () => {
     expect(screen.queryByDisplayValue('must-not-leak')).not.toBeInTheDocument();
   });
 
+  it('copies each redirect URL from a button named after it', async () => {
+    const { user } = renderApp(<SettingsPage />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Copy the GitHub OAuth redirect URL' }),
+    );
+
+    // user-event installs its own clipboard, so what was copied can be read back.
+    expect(await navigator.clipboard.readText()).toMatch(/\/oauth\/github\/callback$/);
+    expect(await screen.findByText('Redirect URL copied.')).toBeVisible();
+  });
+
   it('saves a new provider secret once and never puts it back in the form', async () => {
     const api = new MockSettingsApi();
     const save = vi.spyOn(api, 'saveAuthentication');

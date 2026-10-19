@@ -75,7 +75,8 @@ const MOCK_SESSION: Session = {
   user: MOCK_USER,
   brands: [...MOCK_BRANDS],
   currentBrandId: MOCK_BRANDS[0]?.id ?? '',
-  navCounts: { tickets: 24, contacts: 812, helpCenter: 36, reports: 9 },
+  // No `navCounts`: the api sends none in 1.0, so neither does the fixture,
+  // and the screenshots show the sidebar production shows.
 };
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

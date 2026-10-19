@@ -20,6 +20,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSsoApi } from '../../../sso/context.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { latinNumbering } from '../../../ui/format.js';
 
 /** The SAML variant's public certificate table; PEM inspection happens at the API boundary. */
 export function SsoCertificates({
@@ -77,7 +78,9 @@ export function SsoCertificates({
                   <TableCell>
                     {expiry === null
                       ? ''
-                      : new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(expiry)}
+                      : new Intl.DateTimeFormat(latinNumbering(locale), {
+                          dateStyle: 'medium',
+                        }).format(expiry)}
                     {expiry !== null && expiry - Date.now() < 30 * 86400000 ? (
                       <Chip
                         size="small"

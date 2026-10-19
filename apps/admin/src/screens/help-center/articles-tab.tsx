@@ -344,6 +344,7 @@ function ArticleList({
                           <Box
                             component={Link}
                             to={articleRoute(article.id)}
+                            dir="auto"
                             sx={{
                               color: 'text.primary',
                               fontWeight: 500,

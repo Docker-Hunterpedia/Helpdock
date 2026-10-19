@@ -78,7 +78,7 @@ export function TicketRow({
         <PriorityDot priority={ticket.priority} />
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+          <Typography variant="body2" noWrap dir="auto" sx={{ fontWeight: 500 }}>
             {ticket.subject}
           </Typography>
           <Typography

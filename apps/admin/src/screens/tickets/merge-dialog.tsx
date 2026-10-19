@@ -201,7 +201,7 @@ export function MergeDialog({
                       sx={{ padding: 0 }}
                     />
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                      <Typography variant="bodyStrong" component="span" noWrap>
+                      <Typography variant="bodyStrong" component="span" noWrap dir="auto">
                         {candidate.subject}
                       </Typography>
                       <Typography

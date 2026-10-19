@@ -89,7 +89,7 @@ export function LinkedTickets({
                       </Typography>
                       <StatusBadge status={link.status} />
                     </Box>
-                    <Box component="span" sx={{ overflowWrap: 'anywhere' }}>
+                    <Box component="span" dir="auto" sx={{ overflowWrap: 'anywhere' }}>
                       {link.subject}
                     </Box>
                     <Typography variant="caption" component="span" sx={{ color: 'text.secondary' }}>

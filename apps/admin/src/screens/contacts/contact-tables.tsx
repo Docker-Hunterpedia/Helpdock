@@ -13,8 +13,10 @@ import {
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
+import { usePreferences } from '../../app/providers.tsx';
 import { accountRoute, contactRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { formatDay } from '../../ui/format.js';
 import { csatLabel, DASH, isAnonymousVisitor } from './format.js';
 import { ChannelIcons, ContactAvatar, IdentityLine } from './identity-pieces.tsx';
 
@@ -48,6 +50,7 @@ export function ContactsTable({
   readonly empty: ReactNode;
 }): ReactNode {
   const t = useT();
+  const { locale } = usePreferences();
   const tokens = useSemanticTokens();
 
   return (
@@ -73,7 +76,7 @@ export function ContactsTable({
                 {contact.account === null ? (
                   DASH
                 ) : (
-                  <MuiLink component={Link} to={accountRoute(contact.account.id)}>
+                  <MuiLink component={Link} to={accountRoute(contact.account.id)} dir="auto">
                     {contact.account.name}
                   </MuiLink>
                 )}
@@ -98,7 +101,7 @@ export function ContactsTable({
               <TableCell>
                 {contact.stats.lastTicketAt === null
                   ? DASH
-                  : new Date(contact.stats.lastTicketAt).toLocaleDateString()}
+                  : formatDay(contact.stats.lastTicketAt, locale)}
               </TableCell>
             </TableRow>
           ))}
@@ -124,6 +127,7 @@ function ContactCell({ contact }: { readonly contact: ContactSummary }): ReactNo
           component={Link}
           to={contactRoute(contact.id)}
           variant="bodyStrong"
+          dir="auto"
           sx={{ display: 'block' }}
         >
           {contact.name}
@@ -163,12 +167,17 @@ export function AccountsTable({ accounts }: { readonly accounts: readonly Accoun
           {accounts.map((account) => (
             <TableRow key={account.id} sx={{ height: 44 }}>
               <TableCell>
-                <MuiLink component={Link} to={accountRoute(account.id)} variant="bodyStrong">
+                <MuiLink
+                  component={Link}
+                  to={accountRoute(account.id)}
+                  variant="bodyStrong"
+                  dir="auto"
+                >
                   {account.name}
                 </MuiLink>
               </TableCell>
               <TableCell>
-                <bdi>{account.domain ?? DASH}</bdi>
+                <bdi dir="ltr">{account.domain ?? DASH}</bdi>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="mono">{account.contactCount}</Typography>

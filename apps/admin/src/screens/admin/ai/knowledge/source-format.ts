@@ -1,5 +1,6 @@
 import type { KnowledgeSourceView } from '@helpdock/schemas';
 import type { useT } from '../../../../app/i18n.js';
+import { latinNumbering } from '../../../../ui/format.js';
 
 type T = ReturnType<typeof useT>;
 
@@ -82,12 +83,12 @@ export function stateOf(t: T, source: KnowledgeSourceView): string {
 /** "14:02" today, "1 Oct 10:12" before, in the reader's language. */
 export function whenOf(iso: string, locale: string, now: Date = new Date()): string {
   const date = new Date(iso);
-  const time = new Intl.DateTimeFormat(locale, {
+  const time = new Intl.DateTimeFormat(latinNumbering(locale), {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   });
   return date.toDateString() === now.toDateString()
     ? time.format(date)
-    : `${new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(date)} ${time.format(date)}`;
+    : `${new Intl.DateTimeFormat(latinNumbering(locale), { day: 'numeric', month: 'short' }).format(date)} ${time.format(date)}`;
 }

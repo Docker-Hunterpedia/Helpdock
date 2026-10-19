@@ -406,6 +406,7 @@ function ArticleStatsRow({ row }: { readonly row: HcArticleStats }): ReactNode {
         <MuiLink
           component={Link}
           to={articleRoute(row.articleId)}
+          dir="auto"
           sx={{ color: 'text.primary', fontWeight: 500 }}
         >
           {row.title}

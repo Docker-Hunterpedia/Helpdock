@@ -27,7 +27,6 @@ export function MessageBubble({
   meta,
   label,
   before,
-  bodyDir,
   bodyHtml,
   body,
   facts,
@@ -43,12 +42,6 @@ export function MessageBubble({
   readonly label?: string;
   /** Drawn above the body: a Meta message's quote, and the caption and figure of a story reply (M10-08). */
   readonly before?: ReactNode;
-  /**
-   * M10-08: `auto` lets the text decide its own direction, so a customer's
-   * English sentence in an Arabic admin keeps its punctuation where it ends
-   * (DESIGN §7). Every other channel keeps the page's direction.
-   */
-  readonly bodyDir?: 'auto';
   readonly bodyHtml: string;
   /** M7-05, M7-08: drawn instead of `bodyHtml` — a translation, or what the model received. */
   readonly body?: ReactNode;
@@ -136,7 +129,7 @@ export function MessageBubble({
           </Typography>
         ) : null}
 
-        <Typography variant="bodyStrong" component="p">
+        <Typography variant="bodyStrong" component="p" dir="auto">
           {author}
         </Typography>
         <Typography
@@ -151,7 +144,10 @@ export function MessageBubble({
 
         {body === undefined ? (
           <Box
-            {...(bodyDir === undefined ? {} : { dir: bodyDir })}
+            // DESIGN §7: the body decides its own direction, so a customer's
+            // English sentence in an Arabic admin keeps its punctuation where
+            // it ends, and an Arabic reply in an English one reads right to left.
+            dir="auto"
             sx={{
               fontSize: 14,
               lineHeight: '22px',

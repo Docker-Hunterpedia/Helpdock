@@ -101,18 +101,28 @@ export function IdentityLine({
   readonly identity: ContactIdentity;
   readonly component?: 'span' | 'div';
 }): ReactNode {
+  return (
+    <Typography variant="caption" component={component} sx={{ color: 'text.secondary' }}>
+      <IdentityText identity={identity} />
+    </Typography>
+  );
+}
+
+/** The identifier and its state, without the caption around it. */
+export function IdentityText({ identity }: { readonly identity: ContactIdentity }): ReactNode {
   const t = useT();
 
   return (
-    <Typography variant="caption" component={component} sx={{ color: 'text.secondary' }}>
+    <>
       {/* DESIGN §7: an address, a number or an id inside Arabic prose is
-          isolated so it still reads left to right. */}
-      <bdi>{identityLabel(identity)}</bdi>{' '}
+          isolated and set left to right: `+4930…` has no letter to tell an
+          auto-isolate which way it runs, so it would put the plus at the end. */}
+      <bdi dir="ltr">{identityLabel(identity)}</bdi>{' '}
       {identity.kind === 'visitor'
         ? t('contacts:identity.linked')
         : identity.verified
           ? t('contacts:identity.verified')
           : t('contacts:identity.unverified')}
-    </Typography>
+    </>
   );
 }

@@ -12,6 +12,7 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
+import { formatDayTime } from '../ui/format.js';
 import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
@@ -79,7 +80,7 @@ export function SecurityScreen(): ReactNode {
   const navigate = useNavigate();
   const setSession = useSetSession();
   const queryClient = useQueryClient();
-  const { setLocale } = usePreferences();
+  const { locale: appLocale, setLocale } = usePreferences();
 
   const nameId = useId();
   const localeId = useId();
@@ -456,7 +457,7 @@ export function SecurityScreen(): ReactNode {
                   </Typography>
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {t('me:sessions.lastUsedAt', {
-                      date: new Date(item.lastUsedAt).toLocaleString(),
+                      date: formatDayTime(item.lastUsedAt, appLocale),
                     })}
                   </Typography>
                 </Box>

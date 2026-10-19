@@ -8,6 +8,7 @@ import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { useChannelsApi } from '../../../../auth/session.tsx';
 import { Field } from '../../../../ui/field.tsx';
+import { latinNumbering } from '../../../../ui/format.js';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { SectionCard, useEmailAction } from '../section-card.tsx';
 import { AdminsOnly } from './access-card.tsx';
@@ -79,7 +80,7 @@ export function SignedIdentityCard({
 
   const stamp = signed.secret;
   const date = (iso: string): string =>
-    new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso));
+    new Intl.DateTimeFormat(latinNumbering(locale), { dateStyle: 'medium' }).format(new Date(iso));
   const secretHint =
     stamp === null
       ? t('channels:widget.signed.noSecret')

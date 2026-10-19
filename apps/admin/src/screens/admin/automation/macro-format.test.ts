@@ -15,6 +15,8 @@ describe('lastUsedLabel', () => {
     expect(lastUsedLabel('2026-09-27T11:00:00Z', 'en', NOW, t)).toBe('1 hr. ago');
     expect(lastUsedLabel('2026-09-26T11:00:00Z', 'en', NOW, t)).toBe('yesterday');
     expect(lastUsedLabel('2026-09-26T11:00:00Z', 'ar', NOW, t)).toBe('أمس');
+    // DESIGN §7: Latin digits in Arabic too.
+    expect(lastUsedLabel('2026-09-27T11:48:00Z', 'ar', NOW, t)).toContain('12');
   });
 });
 

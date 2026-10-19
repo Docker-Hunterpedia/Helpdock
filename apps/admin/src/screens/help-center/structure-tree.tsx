@@ -420,6 +420,7 @@ export function StructureTree({
                                   <Box
                                     component={Link}
                                     to={articleRoute(article.id)}
+                                    dir="auto"
                                     sx={{
                                       color: 'text.primary',
                                       fontSize: 13,

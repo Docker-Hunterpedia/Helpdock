@@ -221,6 +221,25 @@ test.describe('the keyboard', () => {
     await opened(MOCK_TICKET_REFUND, 'Refund for order 42');
   });
 
+  test('answers the same keys on an Arabic keyboard layout, where j types ت', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+    await page.getByRole('link', { name: /HD-1042/ }).waitFor();
+
+    // Playwright's keyboard types US letters, so the Arabic layout's event is
+    // dispatched as the browser would send it: the letter it types, the key it is.
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ت', code: 'KeyJ', bubbles: true, cancelable: true }),
+      );
+    });
+
+    await expect(page).toHaveURL(new RegExp(MOCK_TICKET_REFUND));
+  });
+
   test('puts the caret in the composer with r, and into note mode with n', async ({
     page,
     appLocale: locale,
@@ -245,6 +264,27 @@ test.describe('the keyboard', () => {
 });
 
 test.describe('one ticket', () => {
+  test('lets an English subject keep its own direction', async ({ page, appLocale: locale }) => {
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const subject = 'Refund for order 42 has not arrived';
+    await expect(page.getByRole('heading', { level: 1, name: subject })).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+    await expect(page.getByRole('link', { name: /HD-1042/ }).getByText(subject)).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+    // An English line resolves to left to right, inside the Arabic page too.
+    expect(
+      await page
+        .getByRole('heading', { level: 1, name: subject })
+        .evaluate((node) => node.matches(':dir(ltr)')),
+    ).toBe(true);
+  });
+
   test('draws the badge row, the four kinds of message and the events', async ({
     page,
     appLocale: locale,

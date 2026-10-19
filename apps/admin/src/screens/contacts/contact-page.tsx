@@ -19,19 +19,23 @@ import { GitMerge, Lock, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
+import { usePreferences } from '../../app/providers.tsx';
 import { accountRoute, contactRoute, ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
+import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../../auth/session.tsx';
+import { ticketKeys } from '../../tickets/keys.js';
 import { ActionsMenu, type MenuAction } from '../../ui/actions-menu.tsx';
+import { formatDay } from '../../ui/format.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { AnonymiseDialog } from './anonymise-dialog.tsx';
 import { ContactDialog, IdentityDialog } from './contact-dialogs.tsx';
 import { DuplicateSuggestions } from './duplicate-suggestions.tsx';
-import { csatLabel, DASH, durationLabel, identityLabel } from './format.js';
-import { ContactAvatar, IdentityLine } from './identity-pieces.tsx';
+import { csatLabel, DASH, durationLabel, identityLabel, languageName } from './format.js';
+import { ContactAvatar, IdentityLine, IdentityText } from './identity-pieces.tsx';
 import { MergeBanners } from './merge-banner.tsx';
 import { MergeContactsDialog } from './merge-contacts-dialog.tsx';
 import { MergeWithDialog } from './merge-with-dialog.tsx';
+import { TimelineTicket } from './timeline-ticket.tsx';
 import { useContactAction, useContactErrorMessage } from './use-contact-action.js';
 
 /**
@@ -53,8 +57,10 @@ import { useContactAction, useContactErrorMessage } from './use-contact-action.j
  */
 export function ContactPage(): ReactNode {
   const t = useT();
+  const { locale } = usePreferences();
   const session = useSession();
   const api = useContactsApi();
+  const ticketsApi = useTicketsApi();
   const tokens = useSemanticTokens();
   const queryClient = useQueryClient();
   const noteId = useId();
@@ -81,6 +87,12 @@ export function ContactPage(): ReactNode {
   const timeline = useQuery({
     queryKey: ['contact-timeline', brand.id, contactId],
     queryFn: () => api.timeline(brand.id, contactId),
+  });
+
+  // The workspace's key, so a contact opened from a ticket reuses its read.
+  const statuses = useQuery({
+    queryKey: ticketKeys.statuses(brand.id),
+    queryFn: () => ticketsApi.statuses(brand.id),
   });
 
   const accounts = useQuery({
@@ -254,7 +266,7 @@ export function ContactPage(): ReactNode {
           <Box sx={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <ContactAvatar name={detail.name} size={40} anonymous={detail.anonymised} />
             <Box>
-              <Typography variant="h1" component="h1">
+              <Typography variant="h1" component="h1" dir="auto">
                 {detail.name}
               </Typography>
               <Typography
@@ -262,20 +274,15 @@ export function ContactPage(): ReactNode {
                 component="p"
                 sx={{ color: 'text.secondary', marginBlockStart: 1 }}
               >
-                {[
-                  detail.account?.name,
-                  ...detail.identities.map((identity) =>
-                    `${identityLabel(identity)} ${
-                      identity.kind === 'visitor'
-                        ? t('contacts:identity.linked')
-                        : identity.verified
-                          ? t('contacts:identity.verified')
-                          : t('contacts:identity.unverified')
-                    }`.trim(),
-                  ),
-                ]
-                  .filter((part): part is string => part !== undefined && part !== '')
-                  .join(' · ')}
+                {/* DESIGN §7: the account is isolated, and each identifier is
+                    its own left-to-right run inside the line. */}
+                {detail.account === null ? null : <bdi>{detail.account.name}</bdi>}
+                {detail.identities.map((identity, index) => (
+                  <span key={identity.id}>
+                    {detail.account === null && index === 0 ? null : ' · '}
+                    <IdentityText identity={identity} />
+                  </span>
+                ))}
               </Typography>
               {typeof detail.custom.tag === 'string' ? (
                 <Chip size="small" label={detail.custom.tag} sx={{ marginBlockStart: 2 }} />
@@ -367,24 +374,11 @@ export function ContactPage(): ReactNode {
             sx={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 3 }}
           >
             {visibleItems.map((item) => (
-              <Box
+              <TimelineTicket
                 key={item.id}
-                component="li"
-                sx={{
-                  border: `1px solid ${tokens['border.default']}`,
-                  borderRadius: '10px',
-                  padding: 4,
-                  backgroundColor: tokens['bg.surface'],
-                }}
-              >
-                <Typography variant="bodyStrong" component="p">
-                  {item.subject}
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  <bdi>{item.reference}</bdi>
-                  {` · ${item.channel} · ${item.departmentName ?? DASH} · ${item.assigneeName ?? DASH}`}
-                </Typography>
-              </Box>
+                item={item}
+                status={statuses.data?.statuses.find((status) => status.id === item.statusId)}
+              />
             ))}
 
             {visibleNotes.map((entry) => (
@@ -404,13 +398,13 @@ export function ContactPage(): ReactNode {
                 >
                   {t('contacts:detail.note')}
                 </Typography>
-                <Typography variant="body2" component="p">
+                <Typography variant="body2" component="p" dir="auto">
                   {entry.bodyText}
                 </Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   {t('contacts:detail.noteBy', {
                     author: entry.authorName,
-                    date: new Date(entry.createdAt).toLocaleDateString(),
+                    date: formatDay(entry.createdAt, locale),
                   })}
                 </Typography>
               </Box>
@@ -471,6 +465,7 @@ export function ContactPage(): ReactNode {
               type="submit"
               variant="contained"
               disabled={detail.anonymised || note.trim() === '' || addNote.isPending}
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
             >
               {t('contacts:detail.saveNote')}
             </Button>
@@ -547,12 +542,14 @@ export function ContactPage(): ReactNode {
               {detail.account === null ? (
                 DASH
               ) : (
-                <MuiLink component={Link} to={accountRoute(detail.account.id)}>
+                <MuiLink component={Link} to={accountRoute(detail.account.id)} dir="auto">
                   {detail.account.name}
                 </MuiLink>
               )}
             </Detail>
-            <Detail label={t('contacts:details.language')}>{detail.locale ?? DASH}</Detail>
+            <Detail label={t('contacts:details.language')}>
+              {detail.locale === null ? DASH : languageName(detail.locale, locale)}
+            </Detail>
             <Detail label={t('contacts:details.timezone')}>{detail.timezone ?? DASH}</Detail>
             <Detail label={t('contacts:details.customerId')}>
               <Typography variant="mono">

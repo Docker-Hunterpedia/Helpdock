@@ -74,6 +74,15 @@ it('keeps provenance visible without making an unsafe source address clickable',
   expect(screen.queryByRole('link', { name: /old-42/ })).not.toBeInTheDocument();
 });
 
+it('lets the subject take its own direction, whatever the page’s is', () => {
+  renderHeader([]);
+
+  expect(screen.getByRole('heading', { level: 1, name: 'Refund for order 42' })).toHaveAttribute(
+    'dir',
+    'auto',
+  );
+});
+
 describe('the collision pill', () => {
   it('says somebody is replying when their composer has something in it', () => {
     renderHeader([{ name: 'Omar Nasser', activity: 'replying' }]);

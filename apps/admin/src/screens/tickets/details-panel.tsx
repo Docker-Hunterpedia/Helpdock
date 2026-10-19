@@ -12,7 +12,7 @@ import type {
 } from '@helpdock/schemas';
 import { ticketPrioritySchema } from '@helpdock/schemas';
 import { Box, MenuItem, Link as MuiLink, TextField, Typography } from '@mui/material';
-import { BadgeCheck, Lock } from 'lucide-react';
+import { BadgeCheck } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -26,6 +26,7 @@ import { CustomFieldsCard } from './custom-fields-card.tsx';
 import { messageTime, statusName } from './format.js';
 import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
+import { type ContactHistoryState, PreviousTickets } from './previous-tickets.tsx';
 import { SlaCard } from './sla-card.tsx';
 import { TicketTags } from './ticket-tags.tsx';
 
@@ -45,10 +46,10 @@ import { TicketTags } from './ticket-tags.tsx';
  * Without `ticket:write` (a Viewer) the tags are chips and the custom fields
  * are disabled: the same panel, with nothing to press.
  *
- * **The hidden-ticket count is the contact's, not the ticket's**
- * (DOMAIN-RULES §1.2). It comes from the contact timeline, which is the one
- * place the api says how much history a viewer's departments exclude, and it
- * says a number and nothing else.
+ * **The contact's other tickets come from the contact timeline**
+ * ({@link PreviousTickets}), which is the one place the api says how much
+ * history a viewer's departments exclude (DOMAIN-RULES §1.2): it lists what the
+ * viewer may open and says a number for the rest.
  */
 
 export const DETAILS_WIDTH = 300;
@@ -56,7 +57,8 @@ export const DETAILS_WIDTH = 300;
 export interface DetailsPanelProps {
   readonly ticket: Ticket;
   readonly contact: ContactDetail | null;
-  readonly hiddenTicketCount: number;
+  /** The contact's timeline, which the Previous tickets section reads. */
+  readonly contactHistory: ContactHistoryState;
   readonly statuses: readonly TicketStatus[];
   readonly departments: readonly Department[];
   /** The read's `related` list: every linked ticket, hidden ones as their relation alone. */
@@ -105,7 +107,7 @@ export interface DetailsPanelProps {
 export function DetailsPanel({
   ticket,
   contact,
-  hiddenTicketCount,
+  contactHistory,
   statuses,
   departments,
   related,
@@ -157,63 +159,55 @@ export function DetailsPanel({
             {t('tickets:details.noContact')}
           </Typography>
         ) : (
-          <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', marginBlockStart: 2 }}>
-            <Box
-              aria-hidden="true"
-              sx={{
-                width: 28,
-                height: 28,
-                flexShrink: 0,
-                borderRadius: '50%',
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: 12,
-                fontWeight: 600,
-                backgroundColor: tokens['bg.muted'],
-                color: tokens['text.secondary'],
-              }}
-            >
-              {initialsOf(contact.name)}
+          <>
+            <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', marginBlockStart: 2 }}>
+              <Box
+                aria-hidden="true"
+                sx={{
+                  width: 28,
+                  height: 28,
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  backgroundColor: tokens['bg.muted'],
+                  color: tokens['text.secondary'],
+                }}
+              >
+                {initialsOf(contact.name)}
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <MuiLink component={Link} to={contactRoute(contact.id)} variant="bodyStrong">
+                  {contact.name}
+                </MuiLink>
+                {contact.primaryIdentity === null ? null : (
+                  <Typography
+                    variant="caption"
+                    component="p"
+                    sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}
+                  >
+                    <bdi>{contact.primaryIdentity.value}</bdi>
+                    {contact.primaryIdentity.verified ? (
+                      <>
+                        <BadgeCheck size={12} aria-hidden="true" color={tokens['status.success']} />
+                        {t('tickets:details.verified')}
+                      </>
+                    ) : (
+                      t('tickets:details.unverified')
+                    )}
+                  </Typography>
+                )}
+              </Box>
             </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <MuiLink component={Link} to={contactRoute(contact.id)} variant="bodyStrong">
-                {contact.name}
-              </MuiLink>
-              {contact.primaryIdentity === null ? null : (
-                <Typography
-                  variant="caption"
-                  component="p"
-                  sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}
-                >
-                  <bdi>{contact.primaryIdentity.value}</bdi>
-                  {contact.primaryIdentity.verified ? (
-                    <>
-                      <BadgeCheck size={12} aria-hidden="true" color={tokens['status.success']} />
-                      {t('tickets:details.verified')}
-                    </>
-                  ) : (
-                    t('tickets:details.unverified')
-                  )}
-                </Typography>
-              )}
-              {hiddenTicketCount > 0 ? (
-                <Typography
-                  variant="caption"
-                  component="p"
-                  sx={{
-                    marginBlockStart: 1,
-                    color: tokens['status.warning.text'],
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}
-                >
-                  <Lock size={12} aria-hidden="true" />
-                  {t('tickets:details.hiddenTickets', { count: hiddenTicketCount })}
-                </Typography>
-              ) : null}
-            </Box>
-          </Box>
+            <PreviousTickets
+              contact={contact}
+              history={contactHistory}
+              statuses={statuses}
+              now={now}
+            />
+          </>
         )}
       </Box>
 

@@ -47,6 +47,7 @@ import { useTicketAi } from './ai/use-ticket-ai.tsx';
 import { useTicketAssist } from './assist/use-ticket-assist.tsx';
 import { TranscriptsProvider } from './assist/voice-transcript.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
+import { previousTickets } from './contact-history.js';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
 import { assigneeName, staffName } from './directory.js';
@@ -236,8 +237,9 @@ export function TicketView({
   });
 
   /**
-   * DOMAIN-RULES §1.2: a contact's history says how many tickets the viewer's
-   * departments exclude. The timeline is the one read that answers it.
+   * The contact's other tickets for the details panel, and how many the
+   * viewer's departments exclude (DOMAIN-RULES §1.2). The timeline is the one
+   * read that answers both.
    */
   const timeline = useQuery({
     queryKey: ['contact-timeline', brandId, contactId],
@@ -741,7 +743,13 @@ export function TicketView({
     <DetailsPanel
       ticket={ticket}
       contact={contact.data ?? null}
-      hiddenTicketCount={timeline.data?.hiddenCount ?? 0}
+      contactHistory={
+        timeline.isError
+          ? 'failed'
+          : timeline.data === undefined
+            ? 'loading'
+            : previousTickets(timeline.data, ticket.id)
+      }
       statuses={directory.statuses}
       departments={directory.departments}
       related={detail.data?.related ?? []}

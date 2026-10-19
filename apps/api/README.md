@@ -380,7 +380,8 @@ raw string.
 have "none yet" implementations, because M1-04 ships before M1-02. M1-02 passes
 real ones to `ContactsModule.forRoot` and nothing else in the folder changes.
 `hiddenCount` on the timeline is DOMAIN-RULES §1.2's count of the tickets a
-viewer's departments exclude.
+viewer's departments exclude; `visibleCount` is how many they may see, which the
+timeline's 50 `items` can stop short of.
 
 ## Staff and roles
 

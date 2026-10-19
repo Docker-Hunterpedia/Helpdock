@@ -227,6 +227,8 @@ export function ContactPage(): ReactNode {
 
   const hiddenCount = timeline.data?.hiddenCount ?? 0;
   const items = timeline.data?.items ?? [];
+  // The api lists a page of them and counts them all.
+  const visibleCount = timeline.data?.visibleCount ?? 0;
   const notes = detail.notes;
   const visibleItems = filter === 'notes' ? [] : items;
   const visibleNotes = filter === 'open' ? [] : notes;
@@ -325,13 +327,14 @@ export function ContactPage(): ReactNode {
             {t('contacts:detail.timeline')}
           </Typography>
           <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>
-            {t('contacts:detail.visibleTickets', { count: items.length })}
+            {t('contacts:detail.visibleTickets', { count: visibleCount })}
           </Typography>
           {hiddenCount > 0 ? (
             <Typography
               variant="caption"
               sx={{
-                display: 'inline-flex',
+                // Its own line: inline, it ran into the segmented control after it.
+                display: 'flex',
                 alignItems: 'center',
                 gap: 1,
                 color: tokens['status.warning.text'],

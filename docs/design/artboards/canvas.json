@@ -729,6 +729,13 @@
       "w": 1280,
       "h": 800,
       "title": "Admin/SignIn-MagicLink-AR"
+    },
+    "AdminTicketContactHistory.dc.html": {
+      "x": 0,
+      "y": 61400,
+      "w": 1340,
+      "h": 720,
+      "title": "Admin/Ticket-ContactHistory"
     }
   },
   "createdOnFiles": {
@@ -1022,7 +1029,8 @@
     "AdminImportFileMapper.dc.html",
     "AdminTicketImported.dc.html",
     "AdminMagicLink.dc.html",
-    "AdminMagicLinkAR.dc.html"
+    "AdminMagicLinkAR.dc.html",
+    "AdminTicketContactHistory.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

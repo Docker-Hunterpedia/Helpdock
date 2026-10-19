@@ -152,7 +152,8 @@ test.describe('one contact', () => {
     await signIn(page, locale);
     await openContact(page, locale, 'Mona Khalil');
 
-    await expect(page.getByText(t('contacts:detail.visibleTickets', { count: 0 }))).toBeVisible();
+    // HD-1042 and HD-1030 are hers.
+    await expect(page.getByText(t('contacts:detail.visibleTickets', { count: 2 }))).toBeVisible();
     await expect(page.getByRole('region', { name: t('contacts:identities.title') })).toBeVisible();
   });
 

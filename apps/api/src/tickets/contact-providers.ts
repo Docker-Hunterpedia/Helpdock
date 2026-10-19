@@ -152,8 +152,8 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
 
 export class DbContactTimelineProvider implements ContactTimelineProvider {
   /**
-   * The contact's tickets, newest first, and how many of them this principal
-   * cannot see.
+   * The contact's tickets, newest first, how many this principal can see in
+   * all, and how many of them it cannot see.
    *
    * The items come from the request's own transaction, so the policies decide
    * what is in the list. `hiddenCount` cannot: a row the policy hides is a row
@@ -180,6 +180,7 @@ export class DbContactTimelineProvider implements ContactTimelineProvider {
         number: tickets.number,
         subject: tickets.subject,
         status: ticketStatuses.name,
+        statusId: tickets.statusId,
         channel: tickets.channel,
         departmentName: departments.name,
         assigneeName: assignee.name,
@@ -209,12 +210,15 @@ export class DbContactTimelineProvider implements ContactTimelineProvider {
           reference: `${row.prefix}-${row.number}`,
           subject: row.subject,
           status: row.status,
+          statusId: row.statusId,
           channel: row.channel,
           departmentName: row.departmentName,
           assigneeName: row.assigneeName,
           createdAt: row.createdAt.toISOString(),
         }),
       ),
+      // Counted rather than `items.length`, which stops at the page.
+      visibleCount: visible?.total ?? 0,
       // Never negative, whatever the two reads disagree about.
       hiddenCount: Math.max(0, (all?.total ?? 0) - (visible?.total ?? 0)),
     };

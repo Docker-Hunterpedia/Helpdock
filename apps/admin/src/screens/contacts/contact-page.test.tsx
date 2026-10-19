@@ -72,6 +72,18 @@ describe('the timeline', () => {
     expect(await screen.findByText('0 tickets you can see')).toBeInTheDocument();
   });
 
+  it('counts every ticket the viewer can see, not only the page the timeline lists', async () => {
+    await renderContact({
+      contactsApi: new MockContactsApi(() => ({
+        items: [],
+        visibleCount: 73,
+        hiddenCount: 0,
+      })),
+    });
+
+    expect(await screen.findByText('73 tickets you can see')).toBeInTheDocument();
+  });
+
   it('says nothing about hidden tickets when none are hidden', async () => {
     await renderContact();
 

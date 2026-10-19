@@ -309,7 +309,11 @@ describe.skipIf(!hasDocker)('contacts and accounts', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json() as ContactTimeline).toMatchObject({ items: [], hiddenCount: 0 });
+      expect(response.json() as ContactTimeline).toMatchObject({
+        items: [],
+        visibleCount: 0,
+        hiddenCount: 0,
+      });
       expect(contact.stats).toMatchObject({ openTickets: 0, csat: null });
     });
 

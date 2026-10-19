@@ -183,8 +183,9 @@ export function createApis(
   const uploads = new MockAttachmentUploader();
   const blockList = new MockBlockList();
   // And the contact fixture, so a ticket filed against a contact created in
-  // this session names them the way the api would.
-  const contacts = new MockContactsApi();
+  // this session names them the way the api would; the contact's timeline
+  // reads the ticket fixture back, which is built by the time anything asks.
+  const contacts = new MockContactsApi((id) => tickets.contactHistory(id));
   const ticketing = new MockTicketingApi(blockList);
   const tickets = new MockTicketsApi(
     uploads,

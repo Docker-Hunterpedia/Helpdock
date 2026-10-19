@@ -108,15 +108,22 @@ test.describe('reference screens @screenshot', () => {
     // activity event between them and a colleague viewing it.
     await openTicket(page, locale);
     await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).waitFor();
+    // The contact's timeline arrives after the ticket; until it does, the
+    // panel holds skeleton rows, which is not the screen being kept.
+    await page.getByText(t('tickets:details.hiddenTickets', { count: 2 })).waitFor();
 
     await expect(page).toHaveScreenshot('ticket-view.png');
   });
 
   test('one contact', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
     await signIn(page, locale);
     // The fixture's fullest contact: a verified identifier beside unverified
-    // ones, an account, a note, every stat and an open duplicate suggestion.
+    // ones, an account, a note, every stat, an open duplicate suggestion, and
+    // her tickets, which the timeline reads after the contact.
     await openContact(page, locale, 'Mona Khalil');
+    await page.getByText(t('contacts:detail.visibleTickets', { count: 2 })).waitFor();
 
     await expect(page).toHaveScreenshot('contact-detail.png', { fullPage: true });
   });

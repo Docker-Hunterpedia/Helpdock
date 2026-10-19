@@ -54,6 +54,23 @@ describe('MockTicketsApi', () => {
     expect(ticket.contact).toEqual({ id: MOCK_CONTACT_MONA, name: 'Mona K.' });
   });
 
+  it('answers a contact’s timeline from its tickets, newest first, with the hidden count', () => {
+    const history = api.contactHistory(MOCK_CONTACT_MONA);
+
+    expect(history.items.map((item) => [item.id, item.reference, item.statusId])).toEqual([
+      [MOCK_TICKET_REFUND, 'HD-1042', expect.any(String)],
+      [MOCK_TICKET_CLOSED, 'HD-1030', MOCK_STATUS_CLOSED],
+    ]);
+    expect(history.items[1]?.departmentName).toBe(BILLING?.name);
+    expect(history.visibleCount).toBe(2);
+    expect(history.hiddenCount).toBe(2);
+    expect(api.contactHistory('0192c3f0-1a2b-7c3d-8e4f-0000000000ff')).toEqual({
+      items: [],
+      visibleCount: 0,
+      hiddenCount: 0,
+    });
+  });
+
   it('seeds the six statuses every brand is created with', async () => {
     const { statuses } = await api.statuses(BRAND);
 

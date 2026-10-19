@@ -355,12 +355,28 @@ const SEED_CONTACT_NAMES: ReadonlyMap<string, string> = new Map(
 export const seedContactName = (contactId: string): string | undefined =>
   SEED_CONTACT_NAMES.get(contactId);
 
+/**
+ * What the ticket fixture holds for one contact, which the timeline reads. The
+ * contact fixture knows no tickets of its own, so the app wires the two
+ * together and a test that does not gets the empty timeline.
+ */
+export type MockTicketHistory = (
+  contactId: string,
+) => Pick<ContactTimeline, 'items' | 'visibleCount' | 'hiddenCount'>;
+
+const NO_TICKETS: MockTicketHistory = () => ({ items: [], visibleCount: 0, hiddenCount: 0 });
+
 export class MockContactsApi implements ContactsApi {
+  readonly #history: MockTicketHistory;
   #accounts = seedAccounts();
   #contacts = seedContacts();
   #duplicates = seedDuplicates();
   #merges: MockMerge[] = [];
   #sequence = 0;
+
+  constructor(history: MockTicketHistory = NO_TICKETS) {
+    this.#history = history;
+  }
 
   /** The name the api would embed in a ticket naming this contact, including one created here. */
   nameOf(contactId: string): string | undefined {
@@ -403,11 +419,10 @@ export class MockContactsApi implements ContactsApi {
     return this.#detail(this.#require(contactId));
   }
 
-  /** Empty until M1-02, exactly as the api's null provider answers. */
   async timeline(_brandId: string, contactId: string): Promise<ContactTimeline> {
     const contact = this.#require(contactId);
 
-    return { items: [], notes: contact.notes, hiddenCount: 0 };
+    return { ...this.#history(contactId), notes: contact.notes };
   }
 
   async createContact(_brandId: string, request: ContactCreateRequest): Promise<ContactDetail> {

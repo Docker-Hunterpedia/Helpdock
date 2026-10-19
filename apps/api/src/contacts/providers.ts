@@ -53,7 +53,10 @@ export interface TicketStatsProvider {
 }
 
 export interface ContactTimelineResult {
+  /** The newest of the tickets the viewer may see, up to the provider's page. */
   readonly items: readonly ContactTimelineItem[];
+  /** All of the tickets the viewer may see, which `items` may stop short of. */
+  readonly visibleCount: number;
   /**
    * How many tickets of this contact the viewer's departments exclude
    * (DOMAIN-RULES §1.2). It is a count and never an identifier: the agent
@@ -79,7 +82,7 @@ export class NoTicketStatsProvider implements TicketStatsProvider {
 
 export class NoContactTimelineProvider implements ContactTimelineProvider {
   forContact(): Promise<ContactTimelineResult> {
-    return Promise.resolve({ items: [], hiddenCount: 0 });
+    return Promise.resolve({ items: [], visibleCount: 0, hiddenCount: 0 });
   }
 }
 

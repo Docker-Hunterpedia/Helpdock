@@ -13,22 +13,22 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | in progress: the internal pre-pentest review is done and F1 to F6 are fixed (F3 for sockets only); N1 is open ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)); **the external pentest still needs a vendor, budget and test window** ([statement of work](../planning/pentest-scope.md)) |
+| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | the internal pre-pentest review is done and F1 to F6 and N1 are fixed (F3 for sockets only) ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)). The external pentest ([statement of work](../planning/pentest-scope.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
 | M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 (2026-10-09) found more; its gaps were closed in #167 on 2026-10-11 ([record](../completed/asvs-l2.md), [notes](#m9-02-re-walk-of-m6-m7-and-m8)): 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator. 7.2.1, 2.10.1 and 3.5.2 stay Partial |
-| M9-03 | Load tests | #154 | in progress: suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); **the §14 host run is outstanding** |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md)); **the screen-reader pass still needs a person** ([runbook](../guides/screen-reader-pass.md)) |
+| M9-03 | Load tests | #154 | suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); the §14 host run: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md)); the screen-reader pass ([runbook](../guides/screen-reader-pass.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
-| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; **the clean-VM run and the three outside testers need people** (#157) and are recorded in [onboarding-test.md](../completed/onboarding-test.md) when done |
+| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; the clean-VM run and the three outside testers (#157): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [onboarding-test.md](../completed/onboarding-test.md). |
 | M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented, and `v0.4.0` signed under it on 2026-10-09 by the Release workflow's manual mode (run 37928180052); #158 closed that day ([notes](#m9-08-release-pipeline)) |
 | M9-09 | Tag `1.0.0` | #159 | planned after every release gate passes |
-| M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); **the drill for the record on a clean VM needs a person** and is recorded in [restore-drill.md](../completed/restore-drill.md) when done |
+| M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); the drill on a clean VM: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [restore-drill.md](../completed/restore-drill.md). |
 
 ## M9-01 Internal pre-pentest review
 
 An internal review of the widget and API surface found no High finding, two
-Medium and four Low. This is what became of them; the
-[record](../completed/internal-security-review.md) keeps the traces. The
+Medium and four Low, and N1 was found while fixing F1. This is what became of
+them; the [record](../completed/internal-security-review.md) keeps the traces. The
 external test is still to be booked and run; its findings are fixed under this
 deliverable too.
 
@@ -40,14 +40,10 @@ deliverable too.
 | F4 (Low) | OAuth callback not bound to the browser that started it | Fixed with the `hd_oauth` cookie ([authentication](../guides/authentication.md#oauth)). |
 | F5 (Low) | API keys and webhook deliveries ignored a brand's deletion grace | Fixed: `410` for the key, `skipped` for the delivery. |
 | F6 (Low) | The magic link is spent by a `GET` | Fixed. The email links to the admin's confirm screen `/sign-in/magic#token=…` (`Admin/SignIn-MagicLink`, `-AR`). It shows the account from `POST /api/auth/magic-link/preview`, which spends nothing, and spends the link only on Continue with `POST /api/auth/magic-link/consume`; the old `GET` link only redirects there ([authentication](../guides/authentication.md#the-sign-in-link-and-the-password-reset)). |
+| N1 (not rated) | The `/widget` handshake keyed its `widget-ip` budget on Caddy's address, so every visitor of a brand shared one | Fixed. The handshake resolves the client address the way Fastify resolves `request.ip`, under the same `TRUST_PROXY`, so a socket and a REST call from one visitor spend one budget and two visitors behind Caddy spend two ([widget protocol](../guides/widget-protocol.md#throttles)). |
 
 **Outstanding from this review**
 
-- **The widget socket's address is the proxy's.** `socket.handshake.address` is
-  the TCP peer, which behind Caddy is Caddy, so the handshake's `widget-ip`
-  budget (300 per 5 minutes per brand) is shared by every visitor of a brand.
-  A per-address socket-event budget would share the same key, which is why F1
-  has none. Resolving the handshake address under `TRUST_PROXY` is the fix.
 - **Live checks for the vendor** (the proxy half of F2 was checked against
   Caddy 2.10 here, not on a Cloudflare zone): the real `request.ip` through
   Cloudflare, and the cluster-wide disconnect of F3 across two replicas.
@@ -109,9 +105,9 @@ Copied from the PRD, ticked as they are met.
 - ~~**Magic link spent by a `GET` (M9-01 F6).**~~ Fixed: the confirm screen at
   `/sign-in/magic` spends the link only on a click
   ([internal review](../completed/internal-security-review.md)).
-- **Handshake address budget (M9-01 N1).** Open, and the fix is not written: resolve
-  the `/widget` handshake's address under `TRUST_PROXY`, with a test through the
-  proxy ([outstanding](#m9-01-internal-pre-pentest-review)).
+- ~~**Handshake address budget (M9-01 N1).**~~ Fixed: the `/widget` handshake's
+  address is resolved under `TRUST_PROXY`, with a test through a trusted proxy
+  ([review](#m9-01-internal-pre-pentest-review)).
 - **Telegram empty welcome (M6 gaps).** `Admin/Channels-Telegram` says an empty
   welcome skips the welcome in that language; the code and the guide send the
   catalog's. A decision picks which one changes.

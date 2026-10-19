@@ -652,6 +652,12 @@ to it after three failed connects.
 | every event on the `/widget` socket | 120 per minute | visitor |
 | transcripts | 3 per hour | conversation |
 
+The client address is the one the api resolves under
+[`TRUST_PROXY`](configuration.md#trust_proxy), for the handshake as for REST:
+behind a proxy the setting names it is the visitor's from `X-Forwarded-For`,
+and otherwise the connection's own. So a visitor's REST calls and handshakes
+spend one budget, and visitors behind the same proxy each have their own.
+
 Events on a socket that has already passed the handshake do not count against
 the per-address rule again. Each one spends the per-visitor socket budget
 instead, whichever event it is (`conversation:join`, `conversation:leave`,

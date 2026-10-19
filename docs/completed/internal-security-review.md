@@ -25,8 +25,8 @@ endpoint with no rate limit, or weak crypto in practice.
 | F3 | Low | A widget socket keeps its conversation rooms after the signed-identity link is withdrawn | `api/widget/widget.gateway.ts`, `api/widget/widget-session.service.ts` | Fixed for sockets in `82683dc` and for SSE streams after; open for origin removal and secret rotation |
 | F4 | Low | OAuth callback not bound to the browser that started it (login CSRF) | `api/auth/oauth/oauth.service.ts`, `api/auth/auth.controller.ts` | Fixed in `10ac844` |
 | F5 | Low | API keys and webhook deliveries ignore a brand's deletion grace | `api/api-keys/api-key-principal-resolver.ts`, `api/tenant/all-brands.ts`, `api/webhooks/webhook-deliver.job.ts` | Fixed in `275a3f2` |
-| F6 | Low | The magic link is spent by a plain `GET` | `api/auth/auth.controller.ts`, `api/auth/auth.service.ts` | Fixed by the pull request that adds `/sign-in/magic` (branch `fix/m9-01-f6-magic-link-confirm`) |
-| N1 | Not rated | The `/widget` handshake's address budget is shared by every visitor behind Caddy | `api/widget/widget.gateway.ts` | Open: fix not written |
+| F6 | Low | The magic link is spent by a plain `GET` | `api/auth/auth.controller.ts`, `api/auth/auth.service.ts` | Fixed in this PR |
+| N1 | Not rated | The `/widget` handshake's address budget is shared by every visitor behind Caddy | `api/widget/widget.gateway.ts` | Fixed in [#228](https://github.com/Docker-Hunterpedia/Helpdock/pull/228) |
 
 Count: High 0, Medium 2, Low 4. N1 is not in the review. It was found while
 fixing F1, and it is listed so the M9 deliverable carries it.
@@ -117,8 +117,14 @@ then the click still signs in; a second click is refused),
 address is Caddy's, and the handshake does not read `request.ip`, so `TRUST_PROXY`
 does not reach it. Every visitor of a brand who connects through Caddy shares one
 budget, and F2 does not change that. The per-address socket budget considered for
-F1 would share the same key, which is why F1 has none. Open: resolve the handshake
-address under the same `TRUST_PROXY` rule HTTP uses, with a test through the proxy.
+F1 would share the same key, which is why F1 has none. Fixed in this PR: the
+handshake address is resolved from `socket.handshake.address` and
+`X-Forwarded-For` by the walk `@fastify/proxy-addr` makes for `request.ip`, under
+the same `TRUST_PROXY` (`api/context/client-address.ts`). With `TRUST_PROXY=false`
+the header is never read. `widget.integration.test.ts` spends one forwarded
+address's budget through a trusted loopback proxy and shows a second visitor
+behind the same proxy still connects. The `/staff` gateway keys its event budget
+on the user and reads no address.
 
 ## Checked and sound
 
@@ -224,4 +230,4 @@ path listed exists at `3579972`.
 12. **Redis** on the production Compose network, which has no password by design,
     and the adapter and revocation channels an attacker there could publish to.
 
-**Open for 1.0:** the shared handshake budget (N1). F6 is fixed.
+**Open for 1.0:** none. F6 and N1 are fixed.

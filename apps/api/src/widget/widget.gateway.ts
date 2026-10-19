@@ -1,3 +1,4 @@
+import type { Env } from '@helpdock/config';
 import {
   VISITOR_AUTH_SCHEME,
   WIDGET_EVENTS,
@@ -24,8 +25,9 @@ import {
 import type { Namespace, Socket } from 'socket.io';
 import type { z } from 'zod';
 import { Public } from '../auth/route-declaration.js';
+import { clientAddressResolver } from '../context/client-address.js';
 import type { Logger } from '../logging/logger.js';
-import { LOGGER } from '../runtime/tokens.js';
+import { ENV, LOGGER } from '../runtime/tokens.js';
 import { WidgetActivityService } from './widget-activity.service.js';
 import { WidgetConfigService } from './widget-config.service.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
@@ -79,7 +81,9 @@ const factsOf = (data: WidgetSocketData): WidgetRequestFacts => ({
  *
  * - **Handshake**: `auth: { brandId, visitorSecret }`, the page's `Origin`
  *   against the brand's allow-list, and the address throttle — the same gate
- *   every REST route passes. No visitor, no connection.
+ *   every REST route passes, keyed on the address `request.ip` would be under
+ *   `TRUST_PROXY`, so visitors behind Caddy do not share one budget (N1). No
+ *   visitor, no connection.
  * - **Rooms**: `conversation:<id>`, joined only through `conversation:join`,
  *   which runs the same ownership check as `GET …/conversations/:id`;
  *   `visitors:<brandId>`, joined on connect, for presence; and
@@ -104,6 +108,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
   readonly #activity: WidgetActivityService;
   readonly #config: WidgetConfigService;
   readonly #logger: Logger;
+  readonly #clientAddress: ReturnType<typeof clientAddressResolver>;
 
   constructor(
     @Inject(WidgetGate) gate: WidgetGate,
@@ -112,6 +117,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
     @Inject(WidgetActivityService) activity: WidgetActivityService,
     @Inject(WidgetConfigService) config: WidgetConfigService,
     @Inject(LOGGER) logger: Logger,
+    @Inject(ENV) env: Env,
   ) {
     this.#gate = gate;
     this.#hub = hub;
@@ -119,6 +125,7 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
     this.#activity = activity;
     this.#config = config;
     this.#logger = logger;
+    this.#clientAddress = clientAddressResolver(env.TRUST_PROXY);
   }
 
   afterInit(namespace: Namespace): void {
@@ -239,7 +246,11 @@ export class WidgetGateway implements OnGatewayInit, OnGatewayConnection {
       );
     }
     const origin = socket.handshake.headers.origin;
-    const ip = socket.handshake.address === '' ? null : socket.handshake.address;
+    const address = this.#clientAddress(
+      socket.handshake.address,
+      socket.handshake.headers['x-forwarded-for'],
+    );
+    const ip = address === undefined || address === '' ? null : address;
     const { visitorId } = await this.#gate.handshake(
       auth.data.brandId,
       { origin, ip },

@@ -28,7 +28,7 @@ Then open `https://<ADMIN_HOST>` and finish the first-run wizard. [docs/guides/i
 
 ## Channels (v1)
 
-Email (IMAP and inbound-parse webhooks, SMTP out), Telegram bots, WhatsApp numbers, Facebook Pages and Instagram accounts ([Meta channels](docs/guides/meta-channels.md), in development as M10), web chat widget, hosted web form, and a scoped REST API. Slack and Discord are planned for v1.1.
+Email (IMAP and inbound-parse webhooks, SMTP out), Telegram bots, WhatsApp numbers, Facebook Pages and Instagram accounts ([Meta channels](docs/guides/meta-channels.md)), web chat widget, hosted web form, and a scoped REST API. Slack and Discord are planned for v1.1.
 
 ## Stack
 
@@ -49,6 +49,7 @@ Node.js 24, TypeScript, NestJS, Drizzle ORM, PostgreSQL 17 with pgvector, Redis 
 | M8 | API, webhooks, reports | [shipped](docs/completed/M8-api-webhooks-reports.md) |
 | M9 | Hardening and 1.0 release | [in development](docs/in-development/M9-hardening-and-1-0.md) |
 | M10 | Meta channels: WhatsApp, Messenger and Instagram | [shipped](docs/completed/M10-meta-channels.md) |
+| M11 | SSO and migration: SAML/OIDC sign-in and importers | [shipped](docs/completed/M11-sso-and-migration.md) |
 
 Milestones are grouped into five phases with deliverables and exit criteria in the [PRD](docs/planning/PRD.md). All project documents live under [docs/](docs/), organised by lifecycle stage.
 

@@ -2,6 +2,7 @@ import type {
   AiCallView,
   AssignableAgentList,
   Attachment,
+  ContactTimeline,
   Macro,
   MacroLocale,
   MacroRunRequest,
@@ -145,6 +146,13 @@ const MOCK_TAG_DELETED: Tag = {
   color: 'stone',
 };
 const MOCK_TICKET_HIDDEN = '0192c3f0-1a2b-7c3d-8e4f-000000000999';
+
+/**
+ * The history a contact has in departments the viewer is not in, which the
+ * contact timeline counts and never lists (DOMAIN-RULES §1.2). Mona is the
+ * returning customer of `Admin/Ticket-ContactHistory`.
+ */
+const MOCK_HIDDEN_HISTORY: ReadonlyMap<string, number> = new Map([[MOCK_CONTACT_MONA, 2]]);
 
 export const MOCK_STATUS_OPEN = '0192c3f0-1a2b-7c3d-8e4f-000000000051';
 export const MOCK_STATUS_AWAITING = '0192c3f0-1a2b-7c3d-8e4f-000000000052';
@@ -837,6 +845,37 @@ export class MockTicketsApi implements TicketsApi {
 
   async statuses(_brandId: string): Promise<TicketStatusList> {
     return Promise.resolve({ statuses: [...this.#statuses] });
+  }
+
+  /**
+   * A contact's tickets as the api's timeline answers them, newest first, so
+   * the contact fixture's timeline names the tickets this fixture holds.
+   */
+  contactHistory(
+    contactId: string,
+  ): Pick<ContactTimeline, 'items' | 'visibleCount' | 'hiddenCount'> {
+    const items = this.#tickets
+      .filter((ticket) => ticket.contactId === contactId)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .map((ticket) => ({
+        id: ticket.id,
+        reference: `${ticket.prefix}-${ticket.number}`,
+        subject: ticket.subject,
+        status: ticket.status.name,
+        statusId: ticket.status.id,
+        channel: ticket.channel,
+        departmentName:
+          MOCK_DEPARTMENTS.find((department) => department.id === ticket.departmentId)?.name ??
+          null,
+        assigneeName: null,
+        createdAt: ticket.createdAt,
+      }));
+
+    return {
+      items,
+      visibleCount: items.length,
+      hiddenCount: MOCK_HIDDEN_HISTORY.get(contactId) ?? 0,
+    };
   }
 
   async list(_brandId: string, query: TicketQuery = {}): Promise<TicketList> {

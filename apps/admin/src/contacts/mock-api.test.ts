@@ -185,10 +185,23 @@ describe('MockContactsApi', () => {
     expect(reasonOf(error)).toBe('anonymised');
   });
 
-  it('answers an empty timeline, which is what the api answers until M1-02', async () => {
+  it('answers an empty timeline when no ticket fixture is wired in', async () => {
     const timeline = await new MockContactsApi().timeline(MOCK_BRAND, MOCK_CONTACT_MONA);
 
-    expect(timeline).toMatchObject({ items: [], hiddenCount: 0 });
+    expect(timeline).toMatchObject({ items: [], visibleCount: 0, hiddenCount: 0 });
+    expect(timeline.notes).toHaveLength(1);
+  });
+
+  it('reads the timeline’s tickets from the ticket fixture it was given', async () => {
+    const api = new MockContactsApi((contactId) =>
+      contactId === MOCK_CONTACT_MONA
+        ? { items: [], visibleCount: 4, hiddenCount: 2 }
+        : { items: [], visibleCount: 0, hiddenCount: 0 },
+    );
+
+    const timeline = await api.timeline(MOCK_BRAND, MOCK_CONTACT_MONA);
+
+    expect(timeline).toMatchObject({ visibleCount: 4, hiddenCount: 2 });
     expect(timeline.notes).toHaveLength(1);
   });
 

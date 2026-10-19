@@ -1285,6 +1285,33 @@ The details panel's **Linked tickets** (`linked-tickets.tsx`, panel 6 of
 reference, status, subject and relation, which opens it, and a locked line
 ("A ticket you cannot open · Split from · hidden from you") for a hidden one.
 
+### Previous tickets on the contact card
+
+Under the contact's name, the details panel lists the contact's other tickets,
+so a returning customer is visible without leaving the ticket (#237, artboard
+`Admin/Ticket-ContactHistory`, `previous-tickets.tsx`). It reads the contact
+timeline the panel already loads for the hidden count
+([contacts guide](contacts.md#where-the-ticket-numbers-come-from)), so it is
+department-scoped like every ticket read: it lists only tickets the viewer may
+open.
+
+- **Up to three rows, newest first**, the open ticket left out. Each row is one
+  link to that ticket: the subject, the reference and the day it was created
+  (with the year when it was not this year), and its status badge.
+- **The heading counts every other ticket the viewer may see**, not only the
+  three rows: "Previous tickets · 5". The count comes from the timeline's
+  `visibleCount`, because its `items` stop at the newest 50.
+- Under the rows, the hidden count ("2 hidden (other departments)") when the
+  viewer's departments exclude any, then "View all on Mona Khalil’s page",
+  which opens the contact page.
+- **A first ticket** says "This is their first ticket." When the contact's only
+  other tickets are hidden from the viewer, the hidden count stands in for that
+  sentence.
+- While the timeline loads, three skeleton rows hold the space. A ticket
+  without a contact has no section, and neither does one whose timeline could
+  not be read: an empty list there would claim a first ticket the panel cannot
+  vouch for.
+
 ### Attachments
 
 Attach is real from M1-10. A file goes up as soon as it is chosen: the brand's

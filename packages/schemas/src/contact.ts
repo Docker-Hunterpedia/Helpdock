@@ -399,6 +399,8 @@ export const contactTimelineItemSchema = z.object({
   reference: z.string().min(1).max(64),
   subject: z.string().min(1),
   status: z.string().min(1).max(64),
+  /** The brand status `status` names, so a screen can draw its StatusBadge in the reader's language. */
+  statusId: z.uuid(),
   channel: z.string().min(1).max(32),
   departmentName: z.string().nullable(),
   assigneeName: z.string().nullable(),
@@ -412,8 +414,11 @@ export type ContactTimelineItem = z.infer<typeof contactTimelineItemSchema>;
  * there without saying a word about what is in it.
  */
 export const contactTimelineSchema = z.object({
+  /** The newest of the tickets this reader may see; the api caps the list, not `visibleCount`. */
   items: z.array(contactTimelineItemSchema),
   notes: z.array(contactNoteSchema),
+  /** Every ticket of the contact this reader may see, however many `items` holds. */
+  visibleCount: z.int().nonnegative(),
   hiddenCount: z.int().nonnegative(),
 });
 export type ContactTimeline = z.infer<typeof contactTimelineSchema>;

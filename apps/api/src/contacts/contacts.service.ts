@@ -175,6 +175,7 @@ export class ContactsService {
     return {
       items: [...result.items],
       notes: await this.#notes(tx, contactId),
+      visibleCount: result.visibleCount,
       hiddenCount: result.hiddenCount,
     };
   }

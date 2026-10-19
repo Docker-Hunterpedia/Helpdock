@@ -327,7 +327,7 @@ tenant transaction.
 | `POST /contacts` | `contact:write` | Creates one, with any identifiers given. 409 if one is taken. |
 | `GET /contacts/:contactId` | `contact:read` | The contact, its identifiers, account, notes, duplicate suggestions and stats. |
 | `PATCH /contacts/:contactId` | `contact:write` | Name, account, language, timezone, customer id. |
-| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, hiddenCount }`. |
+| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, visibleCount, hiddenCount }`: the newest 50 tickets the caller may see, each with its status name and `statusId`; how many they may see in all; and how many are hidden from them. |
 | `POST /contacts/:contactId/identities` | `contact:write` | Adds one, normalised. |
 | `DELETE /contacts/:contactId/identities/:identityId` | `contact:write` | Removes one, never the last. |
 | `POST /contacts/:contactId/notes` | `contact:write` | Adds a staff-only note. |
@@ -375,8 +375,12 @@ answers arrive through interfaces declared in
 - `TicketStatsProvider` — open and total counts, CSAT, average first reply, last
   ticket date, per contact. It takes a whole page of contacts at once, because
   fifty rows must not be fifty queries.
-- `ContactTimelineProvider` — the tickets this viewer may see, plus
-  `hiddenCount`, the DOMAIN-RULES §1.2 count of the ones they may not.
+- `ContactTimelineProvider` — the newest 50 tickets this viewer may see,
+  `visibleCount`, how many they may see in all, and `hiddenCount`, the
+  DOMAIN-RULES §1.2 count of the ones they may not. The contact page's "N
+  tickets you can see" and the ticket screen's Previous tickets
+  ([tickets guide](tickets.md#previous-tickets-on-the-contact-card)) both read
+  `visibleCount`, so neither stops counting at the page.
 
 M1-04 shipped first and its implementations answered "none yet". M1-02
 implements both in `apps/api/src/tickets/contact-providers.ts` and passes them

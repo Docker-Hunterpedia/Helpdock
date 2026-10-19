@@ -11,7 +11,7 @@ A rendered snapshot of every artboard on the Helpdock design canvas, so contribu
 | Path | Contents |
 |---|---|
 | [`artboards/`](artboards/) | The source of each artboard (`*.dc.html`) and `canvas.json`, the canvas manifest with every board's title, size and position. Diff these in a PR to review a design change. |
-| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m8`, then `m10`. |
+| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m11`. |
 
 The artboards are static mockups. Names, numbers, domains and size caps on them are sample values; behaviour comes from [DOMAIN-RULES.md](../planning/DOMAIN-RULES.md).
 
@@ -179,6 +179,7 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 |---|---|---|---|
 | `Admin/SignIn-MagicLink` | M9-01 (F6) | [Admin-SignIn-MagicLink.png](screens/m9/Admin-SignIn-MagicLink.png) | [AdminMagicLink.dc.html](artboards/AdminMagicLink.dc.html) |
 | `Admin/SignIn-MagicLink-AR` | M9-01 (F6) | [Admin-SignIn-MagicLink-AR.png](screens/m9/Admin-SignIn-MagicLink-AR.png) | [AdminMagicLinkAR.dc.html](artboards/AdminMagicLinkAR.dc.html) |
+| `Admin/Ticket-ContactHistory` | M1-04 follow-up (#237) | [Admin-Ticket-ContactHistory.png](screens/m9/Admin-Ticket-ContactHistory.png) | [AdminTicketContactHistory.dc.html](artboards/AdminTicketContactHistory.dc.html) |
 
 ### M10 Meta channels
 
@@ -588,6 +589,10 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Admin/SignIn-MagicLink-AR`
 
 ![Admin/SignIn-MagicLink-AR](screens/m9/Admin-SignIn-MagicLink-AR.png)
+
+#### `Admin/Ticket-ContactHistory`
+
+![Admin/Ticket-ContactHistory](screens/m9/Admin-Ticket-ContactHistory.png)
 
 ### M10 Meta channels
 

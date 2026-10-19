@@ -40,7 +40,7 @@ describe('NoContactTimelineProvider', () => {
     const provider: ContactTimelineProvider = new NoContactTimelineProvider();
     const timeline = await provider.forContact(tx, BRAND, 'a');
 
-    expect(timeline).toEqual({ items: [], hiddenCount: 0 });
+    expect(timeline).toEqual({ items: [], visibleCount: 0, hiddenCount: 0 });
   });
 });
 

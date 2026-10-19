@@ -1877,6 +1877,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
   describe('what the contact screens read (M1-04’s seam)', () => {
     let contactId: string;
+    let supportSide: TicketDetail;
 
     beforeAll(async () => {
       const created = await call<{ id: string }>(
@@ -1889,7 +1890,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
       // One in each department, so the same contact is partly visible to each
       // agent and wholly visible to the admin.
-      await createTicket(sam, { subject: 'Support side', contactId });
+      supportSide = await createTicket(sam, { subject: 'Support side', contactId });
       await call<TicketDetail>('POST', `${brandPath(seeded.brandId)}/tickets`, bo, {
         subject: 'Billing side',
         bodyHtml: '<p>x</p>',
@@ -1902,23 +1903,28 @@ describe.skipIf(!hasDocker)('tickets', () => {
       // DOMAIN-RULES §1.2: "the timeline shows a count of hidden tickets so the
       // agent knows history exists".
       const { status, body } = await call<{
-        items: { subject: string }[];
+        items: { subject: string; statusId: string }[];
+        visibleCount: number;
         hiddenCount: number;
       }>('GET', `${brandPath(seeded.brandId)}/contacts/${contactId}/timeline`, sam);
 
       expect(status).toBe(200);
       expect(body.items.map((item) => item.subject)).toEqual(['Support side']);
+      // The status by id as well as by name: the ticket screen draws its badge from it.
+      expect(body.items[0]?.statusId).toBe(supportSide.ticket.status.id);
+      expect(body.visibleCount).toBe(1);
       expect(body.hiddenCount).toBe(1);
     });
 
     it('hides nothing from somebody who may see everything', async () => {
-      const { body } = await call<{ items: unknown[]; hiddenCount: number }>(
+      const { body } = await call<{ items: unknown[]; visibleCount: number; hiddenCount: number }>(
         'GET',
         `${brandPath(seeded.brandId)}/contacts/${contactId}/timeline`,
         ada,
       );
 
       expect(body.items).toHaveLength(2);
+      expect(body.visibleCount).toBe(2);
       expect(body.hiddenCount).toBe(0);
     });
 
@@ -2033,6 +2039,30 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
       expect(again.body.contacts.map((row) => row.id)).not.toContain(lonely.body.id);
     });
+
+    it('counts every visible ticket when the list stops at its page of 50', async () => {
+      // #237: the ticket screen's "Previous tickets · N" reads this count, so
+      // it must not stop where `items` does.
+      const regular = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Many Tickets' },
+      );
+      for (let index = 0; index < 51; index += 1) {
+        await createTicket(sam, { subject: `Visit ${index}`, contactId: regular.body.id });
+      }
+
+      const { body } = await call<{ items: unknown[]; visibleCount: number; hiddenCount: number }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts/${regular.body.id}/timeline`,
+        sam,
+      );
+
+      expect(body.items).toHaveLength(50);
+      expect(body.visibleCount).toBe(51);
+      expect(body.hiddenCount).toBe(0);
+    }, 60_000);
   });
 
   // --------------------------------------------------------------- realtime

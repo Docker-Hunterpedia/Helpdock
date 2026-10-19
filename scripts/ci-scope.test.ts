@@ -50,6 +50,12 @@ describe('CI workspace selection', () => {
       run_image: false,
     });
   });
+  it.each([
+    ['docs/guides/configuration.md', '@helpdock/config'],
+    ['docs/guides/webhooks.md', '@helpdock/jobs'],
+  ])('runs the package suite that renders the generated guide %s', (path) => {
+    expect(scope(path)).toMatchObject({ run_full: false, run_unit: true });
+  });
   it('includes the source of a rename out of a workspace', () => {
     expect(
       classifyChanges(

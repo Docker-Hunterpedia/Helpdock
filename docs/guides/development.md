@@ -989,7 +989,10 @@ image smoke test run for any affected workspace.
 Global configuration, workspace manifests, tooling, unknown paths, empty diffs
 and incomplete GitHub file lists select every suite. A manifest change that only
 bumps `"version"` (the Changesets release pull request) selects none. Renames
-check both paths. Documentation changes skip heavy jobs. The reference imports,
+check both paths. Documentation changes skip heavy jobs, except the two guides a
+package test renders and compares: `docs/guides/configuration.md` selects
+`@helpdock/config` and `docs/guides/webhooks.md` selects `@helpdock/jobs`, so a
+hand edit to either fails on its pull request. The reference imports,
 the slowest jobs at 15 to 30 minutes, run on a pull request only when it touches
 the import path: `apps/api/src/imports/`, files named `import*` or `imported*`
 under `apps/api/src/`, `apps/api/src/media/`, `packages/importers/`,

@@ -620,7 +620,13 @@ confidence = self × (0.6 + 0.4 × support)          0 when the answer cites not
 
 - **self** is the model's own estimate: the auto-reply rules make it end its
   answer with `CONFIDENCE: 0.82`, which is removed before anyone sees the
-  answer. A missing or unreadable line counts as 0.
+  answer. It means how sure the model is that the sources answer the
+  customer's exact question, not how sure it is of what it wrote. The figure
+  is read from a line of its own, or from the very end of the answer when the
+  model runs it on from the last sentence (`… [2]. CONFIDENCE: 0.95`); case,
+  blanks and Markdown emphasis (`**Confidence:** 0.9`) do not matter, and a
+  number anywhere else in the text is never taken for it. A missing or
+  unreadable figure counts as 0, so the answer is handed off.
 - **support** is how strongly retrieval backed the best source the answer
   cites: its fused score divided by the most a chunk can score — first in every
   ranker that ran, with the language boost when it applied. About 1 when both
@@ -639,6 +645,11 @@ should hand off. `decideAutoReply` in `@helpdock/ai` is the whole rule.
 The assistant hands off — sends the brand's handoff message (or the built-in
 one, in the customer's language) and stops — when:
 
+- the model replied `NO_ANSWER`: the rules tell it to, instead of answering,
+  when the sources do not answer the customer's exact question — they cover
+  only a related topic, or the question needs facts it was not given — so it
+  never offers related facts in place of an answer (logged as low confidence,
+  at 0);
 - its confidence is under the threshold, or retrieval found nothing;
 - the answer cited a source it was not given (the citation is invalid, so the
   answer cannot be trusted; DOMAIN-RULES §5).

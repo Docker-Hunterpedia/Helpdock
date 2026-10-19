@@ -36,6 +36,7 @@ describe('readSelfAssessment', () => {
     expect(performance.now() - started).toBeLessThan(500);
   });
 
+  // The first live evaluation (glm-4.6) handed off a correct Arabic answer written this way.
   it('reads a figure run on from the last sentence and removes it', () => {
     expect(readSelfAssessment('تواصل مع الدعم [1]. CONFIDENCE: 0.95')).toEqual({
       text: 'تواصل مع الدعم [1].',
@@ -137,14 +138,6 @@ describe('decideAutoReply', () => {
         answer: 'The sources only cover returns [1].\nNO_ANSWER\nCONFIDENCE: 0.95',
       }),
     ).toEqual({ kind: 'handoff', reason: 'low_confidence', confidence: 0 });
-  });
-
-  it('answers when the model ran its confidence on from the last sentence', () => {
-    expect(decideAutoReply({ ...input, answer: 'Five days [1]. CONFIDENCE: 0.9' })).toMatchObject({
-      kind: 'answer',
-      text: 'Five days [1].',
-      confidence: 0.9,
-    });
   });
 
   it('hands off an answer that cites nothing, however sure the model says it is', () => {

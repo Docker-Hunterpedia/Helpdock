@@ -44,6 +44,7 @@ const LABEL_ANYWHERE = new RegExp(CONFIDENCE_LABEL, 'gi');
 const FIGURE = /^ ?[:：] ?(\d+(?:[.,]\d+)?) ?%?\.?$/;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 const EMPHASIS = /[*_`]/g;
+const BLANK_OR_EMPHASIS = /[\s*_`]/;
 const BLANKS = /\s+/g;
 
 export interface SelfAssessment {
@@ -113,7 +114,7 @@ const figureOf = (rest: string): number | undefined => {
 
 const trimEmphasisEnd = (text: string): string => {
   let end = text.length;
-  while (end > 0 && /[\s*_]/.test(text.charAt(end - 1))) {
+  while (end > 0 && BLANK_OR_EMPHASIS.test(text.charAt(end - 1))) {
     end -= 1;
   }
   return text.slice(0, end);

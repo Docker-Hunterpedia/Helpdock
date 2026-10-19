@@ -17,7 +17,7 @@ invitations and a person's own security page.
 | | |
 |---|---|
 | **Password** | Argon2id with a pepper; blocked by SSO enforcement except emergency admins. |
-| **Sign-in link** | A single-use link by email, valid for `auth.magicLinkTtlMinutes` (10 by default). |
+| **Sign-in link** | A single-use link by email, valid for `auth.magicLinkTtlMinutes` (10 by default). Opening it spends nothing; the click on its confirm screen does. |
 | **Google / GitHub** | OAuth. Shown only when the install has configured that provider. |
 | **Staff SSO** | OIDC or SAML company sign-in; see [SSO setup](sso.md). |
 | **Password reset** | A single-use link by email, valid for 10 minutes. |
@@ -250,15 +250,45 @@ A password reset ends **every** session the account holds, everywhere, and
 forgets every browser it trusted. Somebody resets a password because they think
 somebody else has it.
 
+### Opening a sign-in link spends nothing
+
+A mail scanner or a chat app's link preview fetches every link in a message, so
+a link spent by a `GET` would be spent before the person clicks it. The email
+therefore links to an admin page, `/sign-in/magic#token=…`, and the page asks
+first:
+
+1. It reads the token from the URL fragment. A browser never sends a fragment to
+   a server, so the token reaches no request log and no `Referer` header.
+2. `POST /api/auth/magic-link/preview` with `{ "token": … }` answers the address
+   of the account the link opens and `auth.magicLinkTtlMinutes`. It reads the
+   token without spending it. Every dead, used or unknown token answers the same
+   `401 challenge-expired`, so the call cannot be asked about an address.
+3. **Continue to Helpdock** sends `POST /api/auth/magic-link/consume` with the
+   same body. That spends the link (`GETDEL`, so two clicks race and one wins)
+   and answers exactly as `POST /api/auth/sign-in` does: a session, a
+   second-factor challenge, or enrolment.
+
+Both calls take the token in the body, refuse with `sso-required` while SSO is
+enforced (before the token is touched, so it is not burnt), and share a budget
+of 30 a quarter-hour per address (`unavailable` once it is spent). A refused
+click is in the audit trail as `auth.sign_in.failed` with `method: magic-link`.
+
+A link sent before this page existed points at `GET /api/auth/magic-link/<token>`.
+That route still answers, but only with a redirect to the page, the token moved
+into the fragment; it reads nothing and spends nothing.
+
 ### A token in a path never reaches the log
 
 A query string never reaches the request log at all, so the password reset's
-token is safe by construction. The sign-in link and the staff invitation put
-theirs in a *path*, and the invitation's is served as a page by the admin SPA —
+token is safe by construction, and a fragment never reaches the server, which is
+where a sign-in link carries its token now. A sign-in link sent before the
+confirm screen and the staff invitation put theirs in a *path*, and the
+invitation's is served as a page by the admin SPA —
 through the catch-all route, which never reaches a handler that knows what the
 segment is. So `RequestContextMiddleware` collapses `/invite/<token>` and
 `/api/auth/magic-link/<token>` to `:token` before the line is written, where
-every request passes, rather than in each handler.
+every request passes, rather than in each handler. `/magic-link/preview` and
+`/magic-link/consume` keep their names: their token is in the body.
 
 ### Sending
 
@@ -321,7 +351,7 @@ ASVS 7.1.3, 7.2.1):
 | Action | When |
 |---|---|
 | `auth.sign_in.succeeded` | A session was opened. `meta` has the first factor (`password`, `magic-link`, `oauth`, `invite`) and the second (`totp`, `recovery-code`, `trusted-browser` or none) |
-| `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role` |
+| `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role`, or `invalid-link` for a sign-in link that was dead, used or never issued |
 | `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code; a code used twice |
 | `auth.account.locked` | A challenge spent its last attempt |
 | `auth.step_up.refused` | A security-page check refused: wrong password, or the rate limit |
@@ -485,7 +515,9 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/enrolment/start` | `@Public()` | Stage a secret against an enrolment challenge |
 | `POST /api/auth/enrolment/confirm` | `@Public()` | Turn it on with a live code; answers the recovery codes and the session |
 | `POST /api/auth/magic-link` | `@Public()` | Ask for a sign-in link. Always 204 |
-| `GET /api/auth/magic-link/:token` | `@Public()` | Spend one. Redirects |
+| `POST /api/auth/magic-link/preview` | `@Public()` | Whose account a link opens, without spending it |
+| `POST /api/auth/magic-link/consume` | `@Public()` | Spend one; answers like `/sign-in` |
+| `GET /api/auth/magic-link/:token` | `@Public()` | A link sent before the confirm screen. Redirects to it, spends nothing |
 | `POST /api/auth/exchange` | `@Public()` | One-time code → access token |
 | `POST /api/auth/password/forgot` | `@Public()` | Always 204 |
 | `POST /api/auth/password/reset` | `@Public()` | Token and a new password |

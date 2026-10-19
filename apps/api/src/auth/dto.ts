@@ -5,8 +5,10 @@ import {
   enrolmentConfirmRequestSchema,
   enrolmentStartRequestSchema,
   exchangeRequestSchema,
+  magicLinkPreviewSchema,
   magicLinkRequestSchema,
   magicLinkTokenParamSchema,
+  magicLinkTokenRequestSchema,
   oauthCallbackQuerySchema,
   oauthProviderParamSchema,
   passwordForgotRequestSchema,
@@ -38,6 +40,8 @@ export class SignInRequestDto extends createZodDto(signInRequestSchema) {}
  */
 export class MagicLinkRequestDto extends createZodDto(magicLinkRequestSchema) {}
 export class MagicLinkTokenParamDto extends createZodDto(magicLinkTokenParamSchema) {}
+export class MagicLinkTokenRequestDto extends createZodDto(magicLinkTokenRequestSchema) {}
+export class MagicLinkPreviewDto extends createZodDto(magicLinkPreviewSchema) {}
 export class OauthProviderParamDto extends createZodDto(oauthProviderParamSchema) {}
 export class OauthCallbackQueryDto extends createZodDto(oauthCallbackQuerySchema) {}
 export class TotpRequestDto extends createZodDto(totpRequestSchema) {}

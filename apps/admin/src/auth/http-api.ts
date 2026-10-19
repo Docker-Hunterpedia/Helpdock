@@ -1,6 +1,7 @@
 import type {
   AuthMethods,
   InviteAcceptRequest,
+  MagicLinkPreview,
   OauthProvider,
   PublicInvite,
   RecoveryCodes,
@@ -12,6 +13,7 @@ import {
   authMethodsSchema,
   authSessionResponseSchema,
   enrolmentCompleteResponseSchema,
+  magicLinkPreviewSchema,
   publicInviteSchema,
   recoveryCodesSchema,
   sessionSchema,
@@ -60,6 +62,20 @@ export class HttpAuthApi implements AuthApi {
 
   async requestMagicLink(email: string): Promise<void> {
     await this.#transport.request('POST', '/auth/magic-link', { email: email.trim() });
+  }
+
+  async previewMagicLink(token: string): Promise<MagicLinkPreview> {
+    return magicLinkPreviewSchema.parse(
+      await this.#transport.request('POST', '/auth/magic-link/preview', { token }),
+    );
+  }
+
+  async consumeMagicLink(token: string): Promise<SignInResult> {
+    const response = signInResponseSchema.parse(
+      await this.#transport.request('POST', '/auth/magic-link/consume', { token }),
+    );
+
+    return this.#keepSession(response);
   }
 
   async verifyTotp(

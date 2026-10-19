@@ -11,7 +11,7 @@ import { AlertBanner } from '../ui/alert-banner.tsx';
 import { AuthLayout } from './auth-layout.tsx';
 
 /**
- * Where a magic link and an OAuth callback land. The api has already done the
+ * Where an SSO sign-in and an OAuth callback land. The api has already done the
  * work and redirected here with one of four things in the query string:
  *
  * | | |

@@ -2,6 +2,7 @@ import type {
   AuthErrorCode,
   AuthMethods,
   InviteAcceptRequest,
+  MagicLinkPreview,
   OauthProvider,
   PublicInvite,
   RecoveryCodes,
@@ -26,6 +27,10 @@ export interface AuthApi {
   ssoStartUrl(connectionId: string, returnTo: string): string;
   signInWithPassword(email: string, password: string): Promise<SignInResult>;
   requestMagicLink(email: string): Promise<void>;
+  /** Whose account a sign-in link opens. Reading it spends nothing (M9-01 F6). */
+  previewMagicLink(token: string): Promise<MagicLinkPreview>;
+  /** Spends the link on the person's click; answers like a password sign-in. */
+  consumeMagicLink(token: string): Promise<SignInResult>;
   verifyTotp(
     challengeId: string,
     code: string,

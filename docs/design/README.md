@@ -173,6 +173,13 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | `Widget/CSAT-EN` | M8-06 | [Widget-CSAT-EN.png](screens/m8/Widget-CSAT-EN.png) | [WidgetCsatEN.dc.html](artboards/WidgetCsatEN.dc.html) |
 | `Widget/CSAT-AR` | M8-06 | [Widget-CSAT-AR.png](screens/m8/Widget-CSAT-AR.png) | [WidgetCsatAR.dc.html](artboards/WidgetCsatAR.dc.html) |
 
+### M9 Hardening
+
+| Artboard | Deliverables | Screen | Source |
+|---|---|---|---|
+| `Admin/SignIn-MagicLink` | M9-01 (F6) | [Admin-SignIn-MagicLink.png](screens/m9/Admin-SignIn-MagicLink.png) | [AdminMagicLink.dc.html](artboards/AdminMagicLink.dc.html) |
+| `Admin/SignIn-MagicLink-AR` | M9-01 (F6) | [Admin-SignIn-MagicLink-AR.png](screens/m9/Admin-SignIn-MagicLink-AR.png) | [AdminMagicLinkAR.dc.html](artboards/AdminMagicLinkAR.dc.html) |
+
 ### M10 Meta channels
 
 | Artboard | Deliverables | Screen | Source |
@@ -571,6 +578,16 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 
 ![Widget/CSAT-AR](screens/m8/Widget-CSAT-AR.png)
 
+
+### M9 Hardening
+
+#### `Admin/SignIn-MagicLink`
+
+![Admin/SignIn-MagicLink](screens/m9/Admin-SignIn-MagicLink.png)
+
+#### `Admin/SignIn-MagicLink-AR`
+
+![Admin/SignIn-MagicLink-AR](screens/m9/Admin-SignIn-MagicLink-AR.png)
 
 ### M10 Meta channels
 

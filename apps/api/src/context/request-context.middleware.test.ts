@@ -128,6 +128,9 @@ describe('redactCredentialSegments', () => {
     '/',
     '/tickets',
     '/api/auth/sign-in',
+    // The confirm screen's calls carry the token in the body, so their names stay.
+    '/api/auth/magic-link/preview',
+    '/api/auth/magic-link/consume',
     '/admin/staff',
     // No segment after it: there is nothing to redact and nothing to lose.
     '/invite',

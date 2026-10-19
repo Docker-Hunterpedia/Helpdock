@@ -11,7 +11,7 @@ import { uuidv7 } from '@helpdock/db';
 import argon2 from 'argon2';
 import { generateKeyPair } from 'jose';
 import { generate } from 'otplib';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SsoIdentityService } from '../sso/identity.service.js';
 import { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import { authRedis } from '../testing/auth-redis.js';
@@ -700,22 +700,33 @@ describe('enrolTotp and confirmTotp', () => {
 });
 
 describe('the magic link', () => {
+  const IP = '203.0.113.5';
+  const consume = (token: string) =>
+    service.consumeMagicLink({ token, ip: IP, userAgent: 'Firefox' });
+  const preview = (token: string) => service.previewMagicLink({ token, ip: IP });
+  const requestLink = async (email = 'lina@helpdock.com'): Promise<string> => {
+    await service.requestMagicLink({ email, ip: IP });
+    return tokenIn(mail.sent.at(-1)?.url ?? '');
+  };
+
   it('sends nothing for an address nobody has', async () => {
-    await service.requestMagicLink({ email: 'nobody@helpdock.com', ip: '203.0.113.5' });
+    await service.requestMagicLink({ email: 'nobody@helpdock.com', ip: IP });
 
     expect(mail.sent).toEqual([]);
   });
 
-  it('queues one link for the account, lasting the configured minutes', async () => {
+  it('queues one link to the confirm screen, with the token in the fragment', async () => {
     const user = staff.add(await newUser());
 
-    await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
+    await service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP });
 
     expect(mail.sent).toEqual([
       {
         kind: 'magicLink',
         userId: user.id,
-        url: expect.stringContaining(`${APP_URL}/api/auth/magic-link/`),
+        url: expect.stringMatching(
+          new RegExp(`^${APP_URL}/sign-in/magic#token=[A-Za-z0-9_-]{43}$`),
+        ),
         expiresIn: 10,
         brandId: null,
       },
@@ -727,47 +738,98 @@ describe('the magic link', () => {
     mail.hasBrand = false;
 
     await expect(
-      service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' }),
+      service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP }),
     ).resolves.toBeUndefined();
     expect(mail.sent).toEqual([]);
   });
 
+  it('previews whose account the link opens, and the preview spends nothing (M9-01 F6)', async () => {
+    staff.add(await newUser());
+    const token = await requestLink();
+
+    await expect(preview(token)).resolves.toEqual({
+      email: 'lina@helpdock.com',
+      expiresInMinutes: 10,
+    });
+    await expect(preview(token)).resolves.toMatchObject({ email: 'lina@helpdock.com' });
+    await expect(consume(token)).resolves.toMatchObject({ kind: 'session' });
+  });
+
+  it('previews nothing for a token it never issued', async () => {
+    await expect(preview('made-up')).rejects.toMatchObject({
+      auth: { code: 'challenge-expired' },
+    });
+  });
+
   it('signs in once and then the link is spent', async () => {
     staff.add(await newUser());
-    await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
-    const token = tokenIn(mail.sent[0]?.url ?? '');
+    const token = await requestLink();
 
-    await expect(service.consumeMagicLink(token, 'Firefox')).resolves.toMatchObject({
-      kind: 'session',
+    await expect(consume(token)).resolves.toMatchObject({ kind: 'session' });
+    await expect(consume(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+    await expect(preview(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+  });
+
+  it('refuses a link whose lifetime has passed, to the preview and to the click', async () => {
+    staff.add(await newUser());
+    const token = await requestLink();
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+
+      await expect(preview(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+      await expect(consume(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records a refused link in the audit trail without naming anybody', async () => {
+    await expect(consume('made-up')).rejects.toMatchObject({
+      auth: { code: 'challenge-expired' },
     });
-    await expect(service.consumeMagicLink(token, 'Firefox')).resolves.toBeNull();
+
+    expect(audit.entries.at(-1)).toEqual({
+      action: 'auth.sign_in.failed',
+      userId: null,
+      actor: 'system',
+      meta: { method: 'magic-link', reason: 'invalid-link' },
+    });
   });
 
   it('still asks for the second factor when the account has one', async () => {
     const { user } = await withTotp();
     staff.add(user);
-    await service.requestMagicLink({ email: user.email, ip: '203.0.113.5' });
 
-    await expect(
-      service.consumeMagicLink(tokenIn(mail.sent[0]?.url ?? ''), 'Firefox'),
-    ).resolves.toMatchObject({ kind: 'totp-required' });
+    await expect(consume(await requestLink(user.email))).resolves.toMatchObject({
+      kind: 'totp-required',
+    });
   });
 
-  it('answers null for a link belonging to an account that has since been deactivated', async () => {
+  it('refuses a link belonging to an account that has since been deactivated', async () => {
     const user = staff.add(await newUser());
-    await service.requestMagicLink({ email: user.email, ip: '203.0.113.5' });
+    const token = await requestLink(user.email);
     staff.users.set(user.id, { ...user, status: 'deactivated' });
 
-    await expect(
-      service.consumeMagicLink(tokenIn(mail.sent[0]?.url ?? ''), 'Firefox'),
-    ).resolves.toBeNull();
+    await expect(preview(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+    await expect(consume(token)).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+  });
+
+  it('stops answering one address once its lookup budget is spent', async () => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await preview('made-up').catch(() => undefined);
+    }
+
+    await expect(preview('made-up')).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+    await expect(consume('made-up')).rejects.toMatchObject({ auth: { code: 'unavailable' } });
   });
 
   it('stops sending once the per-address budget is spent', async () => {
     staff.add(await newUser());
 
     for (let attempt = 0; attempt < 7; attempt += 1) {
-      await service.requestMagicLink({ email: 'lina@helpdock.com', ip: '203.0.113.5' });
+      await service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP });
     }
 
     expect(mail.sent.length).toBeLessThanOrEqual(5);
@@ -1364,11 +1426,9 @@ describe('the audit trail of a sign-in (ASVS 7.1.3, 7.2.1)', () => {
   });
 });
 
-/** The token out of the one line of the message that is just a link. */
-const tokenIn = (text: string): string =>
-  (text.split('\n').find((line) => line.includes('/api/auth/magic-link/')) ?? '')
-    .split('/')
-    .at(-1) ?? '';
+/** The token out of the fragment of a sign-in link. */
+const tokenIn = (url: string): string =>
+  new URLSearchParams(new URL(url, APP_URL).hash.slice(1)).get('token') ?? '';
 
 const resetTokenIn = (text: string): string => {
   const line = text.split('\n').find((candidate) => candidate.includes('/sign-in/reset')) ?? '';

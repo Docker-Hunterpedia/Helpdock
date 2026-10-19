@@ -3,6 +3,7 @@ import type {
   AuthMethods,
   AuthSessionResponse,
   EnrolmentCompleteResponse,
+  MagicLinkPreview,
   OauthProvider,
   RecoveryCodes,
   Session,
@@ -27,7 +28,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import { ENV } from '../runtime/tokens.js';
-import { AuthService, type SignInOutcome } from './auth.service.js';
+import { AuthService, magicLinkScreenUrl, type SignInOutcome } from './auth.service.js';
 import { AuthFailure, isAuthFailure } from './auth-failure.js';
 import {
   AuthMethodsDto,
@@ -36,8 +37,10 @@ import {
   EnrolmentConfirmRequestDto,
   EnrolmentStartRequestDto,
   ExchangeRequestDto,
+  MagicLinkPreviewDto,
   MagicLinkRequestDto,
   MagicLinkTokenParamDto,
+  MagicLinkTokenRequestDto,
   OauthCallbackQueryDto,
   OauthProviderParamDto,
   PasswordForgotRequestDto,
@@ -225,9 +228,44 @@ export class AuthController {
   }
 
   /**
-   * The link itself. It answers with a redirect because a mail client is what
-   * follows it, and the session is handed over as a one-time code rather than
-   * as a token in the URL.
+   * Whose account a sign-in link opens, for the confirm screen. Spends nothing.
+   * The token is in the body, not the path, so it never reaches a request log.
+   */
+  @Post('magic-link/preview')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(MagicLinkPreviewDto)
+  previewMagicLink(
+    @Body(new ZodValidationPipe(MagicLinkTokenRequestDto)) { token }: MagicLinkTokenRequestDto,
+    @Req() request: FastifyRequest,
+  ): Promise<MagicLinkPreview> {
+    return this.#auth.previewMagicLink({ token, ip: request.ip });
+  }
+
+  /**
+   * The person's click on the confirm screen: spends the link and answers like
+   * `/sign-in`, a session or the second factor still to come.
+   */
+  @Post('magic-link/consume')
+  @Public()
+  async consumeMagicLink(
+    @Body(new ZodValidationPipe(MagicLinkTokenRequestDto)) { token }: MagicLinkTokenRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SignInResponse> {
+    const outcome = await this.#auth.consumeMagicLink({
+      token,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+
+    return this.#answer(outcome, reply);
+  }
+
+  /**
+   * A link sent before the confirm screen existed. It spends nothing: a mail
+   * scanner follows a `GET`, so a `GET` only forwards the token to the screen,
+   * in the fragment, and the person's click spends it there (M9-01 F6).
    *
    * The token *is* in this URL, which is the one place a credential appears in
    * a path. The request log would otherwise carry it, so the handler replaces
@@ -235,20 +273,13 @@ export class AuthController {
    */
   @Get('magic-link/:token')
   @Public()
-  async consumeMagicLink(
+  async openMagicLink(
     @Param(new ZodValidationPipe(MagicLinkTokenParamDto)) { token }: MagicLinkTokenParamDto,
-    @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
     requireRequestContext().path = '/api/auth/magic-link/:token';
 
-    const outcome = await this.#auth.consumeMagicLink(token, request.headers['user-agent']);
-    if (outcome === null) {
-      await this.#redirect(reply, '/sign-in/complete', { error: 'challenge-expired' });
-      return;
-    }
-
-    await this.#redirectFor(outcome, reply, '/sign-in/complete');
+    await reply.redirect(magicLinkScreenUrl(this.#env.APP_URL, token), HttpStatus.FOUND);
   }
 
   /** Turns the one-time code from a redirect into an access token. */

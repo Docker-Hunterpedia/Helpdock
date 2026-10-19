@@ -25,7 +25,7 @@ endpoint with no rate limit, or weak crypto in practice.
 | F3 | Low | A widget socket keeps its conversation rooms after the signed-identity link is withdrawn | `api/widget/widget.gateway.ts`, `api/widget/widget-session.service.ts` | Fixed for sockets in `82683dc` and for SSE streams after; open for origin removal and secret rotation |
 | F4 | Low | OAuth callback not bound to the browser that started it (login CSRF) | `api/auth/oauth/oauth.service.ts`, `api/auth/auth.controller.ts` | Fixed in `10ac844` |
 | F5 | Low | API keys and webhook deliveries ignore a brand's deletion grace | `api/api-keys/api-key-principal-resolver.ts`, `api/tenant/all-brands.ts`, `api/webhooks/webhook-deliver.job.ts` | Fixed in `275a3f2` |
-| F6 | Low | The magic link is spent by a plain `GET` | `api/auth/auth.controller.ts`, `api/auth/auth.service.ts` | Open: the confirm screen needs an artboard first |
+| F6 | Low | The magic link is spent by a plain `GET` | `api/auth/auth.controller.ts`, `api/auth/auth.service.ts` | Fixed by the pull request that adds `/sign-in/magic` (branch `fix/m9-01-f6-magic-link-confirm`) |
 | N1 | Not rated | The `/widget` handshake's address budget is shared by every visitor behind Caddy | `api/widget/widget.gateway.ts` | Open: fix not written |
 
 Count: High 0, Medium 2, Low 4. N1 is not in the review. It was found while
@@ -96,10 +96,20 @@ back; skipped deliveries are not replayed.
 **F6, Low: the magic link is spent by a `GET`.** `GET /api/auth/magic-link/:token`
 (`api/auth/auth.controller.ts:234-250`) spends the token with `GETDEL`
 (`api/auth/auth.service.ts:554`) and sets the session cookie. A mail scanner that
-fetches the link therefore consumes the sign-in. Open. The fix is an admin page at
-`/sign-in/magic` plus `POST /api/auth/magic-link/consume`. Invites already preview
-without spending (`api/auth/email-token.store.ts`). AGENTS.md requires an artboard
-before a screen is built, so this waits for one.
+fetches the link therefore consumes the sign-in. Fixed, from the artboards
+`Admin/SignIn-MagicLink` and `-AR`: the email links to the admin page
+`/sign-in/magic#token=…`, where the token is in the fragment and so reaches no
+server log and no `Referer`. The page reads the account with
+`POST /api/auth/magic-link/preview`, which uses `EmailTokenStore.read` (a `GET`,
+not a `GETDEL`), and spends the link only on the person's click with
+`POST /api/auth/magic-link/consume`, which answers like `/sign-in`. Both take the
+token in a JSON body, check SSO enforcement before touching the token, and
+spend a 30-per-15-minutes per-address budget (`MAGIC_LINK_LOOKUP_RULE`). The old
+`GET /api/auth/magic-link/:token` stays for links already in inboxes and now only
+redirects to the page. Tests: `api/auth/auth.integration.test.ts` (a `GET` twice,
+then the click still signs in; a second click is refused),
+`api/auth/auth.service.test.ts` (preview spends nothing, expiry, audit) and
+`apps/admin/e2e/magic-link.spec.ts`.
 
 **N1, not rated: the handshake's address budget is shared behind Caddy.** The
 `/widget` handshake spends `widget-ip` (300 per 5 minutes per brand) against
@@ -214,4 +224,4 @@ path listed exists at `3579972`.
 12. **Redis** on the production Compose network, which has no password by design,
     and the adapter and revocation channels an attacker there could publish to.
 
-**Open for 1.0:** F6 (the magic-link confirm screen, which needs an artboard) and the shared handshake budget (N1).
+**Open for 1.0:** the shared handshake budget (N1). F6 is fixed.

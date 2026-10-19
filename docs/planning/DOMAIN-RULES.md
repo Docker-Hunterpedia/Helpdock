@@ -305,6 +305,8 @@ Presigned GET URLs are issued only by an endpoint that first authorises the call
 
 CSAT links, transcript links, and magic links are single-use, signed, bound to one ticket or one address, and expire (CSAT 30 days, transcript 24 hours, magic link 10 minutes). None of them grant access to anything beyond their purpose.
 
+A staff sign-in link is spent by an explicit `POST` from the page it opens, never by the `GET` that opens it: mail scanners and link previews follow every link in a message, and opening the page only reads the token (M9-01 F6).
+
 ### 4.7 Meta identities
 
 - Each platform scopes its customer id (M10). A WhatsApp business-scoped user id is the same for every number in one business portfolio and different in another; a Messenger id is per Page; an Instagram id is per professional account. The stored value is the WhatsApp user id alone, and for Messenger and Instagram `<account external id>:<customer id>`, so the same person writing to two Pages of one brand is two identifiers until an agent merges them.

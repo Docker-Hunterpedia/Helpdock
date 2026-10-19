@@ -320,7 +320,7 @@ export const prepareEvaluation = async ({
   const http: HttpTransport =
     config.mode === 'mock'
       ? fakeEmbeddingsServer(MOCK_DIMS, [MOCK_EMBEDDING_MODEL], bagOfWordsVector).http
-      : safeAiTransport([]);
+      : safeAiTransport(config.live?.outboundAllowCidrs ?? []);
   const stack = await startEvalStack({
     databaseUrl: config.databaseUrl,
     redisUrl: config.redisUrl,

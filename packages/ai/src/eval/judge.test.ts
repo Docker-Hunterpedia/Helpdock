@@ -21,6 +21,15 @@ describe('judgeInstructions', () => {
   it('opens with the marker the mocked model recognises', () => {
     expect(judgeInstructions().startsWith(JUDGE_MARKER)).toBe(true);
   });
+
+  it('grades grounding claim by claim against the cited source, general knowledge excluded', () => {
+    const grounded = judgeInstructions()
+      .split('\n')
+      .find((line) => line.startsWith('- "grounded"'));
+    expect(grounded).toContain('the source it cites');
+    expect(grounded).toContain('cites nothing');
+    expect(grounded).toContain('general knowledge');
+  });
 });
 
 describe('parseJudgeVerdict', () => {

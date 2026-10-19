@@ -1,5 +1,6 @@
 import type { Context } from '@mariozechner/pi-ai';
 import type { ModelTransport } from '../complete.js';
+import { validateCitations } from '../knowledge/citations.js';
 import { detectLocale } from '../knowledge/locale.js';
 import { createFakeModel } from '../testing.js';
 import { JUDGE_MARKER, type JudgeVerdict, parseJudgePayload } from './judge.js';
@@ -140,7 +141,11 @@ const scriptedAnswer = (item: EvalItem, system: string, flaws: MockFlaws): strin
 
 const normalise = (text: string): string => text.toLowerCase().replace(/\s+/g, ' ').trim();
 
-/** Grades as a careful reader would, from the payload alone. */
+/**
+ * Grades as a careful reader would, from the payload alone. It cannot tell
+ * which source states which fact, so grounded is the part it can see: the key
+ * facts are there, and the answer cites only sources it was shown, at least one.
+ */
 export const mockVerdict = (payload: string): JudgeVerdict => {
   const input = parseJudgePayload(payload);
   if (input === null) {
@@ -155,8 +160,13 @@ export const mockVerdict = (payload: string): JudgeVerdict => {
   }
   const answer = normalise(input.answer);
   const correct = input.keyFacts.every((fact) => answer.includes(normalise(fact)));
+  // The payload lists the sources in the order the model saw them, `[1]` first.
+  const citations = validateCitations(
+    input.answer,
+    input.sources.map((source) => ({ chunkId: String(source.index) })),
+  );
   return {
-    grounded: correct,
+    grounded: correct && !citations.uncited && !citations.handoff,
     correct,
     languageMatch: detectLocale(input.answer) === input.locale,
     clarifying: /[?؟]\s*$/.test(input.answer.trim()),

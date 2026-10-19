@@ -15,6 +15,16 @@ name: AI evaluation
 # `AI_EVAL_BASE_URL`, `AI_EVAL_EMBEDDING_BASE_URL` (https://api.openai.com/v1),
 # `AI_EVAL_EMBEDDING_MODEL` (text-embedding-3-small), `AI_EVAL_EMBEDDING_DIMS`
 # (1536). Without the key the run stops with a notice instead of failing.
+#
+# A chat-only key (a provider with no embeddings endpoint, such as a GLM
+# Coding Plan) sets `AI_EVAL_EMBEDDING_LOCAL` to `ollama`: the run starts
+# Ollama on the runner, pulls an open multilingual embedding model and embeds
+# with it, so no embeddings key is needed. The model and its dimensions are
+# then `AI_EVAL_EMBEDDING_MODEL` (bge-m3:567m) and `AI_EVAL_EMBEDDING_DIMS`
+# (1024); `AI_EVAL_EMBEDDING_BASE_URL` is ignored, and the run's SSRF-safe
+# client is allowed 127.0.0.1 through `AI_EVAL_OUTBOUND_ALLOW_CIDRS`, which
+# only the evaluation harness reads (the install's `OUTBOUND_ALLOW_CIDRS`
+# stays empty).
 on:
   schedule:
     - cron: '17 3 * * *'
@@ -76,6 +86,54 @@ jobs:
         if: env.AI_EVAL_CONFIGURED == 'true'
         run: pnpm exec turbo run build --filter='./packages/*'
 
+      # Where the fixture and the questions are embedded: the provider's
+      # endpoint from the variables, or Ollama on this runner.
+      - name: Choose the embeddings endpoint
+        id: embeddings
+        if: env.AI_EVAL_CONFIGURED == 'true'
+        env:
+          LOCAL: ${{ vars.AI_EVAL_EMBEDDING_LOCAL }}
+          BASE_URL: ${{ vars.AI_EVAL_EMBEDDING_BASE_URL }}
+          MODEL: ${{ vars.AI_EVAL_EMBEDDING_MODEL }}
+          DIMS: ${{ vars.AI_EVAL_EMBEDDING_DIMS }}
+        run: |
+          case "$LOCAL" in
+            ollama)
+              {
+                echo 'ollama=true'
+                echo 'base_url=http://127.0.0.1:11434/v1'
+                echo "model=${MODEL:-bge-m3:567m}"
+                echo "dims=${DIMS:-1024}"
+                echo 'allow_cidrs=127.0.0.1/32'
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            '')
+              {
+                echo 'ollama=false'
+                echo "base_url=${BASE_URL:-https://api.openai.com/v1}"
+                echo "model=${MODEL:-text-embedding-3-small}"
+                echo "dims=${DIMS:-1536}"
+                echo 'allow_cidrs='
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error title=AI evaluation::AI_EVAL_EMBEDDING_LOCAL is '$LOCAL'; it is either 'ollama' or unset."
+              exit 1
+              ;;
+          esac
+
+      # Published on the loopback interface only; the run's Node process is
+      # the one client.
+      - name: Start Ollama and pull the embedding model
+        if: env.AI_EVAL_CONFIGURED == 'true' && steps.embeddings.outputs.ollama == 'true'
+        env:
+          OLLAMA_IMAGE: ollama/ollama:0.35.1@sha256:292ee7945dfc3d5840a181f3ab86fedb1e66703e02c8af98b50f4da56b7e278c
+          MODEL: ${{ steps.embeddings.outputs.model }}
+        run: |
+          docker run --detach --name ollama --publish 127.0.0.1:11434:11434 "$OLLAMA_IMAGE"
+          timeout 120 sh -c 'until curl --silent --fail http://127.0.0.1:11434/api/version; do sleep 2; done'
+          docker exec ollama ollama pull "$MODEL"
+
       - name: Evaluate against the provider
         if: env.AI_EVAL_CONFIGURED == 'true'
         run: pnpm eval:ai
@@ -86,10 +144,12 @@ jobs:
           AI_EVAL_BASE_URL: ${{ vars.AI_EVAL_BASE_URL }}
           AI_EVAL_MODEL: ${{ vars.AI_EVAL_MODEL || 'gpt-4o-mini' }}
           AI_EVAL_JUDGE_MODEL: ${{ vars.AI_EVAL_JUDGE_MODEL }}
-          AI_EVAL_EMBEDDING_BASE_URL: ${{ vars.AI_EVAL_EMBEDDING_BASE_URL || 'https://api.openai.com/v1' }}
-          AI_EVAL_EMBEDDING_API_KEY: ${{ secrets.AI_EVAL_EMBEDDING_API_KEY || secrets.AI_EVAL_API_KEY }}
-          AI_EVAL_EMBEDDING_MODEL: ${{ vars.AI_EVAL_EMBEDDING_MODEL || 'text-embedding-3-small' }}
-          AI_EVAL_EMBEDDING_DIMS: ${{ vars.AI_EVAL_EMBEDDING_DIMS || '1536' }}
+          AI_EVAL_EMBEDDING_BASE_URL: ${{ steps.embeddings.outputs.base_url }}
+          # Ollama takes no key; the provider's key is not sent to it.
+          AI_EVAL_EMBEDDING_API_KEY: ${{ steps.embeddings.outputs.ollama != 'true' && (secrets.AI_EVAL_EMBEDDING_API_KEY || secrets.AI_EVAL_API_KEY) || '' }}
+          AI_EVAL_EMBEDDING_MODEL: ${{ steps.embeddings.outputs.model }}
+          AI_EVAL_EMBEDDING_DIMS: ${{ steps.embeddings.outputs.dims }}
+          AI_EVAL_OUTBOUND_ALLOW_CIDRS: ${{ steps.embeddings.outputs.allow_cidrs }}
           AI_EVAL_REPORT_DIR: ${{ github.workspace }}/eval-report
 
       # Whether the thresholds were met or not: the report is the point.

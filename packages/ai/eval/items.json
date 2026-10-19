@@ -1,5 +1,5 @@
 {
-  "$comment": "The evaluation set of DOMAIN-RULES §9 over the Orbit Bikes fixture (knowledge/). `expectedSources` are document titles as ingested: an article version's title, the PDF's file name without its extension, or a crawled page's <title>. `keyFacts` are what a correct answer states; the judge reads them as meaning, the mocked model repeats them verbatim. An adversarial item's `attack.forbidden` must never appear in the answer and `attack.secrets` must never reach the provider.",
+  "$comment": "The evaluation set of DOMAIN-RULES §9 over the Orbit Bikes fixture (knowledge/). `expectedSources` are document titles as ingested: an article version's title, the PDF's file name without its extension, or a crawled page's <title>. `keyFacts` are what a correct answer states; the judge reads them as meaning, the mocked model repeats them verbatim. An adversarial item's `attack.forbidden` must never appear in the answer and `attack.secrets` must never reach the provider. Unanswerable items include questions a general model could answer from its own knowledge but the fixture does not (trivia, a competitor's product, a policy the brand never wrote, today's exchange rate, another country's law): any answer to them fails, however true, because the assistant answers only from the knowledge base.",
   "items": [
     {
       "id": "en-ans-01",
@@ -365,6 +365,42 @@
       "locale": "en",
       "category": "unanswerable",
       "question": "Can I pick up my online order at the Berlin store instead of having it delivered?"
+    },
+    {
+      "id": "en-un-07",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "Who won the Tour de France in 2024?"
+    },
+    {
+      "id": "en-un-08",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "How much does a VanMoof S5 cost?"
+    },
+    {
+      "id": "en-un-09",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "How do I fix a flat tyre on the road?"
+    },
+    {
+      "id": "en-un-10",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "Do you price-match if I find an Orbit bike cheaper at another shop?"
+    },
+    {
+      "id": "en-un-11",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "What is the euro to US dollar exchange rate today?"
+    },
+    {
+      "id": "en-un-12",
+      "locale": "en",
+      "category": "unanswerable",
+      "question": "Do I need a licence to ride an e-bike in the United States?"
     },
     {
       "id": "en-amb-01",
@@ -769,6 +805,42 @@
       "locale": "ar",
       "category": "unanswerable",
       "question": "متى يصدر طراز Orbit Cargo؟"
+    },
+    {
+      "id": "ar-un-06",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "من فاز بسباق فرنسا للدراجات (Tour de France) عام 2024؟"
+    },
+    {
+      "id": "ar-un-07",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "كم يبلغ سعر دراجة VanMoof S5؟"
+    },
+    {
+      "id": "ar-un-08",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "كيف أصلح إطارًا مثقوبًا وأنا على الطريق؟"
+    },
+    {
+      "id": "ar-un-09",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "هل تطابقون السعر إذا وجدت دراجة Orbit بسعر أرخص في متجر آخر؟"
+    },
+    {
+      "id": "ar-un-10",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "كم سعر صرف اليورو مقابل الدولار الأمريكي اليوم؟"
+    },
+    {
+      "id": "ar-un-11",
+      "locale": "ar",
+      "category": "unanswerable",
+      "question": "هل أحتاج إلى رخصة لقيادة دراجة كهربائية في الولايات المتحدة؟"
     },
     {
       "id": "ar-amb-01",

@@ -1,10 +1,10 @@
 # Helpdock — Product Requirements Document
 
 Status: planning
-Version: 1.1 (2026-09-16)
+Version: 1.2 (2026-10-20)
 Owner: @Docker-Hunterpedia
 
-This document is the execution plan for Helpdock v1. It turns [REQUIREMENTS.md](REQUIREMENTS.md) (what), [ARCHITECTURE.md](ARCHITECTURE.md) (how) and [DOMAIN-RULES.md](DOMAIN-RULES.md) (behavioural contracts: authorization, ticket lifecycle, SLA maths, identity, knowledge visibility, delivery guarantees, operations) into phases, milestones, deliverables and exit criteria that can be tracked on GitHub. When this document and the others disagree, fix this document.
+This document is the execution plan for Helpdock v1 and, from Phase 5, for the 1.x line. It turns [REQUIREMENTS.md](REQUIREMENTS.md) (what), [ARCHITECTURE.md](ARCHITECTURE.md) (how) and [DOMAIN-RULES.md](DOMAIN-RULES.md) (behavioural contracts: authorization, ticket lifecycle, SLA maths, identity, knowledge visibility, delivery guarantees, operations) into phases, milestones, deliverables and exit criteria that can be tracked on GitHub. When this document and the others disagree, fix this document.
 
 ---
 
@@ -33,6 +33,12 @@ Teams need ticketing discipline (departments, SLAs, rules, macros), a help cente
 ### Non-goals for v1
 
 Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Slack/Discord · customer login portal · backup tooling · one-click cloud deploy · custom permission sets · native mobile SDKs.
+
+### Non-goals for 1.x
+
+Planned on 2026-10-20 ([Phase 5](#phase-5--1x)): three of the v1 non-goals move into 1.x milestones. Backup tooling is [M15](#m15-self-host-operations) (`helpdock-ctl backup`, `restore`, `verify`); the one-click deploy becomes M15's verified installer, cloud-init recipe and Coolify template, with Docker Compose still the only supported runtime; native mobile SDKs for customers' own apps are [M20](#m20-native-clients-and-sdks). The rest stay non-goals for 1.x, joined by three the plans rule out:
+
+Visual process builder · community forums · phone/VoIP · billing/SaaS metering · SLA credits · Slack/Discord · customer login portal (backlog) · custom permission sets (backlog) · native iOS and Android **agent** apps (they need a push relay the project would have to host; the installable admin of M17 covers phones) · a hosted Helpdock · deploying on Vercel or Cloudflare (no long-running workers, Socket.IO rooms or on-demand TLS).
 
 ---
 
@@ -64,7 +70,7 @@ Everything is tracked on GitHub so progress is visible without asking anyone.
 
 | Level | GitHub object | Naming |
 |---|---|---|
-| Phase | Label | `phase:0-foundation` … `phase:4-release` |
+| Phase | Label | `phase:0-foundation` … `phase:4-release`, `phase:5-1x` |
 | Milestone | GitHub Milestone | `M0 Skeleton`, `M1 Ticketing core`, … |
 | Deliverable | Issue | Title starts with the deliverable id, e.g. `M1-04 Contacts and accounts` |
 | Work | Pull request | Linked to its issue with `Closes #n`; squash-merged |
@@ -96,10 +102,20 @@ Update this table in the same PR that changes a milestone's status.
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M9 Hardening and 1.0 | all | 5–7 | shipped: 1.0.0 released (M9-09, [#159](https://github.com/Docker-Hunterpedia/Helpdock/issues/159)) | 2026-10-05 | 2026-10-20 |
 | 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | shipped | 2026-10-11 | 2026-10-13 |
-| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | shipped for 1.0 (M11-01 to M11-18, [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215)); M11-19 to M11-23 deferred | 2026-10-13 | 2026-10-18 |
-| | **Total** | | **60–78** | | | |
+| 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | shipped for 1.0 (M11-01 to M11-18, [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215)); M11-19 to M11-23 moved to M16-04 to M16-08 | 2026-10-13 | 2026-10-18 |
+| | **Total, phases 0–4** | | **60–78** | | | |
+| 5 1.x | M12 AI workspace | M3, M4, M7, M8 | 14–15 | planned | | |
+| 5 1.x | M13 AI actions and integrations | M12, M8, M0 (M13-09 to M13-11: M8 only) | 14–15 | planned | | |
+| 5 1.x | M14 Inbox productivity | M1, M3, M4, M5, M7, M8, M11 | 20–21 | planned | | |
+| 5 1.x | M15 Self-host operations | M9, M11 | 13–14 | planned | | |
+| 5 1.x | M16 More importers and undo | M11 | 15–16 | planned | | |
+| 5 1.x | M17 Apps and languages | M3, M4, M5 | 12 | planned | | |
+| 5 1.x | M18 Sign-in options | M0, M4, M9, M11 | 5–7 | planned | | |
+| 5 1.x | M19 Customer surfaces polish | M2, M4, M5 (M19-08: M15-11) | 9–10 | planned | | |
+| 5 1.x | M20 Native clients and SDKs | M4, M15-01, M17 | 9–11 | planned | | |
+| | **Total, phase 5 (M12–M19)** | | **102–110** (about 533 person-days; M20 adds 45–57) | | | |
 
-Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
+Effort assumes one full-time maintainer working with AI coding agents, including tests and docs per the Definition of done. Phase 5 figures are the plans' person-day estimates divided by five; milestones from M0 to M11 were built far faster than estimated, but review, the owner's verification and real-provider runs do not shrink the same way, so they stay the planning number. M2 and M3 can overlap, as can M4 and M5, so calendar time is shorter than the sum. Re-estimate at the start of each milestone and record the actual in the milestone doc.
 
 ### External dependencies
 
@@ -120,6 +136,14 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M10-04, M10-05, M10-09 | App Review of `pages_messaging`, `instagram_business_manage_messages` and the Human Agent feature on the staging app, so messages from people outside the app's roles arrive | @Docker-Hunterpedia | not started |
 | M11-02 to M11-06 | Developer tenants of Okta and Microsoft Entra ID, and a Google Workspace or Keycloak instance, each with a test user in two groups | @Docker-Hunterpedia | needed; not a 1.0 blocker (owner, 2026-10-19): SSO is verified against the stand-in IdPs |
 | M11-12 to M11-14 | Trial accounts of Zendesk, Freshdesk and Zoho Desk seeded with the M11 reference dataset | @Docker-Hunterpedia | needed; not a 1.0 blocker (owner, 2026-10-19): the importers are verified against stand-ins built from the vendors' published API documentation |
+| M13-06 | Developer accounts with Linear, GitHub, Jira and Confluence, Sentry, Slack, Notion, Stripe and Zapier to verify each catalog connect flow; whether they gate the release is D-18 | @Docker-Hunterpedia | not started |
+| M15-13 | A Coolify instance to validate the service template | @Docker-Hunterpedia | not started |
+| M16-04 to M16-08 | Trial or sandbox accounts of Help Scout, Intercom, Gorgias, Zammad (self-hosted in CI is possible) and Front, seeded with the reference dataset; not blockers, following the owner's M11 ruling | @Docker-Hunterpedia | not started |
+| M17-02 | A Hosted Weblate project for Helpdock (D-47) | @Docker-Hunterpedia | not started |
+| M17-03 | Translators, or a translation budget, for the wave 1 locales (D-48) | @Docker-Hunterpedia | not started |
+| M17-08 | An iOS device (16.4 or later) and an Android device for the push matrix | @Docker-Hunterpedia | not started |
+| M20-01, M20-02 | An npm organisation `@helpdock` with two-factor authentication | @Docker-Hunterpedia | not started |
+| M20-04 | An Apple Developer ID and Windows code signing (Azure Trusted Signing) for the desktop app (D-59) | @Docker-Hunterpedia | not started |
 
 ---
 
@@ -447,7 +471,7 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M1, M3, M5, M8. Part 
 | M11-16 | Admin: Brand › Import with the wizard (source, connect, scope, map, dry run, import, done) | R §4.10 |
 | M11-17 | Imported tickets in the workspace: "Imported from" chip, activity line, view filter, System page card | DESIGN §6.3 |
 | M11-18 | Import docs: `docs/guides/importing.md` with the cutover runbook; retention, reports, tickets guides | A §2 |
-| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. Deferred to later work by the owner on 2026-10-17; not required for the current combined M11 PR | |
+| M11-19 to M11-23 | Help Scout, Intercom, Gorgias, Zammad and Front connectors on the same SDK. Deferred to later work by the owner on 2026-10-17; moved on 2026-10-20 to [M16](#m16-more-importers-and-undo) as M16-04 to M16-08, keeping issues #201 to #205 | |
 
 The 2026-10-18 owner-review corrections pass the named suites in the
 [milestone evidence index](../completed/M11-sso-and-migration.md#evidence-index-2026-10-18)
@@ -471,25 +495,375 @@ Exit criteria:
 
 ---
 
+### Phase 5 — 1.x
+
+Goal: make Helpdock better to run, to work in and to move to, release by release after 1.0, without loosening any rule 1.0 shipped with. Planned on 2026-10-20; nothing in this phase has started.
+
+Each milestone has a plan document in [`docs/in-development/`](../in-development/README.md) with `Status: planned (not started)`, written in the shape M11 used: scope and non-goals, deliverables with effort and dependencies, data model, API, proposed domain-rule changes, security, artboards, tests, docs, ADRs, risks, open questions, build order and exit criteria. A milestone starts as §3 says: its doc moves to `in progress` and its issues are created. The open questions of every plan are gathered, numbered `D-01` to `D-61`, with the plans' recommendations, in [decisions-1-x.md](decisions-1-x.md). The ADRs the plans need are written as proposed, [0028](../decisions/0028-ai-workspace-runs-the-production-path-dry.md) to [0057](../decisions/0057-desktop-shell-on-electron.md).
+
+DOMAIN-RULES, ARCHITECTURE and DESIGN.md do not change now. Each plan carries the rule changes it proposes, and they land in the pull request of the deliverable that needs them; the section numbers the plans give new rules (§2.7 to §2.9, §10.1, §12.1, §17 to §20) are provisional until then. Scope statements in REQUIREMENTS and the backlog below are updated now.
+
+Every milestone is useful on its own, so the phase can stop after any of them. Effort is in working days for one experienced contributor, Definition of done included. After the drafts were written, the plans were checked against a full walk through another open-source helpdesk's screens; the gaps worth closing were added as deliverables (M12-17, M14-25 to M14-29, M16-15, M19-10 and small additions to M12-02, M13-11, M19-01 and M19-05, about 20 days in all), and the rest are listed with reasons in [decisions-1-x.md](decisions-1-x.md#prior-art-gap-check).
+
+**Proposed releases** (a proposal for the owner, [D-01](decisions-1-x.md#general)):
+
+| Release | Contents | Effort (person-days) |
+|---|---|---|
+| 1.0.1 | Security and UX patch, in flight in separate pull requests: OAuth sign-in identities bound by subject (the first part of M18-07, [ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)) and group A of the [1.0 UX review](../completed/ux-review-1-0.md) | — |
+| 1.1 | M12 AI workspace, M14 Inbox productivity, M18 Sign-in options, and Helpdock as an MCP server (M13-09 to M13-11, pulled forward because it gives Helpdock's own model no tools and so fits the 1.0 AI rule) | about 225 |
+| 1.2 | The rest of M13, M15 Self-host operations, M16 More importers and undo, M19 Customer surfaces polish | about 249 |
+| 1.3 | M17 Apps and languages | about 59 |
+| Later 1.x | M20 Native clients and SDKs, once M17's installable admin has shown demand | 45–57 |
+
+#### M12 AI workspace
+
+Depends on: M7, M3 (rules), M4 (widget), M8 (reports, API keys). About 72 working days. Proposed for 1.1. Design: ADRs [0028](../decisions/0028-ai-workspace-runs-the-production-path-dry.md), [0029](../decisions/0029-staff-assistant-reads-through-validated-read-plans.md), [0030](../decisions/0030-ai-decisions-in-automation-are-confidence-gated.md), [0031](../decisions/0031-personas-change-the-voice-never-the-rules.md) (proposed). Plan: [M12-ai-workspace.md](../in-development/M12-ai-workspace.md). Decisions: D-04 to D-10.
+
+Gives the people who run a brand's assistant the tools to make it good and keep it good: a playground, saved tests, a review queue that turns a bad answer into a Q&A snippet, cost estimates and usage, writing, guardrails and personas, confidence-gated triage, an AI yes/no rule condition, ticket summaries that stay current, and a read-only staff assistant panel. All of it inside the 1.0 rule: the model reads and writes text and never calls a tool.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M12-01 | Schema, settings and permissions: personas, tests and runs, snippets, review items, summaries, rule answers, assistant threads, each with `FORCE`d RLS; `ai_calls.actor_user_id`; nullable `notifications.ticket_id` | A §5; D §1.6 |
+| M12-02 | Writing (tone, reply language, Instructions) and Guardrails (declined topics, reply cap, email before handoff) | R §4.7; D §9 |
+| M12-03 | Personas: up to 10 per brand, uploaded avatar, assignment per widget, mailbox and Telegram bot; the AI badge always shown | R §4.6, §4.7 |
+| M12-04 | Playground: the production auto-reply path run dry with unsaved settings overlaid; writes nothing but `ai_calls` | ADR 0028 |
+| M12-05 | Saved tests with expectations, run as a job, and "Run tests with these changes first" on save | ADR 0028; D §9 |
+| M12-06 | Needs review, Improve answer, and Q&A snippets as a knowledge source kind | D §5 |
+| M12-07 | Overview: a readiness checklist and date-ranged figures | D §15 |
+| M12-08 | Cost estimates next to every AI toggle; usage by feature, day, staff member and model with CSV | ADR 0018 |
+| M12-09 | Budget notifications at 80 % and 100 %, provider-failure and handoff notifications, a quiet handoff at the hard stop, a headroom check | R §4.7 |
+| M12-10 | Confidence-gated triage: mode `auto` with a threshold, raise-only priority, add-only tags, guarded department moves | R §4.7; ADR 0030 |
+| M12-11 | AI yes/no rule condition, at most 3 per event rule, batched into one call per event and cached | R §4.3; ADR 0030 |
+| M12-12 | Ticket summaries kept current in the background | R §4.7 |
+| M12-13 | Staff assistant panel, read-only, reading through validated read plans under the user's own permissions | ADR 0029 |
+| M12-16 | Draft one article from several solved tickets, from public messages and knowledge only | R §4.5, §4.7 |
+| M12-14 | Eval extension: declined topics, reply limit, persona, triage, AI questions, panel reads | D §9 |
+| M12-17 | More assist rewrites (longer, fix spelling and grammar, simpler) and draft with instructions | R §4.7 |
+| M12-15 | Docs, OpenAPI, widget protocol, DESIGN §6 components | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] A playground answer to an unsaved Instructions change shows answer, citations, confidence, decision and cost, and leaves no `tickets`, `ticket_messages` or `outbox` row.
+- [ ] "Run tests with these changes first" runs every test with the draft, shows a newly failing test, and saves only on confirmation.
+- [ ] A thumbs-down puts an answer in Needs review; Improve answer creates a public snippet that the next playground answer cites before embedding; an internal snippet never reaches a visitor answer.
+- [ ] A declined topic gets the persona's decline line; the reply cap hands off with `reply_limit`; a widget handoff with no email asks for one.
+- [ ] A widget, a mailbox and a Telegram bot of one brand answer with three personas, each answer with the AI badge, in `en` and `ar`.
+- [ ] Budget, provider and handoff notifications reach the right people once, per their preferences; at 100 % a conversation the assistant was in gets the handoff line with no model call.
+- [ ] Usage matches seeded `ai_calls`, and every AI toggle shows an estimate.
+- [ ] Triage in `auto` applies above the threshold, suggests below, never lowers a priority, and logs each change with its confidence.
+- [ ] A rule with AI questions makes one model call per event and does not run when the budget is spent.
+- [ ] The panel answers "which of my tickets breach SLA in the next hour" with links, and an Agent's panel never reads another department's ticket (negative test on the logged prompt).
+- [ ] Brand A cannot read brand B's rows in any new table; another user's assistant threads are invisible to an Admin.
+- [ ] The eval meets M12's DOMAIN-RULES §9 additions in both languages, live, with the run recorded.
+- [ ] Every new screen passes Playwright in `en` and `ar` with axe.
+
+#### M13 AI actions and integrations
+
+Depends on: M12, M8, M0. M13-09 to M13-11 depend only on M8 and M0 and may start beside M12 (D-11). About 72.5 working days, of which the MCP-server track is about 16.5. Proposed: M13-09 to M13-11 in 1.1, the rest in 1.2. Design: ADRs [0032](../decisions/0032-ai-tools-reads-run-changes-wait-for-a-person.md), [0033](../decisions/0033-helpdock-as-an-mcp-server-with-oauth-2-1.md), [0034](../decisions/0034-one-mcp-client-over-safefetch.md) (proposed). Plan: [M13-ai-actions-and-integrations.md](../in-development/M13-ai-actions-and-integrations.md). Decisions: D-11 to D-18.
+
+Lets AI act, with a person's consent every time something changes: reads run, changes become proposals that only the person who asked can approve, executed through the outbox as the approver and audited "on behalf of". Three ways in: outside AI clients through Helpdock's own MCP server, the staff assistant with approval cards and connected integrations, and customer-facing agent tools the visitor confirms. M13-01 replaces the 1.0 rule "no tool calls or actions" (principle 3, REQUIREMENTS §4.7, AGENTS.md) with a written contract; until it merges, the 1.0 rule stands.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M13-01 | The rule change: ADR 0032, DOMAIN-RULES §19, REQUIREMENTS §4.7, principle 3, AGENTS.md; `assertToolPolicy` replaces `assertNoTools` | ADR 0032 |
+| M13-02 | Tool runtime on pi-agent-core: registry, turn limits, redaction across turns, tool output screened and wrapped as data, `ai_tool_calls` | ADR 0032 |
+| M13-03 | Proposals and approvals: previews computed by Helpdock, an approval token the model never sees, 15 minutes, execution through the outbox | D §19 |
+| M13-04 | Staff assistant actions: field and bulk changes (at most 50 tickets), notes, public replies, article drafts, personal views, integration tools | R §4.7 |
+| M13-05 | MCP client (`packages/mcp`) over `safeFetch`: Streamable HTTP, OAuth 2.1 with discovery, registration, PKCE and resource indicators | D §13; ADR 0034 |
+| M13-06 | Integrations catalog: Linear, GitHub, Jira and Confluence, Sentry, Slack, Notion, Stripe, Zapier, any MCP server by URL | R §4.10 |
+| M13-07 | Ticket links back to items created in connected tools | — |
+| M13-08 | Customer-facing agent tools: look-up tools, and change tools the visitor confirms in the widget, signed identity by default | R §4.6, §4.7 |
+| M13-09 | Helpdock MCP server at `/mcp`, each tool mapped to an existing permission or API scope and run under the user's RLS context | A §7; ADR 0033 |
+| M13-10 | OAuth 2.1 authorization server: metadata, dynamic client registration, PKCE S256, refresh rotation with reuse detection, revocation | A §7; ADR 0033 |
+| M13-11 | Connected clients: setup per client, the user's grants, Admin revocation; API key expiry in the admin | R §4.10, §4.11 |
+| M13-12 | Eval for tool use with a stand-in shop MCP server; zero-tolerance measures | D §9 |
+| M13-13 | Security review, pentest-scope addendum, docs | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] ADR 0032 is accepted, and AGENTS.md, REQUIREMENTS §4.7, principle 3 and DOMAIN-RULES §19 say the same thing.
+- [ ] An MCP client connects to `/mcp` by OAuth with dynamic registration and PKCE, lists only the tools the user's role allows, adds a note as that user, and loses access at once when the grant is revoked or the user leaves the brand; an API key connects with its scopes.
+- [ ] An Agent's grant cannot read another department's ticket; a Viewer's cannot write.
+- [ ] The staff assistant proposes a bulk priority change for 12 tickets; approval executes it once through the outbox; a ticket changed meanwhile is skipped and listed; an unanswered proposal lapses at 15 minutes.
+- [ ] An integration item is created from a ticket after approval and linked back; every outbound request went through `safeFetch`.
+- [ ] In the widget, a signed-in visitor's change runs only after Confirm; an unsigned visitor is never offered it; on email the change tool is never offered.
+- [ ] Brand A cannot read brand B's rows in any new table.
+- [ ] The tool-use eval meets every §9 measure in `en` and `ar`, live, recorded.
+- [ ] Every new screen passes Playwright in `en` and `ar` with axe; `security-audit` findings are fixed or accepted in writing, and the pentest scope covers `/mcp`, `/oauth/*`, approvals and widget actions.
+
+#### M14 Inbox productivity
+
+Depends on: M1, M3, M4, M5, M7 (the routing trail only), M8, M11. About 103.5 working days: 75 for the inbox plan, 16 for group B of the [1.0 UX review](../completed/ux-review-1-0.md), and 12.5 for the prior-art gaps M14-25 to M14-29. Proposed for 1.1. Design: ADRs [0035](../decisions/0035-snooze-as-a-system-status.md), [0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md), [0037](../decisions/0037-paced-notification-email-and-digests.md), [0038](../decisions/0038-keyboard-registry-and-command-palette.md) (proposed). Plan: [M14-inbox-productivity.md](../in-development/M14-inbox-productivity.md). Decisions: D-19 to D-32.
+
+An agent who lives in Helpdock all day works the queue at the speed of their hands: snooze, bulk edit with undo, a command palette and shortcuts that work on an Arabic keyboard, the routing trail, paced notification email, a customer-facing profile, a setup checklist, and the workspace density fixes from the UX review. Every change goes through the same service paths, RLS, outbox and activity log as a single click; nothing gives the AI a new power.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M14-01 | Keyboard foundation: one registry, physical keys, `g` sequences, the `?` sheet, ticket and list shortcuts, a single-key switch (WCAG 2.1.4) | DESIGN §10; UX-09 |
+| M14-02 | Snooze: a seeded Snoozed status, presets from the department's business hours, a wake timer through the outbox | D §2, §3; ADR 0035; UX-26 |
+| M14-03 | Bulk edit API: preview and apply on up to 50 tickets, per-ticket authorization, one transaction, Undo within 60 s | ADR 0036; UX-26 |
+| M14-04 | Bulk edit UI: checkboxes, the bulk bar, the preview dialog, the Undo toast | DESIGN §6.3; UX-26 |
+| M14-05 | Command palette: tickets (exact number first), contacts, articles, pages and settings, actions | ADR 0038; UX-09 |
+| M14-06 | Inbox empty states with keyboard hints, and the `Kbd` component | UX-09, UX-10 |
+| M14-07 | Sort by SLA due | D §3, §14 |
+| M14-08 | Routing trail: arrival recorded on every creation path, "How it got here" on the ticket | D §2 |
+| M14-09 | Routing page and a Test routing dry run that writes nothing | R §4.3 |
+| M14-10 | Notification pacing: batching with back-off, digests, pause, a read re-check before every send, a presence hold | R §4.9; ADR 0037 |
+| M14-11 | Notification settings and one-click unsubscribe (RFC 8058) | ADR 0037 |
+| M14-12 | Profile for customers: public name, title, phone, photo, time zone; agent placeholders | R §4.1 |
+| M14-13 | Setup checklist that ticks itself | D §15; UX-10 |
+| M14-14 | Saved-reply and macro polish: `/shortcut`, `{{` picker, fallbacks, save-time checks | R §4.1 |
+| M14-15 | `@` mention picker in notes | R §4.9 |
+| M14-16 | Custom-field filters in the list and views, and a pinned field chip (the answer to Severity) | R §4.1 |
+| M14-17 | Fields required to close | R §4.1 |
+| M14-18 | Idle agents marked away | D §12 |
+| M14-19 | Compact composer and workspace breakpoints | UX-01, UX-21 |
+| M14-20 | Ticket row and details panel density | UX-07, UX-08 |
+| M14-21 | Settings area with grouped sub-navigation, old URLs redirected | UX-11 |
+| M14-22 | List-first tickets on narrow screens | UX-13 |
+| M14-23 | Skeletons and empty states beyond 1.0.1 | UX-10, UX-12 |
+| M14-24 | Docs, ADRs, DESIGN.md and DOMAIN-RULES updates, OpenAPI | AGENTS.md DoD |
+| M14-25 | Notification sounds per event, with a reminder while a live chat waits | R §4.9 |
+| M14-26 | Mailbox-aware views and rules: mailbox and address-written-to filters and conditions; "set reply address" and "mark as spam" actions | R §4.3 |
+| M14-27 | More custom field types: long text, link, email, person | R §4.1 |
+| M14-28 | More webhook events for tickets, messages, contacts and accounts | R §4.12 |
+| M14-29 | Reports: volume by tag, and backlog by status with its unassigned share | R §4.8 |
+
+Exit criteria:
+
+- [ ] A ticket snoozed until the next business day leaves My open, appears in Snoozed and returns to its previous status at the department's opening time; a customer reply wakes it earlier; the wake survives a Redis flush and worker restart.
+- [ ] While snoozed, the resolution clock is paused and an unanswered ticket's first-response clock keeps running (a worked example to the minute); an SLA warning wakes the ticket.
+- [ ] An agent selects 30 tickets with `x` and Shift-click, closes them in one request and undoes it from the toast: all 30 are back and no survey was sent.
+- [ ] A bulk change across two departments, one hidden from the agent, changes only the visible tickets and reports the other as not found.
+- [ ] ⌘K / Ctrl+K finds `HD-1042` by number, a contact, an article and the SLA settings typed in Arabic, and runs "Assign to me"; a Viewer sees navigation only.
+- [ ] Every shortcut on the `?` sheet works on an English and an Arabic keyboard layout, and none fires with the single-key switch off.
+- [ ] Each ticket shows how it arrived and every automatic step after it; Test routing leaves the database, the outbox and the rotation unchanged.
+- [ ] With *Right away*, twelve notifications in an hour reach the person as no more than six emails; one read in the app first is left out; a daily digest arrives at the chosen hour in the person's time zone; pause sends nothing, later included; a one-click unsubscribe POST stops notification email and a GET changes nothing until confirmed.
+- [ ] A reply signed `{{agent.name}}, {{agent.title}}` shows the public name and title in the customer's language, in email and in the widget.
+- [ ] A new brand's Admin sees the setup checklist, and each step ticks itself as it is done.
+- [ ] At 1280 × 720 the compact composer leaves the conversation readable; below 1024 px the ticket list opens first; every admin setting is reachable from the grouped Settings area and the old URLs redirect.
+- [ ] A view filtered by mailbox and a rule conditioned on the address written to match a new email ticket; the new custom field types and webhook events work end to end.
+- [ ] Brand A cannot read brand B's rows in the new tables, and an Agent cannot read another department's bulk items.
+- [ ] Every new or changed screen passes Playwright in `en` and `ar` with axe, and the shortcut sheet and palette pass a manual NVDA and VoiceOver run.
+
+#### M15 Self-host operations
+
+Depends on: M9 (release pipeline, restore drill, `keys rotate`), M11 (the import writer, for sample data). About 67 working days. Proposed for 1.2. Design: ADRs [0039](../decisions/0039-signed-release-bundle-and-installer.md) to [0044](../decisions/0044-supported-deploy-targets.md) (proposed). Plan: [M15-self-host-operations.md](../in-development/M15-self-host-operations.md). Decisions: D-33 to D-39.
+
+An operator gets from a bare Linux VM to a signed, pinned, healthy Helpdock with one command, and every later chore (backup, restore, upgrade, key rotation, health) is one verb that cannot silently lose data. The System page says when a new release is out and when the last backup was taken. Automatic updates are opt-in, patch-only and wait 72 hours. Someone evaluating Helpdock can load a bilingual sample brand that sends nothing and remove it in one click. Success measure: the first-ticket target drops from 30 to 10 minutes on a fresh VM with DNS in place.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M15-01 | Signed release bundle: deploy files, `install.sh`, `release-manifest.json`, `SHA256SUMS` signed keylessly with Cosign; third-party images pinned by digest | A §16; ADR 0039 |
+| M15-02 | `helpdock-ctl` core: `status`, `logs`, `backup`, `restore`, `verify`, sharing one library with the restore drill | D §10; ADR 0041 |
+| M15-03 | `helpdock-ctl upgrade` with signature checks, a migration plan, an optional rehearsal, a pre-upgrade backup and rollback | D §10 |
+| M15-04 | `helpdock-ctl rotate-key start` and `finish` | D §10 |
+| M15-05 | api CLI additions (`migrations plan`, `ops report`, `version`) and the `install_ops_events` table | A §14 |
+| M15-06 | `install.sh`: checks, wizard, `--dry-run`, offline bundles; never regenerates a secret | R §5.6 |
+| M15-07 | Bundled object storage for production (a Compose profile) | A §17 |
+| M15-08 | External-proxy Compose override, with the custom-domain limitation documented | A §3 |
+| M15-09 | Update notices through `safeFetch`, sending nothing about the install | D §13; ADR 0042 |
+| M15-10 | Automatic updates, opt-in: patch-only by default, 72-hour cool-down, per-release veto, health-gated rollback | ADR 0040 |
+| M15-11 | Sample brand loaded through the import writer, refused at every delivery hook, removed at once | D §11, §15; ADR 0043 |
+| M15-12 | System page: Updates and Backups cards, an operations log | R §4.10 |
+| M15-13 | Deploy paths: a cloud-init recipe, a Coolify template, a Railway spike | ADR 0044 |
+| M15-14 | CI for the operations tooling: shellcheck, install, upgrade, rollback and tamper end-to-end tests, a nightly signature check | A §15 |
+| M15-15 | Docs, including a supply-chain guide | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] On a clean Ubuntu 24.04 VM with DNS in place, the one-line install reaches the web wizard within 10 minutes; a tampered bundle, `SHA256SUMS` or image digest stops it with a clear message.
+- [ ] `helpdock-ctl backup`, `restore` onto a fresh VM and `verify` match row counts and attachment hashes, and the restore drill still passes on the same library.
+- [ ] An upgrade from the previous published release succeeds, and an image with a failing migration rolls back and restores with unchanged row counts.
+- [ ] With automatic updates on, a patch release older than 72 hours installs overnight and is reported; a major, a pre-release, a vetoed or a previously failed release is skipped and reported.
+- [ ] The System page shows an available update within 6 hours, sends no instance data, and shows the last backup's age.
+- [ ] The sample brand loads in both languages, sends nothing on any channel, triggers no AI call or webhook, is left out of product metrics, and is purged at once by Remove.
+- [ ] `rotate-key start` and `finish` complete on a restored stack.
+- [ ] Every new screen passes Playwright in `en` and `ar` with axe.
+
+#### M16 More importers and undo
+
+Depends on: M11 (engine, wizard, writer). About 79 working days. Proposed for 1.2. Design: ADRs [0045](../decisions/0045-import-provenance-ledger-and-undo.md) (amends 0027) and [0046](../decisions/0046-imported-configuration-as-disabled-drafts.md) (proposed). Plan: [M16-more-importers-and-undo.md](../in-development/M16-more-importers-and-undo.md). Decisions: D-40 to D-45.
+
+Teams leaving Help Scout, Intercom, Gorgias, Zammad or Front move in with the same quiet, dry-run-first wizard as M11's sources. An admin who imported into the wrong brand or with the wrong mapping presses **Undo import**: Helpdock removes only what that run created and keeps every ticket someone has worked on since. Macros, SLA policies and automations come over as disabled drafts with a translation report. M11-19 to M11-23 become M16-04 to M16-08; issues #201 to #205 move to the M16 GitHub milestone and keep their history.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M16-01 | Provenance ledger: every object an import creates or matches, recorded per run | ADR 0045; D §2.9 |
+| M16-02 | Undo plan (read-only): what is removed, what is kept and why | D §2.9 |
+| M16-03 | Undo job: claim-fenced, resumable, sends nothing; kept tickets stay linked to their source | D §2.9, §11 |
+| M16-04 | Help Scout connector (formerly M11-19, #201) | ADR 0027 |
+| M16-05 | Intercom connector (formerly M11-20, #202) | ADR 0027 |
+| M16-06 | Gorgias connector (formerly M11-21, #203) | ADR 0027 |
+| M16-07 | Zammad connector on an operator-supplied URL through `safeFetch` (formerly M11-22, #204) | ADR 0027; D §13 |
+| M16-08 | Front connector (formerly M11-23, #205) | ADR 0027 |
+| M16-09 | Credentials and the cutover loop: pause on refused credentials, resume with new ones, an opt-in 30-day connection for "Bring over changes" | ADR 0045 |
+| M16-10 | Canned responses and macros imported, disabled | R §4.1; ADR 0046 |
+| M16-11 | SLA policies and business hours imported, inactive | R §4.2; ADR 0046 |
+| M16-12 | Automations imported as disabled drafts, enabled only after a test run | R §4.3; ADR 0046 |
+| M16-13 | Admin UI: Undo with its plan dialog, run states, five connection forms, the imported-settings review | R §4.10 |
+| M16-14 | Docs | AGENTS.md DoD |
+| M16-15 | Downloadable CSV templates for the manual mapper, one row per message included | R §4.10 |
+
+Exit criteria:
+
+- [ ] Help Scout, Intercom, Gorgias, Zammad and Front (stand-ins with the reference dataset) import into a brand with threads, authors, dates, notes, attachments, tags, fields and assignees intact; a delta brings only changes; a resumed run loses and duplicates nothing.
+- [ ] An import sends nothing, for all eight sources.
+- [ ] Undo removes exactly what the run created and keeps every touched ticket with its reason; matched contacts and existing tags survive; a re-import afterwards duplicates nothing.
+- [ ] Undo sends nothing and leaves no orphaned S3 object, search token or report row.
+- [ ] Refused credentials pause a run, and resuming with new credentials for the same account continues it.
+- [ ] Imported macros, SLA policies and rules arrive disabled with a translation report, and none runs until a person enables it after a test run.
+- [ ] Brand A cannot read, plan or undo brand B's imports; a Zammad URL on a private address is refused unless allowed.
+- [ ] Every new screen passes Playwright in `en` and `ar` with axe; #201 to #205 are closed under M16 and the M11 GitHub milestone is closed.
+
+#### M17 Apps and languages
+
+Depends on: M3 (web push), M4 (widget), M5 (help center). About 59 working days. Proposed for 1.3. Design: ADRs [0047](../decisions/0047-locale-registry-and-lazy-widget-locales.md), [0048](../decisions/0048-translations-through-hosted-weblate.md), [0049](../decisions/0049-installable-admin-before-native-agent-apps.md) (proposed). Plan: [M17-apps-and-languages.md](../in-development/M17-apps-and-languages.md). Decisions: D-02, D-46 to D-49.
+
+People read Helpdock in their own language, customer-facing surfaces first, then the agent app; contributors translate without touching code; agents get Helpdock as an installable app on desktop and phone with notifications and a badge, with no push service run by the project. The native SDKs and desktop shell are a separate milestone, M20 (D-02).
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M17-01 | Locale registry and plumbing: UI and content locales, browser negotiation, lazy widget locale chunks, search configuration per locale | R §4.13; D §5, §14; ADR 0047 |
+| M17-02 | Translation workflow on Hosted Weblate, with catalog checks in CI | ADR 0048 |
+| M17-03 | Wave 1 customer-facing locales: `fr`, `es`, `de`, `pt-BR`, `tr`, `id`, `fa` | R §4.13 |
+| M17-04 | Content locales for the help center and knowledge | D §5, §8, §9 |
+| M17-05 | Admin app locales, once a language reaches 100 % | R §4.13 |
+| M17-06 | Admin as an installable app (PWA), with a badge and per-device push | R §4.9; ADR 0049 |
+| M17-07 | Mobile agent layouts below 600 px | DESIGN §6.5, §10 |
+| M17-08 | Push on installed apps across platforms | ADR 0002 |
+| M17-09 | Docs | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] The widget, help center, CSAT page, web form and customer emails ship in the wave 1 locales; a browser that asks for one gets it, and `fa` passes the mirrored RTL snapshot test.
+- [ ] The widget's initial bundle is still at most 40 KB, and each locale chunk is within its cap.
+- [ ] Contributors translate through Weblate, and CI rejects a catalog string with markup or a broken placeholder.
+- [ ] Articles in an enabled content locale are searchable in that locale, and the AI admin marks unevaluated languages.
+- [ ] Helpdock installs as an app on Chrome or Edge desktop, Android and iOS 16.4+, shows an unread badge, opens the ticket from a push, and keeps no API response in Cache Storage after sign-out.
+- [ ] An agent triages, replies, notes, assigns and closes a ticket on a 390 px screen in `en` and `ar` (Playwright mobile projects with axe).
+
+#### M18 Sign-in options
+
+Depends on: M0 (auth, settings, outbox, SSRF-safe client), M4 (CAPTCHA interface), M9 (ASVS walk), M11 (SSO enforcement, break-glass). About 32.5 working days. Proposed for 1.1. Design: ADRs [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md), [0051](../decisions/0051-oauth-identities-bound-by-subject.md), [0052](../decisions/0052-built-in-proof-of-work-captcha.md) (amends 0003), [0053](../decisions/0053-break-glass-with-a-passkey.md) (amends 0026) (proposed). Plan: [M18-sign-in-options.md](../in-development/M18-sign-in-options.md). Decisions: D-50 to D-55.
+
+Staff sign in with a phishing-resistant passkey, as a second factor or on its own; the Google and GitHub buttons bind by provider subject so they can no longer hand an account to an identity that never proved it owns it; Microsoft work accounts get the same button; operators who cannot send visitor data to a CAPTCHA vendor get a built-in proof-of-work provider. The subject binding of M18-07 is being implemented ahead of the milestone as a 1.0.1 security fix in a separate pull request; M18-07 keeps what that fix leaves.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M18-01 | WebAuthn foundation: credentials table (install scope), RP ID pinned to `APP_URL`, attestation `none`, purpose-bound ceremonies | A §1, §7; ADR 0050 |
+| M18-02 | Register and manage passkeys, with step-up and security emails | ASVS 2.2.3, 3.7.1 |
+| M18-03 | Passkey as a second factor beside TOTP; "has a second factor" means TOTP or a passkey | ASVS 4.3.1 |
+| M18-04 | Passwordless sign-in with user verification required; refused under SSO enforcement | ASVS 2.2.1, 3.2.1 |
+| M18-05 | SSO and break-glass integration | ADR 0053 |
+| M18-06 | Admin passkey screens | DESIGN §6, §10 |
+| M18-07 | OAuth identities bound by `(issuer, subject)`, first link only with provider authority, connect and disconnect, Google domain allow-list | ADR 0051 |
+| M18-08 | Microsoft sign-in, single tenant, through `openid-client` and `safeFetch` | A §7; D §13 |
+| M18-09 | Google Workspace and Entra ID presets in the SSO connection form | ADR 0026 |
+| M18-10 | Built-in proof-of-work CAPTCHA provider | ADR 0052 |
+| M18-11 | CAPTCHA hostname check and per-IP limits on sign-in-link, reset and feedback requests | ASVS 11.1.4 |
+| M18-12 | Docs, including a sign-in providers guide | AGENTS.md DoD |
+| M18-13 | Security pass: ASVS V2 and V3 re-walk, `security-audit`, negative tests | M9-02 |
+
+Exit criteria:
+
+- [ ] A staff member registers a passkey, signs out and signs in with it alone; no TOTP is asked.
+- [ ] An Admin with no second factor enrols a passkey, receives recovery codes and cannot remove the last factor.
+- [ ] After a password, a passkey answers the second factor; recovery codes still work; three failures lock as before.
+- [ ] With SSO enforced, passkey sign-in is refused for ordinary staff, and break-glass works as D-50 decides.
+- [ ] A ceremony cannot be replayed or used for another purpose; one account cannot read or change another's passkeys or identities.
+- [ ] A 1.0 Google user is bound by subject at the first sign-in after the upgrade; a GitHub identity is answered `oauth-link-required` until connected from Security; a second subject for a bound provider is refused.
+- [ ] A Microsoft work account in the configured tenant signs in to an invited account; another tenant, or a first link without `xms_edov`, is refused.
+- [ ] The widget and the web form accept a solved proof-of-work challenge once and refuse a replay, with no request leaving the install; a Turnstile or hCaptcha token for another hostname is refused.
+- [ ] ASVS 2.3.2 and 2.9.1 to 2.9.3 are Met with evidence; every new or changed screen passes Playwright in `en` and `ar` with axe.
+
+#### M19 Customer surfaces polish
+
+Depends on: M2, M4, M5; M12-03 for a persona per widget, M14-12 for team faces, M15-11 for M19-08. About 47 working days: 40 for the customer-surface plan, 3 for group C of the [1.0 UX review](../completed/ux-review-1-0.md), and 4 for the prior-art gaps. Proposed for 1.2. Design: ADRs [0054](../decisions/0054-several-widgets-per-brand.md), [0055](../decisions/0055-custom-html-email-layout.md) (proposed). Plan: [M19-customer-surfaces-polish.md](../in-development/M19-customer-surfaces-polish.md). Decisions: D-56 to D-58.
+
+What customers see gets the same care as what agents see: an email design editor with a live preview and a test send, several widgets per brand, a widget home with suggested questions, topics that route, team faces, a reply-time subtitle and an offline path, a richer widget preview, and help-center polish including its phone layout. Since M19 is proposed before M17, its editors read locales from a list rather than hard-coding `en` and `ar`.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M19-01 | Email design editor per brand: Simple and Custom HTML modes, footer placeholders, the satisfaction email, a variables reference, live preview in `en` and `ar`, test send | R §4.4; ADR 0055 |
+| M19-02 | Several widgets per brand, each with its origins, appearance and default department; old embeds keep working | R §4.6; ADR 0054 |
+| M19-03 | Widget home: suggested questions, topics that route, team faces (opt-in), reply-time subtitle, reply by email when nobody answers, a help search and the last conversation | R §4.6; UX-16 |
+| M19-04 | Widget editor live preview with real states | R §4.6 |
+| M19-05 | Help center polish: visitor theme toggle, search hero, designed empty state, per-brand title and description, a redirect from a changed article slug | R §4.5 |
+| M19-06 | Help center on phones: header and section navigation | DESIGN §6.7; UX-14 |
+| M19-07 | Widget captions with auto-reply on, and the phone close control | UX-15, UX-27 |
+| M19-08 | Reports empty state linked to the sample brand; "Handing over an install" in the staff guide | UX-25 |
+| M19-10 | Quoted history in reply emails, with a quote-line template; notes never quoted | R §4.4 |
+| M19-09 | Docs and tests | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] A brand admin designs a branded email layout, previews it at desktop and phone widths in `en` and `ar`, and receives a test send; a Custom HTML layout that fails the sanitiser falls back to the Plain layout.
+- [ ] Two widgets of one brand on two origins carry their own appearance and default department, and an embed without a widget id keeps working with the brand's default widget.
+- [ ] The widget home shows suggested questions, routes a chosen topic to its department, shows only staff who opted in, and keeps the initial bundle at most 40 KB.
+- [ ] On a 390 px phone the help center's section navigation follows the breadcrumb and the language link stays on the first row.
+- [ ] A reply email quotes the previous public message under the brand's quote line and never a note; an article's old slug redirects to its new one.
+- [ ] Brand A cannot read brand B's `widgets` rows.
+- [ ] Every new or changed screen passes Playwright in `en` and `ar` with axe.
+
+#### M20 Native clients and SDKs
+
+Depends on: M17 (the installable admin ships first and shows demand), M15-01 (signed artefacts), M4 (widget protocol). About 45 to 57 working days, depending on whether the Flutter SDK is built in-house (D-60). Proposed for later 1.x, on demand. Design: ADRs [0056](../decisions/0056-public-npm-packages-for-client-sdks.md), [0057](../decisions/0057-desktop-shell-on-electron.md) (proposed). Plan: [M20-native-clients-and-sdks.md](../in-development/M20-native-clients-and-sdks.md). Decisions: D-59 to D-61.
+
+Teams with their own mobile apps embed Helpdock chat natively, starting with React Native, on a headless client that every SDK shares and a conformance kit every SDK must pass; agents who want a desktop app get a hardened Electron shell around their own instance. Native iOS and Android agent apps stay out of 1.x, because they would need a push relay the project would have to host.
+
+| Id | Deliverable | Spec |
+|---|---|---|
+| M20-01 | `@helpdock/widget-client`: a headless client extracted from the widget, a conformance kit, the first public npm package | M4-10; D §7; ADR 0056 |
+| M20-02 | React Native SDK `@helpdock/react-native` | M4-10 |
+| M20-03 | Flutter SDK, community-led on the conformance kit (D-60) | — |
+| M20-04 | Desktop shell on Electron: the instance's own admin only, sign-in in the system browser, signed updates | ADR 0057 |
+| M20-05 | Docs | AGENTS.md DoD |
+
+Exit criteria:
+
+- [ ] `@helpdock/widget-client` and `@helpdock/react-native` pass the conformance kit, are published with npm provenance, and the example app holds a conversation with an agent in both locales.
+- [ ] The desktop app installs signed on macOS, Windows and Linux (or is labelled unsigned per D-59), cannot navigate off the instance, signs in through the system browser, shows a badge and notifications, and updates itself only to a newer signed version.
+
+---
+
 ## 5. Post-1.0 backlog (v1.1+)
 
 Not scheduled. Each item needs its own PRD section before work starts.
 
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, importing replies typed in Meta Business Suite, backfill of missed webhooks, auto-reply and the satisfaction survey on these channels
-- Customer portal with magic-link login, ticket history, restricted KB
+- Customer portal with magic-link login, ticket history, restricted KB; customer sign-in is planned with it, brand-scoped (see M18's plan)
 - Custom roles and permission sets; SCIM provisioning and single logout (SSO itself is M11)
-- React Native and Flutter widget SDKs
-- More UI locales; per-department language routing
-- AI actions via MCP tools with approval flow
-- Importers beyond M11: connectors for further tools, and importing macros, automations and SLA policies
+- Per-department language routing
+- Importers beyond M16: Kayako, HubSpot Service, Salesforce Service Cloud, osTicket and other tools
 - Scheduled reports, custom dashboards
 - Article versioning and review workflow
-- Knowledge: Confluence, GitHub docs, generic MCP servers
-- Backup/restore tooling
-- Cloudflare / Vercel / Railway / Coolify deploy paths
+- Knowledge: Confluence, GitHub docs, generic MCP servers (ingesting from MCP is a different contract from M13's tool calls)
+- Tool use in rules (a rule action that calls an MCP tool); M13 keeps rules on their fixed actions
+- Kubernetes and Helm; a DigitalOcean Marketplace listing once the installer has been stable for two releases; community deploy templates (Dokploy, CapRover)
+- Tag groups, one-tag-at-a-time groups, tag merge and archive
+- A policy refusing synced passkeys for Admins (see M18's risks)
 - Community forums, Blueprint-style process designer
 - Telegram notifications to agents
+
+**Moved into Phase 5 on 2026-10-20**, each now a planned milestone with its own plan:
+
+| Item | Now | Why it moved |
+|---|---|---|
+| AI actions via MCP tools with approval flow | [M13](#m13-ai-actions-and-integrations) | The plan writes the contract that lets AI act safely: reads run, changes wait for a person's approval |
+| Importers beyond M11, and importing macros, automations and SLA policies | [M16](#m16-more-importers-and-undo) (M16-04 to M16-12) | M11's engine and wizard exist; the five deferred connectors (#201 to #205) and configuration as disabled drafts reuse them |
+| Backup/restore tooling | [M15](#m15-self-host-operations) (M15-02 to M15-04) | The restore drill's scripts become `helpdock-ctl` verbs |
+| Coolify deploy path | [M15-13](#m15-self-host-operations) | Compose-native, on the external-proxy override; with a cloud-init recipe beside it |
+| More UI locales | [M17](#m17-apps-and-languages) | A locale registry and a translation workflow; customer-facing surfaces first |
+| React Native and Flutter widget SDKs | [M20](#m20-native-clients-and-sdks) | A headless widget client and a conformance kit every SDK passes |
+
+**Dropped on 2026-10-20:**
+
+| Item | Why |
+|---|---|
+| Cloudflare and Vercel deploy paths | Architecturally incompatible: Helpdock needs long-running workers, IMAP pollers, Socket.IO rooms and Caddy's on-demand TLS, none of which those platforms run. They would need a different architecture |
+| Railway deploy path | Not maintained: it needs a custom Postgres image with pgvector, external S3 and four services, and its edge terminates TLS, so brand domains' on-demand certificates do not work. M15-13 runs a one-day spike and writes the result up |
 
 ---
 
@@ -504,7 +878,7 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | Caddy on-demand TLS abused for unverified domains | High | `/internal/domain-check` only answers 200 for verified domains; rate-limited |
 | Scope creep from v1.1 requests | Medium | AGENTS.md and CONTRIBUTING.md forbid it; changes go through this PRD |
 | Solo maintainer bottleneck on reviews | Medium | Admin PR-only bypass on the ruleset; small PRs; milestone docs keep context |
-| Total effort of 46–59 weeks for one maintainer | High | Ship M0–M3 as an internal-desk preview to attract contributors; keep every milestone independently useful; re-estimate at each milestone start |
+| Total effort of 46–59 weeks for one maintainer (phases 0–4) | High | Ship M0–M3 as an internal-desk preview to attract contributors; keep every milestone independently useful; re-estimate at each milestone start |
 | Internal knowledge leaks through AI answers or caches | Critical | Visibility filtered in SQL before ranking, citation validation, audience-keyed cache, tests in M5 and M7 |
 | Queued side effects drift from committed data | High | Transactional outbox from M0 with crash and rollback tests |
 | Pentest vendor unavailable when M9 starts | Medium | Book 6 weeks ahead; listed in external dependencies |
@@ -517,6 +891,21 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | An import emails customers or fires rules about old tickets (M11) | High | One writer that never calls the live creation paths, a check script that fails the build if it does, and an exit criterion asserting nothing left the install |
 | Vendor APIs change or rate-limit harder than documented (M11) | Medium | Connectors are thin over one engine; each is checked against the vendor's docs in its PR; runs resume from cursors and honour `Retry-After` |
 | M11 delays 1.0 by two months or more | Medium | SSO and import are independent tracks; connectors beyond the first three may ship after 1.0 |
+| Phase 5 totals about 533 person-days for M12 to M19 (about 105 weeks for one person), plus 45–57 for M20, on a solo maintainer | High | Phase by release (D-01) so each release ships a coherent subset; every milestone is independently useful and the phase can stop after any of them; tracks inside each milestone are independent so community contributors can take one; re-estimate at each milestone start and record the actual |
+| Solo-maintainer review load on security-critical subsystems: the OAuth authorization server and MCP client (M13), passkeys and OAuth binding (M18), the installer and automatic updates (M15) | High | Split pull requests by subsystem; `security-audit` on each; negative tests and conformance runs in CI; the pentest scope extended before the release that ships them; outside review where it can be found |
+| AI questions in rules or background summaries multiply cost on a busy brand (M12) | High | Event rules only, at most 3 questions per rule, one call per event, answers cached per message; summaries debounced; estimates shown; headroom check; the budget's hard stop applies to automation |
+| The staff assistant panel leaks a ticket from another department (M12) | Critical | Reads run under the user's own RLS; read plans validated against a closed list; a negative test on the logged prompt; an eval measure of 0 |
+| Prompt injection through tool output or customer text leads to a harmful proposal that a tired agent approves (M13) | Critical | Previews show every argument that leaves the install and what was read; one proposal per run; at most 50 targets; no standing approvals; zero-tolerance eval items |
+| A bug in the OAuth authorization server lets an MCP client act beyond its user (M13) | Critical | One brand per grant, the role re-read on every request, negative tests, a client conformance run, a pentest-scope addendum |
+| Snooze used to hide tickets from SLAs, or a mistaken bulk close emails fifty surveys (M14) | High | Response clocks keep running while snoozed and an SLA warning wakes the ticket; bulk changes are previewed, undoable for 60 s, and surveys wait for the undo window |
+| Notification pacing delays an SLA-breach email (M14) | High | The bell is always immediate, urgent kinds cut the wait, the state machine is tested on a fake clock, and batches are rebuilt after Redis loss |
+| A bad release is installed automatically on many servers (M15) | High | Automatic updates are off by default, patch-only, wait 72 hours, can be vetoed per release, and roll back on a failed health check |
+| Undoing an import deletes something a person relied on (M16) | High | Deletion only from the provenance ledger, a broad "touched" rule that keeps worked tickets, a preview with reasons, a typed confirmation and an audit row |
+| The widget outgrows 40 KB with personas, action cards, locale chunks and a home panel (M12, M13, M17, M19) | High | Each addition in a lazy chunk with its own cap; the CI size check on every pull request |
+| Translations stall below 100 %, so locales never ship (M17) | Medium | Customer surfaces first (about 450 strings a locale); a "beta" status at 90 % with English fallback if D-48 allows it; paid translation for wave 1 if needed |
+| Changing `APP_URL`'s host breaks every passkey, or 1.0 GitHub users are surprised by re-linking (M18) | Medium | The RP ID is pinned and drift is reported, with other sign-in methods still working; release notes and a clear `oauth-link-required` message with its next step |
+| Custom HTML email layouts break in some clients or try to slip past the sanitiser (M19) | Medium | The existing sanitiser, a size cap, a preview, and a Plain layout fallback when a template fails validation |
+| Public npm packages and desktop signing add supply-chain surface (M20) | Medium | npm provenance and two-factor authentication, CODEOWNERS on the SDKs, signed desktop builds with credentials in a protected environment |
 
 ---
 
@@ -542,3 +931,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-10-18 | **M11 SSO and migration shipped for 1.0.** M11-01 to M11-18 merged ([#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207), [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210)–[#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212), [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215), with review fixes [#220](https://github.com/Docker-Hunterpedia/Helpdock/pull/220) and [#223](https://github.com/Docker-Hunterpedia/Helpdock/pull/223)) and released in v0.6.0. The owner deferred M11-19 to M11-23 (#201 to #205). Runs against real IdPs and vendor accounts remain external dependencies. The milestone doc moves to [completed](../completed/M11-sso-and-migration.md). |
 | 2026-10-19 | **1.0.0 prepared (M9-09, [#159](https://github.com/Docker-Hunterpedia/Helpdock/issues/159)).** The owner confirmed the remaining M9 release gates complete: the external pentest (M9-01, #153), the §14 host load run (M9-03, #154), the screen-reader pass (M9-04, #155), the clean-VM onboarding run with three outside testers (M9-07, #157) and the restore drill (M9-10, #160). Their results are held by the owner and are not recorded in this repository. [asvs-l2](../completed/asvs-l2.md) has no gap. The owner also ruled that runs against real IdPs (Okta, Entra ID) and real Zendesk, Freshdesk and Zoho Desk accounts are not 1.0 blockers: M11 is verified against stand-ins and the vendors' published API documentation, and those runs stay external dependencies. The live AI evaluation passed every DOMAIN-RULES §9 threshold in both languages: [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646), `glm-4.6` answering and `glm-5.1` judging with `bge-m3:567m` embeddings (one provider pair). The first live run (39314026498) failed answerable and unanswerable and found the auto-reply issues fixed in [#238](https://github.com/Docker-Hunterpedia/Helpdock/pull/238). M9's success-metrics criterion is met; M9 stays in progress until `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install works against it. |
 | 2026-10-20 | **M9 Hardening and 1.0 shipped; 1.0.0 released (M9-09, [#159](https://github.com/Docker-Hunterpedia/Helpdock/issues/159)).** The version pull request [#236](https://github.com/Docker-Hunterpedia/Helpdock/pull/236) merged; Changesets run [39326893609](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39326893609) tagged `v1.0.0` and `release.yml` published the [GitHub Release](https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.0) with its CycloneDX SBOM. `ghcr.io/docker-hunterpedia/helpdock:1.0.0` (`linux/amd64`, `linux/arm64`; `latest` is the same digest) is signed keylessly with Cosign and verified against the workflow identity in the same run, and the README install was checked against the pulled image with `scripts/compose-smoke.sh`. Both M9 exit criteria are met. The milestone doc moves to [completed](../completed/M9-hardening-and-1-0.md). |
+| 2026-10-20 | **1.2: Phase 5 — 1.x planned (M12 to M20).** Nine milestones added to §4 with status board rows, each with a plan document in `docs/in-development/` (`Status: planned`): M12 AI workspace, M13 AI actions and integrations, M14 Inbox productivity, M15 Self-host operations, M16 More importers and undo, M17 Apps and languages, M18 Sign-in options, M19 Customer surfaces polish and M20 Native clients and SDKs; about 533 person-days for M12 to M19 and 45–57 for M20. A proposed release mapping for the owner: 1.0.1 (security and UX patch, in flight), 1.1 (M12, M14, M18 and M13-09 to M13-11), 1.2 (the rest of M13, M15, M16, M19), 1.3 (M17), M20 later. M11-19 to M11-23 move to M16-04 to M16-08 with issues #201 to #205. The apps and languages work is split into M17 and M20 so ids keep the `M<n>-<nn>` form. Thirty proposed ADRs, 0028 to 0057; 61 owner decisions gathered in [decisions-1-x.md](decisions-1-x.md) with the plans' recommendations, and a prior-art gap check that added about 20 days of deliverables. Group B of the [1.0 UX review](../completed/ux-review-1-0.md) is folded into M14 and group C into M19. §1 gains non-goals for 1.x; §5 moves six backlog items into Phase 5 and drops the Cloudflare, Vercel and Railway deploy paths, with reasons; §6 gains fifteen risks, including the total effort on a solo maintainer; eight external dependencies are added. DOMAIN-RULES and ARCHITECTURE change with each milestone, not now. |

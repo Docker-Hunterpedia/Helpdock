@@ -72,10 +72,17 @@ Who may change what: a Team Leader creates, edits and deletes a policy that
 applies only to departments they lead ("Department is any of", every value
 theirs); anything wider, and the order, is the Admin's.
 
-Saving a policy, reordering, deleting, or saving hours recomputes every open
+Saving a policy, reordering, deleting, or saving hours or a holiday recomputes every open
 ticket the saver can see ("time already counted is kept"). The recompute runs
 in the request's transaction; a brand with tens of thousands of open tickets
 will make that save slow, which is accepted for v1.
+
+The recompute locks every ticket it will visit, in id order, before it touches
+a clock, because every other writer of clocks (a firing timer, a ticket change)
+locks the ticket first and its clocks after. A save that arrives while a timer
+is firing on one of those tickets waits for the timer to commit. Before 1.0.1
+the recompute wrote clocks first and locked each ticket later, so that overlap
+could deadlock and the save answered 500.
 
 ## The clocks
 

@@ -596,7 +596,7 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 
 ### M11 SSO and migration
 
-Drawn 2026-10-13 for [M11](../in-development/M11-sso-and-migration.md#artboards-to-draw), before implementation.
+Drawn 2026-10-13 for [M11](../completed/M11-sso-and-migration.md#artboards-to-draw), before implementation.
 
 #### `Admin/Settings-SSO`
 

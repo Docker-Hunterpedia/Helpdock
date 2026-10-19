@@ -5,7 +5,7 @@ awaiting review and merge. It includes Zendesk, Freshdesk,
 Zoho Desk and manual CSV/bundle sources, the bilingual wizard, mapping presets,
 dry-run previews and explicit approval. Track scope, functional acceptance and
 current-head CI in
-[the milestone plan](../in-development/M11-sso-and-migration.md).
+[the milestone plan](../completed/M11-sso-and-migration.md).
 
 Importing creates history without sending customer messages or starting rules,
 notifications, SLA timers or AI work. Published help-center articles remain

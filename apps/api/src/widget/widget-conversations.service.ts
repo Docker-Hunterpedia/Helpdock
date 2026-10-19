@@ -41,6 +41,7 @@ import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activ
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
 import { conversationAccess } from './conversation-access.js';
+import { hostnamesOf } from './origin.js';
 import { plainTextToHtml, subjectFrom } from './plain-text.js';
 import type { TicketWithStatus, WidgetRepository } from './widget.repository.js';
 import { WidgetFailure } from './widget-failure.js';
@@ -278,6 +279,7 @@ export class WidgetConversationsService {
           brandId,
           token: body.captchaToken,
           remoteIp: facts.ip,
+          hostnames: hostnamesOf(settings.allowedOrigins),
           tx,
         });
         // ADR 0003: refused "before any ticket, contact or conversation row".

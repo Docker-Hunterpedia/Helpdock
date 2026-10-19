@@ -106,6 +106,8 @@ export class CaptchaVerifier {
     readonly brandId: string;
     readonly token: string | undefined;
     readonly remoteIp: string | null;
+    /** Where the challenge may have been solved; see `CaptchaVerifyInput.hostnames`. */
+    readonly hostnames: readonly string[];
     readonly tx?: DbTransaction;
   }): Promise<CaptchaCheck> {
     const keys = await this.#keys.forBrand(input.brandId, input.tx);
@@ -122,6 +124,7 @@ export class CaptchaVerifier {
       secret: keys.secret,
       token: input.token,
       remoteIp: input.remoteIp,
+      hostnames: input.hostnames,
     });
     return verdict.success ? 'passed' : 'failed';
   }

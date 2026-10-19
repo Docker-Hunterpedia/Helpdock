@@ -16,7 +16,7 @@ const BRAND = '0199f4b2-0000-7000-8000-0000000000b1';
 const OUTBOX = '0199f4b2-5555-7000-8000-000000000001';
 const USER = '0199f4b2-1111-7000-8000-000000000002';
 const TOKEN = 'a-working-sign-in-token';
-const URL_WITH_TOKEN = `https://support.example.com/api/auth/magic-link/${TOKEN}`;
+const URL_WITH_TOKEN = `https://support.example.com/sign-in/magic#token=${TOKEN}`;
 
 const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 9).toString('base64') });
 

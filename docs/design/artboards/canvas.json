@@ -715,6 +715,20 @@
       "w": 1440,
       "h": 900,
       "title": "Admin/Ticket-Imported"
+    },
+    "AdminMagicLink.dc.html": {
+      "x": 0,
+      "y": 60280,
+      "w": 1280,
+      "h": 800,
+      "title": "Admin/SignIn-MagicLink"
+    },
+    "AdminMagicLinkAR.dc.html": {
+      "x": 1360,
+      "y": 60280,
+      "w": 1280,
+      "h": 800,
+      "title": "Admin/SignIn-MagicLink-AR"
     }
   },
   "createdOnFiles": {
@@ -878,14 +892,16 @@
       "y": 53340,
       "text": "M11 SSO and migration — single sign-on for staff",
       "kind": "title1",
-      "maxW": 6880
+      "maxW": 6880,
+      "w": 240
     },
     "m11b": {
       "x": 0,
       "y": 55960,
       "text": "M11 SSO and migration — import from Zendesk, Freshdesk, Zoho Desk and files",
       "kind": "title1",
-      "maxW": 7520
+      "maxW": 7520,
+      "w": 240
     },
     "m11-note": {
       "x": 6960,
@@ -893,6 +909,13 @@
       "w": 520,
       "maxH": 420,
       "text": "M11 decisions (proposed, docs/in-development/M11-sso-and-migration.md): SSO connections are install-wide (Settings › Single sign-on); groups map to brand roles and only SSO-sourced roles are synced. Imports live under Brand › Import, one brand at a time; nothing is sent to customers while importing; new HD numbers by default, the old number on the chip; no SLA timers until the admin starts them. Names, counts and URLs on these boards are sample values."
+    },
+    "m9": {
+      "x": 0,
+      "y": 59980,
+      "text": "M9 Hardening — magic-link confirm (F6)",
+      "kind": "title1",
+      "maxW": 2640
     }
   },
   "order": [
@@ -997,7 +1020,9 @@
     "AdminImportWizard.dc.html",
     "AdminImportRun.dc.html",
     "AdminImportFileMapper.dc.html",
-    "AdminTicketImported.dc.html"
+    "AdminTicketImported.dc.html",
+    "AdminMagicLink.dc.html",
+    "AdminMagicLinkAR.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

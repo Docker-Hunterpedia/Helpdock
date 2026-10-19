@@ -49,17 +49,18 @@ export class EmailTokenStore {
   }
 
   /**
-   * Reads the record without spending it. The invite screen needs it: a person
-   * opens the link, reads who invited them to what, and only then decides to
-   * fill the form in — and a preview that burned the token would mean one
-   * refresh cost them their invitation (M0-06).
+   * Reads the record without spending it, for a screen that shows what a link
+   * is before anybody acts on it. The invite screen says who invited them to
+   * what before the form is filled in (M0-06); the sign-in link's confirm
+   * screen says whose account it opens before the click that spends it, so a
+   * mail scanner that fetches the link spends nothing (M9-01 F6).
    *
-   * Only for a purpose whose token stands for an offer rather than for an act.
-   * A magic link must never be readable this way: reading it is using it.
+   * Never for a password reset: its screen has nothing to show first, so it has
+   * no reason to read a token it is not about to spend.
    */
   async read(
     token: string,
-    purpose: Extract<EmailTokenPurpose, 'invite'>,
+    purpose: Extract<EmailTokenPurpose, 'invite' | 'magic-link'>,
   ): Promise<EmailTokenPayload | null> {
     return this.#parse(await this.#redis.get(emailTokenKey(hashToken(token))), purpose);
   }

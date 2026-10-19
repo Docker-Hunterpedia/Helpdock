@@ -13,7 +13,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | the internal pre-pentest review is done and F1 to F5 and N1 are fixed (F3 for sockets only); F6 is being fixed in code ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)). The external pentest ([statement of work](../planning/pentest-scope.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
+| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | the internal pre-pentest review is done and F1 to F6 and N1 are fixed (F3 for sockets only) ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)). The external pentest ([statement of work](../planning/pentest-scope.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
 | M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 (2026-10-09) found more; its gaps were closed in #167 on 2026-10-11 ([record](../completed/asvs-l2.md), [notes](#m9-02-re-walk-of-m6-m7-and-m8)): 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator. 7.2.1, 2.10.1 and 3.5.2 stay Partial |
 | M9-03 | Load tests | #154 | suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); the §14 host run: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
 | M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md)); the screen-reader pass ([runbook](../guides/screen-reader-pass.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
@@ -39,7 +39,7 @@ deliverable too.
 | F3 (Low) | A widget socket outlived the identity link that granted its rooms | Fixed: sockets are disconnected and SSE streams are ended, on every replica, when the link is withdrawn or changed. A removed origin or rotated signing secret does not disconnect sockets either. |
 | F4 (Low) | OAuth callback not bound to the browser that started it | Fixed with the `hd_oauth` cookie ([authentication](../guides/authentication.md#oauth)). |
 | F5 (Low) | API keys and webhook deliveries ignored a brand's deletion grace | Fixed: `410` for the key, `skipped` for the delivery. |
-| F6 (Low) | The magic link is spent by a `GET` | **Not fixed: needs an artboard.** The admin never sees the token (the api spends it and redirects), so the fix is a new admin screen that asks for a click and a `POST /api/auth/magic-link/consume`. |
+| F6 (Low) | The magic link is spent by a `GET` | Fixed. The email links to the admin's confirm screen `/sign-in/magic#token=…` (`Admin/SignIn-MagicLink`, `-AR`). It shows the account from `POST /api/auth/magic-link/preview`, which spends nothing, and spends the link only on Continue with `POST /api/auth/magic-link/consume`; the old `GET` link only redirects there ([authentication](../guides/authentication.md#the-sign-in-link-and-the-password-reset)). |
 | N1 (not rated) | The `/widget` handshake keyed its `widget-ip` budget on Caddy's address, so every visitor of a brand shared one | Fixed. The handshake resolves the client address the way Fastify resolves `request.ip`, under the same `TRUST_PROXY`, so a socket and a REST call from one visitor spend one budget and two visitors behind Caddy spend two ([widget protocol](../guides/widget-protocol.md#throttles)). |
 
 **Outstanding from this review**
@@ -102,8 +102,8 @@ Copied from the PRD, ticked as they are met.
 - ~~**ZAP's first release run.**~~ Settled on `v0.4.0`: the release-tag run
   passed 62 checks across 16 URLs with 0 failures and 0 warnings. No new
   `.zap/rules.tsv` exception was needed.
-- **Magic link spent by a `GET` (M9-01 F6).** The confirm screen needs an artboard
-  first: an admin page at `/sign-in/magic` and `POST /api/auth/magic-link/consume`
+- ~~**Magic link spent by a `GET` (M9-01 F6).**~~ Fixed: the confirm screen at
+  `/sign-in/magic` spends the link only on a click
   ([internal review](../completed/internal-security-review.md)).
 - ~~**Handshake address budget (M9-01 N1).**~~ Fixed: the `/widget` handshake's
   address is resolved under `TRUST_PROXY`, with a test through a trusted proxy

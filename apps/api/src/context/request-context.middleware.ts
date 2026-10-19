@@ -133,8 +133,9 @@ export class RequestContextMiddleware implements NestMiddleware {
 const CREDENTIAL_PATHS: readonly RegExp[] = [
   // The invite link people are emailed (M0-06), as a page and as the api call.
   /^(\/api\/auth)?\/invites?\/[^/]+/,
-  // The sign-in link (M0-05), for the same reason.
-  /^\/api\/auth\/magic-link\/[^/]+/,
+  // The sign-in link (M0-05), for the same reason. Not the confirm screen's
+  // `preview` and `consume` (M9-01 F6), whose token is in the body.
+  /^\/api\/auth\/magic-link\/(?!(?:preview|consume)$)[^/]+/,
   // The rating link (M1-12), as the page and as the public api call.
   /^(\/api\/public)?\/csat\/[^/]+/,
 ];

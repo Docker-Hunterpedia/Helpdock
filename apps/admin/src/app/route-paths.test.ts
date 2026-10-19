@@ -4,6 +4,7 @@ import {
   csatPreviewRoute,
   csatTokenFromPath,
   DEFAULT_SIGNED_IN_ROUTE,
+  magicLinkTokenFromHash,
   safeReturnTo,
   ticketIdFromPath,
   ticketRoute,
@@ -66,5 +67,19 @@ describe('csatTokenFromPath', () => {
 
     expect(csatTokenFromPath(route.pathname)).toBe(CSAT_PREVIEW_TOKEN);
     expect(route.searchParams.get('lang')).toBe('ar');
+  });
+});
+
+describe('magicLinkTokenFromHash', () => {
+  it('reads the token from the fragment a sign-in link carries', () => {
+    expect(magicLinkTokenFromHash('#token=AbC-123_xyz')).toBe('AbC-123_xyz');
+  });
+
+  it.each([
+    ['no fragment', ''],
+    ['an empty fragment', '#'],
+    ['a fragment without a token', '#other=1'],
+  ])('is empty for %s', (_case, hash) => {
+    expect(magicLinkTokenFromHash(hash)).toBe('');
   });
 });

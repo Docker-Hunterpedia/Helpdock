@@ -282,7 +282,7 @@ describe.skipIf(!hasDocker)('auth email delivery', () => {
     );
     expect(wouldHave).toHaveLength(1);
     expect(wouldHave[0]).toContain(seeded.userId);
-    await expectNoLeak((await queued.last()).text.match(/magic-link\/([A-Za-z0-9_-]+)/)?.[1] ?? '');
+    await expectNoLeak((await queued.last()).text.match(/#token=([A-Za-z0-9_-]+)/)?.[1] ?? '');
   });
 
   it('delivers a sign-in link once, however often the job arrives, and the link works', async () => {
@@ -294,13 +294,11 @@ describe.skipIf(!hasDocker)('auth email delivery', () => {
 
     const { summary, body } = await onlyMessageTo(seeded.email);
     expect(summary.From.Address).toBe(SYSTEM_FROM);
-    const link = body.Text.match(/https:\/\/\S+\/api\/auth\/magic-link\/([A-Za-z0-9_-]+)/);
+    const link = body.Text.match(/https:\/\/\S+\/sign-in\/magic#token=([A-Za-z0-9_-]+)/);
     const token = link?.[1] ?? '';
     await expectNoLeak(token);
 
-    const followed = await app.inject({ method: 'GET', url: `/api/auth/magic-link/${token}` });
-    expect(followed.statusCode).toBe(302);
-    expect(followed.headers.location).not.toContain('error=');
+    expect((await post('/api/auth/magic-link/consume', { token })).statusCode).toBe(201);
   });
 
   it('delivers a password reset once, in the recipient language, and the token resets', async () => {
@@ -355,8 +353,7 @@ describe.skipIf(!hasDocker)('auth email delivery', () => {
 
     const [job] = await relayAuthEmails();
     const payload = job?.data as AuthEmailPayload;
-    const token =
-      (await queued.last()).text.match(/magic-link\/([A-Za-z0-9_-]+)/)?.[1] ?? 'missing';
+    const token = (await queued.last()).text.match(/#token=([A-Za-z0-9_-]+)/)?.[1] ?? 'missing';
 
     expect(payload.urlEncrypted).toMatch(/^v1\./);
     expect(JSON.stringify(job?.data)).not.toContain(token);

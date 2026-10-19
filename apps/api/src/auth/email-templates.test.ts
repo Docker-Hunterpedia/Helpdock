@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { magicLinkScreenUrl } from './auth.service.js';
 import { escapeHtml, renderAuthEmail, SECURITY_CHANGES } from './email-templates.js';
 
 const URL_WITH_TOKEN = 'https://support.example.com/api/auth/magic-link/abc-123?a=1&b=2';
@@ -77,6 +78,22 @@ describe('renderAuthEmail', () => {
 
     expect(message.text).toContain(URL_WITH_TOKEN);
     expect(message.text).not.toContain('<');
+  });
+
+  it('links the sign-in email to the confirm screen, with the token in the fragment (M9-01 F6)', () => {
+    const url = magicLinkScreenUrl('https://support.example.com', 'abc-123_XYZ');
+    const message = renderAuthEmail({
+      kind: 'magicLink',
+      to: 'lina@helpdock.com',
+      url,
+      locale: 'en',
+      expiresIn: 10,
+    });
+
+    expect(url).toBe('https://support.example.com/sign-in/magic#token=abc-123_XYZ');
+    expect(message.text).toContain(url);
+    expect(message.html).toContain(`href="${url}"`);
+    expect(message.text).not.toContain('/api/auth/magic-link/');
   });
 
   it('escapes the link in the markup, so a query string cannot close the attribute', () => {

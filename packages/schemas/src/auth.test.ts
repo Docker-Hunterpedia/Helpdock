@@ -4,6 +4,7 @@ import {
   authMethodsSchema,
   emailTokenPayloadSchema,
   magicLinkTokenParamSchema,
+  magicLinkTokenRequestSchema,
   oauthCallbackQuerySchema,
   oauthProviderParamSchema,
   PASSWORD_MIN_LENGTH,
@@ -220,6 +221,12 @@ describe('the path and query schemas the auth routes name', () => {
     expect(magicLinkTokenParamSchema.safeParse({ token: 'abc' }).success).toBe(true);
     expect(magicLinkTokenParamSchema.safeParse({ token: '' }).success).toBe(false);
     expect(magicLinkTokenParamSchema.safeParse({ token: 'x'.repeat(201) }).success).toBe(false);
+  });
+
+  it('bounds the token the confirm screen posts the same way as the old path segment', () => {
+    expect(magicLinkTokenRequestSchema.safeParse({ token: 'abc' }).success).toBe(true);
+    expect(magicLinkTokenRequestSchema.safeParse({ token: '' }).success).toBe(false);
+    expect(magicLinkTokenRequestSchema.safeParse({ token: 'x'.repeat(201) }).success).toBe(false);
   });
 
   it('bounds the provider segment, leaving which providers exist to the handler', () => {

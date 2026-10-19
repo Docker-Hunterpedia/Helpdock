@@ -129,17 +129,25 @@ interface Visitor {
   readonly secret: string;
 }
 
-/** The siteverify double: a token of `pass` passes, anything else fails. */
+/**
+ * The siteverify double: `pass` passes as solved on the shop, `pass-elsewhere`
+ * as solved on a site that is not the brand's, and anything else fails.
+ */
 const captchaCalls: URLSearchParams[] = [];
+const SOLVED_ON: Readonly<Record<string, string>> = {
+  pass: 'shop.example.com',
+  'pass-elsewhere': 'elsewhere.example.net',
+};
 const captchaTransport: CaptchaTransport = {
   postForm: async (_url, form) => {
     captchaCalls.push(form);
+    const hostname = SOLVED_ON[form.get('response') ?? ''];
     return {
       status: 200,
       body: JSON.stringify(
-        form.get('response') === 'pass'
-          ? { success: true, hostname: 'shop.example.com' }
-          : { success: false, 'error-codes': ['invalid-input-response'] },
+        hostname === undefined
+          ? { success: false, 'error-codes': ['invalid-input-response'] }
+          : { success: true, hostname },
       ),
     };
   },
@@ -1186,6 +1194,10 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       const visitor = await newVisitor();
       const refused = await start(visitor, { captchaToken: 'nope' });
       expect(refused.status).toBe(403);
+      // 1.0.1: a site key is public, so a token solved on a site that is not
+      // one of the brand's allowed origins passes siteverify and must not here.
+      const solvedElsewhere = await start(visitor, { captchaToken: 'pass-elsewhere' });
+      expect(solvedElsewhere.status).toBe(403);
       const before = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx.select().from(tickets).where(eq(tickets.visitorId, visitor.id)),
       );

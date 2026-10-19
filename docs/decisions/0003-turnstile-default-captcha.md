@@ -42,3 +42,12 @@ CAPTCHA is off by default. When it is on, a missing or failing token is rejected
 - The one provider module is `packages/channels/src/captcha.ts`. `renderConfig(siteKey, locale)` answers the provider, the site key and what a server-rendered page needs (script URL, element class, response field, CSP sources); `verify` refuses a missing secret, a blank or oversized token, a non-2xx answer, an unreadable body and an unreachable provider without ever passing.
 - A brand's one set of keys is edited on Channels › Widget and read by `DbCaptchaKeys` in `apps/api/src/captcha/captcha-keys.ts`, for both the widget (before a first message) and the hosted web form (before a submission). Each surface has its own on/off toggle; a surface switched on while the brand has no keys fails closed.
 - The siteverify POST goes through `safeFetch` with a 64 KB body cap, a 10 s deadline and no redirects.
+
+## Amendment (2026-10-20, 1.0.1): the reported hostname is checked
+
+A site key is public, so a token solved on any site that embeds it used to pass `verify`. `verify` now takes the hosts the challenge may have been solved on (`hostnames`), and refuses a pass whose reported `hostname` is not one of them, or is missing, with `hostname-mismatch`. The comparison ignores case.
+
+- **Widget:** the hosts of the brand's allowed origins. The widget draws the challenge in the page that embeds it.
+- **Web form:** `APP_URL`'s host and each of the brand's verified help center domains. The page sets `frame-ancestors 'none'`, so it is the only place the challenge can run.
+
+Cloudflare's dummy test secret keys always report `example.com`, so they no longer pass on a real install. Test with a real site key whose Cloudflare hostname list includes the site.

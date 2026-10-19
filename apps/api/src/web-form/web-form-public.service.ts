@@ -77,6 +77,12 @@ export interface LoadedForm {
   readonly departmentId: string | null;
   readonly policy: ContentPolicy;
   readonly keys: BrandCaptchaKeys | null;
+  /**
+   * The hosts the page is served on, `APP_URL`'s and each verified help center
+   * host: the only places its CAPTCHA can be solved, since the page refuses
+   * to be framed. Empty while CAPTCHA is off.
+   */
+  readonly captchaHostnames: readonly string[];
 }
 
 export interface WebFormPost {
@@ -99,6 +105,8 @@ export interface WebFormPublicServiceOptions {
   readonly writer: WebFormTicketWriter;
   readonly captchaKeys: CaptchaKeysReader;
   readonly captchaTransport: CaptchaTransport;
+  /** `APP_URL`'s hostname, where `/contact/<brandId>` is served. */
+  readonly appHost: string;
   readonly limiter: RateLimiter;
   /** A fresh sink per submission, so a rolled-back one's uploads are its own to remove. */
   readonly sink: () => StorageAttachmentSink;
@@ -320,6 +328,9 @@ export class WebFormPublicService {
       departmentId: row?.departmentId ?? null,
       policy,
       keys: captchaOn ? keys : null,
+      captchaHostnames: captchaOn
+        ? [this.#options.appHost, ...(await repository.helpCenterHosts(tx, brandId))]
+        : [],
     };
   }
 
@@ -337,6 +348,7 @@ export class WebFormPublicService {
       token: post.fields.get(form.captcha.responseField)?.[0] ?? '',
       remoteIp: post.ip,
       idempotencyKey: submissionId,
+      hostnames: form.captchaHostnames,
     });
     if (!verdict.success) {
       this.#options.log.warn(

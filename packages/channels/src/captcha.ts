@@ -27,6 +27,12 @@ export interface CaptchaVerifyInput {
   readonly remoteIp?: string | null;
   /** Turnstile only: lets a retry of the same check be answered once. */
   readonly idempotencyKey?: string;
+  /**
+   * The hosts the challenge may have been solved on. A site key is public and
+   * works on any site, so a pass the provider reports for another host — or
+   * for no host — is refused as `hostname-mismatch`.
+   */
+  readonly hostnames: readonly string[];
 }
 
 export type CaptchaVerdict =
@@ -96,6 +102,16 @@ const parseVerdict = (status: number, body: string): CaptchaVerdict => {
   return parsed.data.success
     ? { success: true, hostname: parsed.data.hostname ?? null }
     : { success: false, errorCodes: parsed.data['error-codes'] ?? [] };
+};
+
+const solvedHere = (verdict: CaptchaVerdict, hostnames: readonly string[]): CaptchaVerdict => {
+  if (!verdict.success) {
+    return verdict;
+  }
+  const solvedOn = verdict.hostname?.toLowerCase();
+  return hostnames.some((host) => host.toLowerCase() === solvedOn)
+    ? verdict
+    : { success: false, errorCodes: ['hostname-mismatch'] };
 };
 
 /** Answers that are not worth a round trip: the provider would refuse them too. */
@@ -174,7 +190,7 @@ const createProvider = (
       // Unreachable is a refusal, never a pass (ADR 0003: fail closed).
       return { success: false, errorCodes: ['network-error'] };
     }
-    return parseVerdict(response.status, response.body);
+    return solvedHere(parseVerdict(response.status, response.body), input.hostnames);
   },
 });
 

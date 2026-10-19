@@ -92,6 +92,7 @@ const loadForm = (brandId: string, lang: string | undefined) => {
     departmentId: null,
     policy,
     keys: null,
+    captchaHostnames: [],
   };
 };
 

@@ -14,8 +14,13 @@ const KEYS: BrandCaptchaKeys = { provider: 'turnstile', siteKey: 'site', secret:
 const verifierWith = (keys: BrandCaptchaKeys | null, transport: CaptchaTransport) =>
   new CaptchaVerifier({ forBrand: async () => keys }, transport);
 
+const HOSTS = ['support.example.com'];
+
 const answering = (success: boolean): CaptchaTransport => ({
-  postForm: vi.fn(async () => ({ status: 200, body: JSON.stringify({ success }) })),
+  postForm: vi.fn(async () => ({
+    status: 200,
+    body: JSON.stringify({ success, hostname: HOSTS[0] }),
+  })),
 });
 
 describe('CaptchaVerifier', () => {
@@ -23,7 +28,12 @@ describe('CaptchaVerifier', () => {
     const transport = answering(true);
 
     expect(
-      await verifierWith(KEYS, transport).verify({ brandId: BRAND, token: 'tok', remoteIp: null }),
+      await verifierWith(KEYS, transport).verify({
+        brandId: BRAND,
+        token: 'tok',
+        remoteIp: null,
+        hostnames: HOSTS,
+      }),
     ).toBe('passed');
     expect(vi.mocked(transport.postForm).mock.calls[0]?.[1].get('secret')).toBe('s3cret');
   });
@@ -32,11 +42,13 @@ describe('CaptchaVerifier', () => {
     const transport = answering(false);
     const verifier = verifierWith(KEYS, transport);
 
-    expect(await verifier.verify({ brandId: BRAND, token: undefined, remoteIp: null })).toBe(
-      'failed',
-    );
+    expect(
+      await verifier.verify({ brandId: BRAND, token: undefined, remoteIp: null, hostnames: HOSTS }),
+    ).toBe('failed');
     expect(transport.postForm).not.toHaveBeenCalled();
-    expect(await verifier.verify({ brandId: BRAND, token: 'tok', remoteIp: null })).toBe('failed');
+    expect(
+      await verifier.verify({ brandId: BRAND, token: 'tok', remoteIp: null, hostnames: HOSTS }),
+    ).toBe('failed');
   });
 
   it('fails closed when the provider cannot be reached', async () => {
@@ -45,7 +57,12 @@ describe('CaptchaVerifier', () => {
     };
 
     expect(
-      await verifierWith(KEYS, transport).verify({ brandId: BRAND, token: 'tok', remoteIp: null }),
+      await verifierWith(KEYS, transport).verify({
+        brandId: BRAND,
+        token: 'tok',
+        remoteIp: null,
+        hostnames: HOSTS,
+      }),
     ).toBe('failed');
   });
 
@@ -55,6 +72,7 @@ describe('CaptchaVerifier', () => {
         brandId: BRAND,
         token: 'tok',
         remoteIp: null,
+        hostnames: HOSTS,
       }),
     ).toBe('not_configured');
   });

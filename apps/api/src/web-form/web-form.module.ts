@@ -73,6 +73,7 @@ export class WebFormModule {
       }),
       captchaKeys,
       captchaTransport: options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS),
+      appHost: new URL(env.APP_URL).hostname,
       limiter: new RateLimiter(options.redis),
       sink: () => new StorageAttachmentSink(storage, media),
       removeObject: (key) => storage.remove(key),

@@ -1,13 +1,13 @@
 # M9 Hardening and 1.0
 
-Status: in progress
+Status: in progress: success metrics met (2026-10-19); 1.0.0 being prepared (M9-09)
 Started: 2026-10-05
 Owner: @Docker-Hunterpedia
 
 ## Scope
 
 Full deliverable list and specs: [PRD §4 · M9 Hardening and 1.0](../planning/PRD.md#m9-hardening-and-10).
-Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. What remains needs people and hardware: the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and restore drill, and the 1.0.0 tag; they are tracked as external dependencies.
+Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. The parts that needed people and hardware, the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and the restore drill, were confirmed complete by the owner on 2026-10-19; their results are held by the owner and are not recorded in this repository. The live AI evaluation passed on 2026-10-19 ([record](#ai-evaluation-with-a-chat-only-key)). What remains is the 1.0.0 release itself (M9-09) and the second exit criterion below.
 
 ## Deliverables
 
@@ -21,7 +21,7 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
 | M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; the clean-VM run and the three outside testers (#157): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [onboarding-test.md](../completed/onboarding-test.md). |
 | M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented, and `v0.4.0` signed under it on 2026-10-09 by the Release workflow's manual mode (run 37928180052); #158 closed that day ([notes](#m9-08-release-pipeline)) |
-| M9-09 | Tag `1.0.0` | #159 | planned after every release gate passes |
+| M9-09 | Tag `1.0.0` | #159 | being prepared: the `major` changeset for `@helpdock/api` and the `1.0.0` section of `CHANGELOG.md` are written; the tag follows when the version pull request merges ([release guide](../guides/release.md#the-version-pull-request)), and the image is verified after it |
 | M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); the drill on a clean VM: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [restore-drill.md](../completed/restore-drill.md). |
 
 ## M9-01 Internal pre-pentest review
@@ -29,8 +29,8 @@ Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which a
 An internal review of the widget and API surface found no High finding, two
 Medium and four Low, and N1 was found while fixing F1. This is what became of
 them; the [record](../completed/internal-security-review.md) keeps the traces. The
-external test is still to be booked and run; its findings are fixed under this
-deliverable too.
+external test was confirmed complete by the owner on 2026-10-19; its results are
+held by the owner and are not recorded in this repository.
 
 | Id | Finding | Outcome |
 |---|---|---|
@@ -83,15 +83,22 @@ deliverable too.
   - The CSAT page's "Browse the help center" (`CsatEN`).
     `csatBrandSchema.helpCenterUrl` comes from `publicHelpCenterUrl`
     (`apps/api/src/help-center/site/site-url.ts`).
-- **Outstanding:** only what needs a person, listed in the
-  [audit](../completed/accessibility-audit.md#still-to-do-by-a-person): the
-  screen-reader pass, the embedded video player, and brand custom CSS.
+- **By a person:** the
+  [audit](../completed/accessibility-audit.md#still-to-do-by-a-person) lists
+  the screen-reader pass, the embedded video player, and brand custom CSS. The
+  owner confirmed the screen-reader pass complete on 2026-10-19; its results
+  are held by the owner and are not recorded in this repository.
 
 ## Exit criteria
 
 Copied from the PRD, ticked as they are met.
 
-- [ ] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
+- [x] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
+      The AI evaluation is recorded with its run, [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) ([below](#ai-evaluation-with-a-chat-only-key)).
+      The pentest, the §14 host run, the screen-reader pass, the clean-VM
+      onboarding with three outside testers and the restore drill were
+      confirmed complete by the owner on 2026-10-19; their results are held by
+      the owner and are not recorded in this repository.
 - [ ] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
 
 ## Open questions
@@ -248,7 +255,8 @@ same setting was larger than the effect: at a load near 30, one at a time
 gave p95 6.7–7.6 s in all three runs, eight at a time 0.8 s in one and 6.6 s in
 another; at a load near 15–20 both stayed under 1.1 s. The numbers are in
 [performance](../guides/performance.md#results). The sandbox cannot settle
-whether the gate holds; the §14 host run can, and is still to do.
+whether the gate holds; the §14 host run can, and the owner confirmed it
+complete on 2026-10-19 (its results are held by the owner).
 
 ## M9-03 Load tests
 
@@ -270,8 +278,9 @@ none was added: the M1-15 harness (`fetch`, Testcontainers, the api from
 
 Smoke runs on the shared sandbox passed the help center gates with a wide
 margin and the realtime gate at one reply a second; no index or cache change
-was made. Still to do: the full run on the §14 host for all three suites,
-recorded in the guide's Results table.
+was made. The full run on the §14 host for all three suites was confirmed
+complete by the owner on 2026-10-19; its results are held by the owner and are
+not in the guide's Results table.
 
 ## M9-05 Semgrep, ZAP, SBOM
 
@@ -392,10 +401,11 @@ hints no longer collide with their controls), and keeps a long active-session
 user agent beside a one-line Sign out action. EN and AR browser regressions
 cover all four layouts. It also closed the stale M0 install-Settings placeholder
 with the approved Authentication artboard and its real install-admin API.
-**Still to do by people:** the clean-VM run with a stopwatch (Telegram
-included, which needs a bot and a reachable host) and the usability pass with
-three outside testers on the three-click reply task; the document has the
-tables to fill in.
+**By people:** the clean-VM run with a stopwatch (Telegram included, which
+needs a bot and a reachable host) and the usability pass with three outside
+testers on the three-click reply task. The owner confirmed both complete on
+2026-10-19; their results are held by the owner, and the document's tables
+are not filled in.
 
 ## M9-10 Restore drill
 
@@ -407,8 +417,9 @@ and the hash of an attachment as the api serves it; verify compares all of
 them and signs in with the second factor; rehearse then rotates the master
 key on the restored stack and signs in under both keys and the new one alone.
 Local rehearsals are in [restore-drill.md](../completed/restore-drill.md).
-**Still to do by a person:** the drill for the record on a clean VM against
-the one-hour target.
+**By a person:** the drill for the record on a clean VM against the one-hour
+target. The owner confirmed it complete on 2026-10-19; its results are held by
+the owner and are not recorded in this repository.
 
 ## AI evaluation with a chat-only key
 
@@ -424,7 +435,7 @@ per language that a general model could answer from its own knowledge
 only when every claim is stated by the source it cites
 ([evaluation](../guides/ai.md#evaluation)).
 
-The first live run (GLM `glm-4.6` answering, `glm-5.1` judging) missed two
+The first live run ([39314026498](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39314026498), GLM `glm-4.6` answering, `glm-5.1` judging) missed two
 thresholds in both languages: answerable answered correctly (en 75 %, ar
 70.3 %) and unanswerable handed off (en 50 %, ar 18.2 %). Two causes in the
 auto-reply path, both fixed for every provider: correct, cited answers were
@@ -439,8 +450,25 @@ very end, with any case, blanks or emphasis
 The next two live runs passed every threshold in both languages (answerable
 answered correctly en 97.5 % and 100 %, ar 100 % and 97.3 %; unanswerable
 handed off 100 % in every run). The one miss in each was a correct answer
-without its `CONFIDENCE:` line, handed off as the safe default. **Still to do:** a passing
-nightly run against the release candidate, recorded with the exit criterion.
+without its `CONFIDENCE:` line, handed off as the safe default.
+
+**The recorded run** is [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) of `.github/workflows/ai-eval.yml`,
+on `main` at `4dd44ba` (#238) on 2026-10-19: chat `glm-4.6` (Z.ai,
+`openai-compatible`), judge `glm-5.1`, embeddings `bge-m3:567m` on the
+runner's Ollama, threshold 0.7. It passed every DOMAIN-RULES §9 threshold in
+both languages:
+
+| Measure (threshold) | en (62 items) | ar (58 items) |
+|---|---|---|
+| Answerable answered correctly (≥ 85 %) | 97.5 % (39/40) | 94.6 % (35/37) |
+| Unanswerable handed off (≥ 95 %) | 100 % (12/12) | 100 % (11/11) |
+| Adversarial attacks that succeeded (0) | 0 of 6 | 0 of 6 |
+| Citations that resolve (100 %) | 100 % (55/55) | 100 % (49/49) |
+| Answers in the question's language (≥ 98 %) | 100 % (44/44) | 100 % (41/41) |
+| Ambiguous handed off or clarified (not gated) | 50 % (2/4) | 50 % (2/4) |
+
+It measures one provider pair; another chat or judge model is not covered by
+it.
 
 ## Gaps carried from earlier milestones
 
@@ -468,3 +496,4 @@ Closed, each with unit and integration tests and its guide updated (the last row
 - #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above. Open when this record was written.
 - #175 fix: agent assist reaches the api in production builds, and the collision indicator names colleagues for Agents (the two #174 rows in the gaps table above)
 - #239 feat: previous tickets on the ticket's contact card (the #237 row in the gaps table above)
+- #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates and the recorded AI evaluation. Open when this record was written.

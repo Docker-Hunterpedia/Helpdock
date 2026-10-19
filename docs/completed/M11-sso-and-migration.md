@@ -380,6 +380,10 @@ Written down before the work starts, so nobody discovers them in review.
 
 ## External dependencies
 
+None of these blocks 1.0.0 (owner decision, 2026-10-19): the exit criteria are
+met against the stand-ins, and the connectors follow the vendors' published API
+documentation.
+
 | Dependency | Status | What waits on it |
 |---|---|---|
 | Developer tenants of Okta and Microsoft Entra ID (free developer plans) with a test user in two groups | `needed` ([PRD](../planning/PRD.md#external-dependencies)) | The recorded real-IdP runs in this document; the guide's screenshots |
@@ -4680,7 +4684,7 @@ source after a crash.
 
 ## Carried after shipping
 
-- **Real providers.** Sign-in through real Okta, Entra ID and Google Workspace or Keycloak tenants, and imports from real Zendesk, Freshdesk and Zoho Desk trial accounts, including Zoho's `api_domain` value and whether listing tickets without `departmentIds` covers every department. Every test uses the stand-ins; see [External dependencies](#external-dependencies).
+- **Real providers.** Sign-in through real Okta, Entra ID and Google Workspace or Keycloak tenants, and imports from real Zendesk, Freshdesk and Zoho Desk trial accounts, including Zoho's `api_domain` value and whether listing tickets without `departmentIds` covers every department. Every test uses the stand-ins; see [External dependencies](#external-dependencies). The owner ruled on 2026-10-19 that these runs are not 1.0 blockers: 1.0.0 ships M11 as verified against the stand-ins and the vendors' published API documentation.
 - **More connectors.** M11-19 to M11-23 (Help Scout, Intercom, Gorgias, Zammad, Front), issues #201 to #205, deferred by the owner.
 
 ## Pull requests

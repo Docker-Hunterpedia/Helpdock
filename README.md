@@ -2,17 +2,17 @@
 
 Open-source customer support platform: ticketing, help center, live chat widget and grounded AI, in one deploy that serves many brands. A self-hosted alternative to Zoho Desk, Zendesk and Freshdesk.
 
-> **Status:** pre-1.0. M0 to M5 have shipped: the first-run wizard, sign-in with a second factor, staff, roles and brands, the ticket workspace, email in and out, business hours and SLAs, workflow rules and macros, notifications, the chat widget and the help center, in English and Arabic. Telegram, AI, the public API and the 1.0 hardening are being built. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, and [docs/completed/](docs/completed/README.md) for what each milestone built, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
+> **Status:** 1.0. Every milestone of the 1.0 plan has shipped: the first-run wizard, sign-in with a second factor and staff SSO over SAML and OpenID Connect, staff, roles and brands, the ticket workspace, business hours and SLAs, workflow rules and macros, notifications, email, Telegram, WhatsApp, Messenger and Instagram, the chat widget and the web form, the help center, grounded AI, the REST API, webhooks and reports, and importers from Zendesk, Freshdesk and Zoho Desk, in English and Arabic. See the [PRD](docs/planning/PRD.md) for phases, milestones and current status, and [docs/completed/](docs/completed/README.md) for what each milestone built, plus [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md).
 
 ## Install
 
-Docker Engine with Compose v2, a Linux server with 2 vCPU and 4 GB of memory, two DNS names pointing at it, and ports 80 and 443 open. Each release is published as `ghcr.io/docker-hunterpedia/helpdock:<version>` ([releases](https://github.com/Docker-Hunterpedia/Helpdock/releases)).
+Docker Engine with Compose v2, a Linux server with 2 vCPU and 4 GB of memory, two DNS names pointing at it, and ports 80 and 443 open. Each release is published as `ghcr.io/docker-hunterpedia/helpdock:<version>` ([releases](https://github.com/Docker-Hunterpedia/Helpdock/releases)); the commands below install 1.0.0.
 
 ```bash
-git clone --depth 1 --branch v<version> https://github.com/Docker-Hunterpedia/Helpdock.git
+git clone --depth 1 --branch v1.0.0 https://github.com/Docker-Hunterpedia/Helpdock.git
 cd Helpdock/docker
 cp ../.env.example .env
-# Fill in .env: HELPDOCK_VERSION=<version>, APP_URL, APP_MASTER_KEY (openssl rand -base64 32),
+# Fill in .env: HELPDOCK_VERSION=1.0.0, APP_URL, APP_MASTER_KEY (openssl rand -base64 32),
 # the database passwords, the S3 bucket, ADMIN_HOST and API_HOST.
 docker compose up -d
 ```

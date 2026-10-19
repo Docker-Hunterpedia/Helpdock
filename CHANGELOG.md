@@ -14,6 +14,68 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.0.0 — 2026-10-20
+
+The first stable release. Every milestone of the 1.0 plan has shipped: the
+ticket desk with SLAs, rules and macros; email, Telegram, WhatsApp, Messenger
+and Instagram, the chat widget and the web form; a bilingual help center on
+each brand's own domain; grounded AI that assists agents and answers customers
+from the brand's knowledge; the REST API, webhooks and reports; staff sign-in
+over SAML and OpenID Connect; and importers from Zendesk, Freshdesk and Zoho
+Desk with a manual CSV mapper for the rest. What each milestone built, and the
+gaps it left open, is in [docs/completed/](docs/completed/README.md).
+
+### New since 0.7
+
+- **Previous tickets on the contact card.** The ticket's details panel lists
+  up to three of the contact's other tickets, newest first, with their status,
+  a count of every earlier ticket you may see, and a link to the contact's
+  page ([#239](https://github.com/Docker-Hunterpedia/Helpdock/pull/239)).
+- **Auto-reply answers only what the sources answer.** When the knowledge base
+  does not answer the customer's exact question, the model replies
+  `NO_ANSWER` and the conversation goes to the team, instead of offering
+  related facts. The `CONFIDENCE:` figure is read on its own line or run on
+  from the last sentence, in any case or emphasis
+  ([#238](https://github.com/Docker-Hunterpedia/Helpdock/pull/238)).
+- **"AI answered" on the ticket list** appears only once the assistant has
+  sent an answer ([#233](https://github.com/Docker-Hunterpedia/Helpdock/pull/233)).
+
+### Upgrading from 0.7
+
+Nothing to change in your configuration. The major version marks the release,
+not an incompatible change: follow
+[Upgrading](docs/guides/operations.md#upgrading) with `1.0.0`, and the api runs
+any pending migrations when it starts.
+
+### Before the release
+
+- **Release gates.** The external pentest of the widget and the API, the load
+  run on the reference host, the screen-reader pass, the onboarding run on a
+  clean VM with three outside testers, and the restore drill were completed
+  before 1.0.0. Their results are held by the maintainer and are not published
+  in this repository.
+- **AI answer quality.** The bilingual evaluation (DOMAIN-RULES §9) passed
+  every threshold in [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646),
+  with `glm-4.6` answering, `glm-5.1` judging and `bge-m3:567m` embeddings:
+  answerable questions answered correctly 97.5 % in English and 94.6 % in
+  Arabic, unanswerable ones handed off 100 % in both, no injected instruction
+  followed, every citation resolved, every answer in the question's language.
+  That is one provider pair; evaluate the model you choose
+  ([AI guide](docs/guides/ai.md#evaluation)).
+- **OWASP ASVS Level 2.** Every requirement has been walked with its evidence,
+  and no gap is open ([asvs-l2](docs/completed/asvs-l2.md)).
+
+### Known limits
+
+- **SSO and imports were not run against live accounts.** Sign-in was verified
+  against stand-in OIDC and SAML identity providers, and the Zendesk, Freshdesk
+  and Zoho Desk importers against stand-in servers built from each vendor's
+  published API documentation. No run against a live Okta or Entra ID tenant
+  or a live vendor account was made before 1.0.
+- **More importers come later.** Help Scout, Intercom, Gorgias, Zammad and
+  Front connectors are deferred; until then their exports go through the manual
+  CSV mapper ([importing](docs/guides/importing.md)).
+
 ## 0.5.1 — 2026-10-13
 
 A fix release for two admin defects that only show against a real api, so the

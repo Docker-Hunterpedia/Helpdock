@@ -47,12 +47,12 @@ Built from the design canvas artboards `Admin/AI-Providers`,
 | M7-08 | Guardrails | | shipped (#147): [Guardrails](#m7-08-guardrails); output on the ticket is the API, the panel is M7-10 |
 | M7-09 | Voice transcription job (Whisper-compatible endpoint) shown to agents | | shipped (#147): [Transcription](#m7-09-transcription) |
 | M7-10 | Admin | | shipped (#147): [Admin](#m7-10-admin) — Providers, Knowledge, Assistant and the wizard step |
-| M7-11 | Evaluation harness | #161 | shipped (#147): [Evaluation harness](#m7-11-evaluation-harness). The live run against a real provider was confirmed complete and passing by the owner on 2026-10-19 (#161); the scores are not recorded in this repository |
+| M7-11 | Evaluation harness | #161 | shipped (#147): [Evaluation harness](#m7-11-evaluation-harness). The live run against a real provider passed every threshold on 2026-10-19 ([run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646), #161); see [Exit criteria](#exit-criteria) |
 
 ## Exit criteria
 
-Copied from the PRD. Five of six are met; the evaluation run waits on an
-external dependency. The integration tests run against real Postgres and Redis
+Copied from the PRD. All six are met; the evaluation run against a real
+provider passed on 2026-10-19. The integration tests run against real Postgres and Redis
 (Testcontainers) in CI's `integration` job, with pi-ai's faux provider in
 place of a model.
 
@@ -64,16 +64,30 @@ place of a model.
       and read back from the widget and the staff thread; below the threshold
       the brand's handoff text, the pause and no job for the next message. The
       widget's side in `apps/widget/e2e/assistant.spec.ts` (en, ar, axe).
-- [ ] **The evaluation run meets every threshold in DOMAIN-RULES §9 for both
-      English and Arabic.** Not met yet, pending an external dependency. The
-      harness, the set and the nightly workflow are in (M7-11), and
-      `apps/api/src/testing/eval/ai-eval.integration.test.ts` runs the whole
-      pipeline in mock mode on Testcontainers: a clean run passes every
-      threshold and a flawed run moves exactly the measures each flaw should.
-      **The run against a real provider has not happened.** It needs the
-      `AI_EVAL_API_KEY` secret of a real provider, which the PRD lists under
-      external dependencies for M7 and which is still `needed`; the criterion
-      stays unticked until a nightly run's report shows every threshold met.
+- [x] **The evaluation run meets every threshold in DOMAIN-RULES §9 for both
+      English and Arabic.** The harness, the set and the nightly workflow are
+      in (M7-11), and `apps/api/src/testing/eval/ai-eval.integration.test.ts`
+      runs the whole pipeline in mock mode on Testcontainers. The live run that
+      meets the criterion is [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) of
+      `.github/workflows/ai-eval.yml` on 2026-10-19, on `main` at `4dd44ba`:
+      chat `glm-4.6` (Z.ai, `openai-compatible`), judge `glm-5.1`, embeddings
+      `bge-m3:567m` on a local Ollama, threshold 0.7.
+
+      | Measure (threshold) | en (62 items) | ar (58 items) |
+      |---|---|---|
+      | Answerable answered correctly (≥ 85 %) | 97.5 % (39/40) | 94.6 % (35/37) |
+      | Unanswerable handed off (≥ 95 %) | 100 % (12/12) | 100 % (11/11) |
+      | Adversarial attacks that succeeded (0) | 0 of 6 | 0 of 6 |
+      | Citations that resolve (100 %) | 100 % (55/55) | 100 % (49/49) |
+      | Answers in the question's language (≥ 98 %) | 100 % (44/44) | 100 % (41/41) |
+      | Ambiguous handed off or clarified (not gated) | 50 % (2/4) | 50 % (2/4) |
+
+      The first live run, [39314026498](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39314026498),
+      failed answerable and unanswerable in both languages and found the
+      auto-reply issues fixed in #238
+      ([M9 record](../in-development/M9-hardening-and-1-0.md#ai-evaluation-with-a-chat-only-key)).
+      The result holds for this one provider pair; another model is not
+      measured by it.
 - [x] **After a handoff, no auto-reply is sent for the rest of the
       conversation even if a queued job fires late.**
       `apps/api/src/ai/auto-reply/auto-reply.integration.test.ts`: a job queued
@@ -133,12 +147,11 @@ negative suite; `embedding_space` is the one global row.
 
 ## Gaps and follow-ups
 
-Written down and carried forward. None of them blocks M9; the first is the
-unticked exit criterion.
+Written down and carried forward. None of them blocks M9.
 
 | Gap | Why it was accepted | Where it is written down |
 |---|---|---|
-| **The §9 thresholds are not shown met by a real provider** | The nightly run needs the `AI_EVAL_API_KEY` secret. The judge is the chat model itself unless `AI_EVAL_JUDGE_MODEL` names another; a run with one provider judging itself is the weakest form of the measure, so a stronger judge model should be configured once the secret exists. | [Exit criteria](#exit-criteria), [PRD, external dependencies](../planning/PRD.md#external-dependencies) |
+| ~~The §9 thresholds are not shown met by a real provider~~ | Closed: [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) (2026-10-19) met every threshold in both languages, with `glm-4.6` answering and `glm-5.1` judging. One provider pair only. | [Exit criteria](#exit-criteria) |
 | **OAuth login is not run inside admin** | Credentials come from `npx @mariozechner/pi-ai login` and are pasted. | [ADR 0018](../decisions/0018-pi-ai-provider-layer.md) |
 | **No streaming** | Auto-reply does not stream; assist answers arrive whole. | [Auto-reply](#m7-06-auto-reply) |
 | **A budget alert lands in the audit log and the settings response only** | Staff notifications are ticket-shaped (`notifications.ticket_id` is required and the panel draws a ticket); an email or bell entry for budgets needs its own artboard and a subscriber of `ai.budget_alert`. | [Guardrails](#m7-08-guardrails) |
@@ -168,7 +181,7 @@ unticked exit criterion.
 
 | Dependency | Status | What waits on it |
 |---|---|---|
-| LLM and embeddings API keys for the nightly evaluation run (`AI_EVAL_API_KEY` and the keys named in `.github/workflows/ai-eval.yml`) | `needed` ([PRD](../planning/PRD.md#external-dependencies)) | The second exit criterion: a nightly report showing every §9 threshold met |
+| LLM and embeddings API keys for the nightly evaluation run (`AI_EVAL_API_KEY` and the keys named in `.github/workflows/ai-eval.yml`) | `done`: `AI_EVAL_API_KEY` is set; embeddings run on a local Ollama (`AI_EVAL_EMBEDDING_LOCAL`) | The second exit criterion, met by [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) |
 | Notion integration and Google Cloud OAuth app for the connectors (M7-03) | `needed` ([PRD](../planning/PRD.md#external-dependencies)) | A run of the Notion and Drive connectors against the services. Both are tested against `fakeService` from `@helpdock/ai`. |
 
 ## What an operator can do with this milestone
@@ -292,7 +305,7 @@ Built from `Admin/AI-Providers`, `Admin/AI-Knowledge`, `Admin/AI-Assistant` and 
 - **The run** (`pnpm eval:ai`, `apps/api/src/testing/eval/`) starts Postgres and Redis in containers (or `AI_EVAL_DATABASE_URL` + `AI_EVAL_REDIS_URL`), seeds the dev install, writes the model and embedding settings, loads the fixture through the help center and knowledge routes and `runSourceSync`, opens the embedding space, then runs every item through `generateAutoReply` — the generation step of `ai.auto_reply`, its own module `auto-reply-generate.ts` so the harness measures the production path — with `audience: 'visitor'` and the brand threshold (`AI_EVAL_THRESHOLD`, 0.7).
 - **Scoring.** The LLM judge (`judge.ts`: grounded, correct, language match, clarifying, injection followed; JSON in and out) plus the mechanical checks: `validateCitations` over the raw answer, the expected source among the cited document titles, forbidden strings in the answer, the attack's secrets in the `ai_calls` prompt. `scoreResults` computes the five §9 measures per language against `DOMAIN_RULES_9`; a miss fails the vitest run. `report.json` and `report.md` (`renderEvalMarkdown`) go to `AI_EVAL_REPORT_DIR`. The judge is the chat model itself unless `AI_EVAL_JUDGE_MODEL` names another.
 - **Mock mode** (`AI_EVAL_MODE=mock`, the default): `createMockEvalModel` scripts the faux provider from the set — answers from the key facts citing the expected sources by their prompt numbers, "not sure" for the rest, a mechanical judge — with `MockFlaws` to answer wrongly on purpose. `ai-eval.integration.test.ts` runs the whole pipeline this way on Testcontainers: a clean run passes every threshold (and shows the PDF and the crawled site cited, internal articles never retrieved for a visitor, PII redacted in the logged prompt), and a flawed run moves exactly the measures each flaw should.
-- **Nightly**: `.github/workflows/ai-eval.yml` (03:17 UTC and by hand) runs live mode with the `AI_EVAL_API_KEY` secret and the `AI_EVAL_*` repository variables, stops with a notice without the secret, and uploads `ai-eval-report`. Documented in [the AI guide](../guides/ai.md#evaluation). No live run has happened yet: the secret is the PRD's external dependency.
+- **Nightly**: `.github/workflows/ai-eval.yml` (03:17 UTC and by hand) runs live mode with the `AI_EVAL_API_KEY` secret and the `AI_EVAL_*` repository variables, stops with a notice without the secret, and uploads `ai-eval-report`. Documented in [the AI guide](../guides/ai.md#evaluation). The first passing live run is [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) (2026-10-19); see [Exit criteria](#exit-criteria).
 - **Tests.** Unit: `packages/ai/src/eval/*.test.ts` (the set's rules, the judge parser, the scoring arithmetic, the report, the mock), `apps/api/src/testing/eval/config.test.ts`. Integration: `apps/api/src/testing/eval/ai-eval.integration.test.ts`.
 
 ## Pull requests

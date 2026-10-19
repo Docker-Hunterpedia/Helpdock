@@ -1,13 +1,13 @@
 # M9 Hardening and 1.0
 
-Status: in progress: release gates confirmed by the owner on 2026-10-19; 1.0.0 being prepared (M9-09)
+Status: in progress: success metrics met (2026-10-19); 1.0.0 being prepared (M9-09)
 Started: 2026-10-05
 Owner: @Docker-Hunterpedia
 
 ## Scope
 
 Full deliverable list and specs: [PRD §4 · M9 Hardening and 1.0](../planning/PRD.md#m9-hardening-and-10).
-Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. The parts that needed people and hardware, the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and the restore drill, were confirmed complete by the owner on 2026-10-19; their results are held by the owner and are not recorded in this repository. What remains is the 1.0.0 release itself (M9-09) and the two exit criteria below.
+Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. The parts that needed people and hardware, the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and the restore drill, were confirmed complete by the owner on 2026-10-19; their results are held by the owner and are not recorded in this repository. The live AI evaluation passed on 2026-10-19 ([record](#ai-evaluation-with-a-chat-only-key)). What remains is the 1.0.0 release itself (M9-09) and the second exit criterion below.
 
 ## Deliverables
 
@@ -93,7 +93,12 @@ held by the owner and are not recorded in this repository.
 
 Copied from the PRD, ticked as they are met.
 
-- [ ] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
+- [x] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
+      The AI evaluation is recorded with its run, [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) ([below](#ai-evaluation-with-a-chat-only-key)).
+      The pentest, the §14 host run, the screen-reader pass, the clean-VM
+      onboarding with three outside testers and the restore drill were
+      confirmed complete by the owner on 2026-10-19; their results are held by
+      the owner and are not recorded in this repository.
 - [ ] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
 
 ## Open questions
@@ -430,7 +435,7 @@ per language that a general model could answer from its own knowledge
 only when every claim is stated by the source it cites
 ([evaluation](../guides/ai.md#evaluation)).
 
-The first live run (GLM `glm-4.6` answering, `glm-5.1` judging) missed two
+The first live run ([39314026498](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39314026498), GLM `glm-4.6` answering, `glm-5.1` judging) missed two
 thresholds in both languages: answerable answered correctly (en 75 %, ar
 70.3 %) and unanswerable handed off (en 50 %, ar 18.2 %). Two causes in the
 auto-reply path, both fixed for every provider: correct, cited answers were
@@ -445,8 +450,25 @@ very end, with any case, blanks or emphasis
 The next two live runs passed every threshold in both languages (answerable
 answered correctly en 97.5 % and 100 %, ar 100 % and 97.3 %; unanswerable
 handed off 100 % in every run). The one miss in each was a correct answer
-without its `CONFIDENCE:` line, handed off as the safe default. **Still to do:** a passing
-nightly run against the release candidate, recorded with the exit criterion.
+without its `CONFIDENCE:` line, handed off as the safe default.
+
+**The recorded run** is [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) of `.github/workflows/ai-eval.yml`,
+on `main` at `4dd44ba` (#238) on 2026-10-19: chat `glm-4.6` (Z.ai,
+`openai-compatible`), judge `glm-5.1`, embeddings `bge-m3:567m` on the
+runner's Ollama, threshold 0.7. It passed every DOMAIN-RULES §9 threshold in
+both languages:
+
+| Measure (threshold) | en (62 items) | ar (58 items) |
+|---|---|---|
+| Answerable answered correctly (≥ 85 %) | 97.5 % (39/40) | 94.6 % (35/37) |
+| Unanswerable handed off (≥ 95 %) | 100 % (12/12) | 100 % (11/11) |
+| Adversarial attacks that succeeded (0) | 0 of 6 | 0 of 6 |
+| Citations that resolve (100 %) | 100 % (55/55) | 100 % (49/49) |
+| Answers in the question's language (≥ 98 %) | 100 % (44/44) | 100 % (41/41) |
+| Ambiguous handed off or clarified (not gated) | 50 % (2/4) | 50 % (2/4) |
+
+It measures one provider pair; another chat or judge model is not covered by
+it.
 
 ## Gaps carried from earlier milestones
 
@@ -474,4 +496,4 @@ Closed, each with unit and integration tests and its guide updated (the last row
 - #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above. Open when this record was written.
 - #175 fix: agent assist reaches the api in production builds, and the collision indicator names colleagues for Agents (the two #174 rows in the gaps table above)
 - #239 feat: previous tickets on the ticket's contact card (the #237 row in the gaps table above)
-- #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates. Open when this record was written.
+- #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates and the recorded AI evaluation. Open when this record was written.

@@ -14,7 +14,7 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
-## 1.0.0 — 2026-10-19
+## 1.0.0 — 2026-10-20
 
 The first stable release. Every milestone of the 1.0 plan has shipped: the
 ticket desk with SLAs, rules and macros; email, Telegram, WhatsApp, Messenger
@@ -24,6 +24,21 @@ from the brand's knowledge; the REST API, webhooks and reports; staff sign-in
 over SAML and OpenID Connect; and importers from Zendesk, Freshdesk and Zoho
 Desk with a manual CSV mapper for the rest. What each milestone built, and the
 gaps it left open, is in [docs/completed/](docs/completed/README.md).
+
+### New since 0.7
+
+- **Previous tickets on the contact card.** The ticket's details panel lists
+  up to three of the contact's other tickets, newest first, with their status,
+  a count of every earlier ticket you may see, and a link to the contact's
+  page ([#239](https://github.com/Docker-Hunterpedia/Helpdock/pull/239)).
+- **Auto-reply answers only what the sources answer.** When the knowledge base
+  does not answer the customer's exact question, the model replies
+  `NO_ANSWER` and the conversation goes to the team, instead of offering
+  related facts. The `CONFIDENCE:` figure is read on its own line or run on
+  from the last sentence, in any case or emphasis
+  ([#238](https://github.com/Docker-Hunterpedia/Helpdock/pull/238)).
+- **"AI answered" on the ticket list** appears only once the assistant has
+  sent an answer ([#233](https://github.com/Docker-Hunterpedia/Helpdock/pull/233)).
 
 ### Upgrading from 0.7
 
@@ -39,6 +54,14 @@ any pending migrations when it starts.
   clean VM with three outside testers, and the restore drill were completed
   before 1.0.0. Their results are held by the maintainer and are not published
   in this repository.
+- **AI answer quality.** The bilingual evaluation (DOMAIN-RULES §9) passed
+  every threshold in [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646),
+  with `glm-4.6` answering, `glm-5.1` judging and `bge-m3:567m` embeddings:
+  answerable questions answered correctly 97.5 % in English and 94.6 % in
+  Arabic, unanswerable ones handed off 100 % in both, no injected instruction
+  followed, every citation resolved, every answer in the question's language.
+  That is one provider pair; evaluate the model you choose
+  ([AI guide](docs/guides/ai.md#evaluation)).
 - **OWASP ASVS Level 2.** Every requirement has been walked with its evidence,
   and no gap is open ([asvs-l2](docs/completed/asvs-l2.md)).
 

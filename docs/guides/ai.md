@@ -963,9 +963,11 @@ AI_EVAL_OUTBOUND_ALLOW_CIDRS=127.0.0.1/32 pnpm eval:ai
 
 ## Known gaps
 
-- The §9 thresholds have not yet been shown to be met by a real provider: the
-  nightly evaluation needs the `AI_EVAL_API_KEY` secret, which is an external
-  dependency of the milestone.
+- The §9 thresholds are shown met for one provider pair only: `glm-4.6`
+  answering and `glm-5.1` judging, with `bge-m3:567m` embeddings
+  ([run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646),
+  2026-10-19). Run the evaluation against the model you choose before relying
+  on auto-reply.
 - Assist answers arrive whole; streaming them into the card is not built.
 - A transcription costs 0 in the log: there is no per-minute price setting.
 - A budget alert reaches the audit log and the settings response; an email or

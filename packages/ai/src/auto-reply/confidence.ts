@@ -5,9 +5,11 @@ import { LOCALE_BOOST, RRF_K } from '../knowledge/fusion.js';
  * threshold"). Two signals, because neither is enough alone:
  *
  * 1. **Self-assessment.** The model ends its answer with `CONFIDENCE: 0.82`,
- *    how sure it is that the answer is right and supported by the sources it
- *    was given. Models are over-confident, so this is an upper bound, never a
- *    proof; a missing or unreadable line counts as 0.
+ *    how sure it is that the sources directly answer the customer's exact
+ *    question and that its answer says so. Models are over-confident, so this
+ *    is an upper bound, never a proof; a missing or unreadable figure counts
+ *    as 0. A model whose sources do not answer the question writes
+ *    `NO_ANSWER` instead, and has nothing to send.
  * 2. **Retrieval support.** How strongly retrieval backed the chunks the
  *    answer cites. A chunk's fused score is `Σ 1 / (60 + rank)` over the
  *    rankers that found it (ADR 0020), so dividing by the most it could score
@@ -29,29 +31,92 @@ import { LOCALE_BOOST, RRF_K } from '../knowledge/fusion.js';
 
 export const SUPPORT_FLOOR = 0.6;
 
-// Tested against a trimmed line, so no run of blanks is matched twice.
-const CONFIDENCE_LINE = /^confidence[ \t]*[:：][ \t]*(\d+(?:[.,]\d+)?)[ \t]*%?$/i;
+/** The label of the model's self-assessment, as the prompt spells it. */
+export const CONFIDENCE_LABEL = 'CONFIDENCE';
+/** What the model writes when its sources do not answer the question. */
+export const NO_ANSWER = 'NO_ANSWER';
+
+const NO_ANSWER_MARK = /\bNO_ANSWER\b/i;
+// A regex rather than an upper-cased copy, whose indices can drift from the original's.
+const LABEL_ANYWHERE = new RegExp(CONFIDENCE_LABEL, 'gi');
+// Matched against text with emphasis removed and blanks collapsed, so no run
+// of blanks is ever matched twice.
+const FIGURE = /^ ?[:：] ?(\d+(?:[.,]\d+)?) ?%?\.?$/;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+const EMPHASIS = /[*_`]/g;
+const BLANKS = /\s+/g;
 
 export interface SelfAssessment {
-  /** The answer without the confidence line. */
+  /** The answer without its confidence figure; empty when the model wrote `NO_ANSWER`. */
   readonly text: string;
-  /** 0 to 1; 0 when the model wrote none. */
+  /** 0 to 1; 0 when the model wrote none, or `NO_ANSWER`. */
   readonly self: number;
 }
 
-/** Reads and removes the model's `CONFIDENCE:` line; the last one wins. */
+/**
+ * Reads and removes the model's `CONFIDENCE: x`: a line of its own (the last
+ * one wins), or else the end of the answer, where some models run it on from
+ * the last sentence. Markdown emphasis (`**Confidence:** 0.9`), case and
+ * blanks do not matter; a figure anywhere else in the text is never read as
+ * confidence.
+ */
 export const readSelfAssessment = (answer: string): SelfAssessment => {
-  let self = 0;
+  if (NO_ANSWER_MARK.test(answer)) {
+    return { text: '', self: 0 };
+  }
+  let self: number | undefined;
   const kept = answer.split('\n').filter((line) => {
-    const figure = CONFIDENCE_LINE.exec(line.trim())?.[1];
+    const figure = labelledFigure(line);
     if (figure === undefined) {
       return true;
     }
-    const value = Number.parseFloat(figure.replace(',', '.'));
-    self = value > 1 ? value / 100 : value;
+    self = figure;
     return false;
   });
-  return { text: kept.join('\n').trim(), self: clamp(self) };
+  if (self !== undefined) {
+    return { text: kept.join('\n').trim(), self: clamp(self) };
+  }
+  return trailingAssessment(answer.trim());
+};
+
+/** The figure of a line that is nothing but `CONFIDENCE: x`. */
+const labelledFigure = (line: string): number | undefined => {
+  const plain = line.replace(EMPHASIS, '').trim().toUpperCase();
+  return plain.startsWith(CONFIDENCE_LABEL)
+    ? figureOf(plain.slice(CONFIDENCE_LABEL.length))
+    : undefined;
+};
+
+/** `… [2]. CONFIDENCE: 0.95`: the label as the answer's last words. */
+const trailingAssessment = (answer: string): SelfAssessment => {
+  const at = [...answer.matchAll(LABEL_ANYWHERE)].at(-1)?.index ?? -1;
+  const before = answer.charAt(at - 1);
+  const figure =
+    at === -1 || LETTER_OR_DIGIT.test(before)
+      ? undefined
+      : figureOf(answer.slice(at + CONFIDENCE_LABEL.length));
+  if (figure === undefined) {
+    return { text: answer, self: 0 };
+  }
+  return { text: trimEmphasisEnd(answer.slice(0, at)), self: clamp(figure) };
+};
+
+/** `: 0.82`, `: 82 %` or `：0,82` after the label, and nothing more. */
+const figureOf = (rest: string): number | undefined => {
+  const digits = FIGURE.exec(rest.replace(EMPHASIS, '').replace(BLANKS, ' ').trimEnd())?.[1];
+  if (digits === undefined) {
+    return undefined;
+  }
+  const value = Number.parseFloat(digits.replace(',', '.'));
+  return value > 1 ? value / 100 : value;
+};
+
+const trimEmphasisEnd = (text: string): string => {
+  let end = text.length;
+  while (end > 0 && /[\s*_]/.test(text.charAt(end - 1))) {
+    end -= 1;
+  }
+  return text.slice(0, end);
 };
 
 export interface SupportingChunk {

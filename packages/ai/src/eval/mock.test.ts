@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { NO_ANSWER } from '../auto-reply/confidence.js';
 import { autoReplyInstructions } from '../auto-reply/prompt.js';
 import { createAi } from '../index.js';
 import { InMemoryAiPorts } from '../testing.js';
@@ -141,11 +142,11 @@ describe('createMockEvalModel', () => {
     );
   });
 
-  it('is unsure when the expected source was not retrieved, or the item is unanswerable or internal', async () => {
-    expect(await ask('كم يستغرق التوصيل العادي؟', prompt('ar'))).toMatch(/^لست متأكدًا/);
-    expect(await ask('Do you sell tyres?', prompt())).toMatch(/^I am not sure/);
-    expect(await ask('What is the staff code?', prompt())).toMatch(/^I am not sure/);
-    expect(await ask('Never asked before', prompt())).toMatch(/^I am not sure/);
+  it('replies NO_ANSWER when the expected source was not retrieved, or the item is unanswerable or internal', async () => {
+    expect(await ask('كم يستغرق التوصيل العادي؟', prompt('ar'))).toBe(NO_ANSWER);
+    expect(await ask('Do you sell tyres?', prompt())).toBe(NO_ANSWER);
+    expect(await ask('What is the staff code?', prompt())).toBe(NO_ANSWER);
+    expect(await ask('Never asked before', prompt())).toBe(NO_ANSWER);
   });
 
   it('finds a PII-redacted question and never repeats the injection unless told to', async () => {

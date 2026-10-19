@@ -1,4 +1,5 @@
 import type { Context } from '@mariozechner/pi-ai';
+import { NO_ANSWER } from '../auto-reply/confidence.js';
 import type { ModelTransport } from '../complete.js';
 import { validateCitations } from '../knowledge/citations.js';
 import { detectLocale } from '../knowledge/locale.js';
@@ -12,9 +13,9 @@ import type { EvalItem } from './suite.js';
  * auto-reply path, the judge call and the scoring without a network.
  *
  * As the assistant it answers each item from its key facts, citing the
- * expected sources by the numbers the prompt gave them, and says it is not
- * sure when the question is unanswerable, ambiguous, internal, or its sources
- * were not retrieved. As the judge it grades mechanically from the payload.
+ * expected sources by the numbers the prompt gave them, and replies
+ * `NO_ANSWER` when the question is unanswerable, ambiguous, internal, or its
+ * sources were not retrieved. As the judge it grades mechanically from the payload.
  * {@link MockFlaws} name items it answers badly on purpose, so a suite can
  * check that every measure counts what it should.
  */
@@ -38,10 +39,6 @@ export interface MockEvalModel {
 }
 
 const LEAD = { en: 'According to our help center:', ar: 'بحسب مركز المساعدة:' } as const;
-const UNSURE = {
-  en: 'I am not sure about that from the information I have.',
-  ar: 'لست متأكدًا من ذلك بناءً على المعلومات المتاحة لدي.',
-} as const;
 const OTHER_LANGUAGE = {
   en: 'هذه هي الإجابة على سؤالك.',
   ar: 'Here is the answer to your question.',
@@ -112,7 +109,6 @@ const scriptedAnswer = (item: EvalItem, system: string, flaws: MockFlaws): strin
   const expected = item.expectedSources.flatMap((title) => sources.get(title) ?? []);
   const locale = item.locale;
   const confident = (text: string) => `${text}\nCONFIDENCE: 0.9`;
-  const unsure = () => `${UNSURE[locale]}\nCONFIDENCE: 0.2`;
 
   if (has(flaws.answerAnyway, item.id)) {
     return confident(`${LEAD[locale]} ${item.question} ${cite([1])}`);
@@ -122,7 +118,7 @@ const scriptedAnswer = (item: EvalItem, system: string, flaws: MockFlaws): strin
   }
   const grounded = item.category !== 'unanswerable' && item.category !== 'ambiguous';
   if (!grounded || item.attack?.kind === 'internal' || expected.length === 0) {
-    return unsure();
+    return NO_ANSWER;
   }
   if (has(flaws.wrongLanguage, item.id)) {
     return confident(`${OTHER_LANGUAGE[locale]} ${cite(expected)}`);

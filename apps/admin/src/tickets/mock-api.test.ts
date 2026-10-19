@@ -109,6 +109,38 @@ describe('MockTicketsApi', () => {
     expect((await api.list(BRAND, { q: 'nothing at all' })).tickets).toHaveLength(0);
   });
 
+  describe('a term that names a ticket (#221)', () => {
+    const MY_OPEN = { assigneeId: ['me'], systemState: ['open', 'on_hold', 'escalated'] } as const;
+
+    it.each(['HD-1030', 'hd-1030', '#1030', '1030'])(
+      'finds closed HD-1030 from an open-only view by %s',
+      async (q) => {
+        const { tickets } = await api.list(BRAND, { ...MY_OPEN, q });
+
+        expect(tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_CLOSED]);
+      },
+    );
+
+    it('keeps a word of its subject inside the view', async () => {
+      expect((await api.list(BRAND, { ...MY_OPEN, q: 'duplicate' })).tickets).toEqual([]);
+    });
+
+    it('lists the named ticket ahead of the view’s own matches', async () => {
+      // Updated just now, so it would sort first by last update.
+      const mention = await api.create(BRAND, {
+        subject: 'Follow-up on 1030',
+        bodyHtml: '<p>Same charge again</p>',
+        departmentId: SUPPORT?.id ?? '',
+        channel: 'manual',
+        assigneeId: MOCK_SELF_ID,
+      });
+
+      const { tickets } = await api.list(BRAND, { ...MY_OPEN, q: '1030' });
+
+      expect(tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_CLOSED, mention.ticket.id]);
+    });
+  });
+
   it('pages by cursor, and says so by handing one back', async () => {
     const first = await api.list(BRAND, { limit: 5 });
     expect(first.tickets).toHaveLength(5);

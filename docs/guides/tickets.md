@@ -15,7 +15,9 @@ The admin screen built on it is the [ticket workspace](#the-admin-workspace)
 
 Local M11 implementation, pending batch verification: imported tickets expose
 `imported: { source, number, url } | null` on workspace responses. Original
-numbers and native IDs are searchable alongside Helpdock's new ticket number.
+numbers and native IDs are searchable alongside Helpdock's new ticket number,
+and from any view: an exact one finds the ticket even when the view's filters
+would hide it ([listing](#listing), #221).
 The original URL is a navigation link with query strings/fragments removed; an
 unsafe or ambiguous address is omitted. The Source filter distinguishes imported
 and native tickets and can be saved in a view. Every source lookup still narrows
@@ -821,7 +823,7 @@ GET /api/brands/:brandId/tickets
   &channel=email              repeatable: email | chat | telegram | form | api | manual | whatsapp | messenger | instagram
   &assigneeId=<uuid>          repeatable; `unassigned` and `me` are values of their own
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
-  &q=printer                  the subject, the contact's name, or a reference
+  &q=printer                  the words, the contact's name, or a reference or original number (first, past the other filters)
   &overdue=true               only tickets whose SLA has run out (M1-05)
   &sort=updatedAt             updatedAt | createdAt | number | priority
   &direction=desc             asc | desc
@@ -896,6 +898,28 @@ From M1-09 the same `q` also matches the **contact's name** (`ILIKE`, with `%`
 and `_` escaped, through `contacts`, which is brand-scoped) and a **reference**:
 `HD-1042`, `#1042` or `1042` match ticket number 1042 whatever the prefix,
 because a brand has one sequence. The merge dialog's search is this list read.
+
+**A term that names a ticket finds it past the filters** (#221). When `q` is a
+reference or a bare ticket number, or an imported ticket's original number or
+native ID (`580`, `#580`, the vendor's ID; see [Importing](importing.md)), the
+tickets it names come **first**, and the request's other filters (`systemState`,
+`statusId`, `assigneeId`, `priority`, `departmentId`, `channel`, `imported`,
+tags, `overdue`) do not apply to them. Somebody who types an exact number wants
+that ticket whatever its status, so `#580` from "My open" finds the closed
+ticket the import made. Everything else stays as it was: the words and the
+contact's name are still matched inside the filters, so a word from a closed
+ticket's subject does not find it from an open-only view. Named tickets are
+still only tickets the reader can already see: row-level security and
+department scope apply, and a soft-deleted ticket is never named.
+
+The list reads the named tickets with a statement of their own (the same
+`brand_id`, soft-delete rule and ordering, under none of the view's filters),
+then fills the rest of the page with the view's matches, which leave the named
+tickets out, so no ticket appears twice. When the named tickets fill a page, the
+cursor says so (`n`), and the next page carries on through them before it
+starts the view's matches from the top. Each read stays a keyset read of one
+ordering, and the named half is three index lookups (`tickets_brand_number_key`,
+`import_external_ids_number_idx`, `import_external_ids_native_lookup_idx`).
 
 `tagId` has **all-of** semantics (M1-06): a ticket matches when it carries every
 tag named, not any of them. Two chips in a filter are how somebody narrows a
@@ -1160,7 +1184,7 @@ looked at rather than out of the screen.
 | Parameter | |
 |---|---|
 | `view` | A view's id, or `all` for the whole desk. Absent means the first view of the sidebar. |
-| `q` | Free text, debounced 250 ms, passed to the api's own search. A term typed into a view does not count as changing it |
+| `q` | Free text, debounced 250 ms, passed to the api's own search. A term typed into a view does not count as changing it. A reference, ticket number or imported original number lists that ticket first even when the view's filters would hide it, such as a closed ticket in "My open"; its row's status badge says it is closed (#221) |
 | `state`, `status`, `priority`, `assignee`, `department`, `tag`, `channel` | Repeatable, one per chip in the filter popover. `assignee=me` is whoever opens the link |
 | `overdue`, `sort`, `dir` | `overdue=1`; the order when it is not "last updated, newest first" |
 | `custom` | Present when the filters above *replace* the view's rather than being empty |

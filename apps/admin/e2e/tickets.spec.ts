@@ -148,6 +148,26 @@ test.describe('the ticket list', () => {
     await expect(page.getByText(t('tickets:empty.searchHeading'))).toBeVisible();
   });
 
+  test('finds a closed ticket by its reference from "My open", and not by its words (#221)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale);
+    await expect(
+      page.getByRole('heading', { name: t('tickets:views.myOpen'), level: 1 }),
+    ).toBeVisible();
+
+    const search = page.getByRole('searchbox', { name: t('tickets:list.searchLabel') });
+    await search.fill('#1030');
+    await expect(page.getByRole('link', { name: /HD-1030/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(1);
+
+    await search.fill('Duplicate charge');
+    await expect(page.getByText(t('tickets:empty.searchHeading'))).toBeVisible();
+  });
+
   test('filters from the popover and counts what is on', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

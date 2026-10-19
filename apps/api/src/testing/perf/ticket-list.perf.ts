@@ -241,7 +241,8 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
   /**
    * The runtime role's plan for each list case, under that session's tenant
    * context. A search that falls back to its fuzzy half is explained twice,
-   * because the api runs both statements (ADR 0011).
+   * because the api runs both statements (ADR 0011), and every search once
+   * more for the tickets its term names (#221).
    */
   const explainAll = async (cases: readonly ListCase[]): Promise<Record<string, string>> => {
     const repository = new TicketRepository();
@@ -266,6 +267,14 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
           );
           const label = search === 'fuzzy' ? ' · fuzzy fallback' : '';
           plans[`${listCase.session} · ${listCase.name}${label}`] = [...rows]
+            .map((row) => row['QUERY PLAN'])
+            .join('\n');
+        }
+        if (query.q !== undefined) {
+          const rows = await tx.execute<{ 'QUERY PLAN': string }>(
+            sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.namedTicketsStatement(tx, reader, { ...query, q: query.q })}`,
+          );
+          plans[`${listCase.session} · ${listCase.name} · named tickets`] = [...rows]
             .map((row) => row['QUERY PLAN'])
             .join('\n');
         }

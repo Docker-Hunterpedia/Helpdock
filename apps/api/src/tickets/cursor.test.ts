@@ -38,6 +38,18 @@ describe('ticket cursors', () => {
     });
 
     expect(decodeTicketCursor(encoded, UPDATED_AT_DESC)).not.toHaveProperty('fuzzy');
+    expect(decodeTicketCursor(encoded, UPDATED_AT_DESC)).not.toHaveProperty('named');
+  });
+
+  it('round-trips a page that ended among the tickets a search names (#221)', () => {
+    const encoded = encodeTicketCursor({
+      ...UPDATED_AT_DESC,
+      value: '2026-09-19T10:00:00.000Z',
+      id: TICKET,
+      named: true,
+    });
+
+    expect(decodeTicketCursor(encoded, UPDATED_AT_DESC).named).toBe(true);
   });
 
   it('round-trips a numeric sort value', () => {

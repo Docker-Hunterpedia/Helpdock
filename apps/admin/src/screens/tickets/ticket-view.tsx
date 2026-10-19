@@ -65,6 +65,7 @@ import { useTicketTelegram } from './telegram/use-ticket-telegram.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
+import { TicketViewSkeleton } from './ticket-skeletons.tsx';
 import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
 import { useSpamActions } from './use-spam-actions.tsx';
@@ -591,7 +592,11 @@ export function TicketView({
 
   const ticket = detail.data?.ticket;
   if (ticket === undefined) {
-    return <Box sx={{ padding: 8 }} aria-busy="true" />;
+    return (
+      <Box aria-busy="true">
+        <TicketViewSkeleton />
+      </Box>
+    );
   }
 
   const merged = detail.data?.merged ?? [];

@@ -45,7 +45,7 @@
     "loadMore": "Load more",
     "loading": "Loading tickets…",
     "unassigned": "Unassigned",
-    "rowLabel": "{{reference}}: {{subject}}",
+    "priority": "{{priority}} priority",
     "aiPaused": "AI paused",
     "aiAnswered": "AI answered",
     "open": "Show the ticket list"

@@ -2,7 +2,7 @@ import type { TicketAiState } from '@helpdock/schemas';
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { renderApp } from '../../test/render.tsx';
-import { NOW, testTicket } from '../../tickets/fixtures.js';
+import { HOUR, NOW, testTicket } from '../../tickets/fixtures.js';
 import { TicketRow } from './ticket-row.tsx';
 
 /**
@@ -52,6 +52,34 @@ describe('the subject on a ticket row', () => {
     );
 
     expect(screen.getByText('Do you ship to Ireland?')).toHaveAttribute('dir', 'auto');
+  });
+});
+
+describe('what a screen reader hears of a row', () => {
+  it('names the link by everything on it: priority, subject, reference, contact, status and SLA', () => {
+    renderApp(
+      <ul>
+        <TicketRow
+          ticket={testTicket({
+            priority: 'urgent',
+            contact: { id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c1', name: 'Mona Khalil' },
+            firstResponseDueAt: new Date(NOW + 4 * HOUR).toISOString(),
+          })}
+          selected={false}
+          now={NOW}
+          search=""
+        />
+      </ul>,
+    );
+
+    // DESIGN §10: the dot's colour is not the only place the priority is said,
+    // and the row's bare `4h` is said as what it is.
+    expect(
+      screen.getByRole('link', {
+        name: /^Urgent priority Refund for order 42 HD-1042 Mona Khalil Open 4h left/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link')).not.toHaveAttribute('aria-label');
   });
 });
 

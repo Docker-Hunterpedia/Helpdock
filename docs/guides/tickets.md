@@ -1190,6 +1190,13 @@ looked at rather than out of the screen.
 | `custom` | Present when the filters above *replace* the view's rather than being empty |
 | `intent` | `filters` or `save`: the sidebar asking the workspace to open the filters or the save dialog. Acted on once and dropped from the URL |
 
+**A row is one link, named by what it shows.** A screen reader hears the
+priority ("Urgent priority", which the dot says only in colour), the subject,
+the reference, the contact, what the assistant did, the status, and the SLA in
+words ("4h left" where the row prints `4h`). Until the list's first page
+arrives it draws six skeleton rows, and an opening ticket draws the shape of
+its header and two messages, each under `aria-busy`.
+
 ### Views in the workspace
 
 The sidebar's **Views** group (`views-nav.tsx`, `Admin/View-Dialogs` panels 1–2)

@@ -7,6 +7,7 @@ import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { MOCK_TICKET_REFUND, MockTicketsApi } from '../../tickets/mock-api.js';
 import { MOCK_VIEW_ESCALATED } from '../../tickets/mock-views.js';
+import { LIST_SKELETON_ROWS } from './ticket-skeletons.tsx';
 
 /**
  * The ticket workspace against the fixture. What is worth asserting is what the
@@ -74,7 +75,7 @@ describe('the ticket list', () => {
     await renderTickets('/tickets?view=all');
 
     await screen.findByRole('heading', { name: 'All tickets', level: 1 });
-    expect(await screen.findAllByRole('link', { name: /^HD-/ })).toHaveLength(9);
+    expect(await within(list()).findAllByRole('link', { name: /HD-\d+/ })).toHaveLength(9);
   });
 
   it('puts the reference, the contact and the time on a row', async () => {
@@ -98,7 +99,7 @@ describe('the ticket list', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search tickets' }), 'VAT');
 
     await waitFor(async () => {
-      expect(await screen.findAllByRole('link', { name: /^HD-/ })).toHaveLength(1);
+      expect(await within(list()).findAllByRole('link', { name: /HD-\d+/ })).toHaveLength(1);
     });
     expect(screen.getByRole('link', { name: /HD-1035/ })).toBeVisible();
   });
@@ -120,7 +121,7 @@ describe('the ticket list', () => {
 
     expect(await screen.findByRole('button', { name: 'Filter (1)' })).toBeVisible();
     await waitFor(() => {
-      expect(screen.getAllByRole('link', { name: /^HD-/ })).toHaveLength(1);
+      expect(within(list()).getAllByRole('link', { name: /HD-\d+/ })).toHaveLength(1);
     });
   });
 
@@ -128,6 +129,47 @@ describe('the ticket list', () => {
     await renderTickets('/tickets?view=all');
 
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+});
+
+describe('while the first read is out', () => {
+  beforeEach(wideViewport);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** A read that never answers, so the screen stays on what it draws meanwhile. */
+  const pending = <T,>(): Promise<T> => new Promise<T>(() => {});
+
+  it('draws skeleton rows in the list, as many as a first screen holds', async () => {
+    class SlowListApi extends MockTicketsApi {
+      override list(): ReturnType<MockTicketsApi['list']> {
+        return pending();
+      }
+    }
+    await renderTickets('/tickets?view=all', new SlowListApi());
+
+    const busy = list().querySelector('[aria-busy="true"]');
+    expect(busy?.querySelectorAll('.MuiSkeleton-circular')).toHaveLength(LIST_SKELETON_ROWS);
+    expect(within(list()).queryByText('Nothing in this view')).not.toBeInTheDocument();
+  });
+
+  it('draws the header and two bubbles in the ticket view', async () => {
+    class SlowTicketApi extends MockTicketsApi {
+      override ticket(): ReturnType<MockTicketsApi['ticket']> {
+        return pending();
+      }
+    }
+    await renderTickets(`/tickets/${MOCK_TICKET_REFUND}`, new SlowTicketApi());
+
+    const busy = await waitFor(() => {
+      const found = [...document.querySelectorAll('[aria-busy="true"]')].find(
+        (node) => !list().contains(node),
+      );
+      expect(found).toBeDefined();
+      return found as Element;
+    });
+    expect(busy.querySelectorAll('.MuiSkeleton-rounded').length).toBeGreaterThanOrEqual(2);
   });
 });
 

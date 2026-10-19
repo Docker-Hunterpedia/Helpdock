@@ -2,7 +2,6 @@ import type { Ticket } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { useT } from '../../app/i18n.js';
 import { ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
@@ -32,6 +31,10 @@ const isMetaChannel = (channel: Ticket['channel']): boolean =>
  *
  * After them the caption says what the assistant did on the conversation:
  * "AI paused" or "AI answered" (M7-06), from the ticket's `ai` state.
+ *
+ * The link is named by its content, not by an `aria-label`: a label would
+ * replace the priority, status, SLA and contact with the subject alone, which
+ * is all a screen reader used to hear of a row.
  */
 export function TicketRow({
   ticket,
@@ -45,7 +48,6 @@ export function TicketRow({
   /** Carried onto the link so the list a person came back to is the same list. */
   readonly search: string;
 }): ReactNode {
-  const t = useT();
   const tokens = useSemanticTokens();
   const reference = ticketReference(ticket);
   const contactName = ticket.contact?.name ?? null;
@@ -56,7 +58,6 @@ export function TicketRow({
         component={Link}
         to={{ pathname: ticketRoute(ticket.id), search }}
         aria-current={selected ? 'true' : undefined}
-        aria-label={t('tickets:list.rowLabel', { reference, subject: ticket.subject })}
         sx={{
           display: 'flex',
           alignItems: 'center',

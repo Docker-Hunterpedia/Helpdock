@@ -9,6 +9,7 @@ import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { TicketRow } from './ticket-row.tsx';
+import { TicketListSkeleton } from './ticket-skeletons.tsx';
 
 /**
  * The 360 px list column of DESIGN §6.5: a heading naming the view, the search
@@ -236,7 +237,7 @@ export function TicketList({
         />
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }} aria-busy={loading}>
         {failed ? (
           <EmptyState
             icon={TicketIcon}
@@ -248,7 +249,9 @@ export function TicketList({
               </Button>
             }
           />
-        ) : tickets.length === 0 && !loading ? (
+        ) : tickets.length === 0 && loading ? (
+          <TicketListSkeleton />
+        ) : tickets.length === 0 ? (
           <EmptyState
             icon={TicketIcon}
             heading={t(search === '' ? 'tickets:empty.listHeading' : 'tickets:empty.searchHeading')}

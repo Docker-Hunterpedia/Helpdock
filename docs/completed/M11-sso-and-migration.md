@@ -4682,7 +4682,6 @@ source after a crash.
 
 - **Real providers.** Sign-in through real Okta, Entra ID and Google Workspace or Keycloak tenants, and imports from real Zendesk, Freshdesk and Zoho Desk trial accounts, including Zoho's `api_domain` value and whether listing tickets without `departmentIds` covers every department. Every test uses the stand-ins; see [External dependencies](#external-dependencies).
 - **More connectors.** M11-19 to M11-23 (Help Scout, Intercom, Gorgias, Zammad, Front), issues #201 to #205, deferred by the owner.
-- **Search.** Original numbers are searchable, but only inside the current view until [#221](https://github.com/Docker-Hunterpedia/Helpdock/issues/221) lands.
 
 ## Pull requests
 

@@ -436,8 +436,10 @@ answer this exact question", and have the model reply `NO_ANSWER` instead of
 offering related facts; the parser reads the figure on its own line or at the
 very end, with any case, blanks or emphasis
 ([confidence](../guides/ai.md#confidence), [handoff](../guides/ai.md#handoff)).
-The next live run passed every threshold in both languages (en answerable
-97.5 %, unanswerable 100 %; ar 100 % and 100 %). **Still to do:** a passing
+The next two live runs passed every threshold in both languages (answerable
+answered correctly en 97.5 % and 100 %, ar 100 % and 97.3 %; unanswerable
+handed off 100 % in every run). The one miss in each was a correct answer
+without its `CONFIDENCE:` line, handed off as the safe default. **Still to do:** a passing
 nightly run against the release candidate, recorded with the exit criterion.
 
 ## Gaps carried from earlier milestones

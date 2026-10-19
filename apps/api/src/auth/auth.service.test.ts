@@ -725,7 +725,7 @@ describe('the magic link', () => {
         kind: 'magicLink',
         userId: user.id,
         url: expect.stringMatching(
-          new RegExp(`^${APP_URL.replaceAll('.', '\\.')}/sign-in/magic#token=[A-Za-z0-9_-]{43}$`),
+          /^https:\/\/support\.example\.com\/sign-in\/magic#token=[A-Za-z0-9_-]{43}$/,
         ),
         expiresIn: 10,
         brandId: null,

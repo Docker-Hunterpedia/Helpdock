@@ -270,7 +270,7 @@ a one-time session exchange code. No ID/access token appears in a redirect URL.
 
 The fake-IdP suites need no provider credentials. For a real local Keycloak
 Docker/Chromium smoke test, follow the commands in
-[M11-02](../in-development/M11-sso-and-migration.md#m11-02-oidc-sign-in).
+[M11-02](../completed/M11-sso-and-migration.md#m11-02-oidc-sign-in).
 
 ## SAML protocol (M11-03)
 

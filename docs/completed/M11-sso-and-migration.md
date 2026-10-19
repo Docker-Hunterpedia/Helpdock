@@ -1,7 +1,8 @@
 # M11 SSO and migration
 
-Status: implemented; validation and review in PR #215, merge pending
+Status: shipped for the 1.0 scope (M11-01 to M11-18); M11-19 to M11-23 deferred by the owner
 Started: 2026-10-13
+Shipped: 2026-10-18 (PR #215), released in v0.6.0
 Owner: @Docker-Hunterpedia
 
 ## Scope
@@ -4677,9 +4678,21 @@ snapshots after the vendor edits that page and adds a ticket. No source page is
 fetched twice. Per-record lookups, such as an author's role, are re-read from the
 source after a crash.
 
+## Carried after shipping
+
+- **Real providers.** Sign-in through real Okta, Entra ID and Google Workspace or Keycloak tenants, and imports from real Zendesk, Freshdesk and Zoho Desk trial accounts, including Zoho's `api_domain` value and whether listing tickets without `departmentIds` covers every department. Every test uses the stand-ins; see [External dependencies](#external-dependencies).
+- **More connectors.** M11-19 to M11-23 (Help Scout, Intercom, Gorgias, Zammad, Front), issues #201 to #205, deferred by the owner.
+- **Search.** Original numbers are searchable, but only inside the current view until [#221](https://github.com/Docker-Hunterpedia/Helpdock/issues/221) lands.
+
 ## Pull requests
 
-- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–18 implementation and gap fixes #213/#214/#218; current CI and review status are on the PR, with merge reserved for the owner. The owner deferred M11-19–23; their issues remain open.
+- [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215) — combined M11-07–18 implementation and gap fixes #213/#214/#218, merged 2026-10-18 after the owner review corrections (all checks passed). The owner deferred M11-19–23; their issues remain open.
+
+- [#220](https://github.com/Docker-Hunterpedia/Helpdock/pull/220) — review fix [#219](https://github.com/Docker-Hunterpedia/Helpdock/issues/219): SSO email linking can no longer take over an already-linked account; one enabled connection per email domain; `email_verified` only vouches for the `email` claim; added SAML metadata certificates need an admin save (merged).
+
+- [#223](https://github.com/Docker-Hunterpedia/Helpdock/pull/223) — [#222](https://github.com/Docker-Hunterpedia/Helpdock/issues/222): the Map step names saved and suggested destinations instead of "Selected destination" (merged).
+
+- [#224](https://github.com/Docker-Hunterpedia/Helpdock/pull/224) — CI: pull requests run the reference imports only when the import path changes; the complete suite runs nightly (merged).
 
 - [#217](https://github.com/Docker-Hunterpedia/Helpdock/pull/217) — M11-09/10 CI validation gap #216: required Docker probes fail explicitly in CI; local skips remain available (merged; all checks passed).
 
@@ -4699,7 +4712,7 @@ source after a crash.
 [PR #209](https://github.com/Docker-Hunterpedia/Helpdock/pull/209), tracks the
 owner-requested dependency-aware CI selection supporting M11 and M0-11. PRs
 run affected workspace suites and their transitive dependents; global or
-incomplete diffs run everything. Main pushes retain the full regression run.
+incomplete diffs run everything. Since [#224](https://github.com/Docker-Hunterpedia/Helpdock/pull/224), a push to main runs the repository-wide checks and the complete regression run is nightly.
 Coverage gates and the required `ci` aggregate remain in place. See the
 [development guide](../guides/development.md#the-ci-workflow).
 

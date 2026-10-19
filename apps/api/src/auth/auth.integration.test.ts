@@ -488,40 +488,93 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
 
       const message = await email.last();
-      const token = linkIn(message).split('/').at(-1) ?? '';
+      const token = tokenOf(linkIn(message));
       expect(token.length).toBeGreaterThan(20);
       expect(message.locale).toBe('en');
       expect(JSON.stringify(await email.payloads())).not.toContain(token);
       expect(logLines.join('\n')).not.toContain(token);
     });
 
-    it('keeps the token out of the request log, where a path would otherwise put it', async () => {
+    it('links to the confirm screen, with the token where no server sees it', async () => {
       await post('/api/auth/magic-link', { email: seeded.email });
-      const link = linkIn(await email.last());
-      const token = link.split('/').at(-1) ?? '';
+
+      expect(linkIn(await email.last())).toMatch(/^\/sign-in\/magic#token=[A-Za-z0-9_-]+$/);
+    });
+
+    it('keeps the token out of the request log, on the old path and on the new calls', async () => {
+      await post('/api/auth/magic-link', { email: seeded.email });
+      const token = tokenOf(linkIn(await email.last()));
       logLines.length = 0;
 
-      await get(link);
+      await get(`/api/auth/magic-link/${token}`);
+      await post('/api/auth/magic-link/preview', { token });
+      await post('/api/auth/magic-link/consume', { token });
 
       // The route shape may be logged. The credential in it may not.
       expect(logLines.join('\n')).toContain('/api/auth/magic-link/:token');
+      expect(logLines.join('\n')).toContain('/api/auth/magic-link/consume');
       expect(logLines.join('\n')).not.toContain(token);
     });
 
-    it('sends a link that signs in once and then stops working', async () => {
+    it('spends nothing when a scanner follows a link sent before the confirm screen (M9-01 F6)', async () => {
+      await post('/api/auth/magic-link', { email: seeded.email });
+      const token = tokenOf(linkIn(await email.last()));
+
+      for (let fetch = 0; fetch < 2; fetch += 1) {
+        const followed = await get(`/api/auth/magic-link/${token}`);
+        expect(followed.statusCode).toBe(302);
+        expect(followed.headers.location).toBe(`${APP_URL}/sign-in/magic#token=${token}`);
+        expect(followed.cookies).toEqual([]);
+      }
+
+      const consumed = await post('/api/auth/magic-link/consume', { token });
+      expect(consumed.statusCode).toBe(201);
+    });
+
+    it('previews whose account the link opens, as often as it is asked, without spending it', async () => {
+      await post('/api/auth/magic-link', { email: seeded.email });
+      const token = tokenOf(linkIn(await email.last()));
+
+      for (let look = 0; look < 2; look += 1) {
+        const preview = await post('/api/auth/magic-link/preview', { token });
+        expect(preview.statusCode).toBe(200);
+        expect(preview.json()).toEqual({ email: seeded.email, expiresInMinutes: 10 });
+      }
+
+      expect((await post('/api/auth/magic-link/consume', { token })).statusCode).toBe(201);
+    });
+
+    it('answers a dead link the same way to the preview and to the click', async () => {
+      for (const path of ['/api/auth/magic-link/preview', '/api/auth/magic-link/consume']) {
+        const response = await post(path, { token: 'never-issued' });
+
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+      }
+    });
+
+    it('signs in on the click, once, through the second factor', async () => {
       expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
+      const token = tokenOf(linkIn(await email.last()));
 
-      const link = linkIn(await email.last());
-      const first = await get(link);
-
-      expect(first.statusCode).toBe(302);
-      // This account has a second factor, so the link hands over to the code
+      const first = await post('/api/auth/magic-link/consume', { token });
+      // This account has a second factor, so the click hands over to the code
       // screen rather than signing in outright.
-      expect(first.headers.location).toContain('challenge=');
-      expect(originOf(first.headers.location)).toBe(new URL(APP_URL).origin);
+      expect(first.statusCode).toBe(201);
+      const challenge = first.json() as { kind: string; challengeId: string; email: string };
+      expect(challenge).toMatchObject({ kind: 'totp-required', email: seeded.email });
 
-      const second = await get(link);
-      expect(second.headers.location).toContain('error=challenge-expired');
+      const second = await post('/api/auth/totp', {
+        challengeId: challenge.challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(second.statusCode).toBe(201);
+      expect(cookieOf(second, REFRESH_COOKIE)).toBeDefined();
+
+      const again = await post('/api/auth/magic-link/consume', { token });
+      expect(again.statusCode).toBe(401);
+      expect(again.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
     });
   });
 
@@ -808,6 +861,10 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     return new PasswordHasher(Buffer.from(MASTER_KEY, 'base64')).hash(password);
   };
 });
+
+/** The token out of a sign-in link's fragment. */
+const tokenOf = (link: string): string =>
+  new URLSearchParams(new URL(link, APP_URL).hash.slice(1)).get('token') ?? '';
 
 /** The URL out of the plain-text body, which is the one line that is just a link. */
 const linkIn = (message: EmailMessage): string => {

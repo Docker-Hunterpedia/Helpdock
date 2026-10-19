@@ -7,7 +7,7 @@ import type { StaffMembership } from './staff.repository.js';
 
 const keyring = createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 3).toString('base64') });
 const TOKEN = 'the-sign-in-token-itself';
-const URL_WITH_TOKEN = `https://support.example.com/api/auth/magic-link/${TOKEN}`;
+const URL_WITH_TOKEN = `https://support.example.com/sign-in/magic#token=${TOKEN}`;
 
 const membership = (brandId: string): StaffMembership =>
   ({ brandId, userId: uuidv7(), role: 'agent', departmentIds: null }) as StaffMembership;

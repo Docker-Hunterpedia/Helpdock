@@ -76,6 +76,18 @@ export const INVITE_LOOKUP_RULE: RateLimitRule = {
 };
 
 /**
+ * Per IP, for the sign-in link's confirm screen: the preview it loads and the
+ * click that spends the link (M9-01 F6). The same reasoning and the same
+ * figure as {@link INVITE_LOOKUP_RULE}: a 256-bit token is not guessed, so
+ * this bounds somebody asking whether a link they hold is still live.
+ */
+export const MAGIC_LINK_LOOKUP_RULE: RateLimitRule = {
+  bucket: 'magic-link-lookup',
+  limit: 30,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Trim, count, add, expire — in one round trip, so two requests racing cannot
  * both see a count below the limit.
  */

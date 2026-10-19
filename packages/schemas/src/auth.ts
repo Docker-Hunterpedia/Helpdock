@@ -80,6 +80,21 @@ export type SignInRequest = z.infer<typeof signInRequestSchema>;
 export const magicLinkRequestSchema = z.object({ email: z.email() });
 export type MagicLinkRequest = z.infer<typeof magicLinkRequestSchema>;
 
+/**
+ * 200 characters is what `inviteTokenParamSchema` allows: far more than the
+ * 32-byte token encodes to, far less than a body that would cost anything to
+ * hash.
+ */
+const magicLinkTokenSchema = z.string().min(1).max(200);
+
+/**
+ * The body of the confirm screen's two calls, `/magic-link/preview` and
+ * `/magic-link/consume` (M9-01 F6). The token travels in JSON rather than in a
+ * path, so it never reaches a request log.
+ */
+export const magicLinkTokenRequestSchema = z.object({ token: magicLinkTokenSchema });
+export type MagicLinkTokenRequest = z.infer<typeof magicLinkTokenRequestSchema>;
+
 export const totpRequestSchema = z.object({
   challengeId: z.string().min(1),
   code: z.string().regex(/^\d{6}$/),
@@ -144,15 +159,12 @@ export type EnrolmentConfirmRequest = z.infer<typeof enrolmentConfirmRequestSche
 // --------------------------------------------------------------------------
 
 /**
- * The `:token` segment of a sign-in link. It bounds the segment; whether the
- * token exists and has not been spent is Redis's answer, not a schema's, and an
- * unknown one has to land on a screen rather than on a 400.
- *
- * 200 characters is what `inviteTokenParamSchema` allows for the same reason:
- * far more than the 32-byte token encodes to, far less than a body that would
- * cost anything to hash.
+ * The `:token` segment of a sign-in link sent before the confirm screen
+ * existed. It bounds the segment and nothing else: the route only forwards the
+ * token to the screen, and an unknown one has to land there rather than on a
+ * 400.
  */
-export const magicLinkTokenParamSchema = z.object({ token: z.string().min(1).max(200) });
+export const magicLinkTokenParamSchema = z.object({ token: magicLinkTokenSchema });
 export type MagicLinkTokenParam = z.infer<typeof magicLinkTokenParamSchema>;
 
 /**
@@ -199,6 +211,19 @@ export const authMethodsSchema = z.object({
   oauth: z.record(oauthProviderSchema, z.boolean()),
 });
 export type AuthMethods = z.infer<typeof authMethodsSchema>;
+
+/**
+ * What the confirm screen shows about a live sign-in link before anything is
+ * spent: whose account it opens, and how long such a link lasts. Only a live
+ * token gets an answer, and the token was emailed to that address, so the
+ * answer tells its holder nothing they could not read in the inbox.
+ */
+export const magicLinkPreviewSchema = z.object({
+  email: z.email(),
+  /** The install's `auth.magicLinkTtlMinutes`, for the caption under the button. */
+  expiresInMinutes: z.int().positive(),
+});
+export type MagicLinkPreview = z.infer<typeof magicLinkPreviewSchema>;
 
 /** Seconds an access token stays valid, so the client can refresh before it expires. */
 export const accessTokenSchema = z.object({

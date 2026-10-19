@@ -1,6 +1,7 @@
 import type {
   AuthMethods,
   InviteAcceptRequest,
+  MagicLinkPreview,
   OauthProvider,
   PublicInvite,
   RecoveryCodes,
@@ -30,6 +31,10 @@ export const MOCK_TOTP_CODE = '482913';
 export const MOCK_RECOVERY_CODE = 'RC-1234-5678';
 /** Not a JWT and not meant to be: nothing in the fixture verifies it. */
 export const MOCK_ACCESS_TOKEN = 'mock-access-token';
+
+/** The one sign-in link the fixture knows; any other token is expired or spent. */
+export const MOCK_MAGIC_LINK_TOKEN = 'mock-magic-link';
+export const MOCK_MAGIC_LINK_MINUTES = 10;
 
 /** DOMAIN-RULES §1.4: three tries, then a 15-minute lock. */
 export const MOCK_TOTP_ATTEMPTS = 3;
@@ -93,6 +98,7 @@ export class MockAuthApi implements AuthApi {
   ssoEnforced = false;
   ssoConnections: { id: string; name: string; emailDomains: string[] }[] = [];
   #recoveryCodeUsed = false;
+  #magicLinkSpent = false;
   /** What a real install would store as a trusted-device cookie. */
   #trustedDevice = false;
 
@@ -129,6 +135,39 @@ export class MockAuthApi implements AuthApi {
       throw new AuthError('invalid-credentials');
     }
 
+    return this.#afterFirstFactor();
+  }
+
+  /**
+   * The address is not read: answering the same way for an unknown one is what
+   * stops the form telling a stranger which addresses exist (REQUIREMENTS §5.1).
+   */
+  async requestMagicLink(_email: string): Promise<void> {
+    await delay(MAGIC_LINK_DELAY_MS);
+  }
+
+  async previewMagicLink(token: string): Promise<MagicLinkPreview> {
+    this.#requireMagicLink(token);
+    return { email: MOCK_EMAIL, expiresInMinutes: MOCK_MAGIC_LINK_MINUTES };
+  }
+
+  /** Spends the fixture's one link, then asks for the second factor as a password would. */
+  async consumeMagicLink(token: string): Promise<SignInResult> {
+    this.#requireMagicLink(token);
+    this.#magicLinkSpent = true;
+    return this.#afterFirstFactor();
+  }
+
+  #requireMagicLink(token: string): void {
+    if (this.ssoEnforced) {
+      throw new AuthError('sso-required');
+    }
+    if (token !== MOCK_MAGIC_LINK_TOKEN || this.#magicLinkSpent) {
+      throw new AuthError('challenge-expired');
+    }
+  }
+
+  #afterFirstFactor(): SignInResult {
     // A browser the user chose to trust skips the second factor, which is what
     // "Trust this browser for 30 days" buys them.
     if (this.#trustedDevice) {
@@ -145,14 +184,6 @@ export class MockAuthApi implements AuthApi {
     });
 
     return { kind: 'totp-required', challengeId, email: MOCK_EMAIL };
-  }
-
-  /**
-   * The address is not read: answering the same way for an unknown one is what
-   * stops the form telling a stranger which addresses exist (REQUIREMENTS §5.1).
-   */
-  async requestMagicLink(_email: string): Promise<void> {
-    await delay(MAGIC_LINK_DELAY_MS);
   }
 
   async verifyTotp(

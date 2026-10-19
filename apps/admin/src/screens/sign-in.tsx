@@ -8,13 +8,14 @@ import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES, safeReturnTo } from '../app/route-paths.js';
 import type { AuthApi } from '../auth/api.js';
 import { isAuthError } from '../auth/api.js';
-import { useAuthApi, useSetSession } from '../auth/session.tsx';
+import { useAuthApi } from '../auth/session.tsx';
 import { ssoErrorKey } from '../auth/sso-error.js';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { ProviderMark } from '../ui/provider-marks.tsx';
 import { AuthLayout, LanguageLink } from './auth-layout.tsx';
+import { useFinishSignIn } from './finish-sign-in.js';
 import { type SignInFormErrors, validateEmail, validateSignInForm } from './sign-in-form.js';
 import { SsoButtons, SsoEmailForm } from './sso-sign-in.tsx';
 
@@ -70,7 +71,6 @@ function ProviderButtons({ api }: { readonly api: AuthApi }): ReactNode {
 export function SignIn(): ReactNode {
   const t = useT();
   const api = useAuthApi();
-  const setSession = useSetSession();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get(RETURN_TO_PARAM));
@@ -84,27 +84,11 @@ export function SignIn(): ReactNode {
 
   const install = useMemo(() => readPublicInstallInfo(), []);
 
+  const finishSignIn = useFinishSignIn(returnTo);
+
   const signIn = useMutation({
     mutationFn: () => api.signInWithPassword(email.trim(), password),
-    onSuccess: (result) => {
-      if (result.kind === 'session') {
-        setSession(result.session);
-        void navigate(returnTo, { replace: true });
-        return;
-      }
-
-      if (result.kind === 'totp-enrolment-required') {
-        void navigate(ROUTES.totpEnrolment, {
-          replace: true,
-          state: { challengeId: result.challengeId },
-        });
-        return;
-      }
-
-      void navigate(ROUTES.totp, {
-        state: { challengeId: result.challengeId, email: result.email, returnTo },
-      });
-    },
+    onSuccess: finishSignIn,
     onError: (error: unknown) => {
       setFailure(isAuthError(error) ? error.code : 'unavailable');
     },

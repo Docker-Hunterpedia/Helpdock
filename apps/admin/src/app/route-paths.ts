@@ -6,7 +6,12 @@ export const ROUTES = {
   signIn: '/sign-in',
   totp: '/sign-in/totp',
   magicLinkSent: '/sign-in/link-sent',
-  /** Where the api redirects after a magic link, carrying a one-time code. */
+  /**
+   * Where a sign-in link opens, with the token in the fragment: the confirm
+   * screen that spends it only on a click (M9-01 F6).
+   */
+  magicLink: '/sign-in/magic',
+  /** Where the api redirects after an OAuth or SSO sign-in, carrying a one-time code. */
   authComplete: '/sign-in/complete',
   passwordResetSent: '/sign-in/reset-sent',
   passwordReset: '/sign-in/reset',
@@ -201,6 +206,14 @@ export const importRunRoute = (runId: string): string =>
 export const DEFAULT_SIGNED_IN_ROUTE = ROUTES.tickets;
 
 export const RETURN_TO_PARAM = 'returnTo';
+
+/**
+ * The token of a sign-in link, from the fragment the api puts it in
+ * (`/sign-in/magic#token=…`). A fragment never reaches a server, so the token
+ * is in no request log and no `Referer`. Empty when there is none.
+ */
+export const magicLinkTokenFromHash = (hash: string): string =>
+  new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get('token') ?? '';
 
 /**
  * A `returnTo` is only followed when it is a path inside this app. Anything

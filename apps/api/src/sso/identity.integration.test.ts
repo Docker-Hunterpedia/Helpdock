@@ -514,9 +514,12 @@ describe.skipIf(!hasDocker)(
         { purpose: 'magic-link', userId: ADMIN, email: 'admin@example.com', issuedAt: Date.now() },
         600,
       );
-      await expect(auth.consumeMagicLink(token, undefined)).rejects.toMatchObject({
+      await expect(auth.previewMagicLink({ token, ip: 'magic-policy' })).rejects.toMatchObject({
         auth: { code: 'sso-required' },
       });
+      await expect(
+        auth.consumeMagicLink({ token, ip: 'magic-policy', userAgent: undefined }),
+      ).rejects.toMatchObject({ auth: { code: 'sso-required' } });
       expect(await tokens.consume(token, 'magic-link')).not.toBeNull();
       const outcome = await signIn('admin@example.com');
       expect(outcome.kind).toBe('totp-required');

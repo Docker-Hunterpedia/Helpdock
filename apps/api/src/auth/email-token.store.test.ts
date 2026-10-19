@@ -52,6 +52,21 @@ describe('EmailTokenStore', () => {
     await expect(store.consume(token, 'magic-link')).resolves.toBeNull();
   });
 
+  it('reads a sign-in link without spending it, so a mail scanner cannot burn it (M9-01 F6)', async () => {
+    const token = await store.issue(magicLink, 600);
+
+    await expect(store.read(token, 'magic-link')).resolves.toEqual(magicLink);
+    await expect(store.read(token, 'magic-link')).resolves.toEqual(magicLink);
+    await expect(store.consume(token, 'magic-link')).resolves.toEqual(magicLink);
+  });
+
+  it('reads nothing for a sign-in link presented as an invitation', async () => {
+    const token = await store.issue(magicLink, 600);
+
+    await expect(store.read(token, 'invite')).resolves.toBeNull();
+    await expect(store.consume(token, 'magic-link')).resolves.toEqual(magicLink);
+  });
+
   it('refuses a token it never issued', async () => {
     await expect(store.consume('made-up', 'magic-link')).resolves.toBeNull();
   });

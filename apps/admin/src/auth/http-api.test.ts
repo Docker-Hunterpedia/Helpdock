@@ -193,6 +193,35 @@ describe('HttpAuthApi', () => {
     expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({ code: 'one-time' });
   });
 
+  it('previews a sign-in link with the token in the body, never in the path (M9-01 F6)', async () => {
+    fetchMock.mockResolvedValueOnce(json({ email: 'lina@helpdock.com', expiresInMinutes: 10 }));
+
+    await expect(new HttpAuthApi().previewMagicLink('the-token')).resolves.toEqual({
+      email: 'lina@helpdock.com',
+      expiresInMinutes: 10,
+    });
+    expect(calls()[0]?.url).toMatch(/\/auth\/magic-link\/preview$/);
+    expect(calls()[0]?.init.method).toBe('POST');
+    expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({ token: 'the-token' });
+  });
+
+  it('spends a sign-in link and keeps the token out of what the screen gets', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        json({ kind: 'session', session, accessToken: 'a.b.c', expiresInSeconds: 600 }, 201),
+      )
+      .mockResolvedValueOnce(json(session));
+    const api = new HttpAuthApi();
+
+    const result = await api.consumeMagicLink('the-token');
+    await api.me();
+
+    expect(result).toEqual({ kind: 'session', session });
+    expect(calls()[0]?.url).toMatch(/\/auth\/magic-link\/consume$/);
+    expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({ token: 'the-token' });
+    expect(headerOf(calls()[1]?.init ?? {}, 'authorization')).toBe('Bearer a.b.c');
+  });
+
   it('carries the cookie on every request, which is what the refresh depends on', async () => {
     fetchMock.mockResolvedValueOnce(
       json({ password: true, magicLink: true, oauth: { google: true, github: false } }),

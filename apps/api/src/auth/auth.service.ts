@@ -4,6 +4,8 @@ import type { DbTransaction } from '@helpdock/db';
 import type {
   AuthMethods,
   AuthSessionResponse,
+  EmailTokenPayload,
+  MagicLinkPreview,
   OauthProvider,
   RecoveryCodes,
   Session,
@@ -26,6 +28,7 @@ import { OauthError } from './oauth/oauth.service.js';
 import type { PasswordHasher } from './password.js';
 import {
   EMAIL_DISPATCH_RULE,
+  MAGIC_LINK_LOOKUP_RULE,
   type RateLimiter,
   SIGN_IN_EMAIL_RULE,
   SIGN_IN_IP_RULE,
@@ -66,6 +69,18 @@ import type { TotpStepStore } from './totp/used-steps.js';
 export const PASSWORD_RESET_TTL_MINUTES = 10;
 
 const SECONDS_PER_MINUTE = 60;
+
+/**
+ * The admin screen a sign-in link opens. The token rides in the fragment, which
+ * a browser never sends to a server, so it reaches neither a request log nor a
+ * `Referer` header; the screen posts it back only when the person clicks
+ * (M9-01 F6).
+ */
+export const magicLinkScreenUrl = (appUrl: string, token: string): string => {
+  const url = new URL('/sign-in/magic', appUrl);
+  url.hash = new URLSearchParams({ token }).toString();
+  return url.toString();
+};
 
 /** What a code typed into a form turned out to be. */
 type CodeCheck = 'accepted' | 'mismatch' | 'replayed';
@@ -552,25 +567,57 @@ export class AuthService {
     await this.#send({
       kind: 'magicLink',
       userId: user.id,
-      url: new URL(`/api/auth/magic-link/${token}`, this.#parts.appUrl).toString(),
+      url: magicLinkScreenUrl(this.#parts.appUrl, token),
       expiresIn: minutes,
     });
   }
 
-  /** Spends the link. The second factor still applies afterwards. */
-  async consumeMagicLink(
-    token: string,
-    userAgent: string | undefined,
-  ): Promise<SignInOutcome | null> {
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
-    const payload = await this.#parts.tokens.consume(token, 'magic-link');
-    if (payload === null) {
-      return null;
+  /**
+   * What the confirm screen shows before the click: whose account the link
+   * opens. Reading spends nothing, so a mail scanner or a link preview that
+   * fetches the page leaves the link working (M9-01 F6).
+   *
+   * Only a live link gets an answer, and every dead one gets the same one, so
+   * this cannot be asked about an address.
+   */
+  async previewMagicLink({
+    token,
+    ip,
+  }: {
+    readonly token: string;
+    readonly ip: string;
+  }): Promise<MagicLinkPreview> {
+    await this.#assertMagicLinkAllowed(ip);
+    const user = await this.#magicLinkUser(await this.#parts.tokens.read(token, 'magic-link'));
+    if (user === undefined) {
+      throw new AuthFailure('challenge-expired');
     }
 
-    const user = await this.#parts.staff.findById(payload.userId);
-    if (user === undefined || !this.#isUsable(user)) {
-      return null;
+    return {
+      email: user.email,
+      expiresInMinutes: await this.#parts.settings.get('auth.magicLinkTtlMinutes'),
+    };
+  }
+
+  /** Spends the link on the person's click. The second factor still applies afterwards. */
+  async consumeMagicLink({
+    token,
+    ip,
+    userAgent,
+  }: {
+    readonly token: string;
+    readonly ip: string;
+    readonly userAgent: string | undefined;
+  }): Promise<SignInOutcome> {
+    await this.#assertMagicLinkAllowed(ip);
+    const payload = await this.#parts.tokens.consume(token, 'magic-link');
+    const user = await this.#magicLinkUser(payload);
+    if (user === undefined) {
+      await this.#audit('auth.sign_in.failed', payload?.userId ?? null, 'system', {
+        method: 'magic-link',
+        reason: payload === null ? 'invalid-link' : 'unusable-account',
+      });
+      throw new AuthFailure('challenge-expired');
     }
 
     return this.#afterFirstFactor(user, {
@@ -975,6 +1022,29 @@ export class AuthService {
       this.#parts.logger.warn({ ip }, 'A sign-in attempt was refused by the rate limit');
       throw new AuthFailure('unavailable');
     }
+  }
+
+  /**
+   * Before a sign-in link is read or spent. SSO enforcement refuses outright,
+   * and before the token is touched, so a link refused for it is not burnt:
+   * break-glass access is a password and a fresh TOTP, and a link is neither.
+   */
+  async #assertMagicLinkAllowed(ip: string): Promise<void> {
+    if (!(await this.#parts.limiter.consume(MAGIC_LINK_LOOKUP_RULE, ip))) {
+      this.#parts.logger.warn({ ip }, 'A sign-in link request was refused by the rate limit');
+      throw new AuthFailure('unavailable');
+    }
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+  }
+
+  /** The account a sign-in link opens, or `undefined` when it opens none. */
+  async #magicLinkUser(payload: EmailTokenPayload | null): Promise<StaffUser | undefined> {
+    if (payload === null) {
+      return undefined;
+    }
+
+    const user = await this.#parts.staff.findById(payload.userId);
+    return user !== undefined && this.#isUsable(user) ? user : undefined;
   }
 
   async #allowEmailDispatch(email: string, ip: string): Promise<boolean> {

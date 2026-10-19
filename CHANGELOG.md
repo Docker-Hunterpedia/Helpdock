@@ -224,7 +224,7 @@ known gaps.
   ([scope](docs/planning/pentest-scope.md)), the screen-reader pass
   ([runbook](docs/guides/screen-reader-pass.md)), the load-test host run, the
   clean-VM onboarding run with outside testers, and the restore drill for the
-  record ([M9](docs/in-development/M9-hardening-and-1-0.md)).
+  record ([M9](docs/completed/M9-hardening-and-1-0.md)).
 - The rest is listed in
   [M10](docs/completed/M10-meta-channels.md#gaps-accepted-up-front).
 

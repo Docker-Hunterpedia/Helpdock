@@ -85,7 +85,7 @@ place of a model.
       The first live run, [39314026498](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39314026498),
       failed answerable and unanswerable in both languages and found the
       auto-reply issues fixed in #238
-      ([M9 record](../in-development/M9-hardening-and-1-0.md#ai-evaluation-with-a-chat-only-key)).
+      ([M9 record](M9-hardening-and-1-0.md#ai-evaluation-with-a-chat-only-key)).
       The result holds for this one provider pair; another model is not
       measured by it.
 - [x] **After a handoff, no auto-reply is sent for the rest of the

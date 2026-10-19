@@ -969,7 +969,7 @@ command you can run locally:
 | `unit` | `vitest run --coverage --project='!integration' --project='!@helpdock/api' --project='!@helpdock/admin'`: the `packages/*` 80 % gate |
 | `admin-unit` | `pnpm --filter @helpdock/admin test:coverage`: the admin's 85 % gate |
 | `api` | `pnpm --filter @helpdock/api test:coverage`: API unit and representative real-DB integration suites with the 90 % gate |
-| `import-reference (source)` | Zendesk, Freshdesk and Zoho 500-ticket import/repeat/delta suites on real Postgres/Redis; one worker per source, without coverage instrumentation; Freshdesk/Zoho include a real worker kill |
+| `import-reference (source)` | Zendesk, Freshdesk and Zoho 500-ticket import/repeat/delta suites on real Postgres/Redis; one worker per source, without coverage instrumentation; Freshdesk/Zoho include a real worker kill. Pull requests run it only when the import path changes (below) |
 | `integration` | `vitest run --project=integration packages/`: the packages' integration suites (Testcontainers) |
 | `e2e (1/4)` … `e2e (4/4)` | `pnpm --filter @helpdock/admin e2e --shard=<n>/4`: browser tests, `en` and `ar`, against the fixture |
 | `browser-api` | `pnpm build`, then `e2e:screenshots` when the baselines are committed, `e2e:api`, and `e2e:imports --workers=1` against a real API, Postgres and Redis |
@@ -987,16 +987,29 @@ the dependency audit remain repository-wide checks. Semgrep and the production
 image smoke test run for any affected workspace.
 
 Global configuration, workspace manifests, tooling, unknown paths, empty diffs
-and incomplete GitHub file lists select every suite. Renames check both paths.
-Documentation changes skip heavy jobs. Pushes to `main` retain the complete
-regression suite. The workflow itself is never path-filtered: the final `ci`
+and incomplete GitHub file lists select every suite. A manifest change that only
+bumps `"version"` (the Changesets release pull request) selects none. Renames
+check both paths. Documentation changes skip heavy jobs. The reference imports,
+the slowest jobs at 15 to 30 minutes, run on a pull request only when it touches
+the import path: `apps/api/src/imports/`, files named `import*` or `imported*`
+under `apps/api/src/`, `apps/api/src/media/`, `packages/importers/`,
+`packages/jobs/src/`, the database schema and migrations, or
+`packages/schemas/src/import*`.
+
+A push to `main` runs only `checks`: the `main` ruleset requires a pull request
+to be up to date with `main` and green before it merges, so the merged commit
+already passed its suites. The complete regression suite, including every
+reference import, runs nightly at 02:23 UTC and on demand (**Actions › CI ›
+Run workflow**). The workflow itself is never path-filtered: the final `ci`
 check still runs, and fails if selection or any selected job fails or is cancelled.
-The scope job records its decision in the run summary.
+The scope job records its decision in the run summary. CodeQL skips the
+Changesets release pull request; its push to `main` is analysed after merging.
 
 Each suite runs once. The test jobs build the workspace packages first
 (`turbo run build --filter='./packages/*'`, a few seconds), because the suites
 import them through their `dist/` exports. A run takes about as long as its
-slowest job, roughly ten minutes, instead of the sum of every step.
+slowest job, roughly ten minutes, instead of the sum of every step; with the
+reference imports selected, about thirty.
 
 Install is `pnpm install --frozen-lockfile`; a `package.json` changed without
 its lockfile fails there. GitHub-hosted runners ship a Docker daemon, so

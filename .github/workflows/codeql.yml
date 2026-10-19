@@ -31,6 +31,9 @@ permissions:
 jobs:
   analyze:
     name: analyze
+    # The Changesets release PR only bumps versions and changelogs; main's push
+    # analysis after it merges covers the same sources.
+    if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
     permissions:
       # Writing the results to the security tab is the point of the job.

@@ -68,6 +68,42 @@ describe('CI workspace selection', () => {
   ])('runs the full suite for global or unknown path %s', (path) => {
     expect(scope(path).run_full).toBe(true);
   });
+  it('skips every suite for a release PR that only bumps a manifest version', () => {
+    const release = classifyChanges(
+      [
+        { filename: 'apps/api/CHANGELOG.md' },
+        {
+          filename: 'apps/api/package.json',
+          patch:
+            '@@ -1,6 +1,6 @@\n   "name": "@helpdock/api",\n-  "version": "0.5.1",\n+  "version": "0.6.0",',
+        },
+      ],
+      2,
+      workspaces,
+    );
+    expect(release).toMatchObject({ run_full: false, run_api: false, run_image: false });
+  });
+  it('treats any other manifest edit as a global change', () => {
+    const dependency = {
+      filename: 'apps/api/package.json',
+      patch: '@@ -1 +1 @@\n-    "zod": "4.1.0",\n+    "zod": "4.2.0",',
+    };
+    expect(classifyChanges([dependency], 1, workspaces).run_full).toBe(true);
+  });
+  it.each([
+    'apps/api/src/imports/jobs/extract-run.ts',
+    'apps/api/src/help-center/imported-articles.ts',
+    'packages/importers/src/zendesk/client.ts',
+    'packages/db/drizzle/0054_imports.sql',
+  ])('runs the reference imports for import path %s', (path) => {
+    expect(scope(path).run_import_reference).toBe(true);
+  });
+  it.each([
+    'apps/api/src/auth/auth.service.ts',
+    'apps/admin/src/screens/admin/imports/import-run-page.tsx',
+  ])('leaves the reference imports to the nightly run for %s', (path) => {
+    expect(scope(path).run_import_reference).toBe(false);
+  });
   it('fails closed for empty or incomplete file lists', () => {
     expect(classifyChanges([], 0, workspaces).run_full).toBe(true);
     expect(classifyChanges([{ filename: 'README.md' }], 3001, workspaces).run_full).toBe(true);

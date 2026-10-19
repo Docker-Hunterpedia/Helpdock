@@ -61,7 +61,8 @@ permanent dependency on an expiring vendor URL.
 3. Map departments, staff, statuses, priorities, channels, tags and custom fields.
    Choose existing staff, an invited person without sending an email, or a name
    only. Review contact/company matches and required fields. Tickets receive new
-   Helpdock numbers; native IDs and numbers remain searchable provenance.
+   Helpdock numbers; native IDs and numbers remain searchable provenance, from
+   any ticket view.
 4. Run the dry run. Compare expected counts, inspect public replies and private
    notes, authors, original dates, contacts and file availability. Resolve blocking
    errors and review each warning before acknowledging it. Check the brand's
@@ -280,7 +281,11 @@ The local implementation includes fifty-ticket batches, outbox continuations
 and five-minute recovery; tests and browser acceptance have not been run yet.
 
 The local workspace also displays the import source and original number, and
-searches source numbers/native IDs under normal ticket RLS. Use the Source
+searches source numbers/native IDs under normal ticket RLS. An exact original
+number (`580` or `#580`) or native ID finds the ticket from any view, ahead of
+the view's other matches, even when the view's status filter would hide it, as
+it does for most imported history, which is closed
+([Tickets: listing](tickets.md#listing)). Use the Source
 filter to select imported or native tickets and save that choice in a view.
 Former-agent names survive in thread messages. Source navigation links omit
 queries and fragments, and imported audit lines show original actors/dates and

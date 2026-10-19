@@ -6,6 +6,7 @@ import { encodeTicketCursor } from './cursor.js';
 import {
   cursorAfter,
   fallsBackToFuzzy,
+  namedTicketFilters,
   parseSearch,
   referenceNumber,
   sortValueOf,
@@ -204,12 +205,22 @@ describe('ticketFilters', () => {
     });
 
     it('joins the halves as a union of ticket ids, not an OR checked on every ticket', () => {
-      const sql = render(ticketFilters(query({ q: 'HD-1042' })));
+      const sql = render(ticketFilters(query({ q: 'refund' })));
 
-      expect(sql?.sql).toContain('"tickets"."id" IN (');
-      expect(sql?.sql.match(/UNION ALL/g)).toHaveLength(4);
-      expect(sql?.sql).toContain('"import_external_ids"."source_number" in');
-      expect(sql?.sql).toContain('"import_external_ids"."external_id" in');
+      expect(sql?.sql).toMatch(
+        /"tickets"\."id" IN \(\s*\(\s*SELECT "tokens"\."ticket_id"[\s\S]*\) UNION ALL \(SELECT "by_contact"\."id"/,
+      );
+    });
+
+    it('leaves out the tickets the term names, which the list reads first (#221)', () => {
+      const sql = render(ticketFilters(query({ q: 'HD-1042', systemState: ['open'] })));
+
+      expect(sql?.sql).toContain(
+        '"tickets"."id" NOT IN ((SELECT "import_external_ids"."helpdock_id"',
+      );
+      expect(sql?.sql).toContain('"by_number"."number" = ');
+      // The view's own filters still apply to its matches.
+      expect(sql?.sql).toContain('"ticket_statuses"."system_state" in');
     });
 
     it('rules out the tickets carrying a -word', () => {
@@ -224,7 +235,9 @@ describe('ticketFilters', () => {
     });
 
     it('adds no exclusion when nothing is excluded', () => {
-      expect(render(ticketFilters(query({ q: 'refund' })))?.sql).not.toContain('NOT IN');
+      expect(render(ticketFilters(query({ q: 'refund' })))?.sql).not.toMatch(
+        /NOT IN \(\s*SELECT "tokens"/,
+      );
     });
 
     it('names the brand of the path in every half, for the planner', () => {
@@ -241,17 +254,52 @@ describe('ticketFilters', () => {
     expect(sql?.params).toContain('%50\\%\\_off%');
   });
 
-  it('matches a reference by its number, whatever prefix it is typed with (M1-09)', () => {
-    const sql = render(ticketFilters(query({ q: 'HD-1042' })));
+  describe('the tickets a term names (#221)', () => {
+    const named = (q: string, cursor?: string) =>
+      render(
+        namedTicketFilters({ brandId: BRAND, q, sort: 'updatedAt', direction: 'desc', cursor }),
+      );
 
-    expect(sql?.sql).toContain('"by_number"."number" = ');
-    expect(sql?.params).toContain(1042);
-  });
+    it('matches a reference by its number, whatever prefix it is typed with (M1-09)', () => {
+      const sql = named('HD-1042');
 
-  it('does not treat a word as a reference', () => {
-    const sql = render(ticketFilters(query({ q: 'refund' })));
+      expect(sql?.sql).toContain('"by_number"."number" = ');
+      expect(sql?.params).toContain(1042);
+    });
 
-    expect(sql?.sql).not.toContain('"by_number"."number" = ');
+    it('does not treat a word as a reference', () => {
+      expect(named('refund')?.sql).not.toContain('"by_number"."number" = ');
+    });
+
+    it('matches an imported ticket by its original number or its native id', () => {
+      const sql = named('#580');
+
+      expect(sql?.sql).toContain('"import_external_ids"."source_number" in');
+      expect(sql?.sql).toContain('"import_external_ids"."external_id" in');
+      expect(sql?.params).toEqual(expect.arrayContaining(['#580', '580']));
+    });
+
+    it('asks for the brand and a live ticket, and not the words', () => {
+      const sql = named('HD-1042');
+
+      expect(sql?.sql).toContain('"tickets"."brand_id" = $1');
+      expect(sql?.sql).toContain('"tickets"."deleted_at" is null');
+      expect(sql?.sql).not.toContain('"ticket_search_tokens"');
+    });
+
+    it('carries on from a cursor in the same ordering', () => {
+      const cursor = encodeTicketCursor({
+        sort: 'updatedAt',
+        direction: 'desc',
+        value: '2026-09-19T10:00:00.000Z',
+        id: TICKET,
+        named: true,
+      });
+
+      expect(named('HD-1042', cursor)?.params).toEqual(
+        expect.arrayContaining(['2026-09-19T10:00:00.000Z', TICKET]),
+      );
+    });
   });
 
   it('never pastes a search term into the statement, however hostile', () => {
@@ -358,8 +406,19 @@ describe('the next cursor', () => {
       JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
     const next = { id: row.id, sortValue: row.updatedAt };
 
-    expect(decode(cursorAfter(next, 'updatedAt', 'desc', 'fuzzy')).f).toBe(true);
-    expect(decode(cursorAfter(next, 'updatedAt', 'desc', 'exact'))).not.toHaveProperty('f');
+    expect(decode(cursorAfter(next, 'updatedAt', 'desc', { search: 'fuzzy' })).f).toBe(true);
+    expect(decode(cursorAfter(next, 'updatedAt', 'desc', { search: 'exact' }))).not.toHaveProperty(
+      'f',
+    );
+  });
+
+  it('says when the page ended among the tickets the term names (#221)', () => {
+    const decode = (cursor: string) =>
+      JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    const next = { id: row.id, sortValue: row.updatedAt };
+
+    expect(decode(cursorAfter(next, 'updatedAt', 'desc', { named: true })).n).toBe(true);
+    expect(decode(cursorAfter(next, 'updatedAt', 'desc'))).not.toHaveProperty('n');
   });
 });
 

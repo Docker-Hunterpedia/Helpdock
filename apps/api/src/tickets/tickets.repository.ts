@@ -19,9 +19,10 @@ import {
 } from '@helpdock/db';
 import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
-import { decodeTicketCursor } from './cursor.js';
+import { decodeTicketCursor, type TicketCursor } from './cursor.js';
 import {
   fallsBackToFuzzy,
+  namedTicketFilters,
   type SearchMode,
   statusJoin,
   ticketFilters,
@@ -61,6 +62,8 @@ export interface TicketWithStatus {
 export interface TicketListPage {
   readonly rows: TicketWithStatus[];
   readonly search: SearchMode;
+  /** How many of `rows`, from the start, are tickets the search term names (#221). */
+  readonly named: number;
 }
 
 const withStatus = (row: { tickets: TicketRow; ticket_statuses: TicketStatusRow }) => ({
@@ -126,9 +129,13 @@ export class TicketRepository {
    * a next page exists without a second `COUNT(*)`, which at 50k tickets would
    * cost more than the page itself (REQUIREMENTS §5.2).
    *
-   * A search is read with its exact half first, and again with the fuzzy half
-   * only when {@link fallsBackToFuzzy} says so (ADR 0011); a later page of a
-   * search that fell back goes straight to the fuzzy half its cursor names.
+   * A search starts with the tickets its term names (#221), whatever the
+   * view's filters, and the view's own matches fill the rest of the page; a
+   * page that ended among the named tickets carries on through them, then
+   * reads the view's matches from the top. The view's matches are read with
+   * the exact half first, and again with the fuzzy half only when
+   * {@link fallsBackToFuzzy} says so (ADR 0011); a later page of a search that
+   * fell back goes straight to the fuzzy half its cursor names.
    */
   async listTickets(
     tx: DbTransaction,
@@ -136,7 +143,37 @@ export class TicketRepository {
     query: TicketListQuery,
   ): Promise<TicketListPage> {
     const cursor = query.cursor === undefined ? undefined : decodeTicketCursor(query.cursor, query);
-    const read = async (search: SearchMode): Promise<TicketListPage> => ({
+    const named =
+      query.q !== undefined && (cursor === undefined || cursor.named === true)
+        ? (await this.namedTicketsStatement(tx, reader, { ...query, q: query.q })).map(withStatus)
+        : [];
+    if (named.length > query.limit) {
+      return { rows: named, search: 'exact', named: named.length };
+    }
+
+    const viewCursor = cursor?.named === true ? undefined : cursor;
+    const view = await this.#viewMatches(
+      tx,
+      reader,
+      {
+        ...query,
+        cursor: viewCursor === undefined ? undefined : query.cursor,
+        limit: query.limit - named.length,
+      },
+      viewCursor,
+    );
+
+    return { rows: [...named, ...view.rows], search: view.search, named: named.length };
+  }
+
+  /** The view's own matches for one page, with the fuzzy fallback of ADR 0011. */
+  async #viewMatches(
+    tx: DbTransaction,
+    reader: TicketReader,
+    query: TicketListQuery,
+    cursor: TicketCursor | undefined,
+  ): Promise<Omit<TicketListPage, 'named'>> {
+    const read = async (search: SearchMode) => ({
       rows: (await this.listTicketsStatement(tx, reader, query, search)).map(withStatus),
       search,
     });
@@ -153,6 +190,27 @@ export class TicketRepository {
     });
 
     return fallBack ? read('fuzzy') : exact;
+  }
+
+  /**
+   * The statement that reads the tickets a search term names (#221), from the
+   * cursor when it is one of theirs, unexecuted for the same reason as
+   * {@link listTicketsStatement}. The caller only runs it for a search.
+   */
+  namedTicketsStatement(
+    tx: DbTransaction,
+    reader: TicketReader,
+    query: TicketListQuery & { readonly q: string },
+  ) {
+    const { sort, direction, cursor, limit, q } = query;
+
+    return tx
+      .select()
+      .from(tickets)
+      .innerJoin(ticketStatuses, statusJoin)
+      .where(namedTicketFilters({ brandId: reader.brandId, q, sort, direction, cursor }))
+      .orderBy(...ticketOrder(sort, direction))
+      .limit(limit + 1);
   }
 
   /**

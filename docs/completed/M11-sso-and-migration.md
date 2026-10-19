@@ -4527,6 +4527,24 @@ also pass. The separate local EN/AR Source-view, import-health, SLA and imported
 ticket checks pass with axe. Final CI remains required on the combined PR's
 latest head.
 
+### Original numbers from any view (#221, gap found and solved, 2026-10-19)
+
+Filming the importer demo showed `#580`, the Zendesk number of `ACME-573`,
+answering "No matches" from every default view: the search ran inside the
+view, the default views show only live states, and imported history is mostly
+closed. Owner decision: a term that names a ticket (its reference, its bare
+number, or an imported original number or native ID) returns that ticket from
+any view, first, under none of the view's filters; words and contact names
+keep the view's scoping. The list now reads the named tickets with a statement
+of their own, then the view's matches without them, so keyset paging stays one
+ordering per read and no ticket repeats; a cursor that ends among named tickets
+carries `n`. RLS, department scope and soft deletion apply as before. No new UI:
+the row's status badge already says "Closed". Covered by the tickets
+integration suite (closed and imported closed tickets from an open-only view, a
+hidden department, a deleted ticket, paging across the boundary), the cursor
+and query unit tests, the admin fixture, and the mock Playwright search in
+`en` and `ar`. See the tickets guide, Listing.
+
 ### Imported chats and the widget queue (gap found and solved, 2026-10-18)
 
 The widget's queue position counted every unassigned, open `chat` ticket of
@@ -4664,7 +4682,6 @@ source after a crash.
 
 - **Real providers.** Sign-in through real Okta, Entra ID and Google Workspace or Keycloak tenants, and imports from real Zendesk, Freshdesk and Zoho Desk trial accounts, including Zoho's `api_domain` value and whether listing tickets without `departmentIds` covers every department. Every test uses the stand-ins; see [External dependencies](#external-dependencies).
 - **More connectors.** M11-19 to M11-23 (Help Scout, Intercom, Gorgias, Zammad, Front), issues #201 to #205, deferred by the owner.
-- **Search.** Original numbers are searchable, but only inside the current view until [#221](https://github.com/Docker-Hunterpedia/Helpdock/issues/221) lands.
 
 ## Pull requests
 

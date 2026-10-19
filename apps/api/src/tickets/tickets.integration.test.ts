@@ -1479,6 +1479,157 @@ describe.skipIf(!hasDocker)('tickets', () => {
     });
   });
 
+  describe('a term that names a ticket, past the view’s filters (#221)', () => {
+    /** The default views' live states: what hides a closed ticket. */
+    const OPEN_VIEW = '&systemState=open&systemState=on_hold&systemState=escalated';
+    const SOURCE_NUMBER = '880580';
+    const NATIVE_ID = 'zd-880580';
+    const HIDDEN_SOURCE_NUMBER = '880581';
+
+    let closed: Ticket;
+    let importedClosed: Ticket;
+    let hiddenClosed: Ticket;
+    let deleted: Ticket;
+    /** An open ticket whose subject carries the closed ticket's number as a word. */
+    let mentionsNumber: Ticket;
+
+    const search = async (who: Person, q: string, extra = '') =>
+      (
+        await call<TicketList>(
+          'GET',
+          `${brandPath(seeded.brandId)}/tickets?q=${encodeURIComponent(q)}&limit=100${extra}`,
+          who,
+        )
+      ).body.tickets.map((row) => row.id);
+
+    const close = async (who: Person, ticketId: string) => {
+      const response = await call<Ticket>(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticketId}`,
+        who,
+        { statusId: closedStatus },
+      );
+      expect(response.status).toBe(200);
+      return response.body;
+    };
+
+    const importAs = (ticketId: string, sourceNumber: string, externalId: string) =>
+      withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx
+          .update(tickets)
+          .set({ importedAt: new Date('2015-01-01T00:00:00Z'), importSource: 'zendesk' })
+          .where(eq(tickets.id, ticketId));
+        await tx.insert(importExternalIds).values({
+          brandId: seeded.brandId,
+          source: 'zendesk',
+          sourceAccountKey: 'b'.repeat(64),
+          entity: 'ticket',
+          externalId,
+          helpdockId: ticketId,
+          sourceNumber,
+          payloadHash: 'e'.repeat(64),
+        });
+      });
+
+    /** Every page of one search, one row at a time, so each cursor is crossed. */
+    const pagesOf = async (q: string, extra: string): Promise<string[]> => {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const suffix: string = cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`;
+        const page: TicketList = (
+          await call<TicketList>(
+            'GET',
+            `${brandPath(seeded.brandId)}/tickets?q=${encodeURIComponent(q)}&limit=1${extra}${suffix}`,
+            sam,
+          )
+        ).body;
+        seen.push(...page.tickets.map((row) => row.id));
+        cursor = page.nextCursor;
+      } while (cursor !== null && seen.length < 10);
+
+      return seen;
+    };
+
+    beforeAll(async () => {
+      closed = await close(
+        sam,
+        (await createTicket(sam, { subject: 'Vexorian gasket recall' })).ticket.id,
+      );
+      mentionsNumber = (await createTicket(sam, { subject: `Follow-up on ${closed.number}` }))
+        .ticket;
+
+      const imported = (await createTicket(sam, { subject: 'Archived courier dispute' })).ticket;
+      await importAs(imported.id, SOURCE_NUMBER, NATIVE_ID);
+      importedClosed = await close(sam, imported.id);
+
+      const hidden = (await createTicket(bo, { departmentId: billing })).ticket;
+      await importAs(hidden.id, HIDDEN_SOURCE_NUMBER, `zd-${HIDDEN_SOURCE_NUMBER}`);
+      hiddenClosed = await close(bo, hidden.id);
+
+      deleted = (await createTicket(ada)).ticket;
+      expect(
+        (await call('DELETE', `${brandPath(seeded.brandId)}/tickets/${deleted.id}`, ada)).status,
+      ).toBe(204);
+    });
+
+    it('finds a closed ticket by its reference or number from an open-only view, first', async () => {
+      for (const q of [
+        `${closed.prefix}-${closed.number}`,
+        `#${closed.number}`,
+        `${closed.number}`,
+      ]) {
+        expect((await search(sam, q, OPEN_VIEW))[0], q).toBe(closed.id);
+      }
+    });
+
+    it('finds a closed imported ticket by its original number or native id from an open-only view', async () => {
+      for (const q of [SOURCE_NUMBER, `#${SOURCE_NUMBER}`, NATIVE_ID]) {
+        expect((await search(sam, q, OPEN_VIEW))[0], q).toBe(importedClosed.id);
+      }
+    });
+
+    it('ignores the view’s other filters for the named ticket too', async () => {
+      const ids = await search(
+        sam,
+        `#${closed.number}`,
+        `${OPEN_VIEW}&priority=urgent&assigneeId=unassigned&imported=true`,
+      );
+
+      expect(ids).toEqual([closed.id]);
+    });
+
+    it('keeps a free-text match inside the view', async () => {
+      expect(await search(sam, 'vexorian')).toEqual([closed.id]);
+      expect(await search(sam, 'vexorian', OPEN_VIEW)).toEqual([]);
+    });
+
+    it('never names a ticket of a department the reader cannot see', async () => {
+      for (const q of [
+        HIDDEN_SOURCE_NUMBER,
+        `zd-${HIDDEN_SOURCE_NUMBER}`,
+        `#${hiddenClosed.number}`,
+      ]) {
+        expect(await search(sam, q, OPEN_VIEW), q).not.toContain(hiddenClosed.id);
+        expect(await search(sam, q), q).not.toContain(hiddenClosed.id);
+      }
+      expect(await search(bo, HIDDEN_SOURCE_NUMBER, OPEN_VIEW)).toEqual([hiddenClosed.id]);
+    });
+
+    it('never names a deleted ticket', async () => {
+      expect(await search(ada, `#${deleted.number}`)).not.toContain(deleted.id);
+    });
+
+    it('pages from the named ticket into the view’s matches, each once', async () => {
+      // The named ticket outside the view, then the open ticket that only
+      // carries its number as a word.
+      expect(await pagesOf(`${closed.number}`, OPEN_VIEW)).toEqual([closed.id, mentionsNumber.id]);
+      // Inside the view too, the named ticket is not read a second time by
+      // the view's own half.
+      expect(await pagesOf(`${closed.number}`, '')).toEqual([closed.id, mentionsNumber.id]);
+    });
+  });
+
   // ------------------------------------------------------- department scope
 
   describe('department scope (DOMAIN-RULES §1.3, §1.6)', () => {

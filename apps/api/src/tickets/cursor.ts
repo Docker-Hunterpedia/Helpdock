@@ -27,7 +27,18 @@ const direction = z.enum(['asc', 'desc']);
  * later page that switched halves would skip the fuzzy matches that sort
  * before it. It narrows nothing and widens nothing the policies decide.
  */
-const shared = { d: direction, id: z.uuid(), f: z.literal(true).optional() };
+/**
+ * `n` marks a page of a search that ended among the tickets the term names
+ * (#221, `namedTicketFilters`): the next page carries on through those, then
+ * starts the view's own matches from the top. Like `f`, it decides which read
+ * answers, never which rows the policies allow.
+ */
+const shared = {
+  d: direction,
+  id: z.uuid(),
+  f: z.literal(true).optional(),
+  n: z.literal(true).optional(),
+};
 
 /**
  * The sort key of the last row on a page, and its id as the tiebreaker.
@@ -54,6 +65,8 @@ export interface TicketCursor {
   readonly id: string;
   /** The page was read with the search's fuzzy half; so is the next one. */
   readonly fuzzy?: true;
+  /** The page ended among the tickets the search term names; so does the read of the next. */
+  readonly named?: true;
 }
 
 /** A cursor that does not decode, or that belongs to a different ordering. */
@@ -64,9 +77,23 @@ export class InvalidCursorError extends Error {
   }
 }
 
-export const encodeTicketCursor = ({ sort, direction, value, id, fuzzy }: TicketCursor): string =>
+export const encodeTicketCursor = ({
+  sort,
+  direction,
+  value,
+  id,
+  fuzzy,
+  named,
+}: TicketCursor): string =>
   Buffer.from(
-    JSON.stringify({ s: sort, d: direction, v: value, id, ...(fuzzy ? { f: true } : {}) }),
+    JSON.stringify({
+      s: sort,
+      d: direction,
+      v: value,
+      id,
+      ...(fuzzy ? { f: true } : {}),
+      ...(named ? { n: true } : {}),
+    }),
     'utf8',
   ).toString('base64url');
 
@@ -102,5 +129,6 @@ export const decodeTicketCursor = (
     value: cursor.data.v,
     id: cursor.data.id,
     ...(cursor.data.f ? { fuzzy: true } : {}),
+    ...(cursor.data.n ? { named: true } : {}),
   };
 };

@@ -6,8 +6,8 @@ import { answerConfidence, readSelfAssessment, retrievalSupport } from './confid
  * the team (M7-06, DOMAIN-RULES §5 and §9), in order:
  *
  * 1. a citation the model was not given → hand off (`invalid_citation`);
- * 2. no valid citation, or confidence under the brand's threshold → hand off
- *    (`low_confidence`);
+ * 2. `NO_ANSWER`, no valid citation, or confidence under the brand's
+ *    threshold → hand off (`low_confidence`);
  * 3. otherwise the answer, with its confidence line removed.
  */
 

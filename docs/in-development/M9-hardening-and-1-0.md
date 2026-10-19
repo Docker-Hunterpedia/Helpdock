@@ -422,8 +422,25 @@ stays empty. The set gained six unanswerable questions
 per language that a general model could answer from its own knowledge
 (62 English and 58 Arabic items), and the judge now calls an answer grounded
 only when every claim is stated by the source it cites
-([evaluation](../guides/ai.md#evaluation)). **Still to do:** the live run
-itself and its report.
+([evaluation](../guides/ai.md#evaluation)).
+
+The first live run (GLM `glm-4.6` answering, `glm-5.1` judging) missed two
+thresholds in both languages: answerable answered correctly (en 75 %, ar
+70.3 %) and unanswerable handed off (en 50 %, ar 18.2 %). Two causes in the
+auto-reply path, both fixed for every provider: correct, cited answers were
+handed off because the model left out the `CONFIDENCE:` line or ran it on from
+the last sentence, and questions the sources do not answer were met with "the
+sources do not say" plus related cited facts at high confidence. The rules now
+end with the reply format and an example, define confidence as "the sources
+answer this exact question", and have the model reply `NO_ANSWER` instead of
+offering related facts; the parser reads the figure on its own line or at the
+very end, with any case, blanks or emphasis
+([confidence](../guides/ai.md#confidence), [handoff](../guides/ai.md#handoff)).
+The next two live runs passed every threshold in both languages (answerable
+answered correctly en 97.5 % and 100 %, ar 100 % and 97.3 %; unanswerable
+handed off 100 % in every run). The one miss in each was a correct answer
+without its `CONFIDENCE:` line, handed off as the safe default. **Still to do:** a passing
+nightly run against the release candidate, recorded with the exit criterion.
 
 ## Gaps carried from earlier milestones
 

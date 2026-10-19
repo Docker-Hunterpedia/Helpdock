@@ -77,6 +77,18 @@ describe('answeredCorrectly', () => {
     ).toBe(true);
   });
 
+  it('is false for an answer that cites nothing, whatever the judge said', () => {
+    expect(
+      answeredCorrectly(
+        result({
+          answer: 'Delivery takes 3 to 5 business days',
+          citations: { total: 0, valid: 0 },
+          citedSources: [],
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it('is false when forbidden text is in the answer', () => {
     expect(
       answeredCorrectly(result({ checks: { forbiddenInAnswer: true, secretsInPrompt: false } })),

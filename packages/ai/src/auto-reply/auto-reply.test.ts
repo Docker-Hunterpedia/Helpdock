@@ -35,6 +35,39 @@ describe('readSelfAssessment', () => {
     expect(readSelfAssessment(nearMiss)).toEqual({ text: nearMiss, self: 0 });
     expect(performance.now() - started).toBeLessThan(500);
   });
+
+  // The first live evaluation (glm-4.6) handed off a correct Arabic answer written this way.
+  it('reads a figure run on from the last sentence and removes it', () => {
+    expect(readSelfAssessment('تواصل مع الدعم [1]. CONFIDENCE: 0.95')).toEqual({
+      text: 'تواصل مع الدعم [1].',
+      self: 0.95,
+    });
+  });
+
+  it.each([
+    ['Five days [1].\n**Confidence:** 0.9', 0.9],
+    ['Five days [1].\n**CONFIDENCE: 0.9**', 0.9],
+    ['Five days [1]. *confidence*: 0.9.', 0.9],
+    ['Five days [1].\n\n  Confidence:0.9  \n', 0.9],
+  ])('reads %j whatever its emphasis, case and blanks', (answer, self) => {
+    expect(readSelfAssessment(answer)).toEqual({ text: 'Five days [1].', self });
+  });
+
+  it.each([
+    'Ride with confidence: the frame is rated for 120 kg [1].',
+    'Confidence: 0.9 is what we aim for, and refunds take 5 days [1].',
+    'Overconfidence: 0.9',
+    'Refunds take 5 days [1]. CONFIDENCE: high',
+  ])('reads no confidence from a figure that is not the trailer, in %j', (answer) => {
+    expect(readSelfAssessment(answer)).toEqual({ text: answer, self: 0 });
+  });
+
+  it('treats NO_ANSWER as nothing to send, whatever surrounds it', () => {
+    expect(readSelfAssessment('NO_ANSWER')).toEqual({ text: '', self: 0 });
+    expect(
+      readSelfAssessment('Sorry, the sources say nothing [1].\nNO_ANSWER\nCONFIDENCE: 0.9'),
+    ).toEqual({ text: '', self: 0 });
+  });
 });
 
 describe('retrievalSupport', () => {
@@ -98,6 +131,15 @@ describe('decideAutoReply', () => {
     });
   });
 
+  it('hands off a NO_ANSWER, however confident the rest of the reply', () => {
+    expect(
+      decideAutoReply({
+        ...input,
+        answer: 'The sources only cover returns [1].\nNO_ANSWER\nCONFIDENCE: 0.95',
+      }),
+    ).toEqual({ kind: 'handoff', reason: 'low_confidence', confidence: 0 });
+  });
+
   it('hands off an answer that cites nothing, however sure the model says it is', () => {
     expect(decideAutoReply({ ...input, answer: 'Five days.\nCONFIDENCE: 1' })).toMatchObject({
       kind: 'handoff',
@@ -132,7 +174,7 @@ describe('asksForHuman', () => {
 });
 
 describe('the prompt', () => {
-  it('numbers the sources and asks for the reader language and a confidence line', () => {
+  it('numbers the sources and asks for the reader language, a confidence line and NO_ANSWER', () => {
     const instructions = autoReplyInstructions(
       [{ index: 1, title: 'Refund timelines', content: 'Card refunds take 3 to 5 days.' }],
       'ar',
@@ -140,6 +182,19 @@ describe('the prompt', () => {
     expect(instructions).toContain('[1] Refund timelines\nCard refunds take 3 to 5 days.');
     expect(instructions).toContain('Reply in Arabic');
     expect(instructions).toContain('CONFIDENCE: ');
+    expect(instructions).toContain('reply with only the word NO_ANSWER');
+  });
+
+  it('ends with an example reply the parser reads', () => {
+    const instructions = autoReplyInstructions([], 'en');
+    const example = instructions.slice(
+      instructions.indexOf('For example:') + 'For example:'.length,
+    );
+    const [reply] = example.trim().split('\n\n');
+    expect(readSelfAssessment(reply ?? '')).toEqual({
+      text: 'Card refunds take 3 to 5 business days [1].',
+      self: 0.9,
+    });
   });
 
   it('keeps the newest turns and ends with the customer', () => {

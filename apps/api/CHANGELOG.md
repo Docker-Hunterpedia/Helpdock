@@ -1,5 +1,19 @@
 # @helpdock/api
 
+## 0.7.0
+
+### Minor Changes
+
+- [#229](https://github.com/Docker-Hunterpedia/Helpdock/pull/229) [`ca3f426`](https://github.com/Docker-Hunterpedia/Helpdock/commit/ca3f426f56d6dc76c1929d90b9dedb64a95e5dad) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Find a ticket by its exact number from any view. A search for a reference (`ACME-573`), a ticket number (`573`, `[#573](https://github.com/Docker-Hunterpedia/Helpdock/issues/573)`), or an imported ticket's original number or native ID (`580`, `[#580](https://github.com/Docker-Hunterpedia/Helpdock/issues/580)`) now lists that ticket first, even when the view's filters would hide it, such as a closed imported ticket in "My open". Words and contact names are still matched inside the view. Row-level security, department scope and soft deletion still apply, and the same rule holds for `q` on `GET /api/v1/tickets`.
+
+### Patch Changes
+
+- [#223](https://github.com/Docker-Hunterpedia/Helpdock/pull/223) [`cda8e52`](https://github.com/Docker-Hunterpedia/Helpdock/commit/cda8e5202afa5cf2a008b1929572e1b9cb721a40) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Show each destination's name on the import Map step. Rows with a saved or suggested mapping no longer read "Selected destination" until the picker is opened: `mapping-values` now returns `confirmedChoice` and `proposedChoice` with the destination's label and Arabic name, resolved in one query per page.
+
+- [#230](https://github.com/Docker-Hunterpedia/Helpdock/pull/230) [`3b7b6af`](https://github.com/Docker-Hunterpedia/Helpdock/commit/3b7b6af73a65d10050865270bace5a550b5e67bb) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Stop mail scanners from spending staff sign-in links (M9-01 F6). The email now links to the admin page `/sign-in/magic#token=…`, which shows whose account the link opens through `POST /api/auth/magic-link/preview` and spends the link only when the person clicks Continue, through `POST /api/auth/magic-link/consume`. The old `GET /api/auth/magic-link/:token` link only redirects to the page and no longer spends anything.
+
+- [#228](https://github.com/Docker-Hunterpedia/Helpdock/pull/228) [`93c0b47`](https://github.com/Docker-Hunterpedia/Helpdock/commit/93c0b47b6a4a73efd64b734b0a4f6e723710d57a) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - **Widget visitors behind a proxy.** The `/widget` socket handshake keyed its per-address budget (300 per 5 minutes per brand) on the proxy's address, so behind Caddy every visitor of a brand shared one budget and one busy visitor could lock the others out of live chat. The handshake now resolves the visitor's address from `X-Forwarded-For` under the same `TRUST_PROXY` rule as `request.ip`: only from a proxy the setting names, and never with `TRUST_PROXY=false`. Nothing to change in your configuration.
+
 ## 0.6.0
 
 ### Minor Changes

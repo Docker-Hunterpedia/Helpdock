@@ -1,34 +1,35 @@
 # M9 Hardening and 1.0
 
-Status: in progress: success metrics met (2026-10-19); 1.0.0 being prepared (M9-09)
+Status: shipped
 Started: 2026-10-05
+Shipped: 2026-10-20, released as 1.0.0
 Owner: @Docker-Hunterpedia
 
 ## Scope
 
 Full deliverable list and specs: [PRD §4 · M9 Hardening and 1.0](../planning/PRD.md#m9-hardening-and-10).
-Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. The parts that needed people and hardware, the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and the restore drill, were confirmed complete by the owner on 2026-10-19; their results are held by the owner and are not recorded in this repository. The live AI evaluation passed on 2026-10-19 ([record](#ai-evaluation-with-a-chat-only-key)). What remains is the 1.0.0 release itself (M9-09) and the second exit criterion below.
+Depends on everything above; M6, M7 and M8 shipped on 2026-10-07 (#147), which also carried M9's code-side work. The parts that needed people and hardware, the external pentest, the §14 host run, the outside usability testers, the clean-VM onboarding run and the restore drill, were confirmed complete by the owner on 2026-10-19; their results are held by the owner and are not recorded in this repository. The live AI evaluation passed on 2026-10-19 ([record](#ai-evaluation-with-a-chat-only-key)). 1.0.0 was tagged and published on 2026-10-20 (M9-09), and the README install was checked against the published image ([record](#m9-09-the-100-release)).
 
 ## Deliverables
 
 | Id | Deliverable | Issue | Status |
 |---|---|---|---|
-| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | the internal pre-pentest review is done and F1 to F6 and N1 are fixed (F3 for sockets only) ([record](../completed/internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)). The external pentest ([statement of work](../planning/pentest-scope.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
-| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 (2026-10-09) found more; its gaps were closed in #167 on 2026-10-11 ([record](../completed/asvs-l2.md), [notes](#m9-02-re-walk-of-m6-m7-and-m8)): 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator. 7.2.1, 2.10.1 and 3.5.2 stay Partial |
+| M9-01 | External pentest of widget + API; fix all High and Medium findings | #153 | the internal pre-pentest review is done and F1 to F6 and N1 are fixed (F3 for sockets only) ([record](internal-security-review.md), [notes](#m9-01-internal-pre-pentest-review)). The external pentest ([statement of work](../planning/pentest-scope.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
+| M9-02 | OWASP ASVS L2 checklist walk-through with evidence recorded in `docs/completed/` | | shipped (#147): walked, and all 11 gaps closed ([notes](#m9-02-closing-the-gaps)); 3.4.4 closes with a recorded deviation. The re-walk of M6, M7 and M8 (2026-10-09) found more; its gaps were closed in #167 on 2026-10-11 ([record](asvs-l2.md), [notes](#m9-02-re-walk-of-m6-m7-and-m8)): 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator. 7.2.1, 2.10.1 and 3.5.2 stay Partial |
 | M9-03 | Load tests | #154 | suites shipped (#147) and smoke-run; outbox concurrency raised ([notes](#m9-03-outbox-concurrency)); the §14 host run: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
-| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](../completed/accessibility-audit.md)); the screen-reader pass ([runbook](../guides/screen-reader-pass.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
+| M9-04 | Accessibility audit (axe + manual keyboard) on widget and help center | #155 | the automated checks landed: axe (#147), and since 2026-10-09 zoom, forced colours, screen-reader markup and mixed direction as Playwright specs ([notes](#m9-04-accessibility-audit); results in [accessibility-audit.md](accessibility-audit.md)); the screen-reader pass ([runbook](../guides/screen-reader-pass.md)): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** |
 | M9-05 | Semgrep rules for Nest, ZAP baseline scan on release branches, SBOM on release | #152, #156 | shipped (#147): [notes](#m9-05-semgrep-zap-sbom); #152 patches the open Fastify advisory; the first release-tag ZAP run passed and #156 is closed |
 | M9-06 | User docs under `docs/guides/` | | shipped (#147): every guide on the PRD's list exists and is checked against the code ([notes](#m9-06-user-docs)); README install path tried against the published image and a local build |
-| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; the clean-VM run and the three outside testers (#157): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [onboarding-test.md](../completed/onboarding-test.md). |
+| M9-07 | Onboarding test on a clean VM against the 30-minute target; usability pass with three outside testers | #150, #157 | tooling shipped (#147) and run locally ([notes](#m9-07-onboarding-test)); internal usability fixes are in #150; the clean-VM run and the three outside testers (#157): **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** [onboarding-test.md](onboarding-test.md) holds the local runs; its tables for the record are not filled in. |
 | M9-08 | Release pipeline | #158 | public multi-architecture image and SBOM verified on `v0.4.0`; keyless Cosign signing implemented, and `v0.4.0` signed under it on 2026-10-09 by the Release workflow's manual mode (run 37928180052); #158 closed that day ([notes](#m9-08-release-pipeline)) |
-| M9-09 | Tag `1.0.0` | #159 | being prepared: the `major` changeset for `@helpdock/api` and the `1.0.0` section of `CHANGELOG.md` are written; the tag follows when the version pull request merges ([release guide](../guides/release.md#the-version-pull-request)), and the image is verified after it |
-| M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); the drill on a clean VM: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** The record would go in [restore-drill.md](../completed/restore-drill.md). |
+| M9-09 | Tag `1.0.0` | #159 | shipped on 2026-10-20: the version pull request (#236) merged, `v1.0.0` was tagged and the GitHub Release published with its SBOM; the image is signed and verified, and the README install passed against it ([notes](#m9-09-the-100-release)) |
+| M9-10 | Restore drill | #160 | tooling shipped (#147) and rehearsed locally, master key rotation included ([notes](#m9-10-restore-drill)); the drill on a clean VM: **owner confirmed complete on 2026-10-19; the results are held by the owner and are not recorded in this repository.** [restore-drill.md](restore-drill.md) holds the local rehearsals; the record of the drill is not filled in. |
 
 ## M9-01 Internal pre-pentest review
 
 An internal review of the widget and API surface found no High finding, two
 Medium and four Low, and N1 was found while fixing F1. This is what became of
-them; the [record](../completed/internal-security-review.md) keeps the traces. The
+them; the [record](internal-security-review.md) keeps the traces. The
 external test was confirmed complete by the owner on 2026-10-19; its results are
 held by the owner and are not recorded in this repository.
 
@@ -61,7 +62,7 @@ held by the owner and are not recorded in this repository.
   `a11y-reflow`, `a11y-forced-colors`, `a11y-semantics` and `a11y-bidi` in
   `apps/widget/e2e/`, and `help-center-a11y-reflow`, `-forced-colors`,
   `-semantics` and `-bidi` in `apps/api/e2e/`, in `en` and `ar`; what each
-  proves is in the [audit](../completed/accessibility-audit.md#beyond-axe-zoom-forced-colours-screen-reader-markup-mixed-direction).
+  proves is in the [audit](accessibility-audit.md#beyond-axe-zoom-forced-colours-screen-reader-markup-mixed-direction).
 - **Fixed.**
   - The help center has a skip link, and every `<main>` can take focus.
   - Article body links are underlined. Axe found them told apart by colour
@@ -84,14 +85,14 @@ held by the owner and are not recorded in this repository.
     `csatBrandSchema.helpCenterUrl` comes from `publicHelpCenterUrl`
     (`apps/api/src/help-center/site/site-url.ts`).
 - **By a person:** the
-  [audit](../completed/accessibility-audit.md#still-to-do-by-a-person) lists
+  [audit](accessibility-audit.md#still-to-do-by-a-person) lists
   the screen-reader pass, the embedded video player, and brand custom CSS. The
   owner confirmed the screen-reader pass complete on 2026-10-19; its results
   are held by the owner and are not recorded in this repository.
 
 ## Exit criteria
 
-Copied from the PRD, ticked as they are met.
+Copied from the PRD; both are met.
 
 - [x] All success metrics in §2 are met and recorded, including the AI evaluation thresholds and the restore drill.
       The AI evaluation is recorded with its run, [run 39322685646](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646) ([below](#ai-evaluation-with-a-chat-only-key)).
@@ -99,7 +100,11 @@ Copied from the PRD, ticked as they are met.
       onboarding with three outside testers and the restore drill were
       confirmed complete by the owner on 2026-10-19; their results are held by
       the owner and are not recorded in this repository.
-- [ ] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
+- [x] `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install instructions work against it.
+      Published on 2026-10-20 with `linux/amd64` and `linux/arm64`, signed with
+      Cosign and verified in the same run; `HELPDOCK_VERSION=1.0.0
+      ./scripts/compose-smoke.sh` passed against the pulled image
+      ([below](#m9-09-the-100-release)).
 
 ## Open questions
 
@@ -111,7 +116,7 @@ Copied from the PRD, ticked as they are met.
   `.zap/rules.tsv` exception was needed.
 - ~~**Magic link spent by a `GET` (M9-01 F6).**~~ Fixed: the confirm screen at
   `/sign-in/magic` spends the link only on a click
-  ([internal review](../completed/internal-security-review.md)).
+  ([internal review](internal-security-review.md)).
 - ~~**Handshake address budget (M9-01 N1).**~~ Fixed: the `/widget` handshake's
   address is resolved under `TRUST_PROXY`, with a test through a trusted proxy
   ([review](#m9-01-internal-pre-pentest-review)).
@@ -126,12 +131,12 @@ Copied from the PRD, ticked as they are met.
 
 ## M9-02 ASVS Level 2
 
-[`docs/completed/asvs-l2.md`](../completed/asvs-l2.md): 258 requirements, each
+[`docs/completed/asvs-l2.md`](asvs-l2.md): 258 requirements, each
 Met, Partial, Gap, N/A or Operator with the code, test or configuration that
-answers it. The gaps to file as issues before 1.0, in the order an attacker
+answers it. The gaps it found, all closed before 1.0 ([below](#m9-02-closing-the-gaps)), in the order an attacker
 would meet them: no email on a credential change (2.2.3, 2.5.5), no
 breached-password check (2.1.7), TOTP codes not remembered as used (2.8.4),
-no strength meter or show-password toggle (2.1.8, 2.1.12; needs an artboard),
+no strength meter or show-password toggle (2.1.8, 2.1.12),
 no idle expiry on a session (3.3.2), no `__Host-` cookie prefix (3.4.4), a
 second factor for admins that is a setting rather than a rule (4.3.1), sign-in
 failures not audited (7.1.3, 7.2.1), no alert on rate-limit refusals (8.1.4),
@@ -141,7 +146,7 @@ M7 and M8 each re-walk the chapters they touch.
 ## M9-02 Closing the gaps
 
 Every gap and partial the walk-through listed is closed, each with tests and
-its row in [asvs-l2](../completed/asvs-l2.md) updated (the summary now
+its row in [asvs-l2](asvs-l2.md) updated (the summary now
 reads 198 Met, 35 Partial, 0 Gap, 24 N/A, 1 Operator).
 
 - **Credential-change email (2.2.3, 2.5.5).** A `securityChange` auth email —
@@ -198,7 +203,7 @@ the api hands back.
 
 The re-walk of 2026-10-09 found a second set of gaps in the chapters M6, M7 and
 M8 touched. The ones fixable in code are closed, each with tests and its guide
-updated; the rows of [asvs-l2](../completed/asvs-l2.md) changed on 2026-10-11 in
+updated; the rows of [asvs-l2](asvs-l2.md) changed on 2026-10-11 in
 #167:
 
 - **Webhook events and scopes (4.1.3).** `webhooks:manage` alone cannot
@@ -394,7 +399,7 @@ sign-in with the second factor enrolled, a second brand, each brand's widget
 allowed on its own site with a visitor starting a conversation from each, the
 web form switched on and sent, and the agent finding and answering a ticket,
 each step timed through the same HTTP calls the admin, the widget and the form
-make. Local runs are in [onboarding-test.md](../completed/onboarding-test.md).
+make. Local runs are in [onboarding-test.md](onboarding-test.md).
 The 2026-10-08 internal usability pass also corrected the shared field layout
 on TOTP enrolment, staff invitation and new-ticket forms (external labels and
 hints no longer collide with their controls), and keeps a long active-session
@@ -416,10 +421,44 @@ image the Compose file pins, and `.env`, with row counts, an object hash list
 and the hash of an attachment as the api serves it; verify compares all of
 them and signs in with the second factor; rehearse then rotates the master
 key on the restored stack and signs in under both keys and the new one alone.
-Local rehearsals are in [restore-drill.md](../completed/restore-drill.md).
+Local rehearsals are in [restore-drill.md](restore-drill.md).
 **By a person:** the drill for the record on a clean VM against the one-hour
 target. The owner confirmed it complete on 2026-10-19; its results are held by
 the owner and are not recorded in this repository.
+
+## M9-09 The 1.0.0 release
+
+The version pull request [#236](https://github.com/Docker-Hunterpedia/Helpdock/pull/236)
+merged on 2026-10-19 (UTC), and the release ran the path
+[M9-08](#m9-08-release-pipeline) set up:
+
+- **Tag and Release.** The Changesets run
+  [39326893609](https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39326893609)
+  tagged `v1.0.0`, and `release.yml` published the
+  [GitHub Release](https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.0),
+  neither a draft nor a pre-release, with the CycloneDX SBOM
+  `helpdock-1.0.0.cdx.json` attached.
+- **Image.** `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is a multi-architecture
+  index, digest
+  `sha256:5560e66144458a4999db199e1a9992f4d9807b1917abc227a7c13785a5ee8dba`,
+  with `linux/amd64`, `linux/arm64` and their attestation manifests. `latest`
+  resolves to the same digest.
+- **Signature.** In the same run, `cosign sign` signed that digest keylessly and
+  `cosign verify` passed with `--certificate-identity` set to the workflow's
+  identity and `--certificate-oidc-issuer
+  https://token.actions.githubusercontent.com`.
+- **README install.** `HELPDOCK_VERSION=1.0.0 ./scripts/compose-smoke.sh`
+  against the pulled image passed every check on macOS on 2026-10-20:
+  liveness and readiness, the admin SPA, the domain check's 403, the session's
+  401, the install meta, a fresh install, the setup refusing a request without
+  its CSRF token, the outbox relay, the first-run wizard, TOTP enrolment, a
+  presigned upload to MinIO, `media.process` through the outbox, and the WebP
+  and thumbnails served.
+
+**Known limit of the smoke script.** Its TOTP helper calls `base32 -d`, which
+macOS does not ship, so on macOS it needs a GNU-compatible `base32` on `PATH`,
+such as the one in GNU coreutils. This is a limit of the test script, not of
+Helpdock, and the script is unchanged.
 
 ## AI evaluation with a chat-only key
 
@@ -482,9 +521,9 @@ Closed, each with unit and integration tests and its guide updated (the last row
 | Socket events were not rate-limited | M0 | `room:join` 120, `presence:set` 30, `presence:heartbeat` 60 per person per minute in Redis; over budget answers `rate_limited` |
 | Revocation was per person, not per browser | M0 | `principal.revoked` carries `familyIds`; only those browsers' sockets close |
 | The widget's out-of-hours handoff line was the ordinary one | M7 | A conversation and its `conversation` frame carry `hours` (its department's calendar, else the brand's); after a handoff the line takes the `moon` and says when the team opens in its zone and that the message is saved (`Widget/AI-EN`, `-AR` panel 6). The header and strip read the same hours; `widget.js` is 30.27 KB gzipped |
-| The Telegram language prompt was the catalog's, not the bot's | M6 | Each bot has its own `language_prompt` (migration `0048`), edited on the bot's page under Channels › Telegram; `/start` asks with it first ([M6-04](../completed/M6-telegram.md#m6-04-start-and-the-language-pick)) |
+| The Telegram language prompt was the catalog's, not the bot's | M6 | Each bot has its own `language_prompt` (migration `0048`), edited on the bot's page under Channels › Telegram; `/start` asks with it first ([M6-04](M6-telegram.md#m6-04-start-and-the-language-pick)) |
 | The ticket list drew no AI state, and "AI paused" was not drawn | M7 | A row's caption line ends with "AI paused" while the conversation is handed off, or "AI answered" once the assistant has sent an answer and is not paused (`Admin/Ticket-AI`, `apps/admin/src/screens/tickets/ai/ticket-ai-mark.tsx`). The answer is read from the ticket's `ai.answeredAt` (`tickets.ai_answered_at`), so a conversation handed back to the assistant before it ever answered says nothing |
-| Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](../completed/M7-ai.md#gaps-and-follow-ups)) |
+| Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](M7-ai.md#gaps-and-follow-ups)) |
 | Agent assist never appeared in a production build | M7 | `HttpAssistApi` built `/api/brands/…` paths on top of the transport's own `/api`, so every call went to `/api/api/…` and 404ed and the composer read assist as off. The paths now start at `/brands/`, and `apps/admin/src/assist/http-api.test.ts` drives every method through the real `HttpTransport` (#174) |
 | The collision indicator named a colleague by id for an Agent | M1 | Viewers were named from `GET /staff` alone, which an Agent cannot read. `staffName` (`apps/admin/src/screens/tickets/directory.ts`) names them as the assignee picker does: the department's `assignable` read, then the staff read, then a shortened id (#174) |
 | The SLA card said "No SLA policy applies" after a note arrived over the socket | M1, M4 | The ticket view's realtime catch-up rebuilt the cached ticket field by field and left out `sla` and `csat`, so the card lost its policy until a reload. `detailAfterCatchUp` (`apps/admin/src/screens/tickets/use-ticket-realtime.ts`) keeps everything the fresh read carries and replaces only the thread and the activity (#179) |
@@ -493,7 +532,10 @@ Closed, each with unit and integration tests and its guide updated (the last row
 ## Pull requests
 
 - #147 feat: M6 Telegram, M7 AI, M8 API/webhooks/reports and M9 hardening towards 1.0 (M9-02, M9-04, M9-05, M9-06; the M9-03 suites and the M9-07 and M9-10 tooling; the carried gaps above)
-- #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above. Open when this record was written.
+- #167 feat: M9 hardening towards 1.0: the pre-pentest fixes (M9-01 F1 to F5), the ASVS re-walk's gaps (M9-02), the automated zoom, forced-colours, semantics and bidi specs (M9-04), the signing of `v0.4.0` (M9-08) and the M6 and M7 gaps carried above
 - #175 fix: agent assist reaches the api in production builds, and the collision indicator names colleagues for Agents (the two #174 rows in the gaps table above)
 - #239 feat: previous tickets on the ticket's contact card (the #237 row in the gaps table above)
-- #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates and the recorded AI evaluation. Open when this record was written.
+- #235 chore: prepare Helpdock 1.0.0 (M9-09): the `major` changeset, the `1.0.0` release notes, and the docs brought in line with the owner-confirmed release gates and the recorded AI evaluation
+- #236 chore: version packages: `1.0.0`, whose merge tagged `v1.0.0` and published the image (M9-09)
+- #240 docs: refresh the README for 1.0
+- #241 docs: mark M9 Hardening and 1.0 shipped: this record moves to `docs/completed/` with the release evidence (M9-09)

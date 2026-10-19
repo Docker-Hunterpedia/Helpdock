@@ -19,6 +19,12 @@ const IMPORT_PATHS = [
   /^packages\/schemas\/src\/import/,
 ];
 
+// Guides a package test renders and compares, so a hand edit fails that package's suite.
+const CHECKED_DOCS: Record<string, string> = {
+  'docs/guides/configuration.md': '@helpdock/config',
+  'docs/guides/webhooks.md': '@helpdock/jobs',
+};
+
 /** A release PR only bumps `"version"`; that cannot change what any suite tests. */
 function versionBumpOnly(file: ChangedFile): boolean {
   if (!file.filename.endsWith('package.json') || file.previous_filename || !file.patch)
@@ -60,6 +66,11 @@ export function classifyChanges(
   for (const file of files) {
     if (versionBumpOnly(file)) continue;
     for (const path of [file.filename, file.previous_filename].filter(Boolean) as string[]) {
+      const checkedBy = CHECKED_DOCS[path];
+      if (checkedBy) {
+        affected.add(checkedBy);
+        continue;
+      }
       // Documentation does not alter runtime contracts; unknown paths fail closed.
       if (path.startsWith('docs/') || path.endsWith('.md')) continue;
       if (IMPORT_PATHS.some((pattern) => pattern.test(path))) imports = true;

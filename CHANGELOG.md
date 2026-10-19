@@ -14,6 +14,45 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.0.0 — 2026-10-19
+
+The first stable release. Every milestone of the 1.0 plan has shipped: the
+ticket desk with SLAs, rules and macros; email, Telegram, WhatsApp, Messenger
+and Instagram, the chat widget and the web form; a bilingual help center on
+each brand's own domain; grounded AI that assists agents and answers customers
+from the brand's knowledge; the REST API, webhooks and reports; staff sign-in
+over SAML and OpenID Connect; and importers from Zendesk, Freshdesk and Zoho
+Desk with a manual CSV mapper for the rest. What each milestone built, and the
+gaps it left open, is in [docs/completed/](docs/completed/README.md).
+
+### Upgrading from 0.7
+
+Nothing to change in your configuration. The major version marks the release,
+not an incompatible change: follow
+[Upgrading](docs/guides/operations.md#upgrading) with `1.0.0`, and the api runs
+any pending migrations when it starts.
+
+### Before the release
+
+- **Release gates.** The external pentest of the widget and the API, the load
+  run on the reference host, the screen-reader pass, the onboarding run on a
+  clean VM with three outside testers, and the restore drill were completed
+  before 1.0.0. Their results are held by the maintainer and are not published
+  in this repository.
+- **OWASP ASVS Level 2.** Every requirement has been walked with its evidence,
+  and no gap is open ([asvs-l2](docs/completed/asvs-l2.md)).
+
+### Known limits
+
+- **SSO and imports were not run against live accounts.** Sign-in was verified
+  against stand-in OIDC and SAML identity providers, and the Zendesk, Freshdesk
+  and Zoho Desk importers against stand-in servers built from each vendor's
+  published API documentation. No run against a live Okta or Entra ID tenant
+  or a live vendor account was made before 1.0.
+- **More importers come later.** Help Scout, Intercom, Gorgias, Zammad and
+  Front connectors are deferred; until then their exports go through the manual
+  CSV mapper ([importing](docs/guides/importing.md)).
+
 ## 0.5.1 — 2026-10-13
 
 A fix release for two admin defects that only show against a real api, so the

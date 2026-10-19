@@ -94,7 +94,7 @@ Update this table in the same PR that changes a milestone's status.
 | 2 Customer surfaces | M6 Telegram | M2 | 2 | shipped | 2026-10-05 | 2026-10-07 |
 | 3 Intelligence | M7 AI | M3, M4, M5, M6 | 7–9 | shipped | 2026-10-05 | 2026-10-07 |
 | 4 Release | M8 API, webhooks, reports | M1, M3 | 4–5 | shipped | 2026-10-05 | 2026-10-07 |
-| 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress | 2026-10-05 | |
+| 4 Release | M9 Hardening and 1.0 | all | 5–7 | in progress: release gates confirmed by the owner on 2026-10-19; 1.0.0 being prepared (M9-09, [#159](https://github.com/Docker-Hunterpedia/Helpdock/issues/159)) | 2026-10-05 | |
 | 4 Release | M10 Meta channels | M6, M9 (code side) | 5–6 | shipped | 2026-10-11 | 2026-10-13 |
 | 4 Release | M11 SSO and migration | M0, M1, M3, M5, M8 | 9–13 | shipped for 1.0 (M11-01 to M11-18, [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215)); M11-19 to M11-23 deferred | 2026-10-13 | 2026-10-18 |
 | | **Total** | | **60–78** | | | |
@@ -111,15 +111,15 @@ Effort assumes one full-time maintainer working with AI coding agents, including
 | M6 | A Telegram bot token for the staging bot | @Docker-Hunterpedia | needed |
 | M7 | LLM and embeddings API keys for the nightly evaluation run (stored as CI secrets: `AI_EVAL_API_KEY` and the keys named in `.github/workflows/ai-eval.yml`) | @Docker-Hunterpedia | needed |
 | M7-03 | Notion integration and Google Cloud OAuth app for the connectors | @Docker-Hunterpedia | needed |
-| M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead ([statement of work](pentest-scope.md)) | @Docker-Hunterpedia | not started |
-| M9-07 | Three outside testers for the usability pass, and a clean VM for the onboarding run and the restore drill for the record (`docs/completed/onboarding-test.md`, `docs/completed/restore-drill.md`) | @Docker-Hunterpedia | not started |
+| M9-01 | External pentest vendor, budget and a 2-week slot booked at least 6 weeks ahead ([statement of work](pentest-scope.md)) | @Docker-Hunterpedia | done: the owner confirmed the pentest complete on 2026-10-19 (#153); the results are held by the owner |
+| M9-07 | Three outside testers for the usability pass, and a clean VM for the onboarding run and the restore drill for the record (`docs/completed/onboarding-test.md`, `docs/completed/restore-drill.md`) | @Docker-Hunterpedia | done: the owner confirmed the onboarding run, the three testers (#157) and the restore drill (#160) complete on 2026-10-19; the results are held by the owner |
 | M9-08 | GHCR publish permissions on the org (done: `v0.4.0` is published). No signing key is needed: Cosign signs keylessly through GitHub OIDC, and `v0.4.0` was signed that way on 2026-10-09 (#158, closed) | @Docker-Hunterpedia | done |
 | M10 | A Meta developer account and a Business-type app with the WhatsApp, Messenger and Instagram products in Live mode, with its app secret and Instagram app secret | @Docker-Hunterpedia | needed |
 | M10-03 | A WhatsApp Business account with its test number, and a payment method for a real number | @Docker-Hunterpedia | needed |
 | M10-04, M10-05 | A Facebook Page and an Instagram professional account for staging, with the maintainer in an app role | @Docker-Hunterpedia | needed |
 | M10-04, M10-05, M10-09 | App Review of `pages_messaging`, `instagram_business_manage_messages` and the Human Agent feature on the staging app, so messages from people outside the app's roles arrive | @Docker-Hunterpedia | not started |
-| M11-02 to M11-06 | Developer tenants of Okta and Microsoft Entra ID, and a Google Workspace or Keycloak instance, each with a test user in two groups | @Docker-Hunterpedia | needed |
-| M11-12 to M11-14 | Trial accounts of Zendesk, Freshdesk and Zoho Desk seeded with the M11 reference dataset | @Docker-Hunterpedia | needed |
+| M11-02 to M11-06 | Developer tenants of Okta and Microsoft Entra ID, and a Google Workspace or Keycloak instance, each with a test user in two groups | @Docker-Hunterpedia | needed; not a 1.0 blocker (owner, 2026-10-19): SSO is verified against the stand-in IdPs |
+| M11-12 to M11-14 | Trial accounts of Zendesk, Freshdesk and Zoho Desk seeded with the M11 reference dataset | @Docker-Hunterpedia | needed; not a 1.0 blocker (owner, 2026-10-19): the importers are verified against stand-ins built from the vendors' published API documentation |
 
 ---
 
@@ -452,8 +452,10 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M1, M3, M5, M8. Part 
 The 2026-10-18 owner-review corrections pass the named suites in the
 [milestone evidence index](../completed/M11-sso-and-migration.md#evidence-index-2026-10-18)
 and all 25 checks on implementation commit `1e053b1`, including the three native
-reference imports. PR #215 still requires owner review and merge; no release is
-recorded here. Real-provider runs remain in External dependencies.
+reference imports. PR #215 merged on 2026-10-18 and was released in v0.6.0.
+Real-provider runs remain in External dependencies; the owner ruled on
+2026-10-19 that they are not 1.0 blockers, because M11 is verified against the
+stand-ins and the vendors' published API documentation.
 
 Exit criteria:
 
@@ -538,3 +540,4 @@ Not scheduled. Each item needs its own PRD section before work starts.
 | 2026-10-13 | M10 shipped. Ten of eleven deliverables merged in #168 (M10-01 to M10-08, M10-10, M10-11) with M10-09's Human Agent tag, released in 0.5.0; all six exit criteria met against the Graph stand-in, each proved in [docs/completed/M10-meta-channels.md](../completed/M10-meta-channels.md#exit-criteria). M10-09's WhatsApp templates and a run against Meta itself are carried as [gaps](../completed/M10-meta-channels.md#gaps-and-follow-ups). |
 | 2026-10-13 | **Scope change: SSO and migration are in scope for 1.0 as M11.** The owner brought SAML 2.0 and OpenID Connect sign-in for staff (JIT provisioning and group-to-role sync, enforcement with break-glass; no SCIM) and importers into 1.0, on the user feedback in [#180](https://github.com/Docker-Hunterpedia/Helpdock/issues/180): teams switch when migration does not hurt. Importers cover every helpdesk whose API can export a whole account (Zendesk, Freshdesk and Zoho Desk for 1.0; Help Scout, Intercom, Gorgias, Zammad and Front on the same SDK, may ship after 1.0) and a manual CSV mapper for the rest. Removed from §5's backlog, where REQUIREMENTS §6 listed both as v1.1; twenty-three deliverables M11-01 to M11-23 in §4, a status board row (9–13 weeks), two external dependencies (IdP developer tenants; vendor trial accounts), four risks. M9-09 now waits for M11. The designs are [ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md) and [ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md); the milestone doc is [M11-sso-and-migration.md](../completed/M11-sso-and-migration.md). |
 | 2026-10-18 | **M11 SSO and migration shipped for 1.0.** M11-01 to M11-18 merged ([#207](https://github.com/Docker-Hunterpedia/Helpdock/pull/207), [#210](https://github.com/Docker-Hunterpedia/Helpdock/pull/210)–[#212](https://github.com/Docker-Hunterpedia/Helpdock/pull/212), [#215](https://github.com/Docker-Hunterpedia/Helpdock/pull/215), with review fixes [#220](https://github.com/Docker-Hunterpedia/Helpdock/pull/220) and [#223](https://github.com/Docker-Hunterpedia/Helpdock/pull/223)) and released in v0.6.0. The owner deferred M11-19 to M11-23 (#201 to #205). Runs against real IdPs and vendor accounts remain external dependencies. The milestone doc moves to [completed](../completed/M11-sso-and-migration.md). |
+| 2026-10-19 | **1.0.0 prepared (M9-09, [#159](https://github.com/Docker-Hunterpedia/Helpdock/issues/159)).** The owner confirmed the remaining M9 release gates complete: the external pentest (M9-01, #153), the §14 host load run (M9-03, #154), the screen-reader pass (M9-04, #155), the clean-VM onboarding run with three outside testers (M9-07, #157) and the restore drill (M9-10, #160). Their results are held by the owner and are not recorded in this repository. [asvs-l2](../completed/asvs-l2.md) has no gap. The owner also ruled that runs against real IdPs (Okta, Entra ID) and real Zendesk, Freshdesk and Zoho Desk accounts are not 1.0 blockers: M11 is verified against stand-ins and the vendors' published API documentation, and those runs stay external dependencies. M9 stays in progress until both its exit criteria are met; the second is that `ghcr.io/docker-hunterpedia/helpdock:1.0.0` is published and the README install works against it. |

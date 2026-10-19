@@ -8,16 +8,19 @@ import { TicketRow } from './ticket-row.tsx';
 /**
  * What the ticket list says about the assistant on a row (M7-06,
  * `Admin/Ticket-AI`): "AI paused" while the conversation is handed off, "AI
- * answered" once the assistant took part and was not paused, nothing when it
- * never did.
+ * answered" once the assistant sent an answer and is not paused, nothing when
+ * it never answered.
  */
 
-const PAUSED: TicketAiState = {
-  pausedAt: '2026-10-05T09:18:00.000Z',
+const AT = '2026-10-05T09:18:00.000Z';
+const HANDED_BACK: TicketAiState = {
+  pausedAt: null,
   pausedUntil: null,
-  reason: 'low_confidence',
+  reason: null,
+  answeredAt: null,
 };
-const ANSWERED: TicketAiState = { pausedAt: null, pausedUntil: null, reason: null };
+const ANSWERED: TicketAiState = { ...HANDED_BACK, answeredAt: AT };
+const PAUSED: TicketAiState = { ...HANDED_BACK, pausedAt: AT, reason: 'low_confidence' };
 const CAPTIONS = ['AI paused', 'AI answered'];
 
 const captionsOnRow = (ai: TicketAiState | undefined): string[] => {
@@ -42,6 +45,16 @@ describe('the assistant on a ticket row', () => {
       'a conversation the assistant answered and still holds is marked "AI answered"',
       ANSWERED,
       ['AI answered'],
+    ],
+    [
+      'a conversation answered and then handed off is marked "AI paused" alone',
+      { ...PAUSED, answeredAt: AT },
+      ['AI paused'],
+    ],
+    [
+      'a conversation handed back to the assistant before it ever answered says nothing',
+      HANDED_BACK,
+      [],
     ],
     ['a ticket the assistant never took part in says nothing', undefined, []],
   ])('%s', (_scenario, ai, expected) => {

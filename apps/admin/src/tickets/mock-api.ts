@@ -283,7 +283,7 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       contactId: MOCK_CONTACT_GMAIL,
       // M7-06: the assistant answered this chat and still holds it, which the
       // list draws as "AI answered".
-      ai: { pausedAt: null, pausedUntil: null, reason: null },
+      ai: { pausedAt: null, pausedUntil: null, reason: null, answeredAt: at(-4 * HOUR) },
       firstResponseDueAt: at(3 * HOUR),
       resolutionDueAt: at(20 * HOUR),
       createdAt: at(-5 * HOUR),
@@ -299,7 +299,12 @@ const seed = (statuses: readonly TicketStatus[], now: number): Seed => {
       assigneeId: MOCK_SELF_ID,
       // M7-06: the assistant handed this conversation off, which the list
       // draws as "AI paused" and the ticket as the AIPausedStrip.
-      ai: { pausedAt: at(-4 * HOUR), pausedUntil: null, reason: 'low_confidence' },
+      ai: {
+        pausedAt: at(-4 * HOUR),
+        pausedUntil: null,
+        reason: 'low_confidence',
+        answeredAt: null,
+      },
       resolutionDueAt: at(30 * HOUR),
       createdAt: at(-3 * DAY),
       updatedAt: at(-4 * HOUR),
@@ -1412,7 +1417,12 @@ export class MockTicketsApi implements TicketsApi {
 
   async resumeAssistant(_brandId: string, ticketId: string): Promise<TicketAiState> {
     const ticket = this.#require(ticketId);
-    const ai: TicketAiState = { pausedAt: null, pausedUntil: null, reason: null };
+    const ai: TicketAiState = {
+      pausedAt: null,
+      pausedUntil: null,
+      reason: null,
+      answeredAt: ticket.ai?.answeredAt ?? null,
+    };
     this.#tickets = this.#tickets.map((row) => (row.id === ticketId ? { ...ticket, ai } : row));
     return Promise.resolve(ai);
   }

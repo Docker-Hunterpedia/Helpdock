@@ -9,8 +9,9 @@ import { useSemanticTokens } from '../../../app/tokens.js';
  * What a ticket list row says about the assistant (M7-06, `Admin/Ticket-AI`,
  * DESIGN §6.2): "AI paused" while the conversation is handed off, the fact the
  * AIPausedStrip carries in the ticket, and "AI answered" once the assistant has
- * taken part and is not paused. The api sends `ai` only for a conversation the
- * assistant took part in, so a ticket without it draws nothing.
+ * sent an answer and is not paused. The api sends `ai` only for a conversation
+ * the assistant took part in, so a ticket without it draws nothing, and nor does
+ * one handed back to the assistant before it ever answered.
  *
  * Both are one caption in `action.primary`, apart in icon and words, as the
  * artboard draws them. DESIGN §6.2 calls the paused one a "Label", but the
@@ -26,6 +27,9 @@ export function TicketAiMark({ state }: { readonly state: TicketAiState | undefi
   }
 
   const paused = state.pausedAt !== null;
+  if (!paused && state.answeredAt === null) {
+    return null;
+  }
   const Icon = paused ? Pause : Sparkles;
 
   return (

@@ -419,6 +419,12 @@ export const ticketAiStateSchema = z.object({
   /** Null with `pausedAt` set: for the rest of the conversation. */
   pausedUntil: z.iso.datetime().nullable(),
   reason: aiPauseReasonSchema.nullable(),
+  /**
+   * When the assistant first sent an answer here; null while it never has. A
+   * handoff is not an answer, so a conversation handed back before the
+   * assistant answered stays null, and the list does not call it answered.
+   */
+  answeredAt: z.iso.datetime().nullable(),
 });
 export type TicketAiState = z.infer<typeof ticketAiStateSchema>;
 

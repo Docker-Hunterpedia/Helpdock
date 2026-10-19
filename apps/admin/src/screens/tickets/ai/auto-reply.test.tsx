@@ -90,7 +90,12 @@ const call: AiCallView = {
 
 /** The fixture with the refund ticket answered by the assistant and then handed off. */
 class AssistedTickets extends MockTicketsApi {
-  state: TicketAiState = { pausedAt: AT, pausedUntil: null, reason: 'low_confidence' };
+  state: TicketAiState = {
+    pausedAt: AT,
+    pausedUntil: null,
+    reason: 'low_confidence',
+    answeredAt: AT,
+  };
   readonly resumed = vi.fn();
 
   override async ticket(brandId: string, ticketId: string): Promise<TicketDetail> {

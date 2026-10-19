@@ -138,6 +138,7 @@ describe('toTicket', () => {
       pausedAt: AT.toISOString(),
       pausedUntil: null,
       reason: 'low_confidence',
+      answeredAt: null,
     });
   });
 

@@ -26,11 +26,12 @@ export const isAiPaused = (
   (ticket.aiPausedUntil === null || ticket.aiPausedUntil.getTime() > now.getTime());
 
 export const toTicketAiState = (
-  ticket: Pick<TicketRow, 'aiPausedAt' | 'aiPausedUntil' | 'aiPauseReason'>,
+  ticket: Pick<TicketRow, 'aiPausedAt' | 'aiPausedUntil' | 'aiPauseReason' | 'aiAnsweredAt'>,
 ): TicketAiState => ({
   pausedAt: ticket.aiPausedAt?.toISOString() ?? null,
   pausedUntil: ticket.aiPausedUntil?.toISOString() ?? null,
   reason: ticket.aiPausedAt === null ? null : (ticket.aiPauseReason as AiPauseReason | null),
+  answeredAt: ticket.aiAnsweredAt?.toISOString() ?? null,
 });
 
 export interface PauseInput {

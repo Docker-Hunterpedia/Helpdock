@@ -22,6 +22,7 @@ import {
   type KnowledgeFilePresignResponse,
   type TicketAiState,
   type TicketDetail,
+  type TicketList,
   WIDGET_EVENTS,
   type WidgetConversation,
   type WidgetMessage,
@@ -70,7 +71,8 @@ import { DEFAULT_HANDOFF_MESSAGES, readAutoReplySettings } from './auto-reply-se
  *    the conversation is paused, and the next message adds no job.
  * 3. After a handoff no answer is sent, even by a job that was queued before
  *    it — and one already past the model when a person replies (exit criterion).
- * 4. "Return to assistant" is audited and lets the assistant answer again.
+ * 4. "Return to assistant" is audited and lets the assistant answer again; the
+ *    ticket says it answered only once it has (`answeredAt`).
  * 5. A spent budget stops auto-reply without a word to the visitor, and the
  *    admin's settings say the window is exceeded (exit criterion).
  * 6. "Was this helpful?" and the deflection figures of Reports.
@@ -350,6 +352,12 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
     return row;
   };
 
+  /** The assistant state the ticket list carries for the row, as the admin reads it. */
+  const listedAi = async (ticketId: string): Promise<TicketAiState | undefined> => {
+    const list = await staff<TicketList>('GET', `/api/brands/${brandId()}/tickets?limit=100`);
+    return list.body.tickets.find((ticket) => ticket.id === ticketId)?.ai;
+  };
+
   beforeAll(async () => {
     [postgres, redisContainer] = await Promise.all([
       new PostgreSqlContainer(POSTGRES_IMAGE).withStartupTimeout(CONTAINER_STARTUP_MS).start(),
@@ -530,7 +538,16 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
       ai: { kind: 'answer', confidence: 0.92, threshold: 0.7 },
     });
     expect(staffAnswer?.bodyText).toContain('Refund timelines');
-    expect(detail.body.ticket.ai).toEqual({ pausedAt: null, pausedUntil: null, reason: null });
+    const answeredAt = (await ticketRow(conversationId))?.aiAnsweredAt;
+    expect(answeredAt).toBeInstanceOf(Date);
+    const answeredState = {
+      pausedAt: null,
+      pausedUntil: null,
+      reason: null,
+      answeredAt: answeredAt?.toISOString(),
+    };
+    expect(detail.body.ticket.ai).toEqual(answeredState);
+    expect(await listedAi(conversationId)).toEqual(answeredState);
     const [logged] = await withSystem(runtime.db, brandId(), (tx) =>
       tx.select().from(aiCalls).where(eq(aiCalls.feature, 'auto_reply')),
     );
@@ -707,7 +724,10 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
       `/api/brands/${brandId()}/tickets/${conversationId}/ai/resume`,
     );
     expect(resumed.status).toBe(200);
-    expect(resumed.body.pausedAt).toBeNull();
+    expect(resumed.body).toMatchObject({ pausedAt: null, answeredAt: null });
+    // Handed back before it ever answered: the list must not call it answered.
+    expect((await ticketRow(conversationId))?.aiAnsweredAt).toBeNull();
+    expect(await listedAi(conversationId)).toMatchObject({ pausedAt: null, answeredAt: null });
     const audit = await withSystem(runtime.db, brandId(), (tx) =>
       tx
         .select()
@@ -723,6 +743,9 @@ describe.skipIf(!hasDocker)('auto-reply (M7-06)', () => {
     fake.reply('Three to five business days [1].\nCONFIDENCE: 0.9');
     await run(job as AiAutoReplyPayload);
     expect((await thread(visitor, conversationId)).at(-1)?.author).toBe('ai');
+    const answeredAt = (await ticketRow(conversationId))?.aiAnsweredAt;
+    expect(answeredAt).toBeInstanceOf(Date);
+    expect((await listedAi(conversationId))?.answeredAt).toBe(answeredAt?.toISOString());
   });
 
   it('stays silent over budget, and the admin sees the window exceeded', async () => {

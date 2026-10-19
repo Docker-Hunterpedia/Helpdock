@@ -148,13 +148,31 @@ describe('the pause', () => {
     );
   });
 
+  const unanswered = { aiPausedUntil: null, aiAnsweredAt: null };
+
   it('is shown with its reason, and without one once cleared', () => {
     expect(
-      toTicketAiState({ aiPausedAt: AT, aiPausedUntil: null, aiPauseReason: 'customer_request' }),
-    ).toEqual({ pausedAt: AT.toISOString(), pausedUntil: null, reason: 'customer_request' });
+      toTicketAiState({ ...unanswered, aiPausedAt: AT, aiPauseReason: 'customer_request' }),
+    ).toEqual({
+      pausedAt: AT.toISOString(),
+      pausedUntil: null,
+      reason: 'customer_request',
+      answeredAt: null,
+    });
     expect(
-      toTicketAiState({ aiPausedAt: null, aiPausedUntil: null, aiPauseReason: 'staff_reply' }),
-    ).toEqual({ pausedAt: null, pausedUntil: null, reason: null });
+      toTicketAiState({ ...unanswered, aiPausedAt: null, aiPauseReason: 'staff_reply' }),
+    ).toEqual({ pausedAt: null, pausedUntil: null, reason: null, answeredAt: null });
+  });
+
+  it('says when the assistant first answered, which a pause does not clear', () => {
+    expect(
+      toTicketAiState({
+        ...unanswered,
+        aiAnsweredAt: AT,
+        aiPausedAt: AT,
+        aiPauseReason: 'staff_reply',
+      }).answeredAt,
+    ).toBe(AT.toISOString());
   });
 });
 

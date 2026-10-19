@@ -10,6 +10,7 @@ import {
   EMBEDDING_MAX_DIMS,
   embeddingSettingsUpdateSchema,
   parseAiAssistantModes,
+  ticketAiStateSchema,
   transcriptionSettingsUpdateSchema,
 } from './ai.js';
 
@@ -152,5 +153,22 @@ describe('AI_AUTO_REPLY_CHANNELS', () => {
     for (const channel of ['whatsapp', 'messenger', 'instagram']) {
       expect(AI_AUTO_REPLY_CHANNELS as readonly string[]).not.toContain(channel);
     }
+  });
+});
+
+describe('ticketAiStateSchema', () => {
+  const handedBack = { pausedAt: null, pausedUntil: null, reason: null, answeredAt: null };
+
+  it('carries when the assistant first answered, null while it never has', () => {
+    expect(ticketAiStateSchema.safeParse(handedBack).success).toBe(true);
+    expect(
+      ticketAiStateSchema.safeParse({ ...handedBack, answeredAt: '2026-10-05T09:18:00.000Z' })
+        .success,
+    ).toBe(true);
+  });
+
+  it('refuses a state that leaves the answer time unsaid, which the list would read as never', () => {
+    const { answeredAt: _omitted, ...withoutAnswer } = handedBack;
+    expect(ticketAiStateSchema.safeParse(withoutAnswer).success).toBe(false);
   });
 });

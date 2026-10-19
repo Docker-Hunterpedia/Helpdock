@@ -111,9 +111,10 @@ Copied from the PRD, ticked as they are met.
 - **Telegram empty welcome (M6 gaps).** `Admin/Channels-Telegram` says an empty
   welcome skips the welcome in that language; the code and the guide send the
   catalog's. A decision picks which one changes.
-- **"AI answered" on the ticket list (M7 gaps).** It also covers a conversation the
-  assistant was handed back to before it answered. Telling them apart takes an
-  `answeredAt` (`tickets.ai_answered_at`) on `ticketAiStateSchema`.
+- ~~**"AI answered" on the ticket list (M7 gaps).**~~ Settled: the ticket's `ai`
+  state carries `answeredAt` from `tickets.ai_answered_at`, which the auto-reply
+  job sets with its first answer, and the list says "AI answered" only once it is
+  set ([gaps table](#gaps-carried-from-earlier-milestones)).
 
 ## M9-02 ASVS Level 2
 
@@ -421,7 +422,7 @@ Closed, each with unit and integration tests and its guide updated (the last row
 | Revocation was per person, not per browser | M0 | `principal.revoked` carries `familyIds`; only those browsers' sockets close |
 | The widget's out-of-hours handoff line was the ordinary one | M7 | A conversation and its `conversation` frame carry `hours` (its department's calendar, else the brand's); after a handoff the line takes the `moon` and says when the team opens in its zone and that the message is saved (`Widget/AI-EN`, `-AR` panel 6). The header and strip read the same hours; `widget.js` is 30.27 KB gzipped |
 | The Telegram language prompt was the catalog's, not the bot's | M6 | Each bot has its own `language_prompt` (migration `0048`), edited on the bot's page under Channels › Telegram; `/start` asks with it first ([M6-04](../completed/M6-telegram.md#m6-04-start-and-the-language-pick)) |
-| The ticket list drew no AI state, and "AI paused" was not drawn | M7 | A row's caption line ends with "AI paused" while the conversation is handed off, or "AI answered" once the assistant has taken part and is not paused (`Admin/Ticket-AI`, `apps/admin/src/screens/tickets/ai/ticket-ai-mark.tsx`). Telling a handed-back conversation apart is open, see Open questions |
+| The ticket list drew no AI state, and "AI paused" was not drawn | M7 | A row's caption line ends with "AI paused" while the conversation is handed off, or "AI answered" once the assistant has sent an answer and is not paused (`Admin/Ticket-AI`, `apps/admin/src/screens/tickets/ai/ticket-ai-mark.tsx`). The answer is read from the ticket's `ai.answeredAt` (`tickets.ai_answered_at`), so a conversation handed back to the assistant before it ever answered says nothing |
 | Agent assist sent the brand's main system prompt for an Arabic ticket | M7 | Every assist call passes the ticket's language to `complete()`, which sends `systemPromptAr` for an Arabic ticket, as auto-reply does ([M7 gaps](../completed/M7-ai.md#gaps-and-follow-ups)) |
 | Agent assist never appeared in a production build | M7 | `HttpAssistApi` built `/api/brands/…` paths on top of the transport's own `/api`, so every call went to `/api/api/…` and 404ed and the composer read assist as off. The paths now start at `/brands/`, and `apps/admin/src/assist/http-api.test.ts` drives every method through the real `HttpTransport` (#174) |
 | The collision indicator named a colleague by id for an Agent | M1 | Viewers were named from `GET /staff` alone, which an Agent cannot read. `staffName` (`apps/admin/src/screens/tickets/directory.ts`) names them as the assignee picker does: the department's `assignable` read, then the staff read, then a shortened id (#174) |

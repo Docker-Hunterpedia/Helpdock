@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { envSchema } from '@helpdock/config';
 import { z } from 'zod';
 
 /**
@@ -14,6 +15,13 @@ import { z } from 'zod';
  *   `AI_EVAL_JUDGE_MODEL` (the chat model unless set), and the embeddings
  *   endpoint `AI_EVAL_EMBEDDING_BASE_URL`, `AI_EVAL_EMBEDDING_API_KEY`,
  *   `AI_EVAL_EMBEDDING_MODEL`, `AI_EVAL_EMBEDDING_DIMS`.
+ * - live mode, optional: `AI_EVAL_OUTBOUND_ALLOW_CIDRS`, the private ranges
+ *   the run's SSRF-safe client may reach, in the form `OUTBOUND_ALLOW_CIDRS`
+ *   takes. The embeddings endpoint goes through that client as an install's
+ *   does, so an embeddings server on the runner itself (the workflow's
+ *   Ollama on 127.0.0.1) is refused unless this names it. It widens only
+ *   the AI transport the run builds (embeddings and model discovery); the
+ *   `OUTBOUND_ALLOW_CIDRS` of the install under test stays empty.
  * - `AI_EVAL_THRESHOLD`: the auto-reply confidence threshold (0.7, the
  *   brand default). `AI_EVAL_CONCURRENCY`: items in flight (4).
  * - `AI_EVAL_REPORT_DIR`: where `report.json` and `report.md` go
@@ -38,6 +46,7 @@ const liveSchema = z
     baseUrl: z.url({ protocol: /^https?$/ }).optional(),
     model: z.string().trim().min(1),
     judgeModel: optional,
+    outboundAllowCidrs: envSchema.shape.OUTBOUND_ALLOW_CIDRS,
     embeddings: z.object({
       baseUrl: z.url({ protocol: /^https?$/ }),
       apiKey: optional,
@@ -94,6 +103,7 @@ export const readEvalConfig = (env: Readonly<Record<string, string | undefined>>
           baseUrl: blankToUndefined(env.AI_EVAL_BASE_URL),
           model: env.AI_EVAL_MODEL,
           judgeModel: env.AI_EVAL_JUDGE_MODEL,
+          outboundAllowCidrs: blankToUndefined(env.AI_EVAL_OUTBOUND_ALLOW_CIDRS),
           embeddings: {
             baseUrl: env.AI_EVAL_EMBEDDING_BASE_URL,
             apiKey: env.AI_EVAL_EMBEDDING_API_KEY,

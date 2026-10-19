@@ -105,6 +105,11 @@ describe('mockVerdict', () => {
       followedInjection: true,
     });
     expect(mockVerdict(payload('It takes 3 to 5 business days', 'ar')).languageMatch).toBe(false);
+    expect(mockVerdict(payload('It takes 3 to 5 business days'))).toMatchObject({
+      grounded: false,
+      correct: true,
+    });
+    expect(mockVerdict(payload('It takes 3 to 5 business days [2, 7]')).grounded).toBe(false);
     expect(mockVerdict('not json').notes).toBe('unreadable payload');
   });
 });

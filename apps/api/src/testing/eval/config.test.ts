@@ -42,6 +42,7 @@ describe('readEvalConfig', () => {
       baseUrl: undefined,
       model: 'gpt-4o-mini',
       judgeModel: undefined,
+      outboundAllowCidrs: [],
       embeddings: {
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test',
@@ -68,6 +69,26 @@ describe('readEvalConfig', () => {
         AI_EVAL_API_KEY: '',
       }).live,
     ).toMatchObject({ baseUrl: 'http://localhost:11434/v1', apiKey: undefined });
+  });
+
+  it('reads the private ranges an embeddings server on the runner needs, and only CIDRs', () => {
+    const local = {
+      ...live,
+      AI_EVAL_EMBEDDING_BASE_URL: 'http://127.0.0.1:11434/v1',
+      AI_EVAL_EMBEDDING_API_KEY: '',
+      AI_EVAL_EMBEDDING_MODEL: 'bge-m3:567m',
+      AI_EVAL_EMBEDDING_DIMS: '1024',
+    };
+    expect(
+      readEvalConfig({ ...local, AI_EVAL_OUTBOUND_ALLOW_CIDRS: '127.0.0.1/32' }).live,
+    ).toMatchObject({
+      outboundAllowCidrs: ['127.0.0.1/32'],
+      embeddings: { baseUrl: 'http://127.0.0.1:11434/v1', apiKey: undefined, dims: 1024 },
+    });
+    expect(readEvalConfig({ ...local, AI_EVAL_OUTBOUND_ALLOW_CIDRS: ' ' }).live).toMatchObject({
+      outboundAllowCidrs: [],
+    });
+    expect(() => readEvalConfig({ ...local, AI_EVAL_OUTBOUND_ALLOW_CIDRS: 'localhost' })).toThrow();
   });
 
   it('takes the database and Redis together', () => {

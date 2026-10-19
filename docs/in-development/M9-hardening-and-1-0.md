@@ -408,6 +408,21 @@ Local rehearsals are in [restore-drill.md](../completed/restore-drill.md).
 **Still to do by a person:** the drill for the record on a clean VM against
 the one-hour target.
 
+## AI evaluation with a chat-only key
+
+For the first exit criterion's AI thresholds (DOMAIN-RULES §9, M7-11). The
+owner's key has chat models and no embeddings endpoint, so the nightly
+workflow can embed on the runner: `AI_EVAL_EMBEDDING_LOCAL=ollama` starts a
+pinned Ollama with `bge-m3:567m` (multilingual, 1,024 dimensions), and
+`AI_EVAL_OUTBOUND_ALLOW_CIDRS`, read by the harness alone, lets the run's AI
+transport reach it on 127.0.0.1 while the install's `OUTBOUND_ALLOW_CIDRS`
+stays empty. The set gained six unanswerable questions
+per language that a general model could answer from its own knowledge
+(62 English and 58 Arabic items), and the judge now calls an answer grounded
+only when every claim is stated by the source it cites
+([evaluation](../guides/ai.md#evaluation)). **Still to do:** the live run
+itself and its report.
+
 ## Gaps carried from earlier milestones
 
 Closed, each with unit and integration tests and its guide updated (the last row after #147; the #174 and #179 rows are admin-only and have unit and component tests):

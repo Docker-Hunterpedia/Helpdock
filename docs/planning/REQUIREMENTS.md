@@ -19,6 +19,9 @@ Helpdock is built from day one around four ideas:
 ### Non-goals (v1)
 Blueprint-style visual process builder · community forums · phone/VoIP · billing or SaaS metering · SLA credits · Slack/Discord · customer login portal · backups tooling · one-click cloud deploy (Docker Compose only).
 
+### 1.x
+Helpdock 1.x is planned as Phase 5 of the [PRD](PRD.md#phase-5--1x) (M12 to M20, planned on 2026-10-20). Two v1 non-goals are now in scope: backup tooling (M15, `helpdock-ctl`) and a guided deploy (M15's verified installer, cloud-init recipe and Coolify template; Docker Compose stays the only supported runtime). The rest stay non-goals, joined by native iOS and Android **agent** apps (they need a push relay the project would host), a hosted Helpdock, and deploying on Vercel or Cloudflare. The scope statements below say where 1.x changes a v1 limit; the behavioural rules for each change land in DOMAIN-RULES with the milestone that builds it.
+
 ---
 
 ## 2. Personas & roles
@@ -163,7 +166,7 @@ All channels implement one `ChannelAdapter` interface (normalize inbound → mes
   - Voice: recorded via MediaRecorder (WebM/Opus, or MP4/AAC on Safari), normalized server-side to Opus; optional AI transcription shown to agents.
   - Images: converted to WebP, thumbnails generated, EXIF stripped.
   - Video: size-capped, stored as-is, poster frame generated.
-- Mobile: v1 = documented widget REST + WebSocket protocol (so native apps can integrate); React Native / Flutter SDKs v1.1.
+- Mobile: v1 = documented widget REST + WebSocket protocol (so native apps can integrate). 1.x plans a headless widget client and React Native and Flutter SDKs (PRD M20), and an installable admin with mobile agent layouts (PRD M17).
 
 ### 4.7 AI
 
@@ -186,7 +189,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 **Guardrails** (default on):
 - PII redaction before sending to LLM (emails, phones, card numbers, IBANs masked; reversible for agents).
 - Prompt-injection filter on crawled/imported content (strip instructions, mark suspicious chunks).
-- No tool/actions in v1 — the AI can only read knowledge and write text.
+- No tool/actions in v1 — the AI can only read knowledge and write text. This rule stands until PRD M13-01 replaces it (ADR 0032, proposed): in 1.x reads may run and changes are proposed and run only after a person approves them. M12 (the AI workspace: playground, saved tests, review queue, personas, guardrails, cost estimates, confidence-gated triage, a read-only staff assistant) stays inside the v1 rule.
 - Per-brand token budget (daily/monthly) with alerts and hard stop.
 - Every AI output is logged with model, prompt hash, sources, cost; visible on the ticket.
 - System prompt per brand (tone, language policy, forbidden topics) editable by Team Leader.
@@ -220,7 +223,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 - HMAC-SHA256 signature header, retries with backoff, delivery log, replay.
 
 ### 4.13 Internationalization
-- UI (admin, widget, help center, emails): **English + Arabic** in v1, full RTL, i18next JSON catalogs; adding a locale = adding a file (v1.1 adds more).
+- UI (admin, widget, help center, emails): **English + Arabic** in v1, full RTL, i18next JSON catalogs; adding a locale = adding a file. 1.x adds a locale registry, a contributor translation workflow and more locales, customer-facing surfaces first (PRD M17).
 - Content: articles, canned responses, auto-responders have per-locale versions.
 - Date/number formatting per locale; Arabic search config in Postgres.
 
@@ -229,7 +232,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 ## 5. Non-functional requirements
 
 ### 5.1 Security (non-negotiable)
-- Passwords: argon2id. Sessions: short-lived JWT (jose) + rotating refresh token in httpOnly/SameSite cookie, refresh state in Redis (revocable). TOTP 2FA (otplib) for all staff, enforceable per install. OAuth: Google, GitHub. Magic link. SSO for staff over SAML 2.0 and OpenID Connect with just-in-time provisioning and group-to-role sync, enforceable per install with break-glass admins (M11).
+- Passwords: argon2id. Sessions: short-lived JWT (jose) + rotating refresh token in httpOnly/SameSite cookie, refresh state in Redis (revocable). TOTP 2FA (otplib) for all staff, enforceable per install. OAuth: Google, GitHub. Magic link. 1.x plans passkeys (WebAuthn) for staff, OAuth identities bound by provider subject, Microsoft sign-in and a built-in proof-of-work CAPTCHA (PRD M18). SSO for staff over SAML 2.0 and OpenID Connect with just-in-time provisioning and group-to-role sync, enforceable per install with break-glass admins (M11).
 - **Postgres Row-Level Security** on every tenant table, set per request (`SET LOCAL app.brand_ids`). No query runs outside a tenant context except admin/system paths.
 - Secrets (SMTP, bot tokens, LLM keys, OAuth tokens) encrypted at rest with AES-256-GCM under a master key from `.env`; never returned to the UI after save.
 - Widget: allowed-origin check, signed visitor identity (optional), per-visitor and per-IP rate limits, CAPTCHA option, no inline scripts, strict CSP on the served bundle.
@@ -257,32 +260,42 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 
 ### 5.5 Data lifecycle and operations
 - Per-brand retention for tickets, spam, AI logs, search log, audit log and visitor sessions; brand deletion with a 30-day grace; contact anonymisation. DOMAIN-RULES §11.
-- Documented backup, restore, upgrade and master-key rotation procedures with a rehearsed restore drill before 1.0 (no backup tooling shipped in v1). DOMAIN-RULES §10.
+- Documented backup, restore, upgrade and master-key rotation procedures with a rehearsed restore drill before 1.0 (no backup tooling shipped in v1; 1.x plans `helpdock-ctl` for backup, restore, verify, upgrade and key rotation, PRD M15). DOMAIN-RULES §10.
 
 ### 5.6 Deployment
 - **Docker Compose only** in v1: `api`, `worker`, `postgres:17` (+pgvector), `redis:7`, `caddy`, `minio` (dev) / external S3 (prod), optional `clamav`, optional `ffmpeg` sidecar (bundled in image).
 - Single image for api/worker (`APP_ROLE=api|worker`).
 - First-run wizard: admin account, first brand, SMTP test, LLM provider.
 - Migrations run automatically on `api` start (lock-protected).
+- 1.x keeps Docker Compose as the only supported runtime and plans a verified one-command installer, an external-proxy override, a bundled object-storage profile for production, opt-in automatic patch updates and a sample brand (PRD M15).
 
 ---
 
 ## 6. Add-on features (v1.1+ backlog)
 
+**Planned for 1.x** (PRD Phase 5, 2026-10-20):
+
+- AI actions via MCP tools (order lookup, refunds) with approval flow: PRD M13
+- Importers beyond M11's connectors (Help Scout, Intercom, Gorgias, Zammad, Front), undo of an import, and importing macros, automations and SLA policies as disabled drafts: PRD M16
+- Backup/restore tooling, and Coolify and cloud-init deploy paths: PRD M15
+- More UI locales: PRD M17
+- React Native + Flutter widget SDKs: PRD M20
+
+**Backlog** (not scheduled):
+
 - Slack, Discord, Viber, LINE
 - Meta channels beyond M10: OAuth connect flows and Embedded Signup, Instagram through Facebook Login, Business Suite echo import, webhook backfill, auto-reply and surveys on these channels
 - Customer portal (magic-link login, ticket history, restricted KB)
 - Custom roles / permission sets; SCIM provisioning and single logout (SAML/OIDC SSO moved into 1.0 as M11)
-- React Native + Flutter widget SDKs
-- More UI locales; per-department language routing
-- AI actions via MCP tools (order lookup, refunds) with approval flow
-- Importers beyond M11's connectors, and importing macros, automations and SLA policies (Zendesk, Freshdesk and Zoho Desk connectors and a CSV mapper moved into 1.0 as M11)
+- Per-department language routing
+- Importers for further tools beyond PRD M16
 - Scheduled reports, custom dashboards
 - Article versioning + review workflow
 - Knowledge: Confluence, GitHub docs, generic MCP servers
-- Backup/restore tooling
-- Cloudflare / Vercel / Railway / Coolify deploy paths
+- Kubernetes / Helm
 - Community forums, Blueprint-style process designer
+
+**Dropped:** Cloudflare, Vercel and Railway deploy paths (Helpdock needs long-running workers, Socket.IO rooms and on-demand TLS; PRD §5 has the reasons).
 
 ---
 

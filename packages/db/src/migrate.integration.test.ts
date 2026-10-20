@@ -73,6 +73,8 @@ const MIGRATION_TAGS = [
   '0052_meta_deliveries_platform_ids',
   '0053_sso',
   '0054_imports',
+  '0055_contact_ticket_count_skips_deleted',
+  '0056_oauth_identities',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

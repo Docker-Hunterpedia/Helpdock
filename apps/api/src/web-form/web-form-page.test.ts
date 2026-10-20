@@ -33,6 +33,7 @@ const form = (overrides: Partial<LoadedForm> = {}): LoadedForm => ({
   departmentId: null,
   policy: contentPolicySchema.parse({}),
   keys: null,
+  captchaHostnames: [],
   ...overrides,
 });
 

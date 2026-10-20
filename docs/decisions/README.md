@@ -35,6 +35,38 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0025](0025-meta-channels-through-one-graph-adapter.md) | Meta channels through one Graph adapter: one module, Instagram Login, one webhook per install, the reply window enforced at compose time and at send time | accepted |
 | [0026](0026-staff-sso-over-saml-and-oidc.md) | Staff single sign-on over SAML 2.0 and OpenID Connect, with JIT provisioning and group-to-role sync | accepted |
 | [0027](0027-imports-through-one-normalised-record-engine.md) | Imports through one engine of normalised records, written without side effects | proposed |
+| [0028](0028-ai-workspace-runs-the-production-path-dry.md) | The AI workspace runs the production path dry | proposed |
+| [0029](0029-staff-assistant-reads-through-validated-read-plans.md) | The staff assistant panel reads through validated read plans, not tool calls | proposed |
+| [0030](0030-ai-decisions-in-automation-are-confidence-gated.md) | AI decisions in automation are confidence-gated and one-directional | proposed |
+| [0031](0031-personas-change-the-voice-never-the-rules.md) | Personas change the voice, never the rules; avatars are public uploads | proposed |
+| [0032](0032-ai-tools-reads-run-changes-wait-for-a-person.md) | The assistant may use tools: reads run, changes wait for a person | accepted |
+| [0033](0033-helpdock-as-an-mcp-server-with-oauth-2-1.md) | Helpdock is an MCP server with a hand-wired OAuth 2.1 authorization server | accepted |
+| [0034](0034-one-mcp-client-over-safefetch.md) | One MCP client for integrations and agent tools, over safeFetch | proposed |
+| [0035](0035-snooze-as-a-system-status.md) | Snooze as a system status with a wake timer | proposed |
+| [0036](0036-bulk-changes-previewed-all-or-nothing-with-undo.md) | Bulk changes as previewed, all-or-nothing operations with a short undo | proposed |
+| [0037](0037-paced-notification-email-and-digests.md) | Paced notification email and digests | proposed |
+| [0038](0038-keyboard-registry-and-command-palette.md) | One keyboard registry, physical keys, and a command palette without a new dependency | proposed |
+| [0039](0039-signed-release-bundle-and-installer.md) | A signed release bundle, verified by the installer | proposed |
+| [0040](0040-automatic-updates-opt-in-and-delayed.md) | Automatic updates are opt-in, patch-only and delayed | accepted |
+| [0041](0041-helpdock-ctl-in-posix-sh.md) | helpdock-ctl is host-side POSIX sh | proposed |
+| [0042](0042-update-checks-send-nothing-about-the-install.md) | Update checks against GitHub send nothing about the install | proposed |
+| [0043](0043-sample-brand-through-the-import-engine.md) | Sample data through the import engine, in a flagged sample brand | proposed |
+| [0044](0044-supported-deploy-targets.md) | Supported deploy targets: Compose through the installer, Coolify and cloud-init | proposed |
+| [0045](0045-import-provenance-ledger-and-undo.md) | Import provenance ledger and undo (amends 0027) | proposed |
+| [0046](0046-imported-configuration-as-disabled-drafts.md) | Imported macros, SLA policies and automations as disabled drafts | proposed |
+| [0047](0047-locale-registry-and-lazy-widget-locales.md) | A locale registry, UI and content locales, and lazy widget locale chunks | proposed |
+| [0048](0048-translations-through-hosted-weblate.md) | Translations through Hosted Weblate | accepted |
+| [0049](0049-installable-admin-before-native-agent-apps.md) | An installable admin (PWA) before native agent apps, and no push relay | proposed |
+| [0050](0050-passkeys-for-staff-over-webauthn.md) | Passkeys for staff over WebAuthn | proposed |
+| [0051](0051-oauth-identities-bound-by-subject.md) | OAuth sign-in identities bound by subject, and Microsoft as a third provider | accepted |
+| [0052](0052-built-in-proof-of-work-captcha.md) | A built-in proof-of-work CAPTCHA provider (amends 0003) | accepted |
+| [0053](0053-break-glass-with-a-passkey.md) | Break-glass may use a passkey (amends 0026) | accepted |
+| [0054](0054-several-widgets-per-brand.md) | Several widgets per brand, with an optional widget id in the protocol | accepted |
+| [0055](0055-custom-html-email-layout.md) | A custom HTML email layout behind the existing sanitiser | accepted |
+| [0056](0056-public-npm-packages-for-client-sdks.md) | Public npm packages for the widget client and the React Native SDK | accepted |
+| [0057](0057-desktop-shell-on-electron.md) | The desktop shell on Electron | proposed |
+
+ADRs 0028 to 0057 were written on 2026-10-20 with the plans of [PRD Phase 5](../planning/PRD.md#phase-5--1x), one milestone after another (M12: 0028–0031, M13: 0032–0034, M14: 0035–0038, M15: 0039–0044, M16: 0045–0046, M17: 0047–0049, M18: 0050–0053, M19: 0054–0055, M20: 0056–0057). Each stays proposed until its milestone builds it, except 0032, 0033, 0040, 0048, 0052, 0053, 0054, 0055 and 0056, which the owner accepted on 2026-10-20 ([decisions](../planning/decisions-1-x.md)). 0051 was accepted and its OAuth binding built ahead of M18, as a 1.0.1 security fix; Microsoft remains M18 work. 0045, 0052 and 0053 amend accepted or earlier records (0027, 0003, 0026) without editing them.
 
 ## Template
 

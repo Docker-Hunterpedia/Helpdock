@@ -91,6 +91,7 @@ describe('@helpdock/db', () => {
       'mailboxes.ts',
       'meta.ts',
       'notifications.ts',
+      'oauth-identities.ts',
       'outbox.ts',
       'reports.ts',
       'retention-settings.ts',

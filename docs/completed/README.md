@@ -20,6 +20,7 @@ describes what was actually built, including what was left out and why.
 | [asvs-l2.md](asvs-l2.md) | 2026-10-05 | **M9-02 OWASP ASVS 4.0.3 Level 2 walk-through** — every Level 2 requirement with its status and evidence, and the gaps to close before 1.0. Walk again as M6, M7 and M8 land. |
 | [accessibility-audit.md](accessibility-audit.md) | 2026-10-09 | **M9-04 accessibility audit** — axe on every widget state and help center page type in both languages and both schemes, keyboard-only passes, zoom and reflow at 200 % and 400 %, forced colours, screen-reader markup and mixed-direction text as Playwright specs, the findings and their fixes, and the screen-reader pass that still needs a person. |
 | [internal-security-review.md](internal-security-review.md) | 2026-10-09 | **M9-01 internal pre-pentest review** — a read-only review of the widget and API surface: six findings (two Medium, four Low), five fixed in code, and the open items carried to 1.0. Not the external pentest, which is still to be commissioned. |
+| [ux-review-1-0.md](ux-review-1-0.md) | 2026-10-20 | **UX and UI review of 1.0.0** — the admin app, widget and help center in both languages: 28 findings with their evidence and severity, the strengths to keep, and where each finding is dealt with: group A in the 1.0.1 patch, group B in M14, group C in M19, one in M12. |
 
 When a milestone or feature is verified and merged, move its document here from
 `in-development/`, set `Status: shipped`, add a `Shipped:` date, and edit the

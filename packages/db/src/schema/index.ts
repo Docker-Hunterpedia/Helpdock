@@ -30,6 +30,7 @@ export * from './knowledge.js';
 export * from './mailboxes.js';
 export * from './meta.js';
 export * from './notifications.js';
+export * from './oauth-identities.js';
 export * from './outbox.js';
 export * from './reports.js';
 export * from './retention-settings.js';

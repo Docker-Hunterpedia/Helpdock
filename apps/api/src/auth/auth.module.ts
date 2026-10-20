@@ -14,6 +14,7 @@ import { OutboxAuthMail } from './auth-email.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
 import { OauthService } from './oauth/oauth.service.js';
+import { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
 import { PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
 import { sessionLifetime } from './session/lifetime.js';
@@ -118,6 +119,7 @@ export const createAuthRuntime = ({
     exchanges: new ExchangeStore(redis),
     limiter: new RateLimiter(redis),
     oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
+    oauthIdentities: new OauthIdentityRepository({ db }),
     settings,
     keyring,
     mail: new OutboxAuthMail({ db, keyring, staff }),

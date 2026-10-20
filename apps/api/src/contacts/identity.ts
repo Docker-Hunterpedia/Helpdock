@@ -472,7 +472,12 @@ class HolderMovedError extends Error {
   }
 }
 
-/** The identifier changed hands on every attempt; the caller's transaction is not usable to retry in. */
+/**
+ * The identifier changed hands on every attempt. Nothing was written by the
+ * failed attempts, but the caller's transaction has taken locks it cannot
+ * release: retry the whole transaction, never just this call. The HTTP filter
+ * answers 503 with `Retry-After`; channel jobs redeliver.
+ */
 export class IdentityContentionError extends Error {
   constructor() {
     super('The identifier kept changing hands while it was being moved');

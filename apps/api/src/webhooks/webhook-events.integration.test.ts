@@ -616,8 +616,10 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     const moverLocked = Promise.withResolvers<void>();
     const moverMayCommit = Promise.withResolvers<void>();
     const mover = withSystem(db(), seeded.brandId, async (tx) => {
-      // NO KEY UPDATE, so the claim's duplicate suggestion (a foreign key on
-      // this contact) is not held up and the claim reaches its own lock.
+      // NO KEY UPDATE opens the window artificially: the claim's duplicate
+      // suggestion (a foreign key on this contact) is not held up, so the claim
+      // reaches its own lock after reading the holder. In production the window
+      // is a second move, from the holder it read to a third contact.
       await tx
         .select({ id: contacts.id })
         .from(contacts)

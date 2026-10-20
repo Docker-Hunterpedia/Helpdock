@@ -1,6 +1,15 @@
 import type { DbTransaction } from '@helpdock/db';
 import { describe, expect, it, vi } from 'vitest';
-import { attachVerifiedIdentity, IdentityContentionError } from './identity.js';
+import {
+  attachVerifiedIdentity,
+  findOrCreateContactByIdentity,
+  IdentityContentionError,
+} from './identity.js';
+
+vi.mock('./contact-events.js', () => ({
+  enqueueContactCreated: async () => 'outbox',
+  shareCreatedContacts: () => undefined,
+}));
 
 // The lock itself is the integration test's business; here the change callback
 // simply runs, so the holder re-read under the "lock" is what the fake returns.
@@ -33,6 +42,44 @@ describe('attachVerifiedIdentity when the identifier keeps changing hands', () =
 
     await expect(
       attachVerifiedIdentity(tx, 'brand', 'contact', {
+        kind: 'email',
+        value: 'mona@example.com',
+        source: 'email.inbound',
+      }),
+    ).rejects.toBeInstanceOf(IdentityContentionError);
+    expect(savepoints).toBe(5);
+  });
+
+  it('gives up the same way when a new contact takes a value from a holder that keeps changing', async () => {
+    let reads = 0;
+    let savepoints = 0;
+    // Awaitable for the plain `where`, and with `limit` for the lookups.
+    const rows = () => {
+      reads += 1;
+      return [{ id: 'identity', contactId: `holder-${reads}`, verified: false }];
+    };
+    const select = () => ({
+      from: () => ({
+        where: () => ({
+          limit: async () => rows(),
+          // biome-ignore lint/suspicious/noThenProperty: stands in for an awaited drizzle query
+          then: (resolve: (value: unknown) => unknown) => resolve(rows()),
+        }),
+      }),
+    });
+    const tx = {
+      select,
+      insert: () => ({
+        values: () => ({ returning: async () => [{ id: 'new-contact', brandId: 'brand' }] }),
+      }),
+      transaction: async (fn: (savepoint: unknown) => unknown) => {
+        savepoints += 1;
+        return fn({ select });
+      },
+    } as unknown as DbTransaction;
+
+    await expect(
+      findOrCreateContactByIdentity(tx, 'brand', {
         kind: 'email',
         value: 'mona@example.com',
         source: 'email.inbound',

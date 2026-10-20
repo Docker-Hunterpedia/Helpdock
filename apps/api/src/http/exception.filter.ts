@@ -37,6 +37,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (error instanceof AuthFailure && error.retryAfter !== undefined) {
       reply.header('Retry-After', String(error.retryAfter));
     }
+    if (mapped.retryAfter !== undefined) {
+      reply.header('Retry-After', String(mapped.retryAfter));
+    }
     void reply.status(mapped.status).send(errorBody(mapped, requestId));
   }
 }

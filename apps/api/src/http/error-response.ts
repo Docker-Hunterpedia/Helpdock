@@ -32,6 +32,7 @@ import { AuthFailure } from '../auth/auth-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
+import { IdentityContentionError } from '../contacts/identity.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
@@ -57,6 +58,8 @@ import { WidgetFailure } from '../widget/widget-failure.js';
 
 export interface MappedError {
   readonly status: number;
+  /** Seconds for the `Retry-After` header, when the refusal is worth retrying. */
+  readonly retryAfter?: number;
   readonly code: ErrorCode;
   readonly message: string;
   readonly fields?: readonly FieldError[];
@@ -362,8 +365,21 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  // The write lost a race on its rows repeatedly; nothing was saved and a retry will do.
+  if (error instanceof IdentityContentionError) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: 'unavailable',
+      message: 'The record is being changed elsewhere. Try again in a moment.',
+      retryAfter: IDENTITY_CONTENTION_RETRY_AFTER_SECONDS,
+      unexpected: false,
+    };
+  }
+
   return internalError();
 };
+
+const IDENTITY_CONTENTION_RETRY_AFTER_SECONDS = 1;
 
 const internalError = (): MappedError => ({
   status: HttpStatus.INTERNAL_SERVER_ERROR,

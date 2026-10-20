@@ -132,23 +132,33 @@ export function PriorityBadge({ priority }: { readonly priority: TicketPriority 
   );
 }
 
-/** The 8 px dot at the start of a `TicketRow`. Decorative: the row names it. */
+/**
+ * The 8 px dot at the start of a `TicketRow`. The dot is colour alone, so the
+ * priority is also there in words for a screen reader, and so in the row
+ * link's accessible name (DESIGN §10).
+ */
 export function PriorityDot({ priority }: { readonly priority: TicketPriority }): ReactNode {
+  const t = useT();
   const tokens = useSemanticTokens();
   const tone = PRIORITY_TONE[priority];
 
   return (
-    <Box
-      component="span"
-      aria-hidden="true"
-      sx={{
-        width: 8,
-        height: 8,
-        flexShrink: 0,
-        borderRadius: '50%',
-        backgroundColor: tone === 'neutral' ? tokens['border.strong'] : tokens[`status.${tone}`],
-      }}
-    />
+    <>
+      <Box
+        component="span"
+        aria-hidden="true"
+        sx={{
+          width: 8,
+          height: 8,
+          flexShrink: 0,
+          borderRadius: '50%',
+          backgroundColor: tone === 'neutral' ? tokens['border.strong'] : tokens[`status.${tone}`],
+        }}
+      />
+      <Box component="span" sx={visuallyHidden}>
+        {t('tickets:list.priority', { priority: t(`tickets:priority.${priority}`) })}
+      </Box>
+    </>
   );
 }
 
@@ -207,11 +217,19 @@ export function SlaTimer({
       tone={state.kind === 'atRisk' ? 'warning' : 'success'}
       icon={<Clock size={12} aria-hidden="true" />}
     >
-      {state.reopened
-        ? t('tickets:sla.next', { remaining: state.remaining })
-        : compact
-          ? state.remaining
-          : t('tickets:sla.running', { remaining: state.remaining })}
+      {state.reopened ? (
+        t('tickets:sla.next', { remaining: state.remaining })
+      ) : compact ? (
+        // The list prints `4h` alone; a screen reader hears what it is.
+        <>
+          <span aria-hidden="true">{state.remaining}</span>
+          <Box component="span" sx={visuallyHidden}>
+            {t('tickets:sla.running', { remaining: state.remaining })}
+          </Box>
+        </>
+      ) : (
+        t('tickets:sla.running', { remaining: state.remaining })
+      )}
     </Pill>
   );
 }

@@ -45,7 +45,7 @@
     "loadMore": "عرض المزيد",
     "loading": "يجري تحميل التذاكر…",
     "unassigned": "غير مسندة",
-    "rowLabel": "{{reference}}: {{subject}}",
+    "priority": "أولوية {{priority}}",
     "aiPaused": "المساعد متوقف",
     "aiAnswered": "أجاب المساعد",
     "open": "إظهار قائمة التذاكر"

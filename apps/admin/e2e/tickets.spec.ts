@@ -50,6 +50,25 @@ test.describe('the ticket list', () => {
     await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(9);
   });
 
+  test('names a row by its priority, status, SLA and contact, not its subject alone', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+
+    const row = page.getByRole('link', { name: /HD-1042/ });
+    await expect(row).not.toHaveAttribute('aria-label');
+    // DESIGN §10: the priority dot is colour, so the priority is said in words too.
+    await expect(row).toHaveAccessibleName(
+      new RegExp(t('tickets:list.priority', { priority: t('tickets:priority.urgent') })),
+    );
+    await expect(row).toHaveAccessibleName(new RegExp(locale === 'ar' ? 'مفتوحة' : 'Open'));
+    await expect(row).toHaveAccessibleName(/Mona Khalil/);
+    await expect(row).toHaveAccessibleName(new RegExp(t('tickets:sla.breached', { over: '2h' })));
+  });
+
   test('names each row’s contact from the ticket itself (M1-15)', async ({
     page,
     appLocale: locale,

@@ -299,7 +299,9 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
       const sent = await email.all();
       expect(sent).toHaveLength(1);
       expect(sent[0]?.subject).toBe('A passkey was added to your account');
-      expect(sent[0]?.text).toContain('“MacBook Air · Touch ID” can now sign you in to Helpdock.');
+      expect(sent[0]?.text).toContain(
+        '“MacBook Air · Touch ID” was saved to your Helpdock account.',
+      );
       expect(sent[0]?.text).toContain('From: Chrome on macOS');
     });
 

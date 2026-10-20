@@ -71,8 +71,9 @@ export function classifyChanges(
         affected.add(checkedBy);
         continue;
       }
-      // Documentation does not alter runtime contracts; unknown paths fail closed.
-      if (path.startsWith('docs/') || path.endsWith('.md')) continue;
+      // Documentation and the static website (`site/`, deployed by pages.yml) do
+      // not alter runtime contracts; unknown paths fail closed.
+      if (path.startsWith('docs/') || path.startsWith('site/') || path.endsWith('.md')) continue;
       if (IMPORT_PATHS.some((pattern) => pattern.test(path))) imports = true;
       const workspace = workspaces.find((item) => path.startsWith(`${item.path}/`));
       if (workspace && !path.endsWith('/package.json')) affected.add(workspace.name);

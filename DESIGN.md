@@ -406,6 +406,7 @@ Every PR that touches UI ticks these in the description:
 | `packages/ui/src/brand.ts` | `resolveBrandTheme(brandTokens)`: derives hover/active/tint/text-on-accent, validates contrast, returns the final token set for a brand. Unit-tested against §8. |
 | `packages/ui/fonts/` | Subset woff2 files for the three families; served by the api with long cache headers. |
 | `packages/ui/src/__tests__/contrast.test.ts` | Asserts every pair in §2.2 and every status tint/text pair meets AA. |
+| `site/assets/site.css` | The product website ([website guide](docs/guides/website.md)). The §2 colours, §3 families, §4 spacing, radius, elevation and motion, and §5 icons, copied as CSS custom properties. It adds three display sizes, for the hero heading, section headings and figures, that only the website uses; product screens keep §3.1. |
 
 ## 12. Change log
 
@@ -439,3 +440,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-10-12 | 1.24. M10 Meta channels, review of the screens against §3 and §4: Channels › Meta draws every sentence at one of the scale's styles (body 14/20, caption 12/16, mono 13/20, h3 16/24) where the first build had 13 px text on an 18 px line, 12 px mono and 13/500 links, and every gap at a step of §4 (6 and 10 px become 8 and 12, the 14 px paddings 12, the 36 px tile 40). The note boxes of the Connect dialog, the Number section and the Connection section's Test result became one MetaNote, a Banner variant (§6.4). Inline code takes the size of the words around it. Nothing is added to the tokens. |
 | 2026-10-19 | 1.25. M1-04 follow-up (#237), `Admin/Ticket-ContactHistory`: §6.3 adds PreviousTickets to the DetailsPanel's contact card, and the hidden-ticket count moves from under the contact's address into it. Built from the caption, mono, StatusBadge, Skeleton and the TicketRow's hover, so no token, size or radius is added. |
 | 2026-10-20 | 1.26. 1.0.1 UX fixes (UX-06, UX-12): §6.3 TicketRow says how the row is named for a screen reader — by its content, with the priority dot's priority and a bare SLA time in visually hidden words — and that the list loads behind skeleton rows of the same anatomy. No token, size or radius is added. |
+| 2026-10-20 | 1.27. The product website in `site/` is built from these tokens; §11 records the three marketing display sizes it adds outside §3.1, for the website only. No product token, size or radius changes. |

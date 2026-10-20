@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/Docker-Hunterpedia/Helpdock/ci.yml?branch=main&label=CI)](https://github.com/Docker-Hunterpedia/Helpdock/actions/workflows/ci.yml)
 [![Container image](https://img.shields.io/badge/ghcr.io-docker--hunterpedia%2Fhelpdock-blue?logo=docker&logoColor=white)](https://github.com/Docker-Hunterpedia/Helpdock/pkgs/container/helpdock)
 
-[Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
+[Website](https://helpdock.oday-bakkour.com) · [Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
 
 <p align="center">
   <img src="apps/admin/e2e/__screenshots__/en/ticket-view.png" alt="The Helpdock ticket workspace: the ticket list, an email ticket with its SLA badge and reply composer, and the contact card with the contact's previous tickets" width="900">
@@ -160,7 +160,7 @@ Next steps: the [install guide](docs/guides/install.md) explains every step, cus
 | Integrate | [API](docs/guides/api.md), [webhooks](docs/guides/webhooks.md), [reports](docs/guides/reports.md) |
 | Move from another help desk | [Importing](docs/guides/importing.md) |
 | Review security | [Security](docs/guides/security.md), [security scanning](docs/guides/security-scanning.md), [ASVS L2 walk-through](docs/completed/asvs-l2.md) |
-| Work on the code | [Development](docs/guides/development.md), [realtime](docs/guides/realtime.md), [release](docs/guides/release.md), [DESIGN.md](DESIGN.md), [docs/design/](docs/design/README.md) |
+| Work on the code | [Development](docs/guides/development.md), [realtime](docs/guides/realtime.md), [release](docs/guides/release.md), [website](docs/guides/website.md), [DESIGN.md](DESIGN.md), [docs/design/](docs/design/README.md) |
 | Understand the plan | [PRD](docs/planning/PRD.md), [requirements](docs/planning/REQUIREMENTS.md), [architecture](docs/planning/ARCHITECTURE.md), [domain rules](docs/planning/DOMAIN-RULES.md), [decisions](docs/decisions/README.md) |
 
 How the documents are organised is in [docs/README.md](docs/README.md).

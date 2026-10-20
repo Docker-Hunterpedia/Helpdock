@@ -119,3 +119,15 @@ describe('the selects', () => {
     expect(sortChoice(oldest)).toBe('createdAt:asc');
   });
 });
+
+describe('SLA due view drafts', () => {
+  it('saves the SLA order and recognises views using the API direction default', () => {
+    const filters = withSortChoice(EMPTY_FILTERS, 'slaDue:asc');
+    expect(sortChoice(filters)).toBe('slaDue:asc');
+    expect(sortChoice({ ...filters, direction: 'desc' })).toBe('slaDue:asc');
+    expect(createRequestOf({ ...draftOf(null), name: 'Urgency', filters }).filters).toMatchObject({
+      sort: 'slaDue',
+      direction: 'asc',
+    });
+  });
+});

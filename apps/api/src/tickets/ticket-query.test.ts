@@ -383,6 +383,7 @@ describe('the next cursor', () => {
     createdAt: new Date('2026-09-18T09:00:00.000Z'),
     number: 1042,
     priority: 'high',
+    slaNextDueAt: null,
   };
 
   it.each([
@@ -390,6 +391,7 @@ describe('the next cursor', () => {
     ['createdAt', '2026-09-18T09:00:00.000Z'],
     ['number', 1042],
     ['priority', 'high'],
+    ['slaDue', null],
   ] as const)('carries the %s of the last row', (sort, expected) => {
     const cursor = cursorAfter({ id: row.id, sortValue: sortValueOf(row, sort) }, sort, 'desc');
 
@@ -486,5 +488,34 @@ describe('fallsBackToFuzzy', () => {
 
   it('has nothing to fall back from without a search', () => {
     expect(fallsBackToFuzzy({ ...firstPage, q: undefined })).toBe(false);
+  });
+});
+
+describe('SLA urgency ordering', () => {
+  it.each(['asc', 'desc'] as const)(
+    'keeps oldest due first and nulls last for direction %s',
+    (direction) => {
+      expect(ticketOrder('slaDue', direction).map((part) => render(part)?.sql)).toEqual([
+        '"tickets"."sla_next_due_at" asc nulls last',
+        '"tickets"."id" asc',
+      ]);
+    },
+  );
+  it('continues from a due time into the no-clock tail', () => {
+    const cursor = encodeTicketCursor({
+      sort: 'slaDue',
+      direction: 'asc',
+      value: '2026-10-20T12:00:00.000Z',
+      id: TICKET,
+    });
+    const statement = render(ticketFilters(query({ sort: 'slaDue', direction: 'asc', cursor })));
+    expect(statement?.sql).toContain('"sla_next_due_at" is null');
+    expect(statement?.params).toEqual([BRAND, '2026-10-20T12:00:00.000Z', TICKET]);
+  });
+  it('continues within tied nulls by id alone', () => {
+    const cursor = cursorAfter({ id: TICKET, sortValue: null }, 'slaDue', 'asc');
+    const statement = render(ticketFilters(query({ sort: 'slaDue', direction: 'asc', cursor })));
+    expect(statement?.sql).toContain('("tickets"."sla_next_due_at" is null and "tickets"."id" >');
+    expect(statement?.params).toEqual([BRAND, TICKET]);
   });
 });

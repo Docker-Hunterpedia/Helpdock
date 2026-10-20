@@ -80,6 +80,7 @@ const row = (contactId: string | null): TicketRow => ({
   slaPolicyId: null,
   slaCycle: 0,
   splitFromId: null,
+  slaNextDueAt: null,
   firstResponseDueAt: null,
   resolutionDueAt: null,
   slaBreached: false,

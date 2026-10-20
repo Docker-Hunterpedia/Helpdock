@@ -116,3 +116,14 @@ describe('the public API docs and the release (ASVS 14.3.3)', () => {
     expect(published).not.toContain('9.8.7');
   });
 });
+
+describe('M14-07 public sort contract', () => {
+  it('publishes slaDue and its fixed urgency direction', () => {
+    const operation = buildOpenApiDocument().paths['/api/v1/tickets']?.get as {
+      parameters: { name: string; schema: { enum?: string[]; description?: string } }[];
+    };
+    const sort = operation.parameters.find((parameter) => parameter.name === 'sort');
+    expect(sort?.schema.enum).toContain('slaDue');
+    expect(sort?.schema.description).toContain('direction does not reverse SLA urgency');
+  });
+});

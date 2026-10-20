@@ -139,7 +139,7 @@ const SEARCH = 'q';
 /** Present when the URL's filters replace the view's rather than being empty. */
 export const CUSTOM = 'custom';
 
-const SORTS: readonly TicketSort[] = ['updatedAt', 'createdAt', 'number', 'priority'];
+const SORTS: readonly TicketSort[] = ['updatedAt', 'createdAt', 'number', 'priority', 'slaDue'];
 
 /** The filters as the query string carries them. */
 export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => {

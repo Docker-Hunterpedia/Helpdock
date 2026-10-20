@@ -427,3 +427,24 @@ describe('MockTicketsApi, merge and split (M1-09)', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('SLA due ordering', () => {
+  it('orders oldest breaches, then upcoming clocks, then no-clock tickets with stable ties', async () => {
+    const api = new MockTicketsApi();
+    const { tickets } = await api.list(BRAND, { sort: 'slaDue', direction: 'asc' });
+    expect(tickets.slice(0, 4).map((ticket) => ticket.number)).toEqual([1028, 1042, 1035, 1041]);
+    const due = tickets.map((ticket) =>
+      ticket.status.pausesSla || ticket.status.systemState === 'closed'
+        ? null
+        : ([ticket.firstResponseDueAt, ticket.resolutionDueAt]
+            .filter((at): at is string => at !== null)
+            .sort()[0] ?? null),
+    );
+    expect(due.filter((at) => at !== null)).toEqual(due.filter((at) => at !== null).sort());
+    const tail = due.indexOf(null);
+    expect(tail).toBeGreaterThan(0);
+    expect(due.slice(tail).every((at) => at === null)).toBe(true);
+    expect(Date.parse(due[0] ?? '')).toBeLessThan(Date.now());
+    expect(due.some((at) => at !== null && Date.parse(at) > Date.now())).toBe(true);
+  });
+});

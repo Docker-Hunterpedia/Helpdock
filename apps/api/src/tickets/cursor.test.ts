@@ -172,3 +172,16 @@ describe('ticket cursors', () => {
     expect(error?.message).not.toContain('Hello-injected');
   });
 });
+
+describe('SLA due cursors', () => {
+  it.each([null, '2026-10-20T12:00:00.000Z'])('round-trips a nullable due time: %s', (value) => {
+    const cursor = { sort: 'slaDue', direction: 'asc', value, id: TICKET } as const;
+    expect(decodeTicketCursor(encodeTicketCursor(cursor), cursor)).toEqual(cursor);
+  });
+  it('refuses a non-date SLA value', () => {
+    const encoded = Buffer.from(
+      JSON.stringify({ s: 'slaDue', d: 'asc', v: 'soon', id: TICKET }),
+    ).toString('base64url');
+    expect(() => decodeTicketCursor(encoded, { sort: 'slaDue', direction: 'asc' })).toThrow();
+  });
+});

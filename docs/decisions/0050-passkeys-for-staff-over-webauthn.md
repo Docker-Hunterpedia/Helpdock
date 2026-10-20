@@ -33,9 +33,11 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    library.
 2. **RP ID per install, pinned.** The RP ID is the hostname of `APP_URL` and the
    one expected origin is `APP_URL`'s origin, never taken from `Host` or
-   `Origin` headers. It is stored in `auth.webauthn.rpId` at first use, by one
-   insert-unless-present statement, so replicas racing to pin agree on one
-   value; an `HD_AUTH_WEBAUTHN_RP_ID` pin is honoured and nothing is written.
+   `Origin` headers. It is stored in `auth.webauthn.rpId` by the first successful
+   registration, and by nothing else, so an install opened on a temporary
+   host before anyone registers is not pinned there. One
+   insert-unless-present statement writes it, so replicas racing to pin agree
+   on one value, and a registration that lost to another host is refused; an `HD_AUTH_WEBAUTHN_RP_ID` pin is honoured and nothing is written.
    If `APP_URL`'s host later differs, passkey ceremonies are refused with
    `passkeys-rp-changed`, a ceremony begun under the old pin cannot finish,
    a warning is shown, and the other methods keep working. Passkeys need a
@@ -43,7 +45,12 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    address; elsewhere `GET /api/auth/methods` reports `passkey: false` and a
    ceremony answers `passkeys-unavailable`.
 3. **Attestation `none`.** No AAGUID allow-list and no metadata service; the
-   AAGUID is stored for display only.
+   AAGUID is stored for display only. A statement other than `none` or a
+   `packed` self-attestation is refused before the library parses it, so no
+   certificate chain is walked and no revocation list fetched (the library
+   would fetch one with the global `fetch`, outside the SSRF-safe client).
+   Client data made inside a frame (`crossOrigin: true`) is refused too: the
+   admin is never framed.
 4. **User verification per purpose.** As a second factor, user presence is
    enough, so a key without a PIN works. As passwordless primary sign-in
    (discoverable credentials, conditional mediation), user verification is

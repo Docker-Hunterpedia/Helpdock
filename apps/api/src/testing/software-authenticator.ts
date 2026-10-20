@@ -46,6 +46,14 @@ export interface CeremonyOverrides {
   readonly type?: string;
   readonly userVerified?: boolean;
   readonly signCount?: number;
+  /** What the client data says about framing; a same-origin page by default. */
+  readonly crossOrigin?: boolean;
+  /**
+   * The attestation statement a registration carries: `none` by default; a
+   * `packed` self-attestation signed with the credential's key; or a `packed`
+   * statement naming a (dummy) certificate chain.
+   */
+  readonly attestation?: 'none' | 'packed-self' | 'packed-x5c';
 }
 
 const base64url = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
@@ -111,9 +119,14 @@ export class SoftwareAuthenticator {
       this.cosePublicKey,
     ]);
     const attestationObject = isoCBOR.encode(
-      new Map<string, string | Uint8Array | Map<string, string>>([
-        ['fmt', 'none'],
-        ['attStmt', new Map<string, string>()],
+      new Map<string, string | Uint8Array | Map<string, number | Uint8Array | Uint8Array[]>>([
+        [
+          'fmt',
+          overrides.attestation === undefined || overrides.attestation === 'none'
+            ? 'none'
+            : 'packed',
+        ],
+        ['attStmt', this.#attestationStatement(overrides.attestation, authData, clientDataJSON)],
         ['authData', authData],
       ]),
     );
@@ -157,13 +170,32 @@ export class SoftwareAuthenticator {
     };
   }
 
+  #attestationStatement(
+    kind: CeremonyOverrides['attestation'],
+    authData: Buffer,
+    clientDataJSON: Buffer,
+  ): Map<string, number | Uint8Array | Uint8Array[]> {
+    if (kind === undefined || kind === 'none') {
+      return new Map();
+    }
+    const sig = sign('sha256', Buffer.concat([authData, sha256(clientDataJSON)]), this.#privateKey);
+    const statement = new Map<string, number | Uint8Array | Uint8Array[]>([
+      ['alg', COSE_ALG_ES256],
+      ['sig', sig],
+    ]);
+    if (kind === 'packed-x5c') {
+      statement.set('x5c', [new Uint8Array(randomBytes(64))]);
+    }
+    return statement;
+  }
+
   #clientData(type: string, challenge: string, overrides: CeremonyOverrides): Buffer {
     return Buffer.from(
       JSON.stringify({
         type: overrides.type ?? type,
         challenge: overrides.challenge ?? challenge,
         origin: overrides.origin,
-        crossOrigin: false,
+        crossOrigin: overrides.crossOrigin ?? false,
       }),
     );
   }

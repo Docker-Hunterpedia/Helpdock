@@ -7,6 +7,8 @@ import { SoftwareAuthenticator } from '../../testing/software-authenticator.js';
 import { AuthFailure } from '../auth-failure.js';
 import { WebAuthnCeremonyStore } from './ceremony-store.js';
 import {
+  type AssertionPurpose,
+  attestationIsAccepted,
   counterRegressed,
   type StoredPasskey,
   truncateUtf8,
@@ -139,11 +141,27 @@ describe('truncateUtf8', () => {
 
 describe('authenticationOptions', () => {
   it('requires user verification for passwordless sign-in and break-glass', async () => {
-    for (const purpose of ['passwordless', 'break-glass'] as const) {
-      const { options } = await service.authenticationOptions({ purpose });
-      expect(options.userVerification, purpose).toBe('required');
-    }
+    const passwordless = await service.authenticationOptions({ purpose: 'passwordless' });
+    const breakGlass = await service.authenticationOptions({
+      purpose: 'break-glass',
+      binding: { userId },
+    });
+
+    expect(passwordless.options.userVerification).toBe('required');
+    expect(breakGlass.options.userVerification).toBe('required');
   });
+
+  it.each(['second-factor', 'step-up', 'break-glass'] as const)(
+    'refuses to begin a %s ceremony that names nobody',
+    async (purpose) => {
+      // The types forbid this; the runtime guard is for a caller that gets around them.
+      const unbound = { purpose, binding: undefined } as unknown as Parameters<
+        WebAuthnService['authenticationOptions']
+      >[0];
+
+      await expect(service.authenticationOptions(unbound)).rejects.toThrow(TypeError);
+    },
+  );
 
   it('accepts user presence alone after another factor', async () => {
     for (const purpose of ['second-factor', 'step-up'] as const) {
@@ -215,6 +233,44 @@ describe('a registration', () => {
     ).toBe('challenge-expired');
   });
 
+  it('accepts a packed self-attestation, checked against the credential key', async () => {
+    const { ceremonyId, options } = await service.registrationOptions({
+      user,
+      existing: [],
+      binding,
+    });
+    const response = new SoftwareAuthenticator().register(options, {
+      origin: ORIGIN,
+      attestation: 'packed-self',
+    });
+
+    await expect(
+      service.verifyRegistration({ ceremonyId, binding, response }),
+    ).resolves.toMatchObject({
+      algorithm: -7,
+    });
+  });
+
+  it.each([
+    ['an attestation that names a certificate chain', { attestation: 'packed-x5c' as const }],
+    ['an answer made inside a frame', { crossOrigin: true }],
+  ])('refuses %s before the library looks at it', async (_case, overrides) => {
+    const { ceremonyId, options } = await service.registrationOptions({
+      user,
+      existing: [],
+      binding,
+    });
+    const response = new SoftwareAuthenticator().register(options, {
+      origin: ORIGIN,
+      ...overrides,
+    });
+
+    expect(await authCode(service.verifyRegistration({ ceremonyId, binding, response }))).toBe(
+      'invalid-credentials',
+    );
+    expect(pin.pinned).toBeNull();
+  });
+
   it('refuses a malformed attestation without throwing anything else', async () => {
     const { ceremonyId, options } = await service.registrationOptions({
       user,
@@ -247,15 +303,12 @@ describe('an assertion', () => {
     purpose: 'passwordless' | 'second-factor',
     overrides: Parameters<SoftwareAuthenticator['assert']>[1] = { origin: ORIGIN },
   ) => {
-    const ceremonyBinding = purpose === 'passwordless' ? {} : { userId };
-    const { ceremonyId, options } = await service.authenticationOptions({
-      purpose,
-      binding: ceremonyBinding,
-    });
+    const asked: AssertionPurpose =
+      purpose === 'passwordless' ? { purpose } : { purpose, binding: { userId } };
+    const { ceremonyId, options } = await service.authenticationOptions(asked);
     return service.verifyAuthentication({
+      ...asked,
       ceremonyId,
-      purpose,
-      binding: ceremonyBinding,
       response: authenticator.assert(options, overrides),
       findCredential: finder(stored),
     });
@@ -285,6 +338,7 @@ describe('an assertion', () => {
   it.each([
     ['signed for a lookalike origin', { origin: 'https://desk-example.com' }],
     ['made for another RP ID', { origin: ORIGIN, rpId: 'example.com' }],
+    ['made inside a frame', { origin: ORIGIN, crossOrigin: true }],
   ])('refuses an assertion %s', async (_case, overrides) => {
     await expect(assertFor('passwordless', overrides)).resolves.toMatchObject({
       ok: false,
@@ -341,6 +395,29 @@ describe('an assertion', () => {
     await expect(
       assertFor('passwordless', { origin: ORIGIN, signCount: 8 }),
     ).resolves.toMatchObject({ ok: true, newSignCount: 8 });
+  });
+
+  it('refuses any passkey for a bound purpose whose ceremony names nobody', async () => {
+    // A ceremony that slipped past the begin guard: stored with no person.
+    const options = await service.authenticationOptions({ purpose: 'passwordless' });
+    const ceremonyId = await ceremonies.begin({
+      purpose: 'second-factor',
+      challenge: options.options.challenge,
+      rpId: RP_ID,
+    });
+    const unbound = {
+      purpose: 'second-factor',
+      binding: {},
+    } as unknown as AssertionPurpose;
+
+    await expect(
+      service.verifyAuthentication({
+        ...unbound,
+        ceremonyId,
+        response: authenticator.assert(options.options, { origin: ORIGIN }),
+        findCredential: finder(stored),
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'wrong-user', userId: null });
   });
 
   it('cannot be replayed: the ceremony is spent by the first answer', async () => {
@@ -418,6 +495,23 @@ describe('an assertion', () => {
   });
 });
 
+describe('attestationIsAccepted', () => {
+  it.each([
+    ['none', 'none', true],
+    ['a packed self-attestation', 'packed-self', true],
+    ['a packed statement with a certificate chain', 'packed-x5c', false],
+  ] as const)('%s: %s', async (_case, attestation, accepted) => {
+    const { options } = await service.registrationOptions({ user, existing: [], binding });
+    const response = new SoftwareAuthenticator().register(options, { origin: ORIGIN, attestation });
+
+    expect(attestationIsAccepted(response.response.attestationObject)).toBe(accepted);
+  });
+
+  it('refuses an attestation object that is not CBOR', () => {
+    expect(attestationIsAccepted('not-cbor')).toBe(false);
+  });
+});
+
 describe('counterRegressed', () => {
   it.each([
     [0, 0, false],
@@ -432,12 +526,36 @@ describe('counterRegressed', () => {
 });
 
 describe('the RP ID pin', () => {
-  it('pins the RP ID at the first ceremony', async () => {
-    expect(pin.pinned).toBeNull();
-
+  it('writes nothing for ceremonies that register no passkey', async () => {
     await service.authenticationOptions({ purpose: 'passwordless' });
+    await service.registrationOptions({ user, existing: [], binding });
+
+    expect(pin.pinned).toBeNull();
+    await expect(service.status()).resolves.toMatchObject({ state: 'available', pinned: null });
+  });
+
+  it('pins the RP ID at the first successful registration', async () => {
+    await register(new SoftwareAuthenticator());
 
     expect(pin.pinned?.rpId).toBe(RP_ID);
+  });
+
+  it('refuses a registration when another host was pinned while it ran', async () => {
+    const { ceremonyId, options } = await service.registrationOptions({
+      user,
+      existing: [],
+      binding,
+    });
+    const response = new SoftwareAuthenticator().register(options, { origin: ORIGIN });
+    // Another replica, with another APP_URL, registered first.
+    pin.pinIfUnset = (rpId) => {
+      pin.pinned = { rpId: 'admin.example.com', pinnedAt: new Date() };
+      return Promise.resolve(pin.pinned ?? { rpId, pinnedAt: null });
+    };
+
+    expect(await authCode(service.verifyRegistration({ ceremonyId, binding, response }))).toBe(
+      'passkeys-rp-changed',
+    );
   });
 
   it('reports passkeys as available on the pinned host', async () => {

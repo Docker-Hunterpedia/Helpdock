@@ -21,6 +21,8 @@ describe('relyingPartyFor', () => {
     ['an IPv4 address', 'https://192.0.2.10'],
     ['an IPv6 address', 'https://[2001:db8::1]'],
     ['plain http on a loopback address', 'http://127.0.0.1:3000'],
+    ['a host with an underscore, which the RP ID pin cannot hold', 'https://desk_1.example.com'],
+    ['a host with a trailing dot', 'https://desk.example.com.'],
   ])('has no relying party on %s', (_case, appUrl) => {
     expect(relyingPartyFor(appUrl)).toBeNull();
   });

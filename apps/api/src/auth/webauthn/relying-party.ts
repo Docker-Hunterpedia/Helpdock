@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { settingDefinitions } from '@helpdock/config';
 
 /** The relying party name an authenticator shows beside the account. */
 export const RELYING_PARTY_NAME = 'Helpdock';
@@ -19,6 +20,9 @@ export interface RelyingParty {
  * Null when browsers will not run WebAuthn there. They need a secure context,
  * which is https, or plain http on `localhost` while developing; and an RP ID
  * is a domain, so an install reached by IP address has no passkeys either.
+ * Nor does a host the `auth.webauthn.rpId` setting could not hold (an
+ * underscore, a trailing dot): the RP ID is pinned there, and a host that
+ * cannot be pinned cannot be compared with the pin.
  */
 export const relyingPartyFor = (appUrl: string): RelyingParty | null => {
   const url = new URL(appUrl);
@@ -28,8 +32,10 @@ export const relyingPartyFor = (appUrl: string): RelyingParty | null => {
   if (!secureContext) {
     return null;
   }
-  // `URL` keeps the brackets around an IPv6 literal.
-  if (isIP(host.replace(/^\[|\]$/g, '')) !== 0) {
+  const pinnable =
+    host !== '' && settingDefinitions['auth.webauthn.rpId'].schema.safeParse(host).success;
+  // An IPv6 literal already fails the pattern (brackets, colons); an IPv4 one does not.
+  if (!pinnable || isIP(host) !== 0) {
     return null;
   }
 

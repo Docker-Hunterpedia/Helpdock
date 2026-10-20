@@ -215,7 +215,7 @@ export const SETTING_DEFINITIONS = [
     secret: false,
     scope: 'install',
     description:
-      'Passkey relying party id: the host of APP_URL, written at the first passkey ceremony; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050).',
+      'Passkey relying party id: the host of APP_URL, written by the first successful passkey registration; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050).',
   }),
   defineSetting({
     key: 'roles.viewerEnabled',

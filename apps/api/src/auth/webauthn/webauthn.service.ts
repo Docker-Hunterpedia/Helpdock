@@ -11,7 +11,11 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
-import { cose, decodeCredentialPublicKey } from '@simplewebauthn/server/helpers';
+import {
+  cose,
+  decodeAttestationObject,
+  decodeCredentialPublicKey,
+} from '@simplewebauthn/server/helpers';
 import { AuthFailure } from '../auth-failure.js';
 import {
   WEBAUTHN_CEREMONY_TTL_SECONDS,
@@ -29,11 +33,14 @@ import type { PinnedRpId, RpIdPin } from './rp-id-pin.js';
  * (M18-02 to M18-05) cannot get one wrong:
  *
  * - the RP ID and the one expected origin come from `APP_URL`, and the RP ID
- *   is pinned at the first ceremony (`rp-id-pin.ts`);
+ *   is pinned by the first successful registration (`rp-id-pin.ts`);
  * - EdDSA, ES256 and RS256 only, which keeps the library's post-quantum path
  *   closed;
- * - attestation `none`: no attestation statement is asked for or parsed;
+ * - attestation `none`: a statement that names a certificate chain is refused
+ *   before the library sees it ({@link attestationIsAccepted});
+ * - no cross-origin answers: the admin is never framed;
  * - user verification by purpose ({@link USER_VERIFICATION});
+ * - a person bound to every ceremony except passwordless sign-in;
  * - one ceremony per challenge, spent before it is checked.
  *
  * It holds no credentials: callers look them up and store them, so the
@@ -89,7 +96,7 @@ const NO_AAGUID = '00000000-0000-0000-0000-000000000000';
  * - `available`: ceremonies run.
  * - `paused`: `APP_URL`'s host is no longer the pinned RP ID, so no passkey
  *   this install holds can sign; ceremonies answer `passkeys-rp-changed`.
- * - `unavailable`: `APP_URL` is not a secure context, or is an IP address.
+ * - `unavailable`: `APP_URL` is not a secure context, or not a domain.
  */
 export type PasskeyStatus =
   | { readonly state: 'available'; readonly rpId: string; readonly pinned: PinnedRpId | null }
@@ -122,6 +129,25 @@ export interface RegisteredPasskey {
   readonly backedUp: boolean;
   readonly userVerified: boolean;
 }
+
+/** The person (and, where there is one, the browser session) a ceremony belongs to. */
+export interface PersonBinding {
+  readonly userId: string;
+  readonly familyId?: string;
+}
+
+/**
+ * Which assertion is asked for, and for whom. Passwordless sign-in is the one
+ * purpose with nobody named yet; every other one follows a first factor or
+ * runs inside a session, so it names the person, and only that person's
+ * passkey can answer it. Without the binding, anyone's passkey would do.
+ */
+export type AssertionPurpose =
+  | { readonly purpose: 'passwordless'; readonly binding?: undefined }
+  | {
+      readonly purpose: Exclude<WebAuthnCeremonyPurpose, 'register' | 'passwordless'>;
+      readonly binding: PersonBinding;
+    };
 
 /**
  * Why an assertion was refused. Callers answer `invalid-credentials` for all
@@ -171,6 +197,45 @@ export const truncateUtf8 = (value: string, maxBytes: number): string => {
 export const counterRegressed = (stored: number, presented: number): boolean =>
   (stored > 0 || presented > 0) && presented <= stored;
 
+/**
+ * Whether an attestation statement is one this install takes: `none`, or a
+ * `packed` self-attestation, which some authenticators send whatever was
+ * asked for and which is checked against the credential's own key. Anything
+ * that names a certificate chain is refused here, before the library could
+ * follow the chain's revocation lists over the network.
+ */
+export const attestationIsAccepted = (attestationObject: string): boolean => {
+  try {
+    const decoded = decodeAttestationObject(Buffer.from(attestationObject, 'base64url'));
+    const format = decoded.get('fmt');
+    return (
+      format === 'none' || (format === 'packed' && decoded.get('attStmt').get('x5c') === undefined)
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * False for client data that says it came from inside a frame, or that cannot
+ * be read. The admin is never framed, and the library lets a cross-origin
+ * answer through when the browser omits `topOrigin`.
+ */
+export const clientDataIsSameOrigin = (clientDataJSON: string): boolean => {
+  try {
+    const clientData: unknown = JSON.parse(
+      Buffer.from(clientDataJSON, 'base64url').toString('utf8'),
+    );
+    return (
+      typeof clientData === 'object' &&
+      clientData !== null &&
+      (clientData as { crossOrigin?: unknown }).crossOrigin !== true
+    );
+  } catch {
+    return false;
+  }
+};
+
 const toBase64Url = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
 
 const descriptorsOf = (credentials: readonly PasskeyDescriptor[]) =>
@@ -190,6 +255,12 @@ const verifyAttestation = async (
   ceremony: WebAuthnCeremony,
   relyingParty: RelyingParty,
 ): Promise<RegistrationInfo | null> => {
+  if (
+    !attestationIsAccepted(response.response.attestationObject) ||
+    !clientDataIsSameOrigin(response.response.clientDataJSON)
+  ) {
+    return null;
+  }
   try {
     const verification = await verifyRegistrationResponse({
       response,
@@ -205,12 +276,7 @@ const verifyAttestation = async (
   }
 };
 
-/**
- * What is stored for a verified credential, or null for one this install
- * will not hold. There is no check on `fmt`: asking for `none` lets the
- * browser strip the statement, but some authenticators still send a `packed`
- * self-attestation, which the library verifies like any other.
- */
+/** What is stored for a verified credential, or null for one this install will not hold. */
 const toRegisteredPasskey = (
   info: RegistrationInfo,
   response: RegistrationResponseJSON,
@@ -267,6 +333,9 @@ const verifySignature = async (input: {
   readonly credential: StoredPasskey;
   readonly requireUserVerification: boolean;
 }): Promise<VerifiedAuthenticationResponse['authenticationInfo'] | null> => {
+  if (!clientDataIsSameOrigin(input.response.response.clientDataJSON)) {
+    return null;
+  }
   try {
     const verification = await verifyAuthenticationResponse({
       response: input.response,
@@ -286,6 +355,20 @@ const verifySignature = async (input: {
   } catch {
     return null;
   }
+};
+
+/**
+ * The types already demand a person for every purpose but passwordless; this
+ * holds the line for a caller that reaches the service around them.
+ */
+const requirePerson = <T extends PersonBinding>(
+  purpose: WebAuthnCeremonyPurpose,
+  binding: T | undefined,
+): T => {
+  if (binding?.userId === undefined || binding.userId === '') {
+    throw new TypeError(`A ${purpose} passkey ceremony must name the person it is for`);
+  }
+  return binding;
 };
 
 export class WebAuthnService {
@@ -322,9 +405,9 @@ export class WebAuthnService {
   async registrationOptions(input: {
     readonly user: { readonly handle: Uint8Array; readonly email: string; readonly name: string };
     readonly existing: readonly PasskeyDescriptor[];
-    readonly binding: Required<WebAuthnCeremonyBinding>;
+    readonly binding: Required<PersonBinding>;
   }): Promise<CeremonyOptions<PublicKeyCredentialCreationOptionsJSON>> {
-    const relyingParty = await this.#beginningRelyingParty();
+    const relyingParty = await this.#relyingParty();
 
     const options = await generateRegistrationOptions({
       rpName: RELYING_PARTY_NAME,
@@ -349,28 +432,34 @@ export class WebAuthnService {
       purpose: 'register',
       challenge: options.challenge,
       rpId: relyingParty.id,
-      ...input.binding,
+      ...requirePerson('register', input.binding),
     });
     return { ceremonyId, options };
   }
 
   /**
-   * Checks a new credential. Throws `challenge-expired` for a ceremony that is
-   * gone or not this caller's, and `invalid-credentials` for an answer that
-   * does not verify.
+   * Checks a new credential and, if it is the install's first, pins the RP ID
+   * it was made for. Throws `challenge-expired` for a ceremony that is gone or
+   * not this caller's, `invalid-credentials` for an answer that does not
+   * verify, and `passkeys-rp-changed` when another host was pinned meanwhile.
    */
   async verifyRegistration(input: {
     readonly ceremonyId: string;
-    readonly binding: Required<WebAuthnCeremonyBinding>;
+    readonly binding: Required<PersonBinding>;
     readonly response: RegistrationResponseJSON;
   }): Promise<RegisteredPasskey> {
     const ceremony = await this.#spend(input.ceremonyId, 'register', input.binding);
-    const relyingParty = await this.#currentRelyingParty(ceremony);
+    const relyingParty = await this.#relyingPartyOf(ceremony);
 
     const info = await verifyAttestation(input.response, ceremony, relyingParty);
     const registered = info === null ? null : toRegisteredPasskey(info, input.response);
     if (registered === null) {
       throw new AuthFailure('invalid-credentials');
+    }
+
+    const pinned = await this.#pin.pinIfUnset(relyingParty.id);
+    if (pinned.rpId !== relyingParty.id) {
+      throw new AuthFailure('passkeys-rp-changed');
     }
     return registered;
   }
@@ -380,12 +469,12 @@ export class WebAuthnService {
    * first factor has named the account; passwordless sign-in passes none, so
    * the options are the same for every caller and name nobody.
    */
-  async authenticationOptions(input: {
-    readonly purpose: Exclude<WebAuthnCeremonyPurpose, 'register'>;
-    readonly binding?: WebAuthnCeremonyBinding;
-    readonly allow?: readonly PasskeyDescriptor[];
-  }): Promise<CeremonyOptions<PublicKeyCredentialRequestOptionsJSON>> {
-    const relyingParty = await this.#beginningRelyingParty();
+  async authenticationOptions(
+    input: AssertionPurpose & { readonly allow?: readonly PasskeyDescriptor[] },
+  ): Promise<CeremonyOptions<PublicKeyCredentialRequestOptionsJSON>> {
+    const binding =
+      input.purpose === 'passwordless' ? {} : requirePerson(input.purpose, input.binding);
+    const relyingParty = await this.#relyingParty();
 
     const options = await generateAuthenticationOptions({
       rpID: relyingParty.id,
@@ -400,7 +489,7 @@ export class WebAuthnService {
       purpose: input.purpose,
       challenge: options.challenge,
       rpId: relyingParty.id,
-      ...input.binding,
+      ...binding,
     });
     return { ceremonyId, options };
   }
@@ -411,15 +500,20 @@ export class WebAuthnService {
    * other refusal is returned with its reason rather than thrown, so the
    * caller can audit it before answering `invalid-credentials`.
    */
-  async verifyAuthentication(input: {
-    readonly ceremonyId: string;
-    readonly purpose: Exclude<WebAuthnCeremonyPurpose, 'register'>;
-    readonly binding?: WebAuthnCeremonyBinding;
-    readonly response: AuthenticationResponseJSON;
-    readonly findCredential: (credentialId: Uint8Array) => Promise<StoredPasskey | undefined>;
-  }): Promise<AssertionCheck> {
+  async verifyAuthentication(
+    input: AssertionPurpose & {
+      readonly ceremonyId: string;
+      readonly response: AuthenticationResponseJSON;
+      readonly findCredential: (credentialId: Uint8Array) => Promise<StoredPasskey | undefined>;
+    },
+  ): Promise<AssertionCheck> {
     const ceremony = await this.#spend(input.ceremonyId, input.purpose, input.binding ?? {});
-    const relyingParty = await this.#currentRelyingParty(ceremony);
+    const relyingParty = await this.#relyingPartyOf(ceremony);
+    // A bound purpose names its person; a ceremony that somehow names nobody
+    // would let any passkey answer it.
+    if (input.purpose !== 'passwordless' && ceremony.userId === undefined) {
+      return { ok: false, reason: 'wrong-user', userId: null };
+    }
 
     const credential = await lookUpCredential(input.response.rawId, input.findCredential);
     if (credential === undefined) {
@@ -454,30 +548,28 @@ export class WebAuthnService {
     };
   }
 
-  /** The relying party for a new ceremony, pinning it if this is the first. */
-  async #beginningRelyingParty(): Promise<RelyingParty> {
-    const relyingParty = this.#secureRelyingParty();
-    const pinned = (await this.#pin.read()) ?? (await this.#pin.pinIfUnset(relyingParty.id));
-    if (pinned.rpId !== relyingParty.id) {
-      throw new AuthFailure('passkeys-rp-changed');
-    }
-    return relyingParty;
-  }
-
-  /** The relying party for finishing a ceremony: the one it began under, still pinned. */
-  async #currentRelyingParty(ceremony: WebAuthnCeremony): Promise<RelyingParty> {
-    const relyingParty = this.#secureRelyingParty();
-    const pinned = await this.#pin.read();
-    if (pinned?.rpId !== relyingParty.id || ceremony.rpId !== relyingParty.id) {
-      throw new AuthFailure('passkeys-rp-changed');
-    }
-    return relyingParty;
-  }
-
-  #secureRelyingParty(): RelyingParty {
+  /**
+   * The relying party a ceremony runs for: `APP_URL`'s, unless a pin names
+   * another host. Nothing is written here; only a registration pins, so an
+   * install opened somewhere temporary before anyone registers stays unpinned.
+   */
+  async #relyingParty(): Promise<RelyingParty> {
     const relyingParty = relyingPartyFor(this.#appUrl);
     if (relyingParty === null) {
       throw new AuthFailure('passkeys-unavailable');
+    }
+    const pinned = await this.#pin.read();
+    if (pinned !== null && pinned.rpId !== relyingParty.id) {
+      throw new AuthFailure('passkeys-rp-changed');
+    }
+    return relyingParty;
+  }
+
+  /** The relying party for finishing a ceremony: the one it began under, and still allowed. */
+  async #relyingPartyOf(ceremony: WebAuthnCeremony): Promise<RelyingParty> {
+    const relyingParty = await this.#relyingParty();
+    if (ceremony.rpId !== relyingParty.id) {
+      throw new AuthFailure('passkeys-rp-changed');
     }
     return relyingParty;
   }

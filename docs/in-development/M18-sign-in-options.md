@@ -468,8 +468,12 @@ Backlog or never:
 - [x] **M18-01** WebAuthn foundation ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)).
   Migration `0058_webauthn_credentials` (the table, with checks on the
   credential id length and the algorithm, and the 32-byte
-  `users.webauthn_user_handle`); `auth.webauthn.rpId` pinned by one
-  insert-unless-present statement (`apps/api/src/auth/webauthn/rp-id-pin.ts`);
+  `users.webauthn_user_handle`); `auth.webauthn.rpId` pinned by the first
+  successful registration, in one insert-unless-present statement
+  (`apps/api/src/auth/webauthn/rp-id-pin.ts`), rather than by any ceremony, so
+  an install opened on a temporary host is not pinned with no passkeys;
+  a person bound to every ceremony but passwordless; attestation limited to
+  `none` or a packed self-attestation, and framed answers refused;
   the ceremony store (`ceremony-store.ts`); `WebAuthnService` over
   `@simplewebauthn/server` 14.0.3 (`webauthn.service.ts`); `passkey` and
   `passkeysPaused` in `GET /api/auth/methods`; the auth codes

@@ -270,11 +270,16 @@ or one reached by IP address, `GET /api/auth/methods` reports
 
 ### The RP ID is pinned
 
-The first passkey ceremony writes the RP ID into the install setting
-`auth.webauthn.rpId`, once, and records `auth.passkey.rp_pinned` in the audit
-trail. Every later ceremony compares `APP_URL`'s host with it. Two replicas
-starting their first ceremony at the same moment agree on one value: the
-write is a single insert that does nothing if a value is already there.
+The first successful passkey registration writes the RP ID into the install
+setting `auth.webauthn.rpId`, once, and records `auth.passkey.rp_pinned` in the
+audit trail. Nothing else writes it: until a passkey exists, ceremonies run
+against `APP_URL`'s host and leave no trace, so an install first opened on
+`localhost` or a staging host is not pinned there by a sign-in page that only
+offered passkeys. Every ceremony after the pin compares `APP_URL`'s host with
+it. Two replicas finishing the first registration at the same moment agree on
+one value: the write is a single statement that does nothing if a value is
+already there, and the registration that lost to another host is refused with
+`passkeys-rp-changed`.
 
 If an operator later moves `APP_URL` to another host, every passkey the
 install holds stops working, because each was made for the old host. Helpdock
@@ -304,17 +309,26 @@ authenticator signed) is a record in Redis under `auth:webauthn:<hash>`:
 - it is spent with `GETDEL` before anything is checked, so it works once,
   whether the answer passes or fails;
 - it names its purpose (`register`, `second-factor`, `passwordless`,
-  `step-up`, `break-glass`) and, where there is one, the person and the
-  browser session it belongs to. A challenge minted for one purpose, person
-  or session cannot complete another; it answers `challenge-expired`.
+  `step-up`, `break-glass`) and the person it belongs to, and for a
+  registration the browser session too. Passwordless sign-in is the one
+  purpose that names nobody; every other one must, so only that person's
+  passkey can answer it. A challenge minted for one purpose, person or
+  session cannot complete another; it answers `challenge-expired`.
 
 The options fix what the install has an opinion on: EdDSA, ES256 and RS256
-only; attestation `none`, so no attestation statement is asked for and no
-metadata service is consulted; a discoverable credential preferred, with the
+only; attestation `none`, with no metadata service; a discoverable credential preferred, with the
 `credProps` extension so the api knows whether it got one. User verification
 (a PIN or a biometric) is **required** for passwordless sign-in and break-glass,
 where one assertion stands for two factors, and only **preferred** elsewhere, so
 a security key without a PIN still works as a second factor.
+
+Two kinds of answer are refused before the library parses them. A
+registration's attestation statement must be `none`, or a `packed`
+self-attestation (signed with the new credential's own key, which some
+authenticators send whatever was asked); a statement that names a
+certificate chain is refused, so no vendor chain is ever walked and no
+revocation list fetched. And client data that says it was made inside a
+frame (`crossOrigin: true`) is refused: the admin is never framed.
 
 The user handle an authenticator stores is 32 random bytes per account
 (`users.webauthn_user_handle`), not the account id, whose UUIDv7 carries the
@@ -463,7 +477,7 @@ ASVS 7.1.3, 7.2.1):
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
 | `auth.oauth.linked` / `.unlinked` | A Google or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
-| `auth.passkey.rp_pinned` | The first passkey ceremony pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
+| `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
 
 The rows are written by the `auth` system principal in a transaction of their
 own, so a refused attempt is recorded although the request fails, and carry the
@@ -689,7 +703,7 @@ is never editable.
 | `auth.magicLinkTtlMinutes` | `10` | Lifetime of a sign-in link |
 | `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned ([staff and roles](staff-and-roles.md#the-viewer-toggle)) |
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
-| `auth.webauthn.rpId` | empty | The passkey RP ID, written at the first passkey ceremony and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
+| `auth.webauthn.rpId` | empty | The passkey RP ID, written by the first passkey registration and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
 

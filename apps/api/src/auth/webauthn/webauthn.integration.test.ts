@@ -201,7 +201,7 @@ describe.skipIf(!hasDocker)('passkey foundation', () => {
   describe('the RP ID pin', () => {
     afterEach(clearPin);
 
-    it('is unset until the first ceremony', async () => {
+    it('is unset until the first registration', async () => {
       await expect(new RpIdPinStore({ db: db(), settings: settingsWith() }).read()).resolves.toBe(
         null,
       );
@@ -224,7 +224,32 @@ describe.skipIf(!hasDocker)('passkey foundation', () => {
       await expect(pinAudits()).resolves.toHaveLength(1);
     });
 
-    it('keeps the first host when a later ceremony asks for another', async () => {
+    it('settles on one host when replicas race to fill an empty pin row', async () => {
+      // A row holding the empty default, as "" in JSON: the update path, not the insert.
+      await withSystem(db(), INSTALL_SCOPE_BRAND_ID, (tx) =>
+        tx.insert(settingsTable).values({
+          key: 'auth.webauthn.rpId',
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          value: JSON.stringify(''),
+          updatedBy: 'test',
+        }),
+      );
+      const replicas = Array.from(
+        { length: 12 },
+        () => new RpIdPinStore({ db: db(), settings: settingsWith() }),
+      );
+
+      const results = await Promise.all(
+        replicas.map((replica, index) =>
+          replica.pinIfUnset(index % 2 === 0 ? 'desk.example.com' : 'admin.example.com'),
+        ),
+      );
+
+      expect(new Set(results.map((result) => result.rpId)).size).toBe(1);
+      await expect(pinAudits()).resolves.toHaveLength(1);
+    });
+
+    it('keeps the first host when a later registration asks for another', async () => {
       const store = new RpIdPinStore({ db: db(), settings: settingsWith() });
       await store.pinIfUnset('desk.example.com');
 

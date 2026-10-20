@@ -15,7 +15,7 @@ const UNPINNED = JSON.stringify('');
 
 export interface PinnedRpId {
   readonly rpId: string;
-  /** When the first ceremony pinned it; null when `HD_AUTH_WEBAUTHN_RP_ID` set it. */
+  /** When the first registration pinned it; null when `HD_AUTH_WEBAUTHN_RP_ID` set it. */
   readonly pinnedAt: Date | null;
 }
 
@@ -27,8 +27,8 @@ export interface RpIdPin {
 
 /**
  * `auth.webauthn.rpId`: the RP ID every passkey on this install was made
- * for, written by the first ceremony and compared by every later one
- * (ADR 0050). A passkey only ever works on the RP ID it was registered under,
+ * for, written by the first successful registration and compared by every
+ * ceremony (ADR 0050). A passkey only ever works on the RP ID it was registered under,
  * so if `APP_URL` moves to another host the stored value is what tells the
  * api that the passkeys it holds no longer can, instead of every ceremony
  * failing in the browser with nothing said.
@@ -47,7 +47,7 @@ export class RpIdPinStore implements RpIdPin {
     this.#settings = settings;
   }
 
-  /** The pinned RP ID, or null before the first ceremony. */
+  /** The pinned RP ID, or null before the first registration. */
   async read(): Promise<PinnedRpId | null> {
     if (this.#settings.isLockedByEnv(KEY)) {
       return { rpId: await this.#settings.get(KEY), pinnedAt: null };

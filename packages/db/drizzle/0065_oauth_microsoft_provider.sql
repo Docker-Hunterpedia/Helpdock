@@ -1,0 +1,1 @@
+ALTER TYPE "public"."oauth_provider" ADD VALUE 'microsoft' BEFORE 'github';

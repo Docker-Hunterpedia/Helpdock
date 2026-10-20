@@ -61,6 +61,6 @@ one. From 1.1 each surface renders Turnstile with its own `action`
 refuses a siteverify pass whose `action` or `cdata` differs, missing
 included, as `action-mismatch` or `cdata-mismatch`. hCaptcha has no
 equivalent fields, so an hCaptcha token stays bound by hostname only, and the
-operations and widget-protocol guides say so. Custom clients that render
+widget-protocol guide says so. Custom clients that render
 Turnstile themselves must pass both values (an upgrade note in the 1.1
 release).

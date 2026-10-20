@@ -168,3 +168,20 @@ describe('the transitions §2.2 has no row for', () => {
     ).toThrowError(UnknownStatusError);
   });
 });
+
+describe('the Snoozed status (M14-02)', () => {
+  const SNOOZED = {
+    ...status('snoozed', 'on_hold'),
+    systemKey: 'snoozed',
+  } satisfies TicketStatusRow;
+
+  it('is never entered as a bare status: it needs a wake time, which `snoozedUntil` carries', () => {
+    expect(() => change({ current: OPEN, next: SNOOZED })).toThrow(TicketLifecycleFailure);
+    expect(() => change({ current: OPEN, next: SNOOZED })).toThrow(/wake time/);
+  });
+
+  it('is left like any other status, and picking it again where it already is changes nothing', () => {
+    expect(change({ current: SNOOZED, next: OPEN })).toMatchObject({ changed: true });
+    expect(change({ current: SNOOZED, next: SNOOZED })).toMatchObject({ changed: false });
+  });
+});

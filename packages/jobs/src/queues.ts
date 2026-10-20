@@ -10,7 +10,10 @@ export const QUEUE_NAMES = {
   inbound: 'inbound',
   /** `email.send`, `telegram.send`, `meta.send` (M10-06), `widget.deliver`. */
   outbound: 'outbound',
-  /** `sla.timer` (one per clock and step, delayed) and `sla.rebuild` (M3-02). */
+  /**
+   * `sla.timer` (one per clock and step, delayed) and `sla.rebuild` (M3-02); `ticket.unsnooze`
+   * (one per snooze version, delayed) and `snooze.rebuild` (M14-02) share it.
+   */
   sla: 'sla',
   /** `rules.evaluate`, `rules.time_based`. */
   rules: 'rules',

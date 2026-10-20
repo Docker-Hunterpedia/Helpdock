@@ -7,6 +7,7 @@ import {
   MOCK_STATUS_AWAITING,
   MOCK_STATUS_CLOSED,
   MOCK_STATUS_MERGED,
+  MOCK_STATUS_SNOOZED,
   MOCK_TICKET_CLOSED,
   MOCK_TICKET_REFUND,
   MOCK_TICKET_SIGN_IN,
@@ -80,7 +81,7 @@ describe('MockTicketsApi', () => {
     expect(history.visibleCount).toBe(1);
   });
 
-  it('seeds the six statuses every brand is created with', async () => {
+  it('seeds the seven statuses every brand is created with', async () => {
     const { statuses } = await api.statuses(BRAND);
 
     expect(statuses.map((status) => status.name)).toEqual([
@@ -90,6 +91,7 @@ describe('MockTicketsApi', () => {
       'Closed',
       'Spam',
       'Merged',
+      'Snoozed',
     ]);
     expect(statuses.every((status) => status.isSystem)).toBe(true);
   });
@@ -446,5 +448,105 @@ describe('SLA due ordering', () => {
     expect(due.slice(tail).every((at) => at === null)).toBe(true);
     expect(Date.parse(due[0] ?? '')).toBeLessThan(Date.now());
     expect(due.some((at) => at !== null && Date.parse(at) > Date.now())).toBe(true);
+  });
+});
+
+describe('snooze (M14-02)', () => {
+  const hoursAhead = (hours: number): string =>
+    new Date(Date.now() + hours * 3_600_000).toISOString();
+
+  it('snoozes into the Snoozed status, remembers who, and leaves the default list and the named search alone', async () => {
+    const api = new MockTicketsApi();
+    const until = hoursAhead(4);
+
+    const snoozed = await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: until });
+
+    expect(snoozed).toMatchObject({
+      snoozedUntil: until,
+      snoozedBy: MOCK_SELF_ID,
+      status: { id: MOCK_STATUS_SNOOZED },
+    });
+    const everywhere = await api.list(BRAND, { limit: 100 });
+    expect(everywhere.tickets.map((ticket) => ticket.id)).not.toContain(MOCK_TICKET_REFUND);
+    const only = await api.list(BRAND, { snoozed: 'only', limit: 100 });
+    expect(only.tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_REFUND]);
+    const included = await api.list(BRAND, { snoozed: 'include', limit: 100 });
+    expect(included.tickets.map((ticket) => ticket.id)).toContain(MOCK_TICKET_REFUND);
+    // #221: a term that names one ticket finds it whatever its state.
+    const named = await api.list(BRAND, { q: 'HD-1042' });
+    expect(named.tickets[0]?.id).toBe(MOCK_TICKET_REFUND);
+  });
+
+  it('wakes into the status it had before, and says so in the thread', async () => {
+    const api = new MockTicketsApi();
+    const before = (await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.status.id;
+    await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: hoursAhead(4) });
+
+    const woke = await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: null });
+
+    expect(woke.snoozedUntil).toBeNull();
+    expect(woke.status.id).toBe(before);
+    const actions = (await api.activity(BRAND, MOCK_TICKET_REFUND)).activity.map(
+      (entry) => entry.action,
+    );
+    expect(actions).toEqual(expect.arrayContaining(['ticket.snoozed', 'ticket.woke']));
+  });
+
+  it('waking a ticket that is not asleep changes nothing', async () => {
+    const api = new MockTicketsApi();
+    const before = (await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket;
+
+    const same = await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: null });
+
+    expect(same.status.id).toBe(before.status.id);
+    expect(same.snoozedUntil ?? null).toBeNull();
+  });
+
+  it('wakes when any other status is picked', async () => {
+    const api = new MockTicketsApi();
+    await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: hoursAhead(4) });
+
+    const moved = await api.update(BRAND, MOCK_TICKET_REFUND, { statusId: MOCK_STATUS_AWAITING });
+
+    expect(moved.snoozedUntil).toBeNull();
+    expect(moved.status.id).toBe(MOCK_STATUS_AWAITING);
+    const reasons = (await api.activity(BRAND, MOCK_TICKET_REFUND)).activity
+      .filter((entry) => entry.action === 'ticket.woke')
+      .map((entry) => entry.to?.reason);
+    expect(reasons).toEqual(['status_changed']);
+  });
+
+  it('refuses a bare Snoozed status, a closed ticket, and a time outside five minutes to ninety days', async () => {
+    const api = new MockTicketsApi();
+
+    await expect(
+      api.update(BRAND, MOCK_TICKET_REFUND, { statusId: MOCK_STATUS_SNOOZED }),
+    ).rejects.toMatchObject({ reason: 'snooze-requires-time' });
+    await expect(
+      api.update(BRAND, MOCK_TICKET_CLOSED, { snoozedUntil: hoursAhead(4) }),
+    ).rejects.toMatchObject({ reason: 'ticket-closed' });
+    await expect(
+      api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: hoursAhead(0.01) }),
+    ).rejects.toThrow('between 5 minutes and 90 days');
+    await expect(
+      api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: hoursAhead(24 * 91) }),
+    ).rejects.toThrow('between 5 minutes and 90 days');
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.status.id).not.toBe(
+      MOCK_STATUS_SNOOZED,
+    );
+  });
+
+  it('moves the time of a snooze that is already set without forgetting the status before it', async () => {
+    const api = new MockTicketsApi();
+    const before = (await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.status.id;
+    await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: hoursAhead(4) });
+    const later = hoursAhead(30);
+
+    const moved = await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: later });
+    const woke = await api.update(BRAND, MOCK_TICKET_REFUND, { snoozedUntil: null });
+
+    expect(moved.snoozedUntil).toBe(later);
+    expect(woke.status.id).toBe(before);
+    expect(before).not.toBe(MOCK_STATUS_SNOOZED);
   });
 });

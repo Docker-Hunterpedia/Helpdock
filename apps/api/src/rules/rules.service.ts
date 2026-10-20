@@ -267,6 +267,7 @@ export class RulesService {
             id: ticketStatuses.id,
             name: ticketStatuses.name,
             nameAr: ticketStatuses.nameAr,
+            systemKey: ticketStatuses.systemKey,
           })
           .from(ticketStatuses)
           .orderBy(asc(ticketStatuses.sortOrder)),
@@ -306,7 +307,10 @@ export class RulesService {
       ]);
 
     return {
-      statuses,
+      statuses: statuses.map(({ systemKey, ...status }) => ({
+        ...status,
+        isSnoozed: systemKey === 'snoozed',
+      })),
       departments: departmentRows,
       teams: teamRows,
       tags: tagRows,
@@ -399,6 +403,14 @@ export class RulesService {
    */
   async #requireReferences(tx: DbTransaction, brandId: string, draft: RuleDraft): Promise<void> {
     const ids = referencesOf(draft.conditions, draft.actions);
+    const setStatuses = draft.actions.flatMap((action) =>
+      action.type === 'set_status' ? [action.statusId] : [],
+    );
+    if (await this.#rules.includesSnoozed(tx, setStatuses)) {
+      throw new BadRequestException(
+        'A rule cannot set the Snoozed status: it needs a wake time, which only a person gives',
+      );
+    }
     const checks = [
       ['status', ids.statuses],
       ['department', ids.departments],

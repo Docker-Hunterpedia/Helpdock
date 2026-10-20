@@ -1,6 +1,7 @@
 import { SanitizeLimitError, sanitizeMessageBody } from '@helpdock/channels';
 import type {
   DbTransaction,
+  NewTicket,
   Ticket as TicketRow,
   TicketStatus as TicketStatusRow,
   TicketTemplate as TicketTemplateRow,
@@ -21,7 +22,7 @@ import type {
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
-import { TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { SNOOZE_MAX_MS, SNOOZE_MIN_MS, TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
 import {
   BadRequestException,
   ConflictException,
@@ -62,9 +63,18 @@ import {
   type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
+import { transitionFor } from './lifecycle/transitions.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
+import { enqueueTicketSnoozed } from './snooze/snooze-events.js';
+import {
+  isSnoozedStatus,
+  snoozeValues,
+  WAKE_VALUES,
+  wakeStatusFor,
+  writeWokeActivity,
+} from './snooze/snooze-wake.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import {
@@ -130,6 +140,14 @@ interface FilledTicket {
   /** `undefined` when the request and the template both said nothing. */
   readonly custom: Record<string, unknown> | undefined;
   readonly tagIds: readonly string[];
+}
+
+/** What a `snoozedUntil` in a `PATCH` turned into, before it is written (M14-02). */
+interface PlannedSnooze {
+  readonly kind: 'snooze' | 'wake';
+  /** The snooze columns, written beside the rest of the `PATCH`. */
+  readonly values: Partial<NewTicket>;
+  readonly statusResult: StatusChangeResult;
 }
 
 @Injectable()
@@ -529,10 +547,23 @@ export class TicketsService {
         ? undefined
         : await this.#changeStatus(tx, ticket, status, input.statusId, now);
 
-    if (statusResult?.changed === true) {
-      values.statusId = statusResult.statusId;
-      values.closedAt = statusResult.closedAt;
+    // ---- M14-02 ------------------------------------------------------------
+    if (input.snoozedUntil !== undefined && input.statusId !== undefined) {
+      throw new BadRequestException('Send snoozedUntil or statusId, not both');
     }
+    const snooze =
+      input.snoozedUntil === undefined
+        ? undefined
+        : await this.#planSnooze(tx, ticket, status, input.snoozedUntil, principal, now);
+    // ------------------------------------------------------------------------
+
+    const statusMove = snooze?.statusResult ?? statusResult;
+
+    if (statusMove?.changed === true) {
+      values.statusId = statusMove.statusId;
+      values.closedAt = statusMove.closedAt;
+    }
+    Object.assign(values, snooze?.values);
 
     if (Object.keys(values).length === 0) {
       return ticketWithSource(tx, ticket, status, await tagsOfTicket(tx, ticketId));
@@ -556,9 +587,9 @@ export class TicketsService {
         // M3-06: a macro records its whole effect as one entry of its own.
         Object.assign(options.bundle.from, from);
         Object.assign(options.bundle.to, to);
-        if (statusResult?.changed === true) {
+        if (statusMove?.changed === true) {
           options.bundle.from.statusId = status.id;
-          options.bundle.to.statusId = statusResult.statusId;
+          options.bundle.to.statusId = statusMove.statusId;
         }
       } else if (Object.keys(to).length > 0) {
         await writeTicketActivity(tx, {
@@ -572,15 +603,15 @@ export class TicketsService {
         });
       }
 
-      if (statusResult?.changed === true && options.bundle !== undefined) {
+      if (statusMove?.changed === true && options.bundle !== undefined) {
         await enqueueWebhookEvent(tx, brandId, 'ticket.status_changed', {
           ticketId,
           departmentId: moved.departmentId,
           previousStatusId: status.id,
-          statusId: statusResult.statusId,
+          statusId: statusMove.statusId,
         });
       }
-      if (statusResult?.changed === true && options.bundle === undefined) {
+      if (statusMove?.changed === true && options.bundle === undefined) {
         await writeTicketActivity(tx, {
           brandId,
           ticketId,
@@ -588,7 +619,7 @@ export class TicketsService {
           actor,
           action: 'ticket.status.changed',
           from: { statusId: status.id },
-          to: { statusId: statusResult.statusId },
+          to: { statusId: statusMove.statusId },
         });
       }
 
@@ -597,8 +628,9 @@ export class TicketsService {
       // ticket's department — by now the new one, which the actor's own scope
       // does not cover. Outside, the insert would be refused by the policy.
       const moveStatus =
-        statusResult?.changed === true ? await this.#requireStatus(tx, moved.statusId) : status;
-      await this.#afterStatusChange(context, moved, status, moveStatus, statusResult);
+        statusMove?.changed === true ? await this.#requireStatus(tx, moved.statusId) : status;
+      await this.#afterStatusChange(context, moved, status, moveStatus, statusMove);
+      await this.#recordSnooze(context, { before: ticket, after: moved, snooze, moveStatus });
       // M3-02, inside the window for the same reason: the clocks are the
       // ticket's children and follow it into the new department.
       await this.#lifecycle.onChanged(
@@ -623,10 +655,10 @@ export class TicketsService {
       await this.#auditEscalation(context, ticket, escalation);
     }
 
-    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusResult, nextStatus), {
+    await enqueueTicketEvent(tx, brandId, ticketEventFor(statusMove, nextStatus), {
       ticketId,
       departmentId: updated.departmentId,
-      changes: changesOf(to, statusResult),
+      changes: changesOf(to, statusMove),
       // On a move, whoever is watching the queue the ticket has just left is in
       // no other room this event reaches.
       ...(updated.departmentId === ticket.departmentId
@@ -1027,6 +1059,127 @@ export class TicketsService {
     }
 
     return found;
+  }
+
+  /**
+   * M14-02. What `snoozedUntil` asks for: a snooze or a re-snooze with a time,
+   * a wake with `null`. Worked out here, before anything is written, so a
+   * refusal leaves the ticket as it was; written by the same `UPDATE` as the
+   * rest of the `PATCH`.
+   *
+   * Returns `undefined` for the one no-op, waking a ticket that is not asleep.
+   */
+  async #planSnooze(
+    tx: DbTransaction,
+    ticket: TicketRow,
+    status: TicketStatusRow,
+    snoozedUntil: string | null,
+    principal: Principal,
+    now: Date,
+  ): Promise<PlannedSnooze | undefined> {
+    if (snoozedUntil === null) {
+      // A ticket in Snoozed with no wake time is a repair, not a no-op.
+      if (ticket.snoozedUntil === null && !isSnoozedStatus(status)) {
+        return undefined;
+      }
+      const target = await wakeStatusFor(tx, ticket.snoozeResumeStatusId);
+      if (target === undefined) {
+        throw new ConflictException('This brand has no default ticket status');
+      }
+      return {
+        kind: 'wake',
+        values: WAKE_VALUES,
+        statusResult: await this.#changeStatus(tx, ticket, status, target.id, now),
+      };
+    }
+
+    const until = new Date(snoozedUntil);
+    const ahead = until.getTime() - now.getTime();
+    if (ahead < SNOOZE_MIN_MS || ahead > SNOOZE_MAX_MS) {
+      throw new BadRequestException('snoozedUntil must be between 5 minutes and 90 days from now');
+    }
+
+    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.snooze');
+    if (outcome.kind === 'refused') {
+      throw new TicketLifecycleFailure(outcome.reason);
+    }
+    const snoozed = await this.#lifecycleReads.snoozedStatus(tx);
+    if (snoozed === undefined) {
+      throw new ConflictException('This brand has no Snoozed status');
+    }
+
+    return {
+      kind: 'snooze',
+      values: snoozeValues({
+        ticket,
+        snoozedStatusId: snoozed.id,
+        until,
+        snoozedBy: staffActorId(principal),
+      }),
+      statusResult: {
+        statusId: snoozed.id,
+        closedAt: ticket.closedAt,
+        changed: snoozed.id !== status.id,
+        closing: false,
+        reopening: false,
+      },
+    };
+  }
+
+  /**
+   * M14-02. The activity row and the timer that go with a snooze change, and
+   * the `ticket.woke` row for a snooze that a plain status change ended. A
+   * customer's reply, a close and a spam mark write theirs where they happen.
+   */
+  async #recordSnooze(
+    context: LifecycleContext,
+    change: {
+      readonly before: TicketRow;
+      readonly after: TicketRow;
+      readonly snooze: PlannedSnooze | undefined;
+      readonly moveStatus: TicketStatusRow;
+    },
+  ): Promise<void> {
+    const { before, after, snooze, moveStatus } = change;
+    const { tx, brandId, actor } = context;
+
+    if (snooze?.kind === 'snooze' && after.snoozedUntil !== null) {
+      await writeTicketActivity(tx, {
+        brandId,
+        ticketId: after.id,
+        departmentId: after.departmentId,
+        actor,
+        action: 'ticket.snoozed',
+        from: { snoozedUntil: before.snoozedUntil?.toISOString() ?? null },
+        to: {
+          snoozedUntil: after.snoozedUntil.toISOString(),
+          resumeStatusId: after.snoozeResumeStatusId,
+        },
+      });
+      await enqueueTicketSnoozed(tx, brandId, {
+        ticketId: after.id,
+        departmentId: after.departmentId,
+        version: after.snoozeVersion,
+        snoozedUntil: after.snoozedUntil.toISOString(),
+      });
+      return;
+    }
+
+    const woke =
+      snooze?.kind === 'wake'
+        ? 'manual'
+        : snooze === undefined && before.snoozedUntil !== null && after.snoozedUntil === null
+          ? 'status_changed'
+          : undefined;
+    if (woke !== undefined) {
+      await writeWokeActivity(tx, {
+        brandId,
+        ticket: before,
+        actor,
+        reason: woke,
+        statusId: moveStatus.id,
+      });
+    }
   }
 
   /**

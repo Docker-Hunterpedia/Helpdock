@@ -36,6 +36,7 @@ const AGENT: MacroActor = {
 
 let rows: CannedResponse[];
 let referencesExist: boolean;
+let includesSnoozed = false;
 let counter = 0;
 
 const readable = (row: CannedResponse, actor: MacroActor): boolean =>
@@ -76,6 +77,7 @@ const repository = {
   },
   departmentExists: async (_tx: DbTransaction, id: string) => id === SUPPORT || id === BILLING,
   referencesExist: async () => referencesExist,
+  includesSnoozed: async () => includesSnoozed,
 } as unknown as MacrosRepository;
 
 const service = new MacrosService(repository);
@@ -99,6 +101,7 @@ const canned = (overrides: Partial<MacroCreateRequest> = {}): MacroCreateRequest
 beforeEach(() => {
   rows = [];
   referencesExist = true;
+  includesSnoozed = false;
   fake = fakeTransaction();
 });
 
@@ -148,6 +151,17 @@ describe('creating', () => {
         canned({ kind: 'macro', actions: [{ type: 'set_status', statusId: STATUS }] }),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('refuses a macro that sets the Snoozed status, which needs a wake time (M14-02)', async () => {
+    includesSnoozed = true;
+
+    await expect(
+      service.create(
+        contextFor(ADMIN),
+        canned({ kind: 'macro', actions: [{ type: 'set_status', statusId: STATUS }] }),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('stops at the brand’s ceiling', async () => {

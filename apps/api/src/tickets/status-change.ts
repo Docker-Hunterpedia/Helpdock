@@ -5,6 +5,7 @@ import {
   type TicketLifecycleFacts,
   transitionFor,
 } from './lifecycle/transitions.js';
+import { isSnoozedStatus } from './snooze/snooze-wake.js';
 
 /**
  * The one place a `status_id` is decided.
@@ -124,6 +125,12 @@ export const applyStatusChange = ({
 
   if (next.id === current.id) {
     return { statusId: current.id, closedAt, changed: false, closing: false, reopening: false };
+  }
+
+  // M14-02: Snoozed is entered with a wake time, through `snoozedUntil`. A bare
+  // status would be a ticket that is Snoozed and never wakes by time.
+  if (isSnoozedStatus(next)) {
+    throw new TicketLifecycleFailure('snooze-requires-time');
   }
 
   const wasClosed = current.systemState === 'closed';

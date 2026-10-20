@@ -123,7 +123,7 @@ export function ActionRow({
         return pick(
           t('rules:fields.status'),
           action.statusId,
-          options?.statuses ?? [],
+          (options?.statuses ?? []).filter((status) => status.isSnoozed !== true),
           (statusId) => {
             onChange({ ...action, statusId });
           },

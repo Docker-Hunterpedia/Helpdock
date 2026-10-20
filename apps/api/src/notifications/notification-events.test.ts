@@ -190,7 +190,7 @@ describe('planFor', () => {
     expect(() => planFor(SLA_EVENTS.warning, { ticketId: TICKET, clock: 'lunch' })).toThrow();
   });
 
-  it('consumes the seven events of the seam', () => {
+  it('consumes the eight events of the seam', () => {
     expect(CONSUMED_EVENTS).toEqual([
       'ticket.assigned',
       'ticket.replied',
@@ -199,11 +199,66 @@ describe('planFor', () => {
       'sla.breached',
       'ticket.escalated',
       'rule.notify',
+      'ticket.snooze_ended',
     ]);
+  });
+
+  it('plans a snooze_ended notification with what woke the ticket (M14-02)', () => {
+    const plan = planFor('ticket.snooze_ended', {
+      ticketId: TICKET,
+      departmentId: SUPPORT,
+      cause: 'sla',
+      snoozedBy: LINA,
+    });
+
+    expect(plan).toMatchObject({
+      kind: 'snooze_ended',
+      ticketId: TICKET,
+      actorId: null,
+      detail: { wokeBy: 'sla' },
+    });
+  });
+
+  it('refuses a snooze_ended payload that names no cause', () => {
+    expect(() =>
+      planFor('ticket.snooze_ended', { ticketId: TICKET, departmentId: SUPPORT, snoozedBy: null }),
+    ).toThrow();
   });
 });
 
 describe('the fan-out handler', () => {
+  it('tells the assignee that a snooze ended, and not the person who set it (M14-02)', async () => {
+    const { rows } = await fanOut('ticket.snooze_ended', {
+      ticketId: TICKET,
+      departmentId: SUPPORT,
+      cause: 'time',
+      snoozedBy: LINA,
+    });
+
+    expect(recipientsOf(rows)).toEqual([OMAR]);
+    expect(rows[0]).toMatchObject({ kind: 'snooze_ended', detail: { wokeBy: 'time' } });
+  });
+
+  it('tells the person who snoozed it when nobody holds the ticket', async () => {
+    const { rows } = await fanOut(
+      'ticket.snooze_ended',
+      { ticketId: TICKET, departmentId: SUPPORT, cause: 'time', snoozedBy: SUE },
+      fakeRepository({ ticket: ticketFacts({ assigneeId: null }) }),
+    );
+
+    expect(recipientsOf(rows)).toEqual([SUE]);
+  });
+
+  it('tells nobody when nobody holds the ticket and the person who snoozed it has gone', async () => {
+    const { rows } = await fanOut(
+      'ticket.snooze_ended',
+      { ticketId: TICKET, departmentId: SUPPORT, cause: 'sla', snoozedBy: null },
+      fakeRepository({ ticket: ticketFacts({ assigneeId: null }) }),
+    );
+
+    expect(rows).toEqual([]);
+  });
+
   it('tells the new assignee, with who chose and the channels they prefer', async () => {
     const { rows, outbox } = await fanOut(TICKET_ASSIGNED_EVENT, {
       ticketId: TICKET,

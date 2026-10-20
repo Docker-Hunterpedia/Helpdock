@@ -309,11 +309,14 @@ export function DetailsPanel({
           onChange({ statusId: event.target.value });
         }}
       >
-        {statuses.map((status) => (
-          <MenuItem key={status.id} value={status.id}>
-            {statusName(status, locale)}
-          </MenuItem>
-        ))}
+        {/* M14-02: Snoozed is entered through the Snooze menu, which asks for a time. */}
+        {statuses
+          .filter((status) => status.isSnoozed !== true || status.id === ticket.status.id)
+          .map((status) => (
+            <MenuItem key={status.id} value={status.id}>
+              {statusName(status, locale)}
+            </MenuItem>
+          ))}
       </TextField>
 
       <TextField

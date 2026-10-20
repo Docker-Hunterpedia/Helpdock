@@ -655,7 +655,7 @@ durable lives only there:
 | Sessions and refresh tokens | Every agent and admin is signed out | At their next sign-in |
 | Trusted browsers, used TOTP steps | Each browser asks for a code again | — |
 | Rate-limit counters | Limits start from zero | As traffic arrives |
-| Queued jobs | Jobs waiting in BullMQ are gone | The relay publishes outbox rows not yet published; `sla.rebuild` recreates SLA timers at worker boot; repeating jobs (mail polling, sweeps, the [Meta account checks](#meta-account-health)) are registered again at worker boot |
+| Queued jobs | Jobs waiting in BullMQ are gone | The relay publishes outbox rows not yet published; `sla.rebuild` recreates SLA timers and `snooze.rebuild` wakes due snoozes and recreates the `ticket.unsnooze` timers, both at worker boot and hourly; repeating jobs (mail polling, sweeps, the [Meta account checks](#meta-account-health)) are registered again at worker boot |
 | The help center page cache | Pages render cold once | On the next view |
 
 Restart the api and the worker once Redis is back, empty

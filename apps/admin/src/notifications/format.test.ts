@@ -141,3 +141,13 @@ describe('dayGroup and groupByDay', () => {
     ]);
   });
 });
+
+describe('snooze_ended (M14-02)', () => {
+  it('titles the row and lines it with the subject, in both languages', () => {
+    const ended = item({ kind: 'snooze_ended', detail: { wokeBy: 'time' } });
+
+    expect(notificationTitle(t, ended)).toBe('Snooze ended');
+    expect(notificationLine(t, ended)).toBe('Refund not received');
+    expect(notificationTitle(ar, ended)).toBe('انتهى التأجيل');
+  });
+});

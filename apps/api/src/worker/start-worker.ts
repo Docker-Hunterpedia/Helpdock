@@ -70,6 +70,7 @@ import {
   STATS_ROLLUP_CRON,
   samlMetadataRefreshJob,
   slaRebuildJob,
+  snoozeRebuildJob,
   startOutboxRelay,
   statsRollupJob,
   statsRollupScheduleJob,
@@ -223,6 +224,7 @@ import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
 
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { bullSnoozeQueue, registerSnoozeEventHandlers } from '../tickets/snooze/snooze-worker.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { createTranscribeProcessor } from '../transcription/transcribe.job.js';
 import { transcriptionConfigFrom } from '../transcription/transcription-config.js';
@@ -494,6 +496,7 @@ const slaDeps = (queue: Queue): SlaWorkerDeps => {
     sla: new SlaService(repository),
     assignment: new AssignmentRepository(),
     timers: bullTimerQueue(queue),
+    snoozeTimers: bullSnoozeQueue(queue),
   };
 };
 
@@ -734,6 +737,8 @@ export const workerDependencies: WorkerDependencies = {
     // shape as the two above.
     const sla = new Queue(QUEUE_NAMES.sla, { connection: redis });
     registerSlaEventHandlers(slaDeps(sla));
+    // M14-02. `ticket.snoozed` adds the delayed wake job on the same queue.
+    registerSnoozeEventHandlers(slaDeps(sla));
 
     // M3-07. After the ticket handlers, so on the events both handle the
     // socket frame goes first. It owns `ticket.assigned`, `ticket.escalated`,
@@ -1304,9 +1309,30 @@ export const workerDependencies: WorkerDependencies = {
         log.error({ err: error }, 'could not register the hourly SLA rebuild'),
       );
 
+    // M14-02: `snooze.rebuild` wakes the snoozes that are due and re-adds the
+    // timers of the rest, on boot and hourly, for the reason `sla.rebuild` does.
+    const addSnoozeRebuild = async (brandId: string | undefined, jobId: string): Promise<void> => {
+      await queue.add(snoozeRebuildJob.name, brandId === undefined ? {} : { brandId }, {
+        ...snoozeRebuildJob.options,
+        jobId,
+      });
+    };
+    addSnoozeRebuild(undefined, `${snoozeRebuildJob.name}.boot.${String(Date.now())}`).catch(
+      (error: unknown) => log.error({ err: error }, 'could not add the boot snooze rebuild'),
+    );
+    queue
+      .upsertJobScheduler(
+        snoozeRebuildJob.name,
+        { every: 3_600_000 },
+        { name: snoozeRebuildJob.name, data: {}, opts: snoozeRebuildJob.options },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not register the hourly snooze rebuild'),
+      );
+
     const worker = new Worker(
       QUEUE_NAMES.sla,
-      createSlaProcessor({ db, deps: slaDeps(queue), log, addRebuild }),
+      createSlaProcessor({ db, deps: slaDeps(queue), log, addRebuild, addSnoozeRebuild }),
       { connection: redis, concurrency: 5 },
     );
     worker.on('failed', (job, error) =>

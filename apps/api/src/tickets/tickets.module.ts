@@ -14,6 +14,7 @@ import { ParticipantsMergeHook } from '../participants/merge-participants.hook.j
 import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
 import { SETTINGS } from '../runtime/tokens.js';
+import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { OutboundTelegramService } from '../telegram/outbound-telegram.service.js';
@@ -34,6 +35,8 @@ import { MergeParticipantsHook } from './merge/participants.hook.js';
 import { ChannelReplyDeliveryHooks, ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { TicketRoutingController } from './routing/ticket-routing.controller.js';
 import { TicketRoutingService } from './routing/ticket-routing.service.js';
+import { SnoozeController } from './snooze/snooze.controller.js';
+import { SnoozeService } from './snooze/snooze.service.js';
 import { TicketSpamController } from './ticket-spam.controller.js';
 import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
@@ -87,6 +90,7 @@ export class TicketsModule {
         TimeEntriesController,
         MergeController,
         TicketRoutingController,
+        SnoozeController,
       ],
       providers: [
         TicketRepository,
@@ -196,6 +200,9 @@ export class TicketsModule {
         MergeService,
         // M14-08's routing trail.
         TicketRoutingService,
+        // M14-02's Snooze menu. Both repositories are stateless: every method takes the tx.
+        SnoozeService,
+        { provide: SlaRepository, useFactory: () => new SlaRepository() },
       ],
       // M3-06: applying a macro replies and edits through this very service.
       exports: [TicketsService],

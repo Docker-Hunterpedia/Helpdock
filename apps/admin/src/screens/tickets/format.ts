@@ -209,3 +209,44 @@ export const paragraph = (text: string): string =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('\n', '<br />')}</p>`;
+
+/**
+ * A wake time as the Snooze menu, the strip and the row print it (M14-02):
+ * "09:00" when it is on the same day as `now`, else "Sun 25 Oct, 09:00".
+ * Latin digits in both locales (DESIGN §7). `timeZone` is the reader's own
+ * unless a caption asks for the department's.
+ */
+export const wakeTime = (
+  iso: string,
+  locale: Locale,
+  now: number,
+  timeZone?: string | undefined,
+): string => {
+  const at = new Date(iso);
+  const zone = timeZone === undefined ? {} : { timeZone };
+  const day = (value: Date | number): string =>
+    new Intl.DateTimeFormat('en-CA', {
+      ...zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(value);
+  const clock = new Intl.DateTimeFormat(numbering(locale), {
+    ...zone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(at);
+  if (day(at) === day(now)) {
+    return clock;
+  }
+
+  const date = new Intl.DateTimeFormat(numbering(locale), {
+    ...zone,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(at);
+
+  return `${date}, ${clock}`;
+};

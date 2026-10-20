@@ -154,7 +154,8 @@
       "mentioned": "إشارة",
       "sla_warning": "تنبيه اتفاقية مستوى الخدمة · {{clock}}",
       "sla_breached": "تجاوز اتفاقية مستوى الخدمة · {{clock}}",
-      "escalated": "تصعيد"
+      "escalated": "تصعيد",
+      "snooze_ended": "انتهى التأجيل"
     },
     "subject": {
       "assigned": "[{{reference}}] أُسند إليك: {{subject}}",
@@ -162,7 +163,8 @@
       "mentioned": "[{{reference}}] أشار إليك {{actor}}",
       "sla_warning": "[{{reference}}] تنبيه: استُهلك {{percent}} % من مهلة {{clock}}",
       "sla_breached": "[{{reference}}] تجاوز مهلة {{clock}}",
-      "escalated": "[{{reference}}] تصعيد: {{subject}}"
+      "escalated": "[{{reference}}] تصعيد: {{subject}}",
+      "snooze_ended": "[{{reference}}] انتهى التأجيل: {{subject}}"
     },
     "heading": {
       "assigned": "أصبح الطلب {{reference}} مسندًا إليك",
@@ -170,7 +172,8 @@
       "mentioned": "أشار إليك {{actor}} في الطلب {{reference}}",
       "sla_warning": "اقترب الطلب {{reference}} من مهلة {{clock}}",
       "sla_breached": "تجاوز الطلب {{reference}} مهلة {{clock}}",
-      "escalated": "صُعّد الطلب {{reference}}"
+      "escalated": "صُعّد الطلب {{reference}}",
+      "snooze_ended": "عاد الطلب {{reference}}"
     },
     "body": {
       "assigned": {
@@ -184,7 +187,8 @@
       "mentioned": "في ملاحظة داخلية على طلب «{{subject}}». لا يرى العملاء الملاحظات.",
       "sla_warning": "استُهلك {{percent}} % من مهلة {{clock}} ولا يزال الطلب بحاجة إلى رد.",
       "sla_breached": "انقضت مهلة {{clock}} ولا يزال الطلب بحاجة إلى رد.",
-      "escalated": "صعّدت خطوةٌ من اتفاقية مستوى الخدمة أو قاعدةٌ هذا الطلب إليك أو إلى فريقك."
+      "escalated": "صعّدت خطوةٌ من اتفاقية مستوى الخدمة أو قاعدةٌ هذا الطلب إليك أو إلى فريقك.",
+      "snooze_ended": "استيقظ طلب أجّلته وعاد إلى قائمتك."
     },
     "clock": {
       "first_response": "الرد الأول",
@@ -279,7 +283,13 @@
       "escalated_two": "تصعيدان",
       "escalated_few": "{{count}} تصعيدات",
       "escalated_many": "{{count}} تصعيدًا",
-      "escalated_other": "{{count}} تصعيد"
+      "escalated_other": "{{count}} تصعيد",
+      "snooze_ended_zero": "لا تأجيلات منتهية",
+      "snooze_ended_one": "تأجيل واحد انتهى",
+      "snooze_ended_two": "تأجيلان انتهيا",
+      "snooze_ended_few": "{{count}} تأجيلات انتهت",
+      "snooze_ended_many": "{{count}} تأجيلًا انتهى",
+      "snooze_ended_other": "{{count}} تأجيل انتهى"
     },
     "heading": {
       "digest_zero": "لا جديد منذ {{since}}",
@@ -336,7 +346,8 @@
       "escalated_two": "صُعّد مرتين",
       "escalated_few": "صُعّد {{count}} مرات",
       "escalated_many": "صُعّد {{count}} مرة",
-      "escalated_other": "صُعّد {{count}} مرة"
+      "escalated_other": "صُعّد {{count}} مرة",
+      "snooze_ended": "انتهى التأجيل"
     },
     "bulk": {
       "assigned_zero": "أسند إليك {{actor}} طلبات",

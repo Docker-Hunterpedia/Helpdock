@@ -34,6 +34,7 @@ import {
 } from '../lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from '../lifecycle/lifecycle-failure.js';
 import { arrivalOf, requestArrival } from '../routing/arrival.js';
+import { isSnoozedStatus, wakeStatusFor, writeWokeActivity } from '../snooze/snooze-wake.js';
 import { activityActorFor, writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
 import { TicketRepository, type TicketWithStatus } from '../tickets.repository.js';
@@ -390,13 +391,21 @@ export class MergeService {
       other: ticket,
     });
 
+    // M14-02: an unmerge puts the ticket back in the status it had, and a
+    // ticket cannot come back Snoozed with no wake time. It returns to where
+    // it would have woken to.
+    const snoozedBefore = isSnoozedStatus(status) && ticket.snoozedUntil !== null;
+    const restoreStatus = snoozedBefore
+      ? ((await wakeStatusFor(context.tx, ticket.snoozeResumeStatusId)) ?? status)
+      : status;
+
     const moved = await this.#tickets.updateTicket(context.tx, ticket.id, {
       statusId: merge.merged.id,
       closedAt: closedAtOnMerge(ticket.closedAt, context.now),
       mergedIntoId: merge.primary.id,
       mergedAt: context.now,
       mergedById: merge.mergedById,
-      preMergeStatusId: status.id,
+      preMergeStatusId: restoreStatus.id,
       preMergeDepartmentId: ticket.departmentId,
       mergeMessageId: announcement,
       departmentId: merge.primary.departmentId,
@@ -414,6 +423,15 @@ export class MergeService {
       toDetail: { statusId: merge.merged.id, departmentId: moved.departmentId },
     });
     await this.#logStatusChange(context, moved, status.id, merge.merged.id);
+    if (snoozedBefore) {
+      await writeWokeActivity(context.tx, {
+        brandId: context.brandId,
+        ticket,
+        actor: context.actor,
+        reason: 'status_changed',
+        statusId: merge.merged.id,
+      });
+    }
 
     return moved;
   }

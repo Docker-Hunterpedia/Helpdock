@@ -11,6 +11,7 @@ import {
   slaState,
   statusName,
   ticketReference,
+  wakeTime,
 } from './format.js';
 
 const iso = (offset: number): string => new Date(NOW + offset).toISOString();
@@ -206,5 +207,25 @@ describe('clockDuration', () => {
     expect(clockDuration(-(HOUR + 20 * 60_000))).toBe('1h 20m');
     expect(clockDuration(3 * 24 * HOUR)).toBe('3d');
     expect(clockDuration(3 * 24 * HOUR + 4 * HOUR)).toBe('3d 4h');
+  });
+});
+
+describe('wakeTime', () => {
+  const NOON = Date.UTC(2026, 9, 21, 12, 0, 0);
+
+  it('prints only the clock for a wake on the same day', () => {
+    expect(wakeTime('2026-10-21T15:12:00Z', 'en', NOON, 'UTC')).toBe('15:12');
+  });
+
+  it('prints the weekday, date and clock for another day, in Latin digits in both languages', () => {
+    expect(wakeTime('2026-10-25T09:00:00Z', 'en', NOON, 'UTC')).toMatch(/Sun.*25.*09:00/);
+    expect(wakeTime('2026-10-25T09:00:00Z', 'ar', NOON, 'UTC')).toMatch(/25.*09:00/);
+    expect(wakeTime('2026-10-25T09:00:00Z', 'ar', NOON, 'UTC')).not.toMatch(/[\u0660-\u0669]/);
+  });
+
+  it('reads the day in the zone it is asked for, not in the reader’s', () => {
+    // 23:30 UTC is already tomorrow in Riyadh (+3).
+    expect(wakeTime('2026-10-21T23:30:00Z', 'en', NOON, 'Asia/Riyadh')).toMatch(/Thu.*02:30/);
+    expect(wakeTime('2026-10-21T23:30:00Z', 'en', NOON, 'UTC')).toBe('23:30');
   });
 });

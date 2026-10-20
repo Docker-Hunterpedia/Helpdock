@@ -21,6 +21,7 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { RealtimeBroadcast } from '../realtime/broadcast.js';
+import { SNOOZE_EVENTS, snoozeEndedPayloadSchema } from '../tickets/snooze/snooze-events.js';
 import {
   TICKET_ASSIGNED_EVENT,
   TICKET_EVENTS,
@@ -57,6 +58,7 @@ import { channelsFor, eligibleRecipients, mentionedStaff, type StaffFacts } from
  * | `sla.warning` | the SLA engine (M3-02) | the people, teams and leads its step names, or else the assignee |
  * | `sla.breached` | the SLA engine | the assignee, or the ticket's team when nobody holds it |
  * | `ticket.escalated` | an SLA step | the people, teams and leads it names, or else the assignee and team |
+ * | `ticket.snooze_ended` | a snooze ended by time or an SLA step (M14-02) | the assignee, else the person who snoozed it |
  * | `rule.notify` | a workflow rule's "notify" action (M3-03) | the recipients the rule resolved |
  */
 
@@ -278,6 +280,26 @@ export const planFor = (
         candidates: namedOr(parsed, assigneeAndTeam),
       };
     }
+    case SNOOZE_EVENTS.ended: {
+      // M14-02: a snooze ended by time or by an SLA step. Whoever holds the
+      // ticket is told; when nobody does, the person who snoozed it is.
+      const parsed = snoozeEndedPayloadSchema.parse(payload);
+      return {
+        kind: 'snooze_ended',
+        ticketId: parsed.ticketId,
+        messageId: null,
+        actorId: null,
+        detail: { wokeBy: parsed.cause },
+        candidates: ({ ticket }) =>
+          Promise.resolve(
+            ticket.assigneeId !== null
+              ? [ticket.assigneeId]
+              : parsed.snoozedBy === null
+                ? []
+                : [parsed.snoozedBy],
+          ),
+      };
+    }
     case RULE_NOTIFY_EVENT: {
       // A rule's "notify" action (M3-03). The rule resolved who; the kind is
       // the escalation row of the preference matrix, whose setting reads "an
@@ -309,6 +331,7 @@ export const CONSUMED_EVENTS = [
   SLA_EVENTS.breached,
   TICKET_ESCALATED_EVENT,
   RULE_NOTIFY_EVENT,
+  SNOOZE_EVENTS.ended,
 ] as const;
 
 export interface FanOutDeps {

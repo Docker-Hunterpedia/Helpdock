@@ -951,6 +951,40 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     await disableAll();
   });
 
+  it('refuses a rule that sets the Snoozed status, and offers it only as a condition value (M14-02)', async () => {
+    const [snoozed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemKey, 'snoozed')),
+    );
+    const base = {
+      name: 'Snooze by rule',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: { match: 'all', groups: [] },
+    };
+
+    const refused = await call<{ error: { message: string } }>(
+      'POST',
+      `${brandPath()}/rules`,
+      ada,
+      {
+        ...base,
+        actions: [{ type: 'set_status', statusId: snoozed?.id }],
+      },
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.message).toContain('Snoozed');
+
+    const options = await call<{ statuses: { id: string; isSnoozed?: boolean }[] }>(
+      'GET',
+      `${brandPath()}/rules/options`,
+      ada,
+    );
+    expect(options.body.statuses.find((status) => status.id === snoozed?.id)?.isSnoozed).toBe(true);
+  });
+
   it('refuses a rule that names another brand’s ids, and reorders a whole list only', async () => {
     const foreign = await call('POST', `${brandPath()}/rules`, ada, {
       name: 'Foreign',

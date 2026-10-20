@@ -256,6 +256,29 @@ strings already in the catalog are used by the sheet (UX-09).
 
 ### M14-02 Snooze
 
+**Status: built, in review** (issue #289). Built as below, with these
+differences: the Snoozed view is written for an existing brand by the api at
+boot (`backfillBuiltInViews`, which calls the idempotent `seedBrandViews`)
+rather than by the migration, because a value added to the
+`ticket_view_built_in` enum cannot be used in the transaction that adds it;
+the migration seeds the Snoozed status for every brand and moves Unassigned and
+Overdue down one place, and a new brand gets the view and the status with its
+other defaults. The wake jobs run on the existing `sla` queue beside the SLA
+timers instead of a queue of their own, because they share its worker, its
+boot rebuild and its hourly tick. `snoozed_by` and `snooze_resume_status_id`
+are set to null when the person or the status goes, so the check is "no snooze
+detail without `snoozed_until`" rather than "all three or none". The picker is
+a native `datetime-local` input beside a read-only time zone field (the
+accessibility note says so) instead of the board's drawn calendar grid. The
+Snooze menu reads its four times from `GET /tickets/:id/snooze-presets`, which
+works them out against the department calendar on the server, so there is one
+copy of the calendar maths. The status picker leaves Snoozed out unless the
+ticket is in it (`isSnoozed` on the status), because choosing it would ask for a
+time. The bulk bar and the palette entry wait for M14-04 and M14-05, which build
+what they act on. A ticket moved from Awaiting customer to Snoozed starts
+counting its response clock again, which is the rule applied as written.
+Guide: [Snooze](../guides/snooze.md).
+
 **Model.** Snooze is a **status**, not a hidden flag: every brand gets a seeded
 system status **Snoozed** (system state `on_hold`, `is_system`, built-in key
 `snoozed`), and the ticket carries `snoozed_until`, `snoozed_by`,

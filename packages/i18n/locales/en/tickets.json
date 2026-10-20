@@ -168,7 +168,15 @@
     "importedHistory": "{{actor}} · history from {{source}} · {{action}}",
     "importedChange": "{{actor}} · history from {{source}} · {{field}}: {{from}} → {{to}}",
     "structuredValue": "structured value",
-    "importedCsat": "Satisfaction response imported from {{source}}"
+    "importedCsat": "Satisfaction response imported from {{source}}",
+    "snoozed": "{{actor}} snoozed the ticket until {{until}}",
+    "woke": {
+      "time": "The ticket woke up: its time came",
+      "customer_reply": "The ticket woke up: the customer replied",
+      "sla": "The ticket woke up: an SLA was about to run out",
+      "status_changed": "The ticket woke up: its status changed",
+      "manual": "{{actor}} woke the ticket"
+    }
   },
   "composer": {
     "label": "Reply or internal note",
@@ -382,7 +390,8 @@
         "status": "Status",
         "priority": "Priority",
         "tags": "Tags",
-        "macros": "Macros"
+        "macros": "Macros",
+        "snooze": "Snooze"
       },
       "composer": {
         "send": "Send",
@@ -511,7 +520,9 @@
     "merge-window-closed": "A merge can be undone for 24 hours, and those have passed.",
     "attachments-in-flight": "A file on those messages is still being processed. Try again in a moment.",
     "merge-primary-deleted": "The ticket this one was merged into has been deleted, so the merge cannot be undone.",
-    "ticket-not-spam": "This ticket is not marked as spam."
+    "ticket-not-spam": "This ticket is not marked as spam.",
+    "ticket-closed": "A closed ticket cannot be snoozed. Reopen it first.",
+    "snooze-requires-time": "Snoozed needs a wake time. Use the Snooze button to choose one."
   },
   "summary": {
     "me": "me",
@@ -525,7 +536,9 @@
     "overdue": "SLA breached or due",
     "search": "Search: {{value}}",
     "sort": "Sort: {{value}}",
-    "everything": "Every ticket"
+    "everything": "Every ticket",
+    "snoozedOnly": "Snoozed only",
+    "snoozedInclude": "Including snoozed"
   },
   "sort": {
     "updatedAt": {
@@ -1066,5 +1079,41 @@
       "team": "a team since deleted",
       "person": "someone no longer in the brand"
     }
+  },
+  "snooze": {
+    "button": "Snooze",
+    "menuLabel": "Snooze until",
+    "loading": "Loading times…",
+    "presetsFailed": "The times could not be loaded. You can still pick a date and time.",
+    "preset": {
+      "in_1_hour": "In 1 hour",
+      "in_4_hours": "In 4 hours",
+      "next_business_day": "Next business day",
+      "next_week": "Next week"
+    },
+    "departmentTime": "{{department}} opens {{time}} ({{zone}})",
+    "pick": "Pick a date and time…",
+    "dialog": {
+      "title": "Snooze until",
+      "when": "Date and time",
+      "timeZone": "Time zone",
+      "bothZones": "{{yours}} your time · {{theirs}} for {{department}} ({{zone}}).",
+      "cancel": "Cancel",
+      "confirm": "Snooze",
+      "tooSoon": "Pick a time at least 5 minutes from now.",
+      "tooFar": "Pick a time within the next 90 days.",
+      "invalid": "Enter a date and time."
+    },
+    "strip": {
+      "by": "Snoozed by {{name}} until {{time}}.",
+      "until": "Snoozed until {{time}}.",
+      "wakes": "It wakes earlier if the customer replies or an SLA is about to breach.",
+      "wakeNow": "Wake now"
+    },
+    "toast": {
+      "snoozed": "Snoozed until {{time}}",
+      "woke": "Ticket woke up"
+    },
+    "rowLabel": "Snoozed until {{time}}"
   }
 }

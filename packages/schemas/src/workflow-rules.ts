@@ -597,7 +597,8 @@ const namedSchema = z.object({ id: z.uuid(), name: z.string(), nameAr: z.string(
  * responses by id, and the builder shows them by name.
  */
 export const ruleBuilderOptionsSchema = z.object({
-  statuses: z.array(namedSchema),
+  // `isSnoozed`: a condition may test the Snoozed status, an action cannot set it (M14-02).
+  statuses: z.array(namedSchema.extend({ isSnoozed: z.boolean().optional() })),
   departments: z.array(namedSchema),
   teams: z.array(z.object({ id: z.uuid(), name: z.string(), departmentId: z.uuid() })),
   tags: z.array(namedSchema),

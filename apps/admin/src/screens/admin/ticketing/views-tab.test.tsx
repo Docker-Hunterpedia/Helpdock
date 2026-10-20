@@ -53,6 +53,7 @@ describe('the list', () => {
 
     expect(namesInOrder()).toEqual([
       'My open',
+      'Snoozed',
       'Unassigned',
       'Overdue',
       'All open · Support',

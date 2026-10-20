@@ -4,6 +4,7 @@ import type {
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
 import type { TicketPriority, TicketSla, TicketSlaSummary } from '@helpdock/schemas';
+import { isSnoozedStatus } from '../tickets/snooze/snooze-wake.js';
 import { writeTicketActivity } from '../tickets/ticket-activity.js';
 import { buildCalendars } from './calendars.js';
 import { type Clock, checkpoint } from './clock.js';
@@ -387,6 +388,7 @@ export class SlaService {
       previousDepartmentId: change.previousDepartmentId,
       systemState: status.systemState,
       pausesSla: status.pausesSla,
+      snoozed: isSnoozedStatus(status),
       excludedFromReports: status.excludedFromReports,
       merged: ticket.mergedIntoId !== null,
       deleted: ticket.deletedAt !== null,

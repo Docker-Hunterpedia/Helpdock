@@ -40,6 +40,11 @@ export interface FilterSummary {
 const isLive = (states: readonly string[]): boolean =>
   states.length === LIVE_STATES.length && LIVE_STATES.every((state) => states.includes(state));
 
+const snoozedKey = (snoozed: 'only' | 'include') =>
+  snoozed === 'only'
+    ? ('tickets:summary.snoozedOnly' as const)
+    : ('tickets:summary.snoozedInclude' as const);
+
 export function useFilterSummary(directory: FilterDirectory): FilterSummary {
   const t = useT();
   const { locale } = usePreferences();
@@ -133,6 +138,14 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
         });
       }
 
+      if (filters.snoozed !== 'exclude') {
+        parts.push({
+          key: 'snoozed',
+          label: t(snoozedKey(filters.snoozed)),
+          without: { ...filters, snoozed: 'exclude' },
+        });
+      }
+
       if (filters.imported !== undefined) {
         parts.push({
           key: 'imported',
@@ -166,6 +179,9 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       });
       if (filters.overdue) {
         phrases.push(t('tickets:summary.overdue'));
+      }
+      if (filters.snoozed !== 'exclude') {
+        phrases.push(t(snoozedKey(filters.snoozed)));
       }
       if (filters.q !== '') {
         phrases.push(t('tickets:summary.search', { value: filters.q }));

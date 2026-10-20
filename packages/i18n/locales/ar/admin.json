@@ -111,7 +111,8 @@
       "mentioned": "أشار إليك {{actor}}",
       "sla_warning": "تنبيه اتفاقية مستوى الخدمة · {{clock}}",
       "sla_breached": "تجاوز اتفاقية مستوى الخدمة · {{clock}}",
-      "escalated": "صُعّد إليك أو إلى فريقك"
+      "escalated": "صُعّد إليك أو إلى فريقك",
+      "snooze_ended": "انتهى التأجيل"
     },
     "clock": {
       "first_response": "الرد الأول",

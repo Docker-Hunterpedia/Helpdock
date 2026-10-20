@@ -69,6 +69,7 @@ navigation only, and the api refuses a change whatever the keys do.
 | `p` | Priority | everyone but a Viewer |
 | `t` | Tags | everyone but a Viewer |
 | `m` | Macros | everyone but a Viewer |
+| `h` | Snooze | everyone but a Viewer |
 
 ### Composer
 
@@ -80,10 +81,10 @@ navigation only, and the api refuses a change whatever the keys do.
 <!-- shortcuts:end -->
 
 Not yet: `⌘K` for the command palette (M14-05), `x` and `Shift`+`x` to select
-tickets and `Esc` to clear the selection (M14-04), `h` to snooze (M14-02),
-`{{` for the placeholder picker in the composer (M14-14), and `Enter` on a
-focused row, which needs M14-04's focus model. Each is added to the registry,
-and so to the sheet and this guide, with the deliverable that builds it.
+tickets and `Esc` to clear the selection (M14-04), `{{` for the placeholder
+picker in the composer (M14-14), and `Enter` on a focused row, which needs
+M14-04's focus model. Each is added to the registry, and so to the sheet and
+this guide, with the deliverable that builds it.
 
 ## Where a shortcut answers
 
@@ -95,6 +96,8 @@ and so to the sheet and this guide, with the deliverable that builds it.
 - **Ticket** answers while a ticket is open. `a`, `s`, `p` and `t` open the
   assignee picker, the status and priority menus and the tag picker in the
   details panel, opening the panel first on a window narrower than 1280 px.
+  `h` opens the Snooze menu on the header's button; a closed or merged ticket
+  has none, so `h` does nothing there ([Snooze](snooze.md)).
 - **Composer** answers only while the caret is in the composer, so `⌘`+`Enter`
   in the list's search box sends nothing. "Send and close" sends, then moves
   the ticket to the same status `e` does. `/` typed into an empty reply opens

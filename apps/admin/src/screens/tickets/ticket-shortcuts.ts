@@ -12,6 +12,7 @@ export const TICKET_SHORTCUTS = [
   'ticket.priority',
   'ticket.tags',
   'ticket.macros',
+  'ticket.snooze',
   'list.close',
 ] as const satisfies readonly ShortcutId[];
 
@@ -49,12 +50,15 @@ export function useTicketShortcuts({
   onCompose,
   onDetails,
   onMacros,
+  onSnooze,
   onClose,
 }: {
   readonly writable: boolean;
   onCompose(mode: ComposerMode): void;
   onDetails(control: DetailsControl): void;
   onMacros(): void;
+  /** Null when the ticket is closed: nothing to put away (DOMAIN-RULES §2.2). */
+  readonly onSnooze: (() => void) | null;
   /** Null when there is nothing to close into, or the ticket is already closed. */
   readonly onClose: (() => void) | null;
 }): void {
@@ -80,6 +84,7 @@ export function useTicketShortcuts({
       onDetails('tags');
     }),
     'ticket.macros': when(onMacros),
+    'ticket.snooze': writable ? onSnooze : null,
     'list.close': writable ? onClose : null,
   });
 }

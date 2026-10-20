@@ -89,6 +89,8 @@ Four system states: `open`, `on_hold`, `escalated`, `closed`. Custom statuses ma
 
 Two custom statuses ship with every brand: **Awaiting customer** (`on_hold`, `pauses_sla`, `awaiting_customer`) and **Spam** (`closed`, excluded from reports). A brand toggle `auto_await_on_agent_reply` (default on) moves a ticket to Awaiting customer when an agent sends a public reply.
 
+A third seeded custom status, **Snoozed** (`on_hold`, `pauses_sla`, not `awaiting_customer`; system key `snoozed`, M14-02, [ADR 0035](../decisions/0035-snooze-as-a-system-status.md)), has a fixed state and fixed flags: a brand may rename and recolour it, never remap it or delete it. A ticket is in Snoozed exactly when `tickets.snoozed_until` is set. The ticket remembers the status before the snooze (`snooze_resume_status_id`) and who snoozed it (`snoozed_by`), and `snooze_version` counts every change of `snoozed_until`. Snoozed is entered only with a wake time (5 minutes to 90 days ahead, from the server's clock); setting it as a bare status, by a person or a rule, is refused (`snooze-requires-time`). A `BEFORE UPDATE` trigger on `tickets` clears the three snooze columns on any change of `status_id` to another status, whichever code path made it.
+
 ### 2.2 Transitions
 
 | Current state | Event | Result |
@@ -102,6 +104,12 @@ Two custom statuses ship with every brand: **Awaiting customer** (`on_hold`, `pa
 | any | Marked spam | Spam status; no auto-responder, no CSAT, sender added to block list if the agent ticks "block sender", excluded from reports and round-robin counts |
 | any | Merged into another ticket | `closed` with `merged_into_id`; see §2.4 |
 | any | Soft-deleted by Admin | Hidden from all views; purged by retention (§11) |
+| any open-like (not closed, not merged) | Agent snoozes, with a wake time | Snoozed, remembering the previous status; a ticket that is already Snoozed keeps the status before the first snooze. A closed ticket is refused (`ticket-closed`). Activity `ticket.snoozed`. |
+| Snoozed | Snooze time reached | The remembered status if it still exists and is open-like, else the brand's default open status. Actor `system:snooze`; activity `ticket.woke`, reason `time`; the assignee, else the person who snoozed it, is notified (`snooze_ended`). |
+| Snoozed | SLA warning or breach on a running first-response or next-response clock | The remembered status (as above). Actor `system:sla`; reason `sla`; same notification. |
+| Snoozed | Customer public reply | The first row of this table, unchanged: the brand's default open status. Reason `customer_reply`; nobody is notified. |
+| Snoozed | Agent sets another status, closes, marks spam, or the ticket is merged (a person or a rule) | That status; the snooze is cleared. Reason `status_changed`. |
+| Snoozed | *Wake now* (`snoozedUntil: null`) | The remembered status (as above). Reason `manual`. |
 
 Time-based rules and workflow actions use the same transitions and are logged with actor `rule:<id>`.
 
@@ -238,6 +246,8 @@ Elapsed time is counted only inside the business hours of the ticket's departmen
 
 While the ticket is in a status with `pauses_sla`, clocks do not advance. On resume, `due_at` is recomputed as `now + remaining`, where `remaining = target − elapsed_in_business_hours`. Pauses are recorded so reports can show "time waiting on customer" separately. Changing a status's `pauses_sla` applies the same rule to the open tickets already in it, through the `sla.status_resync` outbox event in batches, counted from the time of the change.
 
+**Snoozed is the one status whose `pauses_sla` applies per clock** (M14-02, owner decision D-19): it pauses the **resolution** clock only. An unsatisfied first-response or next-response clock keeps running while the ticket is snoozed, because putting a ticket away is not answering it; a response clock that reaches an escalation step wakes the ticket (§2.2). A ticket moved from Awaiting customer to Snoozed therefore starts counting its response clock again.
+
 ### 3.3 Changes to priority, department, or policy
 
 When any of these changes, both unsatisfied clocks are recomputed:
@@ -255,6 +265,7 @@ Escalation steps already fired are not re-fired. Steps not yet fired are re-sche
 - Breach is recorded once per clock. Reports count a ticket as "first-response breached" or "resolution breached" independently.
 - Escalation steps are defined per policy as `{ at_percent, actions[] }`, `at_percent` may exceed 100 for post-breach steps. Actions: notify users/teams, reassign, raise priority, add tag, set status `escalated`.
 - Timers are BullMQ delayed jobs keyed `sla:<ticket_id>:<clock>:<step>` (written with dots, `sla.<ticket_id>.<clock>.<step>`, because BullMQ refuses a colon in a custom job id). Any status, priority, department, or policy change removes and re-adds them. On worker boot, `sla.rebuild` scans open tickets and re-creates missing timers (protects against Redis loss).
+- Snooze timers (M14-02) are delayed jobs `ticket.unsnooze` keyed `snooze.<ticket_id>.<snooze_version>`, added by the consumer of the `ticket.snoozed` outbox event written in the same transaction as the snooze, on the same queue as the SLA timers. A job does nothing unless the ticket is still Snoozed at that version and due, so a newer snooze, a customer reply or a manual wake leaves an old job harmless. `snooze.rebuild` runs on worker boot and hourly: it wakes every snooze that is already due and re-adds the timer of every other, so losing Redis loses no snooze.
 
 ### 3.5 Reopen
 
@@ -268,6 +279,8 @@ Policy: High priority, first response 2 h, resolution 8 h. Business hours 09:00�
 2. Same ticket moved to Awaiting customer at Sunday 09:30 (agent reply, toggle on). Resolution clock: elapsed 1.5 h, remaining 6.5 h, paused. Customer replies Tuesday 12:00 → resumes, due Wednesday 10:30 (5 h Tuesday + 1.5 h Wednesday).
 3. Priority raised to Urgent (resolution 4 h) Tuesday 13:00. Elapsed = 1.5 h + 1 h = 2.5 h. Remaining = 4 − 2.5 = 1.5 h. New due Tuesday 14:30.
 4. Ticket closed Tuesday 14:00 → satisfied. Customer replies the following Monday (6 days later, policy `within_days: 7`) → reopened. Next-response clock due 2 business hours after the reply; resolution due 8 business hours after the reply. Initial clocks remain "met" in reports.
+5. Snooze (M14-02). The ticket of example 1 is snoozed Sunday 09:30 until Monday 12:00, unanswered. Resolution: elapsed 1.5 h, paused. First response: 1.5 h of 2 h used and still running, so its step at 100 % runs Sunday 10:00 and wakes the ticket into the status it had; the resolution clock resumes with 6.5 h remaining and is due Sunday 16:30. If an agent had answered at 09:45 instead, the first-response clock would be met, nothing would wake the ticket early, and at Monday 12:00 it wakes and the resolution clock resumes with 6.5 h remaining, due Tuesday 10:30 (5 h Monday + 1.5 h Tuesday).
+6. The ticket of example 1, not answered, is set to Awaiting customer by an agent at Sunday 09:30, then snoozed Sunday 11:00 (M14-02). Awaiting customer paused both clocks at 09:30: first response 1.5 h used of 2 h, resolution 1.5 h. Snoozed pauses only the resolution clock, so at 11:00 the first-response clock resumes with 0.5 h remaining and is due Sunday 11:30 (the 1.5 h shown at the snooze is 09:30 to 11:00 paused, not counted); the resolution clock stays paused. When that step runs the ticket wakes into Awaiting customer, which pauses both clocks again.
 
 ---
 
@@ -439,7 +452,7 @@ Backup tooling is out of scope for v1, but the procedure is not. `docs/guides/op
 - **Restore**: fresh Compose stack → restore dump with the owner role → point at the bucket → same `.env` → start; migrations bring an older dump forward. A restore drill on a clean VM is an M9 exit criterion.
 - **Upgrades**: pin the image tag; take a dump first; migrations are forward-only. A failed migration leaves the lock held and the api refuses to serve; recovery is restore + previous tag. Release notes flag migrations that cannot be rolled back by restore (none planned for 1.x).
 - **Master key rotation**: `helpdock keys rotate` reads `APP_MASTER_KEY_PREVIOUS` and `APP_MASTER_KEY`, re-encrypts every secret row to the new key id, and reports. Each secret row stores its key id, so the two keys can coexist during rotation. Loss of both keys is unrecoverable and the wizard says so.
-- **Redis**: named volume `redis_data:/data` with AOF. Losing Redis logs everyone out, drops rate-limit counters, and loses queued jobs; the outbox relay republishes anything unpublished, `sla.rebuild` recreates timers, `notify.email_rebuild` places every pending notification email batch again (§20), and repeatable pollers are re-registered on worker boot. Nothing durable lives only in Redis.
+- **Redis**: named volume `redis_data:/data` with AOF. Losing Redis logs everyone out, drops rate-limit counters, and loses queued jobs; the outbox relay republishes anything unpublished, `sla.rebuild` recreates timers, `snooze.rebuild` wakes every snooze already due and recreates the `ticket.unsnooze` timer of the rest (M14-02), `notify.email_rebuild` places every pending notification email batch again (§20), and repeatable pollers are re-registered on worker boot. Nothing durable lives only in Redis.
 
 ---
 
@@ -564,5 +577,6 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-20 | §12: the SSO first-link rule, with Entra ID's `xms_edov` from members of the one tenant a connection names (M18-09, ADR 0026). |
 | 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |
 | 2026-10-21 | §12.1 rule 2: adding, renaming and removing a passkey need a step-up, at most 10 per account, the last-factor refusal, the `securityChange` email and the audit rows (M18-02). |
+| 2026-10-20 | §2.1, §2.2, §3.2, §3.4 and §3.6: the Snoozed status, its wake paths, the per-clock pause and the wake timers (M14-02, [ADR 0035](../decisions/0035-snooze-as-a-system-status.md)). |
 | 2026-10-20 | New §20 Notification delivery: email schedules, Right away pacing, the send-time re-check, the presence hold, pause and per-brand digests (M14-10, [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md)); §6's email key, §10's rebuild and §11's batches follow. |
 | 2026-10-20 | The new §2.9: Test routing walks a sample through the arrival path read-only, with the engine's own evaluation order, and shows no rotation outside the reader's scope (M14-09). |

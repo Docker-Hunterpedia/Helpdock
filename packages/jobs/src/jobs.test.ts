@@ -69,12 +69,15 @@ import {
   slaRebuildJob,
   slaTimerJob,
   slaTimerJobId,
+  snoozeRebuildJob,
   statsRollupJob,
   statsRollupJobId,
   statsRollupScheduleJob,
   telegramPollJob,
   telegramPollSchedulerId,
   telegramSendJob,
+  ticketUnsnoozeJob,
+  ticketUnsnoozeJobId,
   webhookDeliverJob,
 } from './jobs.js';
 import { QUEUE_NAME_LIST } from './queues.js';
@@ -89,6 +92,39 @@ const validEvent = {
   event: 'settings.changed',
   payload: { key: 'smtp.host' },
 };
+
+const BRAND_FOR_SNOOZE = '01937f5e-7e53-7000-8000-0000000000b1';
+const TICKET_FOR_SNOOZE = '01937f5e-7e53-7000-8000-0000000000a1';
+
+describe('snooze timers (M14-02)', () => {
+  const payload = { brandId: BRAND_FOR_SNOOZE, ticketId: TICKET_FOR_SNOOZE, version: 3 };
+
+  it('keys a wake timer by ticket and version, so a newer snooze is a different job', () => {
+    expect(ticketUnsnoozeJobId(payload)).toBe(`snooze.${TICKET_FOR_SNOOZE}.3`);
+    expect(ticketUnsnoozeJobId({ ...payload, version: 4 })).not.toBe(ticketUnsnoozeJobId(payload));
+    // BullMQ refuses a custom id with a colon in it.
+    expect(ticketUnsnoozeJobId(payload)).not.toContain(':');
+  });
+
+  it('validates a wake payload and refuses a missing or negative version', () => {
+    expect(parseJobPayload(ticketUnsnoozeJob, payload)).toEqual(payload);
+    expect(() => parseJobPayload(ticketUnsnoozeJob, { ...payload, version: -1 })).toThrow(
+      PayloadValidationError,
+    );
+    expect(() =>
+      parseJobPayload(ticketUnsnoozeJob, { brandId: payload.brandId, ticketId: payload.ticketId }),
+    ).toThrow(PayloadValidationError);
+  });
+
+  it('runs on the sla queue, and its rebuild ticks hourly like sla.rebuild', () => {
+    expect(ticketUnsnoozeJob.queue).toBe('sla');
+    expect(snoozeRebuildJob.queue).toBe('sla');
+    expect(snoozeRebuildJob.schedule).toEqual({ everyMs: 3_600_000 });
+    expect(parseJobPayload(snoozeRebuildJob, {})).toEqual({});
+    expect(JOB_DEFINITIONS).toHaveProperty(['ticket.unsnooze']);
+    expect(JOB_DEFINITIONS).toHaveProperty(['snooze.rebuild']);
+  });
+});
 
 describe('the job registry', () => {
   it('keys every definition by its own name', () => {

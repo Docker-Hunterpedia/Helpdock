@@ -40,6 +40,7 @@ export function TicketHeader({
   onShowDetails,
   onMacro,
   macroOpen = false,
+  snooze,
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
@@ -57,6 +58,8 @@ export function TicketHeader({
   /** M3-06: opens the composer's macro picker. Absent for a reader who cannot reply. */
   onMacro?: (() => void) | undefined;
   readonly macroOpen?: boolean | undefined;
+  /** M14-02: the Snooze button and its menu. Absent when the ticket cannot be snoozed. */
+  readonly snooze?: ReactNode;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -88,6 +91,8 @@ export function TicketHeader({
             {ticket.subject}
           </Typography>
         </Box>
+
+        {snooze}
 
         {onMacro === undefined ? null : (
           <Button

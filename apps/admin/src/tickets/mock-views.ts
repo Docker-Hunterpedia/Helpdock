@@ -34,6 +34,7 @@ export const MOCK_VIEW_OVERDUE = '0192c3f0-1a2b-7c3d-8e4f-0000000000e3';
 export const MOCK_VIEW_ESCALATED = '0192c3f0-1a2b-7c3d-8e4f-0000000000e4';
 export const MOCK_VIEW_VIP = '0192c3f0-1a2b-7c3d-8e4f-0000000000e5';
 export const MOCK_VIEW_MINE = '0192c3f0-1a2b-7c3d-8e4f-0000000000e6';
+export const MOCK_VIEW_SNOOZED = '0192c3f0-1a2b-7c3d-8e4f-0000000000e7';
 
 const filters = (input: Record<string, unknown>): TicketViewFilters =>
   ticketViewFiltersSchema.parse(input);
@@ -60,11 +61,19 @@ const seedViews = (): TicketView[] => [
     filters: filters({ assigneeId: ['me'], systemState: LIVE }),
   }),
   view({
+    id: MOCK_VIEW_SNOOZED,
+    name: 'Snoozed',
+    nameAr: 'المؤجَّلة',
+    builtIn: 'snoozed',
+    sortOrder: 1,
+    filters: filters({ assigneeId: ['me'], snoozed: 'only' }),
+  }),
+  view({
     id: MOCK_VIEW_UNASSIGNED,
     name: 'Unassigned',
     nameAr: 'غير المسندة',
     builtIn: 'unassigned',
-    sortOrder: 1,
+    sortOrder: 2,
     filters: filters({ assigneeId: ['unassigned'], systemState: LIVE }),
   }),
   view({
@@ -72,7 +81,7 @@ const seedViews = (): TicketView[] => [
     name: 'Overdue',
     nameAr: 'المتأخرة',
     builtIn: 'overdue',
-    sortOrder: 2,
+    sortOrder: 3,
     filters: filters({ overdue: true, systemState: LIVE }),
   }),
   ...MOCK_DEPARTMENTS.map((department, index) =>
@@ -84,7 +93,7 @@ const seedViews = (): TicketView[] => [
       builtIn: 'department_open',
       departmentId: department.id,
       visibility: { kind: 'departments', departmentIds: [department.id] },
-      sortOrder: 3 + index,
+      sortOrder: 4 + index,
       filters: filters({ departmentId: [department.id], systemState: LIVE }),
     }),
   ),
@@ -93,7 +102,7 @@ const seedViews = (): TicketView[] => [
     name: 'Escalated',
     nameAr: 'المُصعَّدة',
     builtIn: 'escalated',
-    sortOrder: 3 + MOCK_DEPARTMENTS.length,
+    sortOrder: 4 + MOCK_DEPARTMENTS.length,
     filters: filters({ systemState: ['escalated'] }),
   }),
   view({
@@ -101,7 +110,7 @@ const seedViews = (): TicketView[] => [
     name: 'VIP refunds',
     nameAr: 'استرداد كبار العملاء',
     visibility: { kind: 'departments', departmentIds: [MOCK_DEPARTMENTS[1]?.id ?? ''] },
-    sortOrder: 4 + MOCK_DEPARTMENTS.length,
+    sortOrder: 5 + MOCK_DEPARTMENTS.length,
     filters: filters({ priority: ['urgent'], systemState: LIVE }),
   }),
   view({

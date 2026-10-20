@@ -2,6 +2,8 @@ import {
   brandIdParamSchema,
   messageCreateRequestSchema,
   messagePageQuerySchema,
+  snoozePresetsQuerySchema,
+  snoozePresetsSchema,
   ticketActivityListSchema,
   ticketActivityQuerySchema,
   ticketCreateRequestSchema,
@@ -48,3 +50,6 @@ export class TicketBrandParamDto extends createZodDto(brandIdParamSchema) {}
 export class TicketParamDto extends createZodDto(ticketParamSchema) {}
 /** M14-08's routing trail. */
 export class TicketRoutingDto extends createZodDto(ticketRoutingSchema) {}
+/** M14-02's Snooze menu. */
+export class SnoozePresetsDto extends createZodDto(snoozePresetsSchema) {}
+export class SnoozePresetsQueryDto extends createZodDto(snoozePresetsQuerySchema) {}

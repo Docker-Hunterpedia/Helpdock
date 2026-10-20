@@ -462,6 +462,70 @@ export const slaRebuildJob = defineJob({
   schedule: { everyMs: 3_600_000 },
 });
 
+export const ticketUnsnoozePayloadSchema = z.object({
+  brandId: z.uuid(),
+  ticketId: z.uuid(),
+  /** `tickets.snooze_version` when the timer was planned; a later snooze change makes this job a no-op. */
+  version: z.int().nonnegative(),
+});
+
+export type TicketUnsnoozePayload = z.infer<typeof ticketUnsnoozePayloadSchema>;
+
+/**
+ * One snooze wake timer (M14-02, DOMAIN-RULES §3.4). Added with a delay by the
+ * `ticket.snoozed` outbox handler, never by a request. It runs on the `sla`
+ * queue beside the timers it is modelled on, so it shares their worker and
+ * their boot and hourly rebuild.
+ *
+ * The id is {@link ticketUnsnoozeJobId}: re-adding the same version moves
+ * nothing and a newer version is a different job, so the older one stays
+ * harmless until it fires, finds the version moved on, and does nothing.
+ */
+export const ticketUnsnoozeJob = defineJob({
+  name: 'ticket.unsnooze',
+  queue: QUEUE_NAMES.sla,
+  schema: ticketUnsnoozePayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: true,
+    removeOnFail: { age: 7 * 86_400 },
+  },
+});
+
+/** `snooze.<ticket_id>.<version>` of DOMAIN-RULES §3.4, with dots for the reason {@link slaTimerJobId} gives. */
+export const ticketUnsnoozeJobId = ({
+  ticketId,
+  version,
+}: Pick<TicketUnsnoozePayload, 'ticketId' | 'version'>): string =>
+  `snooze.${ticketId}.${String(version)}`;
+
+export const snoozeRebuildPayloadSchema = z.object({
+  /** Absent on the boot tick, which adds one job per brand; present on those. */
+  brandId: z.uuid().optional(),
+});
+
+export type SnoozeRebuildPayload = z.infer<typeof snoozeRebuildPayloadSchema>;
+
+/**
+ * `snooze.rebuild` (M14-02): on worker boot, and hourly after, it wakes every
+ * snooze that is already due and re-creates the timer of every other, which is
+ * what keeps a snooze from being lost with Redis. Shaped like
+ * {@link slaRebuildJob}, including the per-brand fan-out.
+ */
+export const snoozeRebuildJob = defineJob({
+  name: 'snooze.rebuild',
+  queue: QUEUE_NAMES.sla,
+  schema: snoozeRebuildPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  schedule: { everyMs: 3_600_000 },
+});
+
 /** A rule chain carries at most this many rule ids; see `RULE_MAX_DEPTH` in `@helpdock/schemas`. */
 const RULE_CHAIN_MAX = 3;
 
@@ -1684,6 +1748,8 @@ export const JOB_DEFINITIONS = Object.freeze({
   [emailPollJob.name]: emailPollJob,
   [slaTimerJob.name]: slaTimerJob,
   [slaRebuildJob.name]: slaRebuildJob,
+  [ticketUnsnoozeJob.name]: ticketUnsnoozeJob,
+  [snoozeRebuildJob.name]: snoozeRebuildJob,
   [rulesEvaluateJob.name]: rulesEvaluateJob,
   [rulesTimeBasedJob.name]: rulesTimeBasedJob,
   [rulesTimeBasedScheduleJob.name]: rulesTimeBasedScheduleJob,

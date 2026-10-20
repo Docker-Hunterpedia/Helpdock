@@ -97,12 +97,13 @@ status mapped to one of them, with two flags (§2.1):
 | `pauses_sla` | SLA clocks are paused while the ticket is in this status |
 | `awaiting_customer` | The ball is with the customer; time-based rules and reports read it |
 
-Every brand is seeded with six when it is created, by `seedBrandStatuses`:
+Every brand is seeded with seven when it is created, by `seedBrandStatuses`:
 
 | Name | System state | Flags | Why it exists |
 |---|---|---|---|
 | Open | `open` | default | Where a new or reopened ticket lands |
 | Awaiting customer | `on_hold` | `pauses_sla`, `awaiting_customer` | §2.1 ships it with every brand |
+| Snoozed | `on_hold` | `pauses_sla` (the resolution clock only) | M14-02: a ticket put away until a time; see [Snooze](snooze.md) |
 | Escalated | `escalated` | — | So the fourth state is reachable without adding a status |
 | Closed | `closed` | — | §2.2 |
 | Spam | `closed` | — | §2.1: no auto-responder, no CSAT, excluded from reports |
@@ -746,7 +747,7 @@ else's business.
 ### The built-in views
 
 Every brand is seeded with **My open** (`assigneeId=me`, the live states),
-**Unassigned** (`assigneeId=unassigned`, the live states), **Overdue**
+**Snoozed** (`snoozed=only`, `assigneeId=me`; [Snooze](snooze.md)), **Unassigned** (`assigneeId=unassigned`, the live states), **Overdue**
 (`overdue=true`, the live states), **Escalated** (`systemState=escalated`), and
 one **All open · <department>** per department (that department, the live
 states), in both languages. The department ones follow the department: created
@@ -817,11 +818,12 @@ which departments it reaches is the policies'.
 | `GET /tickets` | `ticket:read` | A filtered, sorted, cursor-paged list |
 | `POST /tickets` | `ticket:write` | A ticket and its first message |
 | `GET /tickets/:ticketId` | `ticket:read` | The ticket, the first page of its thread and its activity |
-| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status, custom values. Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
+| `PATCH /tickets/:ticketId` | `ticket:write` | Subject, priority, department, assignee, status, custom values, and `snoozedUntil` to snooze, move or end a snooze (M14-02, [Snooze](snooze.md)). Setting a team answers 400 until M1-01; clearing one with `null` is allowed |
 | `GET /tickets/:ticketId/messages` | `ticket:read` | The thread after a `seq` |
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
 | `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
 | `GET /tickets/:ticketId/activity` | `ticket:read` | Bounded activity pages; newest page by default, each page returned oldest first. `before=<entry UUID>` loads an older page; `limit` is 1–100 |
+| `GET /tickets/:ticketId/snooze-presets` | `ticket:read` | The Snooze menu's four times against the department calendar (M14-02) |
 | `GET /tickets/:ticketId/routing` | `ticket:read` | How it got here: the arrival and the automatic steps after it ([above](#arrival-and-the-routing-trail), M14-08) |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
@@ -886,6 +888,7 @@ GET /api/brands/:brandId/tickets
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the words, the contact's name, or a reference or original number (first, past the other filters)
   &overdue=true               only tickets whose SLA has run out (M1-05)
+  &snoozed=exclude            exclude (default) | only | include: snoozed tickets (M14-02); a reference in `q` finds one regardless
   &sort=updatedAt             updatedAt | createdAt | number | priority | slaDue
   &direction=desc             asc | desc
   &limit=25                   1–100

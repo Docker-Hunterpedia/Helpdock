@@ -253,6 +253,7 @@ describe.skipIf(!hasDocker)('views', () => {
 
       expect(names).toEqual([
         'My open',
+        'Snoozed',
         'Unassigned',
         'Overdue',
         'All open · General',

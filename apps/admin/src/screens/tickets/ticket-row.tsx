@@ -1,12 +1,15 @@
 import type { Ticket } from '@helpdock/schemas';
 import { Box, Typography } from '@mui/material';
+import { Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { useT } from '../../app/i18n.js';
+import { usePreferences } from '../../app/providers.tsx';
 import { ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
 import { ChannelMark, PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
-import { elapsed, ticketReference } from './format.js';
+import { elapsed, ticketReference, wakeTime } from './format.js';
 
 /** WhatsApp, Messenger and Instagram rows say which platform they are with an icon (M10-08). */
 const isMetaChannel = (channel: Ticket['channel']): boolean =>
@@ -49,6 +52,8 @@ export function TicketRow({
   readonly search: string;
 }): ReactNode {
   const tokens = useSemanticTokens();
+  const t = useT();
+  const { locale } = usePreferences();
   const reference = ticketReference(ticket);
   const contactName = ticket.contact?.name ?? null;
 
@@ -107,7 +112,26 @@ export function TicketRow({
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
           <StatusBadge status={ticket.status} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <SlaTimer ticket={ticket} now={now} compact />
+            {ticket.snoozedUntil == null ? (
+              <SlaTimer ticket={ticket} now={now} compact />
+            ) : (
+              <Box
+                component="span"
+                aria-label={t('tickets:snooze.rowLabel', {
+                  time: wakeTime(ticket.snoozedUntil, locale, now),
+                })}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  color: 'text.primary',
+                  fontSize: 12,
+                }}
+              >
+                <Clock size={12} aria-hidden="true" />
+                <bdi>{wakeTime(ticket.snoozedUntil, locale, now)}</bdi>
+              </Box>
+            )}
             <Typography variant="mono" sx={{ color: 'text.secondary', fontSize: 12 }}>
               {elapsed(ticket.updatedAt, now)}
             </Typography>

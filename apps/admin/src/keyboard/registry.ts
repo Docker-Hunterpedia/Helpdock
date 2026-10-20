@@ -17,7 +17,7 @@ import type { KeyStroke } from './keys.js';
  *
  * Not here yet, because what they act on does not exist: `⌘K` the command
  * palette (M14-05), `x` and `Shift`+`x` selection and `Esc` to clear it
- * (M14-04), `h` snooze (M14-02), `{{` the placeholder picker (M14-14) and
+ * (M14-04), `{{` the placeholder picker (M14-14) and
  * `Enter` on a focused row, which needs the focus model of M14-04.
  */
 
@@ -75,6 +75,7 @@ export const SHORTCUTS = [
   { id: 'ticket.priority', scope: 'ticket', keys: [KEY('p')], permission: 'ticket:write' },
   { id: 'ticket.tags', scope: 'ticket', keys: [KEY('t')], permission: 'ticket:write' },
   { id: 'ticket.macros', scope: 'ticket', keys: [KEY('m')], permission: 'ticket:write' },
+  { id: 'ticket.snooze', scope: 'ticket', keys: [KEY('h')], permission: 'ticket:write' },
   // Composer
   { id: 'composer.send', scope: 'composer', keys: [MOD('Enter')], permission: 'ticket:write' },
   {

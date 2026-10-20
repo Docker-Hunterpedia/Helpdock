@@ -7,11 +7,18 @@ import {
   parseJobPayload,
   slaRebuildJob,
   slaTimerJob,
+  snoozeRebuildJob,
+  ticketUnsnoozeJob,
 } from '@helpdock/jobs';
 import { DelayedError, type Job, UnrecoverableError } from 'bullmq';
 import { ne } from 'drizzle-orm';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import {
+  rebuildSnoozes,
+  type SnoozeTimerQueue,
+  unsnoozeTicket,
+} from '../tickets/snooze/snooze-worker.js';
 import { fireSlaTimer } from './escalation.js';
 import type { SlaRepository } from './sla.repository.js';
 import type { SlaService } from './sla.service.js';
@@ -41,6 +48,8 @@ export interface SlaWorkerDeps {
   readonly sla: SlaService;
   readonly assignment: AssignmentRepository;
   readonly timers: SlaTimerQueue;
+  /** M14-02: the wake timers of snoozed tickets, on the same queue. */
+  readonly snoozeTimers: SnoozeTimerQueue;
   readonly now?: () => Date;
   /** Tickets one `sla.status_resync` handles before it hands on; tests shrink it. */
   readonly statusResyncBatch?: number;
@@ -133,15 +142,17 @@ export interface SlaProcessorOptions {
   readonly log: JobLogger;
   /** Adds one `sla.rebuild` per brand when the boot tick fans out. */
   readonly addRebuild: (brandId: string, jobId: string) => Promise<void>;
+  /** M14-02: the same fan-out for `snooze.rebuild`. */
+  readonly addSnoozeRebuild: (brandId: string, jobId: string) => Promise<void>;
 }
 
 /**
- * The `sla` queue carries two job names, and BullMQ routes by queue, so the
+ * The `sla` queue carries four job names (two are M14-02's snooze wake timers), and BullMQ routes by queue, so the
  * processor dispatches on `job.name` (as `packages/jobs/src/consumer.ts`
  * describes).
  */
 export const createSlaProcessor =
-  ({ db, deps, log, addRebuild }: SlaProcessorOptions) =>
+  ({ db, deps, log, addRebuild, addSnoozeRebuild }: SlaProcessorOptions) =>
   async (job: Job, token?: string): Promise<void> => {
     const jobId = job.id ?? job.name;
 
@@ -179,6 +190,53 @@ export const createSlaProcessor =
         scheduleTickets(tx, deps, brandId, await deps.repository.runningTicketIds(tx)),
       );
       log.info({ job: job.name, brandId, scheduled }, 'SLA timers rebuilt');
+      return;
+    }
+
+    if (job.name === ticketUnsnoozeJob.name) {
+      const payload = parse(() => parseJobPayload(ticketUnsnoozeJob, job.data));
+      const now = deps.now?.() ?? new Date();
+      const outcome = await withSystemJob(db, payload.brandId, jobId, (tx) =>
+        unsnoozeTicket(tx, deps, payload, now),
+      );
+      if (outcome.kind === 'early') {
+        await job.moveToDelayed(outcome.fireAt.getTime(), token);
+        throw new DelayedError();
+      }
+      return;
+    }
+
+    if (job.name === snoozeRebuildJob.name) {
+      const payload = parse(() => parseJobPayload(snoozeRebuildJob, job.data));
+      if (payload.brandId === undefined) {
+        const live = await db
+          .select({ id: brands.id })
+          .from(brands)
+          .where(ne(brands.status, 'deleted'));
+        for (const { id } of live) {
+          await addSnoozeRebuild(
+            id,
+            `${snoozeRebuildJob.name}.${id}.${jobId.replaceAll(':', '.')}`,
+          );
+        }
+        return;
+      }
+
+      const brandId = payload.brandId;
+      let after: string | undefined;
+      let woke = 0;
+      let scheduled = 0;
+      // One batch per transaction: a long outage can leave thousands overdue.
+      do {
+        const cursor = after;
+        const batch = await withSystemJob(db, brandId, jobId, (tx) =>
+          rebuildSnoozes(tx, deps, brandId, cursor),
+        );
+        woke += batch.woke;
+        scheduled += batch.scheduled;
+        after = batch.next;
+      } while (after !== undefined);
+      log.info({ job: job.name, brandId, woke, scheduled }, 'Snooze timers rebuilt');
       return;
     }
 

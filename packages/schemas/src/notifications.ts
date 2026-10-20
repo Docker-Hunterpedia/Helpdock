@@ -20,6 +20,8 @@ export const NOTIFICATION_KINDS = [
   'sla_warning',
   'sla_breached',
   'escalated',
+  /** M14-02. A snooze ended by time or by an SLA step; the assignee, else the person who snoozed it. */
+  'snooze_ended',
 ] as const;
 export const notificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
@@ -48,6 +50,7 @@ export const notificationPreferencesSchema = z.strictObject({
   sla_warning: notificationChannelsSchema,
   sla_breached: notificationChannelsSchema,
   escalated: notificationChannelsSchema,
+  snooze_ended: notificationChannelsSchema,
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
@@ -63,6 +66,8 @@ export const NOTIFICATION_PREFERENCE_DEFAULTS: NotificationPreferences = Object.
   sla_warning: { inApp: true, email: false, push: false },
   sla_breached: { inApp: true, email: true, push: true },
   escalated: { inApp: true, email: true, push: false },
+  // In-app and push by default, email off (M14-02).
+  snooze_ended: { inApp: true, email: false, push: true },
 });
 
 /**
@@ -179,6 +184,8 @@ export const notificationDetailSchema = z.object({
   stepPercent: z.int().nonnegative().optional(),
   /** `assigned`: who chose the assignee. */
   assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based', 'sla']).optional(),
+  /** `snooze_ended`: what woke the ticket. */
+  wokeBy: z.enum(['time', 'sla']).optional(),
   /** `escalated` by a workflow rule's "notify" action (M3-03): the rule. */
   ruleId: z.uuid().optional(),
   /** Its message, when the rule has one of its own. */

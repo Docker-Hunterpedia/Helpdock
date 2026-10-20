@@ -315,6 +315,22 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
       });
     });
 
+    it('refuses a macro that sets the Snoozed status: it needs a wake time (M14-02)', async () => {
+      const statuses = await call<TicketStatusList>('GET', `${brandPath()}/ticket-statuses`, ada);
+      const snoozed = statuses.body.statuses.find((status) => status.isSnoozed === true);
+
+      const refused = await call('POST', `${brandPath()}/macros`, ada, {
+        kind: 'macro',
+        name: 'Snooze by macro',
+        scope: 'shared',
+        departmentId: billing,
+        bodies: { en: 'Hi', ar: '' },
+        actions: [{ type: 'set_status', statusId: snoozed?.id }],
+      });
+
+      expect(refused.status).toBe(400);
+    });
+
     it('fills the placeholders for the ticket, falling back to English for an empty Arabic variant', async () => {
       const rendered = await call<RenderedMacro>(
         'GET',

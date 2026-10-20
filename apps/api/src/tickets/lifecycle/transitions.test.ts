@@ -27,6 +27,8 @@ import {
  * | any open-like | Agent closes | closed |
  * | `closed` | Customer reply | reopen policy (§2.3) |
  * | `closed` | Agent reopens | open |
+ * | any open-like | Agent snoozes (M14-02) | Snoozed, remembering the status |
+ * | `closed` | Agent snoozes (M14-02) | refused |
  * | any | Marked spam | Spam |
  * | any | Merged | Merged |
  * | any | Soft-deleted by Admin | hidden |
@@ -38,6 +40,7 @@ const EXPECTED: Record<TicketSystemState, Record<LifecycleEvent, TransitionOutco
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': { kind: 'refused', reason: 'ticket-not-closed' },
+    'agent.snooze': { kind: 'to-snoozed' },
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -48,6 +51,7 @@ const EXPECTED: Record<TicketSystemState, Record<LifecycleEvent, TransitionOutco
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': { kind: 'refused', reason: 'ticket-not-closed' },
+    'agent.snooze': { kind: 'to-snoozed' },
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -58,6 +62,7 @@ const EXPECTED: Record<TicketSystemState, Record<LifecycleEvent, TransitionOutco
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': { kind: 'refused', reason: 'ticket-not-closed' },
+    'agent.snooze': { kind: 'to-snoozed' },
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -68,6 +73,7 @@ const EXPECTED: Record<TicketSystemState, Record<LifecycleEvent, TransitionOutco
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'to-requested' },
     'agent.reopen': { kind: 'reopen' },
+    'agent.snooze': { kind: 'refused', reason: 'ticket-closed' },
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },

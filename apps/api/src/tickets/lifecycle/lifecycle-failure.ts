@@ -27,6 +27,8 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketLifecycleRefusal, string>> = {
   'ticket-not-merged': 'This ticket is not merged, so there is nothing to unmerge',
   'merge-window-closed': 'A merge can be undone for 24 hours, and those have passed',
   'attachments-in-flight': 'An attachment on those messages is still being processed',
+  'ticket-closed': 'A closed ticket cannot be snoozed; reopen it first',
+  'snooze-requires-time': 'Snoozed needs a wake time; use the Snooze menu',
   'merge-primary-deleted':
     'The ticket this one was merged into has been deleted, so the merge cannot be undone',
 };

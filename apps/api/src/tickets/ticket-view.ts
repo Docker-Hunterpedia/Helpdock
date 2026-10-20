@@ -66,6 +66,7 @@ export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   isSystem: row.isSystem,
   excludedFromReports: row.excludedFromReports,
   isSpam: row.isSpam,
+  isSnoozed: row.systemKey === 'snoozed',
   sortOrder: row.sortOrder,
   color: row.color,
 });
@@ -113,6 +114,8 @@ export const toTicket = (
   resolutionDueAt: ticket.resolutionDueAt?.toISOString() ?? null,
   slaBreached: ticket.slaBreached,
   closedAt: ticket.closedAt?.toISOString() ?? null,
+  snoozedUntil: ticket.snoozedUntil?.toISOString() ?? null,
+  snoozedBy: ticket.snoozedBy,
   custom: ticket.custom,
   tags: [...tags],
   ...(contact === undefined ? {} : { contact }),

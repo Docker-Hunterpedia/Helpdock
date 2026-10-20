@@ -201,6 +201,11 @@ export class MacrosService {
   }
 
   async #assertReferences(tx: DbTransaction, actions: readonly MacroAction[]): Promise<void> {
+    if (await this.#repository.includesSnoozed(tx, referencesOf(actions).statusIds)) {
+      throw new BadRequestException(
+        'A macro cannot set the Snoozed status: it needs a wake time, which only a person gives',
+      );
+    }
     if (!(await this.#repository.referencesExist(tx, referencesOf(actions)))) {
       // A status, tag, team or person of another brand is invisible to this
       // transaction, so "no such" answers both "there is none" and "not yours".

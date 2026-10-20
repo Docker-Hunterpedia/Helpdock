@@ -33,6 +33,8 @@ export const LIFECYCLE_EVENTS = [
   'agent.status',
   'agent.close',
   'agent.reopen',
+  /** M14-02. Snooze menu, `h`, or `snoozedUntil` on a PATCH. */
+  'agent.snooze',
   'mark.spam',
   'merge',
   'soft.delete',
@@ -63,6 +65,8 @@ export type TransitionOutcome =
   | { readonly kind: 'reopen-policy' }
   /** §2.2 row 6: back to the default open status, with §3.5's clocks restarted. */
   | { readonly kind: 'reopen' }
+  /** M14-02: Snoozed, remembering where the ticket was; the wake time is the caller's. */
+  | { readonly kind: 'to-snoozed' }
   /** §2.2 row 7. M1-11 owns what else being spam means. */
   | { readonly kind: 'to-spam' }
   /** §2.2 row 8. M1-09 owns the rest of a merge. */
@@ -76,6 +80,10 @@ const CUSTOMER_REPLY_TO_OPEN: TransitionOutcome = {
   kind: 'to-default-open',
   clearsAwaitingCustomer: true,
 };
+
+const SNOOZE: TransitionOutcome = { kind: 'to-snoozed' };
+
+const CLOSED_TICKET: TransitionOutcome = { kind: 'refused', reason: 'ticket-closed' };
 
 const NOT_CLOSED: TransitionOutcome = { kind: 'refused', reason: 'ticket-not-closed' };
 
@@ -99,6 +107,7 @@ export const TRANSITIONS: TransitionTable = Object.freeze({
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': NOT_CLOSED,
+    'agent.snooze': SNOOZE,
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -109,6 +118,7 @@ export const TRANSITIONS: TransitionTable = Object.freeze({
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': NOT_CLOSED,
+    'agent.snooze': SNOOZE,
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -119,6 +129,7 @@ export const TRANSITIONS: TransitionTable = Object.freeze({
     'agent.status': { kind: 'to-requested' },
     'agent.close': { kind: 'close' },
     'agent.reopen': NOT_CLOSED,
+    'agent.snooze': SNOOZE,
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },
@@ -135,6 +146,7 @@ export const TRANSITIONS: TransitionTable = Object.freeze({
     // it keeps the `closed_at` it has (`status-change.ts`).
     'agent.close': { kind: 'to-requested' },
     'agent.reopen': { kind: 'reopen' },
+    'agent.snooze': CLOSED_TICKET,
     'mark.spam': { kind: 'to-spam' },
     merge: { kind: 'to-merged' },
     'soft.delete': { kind: 'soft-delete' },

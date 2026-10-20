@@ -63,10 +63,12 @@ export function MacroActionsField({
   const options = (type: MacroActionType): { value: string; label: string }[] => {
     switch (type) {
       case 'set_status':
-        return choices.statuses.map((status) => ({
-          value: status.id,
-          label: statusName(status, locale),
-        }));
+        return choices.statuses
+          .filter((status) => status.isSnoozed !== true)
+          .map((status) => ({
+            value: status.id,
+            label: statusName(status, locale),
+          }));
       case 'set_priority':
         return PRIORITIES.map((priority) => ({
           value: priority,

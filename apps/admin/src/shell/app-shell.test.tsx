@@ -77,6 +77,7 @@ describe('AppShell', () => {
       '',
       'All tickets',
       'My open5',
+      'Snoozed0',
       'Unassigned2',
       'Overdue3',
       'All open · Support6',

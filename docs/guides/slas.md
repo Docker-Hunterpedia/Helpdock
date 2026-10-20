@@ -109,6 +109,7 @@ hours tab keeps the time already counted.
 |---|---|
 | created, continued (§2.3) or split (§2.4) | first-response and resolution clocks start at that moment; outside the hours they start counting at the next opening |
 | moved to a status with `pauses_sla` | pause; `due_at` is null. On resume `due_at = now + remaining` (§3.2) |
+| moved to Snoozed (M14-02) | the resolution clock pauses; an unsatisfied first-response or next-response clock keeps running, and a step it reaches wakes the ticket ([Snooze](snooze.md)) |
 | priority, department or policy changed | retargeted; a target already used up is a breach recorded at the change, attributed in the activity log (`ticket.sla.breached`, `cause: change`) |
 | a public reply by staff | the response clock is met |
 | closed | the resolution clock is met; an unmet response clock stops without a verdict |

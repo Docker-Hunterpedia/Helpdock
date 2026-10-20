@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -181,6 +182,21 @@ export const tickets = pgTable(
      */
     statusChangedAt: timestamp('status_changed_at', { withTimezone: true }).notNull().defaultNow(),
     /**
+     * M14-02. A ticket is in the Snoozed status exactly when `snoozed_until` is
+     * set (DOMAIN-RULES §2.1). The status before the snooze is remembered in
+     * `snooze_resume_status_id` (null once that status was deleted), and
+     * `snooze_version` is bumped by the `tickets_snooze_guard` trigger on every
+     * change of `snoozed_until`, so a delayed wake job keyed on the version can
+     * tell it was superseded. A status change to anything but Snoozed clears the
+     * three snooze columns in the same trigger, whichever code path wrote it.
+     */
+    snoozedUntil: timestamp('snoozed_until', { withTimezone: true, precision: 3 }),
+    snoozedBy: uuid('snoozed_by').references(() => users.id, { onDelete: 'set null' }),
+    snoozeResumeStatusId: uuid('snooze_resume_status_id').references(() => ticketStatuses.id, {
+      onDelete: 'set null',
+    }),
+    snoozeVersion: integer('snooze_version').notNull().default(0),
+    /**
      * Soft deletion by an Admin (DOMAIN-RULES §2.2): the row stays, every view
      * stops showing it, and M1-14's retention job is what finally removes it.
      *
@@ -316,6 +332,15 @@ export const tickets = pgTable(
     index('tickets_brand_ai_eligible_idx')
       .on(table.brandId, table.aiEligibleAt)
       .where(sql`${table.aiEligibleAt} is not null`),
+    // M14-02: the wake timer's rebuild reads the snoozes that are due.
+    index('tickets_brand_snoozed_until_idx')
+      .on(table.brandId, table.snoozedUntil)
+      .where(sql`${table.snoozedUntil} is not null`),
+    // M14-02: no snooze detail without a snooze.
+    check(
+      'tickets_snooze_detail_requires_until',
+      sql`${table.snoozedUntil} is not null or (${table.snoozedBy} is null and ${table.snoozeResumeStatusId} is null)`,
+    ),
     // M3-04: a time-based rule's read, "in this status since before then".
     index('tickets_brand_status_changed_idx').on(
       table.brandId,

@@ -50,6 +50,7 @@ export * from './participants.js';
 export * from './passkeys.js';
 export * from './placeholders.js';
 export * from './principal.js';
+export * from './quick-search.js';
 export * from './realtime.js';
 export * from './reports.js';
 export * from './retention.js';

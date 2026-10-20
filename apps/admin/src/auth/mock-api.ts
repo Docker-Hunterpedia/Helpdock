@@ -103,6 +103,24 @@ const seededSingleKeyShortcuts = (): false | undefined => {
 };
 
 /**
+ * Set to a role (`viewer`, `agent`, `teamLeader`) before the app loads, it
+ * signs the fixture's account in as that role, and not as an install admin
+ * (M14-05: the palette offers a Viewer navigation only).
+ */
+export const MOCK_ROLE_STORAGE = 'helpdock.mock.role';
+
+const ROLES: readonly Session['user']['role'][] = ['admin', 'teamLeader', 'agent', 'viewer'];
+
+export const seededRole = (): Session['user']['role'] | undefined => {
+  try {
+    const stored = globalThis.localStorage?.getItem(MOCK_ROLE_STORAGE);
+    return ROLES.find((role) => role === stored);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Set to JSON before the app loads, it seeds the fixture's passkeys (M18-02):
  * `{"count": 10}` starts with ten, `{"onlyFactor": true}` makes the account one
  * that must have a second factor and has no authenticator app, and
@@ -727,9 +745,14 @@ export class MockAuthApi implements AuthApi {
   }
 
   #withSwitch(session: Session): Session {
+    const role = seededRole();
+    const asRole =
+      role === undefined
+        ? session
+        : { ...session, user: { ...session.user, role, installAdmin: false } };
     return this.#singleKeyShortcuts === undefined
-      ? session
-      : { ...session, user: { ...session.user, singleKeyShortcuts: this.#singleKeyShortcuts } };
+      ? asRole
+      : { ...asRole, user: { ...asRole.user, singleKeyShortcuts: this.#singleKeyShortcuts } };
   }
 
   /** A value shaped like a token, so a caller can tell "signed in" from "not". */

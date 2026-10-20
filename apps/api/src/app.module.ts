@@ -49,6 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { ParticipantsModule } from './participants/participants.module.js';
+import { QuickSearchModule } from './quick-search/quick-search.module.js';
 import { RealtimeModule, type RealtimeModuleOptions } from './realtime/realtime.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { DbContactErasureProvider } from './retention/contact-erasure.js';
@@ -301,6 +302,8 @@ export class AppModule implements NestModule {
         NotificationsModule.forRoot(),
         // M14-01: the single-key shortcuts switch.
         KeyboardModule.forRoot(),
+        // M14-05: the command palette's quick search.
+        QuickSearchModule.forRoot({ tickets, contacts, redis: options.redis }),
         // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
         DomainsModule.forRoot({ env: options.env, hostResolver }),
         // M4: Channels › Widget, the widget's routes, its SSE stream and the

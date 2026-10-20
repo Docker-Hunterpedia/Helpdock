@@ -46,6 +46,7 @@ import {
 } from '../notifications/browser-push.js';
 import { HttpNotificationsApi } from '../notifications/http-api.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { HttpQuickSearchApi, MockQuickSearchApi, type QuickSearchApi } from '../palette/api.js';
 import { HttpReportsApi, type ReportsApi } from '../reports/api.js';
 import { HttpSystemApi, type SystemApi } from '../screens/admin/system/system-api.js';
 import type { SettingsApi } from '../settings/api.js';
@@ -120,6 +121,8 @@ export interface AdminApis {
   readonly developers: DevelopersApi;
   /** M14-01: the single-key shortcuts switch. */
   readonly keyboard: KeyboardApi;
+  /** M14-05: the command palette's quick search. */
+  readonly quickSearch: QuickSearchApi;
 }
 
 /**
@@ -178,6 +181,7 @@ export function createApis(
       assist: new HttpAssistApi(transport),
       developers: new HttpDevelopersApi(transport),
       keyboard: new HttpKeyboardApi(transport),
+      quickSearch: new HttpQuickSearchApi(transport),
     };
   }
 
@@ -234,5 +238,6 @@ export function createApis(
     assist: new MockAssistApi({ tickets, helpCenter }),
     developers: new MockDevelopersApi(),
     keyboard: new MockKeyboardApi(auth),
+    quickSearch: new MockQuickSearchApi({ tickets, contacts, helpCenter }),
   };
 }

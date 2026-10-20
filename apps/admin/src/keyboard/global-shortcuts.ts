@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router';
 import { ROUTES } from '../app/route-paths.js';
 import { currentBrand, useSession, useTicketsApi } from '../auth/session.tsx';
+import { usePalette } from '../palette/palette-provider.tsx';
 import { ADMIN_NAV, navFor } from '../shell/nav-items.js';
 import { ticketKeys } from '../tickets/keys.js';
 import { ALL_VIEW, viewSearch, type WorkspaceIntent, withIntent } from '../tickets/views.js';
@@ -14,6 +15,7 @@ export const GLOBAL_SHORTCUTS = [
   'general.search',
   'general.newTicket',
   'general.shortcuts',
+  'general.palette',
   'goTo.myOpen',
   'goTo.unassigned',
   'goTo.overdue',
@@ -44,6 +46,7 @@ export function useGlobalShortcuts(): void {
   const api = useTicketsApi();
   const queryClient = useQueryClient();
   const { openSheet } = useKeyboard();
+  const palette = usePalette();
   const brandId = currentBrand(session).id;
 
   const toWorkspace = (intent: WorkspaceIntent): void => {
@@ -77,6 +80,7 @@ export function useGlobalShortcuts(): void {
       toWorkspace('new');
     },
     'general.shortcuts': openSheet,
+    'general.palette': palette.open,
     'goTo.myOpen': () => {
       toView('my_open');
     },

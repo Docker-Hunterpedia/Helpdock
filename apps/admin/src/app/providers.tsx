@@ -5,6 +5,8 @@ import type { ImportsApi } from '../imports/api.js';
 import { ImportsApiProvider } from '../imports/context.tsx';
 import type { KeyboardApi } from '../keyboard/api.js';
 import { KeyboardApiProvider } from '../keyboard/keyboard-provider.tsx';
+import type { QuickSearchApi } from '../palette/api.js';
+import { QuickSearchApiProvider } from '../palette/context.tsx';
 import type { SsoApi } from '../sso/api.js';
 import { SsoApiProvider } from '../sso/context.tsx';
 import '@helpdock/ui/fonts.css';
@@ -165,6 +167,8 @@ export interface AppProvidersProps {
   readonly developersApi?: DevelopersApi;
   /** Defaults to the matching adapter. The single-key shortcuts switch reads it (M14-01). */
   readonly keyboardApi?: KeyboardApi;
+  /** Defaults to the matching adapter. The command palette's quick search reads it (M14-05). */
+  readonly quickSearchApi?: QuickSearchApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -210,6 +214,7 @@ export function AppProviders({
   assistApi,
   developersApi,
   keyboardApi,
+  quickSearchApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -249,6 +254,7 @@ export function AppProviders({
   const assist = assistApi ?? fallback.assist;
   const developers = developersApi ?? fallback.developers;
   const keyboard = keyboardApi ?? fallback.keyboard;
+  const quickSearch = quickSearchApi ?? fallback.quickSearch;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -331,9 +337,11 @@ export function AppProviders({
                                           <SettingsApiProvider api={settings}>
                                             <NotificationsProvider api={notifications} push={push}>
                                               <KeyboardApiProvider api={keyboard}>
-                                                <ToastProvider>
-                                                  <Router>{children}</Router>
-                                                </ToastProvider>
+                                                <QuickSearchApiProvider api={quickSearch}>
+                                                  <ToastProvider>
+                                                    <Router>{children}</Router>
+                                                  </ToastProvider>
+                                                </QuickSearchApiProvider>
                                               </KeyboardApiProvider>
                                             </NotificationsProvider>
                                           </SettingsApiProvider>

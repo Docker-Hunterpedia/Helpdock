@@ -30,7 +30,7 @@ import { RetentionCard } from './retention-card.tsx';
  * and a change made now would be purged or restored with it unseen.
  */
 
-const BRAND_TABS = [
+export const BRAND_TABS = [
   { key: 'general', segment: 'general' },
   { key: 'domains', segment: 'domains' },
   { key: 'import', segment: 'import' },

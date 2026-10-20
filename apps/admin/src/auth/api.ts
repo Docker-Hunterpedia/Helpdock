@@ -152,16 +152,23 @@ export class AuthError extends Error {
   readonly code: AuthErrorCode;
   readonly attemptsLeft: number | undefined;
   readonly retryAfter: number | undefined;
+  /** The HTTP status, when the failure had no body the screens understand. */
+  readonly status: number | undefined;
 
   constructor(
     code: AuthErrorCode,
-    options: { readonly attemptsLeft?: number; readonly retryAfter?: number } = {},
+    options: {
+      readonly attemptsLeft?: number;
+      readonly retryAfter?: number;
+      readonly status?: number;
+    } = {},
   ) {
     super(`auth: ${code}`);
     this.name = 'AuthError';
     this.code = code;
     this.attemptsLeft = options.attemptsLeft;
     this.retryAfter = options.retryAfter;
+    this.status = options.status;
   }
 }
 

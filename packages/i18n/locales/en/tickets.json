@@ -369,7 +369,8 @@
         "search": "Search the list",
         "newTicket": "New ticket",
         "sidebar": "Toggle the sidebar",
-        "shortcuts": "All shortcuts"
+        "shortcuts": "All shortcuts",
+        "palette": "Command palette"
       },
       "goTo": {
         "myOpen": "My open",

@@ -130,5 +130,119 @@
       "days_one": "{{count}} day ago",
       "days_other": "{{count}} days ago"
     }
+  },
+  "palette": {
+    "label": "Command palette",
+    "placeholder": "Search or type a command",
+    "resultsLabel": "Results",
+    "groups": {
+      "recent": "Recent",
+      "tickets": "Tickets",
+      "contacts": "Contacts",
+      "articles": "Articles",
+      "pages": "Go to",
+      "actions": "Actions"
+    },
+    "openTicket": "Open {{reference}}",
+    "seeAll": "See all tickets matching “{{query}}”",
+    "noResults": {
+      "title": "Nothing matches “{{query}}”",
+      "hint": "Check the spelling, or search all tickets for it.",
+      "action": "Search all tickets"
+    },
+    "failed": "{{section}} couldn't load. Other results are complete.",
+    "searchFailed": "Search couldn't load. Pages and actions still work.",
+    "retry": "Retry",
+    "viewerNote": "Actions you can't take aren't listed.",
+    "searching": "Searching",
+    "count_one": "{{count}} result",
+    "count_other": "{{count}} results",
+    "empty": "Nothing recent yet. Type to search tickets, contacts, articles and settings.",
+    "draft": "Draft",
+    "scheduled": "Scheduled",
+    "footer": {
+      "move": "move",
+      "open": "open",
+      "close": "close"
+    },
+    "sidebarSearch": "Search",
+    "actions": {
+      "general": {
+        "newTicket": "New ticket",
+        "shortcuts": "Keyboard shortcuts",
+        "search": "Search the ticket list",
+        "sidebar": "Toggle the sidebar"
+      },
+      "ticket": {
+        "reply": "Reply to this ticket",
+        "note": "Add an internal note",
+        "assignee": "Change assignee",
+        "status": "Change status",
+        "priority": "Change priority",
+        "tags": "Edit tags",
+        "macros": "Apply a macro",
+        "snooze": "Snooze this ticket…"
+      },
+      "list": {
+        "close": "Close this ticket"
+      },
+      "copyLink": "Copy link to this ticket",
+      "linkCopied": "Link copied",
+      "switchBrand": "Switch to {{brand}}",
+      "language": "Switch to {{language}}",
+      "theme": {
+        "light": "Theme: light",
+        "dark": "Theme: dark",
+        "auto": "Theme: match system"
+      }
+    },
+    "keywords": {
+      "tickets": "inbox, queue, conversations, support",
+      "contacts": "customers, people, accounts, directory",
+      "contactNew": "add contact, create contact, new customer",
+      "helpCenterArticles": "knowledge base, kb, docs, faq, articles",
+      "helpCenterProposals": "ai drafts, suggested articles, review",
+      "helpCenterSettings": "help center appearance, access, theme, custom css",
+      "helpCenterInsights": "article views, searches, helpful votes, analytics",
+      "reports": "analytics, metrics, volume, csat, response time, dashboard",
+      "accountSecurity": "password, two-factor, 2fa, passkeys, sessions, sign in, shortcuts",
+      "accountNotifications": "email alerts, push, digests, mentions, bell",
+      "accountSignature": "email signature, reply signature",
+      "settings": "install, sso, authentication, smtp, oauth, global",
+      "brandGeneral": "brand name, prefix, timezone, language, logo",
+      "brandDomains": "custom domain, dns, tls, host, cname",
+      "brandImport": "migrate, zendesk, freshdesk, zoho, import tickets",
+      "brandDanger": "delete brand, erase, purge, restore",
+      "ticketingDepartments": "teams, groups, routing",
+      "ticketingStatuses": "open, closed, pending, pause sla, workflow states",
+      "ticketingPriorities": "urgent, high, normal, low",
+      "ticketingTags": "labels, categories",
+      "ticketingCustomFields": "extra fields, form fields, attributes",
+      "ticketingTemplates": "ticket templates, forms, new ticket defaults",
+      "ticketingViews": "saved filters, saved views, queues",
+      "ticketingAssignment": "round robin, auto assign, load balance, routing",
+      "ticketingSpam": "block list, blocked senders, junk",
+      "ticketingFeedback": "csat, survey, rating, satisfaction",
+      "ticketingBusinessHours": "working hours, holidays, calendar, schedule",
+      "ticketingSlas": "sla, service level, response target, resolution target, breach",
+      "automationRules": "workflow, triggers, automations, if then",
+      "automationTimeBased": "scheduled rules, timers, escalation, auto close, reminders",
+      "automationRouting": "routing rules, where tickets go, test routing, dry run, assignment path",
+      "automationMacros": "canned responses, saved replies, snippets, templates",
+      "channelsMailboxes": "email, imap, inbound email, support address, forwarding",
+      "channelsOutgoing": "smtp, sender, dkim, spf, deliverability",
+      "channelsWidget": "live chat, chat widget, embed, messenger",
+      "channelsWebForm": "contact form, form, captcha",
+      "channelsTelegram": "bot, telegram bot",
+      "channelsMeta": "whatsapp, messenger, instagram, facebook",
+      "aiProviders": "llm, openai, model, api key, embeddings",
+      "aiKnowledge": "sources, documents, sync, training data",
+      "aiAssistant": "ai agent, auto reply, bot, copilot",
+      "developersApi": "api, token, integration, rest",
+      "developersWebhooks": "events, callbacks, http notifications",
+      "staff": "agents, team members, roles, permissions, invite, users",
+      "system": "health, version, queues, storage, migrations, status",
+      "systemAuditLog": "activity log, who changed, history, security log"
+    }
   }
 }

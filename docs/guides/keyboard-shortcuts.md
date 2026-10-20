@@ -37,6 +37,7 @@ navigation only, and the api refuses a change whatever the keys do.
 | `c` | New ticket | everyone but a Viewer |
 | `b`, or `⌘`/`Ctrl` + `\` | Toggle the sidebar | everyone |
 | `?` | All shortcuts | everyone |
+| `⌘`/`Ctrl` + `k` | Command palette | everyone |
 
 ### Go to
 
@@ -194,3 +195,46 @@ nothing. The words differ by view: My open, Unassigned and Overdue each have
 their own; a saved view whose filters exclude every ticket offers *Edit
 filters*; and a search that finds nothing names what you typed and offers
 *Clear search*.
+
+## Command palette
+
+Press `⌘`/`Ctrl` + `K` anywhere in the signed-in admin, or choose **Search** at the top of the sidebar. This is deliverable M14-05; the artboard
+is `Admin/CommandPalette`. It works with single-key shortcuts off, because it
+carries a modifier.
+
+Type to find, in this order:
+
+- **Tickets.** A reference (`HD-1042`), `#1042` or a bare number puts that
+  ticket first, worded "Open HD-1042"; any other text searches subjects and
+  first messages. You only find tickets in departments you can reach.
+- **Contacts**, **Articles** (published articles, and for who manages the help
+  center the titles of drafts), then **Go to**: every page and settings tab, by
+  its name or a word it is known by, in English or Arabic whichever language the
+  interface is in (`SLA`, `اتفاقية مستوى الخدمة`, `business hours`, `ساعات العمل`).
+  Arabic is matched without regard to alef forms, `ى` and `ي`, `ة` and `ه`, or
+  diacritics.
+- **Actions**: the commands of the screen you are on (with a ticket open: Reply,
+  Add an internal note, Change assignee, status or priority, Edit tags, Snooze,
+  Apply a macro, Close, Copy link), then New ticket, Keyboard shortcuts, Switch
+  brand, Switch language and Theme. Each shows its key while that key works. An
+  action you may not take, because of your role, is not listed.
+- **See all tickets matching …** opens the ticket list with your text in its
+  search box.
+
+`↑` and `↓` move through the results, `Enter` opens the highlighted one, `Esc`
+closes the palette and puts focus back where it was. Left empty, it shows what
+you opened lately (tickets, contacts and settings pages) and the actions for
+this screen. The list of what you opened is kept in this browser as ids only, no
+subjects or names, and is checked against what you can still see each time the
+palette opens.
+
+If a section cannot be loaded (it errored, or one of its database statements took longer than 300 ms; the article search is limited to 300 ms as a whole), the
+palette says so under the results with a **Retry**, and the other sections are
+unaffected. Searches are limited to ten a second per person.
+
+For integrators: the palette reads one route, `GET
+/api/brands/:brandId/quick-search?q=&limit=&locale=` (`limit` 1 to 10, default
+5). It answers `{ tickets, contacts, articles }`; each is `{ "status": "ok",
+"items": [...] }`, `{ "status": "skipped" }` for a section the caller has no
+permission for, or `{ "status": "failed" }`. It is a staff route and is not part
+of the public API.

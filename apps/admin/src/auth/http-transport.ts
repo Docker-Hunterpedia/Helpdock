@@ -117,7 +117,7 @@ export class HttpTransport {
     method: string,
     path: string,
     body?: unknown,
-    { retry = true }: { readonly retry?: boolean } = {},
+    { retry = true, signal }: { readonly retry?: boolean; readonly signal?: AbortSignal } = {},
   ): Promise<unknown> {
     const sent = this.#accessToken;
     const response = await fetch(`${this.#baseUrl}${path}`, {
@@ -131,12 +131,13 @@ export class HttpTransport {
         ...(sent === null ? {} : { authorization: `Bearer ${sent}` }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(signal === undefined ? {} : { signal }),
     });
 
     if (retry && sent !== null && (await refusedTheToken(response))) {
       this.accessToken = null;
       if (await this.refresh()) {
-        return this.request(method, path, body, { retry: false });
+        return this.request(method, path, body, { retry: false, ...(signal ? { signal } : {}) });
       }
     }
 
@@ -353,7 +354,10 @@ const toError = async (
   const retryAfter = Number(response.headers.get('Retry-After'));
   const retryOptions = Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {};
   if (auth === undefined) {
-    return new AuthError(response.status === 429 ? 'rate-limited' : 'unavailable', retryOptions);
+    return new AuthError(response.status === 429 ? 'rate-limited' : 'unavailable', {
+      ...retryOptions,
+      status: response.status,
+    });
   }
 
   return new AuthError(auth.code, {

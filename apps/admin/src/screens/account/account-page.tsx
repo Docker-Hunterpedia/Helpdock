@@ -18,7 +18,7 @@ import { SignatureTab } from './signature-page.tsx';
  * each tab is a url of its own.
  */
 
-const ACCOUNT_TABS = [
+export const ACCOUNT_TABS = [
   { key: 'security', path: ROUTES.security },
   { key: 'notifications', path: ROUTES.meNotifications },
   { key: 'signature', path: ROUTES.signature },

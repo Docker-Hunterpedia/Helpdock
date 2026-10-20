@@ -49,6 +49,10 @@ interface KeyboardContextValue {
   setSingleKeys(on: boolean): void;
   openSheet(options?: OpenSheetOptions): void;
   permits(permission: ShortcutPermission | undefined): boolean;
+  /** Whether a screen has attached a handler for the shortcut and the person may use it. */
+  isAvailable(id: ShortcutId): boolean;
+  /** Runs the handler attached last for the shortcut, as its key would. False when there is none. */
+  run(id: ShortcutId): boolean;
 }
 
 const KeyboardContext = createContext<KeyboardContextValue | null>(null);
@@ -236,6 +240,24 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
     };
   }, []);
 
+  const isAvailable = useCallback(
+    (id: ShortcutId): boolean =>
+      (handlers.current.get(id)?.length ?? 0) > 0 && permits(shortcutById(id).permission),
+    [permits],
+  );
+
+  const run = useCallback(
+    (id: ShortcutId): boolean => {
+      const handler = handlers.current.get(id)?.at(-1);
+      if (handler === undefined || !permits(shortcutById(id).permission)) {
+        return false;
+      }
+      handler();
+      return true;
+    },
+    [permits],
+  );
+
   const value = useMemo<KeyboardContextValue>(
     () => ({
       register,
@@ -249,8 +271,10 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
         setSheetOpen(true);
       },
       permits,
+      isAvailable,
+      run,
     }),
-    [register, singleKeys, setSingleKeys, permits],
+    [register, singleKeys, setSingleKeys, permits, isAvailable, run],
   );
 
   return (
@@ -332,12 +356,16 @@ export function useKeyboard(): {
   readonly singleKeys: boolean;
   readonly openSheet: (options?: OpenSheetOptions) => void;
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
+  readonly isAvailable: (id: ShortcutId) => boolean;
+  readonly run: (id: ShortcutId) => boolean;
 } {
   const context = useContext(KeyboardContext);
   return {
     singleKeys: context?.singleKeys ?? SINGLE_KEYS_BY_DEFAULT,
     openSheet: context?.openSheet ?? (() => {}),
     permits: context?.permits ?? (() => true),
+    isAvailable: context?.isAvailable ?? (() => false),
+    run: context?.run ?? (() => false),
   };
 }
 

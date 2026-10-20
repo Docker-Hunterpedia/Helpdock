@@ -15,7 +15,7 @@ import {
   VERIFIABLE_IDENTITY_KINDS,
 } from '@helpdock/schemas';
 import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
-import { enqueueContactCreated } from './contact-events.js';
+import { enqueueContactCreated, shareCreatedContacts } from './contact-events.js';
 import { ContactFailure } from './contact-failure.js';
 import { withContactProfileChange } from './contact-profile-change.js';
 
@@ -439,12 +439,58 @@ export const attachVerifiedIdentity = async (
     throw new TypeError(`attachVerifiedIdentity takes proven identifiers, not ${claim.source}`);
   }
   const value = requireNormalised(claim.kind, claim.value);
-  const previousHolder = await findByIdentity(tx, brandId, claim.kind, value);
-  return withContactProfileChange(
+
+  // The holder is read before any lock is taken, so it can change hands before
+  // the lock lands. The attempt runs in a savepoint: when the holder under the
+  // lock is a contact the attempt did not lock, rolling the savepoint back
+  // releases what it took and the next attempt locks the new set from scratch,
+  // in id order, rather than adding a possibly lower id to locks already held.
+  for (let attempt = 0; attempt < MAX_HOLDER_ATTEMPTS; attempt += 1) {
+    const readHolder = await findByIdentity(tx, brandId, claim.kind, value);
+    const lockWith = readHolder === undefined ? [] : [readHolder.contactId];
+    try {
+      return await tx.transaction((savepoint) => {
+        shareCreatedContacts(tx, savepoint);
+        return attachUnderLock(savepoint, brandId, contactId, { ...claim, value }, lockWith);
+      });
+    } catch (error) {
+      if (!(error instanceof HolderMovedError)) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('The identifier kept changing hands while it was being attached');
+};
+
+const MAX_HOLDER_ATTEMPTS = 5;
+
+/** The holder under the lock is a contact that was not locked with it. */
+class HolderMovedError extends Error {
+  constructor() {
+    super('The identifier changed hands before its holder was locked');
+  }
+}
+
+const attachUnderLock = (
+  tx: DbTransaction,
+  brandId: string,
+  contactId: string,
+  claim: IdentityClaim,
+  lockWith: readonly string[],
+): Promise<VerifiedAttachment> =>
+  withContactProfileChange(
     tx,
     contactId,
     async () => {
-      const holder = await findByIdentity(tx, brandId, claim.kind, value);
+      const holder = await findByIdentity(tx, brandId, claim.kind, claim.value);
+      if (
+        holder !== undefined &&
+        holder.contactId !== contactId &&
+        !lockWith.includes(holder.contactId)
+      ) {
+        throw new HolderMovedError();
+      }
       const plan = planVerifiedAttach(holder, contactId);
 
       if (holder === undefined) {
@@ -452,7 +498,7 @@ export const attachVerifiedIdentity = async (
           brandId,
           contactId,
           kind: claim.kind,
-          value,
+          value: claim.value,
           verified: true,
           source: claim.source,
         });
@@ -482,9 +528,8 @@ export const attachVerifiedIdentity = async (
         otherContactId: holder.contactId,
       };
     },
-    previousHolder === undefined ? [] : [previousHolder.contactId],
+    lockWith,
   );
-};
 
 /**
  * Takes an identifier off a contact that holds it, for a channel that learned

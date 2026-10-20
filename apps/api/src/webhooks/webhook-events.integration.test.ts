@@ -1,6 +1,7 @@
 import type { Env } from '@helpdock/config';
 import {
   accounts,
+  contactIdentities,
   contacts,
   createDb,
   type Db,
@@ -23,15 +24,17 @@ import {
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { AccountsService } from '../contacts/accounts.service.js';
 import { ContactMergeService } from '../contacts/contact-merge.service.js';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import { ContactsService } from '../contacts/contacts.service.js';
 import {
   attachUnverifiedIdentity,
   attachVerifiedIdentity,
+  findOrCreateContactByIdentity,
   removeIdentity,
 } from '../contacts/identity.js';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
@@ -340,6 +343,26 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
   });
 
   it('emits contact.updated only when v1 profile data changes, including identities', async () => {
+    // Created in its own transaction: a change in the creating transaction is
+    // covered by `contact.created` and emits nothing.
+    const { contact, receiver } = await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      return {
+        contact: await service.create(context, {
+          name: 'Profile comparison',
+          identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
+        }),
+        receiver: await service.create(context, {
+          name: 'Verified identity receiver',
+          identities: [],
+        }),
+      };
+    });
     await withSystem(db(), seeded.brandId, async (tx) => {
       const context = {
         tx,
@@ -347,10 +370,6 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
         actor: { userId: seeded.userId, role: 'admin' as const },
       };
       const service = app.get(ContactsService);
-      const contact = await service.create(context, {
-        name: 'Profile comparison',
-        identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
-      });
       const events = async () =>
         (await tx.select().from(outbox).where(eq(outbox.event, 'contact.updated'))).filter(
           (row) => row.payload.contactId === contact.id,
@@ -397,10 +416,6 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
       await removeIdentity(tx, seeded.brandId, contact.id, claim);
       expect(await events()).toHaveLength(6);
       await attachUnverifiedIdentity(tx, seeded.brandId, contact.id, claim);
-      const receiver = await service.create(context, {
-        name: 'Verified identity receiver',
-        identities: [],
-      });
       await attachVerifiedIdentity(tx, seeded.brandId, receiver.id, {
         ...claim,
         source: 'email.inbound',
@@ -455,7 +470,142 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     );
   });
 
+  it('sends no contact.updated for a profile change on a contact created in the same transaction', async () => {
+    const contactId = await withSystem(db(), seeded.brandId, async (tx) => {
+      const { contact } = await findOrCreateContactByIdentity(
+        tx,
+        seeded.brandId,
+        { kind: 'email', value: `${uuidv7()}@example.test`, source: 'web.form' },
+        { name: 'Created and localised' },
+      );
+      await withContactProfileChange(tx, contact.id, async () => {
+        await tx.update(contacts).set({ locale: 'ar' }).where(eq(contacts.id, contact.id));
+      });
+      return contact.id;
+    });
+    const eventsFor = (event: string): Promise<number> =>
+      withSystem(
+        db(),
+        seeded.brandId,
+        async (tx) =>
+          (await tx.select().from(outbox).where(eq(outbox.event, event))).filter(
+            (row) => row.payload.contactId === contactId,
+          ).length,
+      );
+    expect(await eventsFor('contact.created')).toBe(1);
+    expect(await eventsFor('contact.updated')).toBe(0);
+
+    await withSystem(db(), seeded.brandId, (tx) =>
+      withContactProfileChange(tx, contactId, async () => {
+        await tx.update(contacts).set({ locale: 'en' }).where(eq(contacts.id, contactId));
+      }),
+    );
+    expect(await eventsFor('contact.updated')).toBe(1);
+  });
+
+  it('re-reads the identity holder under the lock and never waits for a lower id while holding higher ones', async () => {
+    const email = `${uuidv7()}@example.test`;
+    const [low, target, holder] = await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      const first = await service.create(context, { name: 'Race low', identities: [] });
+      const second = await service.create(context, { name: 'Race target', identities: [] });
+      const third = await service.create(context, {
+        name: 'Race holder',
+        identities: [{ kind: 'email', value: email }],
+      });
+      return [first.id, second.id, third.id];
+    });
+    if (low === undefined || target === undefined || holder === undefined) {
+      throw new Error('Missing race contacts');
+    }
+    expect([low, target, holder]).toEqual([low, target, holder].toSorted());
+
+    const lockContacts = (tx: DbTransaction, ids: string[]) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(inArray(contacts.id, ids))
+        .orderBy(contacts.id)
+        .for('update');
+    const waitingOnLocks = async (count: number): Promise<void> => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const rows = await owner.db.execute<{ total: number }>(
+          sql`SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname = 'helpdock' AND wait_event_type = 'Lock'`,
+        );
+        if ((rows[0]?.total ?? 0) >= count) {
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('The transactions never queued on the contact locks');
+    };
+
+    // The mover holds the current holder and is about to hand the value to `low`.
+    let commitMover: () => void = () => undefined;
+    const moverMayCommit = new Promise<void>((resolve) => {
+      commitMover = resolve;
+    });
+    const moverLocked = Promise.withResolvers<void>();
+    const mover = withSystem(db(), seeded.brandId, async (tx) => {
+      await lockContacts(tx, [holder]);
+      await tx
+        .update(contactIdentities)
+        .set({ contactId: low })
+        .where(eq(contactIdentities.value, email));
+      moverLocked.resolve();
+      await moverMayCommit;
+    });
+    await moverLocked.promise;
+
+    // Reads `holder` as the holder, takes `target`, then queues for `holder`.
+    const attach = withSystem(db(), seeded.brandId, async (tx) => {
+      return attachVerifiedIdentity(tx, seeded.brandId, target, {
+        kind: 'email',
+        value: email,
+        source: 'email.inbound',
+      });
+    });
+    await waitingOnLocks(1);
+
+    // A well-behaved writer: holds the new holder, then queues for `holder`.
+    const bystander = withSystem(db(), seeded.brandId, async (tx) => {
+      await lockContacts(tx, [low]);
+      await lockContacts(tx, [low, holder]);
+    });
+    await waitingOnLocks(2);
+    commitMover();
+
+    await mover;
+    await bystander;
+    const attached = await attach;
+    expect(attached).toMatchObject({
+      plan: 'move',
+      otherContactId: low,
+      identity: { contactId: target, verified: true },
+    });
+  });
+
   it('undoing a contact merge emits exactly one update for each existing contact', async () => {
+    const { survivor, restored } = await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      return {
+        survivor: await service.create(context, { name: 'Undo survivor', identities: [] }),
+        restored: await service.create(context, {
+          name: 'Undo restored',
+          identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
+        }),
+      };
+    });
     await withSystem(db(), seeded.brandId, async (tx) => {
       const context = {
         tx,
@@ -463,11 +613,6 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
         actor: { userId: seeded.userId, role: 'admin' as const },
       };
       const service = app.get(ContactsService);
-      const survivor = await service.create(context, { name: 'Undo survivor', identities: [] });
-      const restored = await service.create(context, {
-        name: 'Undo restored',
-        identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
-      });
       const merges = app.get(ContactMergeService);
       const merged = await merges.merge(context, survivor.id, { mergedContactId: restored.id });
       const merge = merged.merges[0];
@@ -493,7 +638,26 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     });
   });
 
-  const mutate = async (tx: DbTransaction, suffix: string) => {
+  /** Committed first, so the later `update` and `merge` are changes to existing contacts. */
+  const seedMutationContacts = (suffix: string) =>
+    withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const contactService = app.get(ContactsService);
+      return {
+        first: await contactService.create(context, { name: `Survivor ${suffix}`, identities: [] }),
+        second: await contactService.create(context, { name: `Merged ${suffix}`, identities: [] }),
+      };
+    });
+
+  const mutate = async (
+    tx: DbTransaction,
+    suffix: string,
+    { first, second }: Awaited<ReturnType<typeof seedMutationContacts>>,
+  ) => {
     const principal = {
       type: 'staff' as const,
       id: seeded.userId,
@@ -518,14 +682,6 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
       const accountService = app.get(AccountsService);
       const account = await accountService.create(context, { name: `Account ${suffix}` });
       await accountService.update(context, account.id, { name: `Updated ${suffix}` });
-      const first = await contactService.create(context, {
-        name: `Survivor ${suffix}`,
-        identities: [],
-      });
-      const second = await contactService.create(context, {
-        name: `Merged ${suffix}`,
-        identities: [],
-      });
       await contactService.update(context, first.id, { name: `Updated contact ${suffix}` });
       await app.get(ContactMergeService).merge(context, first.id, { mergedContactId: second.id });
       const ticketService = app.get(TicketsService);
@@ -574,7 +730,11 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
       tx.select({ id: outbox.id }).from(outbox),
     );
     const beforeIds = new Set(before.map(({ id }) => id));
-    const changed = await withSystem(db(), seeded.brandId, (tx) => mutate(tx, uuidv7()));
+    const suffix = uuidv7();
+    const contactsToChange = await seedMutationContacts(suffix);
+    const changed = await withSystem(db(), seeded.brandId, (tx) =>
+      mutate(tx, suffix, contactsToChange),
+    );
     const emitted = await withSystem(db(), seeded.brandId, (tx) => tx.select().from(outbox));
     const fresh = emitted.filter((row) => !beforeIds.has(row.id) && events.includes(row.event));
     expect(new Set(fresh.map((row) => row.event))).toEqual(new Set(events));
@@ -610,18 +770,19 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
   });
 
   it('rolls back every event with its service changes', async () => {
-    const before = await withSystem(db(), seeded.brandId, (tx) =>
+    const suffix = uuidv7();
+    const contactsToChange = await seedMutationContacts(suffix);
+    const beforeMutation = await withSystem(db(), seeded.brandId, (tx) =>
       tx.select({ id: outbox.id }).from(outbox),
     );
-    const suffix = uuidv7();
     await expect(
       withSystem(db(), seeded.brandId, async (tx) => {
-        await mutate(tx, suffix);
+        await mutate(tx, suffix, contactsToChange);
         throw new Error('rollback all webhook changes');
       }),
     ).rejects.toThrow('rollback all webhook changes');
     await withSystem(db(), seeded.brandId, async (tx) => {
-      expect(await tx.select({ id: outbox.id }).from(outbox)).toEqual(before);
+      expect(await tx.select({ id: outbox.id }).from(outbox)).toEqual(beforeMutation);
       expect(
         await tx
           .select()

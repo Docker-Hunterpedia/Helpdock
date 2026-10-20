@@ -41,3 +41,7 @@ overrides:
   'basic-ftp@<=6.2.0': '>=6.2.1'
   # high, via vitest > vite > postcss
   'source-map-js@<1.2.2': '>=1.2.2'
+  # high, via @changesets/cli > launch-editor (GHSA-587h-7wmj-h5pm, GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw)
+  'launch-editor@<2.14.2': '>=2.14.2'
+  # high, vitest > vite and @vitejs/plugin-react > vite (GHSA-587h-7wmj-h5pm); direct pins are 8.3.4
+  'vite@>=8.3.0 <8.3.3': '>=8.3.3'

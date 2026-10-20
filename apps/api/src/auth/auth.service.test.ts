@@ -23,6 +23,7 @@ import { AuthService, type OauthInviteAcceptor } from './auth.service.js';
 import type { AuthAuditEntry, AuthAuditTrail } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import type { AuthFailure } from './auth-failure.js';
+import { AuthFailure as AuthFailureClass } from './auth-failure.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
 import type {
@@ -3127,6 +3128,20 @@ describe('passwordless sign-in with a passkey (M18-04)', () => {
     expect(options).toMatchObject({ userVerification: 'required', rpId: 'support.example.com' });
     expect(options.allowCredentials ?? []).toEqual([]);
   });
+
+  it.each([['passkeys-unavailable'], ['passkeys-rp-changed']] as const)(
+    'gives the budget slot back when the options cannot be minted (%s)',
+    async (code) => {
+      vi.spyOn(WebAuthnService.prototype, 'authenticationOptions').mockRejectedValue(
+        new AuthFailureClass(code),
+      );
+      const refund = vi.spyOn(RateLimiter.prototype, 'refundSignInIp');
+
+      await expect(authOf(service.passkeySignInOptions({ ip: IP }))).resolves.toEqual({ code });
+
+      expect(refund).toHaveBeenCalledOnce();
+    },
+  );
 
   it('opens a session with method passkey and the user-verified factor, and records the use', async () => {
     const { user, authenticator } = await holder();

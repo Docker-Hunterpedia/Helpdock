@@ -152,7 +152,12 @@ export class PasskeyRepository {
     return row;
   }
 
-  /** Records an assertion: the new counter, the backup state it reported, and when. */
+  /**
+   * Records an assertion: the new counter, the backup state it reported, and
+   * when. The counter only ever grows (`GREATEST`), so two assertions checked
+   * against the same stored value cannot leave the lower one behind; an
+   * authenticator that never counts stays at 0.
+   */
   async markUsed(
     credentialId: Uint8Array,
     signCount: number,
@@ -161,7 +166,11 @@ export class PasskeyRepository {
   ): Promise<void> {
     await (tx ?? this.#db)
       .update(webauthnCredentials)
-      .set({ signCount, backedUp, lastUsedAt: new Date() })
+      .set({
+        signCount: sql`GREATEST(${webauthnCredentials.signCount}, ${signCount})`,
+        backedUp,
+        lastUsedAt: new Date(),
+      })
       .where(eq(webauthnCredentials.credentialId, credentialId));
   }
 

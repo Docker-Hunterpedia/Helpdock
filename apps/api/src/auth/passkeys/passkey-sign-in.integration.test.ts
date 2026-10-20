@@ -23,8 +23,10 @@ import { dockerAvailable } from '../../testing/docker-available.js';
 import { SoftwareAuthenticator } from '../../testing/software-authenticator.js';
 import { forgetUsedTotpSteps } from '../../testing/staff-sign-in.js';
 import { PasswordHasher } from '../password.js';
+import { totpFailuresKey, totpLockKey } from '../redis-keys.js';
 import { refreshCookieOf } from '../session/cookies.js';
 import { newTotpSecret } from '../totp/totp.js';
+import { PasskeyRepository } from './passkey.repository.js';
 
 /**
  * M18-04 over HTTP against a real Postgres and Redis: signing in with a
@@ -512,6 +514,40 @@ describe.skipIf(!hasDocker)('passwordless sign-in with a passkey', () => {
       expect(brandlessAudit?.meta).toMatchObject({ method: 'passkey', reason: 'no-brand-role' });
       const [row] = await stored(noBrand.id);
       expect(row?.lastUsedAt).toBeNull();
+    });
+  });
+
+  describe('the second-factor lock', () => {
+    it('does not stop a passkey sign-in, and leaves the code-guessing counter as it was', async () => {
+      const account = await makeAccount('agent', { totpEnabled: true, totpSecretEncrypted: 'x' });
+      const authenticator = new SoftwareAuthenticator();
+      await holdPasskey(account.id, authenticator);
+      await runtime.redis.set(totpLockKey(account.id), '1', 'EX', 900);
+      await runtime.redis.set(totpFailuresKey(account.id), '2', 'EX', 900);
+
+      const response = await verify(await answerWith(authenticator));
+
+      expect(response.statusCode).toBe(201);
+      expect(sessionCookie(response)).toBe(true);
+      expect(await runtime.redis.exists(totpLockKey(account.id))).toBe(1);
+      expect(await runtime.redis.get(totpFailuresKey(account.id))).toBe('2');
+    });
+  });
+
+  describe('the stored counter', () => {
+    it('only ever grows, and still records the use', async () => {
+      const account = await makeAccount('agent');
+      await holdPasskey(account.id, new SoftwareAuthenticator());
+      const [row] = await stored(account.id);
+      const repository = new PasskeyRepository({ db: runtime.db });
+      const id = row?.credentialId ?? new Uint8Array();
+
+      await repository.markUsed(id, 9, false);
+      await repository.markUsed(id, 4, false);
+      const [after] = await stored(account.id);
+
+      expect(after?.signCount).toBe(9);
+      expect(after?.lastUsedAt).not.toBeNull();
     });
   });
 

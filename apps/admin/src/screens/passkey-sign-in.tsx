@@ -1,4 +1,4 @@
-import type { AuthErrorCode } from '@helpdock/schemas';
+import type { AuthErrorCode, AuthenticationResponse } from '@helpdock/schemas';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { KeyRound } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -22,6 +22,9 @@ import { AlertBanner } from '../ui/alert-banner.tsx';
  * passwordless with user verification, so a success is a session and nothing
  * follows.
  */
+
+/** Under the ceremony's five minutes (`WEBAUTHN_CEREMONY_TTL_SECONDS`), so the next one is ready first. */
+const AUTOFILL_REFRESH_MS = 4 * 60 * 1000;
 
 export type PasskeyNotice = 'cancelled' | 'refused' | 'unreadable' | 'unsupported';
 
@@ -73,17 +76,9 @@ export function usePasskeySignIn({
 
   const signIn = useCallback(
     async (autofill: boolean): Promise<'signed-in' | 'cancelled' | 'failed'> => {
-      try {
-        const { ceremonyId, options } = await api.passkeySignInOptions();
-        const response = await assertPasskey(options, { autofill });
-        setSession(await api.signInWithPasskey({ ceremonyId, response }));
-        void navigate(returnTo, { replace: true });
-        return 'signed-in';
-      } catch (error) {
+      const report = (error: unknown): 'cancelled' | 'failed' => {
         if (isPasskeyCeremonyError(error)) {
-          // The autofill request is one nobody asked for: when the browser
-          // cannot run it, the page says nothing and the button is still there.
-          if (autofill || error.reason === 'cancelled') return 'cancelled';
+          if (error.reason === 'cancelled') return 'cancelled';
           setNotice(error.reason === 'unsupported' ? 'unsupported' : 'unreadable');
         } else if (isAuthError(error) && error.code === 'invalid-credentials') {
           setNotice('refused');
@@ -96,6 +91,26 @@ export function usePasskeySignIn({
           );
         }
         return 'failed';
+      };
+
+      let picked: { ceremonyId: string; response: AuthenticationResponse };
+      try {
+        const { ceremonyId, options } = await api.passkeySignInOptions();
+        picked = { ceremonyId, response: await assertPasskey(options, { autofill }) };
+      } catch (error) {
+        // The autofill request is one nobody asked for: whatever stops it before
+        // a passkey is chosen (a rate limit, a full budget, a browser that cannot
+        // run it), the page says nothing and the button is still there.
+        if (autofill) return 'cancelled';
+        return report(error);
+      }
+      try {
+        setSession(await api.signInWithPasskey(picked));
+        void navigate(returnTo, { replace: true });
+        return 'signed-in';
+      } catch (error) {
+        // A passkey the person chose, from the list or the prompt, is theirs to be told about.
+        return report(error);
       }
     },
     [api, navigate, returnTo, setSession],
@@ -112,8 +127,17 @@ export function usePasskeySignIn({
       // would otherwise be asked again, forever.
       await signIn(true);
     })();
+    // The options are good for five minutes and so is the browser's request;
+    // a fresh pair is asked for before they lapse, so a passkey picked from a
+    // page left open all afternoon still has a live ceremony behind it.
+    const refresh = window.setTimeout(() => {
+      if (!live) return;
+      cancelPasskeyCeremony();
+      setRound((current) => current + 1);
+    }, AUTOFILL_REFRESH_MS);
     return () => {
       live = false;
+      window.clearTimeout(refresh);
       cancelPasskeyCeremony();
     };
   }, [available, signIn, round]);

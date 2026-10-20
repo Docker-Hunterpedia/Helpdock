@@ -283,3 +283,64 @@ describe('when the autofill cannot run', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+describe('when the autofill request is stopped before anyone chose a passkey', () => {
+  it.each([
+    ['a rate-limited options call', new AuthError('rate-limited', { retryAfter: 600 })],
+    ['an install whose address moved', new AuthError('passkeys-rp-changed')],
+    ['an unreachable api', new Error('offline')],
+  ])('says nothing for %s', async (_name, error) => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    vi.spyOn(api, 'passkeySignInOptions').mockRejectedValue(error);
+    renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in'] });
+
+    await screen.findByRole('button', { name: 'Sign in with a passkey' });
+    await waitFor(() => {
+      expect(api.passkeySignInOptions).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Too many sign-in attempts/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Passkeys unavailable')).not.toBeInTheDocument();
+  });
+
+  it('still tells the person when the passkey they picked from the list is refused', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    vi.spyOn(api, 'signInWithPasskey').mockRejectedValue(new AuthError('invalid-credentials'));
+    ceremony.assert.mockResolvedValue(assertion);
+    renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in'] });
+
+    expect(
+      await screen.findByText(/We couldn't sign you in with that passkey/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('an autofill request left open', () => {
+  it('is replaced with fresh options before the ceremony behind it expires', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const api = new MockAuthApi();
+      api.seedPasskeys({ count: 1 });
+      const options = vi.spyOn(api, 'passkeySignInOptions');
+      renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in'] });
+      await waitFor(() => {
+        expect(options).toHaveBeenCalledTimes(1);
+      });
+
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+      expect(options).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(61 * 1000);
+      await waitFor(() => {
+        expect(options).toHaveBeenCalledTimes(2);
+      });
+      expect(ceremony.cancel).toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

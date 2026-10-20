@@ -1078,7 +1078,8 @@ three-code allowance renews at a window boundary. A fourth reservation, or a wro
 fifteen minutes (`totp-locked`). A correct code spends the challenge in one
 atomic step that refuses if the lock landed first, so no session opens after the
 lock. Only someone holding a live challenge can spend the counter, and a
-completed sign-in clears it. In-flight verification reserves a slot atomically so parallel
+sign-in completed through a code, recovery code or passkey second factor clears
+it. A passwordless passkey sign-in neither reads nor clears it. In-flight verification reserves a slot atomically so parallel
 guesses cannot exceed the limit. A proved password that issues a TOTP or
 required-enrolment challenge atomically removes only its own reservation from
 both buckets, preserving earlier failures. Abandoning a challenge adds no

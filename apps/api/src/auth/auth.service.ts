@@ -514,12 +514,16 @@ export class AuthService {
       throw new AuthFailure('rate-limited');
     }
     const attempt = await this.#assertSignInAllowed(undefined, ip);
-    const { ceremonyId, options } = await this.#parts.webauthn.authenticationOptions({
-      purpose: 'passwordless',
-    });
-    await this.#parts.limiter.refundSignInIp(attempt);
-
-    return { ceremonyId, options: { ...options } };
+    try {
+      const { ceremonyId, options } = await this.#parts.webauthn.authenticationOptions({
+        purpose: 'passwordless',
+      });
+      return { ceremonyId, options: { ...options } };
+    } finally {
+      // Minting evaluates no guess, so the slot goes back whether or not it worked
+      // (`passkeys-unavailable` and `passkeys-rp-changed` are thrown from there).
+      await this.#parts.limiter.refundSignInIp(attempt);
+    }
   }
 
   /**
@@ -531,6 +535,11 @@ export class AuthService {
    * ceremony) answers `invalid-credentials`, and the reason goes to the audit
    * trail only. The slot taken from the sign-in budget is kept on every
    * failure, so guesses draw on the same per-IP budget as passwords.
+   *
+   * It neither reads nor clears the second-factor lock and failure counter
+   * (`totp-locked`): those bound guesses at a six-digit code, and an assertion
+   * with user verification is not a guess. A person whose code is locked can
+   * still sign in with their passkey, and doing so leaves the counter as it was.
    */
   async verifyPasskeySignIn({
     ip,

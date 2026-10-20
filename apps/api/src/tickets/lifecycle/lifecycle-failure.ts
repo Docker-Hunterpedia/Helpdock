@@ -29,6 +29,9 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketLifecycleRefusal, string>> = {
   'attachments-in-flight': 'An attachment on those messages is still being processed',
   'ticket-closed': 'A closed ticket cannot be snoozed; reopen it first',
   'snooze-requires-time': 'Snoozed needs a wake time; use the Snooze menu',
+  'bulk-changed': 'Something this bulk edit previewed changed since; preview it again',
+  'bulk-undo-expired': 'A bulk edit can be undone for 60 seconds, and those have passed',
+  'bulk-already-undone': 'This bulk edit was already undone',
   'merge-primary-deleted':
     'The ticket this one was merged into has been deleted, so the merge cannot be undone',
 };

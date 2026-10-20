@@ -11,6 +11,7 @@ import {
   type RetentionSettingsRow,
   retentionSettings,
   telegramDeliveries,
+  ticketBulkOperations,
   ticketStatuses,
   tickets,
   webhookDeliveries,
@@ -210,6 +211,39 @@ export class RetentionRepository {
         ),
       )
       .returning({ id: notifications.id });
+    return deleted.length;
+  }
+
+  /**
+   * M14-03's operations; their items go with them (the foreign key cascades).
+   * Seven days, fixed: the Undo they serve lasts a minute.
+   */
+  async purgeBulkOperationsBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = await tx
+      .select({ id: ticketBulkOperations.id })
+      .from(ticketBulkOperations)
+      .where(
+        and(eq(ticketBulkOperations.brandId, brandId), lt(ticketBulkOperations.createdAt, cutoff)),
+      )
+      .orderBy(asc(ticketBulkOperations.createdAt), asc(ticketBulkOperations.id))
+      .limit(limit);
+    if (batch.length === 0) {
+      return 0;
+    }
+    const deleted = await tx
+      .delete(ticketBulkOperations)
+      .where(
+        inArray(
+          ticketBulkOperations.id,
+          batch.map((row) => row.id),
+        ),
+      )
+      .returning({ id: ticketBulkOperations.id });
     return deleted.length;
   }
 

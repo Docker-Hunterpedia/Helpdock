@@ -7,6 +7,7 @@ import type {
   TicketTemplate as TicketTemplateRow,
 } from '@helpdock/db';
 import type {
+  ActivityVia,
   MessageCreateRequest,
   MessagePageQuery,
   Ticket,
@@ -127,6 +128,17 @@ import type { TimeEntriesService } from './time/time-entries.service.js';
 export interface ActivityBundle {
   readonly from: Record<string, unknown>;
   readonly to: Record<string, unknown>;
+}
+
+/**
+ * What a caller other than the `PATCH` route may say about an update (M14-03):
+ * a bulk edit is the same update, recorded `via` bulk, with the operation its
+ * notifications fold under.
+ */
+export interface UpdateOptions {
+  readonly bundle?: ActivityBundle;
+  readonly via?: Extract<ActivityVia, 'bulk' | 'bulk_undo'>;
+  readonly bulkOperationId?: string;
 }
 
 /** First activity page; older history uses a scoped UUID anchor without losing timestamp precision. */
@@ -475,7 +487,7 @@ export class TicketsService {
     principal: Principal,
     ticketId: string,
     input: TicketUpdateRequest,
-    options: { readonly bundle?: ActivityBundle } = {},
+    options: UpdateOptions = {},
   ): Promise<Ticket> {
     if (Object.keys(input).length === 0) {
       throw new BadRequestException('That request changes nothing');
@@ -483,7 +495,7 @@ export class TicketsService {
 
     const tx = getTx();
     const now = new Date();
-    const actor = activityActorFor(principal);
+    const actor = activityActorFor(principal, options.via);
     const { ticket, status } = await this.#require(tx, ticketId);
     const context: LifecycleContext = { tx, brandId, actor, now };
 
@@ -673,6 +685,9 @@ export class TicketsService {
         assigneeId: updated.assigneeId,
         assignedBy: 'person',
         actorId: staffActorId(principal),
+        ...(options.bulkOperationId === undefined
+          ? {}
+          : { bulkOperationId: options.bulkOperationId }),
       });
       // M7-06, DOMAIN-RULES §9: a person has taken the conversation.
       if (principal.type === 'staff') {

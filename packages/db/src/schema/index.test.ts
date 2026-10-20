@@ -104,6 +104,8 @@ describe('the schema', () => {
       'telegram_chats',
       'telegram_deliveries',
       'ticket_activity',
+      'ticket_bulk_operation_items',
+      'ticket_bulk_operations',
       'ticket_field_suggestions',
       'ticket_messages',
       'ticket_participants',

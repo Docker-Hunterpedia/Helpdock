@@ -1,5 +1,5 @@
 import { type DbTransaction, tickets } from '@helpdock/db';
-import type { TicketTagList, TicketTagsRequest } from '@helpdock/schemas';
+import type { ActivityVia, TicketTagList, TicketTagsRequest } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { Principal } from '../auth/principal.js';
@@ -48,6 +48,7 @@ export class TicketTagsService {
     principal: Principal,
     ticketId: string,
     request: TicketTagsRequest,
+    via?: Extract<ActivityVia, 'bulk' | 'bulk_undo'>,
   ): Promise<TicketTagList> {
     const ticket = await this.#require(tx, ticketId);
 
@@ -70,7 +71,7 @@ export class TicketTagsService {
         brandId,
         ticketId,
         departmentId: ticket.departmentId,
-        actor: activityActorFor(principal),
+        actor: activityActorFor(principal, via),
         action: 'ticket.tags.changed',
         from: { tagIds: change.before },
         to: { tagIds: change.after },

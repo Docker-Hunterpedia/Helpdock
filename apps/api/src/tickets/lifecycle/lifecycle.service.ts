@@ -5,7 +5,7 @@ import type {
 } from '@helpdock/db';
 import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
-import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
+import { type BrandSettings, BULK_UNDO_WINDOW_SECONDS, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { type ArrivalEntryPoint, arrivalOf, continuationArrival } from '../routing/arrival.js';
 import { isSnoozedStatus, type WakeReason, writeWokeActivity } from '../snooze/snooze-wake.js';
@@ -210,7 +210,11 @@ export class TicketLifecycleService {
     await this.#hooks.onResolved(context.tx, event);
 
     if (ticket.mergedIntoId === null && !isSpamStatus(status)) {
-      await this.#hooks.onClosedForCsat(context.tx, event);
+      await this.#hooks.onClosedForCsat(context.tx, {
+        ...event,
+        // The Undo window of a bulk edit (ADR 0036): the survey asks after it.
+        ...(context.actor.via === 'bulk' ? { csatDelayMs: BULK_UNDO_WINDOW_SECONDS * 1_000 } : {}),
+      });
     }
   }
 

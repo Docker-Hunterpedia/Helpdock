@@ -66,7 +66,7 @@ export const messageAuthorTypeSchema = z.enum(['staff', 'contact', 'system', 'ai
 export type MessageAuthorType = z.infer<typeof messageAuthorTypeSchema>;
 
 /** "Who/when/via what (UI, rule, API, AI)" — REQUIREMENTS §4.1. */
-export const activityViaSchema = z.enum(['ui', 'rule', 'api', 'ai', 'system']);
+export const activityViaSchema = z.enum(['ui', 'rule', 'api', 'ai', 'system', 'bulk', 'bulk_undo']);
 export type ActivityVia = z.infer<typeof activityViaSchema>;
 
 // --------------------------------------------------------------------------
@@ -221,6 +221,12 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'ticket-closed',
   /** M14-02. Snoozed is entered with a wake time through `snoozedUntil`, never as a bare status. */
   'snooze-requires-time',
+  /** M14-03. Something a bulk edit previewed changed before it was applied; preview again. */
+  'bulk-changed',
+  /** M14-03. The 60 seconds in which a bulk edit can be undone have passed. */
+  'bulk-undo-expired',
+  /** M14-03. The bulk edit was already undone. */
+  'bulk-already-undone',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 

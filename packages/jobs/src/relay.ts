@@ -18,6 +18,7 @@ import {
   parseJobPayload,
 } from './jobs.js';
 import { type JobLogger, silentLogger } from './logger.js';
+import { deliveryDelayMs } from './outbox.js';
 import { QUEUE_NAMES } from './queues.js';
 import { type RelayStatusStore, writeRelayStatus } from './relay-status.js';
 import { createWaiter } from './waiter.js';
@@ -202,7 +203,12 @@ const addEventJobs = async (
       event: row.event,
       payload: row.payload,
     });
-    await queue.add(outboxEventJob.name, payload, { ...outboxEventJob.options, jobId: row.id });
+    const delay = deliveryDelayMs(row.payload);
+    await queue.add(outboxEventJob.name, payload, {
+      ...outboxEventJob.options,
+      jobId: row.id,
+      ...(delay > 0 ? { delay } : {}),
+    });
   }
 };
 

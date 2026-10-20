@@ -36,7 +36,7 @@ The secret is stored encrypted under `APP_MASTER_KEY`. Every change is in the au
 | Event | When | `data` |
 |---|---|---|
 | `ticket.created` | A ticket is created, by any channel | `ticket` |
-| `ticket.updated` | A ticket's fields or status change, or it is reopened; the ticket carries `snoozedUntil` while it is snoozed (M14-02) | `ticket` |
+| `ticket.updated` | A ticket's fields or status change, or it is reopened; the ticket carries `snoozedUntil` while it is snoozed (M14-02). A bulk edit, and its Undo, send one per changed ticket, exactly as the same edits made one by one would (M14-03) | `ticket` |
 | `ticket.replied` | A message is added to the thread — the customer's, an agent's or the system's. Internal notes are never sent | `ticket`, `message` |
 | `ticket.closed` | A ticket is closed (not marked spam) | `ticket` |
 | `contact.created` | A contact is created: by an agent, the API, or a channel recognising somebody new | `contact` |

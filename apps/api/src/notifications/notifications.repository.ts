@@ -6,6 +6,7 @@ import {
   notifications,
   pushSubscriptions,
   teamMembers,
+  ticketBulkOperations,
   ticketMessages,
   tickets,
   userBrandRoles,
@@ -66,6 +67,8 @@ export interface NewNotificationRow {
   readonly email: boolean;
   readonly push: boolean;
   readonly emailState: 'pending' | null;
+  /** M14-03. The bulk edit it belongs to. */
+  readonly bulkOperationId?: string | null;
 }
 
 export interface DeliveryFacts {
@@ -258,6 +261,41 @@ export class NotificationsRepository {
       .returning({ id: notifications.id });
 
     return inserted.map((row) => row.id);
+  }
+
+  /** M14-03. Whether the bulk edit has been undone, so a late notification for it is not made. */
+  async bulkOperationUndone(tx: DbTransaction, operationId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ undoneAt: ticketBulkOperations.undoneAt })
+      .from(ticketBulkOperations)
+      .where(eq(ticketBulkOperations.id, operationId))
+      .limit(1);
+
+    return row?.undoneAt != null;
+  }
+
+  /**
+   * M14-03. An Undo takes back what the operation told people: an email still
+   * waiting is withdrawn, and every notification nobody has read is deleted.
+   * One someone has read stays, as the record of what they were told. Runs as
+   * the worker: the rows belong to their recipients (the owner policy).
+   */
+  async withdrawBulkOperation(tx: DbTransaction, operationId: string): Promise<number> {
+    await tx
+      .update(notifications)
+      .set({ emailState: 'withdrawn' })
+      .where(
+        and(
+          eq(notifications.bulkOperationId, operationId),
+          eq(notifications.emailState, 'pending'),
+        ),
+      );
+    const deleted = await tx
+      .delete(notifications)
+      .where(and(eq(notifications.bulkOperationId, operationId), isNull(notifications.readAt)))
+      .returning({ id: notifications.id });
+
+    return deleted.length;
   }
 
   // --------------------------------------------------------------- delivery

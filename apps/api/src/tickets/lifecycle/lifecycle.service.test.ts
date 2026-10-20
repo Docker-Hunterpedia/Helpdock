@@ -403,6 +403,32 @@ describe('closing (§2.2 row 4)', () => {
     expect(hooks.onClosedForCsat).toHaveBeenCalledTimes(1);
   });
 
+  it('asks for the survey after the Undo window when a bulk edit closed it (M14-03)', async () => {
+    const { service, context, hooks } = harness({});
+
+    await service.onClosed(
+      { ...context, actor: { ...context.actor, via: 'bulk' } },
+      ticket({ closedAt: NOW }),
+      CLOSED,
+    );
+
+    expect(hooks.onClosedForCsat).toHaveBeenCalledWith(
+      context.tx,
+      expect.objectContaining({ csatDelayMs: 60_000 }),
+    );
+  });
+
+  it('asks for no delay on a close made any other way', async () => {
+    const { service, context, hooks } = harness({});
+
+    await service.onClosed(context, ticket({ closedAt: NOW }), CLOSED);
+
+    expect(hooks.onClosedForCsat).toHaveBeenCalledWith(
+      context.tx,
+      expect.not.objectContaining({ csatDelayMs: expect.anything() }),
+    );
+  });
+
   it('skips the survey for a status excluded from reports, such as Spam', async () => {
     const { service, context, hooks } = harness({});
 

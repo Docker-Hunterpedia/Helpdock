@@ -62,6 +62,7 @@ export * from './system.js';
 export * from './tags.js';
 export * from './telegram.js';
 export * from './ticket.js';
+export * from './ticket-bulk.js';
 export * from './ticket-routing.js';
 export * from './ticket-templates.js';
 export * from './ticketing.js';

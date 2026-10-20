@@ -124,6 +124,14 @@ export const runBrandRetention = async ({
       ),
     batchSize,
   );
+  // Not a category of the form either: ids and enums, kept seven days.
+  await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeBulkOperationsBatch(tx, brandId, cutoffs.bulkOperations, batchSize),
+      ),
+    batchSize,
+  );
   counts.webhookDeliveries = await drainInBatches(
     () =>
       inBrand((tx) =>

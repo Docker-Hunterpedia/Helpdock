@@ -32,9 +32,19 @@ export class CsatLifecycleHooks extends TicketLifecycleHooks {
       return;
     }
 
-    await enqueueCsatRequested(tx, event.brandId, {
-      ticketId: event.ticket.id,
-      closedAt: (event.ticket.closedAt ?? event.at).toISOString(),
-    });
+    await enqueueCsatRequested(
+      tx,
+      event.brandId,
+      {
+        ticketId: event.ticket.id,
+        closedAt: (event.ticket.closedAt ?? event.at).toISOString(),
+      },
+      {
+        notBefore:
+          event.csatDelayMs === undefined
+            ? undefined
+            : new Date(event.at.getTime() + event.csatDelayMs),
+      },
+    );
   }
 }

@@ -84,6 +84,7 @@ const MIGRATION_TAGS = [
   '0063_single_key_shortcuts',
   '0064_ticket_snooze',
   '0065_oauth_microsoft_provider',
+  '0066_bulk_edit',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

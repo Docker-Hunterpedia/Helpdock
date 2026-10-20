@@ -16,7 +16,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { Queue } from 'bullmq';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { enqueueOutbox } from './outbox.js';
+import { deliverAfter, enqueueOutbox } from './outbox.js';
 import { QUEUE_NAMES } from './queues.js';
 import { createQueueConnection } from './redis.js';
 import {
@@ -163,6 +163,25 @@ describe.skipIf(!hasDocker)('the outbox relay', () => {
     expect(await unpublishedIds(brandA)).toEqual([]);
     expect(await runRelayCycle({ db, queue, brandIds: [brandA] })).toMatchObject({ published: 0 });
     expect(await waitingJobIds()).toEqual([id]);
+  });
+
+  it('holds back a job whose row asks to be delivered later, and still marks the row published', async () => {
+    const notBefore = new Date(Date.now() + 60_000);
+    const id = await withSystem(db, brandA, (tx) =>
+      enqueueOutbox(tx, {
+        brandId: brandA,
+        event: 'settings.changed',
+        payload: deliverAfter({ key: 'brand.name' }, notBefore),
+      }),
+    );
+
+    expect(await runRelayCycle({ db, queue, brandIds: [brandA] })).toMatchObject({ published: 1 });
+
+    const job = await queue.getJob(id);
+    expect(job?.opts.delay).toBeGreaterThan(50_000);
+    expect(job?.opts.delay).toBeLessThanOrEqual(60_000);
+    expect(await job?.isDelayed()).toBe(true);
+    expect(await unpublishedIds(brandA)).toEqual([]);
   });
 
   it('loses nothing when it is killed between the add and the commit', async () => {

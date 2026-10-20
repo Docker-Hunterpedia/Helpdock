@@ -1,6 +1,6 @@
 # 0036 Bulk changes as previewed, all-or-nothing operations with a short undo
 
-Status: proposed
+Status: accepted
 Date: 2026-10-20
 
 ## Context

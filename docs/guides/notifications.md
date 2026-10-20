@@ -253,7 +253,8 @@ lost. A `notify.email` job left in Redis from 1.0 is let go with a log line.
 
 | Event consumed | Written by |
 |---|---|
-| `ticket.assigned` | `TicketsService` (a person), `autoAssign` (the rotation), a workflow rule (M3-03) |
+| `ticket.assigned` | `TicketsService` (a person), `autoAssign` (the rotation), a workflow rule (M3-03). A bulk edit's carries `bulkOperationId` (M14-03): the notification is stamped with it, and is not made at all once that operation was undone |
+| `ticket.bulk_undone` | An Undo of a bulk edit (M14-03): withdraws the operation's notifications that nobody has read, and marks a still-pending email `withdrawn` |
 | `ticket.replied`, `ticket.note_added` | `TicketsService.addMessage` (M1-03) |
 | `sla.warning`, `sla.breached` | the SLA engine (M3-02); a warning may name `userIds`, `teamIds` and `departmentLeads` |
 | `ticket.escalated` | an SLA escalation step (M3-02); may name `userIds`, `teamIds` and `departmentLeads` |

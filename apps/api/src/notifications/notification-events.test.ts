@@ -17,6 +17,7 @@ import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { TICKET_ASSIGNED_EVENT, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import {
   CONSUMED_EVENTS,
+  createBulkUndoneHandler,
   createFanOutHandler,
   createNotificationCreatedHandler,
   createNotificationReadHandler,
@@ -46,6 +47,7 @@ const OUTBOX = '0199f4b2-6666-7000-8000-000000000001';
 const NOTIFICATION = '0199f4b2-7777-7000-8000-000000000001';
 const SUBSCRIPTION = '0199f4b2-8888-7000-8000-000000000001';
 const RULE = '0199f4b2-9999-7000-8000-000000000001';
+const OPERATION = '0199f4b2-aaaa-7000-8000-000000000001';
 
 const LINA = '0199f4b2-1111-7000-8000-000000000001';
 const OMAR = '0199f4b2-1111-7000-8000-000000000002';
@@ -94,6 +96,7 @@ const ticketFacts = (overrides: Partial<TicketFacts> = {}): TicketFacts => ({
 interface Fake {
   readonly repository: NotificationsRepository;
   readonly inserted: NewNotificationRow[];
+  readonly withdrawn: string[];
 }
 
 const fakeRepository = ({
@@ -105,6 +108,7 @@ const fakeRepository = ({
   delivery,
   subscriptions = [],
   alreadyInserted = false,
+  undone = false,
 }: {
   ticket?: TicketFacts | null;
   message?: MessageFacts;
@@ -114,8 +118,10 @@ const fakeRepository = ({
   delivery?: DeliveryFacts;
   subscriptions?: SubscriptionRow[];
   alreadyInserted?: boolean;
+  undone?: boolean;
 } = {}): Fake => {
   const inserted: NewNotificationRow[] = [];
+  const withdrawn: string[] = [];
   const repository = {
     ticket: async () => ticket ?? undefined,
     message: async () => message,
@@ -124,6 +130,11 @@ const fakeRepository = ({
       teamIds.length === 0 ? [] : team,
     departmentLeadIds: async () => leads,
     preferencesOf: async () => preferences,
+    bulkOperationUndone: async () => undone,
+    withdrawBulkOperation: async (_tx: DbTransaction, operationId: string) => {
+      withdrawn.push(operationId);
+      return 1;
+    },
     insert: async (_tx: DbTransaction, rows: readonly NewNotificationRow[]) => {
       inserted.push(...rows);
       return alreadyInserted ? [] : rows.map((_row, index) => `notification-${String(index)}`);
@@ -134,7 +145,7 @@ const fakeRepository = ({
       subscriptions.find((row) => row.id === id),
   } as unknown as NotificationsRepository;
 
-  return { repository, inserted };
+  return { repository, inserted, withdrawn };
 };
 
 /** A transaction that records the outbox rows written through it. */
@@ -219,6 +230,31 @@ describe('planFor', () => {
     });
   });
 
+  it('plans an assignment with the bulk edit it was part of (M14-03)', () => {
+    const plan = planFor('ticket.assigned', {
+      ticketId: TICKET,
+      departmentId: SUPPORT,
+      assigneeId: OMAR,
+      assignedBy: 'person',
+      actorId: LINA,
+      bulkOperationId: OPERATION,
+    });
+
+    expect(plan).toMatchObject({ kind: 'assigned', bulkOperationId: OPERATION });
+  });
+
+  it('plans a single assignment with no operation', () => {
+    const plan = planFor('ticket.assigned', {
+      ticketId: TICKET,
+      departmentId: SUPPORT,
+      assigneeId: OMAR,
+      assignedBy: 'person',
+      actorId: LINA,
+    });
+
+    expect(plan).toMatchObject({ bulkOperationId: null });
+  });
+
   it('refuses a snooze_ended payload that names no cause', () => {
     expect(() =>
       planFor('ticket.snooze_ended', { ticketId: TICKET, departmentId: SUPPORT, snoozedBy: null }),
@@ -227,6 +263,63 @@ describe('planFor', () => {
 });
 
 describe('the fan-out handler', () => {
+  const assigned = {
+    ticketId: TICKET,
+    departmentId: SUPPORT,
+    assigneeId: OMAR,
+    assignedBy: 'person',
+    actorId: LINA,
+    bulkOperationId: OPERATION,
+  };
+
+  it('stamps a bulk edit’s notification with its operation (M14-03)', async () => {
+    const { rows } = await fanOut('ticket.assigned', assigned);
+
+    expect(rows).toEqual([expect.objectContaining({ userId: OMAR, bulkOperationId: OPERATION })]);
+  });
+
+  it('makes no notification for a bulk edit that was undone before its event ran', async () => {
+    const { rows, outbox } = await fanOut(
+      'ticket.assigned',
+      assigned,
+      fakeRepository({ undone: true }),
+    );
+
+    expect(rows).toEqual([]);
+    expect(outbox).toEqual([]);
+  });
+
+  it('withdraws the notifications of an undone bulk edit', async () => {
+    const fake = fakeRepository();
+    const { tx } = recordingTx();
+
+    await createBulkUndoneHandler({ repository: fake.repository })({
+      outboxId: OUTBOX,
+      brandId: BRAND,
+      event: 'ticket.bulk_undone',
+      payload: { operationId: OPERATION },
+      tx,
+      log: silentLogger,
+    });
+
+    expect(fake.withdrawn).toEqual([OPERATION]);
+  });
+
+  it('refuses a withdrawal that names no operation', async () => {
+    const { tx } = recordingTx();
+
+    await expect(
+      createBulkUndoneHandler({ repository: fakeRepository().repository })({
+        outboxId: OUTBOX,
+        brandId: BRAND,
+        event: 'ticket.bulk_undone',
+        payload: {},
+        tx,
+        log: silentLogger,
+      }),
+    ).rejects.toThrow();
+  });
+
   it('tells the assignee that a snooze ended, and not the person who set it (M14-02)', async () => {
     const { rows } = await fanOut('ticket.snooze_ended', {
       ticketId: TICKET,

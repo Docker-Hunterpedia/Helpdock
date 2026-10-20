@@ -43,7 +43,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0033](0033-helpdock-as-an-mcp-server-with-oauth-2-1.md) | Helpdock is an MCP server with a hand-wired OAuth 2.1 authorization server | accepted |
 | [0034](0034-one-mcp-client-over-safefetch.md) | One MCP client for integrations and agent tools, over safeFetch | proposed |
 | [0035](0035-snooze-as-a-system-status.md) | Snooze as a system status with a wake timer | accepted |
-| [0036](0036-bulk-changes-previewed-all-or-nothing-with-undo.md) | Bulk changes as previewed, all-or-nothing operations with a short undo | proposed |
+| [0036](0036-bulk-changes-previewed-all-or-nothing-with-undo.md) | Bulk changes as previewed, all-or-nothing operations with a short undo | accepted |
 | [0037](0037-paced-notification-email-and-digests.md) | Paced notification email and digests | accepted |
 | [0038](0038-keyboard-registry-and-command-palette.md) | One keyboard registry, physical keys, and a command palette without a new dependency | proposed |
 | [0039](0039-signed-release-bundle-and-installer.md) | A signed release bundle, verified by the installer | proposed |
@@ -66,7 +66,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0056](0056-public-npm-packages-for-client-sdks.md) | Public npm packages for the widget client and the React Native SDK | accepted |
 | [0057](0057-desktop-shell-on-electron.md) | The desktop shell on Electron | proposed |
 
-ADRs 0028 to 0057 were written on 2026-10-20 with the plans of [PRD Phase 5](../planning/PRD.md#phase-5--1x), one milestone after another (M12: 0028–0031, M13: 0032–0034, M14: 0035–0038, M15: 0039–0044, M16: 0045–0046, M17: 0047–0049, M18: 0050–0053, M19: 0054–0055, M20: 0056–0057). Each stays proposed until its milestone builds it (0035 was accepted with M14-02, 0037 with M14-10), except 0032, 0033, 0040, 0048, 0052, 0053, 0054, 0055 and 0056, which the owner accepted on 2026-10-20 ([decisions](../planning/decisions-1-x.md)). 0051 was accepted and its OAuth binding built ahead of M18, as a 1.0.1 security fix; Microsoft remains M18 work. 0050 was accepted with M18-01, the WebAuthn foundation. 0045, 0052 and 0053 amend accepted or earlier records (0027, 0003, 0026) without editing them.
+ADRs 0028 to 0057 were written on 2026-10-20 with the plans of [PRD Phase 5](../planning/PRD.md#phase-5--1x), one milestone after another (M12: 0028–0031, M13: 0032–0034, M14: 0035–0038, M15: 0039–0044, M16: 0045–0046, M17: 0047–0049, M18: 0050–0053, M19: 0054–0055, M20: 0056–0057). Each stays proposed until its milestone builds it (0035 was accepted with M14-02, 0036 with M14-03, 0037 with M14-10), except 0032, 0033, 0040, 0048, 0052, 0053, 0054, 0055 and 0056, which the owner accepted on 2026-10-20 ([decisions](../planning/decisions-1-x.md)). 0051 was accepted and its OAuth binding built ahead of M18, as a 1.0.1 security fix; Microsoft remains M18 work. 0050 was accepted with M18-01, the WebAuthn foundation. 0045, 0052 and 0053 amend accepted or earlier records (0027, 0003, 0026) without editing them.
 
 ## Template
 

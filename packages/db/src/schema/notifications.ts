@@ -23,6 +23,7 @@ import {
   notificationEmailStateEnum,
   notificationKindEnum,
 } from './enums.js';
+import { ticketBulkOperations } from './ticket-bulk-operations.js';
 import { ticketMessages } from './ticket-messages.js';
 import { tickets } from './tickets.js';
 import { users } from './users.js';
@@ -83,6 +84,10 @@ export const notifications = pgTable(
       onDelete: 'set null',
     }),
     emailedAt: timestamp('emailed_at', { withTimezone: true }),
+    /** M14-03. The bulk edit that caused it: the bell folds on it and an Undo withdraws it. */
+    bulkOperationId: uuid('bulk_operation_id').references(() => ticketBulkOperations.id, {
+      onDelete: 'set null',
+    }),
   },
   (table) => [
     unique('notifications_source_user_key').on(table.sourceEventId, table.userId),
@@ -93,6 +98,9 @@ export const notifications = pgTable(
       .on(table.brandId, table.userId, table.createdAt)
       .where(sql`${table.emailState} = 'pending'`),
     index('notifications_email_batch_idx').on(table.emailBatchId),
+    index('notifications_bulk_operation_idx')
+      .on(table.bulkOperationId)
+      .where(sql`${table.bulkOperationId} is not null`),
   ],
 );
 

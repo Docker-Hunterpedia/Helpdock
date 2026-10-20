@@ -52,6 +52,12 @@ test.describe('a passkey as the second factor, against the real api', () => {
     const context = await browser.newContext({ baseURL: test.info().project.use.baseURL ?? '' });
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
+    // Chromium's virtual authenticator answers a conditional request on its own, which a
+    // person's browser never does; the sign-in page would sign in before this spec types.
+    await context.addInitScript(() => {
+      PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+    });
+
     await cdp.send('WebAuthn.enable');
     const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
       options: {

@@ -17,6 +17,13 @@ import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { ProviderMark } from '../ui/provider-marks.tsx';
 import { AuthLayout, LanguageLink } from './auth-layout.tsx';
 import { useFinishSignIn } from './finish-sign-in.js';
+import {
+  PasskeyButton,
+  PasskeyNoticeBanner,
+  PasskeysPausedBanner,
+  PasskeyWaiting,
+  usePasskeySignIn,
+} from './passkey-sign-in.tsx';
 import { type SignInFormErrors, validateEmail, validateSignInForm } from './sign-in-form.js';
 import { SsoButtons, SsoEmailForm } from './sso-sign-in.tsx';
 
@@ -126,11 +133,24 @@ export function SignIn(): ReactNode {
     },
   });
 
+  const passkeyAvailable = methods.data?.passkey === true;
+  const passkey = usePasskeySignIn({
+    api,
+    available: passkeyAvailable,
+    returnTo,
+    onRefusal: (code, retryAfter) => {
+      setFailure(code);
+      setRetryMinutes(retryAfterMinutes(retryAfter));
+    },
+  });
+  const showPasskeyPaused = methods.data?.passkeysPaused === true || passkey.paused;
+
   const submitPassword = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const found = validateSignInForm({ email, password });
     setErrors(found);
     setFailure(null);
+    passkey.clearNotice();
 
     if (Object.keys(found).length === 0) {
       signIn.mutate();
@@ -184,7 +204,7 @@ export function SignIn(): ReactNode {
   return (
     <AuthLayout
       title={t('auth:signIn.title')}
-      subtitle={subtitle}
+      subtitle={passkey.waiting ? t('auth:signIn.passkeyWaitingBody') : subtitle}
       footer={
         <Box
           sx={{
@@ -212,12 +232,15 @@ export function SignIn(): ReactNode {
         </Box>
       }
     >
-      {methods.data?.ssoEnforced && !breakGlass ? (
+      {passkey.waiting ? (
+        <PasskeyWaiting onCancel={passkey.cancel} />
+      ) : methods.data?.ssoEnforced && !breakGlass ? (
         <SsoEmailForm returnTo={returnTo} />
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <SsoButtons connections={methods.data?.sso ?? []} returnTo={returnTo} />
           {failureMessage ? <AlertBanner tone="danger">{failureMessage}</AlertBanner> : null}
+          {passkey.notice ? <PasskeyNoticeBanner notice={passkey.notice} /> : null}
 
           <Box
             component="form"
@@ -225,7 +248,12 @@ export function SignIn(): ReactNode {
             onSubmit={submitPassword}
             sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
           >
-            <Field id="sign-in-email" label={t('auth:signIn.emailLabel')} error={emailError}>
+            <Field
+              id="sign-in-email"
+              label={t('auth:signIn.emailLabel')}
+              error={emailError}
+              hint={passkeyAvailable ? t('auth:signIn.passkeyHint') : undefined}
+            >
               <OutlinedInput
                 id="sign-in-email"
                 type="email"
@@ -238,8 +266,12 @@ export function SignIn(): ReactNode {
                 slotProps={{
                   input: {
                     dir: 'ltr',
-                    autoComplete: 'username',
-                    'aria-describedby': fieldDescribedBy('sign-in-email', { error: emailError }),
+                    // `webauthn` is the token that lets the browser offer saved passkeys here.
+                    autoComplete: passkeyAvailable ? 'username webauthn' : 'username',
+                    'aria-describedby': fieldDescribedBy('sign-in-email', {
+                      error: emailError,
+                      hint: passkeyAvailable,
+                    }),
                   },
                 }}
               />
@@ -300,6 +332,15 @@ export function SignIn(): ReactNode {
                   {t('auth:signIn.or')}
                 </Typography>
               </Divider>
+
+              {showPasskeyPaused ? (
+                <PasskeysPausedBanner />
+              ) : passkeyAvailable ? (
+                <PasskeyButton
+                  disabled={signIn.isPending || magicLink.isPending}
+                  onClick={passkey.start}
+                />
+              ) : null}
 
               <Button
                 type="button"

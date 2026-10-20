@@ -422,6 +422,53 @@ describe('HttpAuthApi', () => {
     });
   });
 
+  describe('signing in with a passkey (M18-04)', () => {
+    const CEREMONY = 'B'.repeat(43);
+    const assertion = {
+      id: 'AQID',
+      rawId: 'AQID',
+      type: 'public-key' as const,
+      response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+      clientExtensionResults: {},
+    };
+
+    it('asks for options naming nobody, and answers with the ceremony and the assertion alone', async () => {
+      fetchMock
+        .mockResolvedValueOnce(json({ ceremonyId: CEREMONY, options: { challenge: 'x' } }))
+        .mockResolvedValueOnce(
+          json({ kind: 'session', session, accessToken: 'a.b.c', expiresInSeconds: 600 }, 201),
+        );
+      const api = new HttpAuthApi();
+
+      const options = await api.passkeySignInOptions();
+      const signedIn = await api.signInWithPasskey({
+        ceremonyId: options.ceremonyId,
+        response: assertion,
+      });
+
+      expect(signedIn.user.email).toBe('lina@helpdock.com');
+      expect(calls().map(({ init, url }) => [init.method, url])).toEqual([
+        ['POST', '/api/auth/passkey/options'],
+        ['POST', '/api/auth/passkey/verify'],
+      ]);
+      expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({});
+      expect(JSON.parse(String(calls()[1]?.init.body))).toEqual({
+        ceremonyId: CEREMONY,
+        response: assertion,
+      });
+    });
+
+    it('carries the refusal code and keeps no session', async () => {
+      fetchMock.mockResolvedValueOnce(authFailure('invalid-credentials', 401));
+
+      const refusal = (await new HttpAuthApi()
+        .signInWithPasskey({ ceremonyId: CEREMONY, response: assertion })
+        .catch((error: unknown) => error)) as AuthError;
+
+      expect(refusal).toMatchObject({ code: 'invalid-credentials' });
+    });
+  });
+
   describe('a passkey as the second factor (M18-03)', () => {
     const CEREMONY = 'A'.repeat(43);
     const assertion = {

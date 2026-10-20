@@ -3054,3 +3054,218 @@ describe('a passkey as the second factor (M18-03)', () => {
     });
   });
 });
+
+describe('passwordless sign-in with a passkey (M18-04)', () => {
+  const IP = '203.0.113.9';
+
+  // Earlier suites leave a spy on the SSO policy; this one starts from the real one.
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const holder = async (
+    options: {
+      authenticator?: SoftwareAuthenticator;
+      user?: Partial<StaffUser>;
+      role?: StaffMembership['role'] | null;
+    } = {},
+  ) => {
+    const user = await newUser(options.user);
+    if (options.role !== null) staff.add(user, options.role ?? 'agent');
+    else staff.users.set(user.id, user);
+    const authenticator = options.authenticator ?? new SoftwareAuthenticator();
+    passkeyRows.rows.push(
+      credentialRow(user.id, 'Key', authenticator.credentialId, authenticator.cosePublicKey),
+    );
+    return { user, authenticator };
+  };
+
+  const assertionFrom = async (
+    authenticator: SoftwareAuthenticator,
+    overrides: Partial<Parameters<SoftwareAuthenticator['assert']>[1]> = {},
+    ip = IP,
+  ) => {
+    const { ceremonyId, options } = await service.passkeySignInOptions({ ip });
+    return {
+      ceremonyId,
+      response: authenticator.assert(options as never, {
+        origin: APP_URL,
+        ...overrides,
+      }) as never,
+    };
+  };
+
+  const verify = (assertion: { ceremonyId: string; response: never }, ip = IP) =>
+    service.verifyPasskeySignIn({
+      ip,
+      ceremonyId: assertion.ceremonyId,
+      response: assertion.response,
+      userAgent: 'Firefox',
+    });
+
+  const authOf = async (promise: Promise<unknown>): Promise<unknown> => {
+    try {
+      await promise;
+      return undefined;
+    } catch (error) {
+      return (error as AuthFailure).auth;
+    }
+  };
+
+  const failureReasons = () =>
+    audit.entries
+      .filter((entry) => entry.action === 'auth.sign_in.failed')
+      .map((entry) => entry.meta?.reason);
+
+  it('mints options that name nobody and give the shared budget its slot back', async () => {
+    const { options } = await service.passkeySignInOptions({ ip: IP });
+
+    expect(options).toMatchObject({ userVerification: 'required', rpId: 'support.example.com' });
+    expect(options.allowCredentials ?? []).toEqual([]);
+  });
+
+  it('opens a session with method passkey and the user-verified factor, and records the use', async () => {
+    const { user, authenticator } = await holder();
+
+    const issued = await verify(await assertionFrom(authenticator));
+
+    expect(issued.session.user.id).toBe(user.id);
+    expect(audit.entries.at(-1)).toMatchObject({
+      action: 'auth.sign_in.succeeded',
+      meta: { method: 'passkey', secondFactor: 'passkey-uv' },
+    });
+    expect(passkeyRows.rows[0]?.lastUsedAt).not.toBeNull();
+  });
+
+  it('asks for no second factor of an account that has an authenticator app', async () => {
+    const { user, authenticator } = await holder({
+      user: { totpEnabled: true, totpSecretEncrypted: 'sealed' },
+    });
+
+    const issued = await verify(await assertionFrom(authenticator));
+
+    expect(issued.session.user.id).toBe(user.id);
+  });
+
+  describe('refusals', () => {
+    const refused = { code: 'invalid-credentials' };
+
+    it('answers an unknown credential like any other failure', async () => {
+      await expect(
+        authOf(verify(await assertionFrom(new SoftwareAuthenticator()))),
+      ).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['unknown-credential']);
+    });
+
+    it('refuses an assertion made without user verification', async () => {
+      const { authenticator } = await holder({
+        authenticator: new SoftwareAuthenticator({ userVerified: false }),
+      });
+
+      await expect(authOf(verify(await assertionFrom(authenticator)))).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['bad-assertion']);
+      expect(passkeyRows.rows[0]?.lastUsedAt).toBeNull();
+    });
+
+    it('refuses a regressed counter, audits it and leaves the stored counter alone', async () => {
+      const { authenticator } = await holder({
+        authenticator: new SoftwareAuthenticator({ signCount: 5 }),
+      });
+      Object.assign(passkeyRows.rows[0] ?? {}, { signCount: 40 });
+
+      await expect(authOf(verify(await assertionFrom(authenticator)))).resolves.toEqual(refused);
+      expect(passkeyRows.rows[0]?.signCount).toBe(40);
+      expect(audit.entries.map((entry) => entry.action)).toContain(
+        'auth.passkey.counter_regressed',
+      );
+    });
+
+    it('refuses a replayed answer', async () => {
+      const { authenticator } = await holder();
+      const assertion = await assertionFrom(authenticator);
+      await verify(assertion);
+
+      await expect(authOf(verify(assertion))).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['ceremony-gone']);
+    });
+
+    it('refuses a deactivated person with the same answer', async () => {
+      const { authenticator } = await holder({
+        user: { status: 'deactivated', deactivatedAt: new Date() },
+      });
+
+      await expect(authOf(verify(await assertionFrom(authenticator)))).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['unusable-account']);
+      expect(passkeyRows.rows[0]?.lastUsedAt).toBeNull();
+    });
+
+    it('refuses an account with no role in any brand, with the same answer, and records no use', async () => {
+      const { authenticator } = await holder({ role: null });
+
+      await expect(authOf(verify(await assertionFrom(authenticator)))).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['no-brand-role']);
+      expect(passkeyRows.rows[0]?.lastUsedAt).toBeNull();
+    });
+
+    it('refuses an assertion that reports another user handle', async () => {
+      const { authenticator } = await holder();
+
+      await expect(
+        authOf(
+          verify(
+            await assertionFrom(authenticator, {
+              userHandle: Buffer.alloc(32, 1).toString('base64url'),
+            }),
+          ),
+        ),
+      ).resolves.toEqual(refused);
+      expect(failureReasons()).toEqual(['user-handle-mismatch']);
+    });
+  });
+
+  describe('under SSO enforcement', () => {
+    it('refuses the options and the assertion before anything is spent', async () => {
+      const { authenticator } = await holder();
+      const assertion = await assertionFrom(authenticator);
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+
+      await expect(authOf(service.passkeySignInOptions({ ip: IP }))).resolves.toEqual({
+        code: 'sso-required',
+      });
+      await expect(authOf(verify(assertion))).resolves.toEqual({ code: 'sso-required' });
+      expect(passkeyRows.rows[0]?.lastUsedAt).toBeNull();
+    });
+  });
+
+  describe('the budget', () => {
+    it('is the password form’s: failures from one IP run it out for both', async () => {
+      const { authenticator } = await holder();
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        await authOf(verify(await assertionFrom(new SoftwareAuthenticator())));
+      }
+
+      await expect(
+        authOf(verify(await assertionFrom(authenticator).catch(() => ({}) as never))),
+      ).resolves.toMatchObject({ code: 'rate-limited' });
+      await expect(signIn({ ip: IP })).rejects.toMatchObject({ auth: { code: 'rate-limited' } });
+    });
+
+    it('keeps another IP’s budget apart', async () => {
+      const { authenticator } = await holder();
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        await authOf(verify(await assertionFrom(new SoftwareAuthenticator())));
+      }
+
+      const issued = await verify(
+        await assertionFrom(authenticator, {}, '198.51.100.7'),
+        '198.51.100.7',
+      );
+
+      expect(issued.session.user.email).toBe('lina@helpdock.com');
+    });
+  });
+});

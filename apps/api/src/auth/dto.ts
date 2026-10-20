@@ -18,6 +18,7 @@ import {
   passkeyRegistrationOptionsSchema,
   passkeySecondFactorOptionsRequestSchema,
   passkeySecondFactorVerifyRequestSchema,
+  passkeySignInVerifyRequestSchema,
   passkeyStepUpOptionsSchema,
   passwordForgotRequestSchema,
   passwordResetRequestSchema,
@@ -63,6 +64,7 @@ export class PasskeySecondFactorOptionsRequestDto extends createZodDto(
 export class PasskeySecondFactorVerifyRequestDto extends createZodDto(
   passkeySecondFactorVerifyRequestSchema,
 ) {}
+export class PasskeySignInVerifyRequestDto extends createZodDto(passkeySignInVerifyRequestSchema) {}
 export class PasskeyCeremonyOptionsDto extends createZodDto(passkeyStepUpOptionsSchema) {}
 export class EnrolmentPasskeyOptionsDto extends createZodDto(passkeyRegistrationOptionsSchema) {}
 export class EnrolmentPasskeyConfirmRequestDto extends createZodDto(

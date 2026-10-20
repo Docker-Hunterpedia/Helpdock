@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import {
   type AuthenticationResponseJSON,
   generateAuthenticationOptions,
@@ -15,6 +15,7 @@ import {
   cose,
   decodeAttestationObject,
   decodeCredentialPublicKey,
+  isoCBOR,
 } from '@simplewebauthn/server/helpers';
 import { AuthFailure } from '../auth-failure.js';
 import {
@@ -357,6 +358,38 @@ const verifySignature = async (input: {
   }
 };
 
+let standIn: StoredPasskey | undefined;
+
+/**
+ * A credential nobody holds, with a real key. An assertion that names no stored
+ * credential is checked against it and the verdict thrown away, so an unknown
+ * credential costs the signature check a known one does and the sign-in
+ * endpoint is not a stopwatch for which credential ids exist.
+ */
+const standInCredential = (): StoredPasskey => {
+  if (standIn === undefined) {
+    const jwk = generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey.export({
+      format: 'jwk',
+    });
+    standIn = {
+      userId: '',
+      credentialId: new Uint8Array(32),
+      publicKey: isoCBOR.encode(
+        new Map<number, number | Uint8Array>([
+          [cose.COSEKEYS.kty, 2],
+          [cose.COSEKEYS.alg, -7],
+          [cose.COSEKEYS.crv, 1],
+          [cose.COSEKEYS.x, Buffer.from(jwk.x ?? '', 'base64url')],
+          [cose.COSEKEYS.y, Buffer.from(jwk.y ?? '', 'base64url')],
+        ]),
+      ),
+      signCount: 0,
+      transports: [],
+    };
+  }
+  return standIn;
+};
+
 /**
  * The types already demand a person for every purpose but passwordless; this
  * holds the line for a caller that reaches the service around them.
@@ -517,6 +550,13 @@ export class WebAuthnService {
 
     const credential = await lookUpCredential(input.response.rawId, input.findCredential);
     if (credential === undefined) {
+      await verifySignature({
+        response: input.response,
+        ceremony,
+        relyingParty,
+        credential: standInCredential(),
+        requireUserVerification: USER_VERIFICATION[input.purpose] === 'required',
+      });
       return { ok: false, reason: 'unknown-credential', userId: null };
     }
     if (ceremony.userId !== undefined && credential.userId !== ceremony.userId) {

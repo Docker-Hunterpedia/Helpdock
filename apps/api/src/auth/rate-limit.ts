@@ -162,6 +162,19 @@ export const PASSKEY_CEREMONY_OPTIONS_RULE: RateLimitRule = {
 };
 
 /**
+ * Per IP, for the options of a passwordless passkey sign-in (M18-04). The
+ * options are identical for everyone and evaluate no guess, so the shared
+ * sign-in budget gets its slot back; this only stops one source filling Redis
+ * with ceremonies. Looser than that budget because the sign-in page asks for
+ * options on every load, to start the autofill prompt.
+ */
+export const PASSKEY_SIGN_IN_OPTIONS_RULE: RateLimitRule = {
+  bucket: 'passkey-signin-options',
+  limit: 120,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Per IP, for the two public invite routes. An invite token is 256 bits, so
  * guessing one is not the threat; what this bounds is somebody walking the
  * endpoint to find out whether a token they already hold is still live, and the

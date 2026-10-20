@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement privately, through GitHub: use the [private reporting form](https://github.com/Docker-Hunterpedia/Helpdock/security/advisories/new) with a title that starts with "Code of Conduct:", or contact the maintainer, [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at [contact@oday-bakkour.com](mailto:contact@oday-bakkour.com). All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

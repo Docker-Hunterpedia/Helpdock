@@ -43,7 +43,7 @@ type StepUp = { readonly action: 'connect' | 'disconnect'; readonly provider: Oa
  * The step-up field takes either credential. A password is at least twelve
  * characters, so six digits can only be an authenticator code.
  */
-const stepUpProof =(value: string): OauthStepUpRequest =>
+const stepUpProof = (value: string): OauthStepUpRequest =>
   /^\d{6}$/.test(value) ? { code: value } : { currentPassword: value };
 
 const IDENTITIES_KEY = ['me', 'oauth-identities'] as const;

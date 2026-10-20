@@ -30,12 +30,18 @@ import {
 export function ShortcutSheet({
   open,
   singleKeys,
+  saving,
   permits,
   onSingleKeysChange,
   onClose,
 }: {
   readonly open: boolean;
   readonly singleKeys: boolean;
+  /**
+   * The switch is being saved. Said with `aria-busy` rather than `disabled`:
+   * a disabled button drops the focus it holds.
+   */
+  readonly saving: boolean;
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
   onSingleKeysChange(on: boolean): void;
   onClose(): void;
@@ -145,6 +151,7 @@ export function ShortcutSheet({
           checked={singleKeys}
           label={t('tickets:keyboard.singleKey')}
           describedBy={hintId}
+          busy={saving}
           onChange={onSingleKeysChange}
         />
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>

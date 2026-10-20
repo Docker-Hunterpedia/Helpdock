@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { MOCK_SINGLE_KEY_STORAGE, MOCK_USER } from '../src/auth/mock-api.js';
+import { MOCK_KEYBOARD_SAVE_DELAY_STORAGE } from '../src/keyboard/api.js';
 import { MOCK_TICKET_REFUND } from '../src/tickets/mock-api.js';
 import { expect, test } from './fixtures.js';
 import { openTicket, openTickets, signIn } from './flows.js';
@@ -148,6 +149,32 @@ test.describe('the keys', () => {
 });
 
 test.describe('the single-key switch', () => {
+  test('keeps focus on the switch through Space and the save, busy while it is out', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    // Long enough to see the save in flight, short enough not to slow the run.
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, '800');
+    }, MOCK_KEYBOARD_SAVE_DELAY_STORAGE);
+    await signIn(page, locale);
+
+    await page.keyboard.press('Shift+Slash');
+    const sheet = page.getByRole('dialog', { name: t('tickets:keyboard.label') });
+    const toggle = sheet.getByRole('switch', { name: t('tickets:keyboard.singleKey') });
+    await toggle.focus();
+    await page.keyboard.press('Space');
+
+    await expect(toggle).toHaveAttribute('aria-busy', 'true');
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expect(toggle).toBeFocused();
+
+    await expect(toggle).not.toHaveAttribute('aria-busy');
+    await expect(toggle).toBeFocused();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
   test('turned off in the sheet, no letter is a shortcut and ⌘/Ctrl ones still are', async ({
     page,
     appLocale: locale,

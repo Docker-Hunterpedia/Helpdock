@@ -73,6 +73,8 @@ const SINGLE_KEYS_BY_DEFAULT = true;
  */
 function useSingleKeySwitch(): {
   readonly singleKeys: boolean;
+  /** A save is on its way to the account; the switch says so with `aria-busy`. */
+  readonly saving: boolean;
   readonly setSingleKeys: (on: boolean) => void;
 } {
   const t = useT();
@@ -105,7 +107,7 @@ function useSingleKeySwitch(): {
     [mutate, isPending],
   );
 
-  return { singleKeys, setSingleKeys };
+  return { singleKeys, saving: isPending, setSingleKeys };
 }
 
 /** Whether the signed-in person may use a shortcut that needs `permission`. */
@@ -132,7 +134,7 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
   const handlers = useRef(new Map<ShortcutId, ShortcutHandler[]>());
   const [pending, setPending] = useState<PendingSequence | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { singleKeys, setSingleKeys } = useSingleKeySwitch();
+  const { singleKeys, saving, setSingleKeys } = useSingleKeySwitch();
   const permits = usePermits();
 
   // Read when a key arrives rather than closed over when the listener was
@@ -223,6 +225,7 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
       <ShortcutSheet
         open={sheetOpen}
         singleKeys={singleKeys}
+        saving={saving}
         permits={permits}
         onSingleKeysChange={setSingleKeys}
         onClose={() => {

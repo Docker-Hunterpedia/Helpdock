@@ -153,7 +153,16 @@ describe('the single-key switch', () => {
     expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
   });
 
-  it('keeps focus on the switch when Space toggles it', async () => {
+  it('keeps focus on the switch when Space toggles it, busy while the save is out', async () => {
+    let finish: () => void = () => {};
+    vi.spyOn(MockKeyboardApi.prototype, 'save').mockImplementation(
+      (preferences) =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve(preferences);
+          };
+        }),
+    );
     const { user } = await renderAt('/contacts');
     await user.keyboard('?');
     const toggle = within(
@@ -164,7 +173,14 @@ describe('the single-key switch', () => {
     await user.keyboard(' ');
 
     await waitFor(() => {
-      expect(toggle).toHaveAttribute('aria-checked', 'false');
+      expect(toggle).toHaveAttribute('aria-busy', 'true');
+    });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveFocus();
+
+    finish();
+    await waitFor(() => {
+      expect(toggle).not.toHaveAttribute('aria-busy');
     });
     expect(toggle).toHaveFocus();
   });

@@ -172,4 +172,4 @@ single shortcut (New ticket, the search box, Reply and Internal note, Send,
 Macros, the assignee, status, priority and tag controls, the sidebar toggle,
 Keyboard shortcuts in the account menu) carry its keys in `aria-keyshortcuts`
 while they work. The sheet's rows are a description list per group, and a row
-the switch turned off says "(off)".
+the switch turned off says "(off)". While a change of the switch is being saved it is `aria-busy`, never disabled, so the focus stays on it.

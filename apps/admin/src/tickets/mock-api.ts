@@ -2025,6 +2025,7 @@ const comparator =
 
     switch (query.sort ?? 'updatedAt') {
       case 'slaDue': {
+        // Fixtures derive urgency here; the server reads the engine's stored due columns.
         const due = (ticket: Ticket): string | null =>
           ticket.status.pausesSla || ticket.status.systemState === 'closed'
             ? null

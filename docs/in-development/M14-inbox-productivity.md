@@ -422,7 +422,7 @@ M14-23.
 unsatisfied clocks, breached ones first by how long ago, then soonest due, then
 tickets without a clock. A stored generated column `tickets.sla_next_due_at`
 (least of the two due columns the SLA engine already maintains) with an index
-`(brand_id, department_id, sla_next_due_at)`. Offered in the list's sort menu
+`(brand_id, sla_next_due_at, id)`. Offered in the list's sort menu
 and the view editor. The 50k-ticket p95 under D §14 is re-measured for this
 sort.
 
@@ -430,11 +430,19 @@ Implementation (M14-07, #294): complete, pending PR review. The engine's
 `summaryColumns` writes `first_response_due_at` and `resolution_due_at` only
 for counting clocks; PostgreSQL generates `sla_next_due_at` with `least` of
 those columns (one null leaves the other; both null produce null). The index
-is `(brand_id, department_id, sla_next_due_at)`. The API, list Sort menu and
+is `(brand_id, sla_next_due_at, id)`. The API, list Sort menu and
 view editor accept `slaDue`. Urgency is always ascending, nulls last, with
 ascending ticket ID ties, regardless of `direction` (including its default).
 Nullable cursors cover both the transition into the no-clock tail and ties
 within it. Existing RLS and exact-reference search precedence still apply.
+
+Review-approved departure from the original index wording: the department RLS
+predicate cannot be an index condition, so putting `department_id` before the
+sort key prevents an ordered scan of the scoped list. The explicit brand
+equality in `liveTicketsOf` lets `(brand_id, sla_next_due_at, id)` serve both
+Admin and Agent lists, with department RLS filtering rows. The generated
+column uses millisecond precision, matching the cursor timestamps. The
+performance harness includes SLA due and SLA due page 2 for both roles.
 
 Validation covers cursor encoding and predicates, saved-view schemas, clock
 exclusion, generated values through real SLA transitions, department-scoped
@@ -969,7 +977,7 @@ Changed tables:
 
 | Table | Change |
 |---|---|
-| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, department_id, sla_next_due_at)`; GIN on `custom` |
+| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, sla_next_due_at, id)`; GIN on `custom` |
 | `ticket_statuses` | built-in key `snoozed`, seeded for every brand by `seedBrandStatuses` (`packages/db/src/ticket-statuses.ts`) and backfilled by the migration; its state and flags fixed like the other system statuses |
 | `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (reserved for M14-03)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
 | `notification_prefs` (install scope, per person) | `email_schedule`, `digest_hour`, `paused_until`, `email_unsubscribed_at` |

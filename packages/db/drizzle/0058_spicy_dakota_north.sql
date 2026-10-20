@@ -1,2 +1,0 @@
-ALTER TABLE "tickets" ADD COLUMN "sla_next_due_at" timestamp with time zone GENERATED ALWAYS AS (least(first_response_due_at, resolution_due_at)) STORED;--> statement-breakpoint
-CREATE INDEX "tickets_brand_department_sla_due_idx" ON "tickets" USING btree ("brand_id","department_id","sla_next_due_at");

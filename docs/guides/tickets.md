@@ -872,7 +872,7 @@ view's filtered matches, as with the other sorts.
 The SLA engine maintains `first_response_due_at` and `resolution_due_at` only
 while clocks count. PostgreSQL stores their `least` in the generated column
 `sla_next_due_at`; one null leaves the other value, and two nulls produce null.
-The index is `(brand_id, department_id, sla_next_due_at)`. Its 50k-ticket p95
+The index is `(brand_id, sla_next_due_at, id)`. Its 50k-ticket p95
 under DOMAIN-RULES §14 has not been re-measured locally for M14-07.
 
 ```
@@ -1627,9 +1627,9 @@ measured last.
 
 ### The index set
 
-Every list is ordered by the keyset `(updated_at, id)`, so every index a list
-reads *in order* ends in exactly those two columns
-(`0021_ticket_list_indexes.sql`):
+The default list uses the keyset `(updated_at, id)`
+(`0021_ticket_list_indexes.sql`); SLA due uses `(sla_next_due_at, id)`,
+ascending with nulls last. Each ordered-scan index ends in its list keyset:
 
 | Index | Serves |
 |---|---|
@@ -1638,6 +1638,7 @@ reads *in order* ends in exactly those two columns
 | `tickets_brand_department_status_updated_idx (brand_id, department_id, status_id, updated_at, id)` | The filter popover's department and status chips. `id` was added so one department in one status is in keyset order too |
 | `tickets_brand_status_updated_idx (brand_id, status_id, updated_at, id)` | A view narrowed by state across departments, and its sidebar count (M1-05, `0022_views.sql`) |
 | `tickets_brand_number_key (brand_id, number)` | `sort=number` |
+| `tickets_brand_sla_due_idx (brand_id, sla_next_due_at, id)` | `sort=slaDue`, including page 2; brand equality enables ordered scans, while department RLS filters rows |
 | `ticket_tags_brand_tag_idx (brand_id, tag_id)` | The all-of tag filter, one scan however many tags are named (M1-06) |
 | `ticket_search_tokens_brand_token_idx (brand_id, token, ticket_id, department_id)` | Search: every word of `q` is an index lookup, and the fuzzy fallback a prefix range (M1-15 part 2) |
 | `tickets_brand_contact_idx (brand_id, contact_id)` | Search by the contact's name: the tickets of the contacts whose name matched (M1-15 part 2) |
@@ -1688,7 +1689,16 @@ prints the full plans):
 | Search `renewa` (half-typed) | exact half: token index, 0 ids, 9.1 ms; fuzzy fallback: prefix range of the token index, 53 ms | 8.7 ms; 30 ms |
 | Search matching nothing | exact half: token index, **0 ids, 8.8 ms**; fuzzy fallback: prefix range, 0 candidates, 9.5 ms | 8.2 ms; 8.2 ms |
 | Two tags, all-of | `Bitmap Index Scan on ticket_tags_brand_tag_idx`, then `Index Scan using tickets_pkey`, 22.6 ms | same, 15.5 ms |
+| SLA due (expected; reference-host run owed) | `Index Scan using tickets_brand_sla_due_idx`, ascending due time then ID, nulls last, stopping after one page | same index, department policy filters rows |
+| SLA due page 2 (expected; reference-host run owed) | same index, null-aware cursor filter over `(sla_next_due_at, id)`, stopping after one page | same index and cursor filter, with department policy |
 | Page 2 | `Index Scan Backward using tickets_brand_updated_idx`, `Index Cond: … ROW(updated_at, id) < ROW(…)`, 0.15 ms | same, 0.42 ms |
+
+The SLA rows above are expected plans, not measured results. The harness runs
+`SLA due` and `SLA due page 2` for Admin and Agent and prints their plans;
+the 50k-ticket p95 run on the owner's DOMAIN-RULES §14 reference host is still
+owed. The SLA index omits `department_id` before the sort key because its RLS
+predicate cannot be an index condition; the explicit brand equality allows an
+ordered scan with department filtering.
 
 "Unassigned" reads the brand-wide index rather than the assignee one: `IS NULL`
 is an index condition but not an equality, so Postgres cannot treat the

@@ -1,0 +1,2 @@
+ALTER TABLE "tickets" ADD COLUMN "sla_next_due_at" timestamp (3) with time zone GENERATED ALWAYS AS (least(first_response_due_at, resolution_due_at)) STORED;--> statement-breakpoint
+CREATE INDEX "tickets_brand_sla_due_idx" ON "tickets" USING btree ("brand_id","sla_next_due_at","id");

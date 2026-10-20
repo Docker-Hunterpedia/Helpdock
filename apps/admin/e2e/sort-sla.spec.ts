@@ -32,13 +32,11 @@ test('sorts by SLA urgency and restores focus when the menu is cancelled', async
   await expect(rows.nth(3)).toContainText('HD-1041');
   const region = page.getByRole('region', { name: t('tickets:list.label') });
   expect(await region.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await page.screenshot({ path: `/private/tmp/helpdock-m14-07-validation/${locale}-sorted.png` });
   const ordered = await rows.allTextContents();
   await sort.click();
   await expect(
     page.getByRole('menuitemradio', { name: new RegExp(t('tickets:sort.slaDue.asc')) }),
   ).toHaveAttribute('aria-checked', 'true');
-  await page.screenshot({ path: `/private/tmp/helpdock-m14-07-validation/${locale}-menu.png` });
   await page.keyboard.press('Escape');
   await expect(sort).toBeFocused();
   expect(await rows.allTextContents()).toEqual(ordered);

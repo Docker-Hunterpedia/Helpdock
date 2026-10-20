@@ -167,9 +167,10 @@ export const tickets = pgTable(
     firstResponseDueAt: timestamp('first_response_due_at', { withTimezone: true }),
     resolutionDueAt: timestamp('resolution_due_at', { withTimezone: true }),
     /** M14-07: summary due columns exclude paused, satisfied and stopped clocks. */
-    slaNextDueAt: timestamp('sla_next_due_at', { withTimezone: true }).generatedAlwaysAs(
-      sql`least(first_response_due_at, resolution_due_at)`,
-    ),
+    slaNextDueAt: timestamp('sla_next_due_at', {
+      withTimezone: true,
+      precision: 3,
+    }).generatedAlwaysAs(sql`least(first_response_due_at, resolution_due_at)`),
     slaBreached: boolean('sla_breached').notNull().default(false),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     /**
@@ -261,11 +262,7 @@ export const tickets = pgTable(
     // each one serves, and the plan that proves it, is in docs/guides/tickets.md
     // under "Performance".
     //
-    index('tickets_brand_department_sla_due_idx').on(
-      table.brandId,
-      table.departmentId,
-      table.slaNextDueAt,
-    ),
+    index('tickets_brand_sla_due_idx').on(table.brandId, table.slaNextDueAt, table.id),
     // The list's own ordering: `(updated_at, id)` is the keyset, so with the
     // brand fixed the default list — and every view that filters rather than
     // narrows — is an index scan that stops after one page.

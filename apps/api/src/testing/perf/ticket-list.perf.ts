@@ -154,6 +154,13 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
       for (const session of ['admin', 'agent'] as const) {
         const viewer = session === 'admin' ? dataset.admin.id : dataset.agent.id;
         const firstPage = await getJson<TicketList>(firstUrl, listPath, sessions[session].token);
+        const slaPage = await getJson<TicketList>(
+          firstUrl,
+          `${listPath}?sort=slaDue`,
+          sessions[session].token,
+        );
+        const slaCursor = slaPage.nextCursor;
+        if (slaCursor === null) throw new Error(`SLA due needs a second page for ${session}`);
         reads.push({
           name: 'read · open a ticket',
           session: sessions[session],
@@ -169,6 +176,12 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
 
         cases.push(
           { name: 'all (default)', session, query: {} },
+          { name: 'SLA due', session, query: { sort: 'slaDue' } },
+          {
+            name: 'SLA due page 2',
+            session,
+            query: { sort: 'slaDue', cursor: slaCursor },
+          },
           {
             name: 'view: my open',
             session,

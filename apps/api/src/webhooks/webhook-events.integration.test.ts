@@ -1,8 +1,11 @@
 import type { Env } from '@helpdock/config';
 import {
+  accounts,
+  contacts,
   createDb,
   type Db,
   type DbHandle,
+  type DbTransaction,
   departments,
   outbox,
   ticketMessages,
@@ -13,15 +16,25 @@ import {
   withSystem,
 } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
-import type { WebhookEnvelope } from '@helpdock/schemas';
+import {
+  additionalWebhookDataSchemas,
+  type WebhookEnvelope,
+  webhookSourcePayloadSchemas,
+} from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createRuntime, type Runtime } from '../bootstrap.js';
+import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { AccountsService } from '../contacts/accounts.service.js';
+import { ContactMergeService } from '../contacts/contact-merge.service.js';
+import { ContactsService } from '../contacts/contacts.service.js';
+import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
+import { MergeService } from '../tickets/merge/merge.service.js';
+import { TicketsService } from '../tickets/tickets.service.js';
 import { createWebhookSourceHandler, WEBHOOK_DELIVERY_REQUESTED_EVENT } from './webhook-events.js';
 import { WebhooksRepository } from './webhooks.repository.js';
 
@@ -57,6 +70,7 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
   let postgres: StartedPostgreSqlContainer;
   let redisContainer: StartedRedisContainer;
   let runtime: Runtime;
+  let app: ApiApp;
   let owner: DbHandle;
   let seeded: SeededInstall;
   let departmentId: string;
@@ -96,12 +110,13 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
 
   const db = (): Db => runtime.db;
 
-  const endpointFor = (events: string[]): Promise<string> =>
+  const endpointFor = (events: string[], includeInternalNotes?: boolean): Promise<string> =>
     withSystem(db(), seeded.brandId, async (tx) => {
       const row = await repository.insert(tx, {
         brandId: seeded.brandId,
         url: `https://hooks.example.com/${uuidv7()}`,
         description: '',
+        ...(includeInternalNotes === undefined ? {} : { includeInternalNotes }),
         events,
         secret: 'v1.test.sealed',
       });
@@ -185,6 +200,7 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
       env: envFor(),
       logger: createLogger({ env: { APP_ROLE: 'api', NODE_ENV: 'test', LOG_LEVEL: 'silent' } }),
     });
+    app = await createApiApp({ runtime });
     seeded = await seedDevInstall({ db: db(), env: envFor() });
 
     [departmentId, openStatusId] = await withSystem(db(), seeded.brandId, async (tx) => {
@@ -199,6 +215,7 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
   });
 
   afterAll(async () => {
+    await app?.close();
     await runtime?.close();
     await owner?.close();
     await Promise.all([postgres?.stop(), redisContainer?.stop()]);
@@ -306,5 +323,179 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     await run('ticket.closed', { ticketId });
 
     expect(await deliveriesOf(endpoint)).toEqual([]);
+  });
+  const mutate = async (tx: DbTransaction, suffix: string) => {
+    const principal = {
+      type: 'staff' as const,
+      id: seeded.userId,
+      installAdmin: true,
+      brands: { [seeded.brandId]: { role: 'admin' as const, departmentIds: 'all' as const } },
+    };
+    const request = new RequestContext({
+      requestId: uuidv7(),
+      method: 'POST',
+      path: '/test/m14-28',
+    });
+    request.tx = tx;
+    request.principal = principal;
+    request.targetBrandId = seeded.brandId;
+    return runInRequestContext(request, async () => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const contactService = app.get(ContactsService);
+      const accountService = app.get(AccountsService);
+      const account = await accountService.create(context, { name: `Account ${suffix}` });
+      await accountService.update(context, account.id, { name: `Updated ${suffix}` });
+      const first = await contactService.create(context, {
+        name: `Survivor ${suffix}`,
+        identities: [],
+      });
+      const second = await contactService.create(context, {
+        name: `Merged ${suffix}`,
+        identities: [],
+      });
+      await contactService.update(context, first.id, { name: `Updated contact ${suffix}` });
+      await app.get(ContactMergeService).merge(context, first.id, { mergedContactId: second.id });
+      const ticketService = app.get(TicketsService);
+      const ticket = await ticketService.create(seeded.brandId, principal, {
+        subject: `Webhook ${suffix}`,
+        departmentId,
+        bodyHtml: '<p>Public first reply</p>',
+        channel: 'manual',
+        assigneeId: seeded.userId,
+      });
+      const [status] = await tx
+        .select()
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemState, 'closed'))
+        .limit(1);
+      if (status === undefined) throw new Error('No closed status');
+      await ticketService.update(seeded.brandId, principal, ticket.ticket.id, {
+        statusId: status.id,
+      });
+      const note = await ticketService.addMessage(seeded.brandId, principal, ticket.ticket.id, {
+        kind: 'note',
+        bodyHtml: '<p>Internal note secret</p>',
+      });
+      const primary = await ticketService.create(seeded.brandId, principal, {
+        subject: `Primary ${suffix}`,
+        departmentId,
+        bodyHtml: '<p>Public primary</p>',
+        channel: 'manual',
+      });
+      await app
+        .get(MergeService)
+        .merge(seeded.brandId, principal, ticket.ticket.id, { primaryTicketId: primary.ticket.id });
+      return {
+        accountId: account.id,
+        contactId: first.id,
+        ticketId: ticket.ticket.id,
+        messageId: note.id,
+      };
+    });
+  };
+
+  it('writes every M14-28 event with the actual service mutation, and carries department scope to deliveries', async () => {
+    const events = Object.keys(webhookSourcePayloadSchemas);
+    const endpoint = await endpointFor(events);
+    const before = await withSystem(db(), seeded.brandId, (tx) =>
+      tx.select({ id: outbox.id }).from(outbox),
+    );
+    const beforeIds = new Set(before.map(({ id }) => id));
+    const changed = await withSystem(db(), seeded.brandId, (tx) => mutate(tx, uuidv7()));
+    const emitted = await withSystem(db(), seeded.brandId, (tx) => tx.select().from(outbox));
+    const fresh = emitted.filter((row) => !beforeIds.has(row.id) && events.includes(row.event));
+    expect(new Set(fresh.map((row) => row.event))).toEqual(new Set(events));
+    for (const row of fresh) {
+      expect(row.brandId).toBe(seeded.brandId);
+      expect(row.payload.departmentId).toBe(
+        row.event.startsWith('contact.') || row.event.startsWith('account.') ? null : departmentId,
+      );
+      expect(JSON.stringify(row.payload)).not.toContain('Internal note secret');
+      await run(row.event, row.payload, row.id);
+    }
+    const deliveries = await withSystem(db(), seeded.brandId, (tx) =>
+      repository.deliveries(tx, endpoint, { before: undefined, limit: 100 }),
+    );
+    expect(deliveries).toHaveLength(fresh.length);
+    for (const delivery of deliveries) {
+      const name = delivery.event as keyof typeof additionalWebhookDataSchemas;
+      expect(additionalWebhookDataSchemas[name].safeParse(delivery.payload.data).success).toBe(
+        true,
+      );
+      expect(delivery.payload).toMatchObject({
+        brandId: seeded.brandId,
+        departmentId: fresh.find((row) => row.id === delivery.eventId)?.payload.departmentId,
+      });
+    }
+    expect(
+      deliveries.find(
+        (row) =>
+          row.event === 'message.created' &&
+          JSON.stringify(row.payload).includes(changed.messageId),
+      )?.payload.data,
+    ).toMatchObject({ message: { public: false, authorType: 'staff' } });
+  });
+
+  it('rolls back every event with its service changes', async () => {
+    const before = await withSystem(db(), seeded.brandId, (tx) =>
+      tx.select({ id: outbox.id }).from(outbox),
+    );
+    const suffix = uuidv7();
+    await expect(
+      withSystem(db(), seeded.brandId, async (tx) => {
+        await mutate(tx, suffix);
+        throw new Error('rollback all webhook changes');
+      }),
+    ).rejects.toThrow('rollback all webhook changes');
+    await withSystem(db(), seeded.brandId, async (tx) => {
+      expect(await tx.select({ id: outbox.id }).from(outbox)).toEqual(before);
+      expect(
+        await tx
+          .select()
+          .from(accounts)
+          .where(eq(accounts.name, `Updated ${suffix}`)),
+      ).toEqual([]);
+      expect(
+        await tx
+          .select()
+          .from(contacts)
+          .where(eq(contacts.name, `Updated contact ${suffix}`)),
+      ).toEqual([]);
+      expect(
+        await tx
+          .select()
+          .from(tickets)
+          .where(eq(tickets.subject, `Webhook ${suffix}`)),
+      ).toEqual([]);
+    });
+  });
+
+  it('freezes notes without either body unless that endpoint opted in, while public replies keep their bodies', async () => {
+    const optedOut = await endpointFor(['message.created']);
+    const optedIn = await endpointFor(['message.created'], true);
+    const note = await seedTicket('note');
+    const reply = await seedTicket('public');
+    await run('message.created', { ...note, departmentId });
+    await run('message.created', { ...reply, departmentId });
+    const redacted = await deliveriesOf(optedOut);
+    const full = await deliveriesOf(optedIn);
+    expect(redacted).toHaveLength(2);
+    expect(full).toHaveLength(2);
+    const notePayload = redacted.find((row) =>
+      JSON.stringify(row.payload).includes(note.messageId),
+    )?.payload;
+    expect(notePayload?.data).toMatchObject({ message: { public: false, authorType: 'staff' } });
+    expect(JSON.stringify(notePayload)).not.toContain('bodyText');
+    expect(JSON.stringify(notePayload)).not.toContain('bodyHtml');
+    expect(
+      full.find((row) => JSON.stringify(row.payload).includes(note.messageId))?.payload.data,
+    ).toMatchObject({ message: { bodyText: 'Your order left the warehouse.' } });
+    expect(
+      redacted.find((row) => JSON.stringify(row.payload).includes(reply.messageId))?.payload.data,
+    ).toMatchObject({ message: { public: true, bodyText: 'Your order left the warehouse.' } });
   });
 });

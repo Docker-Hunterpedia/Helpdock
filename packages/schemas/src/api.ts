@@ -105,6 +105,14 @@ export const WEBHOOK_EVENTS = [
   'contact.created',
   'csat.received',
   'article.published',
+  'ticket.assigned',
+  'ticket.status_changed',
+  'ticket.merged',
+  'message.created',
+  'contact.updated',
+  'contact.merged',
+  'account.created',
+  'account.updated',
 ] as const;
 export const webhookEventSchema = z.enum(WEBHOOK_EVENTS);
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
@@ -127,6 +135,14 @@ const SCOPE_BY_WEBHOOK_EVENT: Readonly<Record<WebhookEvent, ApiScope>> = {
   'csat.received': 'tickets:read',
   'contact.created': 'contacts:read',
   'article.published': 'articles:read',
+  'ticket.assigned': 'tickets:read',
+  'ticket.status_changed': 'tickets:read',
+  'ticket.merged': 'tickets:read',
+  'message.created': 'tickets:read',
+  'contact.updated': 'contacts:read',
+  'contact.merged': 'contacts:read',
+  'account.created': 'contacts:read',
+  'account.updated': 'contacts:read',
 };
 
 /**
@@ -188,6 +204,7 @@ export const webhookSchema = z.object({
   url: z.string(),
   description: z.string(),
   events: z.array(webhookEventSchema),
+  includeInternalNotes: z.boolean().default(false),
   enabled: z.boolean(),
   /** `failures` when Helpdock switched the endpoint off after repeated failed deliveries. */
   disabledReason: z.enum(['failures']).nullable(),
@@ -211,6 +228,7 @@ export const webhookCreateRequestSchema = z.object({
   url: webhookUrlSchema,
   description: z.string().trim().max(200).optional(),
   events: webhookEventsSchema,
+  includeInternalNotes: z.boolean().optional(),
 });
 export type WebhookCreateRequest = z.infer<typeof webhookCreateRequestSchema>;
 
@@ -220,6 +238,7 @@ export const webhookUpdateRequestSchema = z
     url: webhookUrlSchema.optional(),
     description: z.string().trim().max(200).optional(),
     events: webhookEventsSchema.optional(),
+    includeInternalNotes: z.boolean().optional(),
     enabled: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, { message: 'Change at least one field' });
@@ -319,6 +338,7 @@ export const webhookEnvelopeSchema = z.object({
   event: webhookDeliveryEventSchema,
   createdAt: z.iso.datetime(),
   brandId: z.uuid(),
+  departmentId: z.uuid().nullable().optional(),
   data: z.record(z.string(), z.unknown()),
 });
 export type WebhookEnvelope = z.infer<typeof webhookEnvelopeSchema>;
@@ -459,3 +479,83 @@ export const v1WebhookParamSchema = z.object({ webhookId: z.uuid() });
 export type V1WebhookParam = z.infer<typeof v1WebhookParamSchema>;
 export const v1WebhookDeliveryParamSchema = v1WebhookParamSchema.extend({ deliveryId: z.uuid() });
 export type V1WebhookDeliveryParam = z.infer<typeof v1WebhookDeliveryParamSchema>;
+
+/** M14-28: deliberately small message view; no email headers or attachment metadata. */
+export const webhookMessageSchema = ticketMessageSchema
+  .pick({
+    id: true,
+    ticketId: true,
+    seq: true,
+    kind: true,
+    authorType: true,
+    authorId: true,
+    channel: true,
+    createdAt: true,
+  })
+  .extend({
+    public: z.boolean(),
+    bodyHtml: z.string().optional(),
+    bodyText: z.string().optional(),
+  });
+
+const webhookAccountSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  domain: z.string().nullable(),
+  custom: z.record(z.string(), z.unknown()),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const additionalWebhookDataSchemas = {
+  'ticket.assigned': z.object({
+    ticket: ticketSchema,
+    assigneeId: z.uuid(),
+    assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based']),
+    actorId: z.uuid().nullable(),
+  }),
+  'ticket.status_changed': z.object({
+    ticket: ticketSchema,
+    previousStatusId: z.uuid(),
+    statusId: z.uuid(),
+  }),
+  'ticket.merged': z.object({
+    ticket: ticketSchema,
+    mergedIntoId: z.uuid(),
+    previousDepartmentId: z.uuid(),
+  }),
+  'message.created': z.object({ message: webhookMessageSchema }),
+  'contact.updated': z.object({ contact: v1ContactSchema }),
+  'contact.merged': z.object({ contact: v1ContactSchema, mergedContactId: z.uuid() }),
+  'account.created': z.object({ account: webhookAccountSchema }),
+  'account.updated': z.object({ account: webhookAccountSchema }),
+} as const;
+
+/** Outbound data contracts for OpenAPI; the M14-28 producers validate their output with these. */
+export const webhookDataSchemas = {
+  'ticket.created': z.object({ ticket: ticketSchema }),
+  'ticket.updated': z.object({ ticket: ticketSchema }),
+  'ticket.closed': z.object({ ticket: ticketSchema }),
+  'ticket.replied': z.object({ ticket: ticketSchema, message: ticketMessageSchema }),
+  'contact.created': z.object({ contact: v1ContactSchema }),
+  'csat.received': z.object({
+    survey: z.object({
+      id: z.uuid(),
+      ticketId: z.uuid(),
+      rating: z.number(),
+      comment: z.string().nullable(),
+      ratedAt: z.iso.datetime().nullable(),
+    }),
+  }),
+  'article.published': z.object({
+    article: z.object({
+      id: z.uuid(),
+      slug: z.string(),
+      locale: localeSchema,
+      title: z.string().nullable(),
+      visibility: z.string(),
+      publishedAt: z.iso.datetime().nullable(),
+    }),
+  }),
+  ...additionalWebhookDataSchemas,
+} as const;

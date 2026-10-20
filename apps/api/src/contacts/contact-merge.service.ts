@@ -6,6 +6,7 @@ import type {
   ContactMergeSide,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
 import type { ContactMergesRepository } from './contact-merges.repository.js';
@@ -145,6 +146,11 @@ export class ContactMergeService {
       },
     });
 
+    await enqueueWebhookEvent(tx, brandId, 'contact.merged', {
+      contactId: survivor.id,
+      mergedContactId: merged.id,
+      departmentId: null,
+    });
     return this.#detail.detail(context, survivor.id);
   }
 

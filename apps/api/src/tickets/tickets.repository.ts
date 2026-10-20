@@ -19,6 +19,7 @@ import {
 } from '@helpdock/db';
 import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { decodeTicketCursor, type TicketCursor } from './cursor.js';
 import {
   fallsBackToFuzzy,
@@ -430,6 +431,13 @@ export class TicketRepository {
     /* c8 ignore next 3 -- an insert refused by a policy raises; it never returns nothing. */
     if (row === undefined) {
       throw new Error('The message insert returned no row');
+    }
+    if (row.kind !== 'system' && row.copiedFromMessageId === null) {
+      await enqueueWebhookEvent(tx, row.brandId, 'message.created', {
+        ticketId: row.ticketId,
+        departmentId: row.departmentId,
+        messageId: row.id,
+      });
     }
 
     return row;

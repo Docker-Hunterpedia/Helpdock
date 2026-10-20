@@ -177,7 +177,15 @@
       "ticket.closed": "A ticket is closed",
       "contact.created": "A new contact is created",
       "csat.received": "A customer answers a satisfaction survey",
-      "article.published": "A help center article is published"
+      "article.published": "A help center article is published",
+      "ticket.assigned": "A ticket was assigned.",
+      "ticket.status_changed": "A ticket changed status.",
+      "ticket.merged": "A ticket was merged.",
+      "message.created": "A public reply or internal note was created.",
+      "contact.updated": "A contact was updated.",
+      "contact.merged": "A contact was merged.",
+      "account.created": "An account was created.",
+      "account.updated": "An account was updated."
     },
     "created": {
       "title": "Endpoint added",
@@ -294,6 +302,15 @@
       "pick": "Choose a delivery to see what was sent and what came back."
     },
     "endpointCount_one": "{{count}} endpoint",
-    "endpointCount_other": "{{count}} endpoints"
+    "endpointCount_other": "{{count}} endpoints",
+    "groups": {
+      "tickets": "Tickets",
+      "messages": "Messages",
+      "contacts": "Contacts and accounts",
+      "other": "Other events"
+    },
+    "newEvent": "new",
+    "includeInternalNotes": "Include internal notes in message.created",
+    "notesHint": "Off: notes are sent without their body."
   }
 }

@@ -23,6 +23,7 @@ import type {
 import { CONTACT_PAGE_SIZE } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { ERASED_CONTACT_NAME, erasedIdentityValue, erasureSummary } from './anonymise.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
@@ -316,6 +317,7 @@ export class ContactsService {
       targetId: contactId,
       meta: { fields: Object.keys(changes) },
     });
+    await enqueueWebhookEvent(tx, brandId, 'contact.updated', { contactId, departmentId: null });
 
     return this.detail(context, contactId);
   }

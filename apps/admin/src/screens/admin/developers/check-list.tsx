@@ -1,6 +1,7 @@
 import { Box, Checkbox, Typography } from '@mui/material';
 import { type ReactNode, useId } from 'react';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { MonoTag } from './mono-tag.tsx';
 
 /**
  * A fieldset of checkboxes, each a mono identifier over a caption: the scopes
@@ -15,7 +16,11 @@ export function CheckList<Value extends string>({
   onChange,
 }: {
   readonly legend: string;
-  readonly options: readonly { readonly value: Value; readonly hint: string }[];
+  readonly options: readonly {
+    readonly value: Value;
+    readonly hint: string;
+    readonly badge?: string | undefined;
+  }[];
   readonly selected: readonly Value[];
   readonly error?: string | undefined;
   onChange(next: readonly Value[]): void;
@@ -67,6 +72,11 @@ export function CheckList<Value extends string>({
                 }}
               >
                 {option.value}
+                {option.badge === undefined ? null : (
+                  <Box component="span" sx={{ marginInlineStart: 2 }}>
+                    <MonoTag prose>{option.badge}</MonoTag>
+                  </Box>
+                )}
               </Typography>
               <Typography id={`${inputId}-hint`} variant="caption" sx={{ color: 'text.secondary' }}>
                 {option.hint}

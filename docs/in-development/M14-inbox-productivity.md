@@ -920,6 +920,14 @@ mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 
 ### M14-28 More webhook events
 
+Status: implemented for #315; pending PR review and CI.
+
+- [x] Eight additional events, Zod source/output contracts, transactional producers, brand and department scope.
+- [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.
+- [x] Focused unit, real Postgres/Redis integration and en/ar Playwright coverage; payload reference in `webhooks.md`, OpenAPI webhooks and API minor changeset.
+- [ ] M14-03 bulk apply/undo integration: that deliverable is not in this checkout; its implementation must use the shared ticket mutation paths and emit per ticket.
+
+
 `WEBHOOK_EVENTS` today holds `ticket.created`, `ticket.updated`,
 `ticket.replied`, `ticket.closed`, `contact.created`, `csat.received` and
 `article.published`. It gains `ticket.assigned`, `ticket.status_changed`,

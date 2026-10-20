@@ -177,7 +177,15 @@
       "ticket.closed": "تُغلق تذكرة",
       "contact.created": "تُنشأ جهة اتصال جديدة",
       "csat.received": "يجيب عميل عن استبيان الرضا",
-      "article.published": "يُنشر مقال في مركز المساعدة"
+      "article.published": "يُنشر مقال في مركز المساعدة",
+      "ticket.assigned": "أُسندت تذكرة.",
+      "ticket.status_changed": "تغيّرت حالة تذكرة.",
+      "ticket.merged": "دُمجت تذكرة.",
+      "message.created": "أُنشئ رد علني أو ملاحظة داخلية.",
+      "contact.updated": "حُدّثت جهة اتصال.",
+      "contact.merged": "دُمجت جهة اتصال.",
+      "account.created": "أُنشئ حساب.",
+      "account.updated": "حُدّث حساب."
     },
     "created": {
       "title": "أُضيفت النقطة",
@@ -298,6 +306,15 @@
     "endpointCount_two": "نقطتان",
     "endpointCount_few": "{{count}} نقاط",
     "endpointCount_many": "{{count}} نقطة",
-    "endpointCount_other": "{{count}} نقطة"
+    "endpointCount_other": "{{count}} نقطة",
+    "groups": {
+      "tickets": "التذاكر",
+      "messages": "الرسائل",
+      "contacts": "جهات الاتصال والحسابات",
+      "other": "أحداث أخرى"
+    },
+    "newEvent": "جديد",
+    "includeInternalNotes": "تضمين الملاحظات الداخلية في message.created",
+    "notesHint": "عند إيقافه، تُرسل الملاحظات دون محتواها."
   }
 }

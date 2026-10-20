@@ -1,0 +1,1 @@
+ALTER TABLE "webhooks" ADD COLUMN "include_internal_notes" boolean DEFAULT false NOT NULL;

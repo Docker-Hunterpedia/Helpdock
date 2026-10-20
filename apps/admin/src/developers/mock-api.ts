@@ -96,6 +96,7 @@ const webhookRow = (url: string, events: Webhook['events'], createdAt: string): 
   description: '',
   events,
   enabled: true,
+  includeInternalNotes: false,
   disabledReason: null,
   consecutiveFailures: 0,
   secretRotatedAt: null,
@@ -398,7 +399,10 @@ export class MockDevelopersApi implements DevelopersApi {
     if (refusal !== undefined) {
       return Promise.reject(refusal);
     }
-    const webhook = webhookRow(request.url, [...request.events], this.#iso());
+    const webhook = {
+      ...webhookRow(request.url, [...request.events], this.#iso()),
+      includeInternalNotes: request.includeInternalNotes ?? false,
+    };
     this.#brand(brandId).webhooks.unshift({ webhook, createdByName: ME, deliveries: [] });
     return Promise.resolve({ ...webhook, secret: this.#secret() });
   }
@@ -415,6 +419,9 @@ export class MockDevelopersApi implements DevelopersApi {
     return this.#change(brandId, webhookId, (webhook) => ({
       ...webhook,
       ...(request.url === undefined ? {} : { url: request.url }),
+      ...(request.includeInternalNotes === undefined
+        ? {}
+        : { includeInternalNotes: request.includeInternalNotes }),
       ...(request.events === undefined ? {} : { events: [...request.events] }),
       ...(request.enabled === undefined
         ? {}

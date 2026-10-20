@@ -311,18 +311,18 @@ discarded immediately. Message paging remains independently available.
 
 | Action | Written when |
 |---|---|
-| `ticket.created` | A ticket is created |
+| `ticket.created` | A ticket is created; `to.arrival` records how it arrived ([below](#arrival-and-the-routing-trail), M14-08) |
 | `ticket.updated` | Subject, priority, department, team or assignee moved — one row, with `from` and `to` naming every field that moved |
 | `ticket.status.changed` | The status moved, through the transition hook |
 | `ticket.replied` | A public reply was added |
 | `ticket.note_added` | An internal note was added |
 | `ticket.closed` | The status change took the ticket **into** a closed state (M1-08) |
 | `ticket.reopened` | It took the ticket **out of** one (M1-08) |
-| `ticket.continued` | A customer reply past the reopen window started a new ticket; written on both (M1-08) |
+| `ticket.continued` | A customer reply past the reopen window started a new ticket; written on both (M1-08). On the new ticket, `to.arrival` records the continuation (M14-08) |
 | `ticket.deleted` | An Admin soft-deleted it (M1-08) |
 | `ticket.escalated` | Recorded in `audit_log`, not here: the activity row moves with the ticket |
 | `ticket.source_article` | A widget conversation or web form ticket was opened from a help center article's "Still need help?"; `to` holds `articleId`, `title` and `locale`, and the thread shows "Came from the help center article …" (M5-08) |
-| `ticket.imported` | Imported provenance, original number and dates (local M11 implementation) |
+| `ticket.imported` | Imported provenance, original number and dates (local M11 implementation), and `to.arrival` with `entry: import` (M14-08) |
 | `ticket.imported.event` | Original source activity with its preserved actor, date and changes (local M11 implementation) |
 
 `ticket.status.changed` is written for **every** status move. A close or a
@@ -331,7 +331,52 @@ thread wants the second word.
 
 `via` is *how*: `ui` for the admin, `api` for an api key, `rule` for M3-03's
 rules, `ai` for M7, `system` for a worker. A field set to the value it already
-holds is not a change and is not logged.
+holds is not a change and is not logged. A rule's AI triage action that applies
+its answer (M7-07) writes its changes as the rule (`rule:<id>`) with `via = ai`,
+which is how the routing trail tells "by AI triage" from "by rule".
+
+### Arrival and the routing trail
+
+M14-08, [DOMAIN-RULES §2.8](../planning/DOMAIN-RULES.md#28-arrival-and-the-routing-trail). Every path that files
+a ticket records **how it arrived** in its creation row's `to.arrival`, through
+one helper (`apps/api/src/tickets/routing/arrival.ts`), so the writers cannot
+drift:
+
+```json
+{ "entry": "mailbox", "entryId": "<mailbox id>", "address": "billing@acme.com",
+  "departmentId": "<department id>", "reason": "entry_department" }
+```
+
+| Path | `entry` | `entryId` | `reason` |
+|---|---|---|---|
+| Inbound email | `mailbox` | the mailbox, with `address` | `entry_department`; `referenced_ticket` when the mail named a ticket its sender is not a participant of and was filed in that ticket's department (§4.3) |
+| Chat widget | `widget` | null | `brand_first_department`: the widget files into the brand's first department until M19-02 gives each widget its own |
+| Web form | `web_form` | null | `entry_department` when the form names a department, otherwise `brand_first_department` |
+| Telegram | `telegram_bot` | the bot | `entry_department` |
+| WhatsApp, Messenger, Instagram | `meta_account` | the number, Page or account | `entry_department` |
+| `POST /tickets` with an API key | `api_key` | the key | `named_by_api` |
+| `POST /tickets` or a split by a person | `staff` | the person | `chosen_by_staff` |
+| A reply past the reopen window (§2.3) | the closed ticket's entry, or its channel's when it predates M14 | the closed ticket's, or null | `continued_from`, on the new ticket's `ticket.continued` row |
+| An importer (M11) | `import` | the import run | `import_mapping`, on the `ticket.imported` row |
+
+`GET /tickets/:ticketId/routing` reads the trail back from the activity log;
+nothing new is stored. It is read in the request's own transaction, so it
+follows the ticket's department policy: a ticket in another department answers
+404 like every other read of it. The answer is structured, and the admin words
+it in the reader's language:
+
+- `origin`: `recorded` (the channel, `entry`, `address`, `reason` and the
+  arrival department), `unrecorded` for a ticket filed before M14 (its channel
+  only), or `imported` with the source, for which the trail stops there:
+  imports run no rules and assign no one.
+- `steps`: every department, team, priority and assignee change written by the
+  system after the arrival, oldest first, **until the first change by a person**
+  (a staff member or an API key; a reply or a note is not a change), at most
+  50. Each names its actor: `rule` with the rule's name, or `name: null` for a
+  rule since deleted; `ai_triage`; `assignment` with the department's mode;
+  `sla` for an escalation step; `system` for anything else.
+
+The workspace shows it as [How it got here](#how-it-got-here).
 
 ## The lifecycle
 
@@ -777,6 +822,7 @@ which departments it reaches is the policies'.
 | `POST /tickets/:ticketId/messages` | `ticket:write` | A public reply or an internal note |
 | `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
 | `GET /tickets/:ticketId/activity` | `ticket:read` | Bounded activity pages; newest page by default, each page returned oldest first. `before=<entry UUID>` loads an older page; `limit` is 1–100 |
+| `GET /tickets/:ticketId/routing` | `ticket:read` | How it got here: the arrival and the automatic steps after it ([above](#arrival-and-the-routing-trail), M14-08) |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
 | `GET /tickets/:ticketId/spam-sender` | `ticket:read` | Who "Block sender" would block, and whether the dialog offers it (M1-11) |
@@ -1341,6 +1387,19 @@ coming, and a chip that quietly disappeared would leave somebody believing they
 had sent it. No thumbnails: a render URL is presigned, lives five minutes and
 has to be asked for per attachment, so a thread of them would be a burst of
 requests for pictures nobody has opened.
+
+### How it got here
+
+The "How it got here" card in the details panel, under the SLA card
+(`Admin/Ticket-Routing`), is collapsed to one line — "Email to
+billing@acme.com → Billing · assigned by round-robin" — and expands to the
+arrival and each step with its time: "Arrived at billing@acme.com · Billing ·
+the mailbox's department", "Moved to Billing › Refunds by rule “Refunds to the
+refund team”", "Priority raised to High by AI triage", "Assigned to Lina Haddad
+by round-robin". A ticket filed before 1.1 says "Arrived by email" and that the
+entry point was not recorded; an imported one says "Imported from Zendesk".
+The card reads the trail again whenever the ticket changes, and offers "Try
+again" when the read fails.
 
 ### Keyboard
 

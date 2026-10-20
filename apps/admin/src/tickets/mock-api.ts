@@ -33,6 +33,7 @@ import type {
   TicketParticipantList,
   TicketPriority,
   TicketRelation,
+  TicketRouting,
   TicketSpamSender,
   TicketSplitRequest,
   TicketStatus,
@@ -85,6 +86,7 @@ import type { MockMacros } from '../ticketing/mock-macros.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
 import { MOCK_IMPORTED_CSAT, mockImportedCsatEvent } from './mock-imported-csat.js';
 import { metaSeed } from './mock-meta-seed.js';
+import { mockRouting } from './mock-routing.js';
 import { mockSlaOf, mockSlaSummaryOf } from './mock-sla.js';
 import { MockViews } from './mock-views.js';
 
@@ -1315,6 +1317,10 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   // ---------------------------------------------------------------- M1-12
+
+  async routing(_brandId: string, ticketId: string): Promise<TicketRouting> {
+    return Promise.resolve(mockRouting(this.#require(ticketId)));
+  }
 
   async timeEntries(_brandId: string, ticketId: string): Promise<TimeEntryList> {
     this.#require(ticketId);

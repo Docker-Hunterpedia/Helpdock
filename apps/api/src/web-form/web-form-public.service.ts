@@ -241,6 +241,8 @@ export class WebFormPublicService {
           tx,
           brandId,
           departmentId,
+          departmentReason:
+            form.departmentId === null ? 'brand_first_department' : 'entry_department',
           locale: form.locale,
           submissionId,
           submission,

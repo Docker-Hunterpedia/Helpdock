@@ -553,7 +553,20 @@ describe.skipIf(!hasDocker)('Meta channels', () => {
           lastInboundAt: new Date((META_FIXTURE.time + clock) * 1_000),
         });
         expect(await activityOf(ticket?.id ?? '')).toMatchObject([
-          { action: 'ticket.created', actorType: 'system', actorId: `meta:${accountA.id}` },
+          {
+            action: 'ticket.created',
+            actorType: 'system',
+            actorId: `meta:${accountA.id}`,
+            // M14-08: the number's own department.
+            to: {
+              arrival: {
+                entry: 'meta_account',
+                entryId: accountA.id,
+                departmentId: ticket?.departmentId,
+                reason: 'entry_department',
+              },
+            },
+          },
         ]);
         // Filing the message called nobody: Meta waits for the webhook, not the other way round.
         expect(graph.calls).toEqual([]);

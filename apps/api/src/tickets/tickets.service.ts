@@ -63,6 +63,7 @@ import {
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { arrivalOf, requestArrival } from './routing/arrival.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import {
@@ -412,6 +413,7 @@ export class TicketsService {
         // thread does not render "tags: none" on every ticket ever filed.
         ...(filled.tagIds.length === 0 ? {} : { tagIds: filled.tagIds }),
         ...(input.templateId === undefined ? {} : { templateId: input.templateId }),
+        ...arrivalOf(requestArrival(actor, ticket.departmentId)),
       },
     });
 

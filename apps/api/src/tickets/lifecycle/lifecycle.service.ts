@@ -7,6 +7,7 @@ import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
 import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { arrivalOf, continuationArrival } from '../routing/arrival.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -553,7 +554,19 @@ export class TicketLifecycleService {
       actor: context.actor,
       action: 'ticket.continued',
       from: { ticketId: closed.id },
-      to: { ticketId: created.id },
+      to: {
+        ticketId: created.id,
+        // M14-08: the continuation is how this ticket arrived.
+        ...arrivalOf(
+          continuationArrival(
+            {
+              channel: closed.channel,
+              arrival: await this.#lifecycle.arrivalOf(context.tx, closed.id),
+            },
+            created.departmentId,
+          ),
+        ),
+      },
     });
     await writeTicketActivity(context.tx, {
       brandId: context.brandId,

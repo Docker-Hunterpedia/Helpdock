@@ -24,6 +24,7 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../../tickets/lifecycle/lifecycle.service.js';
+import { arrivalOf } from '../../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../../tickets/ticket-events.js';
 import type { TicketRepository } from '../../tickets/tickets.repository.js';
@@ -63,6 +64,8 @@ export interface RouteContext {
   /** The mailbox: its department takes a new ticket, its policy the remote images. */
   readonly mailbox: {
     readonly id: string;
+    /** The address it receives for, which M14-08's arrival records. */
+    readonly address: string;
     readonly departmentId: string;
     readonly remoteImages: 'block' | 'proxy';
     readonly authFailureIsSpam: boolean;
@@ -323,7 +326,18 @@ export class ConversationRouter {
       departmentId: ticket.departmentId,
       actor,
       action: 'ticket.created',
-      to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+      to: {
+        subject: ticket.subject,
+        statusId: status.id,
+        priority: ticket.priority,
+        ...arrivalOf({
+          entry: 'mailbox',
+          entryId: context.mailbox.id,
+          address: context.mailbox.address,
+          departmentId: ticket.departmentId,
+          reason: referenced === undefined ? 'entry_department' : 'referenced_ticket',
+        }),
+      },
     });
 
     if (referenced !== undefined) {

@@ -964,5 +964,90 @@
       "nothing-to-work-from": "لا توجد رسالة من العميل ليعمل عليها المساعد.",
       "unreadable-answer": "تعذّرت قراءة إجابة المساعد. حاول مرة أخرى."
     }
+  },
+  "routing": {
+    "heading": "كيف وصلت إلى هنا",
+    "loading": "جارٍ قراءة كيف وصلت إلى هنا…",
+    "failed": "تعذّرت قراءة كيف وصلت هذه التذكرة إلى هنا.",
+    "retry": "أعد المحاولة",
+    "arrow": "←",
+    "summary": {
+      "mailbox": "بريد إلى <bdi>{{address}}</bdi>",
+      "mailboxNoAddress": "البريد",
+      "widget": "أداة المحادثة",
+      "web_form": "نموذج الويب",
+      "telegram_bot": "تيليغرام",
+      "meta_account": "{{channel}}",
+      "api_key": "الواجهة البرمجية",
+      "staff": "أنشأها موظف",
+      "assigned": "أُسندت"
+    },
+    "arrived": {
+      "mailbox": "وصلت إلى <bdi>{{address}}</bdi>",
+      "mailboxNoAddress": "وصلت بالبريد",
+      "widget": "وصلت عبر أداة المحادثة",
+      "web_form": "وصلت عبر نموذج الويب",
+      "telegram_bot": "وصلت عبر تيليغرام",
+      "meta_account": "وصلت عبر {{channel}}",
+      "api_key": "أُنشئت عبر الواجهة البرمجية",
+      "staff": "أنشأها موظف"
+    },
+    "reason": {
+      "entry_department": {
+        "mailbox": "قسم صندوق البريد",
+        "web_form": "قسم النموذج",
+        "telegram_bot": "قسم البوت",
+        "meta_account": "قسم الحساب",
+        "other": "قسم نقطة الدخول"
+      },
+      "brand_first_department": "أول قسم في العلامة",
+      "named_by_api": "حدّدته الواجهة البرمجية",
+      "chosen_by_staff": "اختير عند إنشائها",
+      "continued_from": "تُكمل تذكرة مغلقة",
+      "referenced_ticket": "قسم التذكرة التي ذكرتها",
+      "import_mapping": "حدّده الاستيراد"
+    },
+    "unrecorded": {
+      "email": "وصلت بالبريد",
+      "chat": "وصلت عبر المحادثة",
+      "telegram": "وصلت عبر تيليغرام",
+      "form": "وصلت عبر نموذج الويب",
+      "api": "وصلت عبر الواجهة البرمجية",
+      "manual": "أنشأها موظف",
+      "whatsapp": "وصلت عبر واتساب",
+      "messenger": "وصلت عبر ماسنجر",
+      "instagram": "وصلت عبر إنستغرام",
+      "detail": "قبل الإصدار 1.1 لم تكن نقطة الدخول تُسجَّل."
+    },
+    "imported": {
+      "title": "مستوردة من {{source}}",
+      "detail": "لا يشغّل الاستيراد أي قواعد ولا يُسند التذاكر لأحد."
+    },
+    "change": {
+      "moved": "نُقلت إلى <bdi>{{department}}</bdi>",
+      "movedWithTeam": "نُقلت إلى <bdi>{{department}}</bdi> › <bdi>{{team}}</bdi>",
+      "team": "أُعطيت لفريق <bdi>{{team}}</bdi>",
+      "teamCleared": "أُزيلت من فريقها",
+      "priorityRaised": "رُفعت الأولوية إلى {{priority}}",
+      "priorityLowered": "خُفضت الأولوية إلى {{priority}}",
+      "prioritySet": "عُيّنت الأولوية {{priority}}",
+      "assigned": "أُسندت إلى <bdi>{{name}}</bdi>",
+      "unassigned": "أُلغي إسنادها"
+    },
+    "by": {
+      "rule": "بقاعدة «<bdi>{{name}}</bdi>»",
+      "ruleDeleted": "بقاعدة حُذفت لاحقًا",
+      "ai_triage": "بفرز الذكاء الاصطناعي",
+      "round_robin": "بالتناوب",
+      "skill_based": "بالتوجيه حسب المهارات",
+      "rotation": "بالتوزيع التلقائي",
+      "sla": "بتصعيد اتفاقية مستوى الخدمة",
+      "system": "تلقائيًا"
+    },
+    "gone": {
+      "department": "قسم حُذف لاحقًا",
+      "team": "فريق حُذف لاحقًا",
+      "person": "شخص لم يعد في العلامة"
+    }
   }
 }

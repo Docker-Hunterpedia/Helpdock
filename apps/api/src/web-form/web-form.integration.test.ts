@@ -456,6 +456,21 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
       subject: 'Refund for order 8841',
       custom: { order_number: '8841', product: 'Widget' },
     });
+    // M14-08: the form names its own department, so the arrival says so.
+    const [created] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ to: ticketActivity.to })
+        .from(ticketActivity)
+        .where(
+          and(eq(ticketActivity.ticketId, ticket.id), eq(ticketActivity.action, 'ticket.created')),
+        ),
+    );
+    expect(created?.to?.arrival).toEqual({
+      entry: 'web_form',
+      entryId: null,
+      departmentId: billing,
+      reason: 'entry_department',
+    });
 
     const [contact] = await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx

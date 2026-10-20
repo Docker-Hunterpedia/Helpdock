@@ -3,7 +3,7 @@ import type {
   Ticket as TicketRow,
   TicketStatus as TicketStatusRow,
 } from '@helpdock/db';
-import type { BrandSettings, ReopenPolicy } from '@helpdock/schemas';
+import type { BrandSettings, ReopenPolicy, TicketArrival } from '@helpdock/schemas';
 import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityActor } from '../ticket-activity.js';
@@ -27,6 +27,7 @@ import { TicketLifecycleFailure } from './lifecycle-failure.js';
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 const BRAND = '0199f4b2-0000-7000-8000-0000000000b1';
+const DEPARTMENT = '0199f4b2-0000-7000-8000-0000000000d1';
 
 const status = (
   id: string,
@@ -69,7 +70,7 @@ const ticket = (overrides: Partial<TicketRow> = {}): TicketRow =>
   ({
     id: '0199f4b2-0000-7000-8000-000000000001',
     brandId: BRAND,
-    departmentId: '0199f4b2-0000-7000-8000-0000000000d1',
+    departmentId: DEPARTMENT,
     number: 1042,
     prefix: 'HD',
     subject: 'Refund for order 42',
@@ -117,6 +118,8 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
 const harness = (options: {
   readonly statuses?: readonly TicketStatusRow[];
   readonly settings?: BrandSettings;
+  /** M14-08: what the closed ticket recorded when it arrived. */
+  readonly closedArrival?: TicketArrival;
 }) => {
   const recorder: Recorder = { inserts: [] };
 
@@ -144,6 +147,7 @@ const harness = (options: {
     ),
     localeForContact: vi.fn(async () => 'en' as const),
     writeAudit: vi.fn(async () => undefined),
+    arrivalOf: vi.fn(async () => options.closedArrival),
   } as unknown as TicketLifecycleRepository;
 
   const created: TicketRow[] = [];
@@ -212,6 +216,18 @@ const messages = (recorder: Recorder): { bodyText: string }[] =>
     .filter((row) => row.table === 'ticket_messages')
     .map((row) => row.values as { bodyText: string });
 
+/** The `ticket.continued` row written on the new ticket, where its arrival is kept. */
+const continuation = (
+  recorder: Recorder,
+  ticketId: string,
+): { arrival?: TicketArrival } | undefined =>
+  recorder.inserts
+    .filter((row) => row.table === 'ticket_activity')
+    .map(
+      (row) => row.values as { ticketId: string; action: string; to: { arrival?: TicketArrival } },
+    )
+    .find((row) => row.action === 'ticket.continued' && row.ticketId === ticketId)?.to;
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -277,6 +293,46 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
 
     const written = messages(recorder).map((row) => row.bodyText);
     expect(written).toEqual(['Continued from HD-1042', 'Continued in HD-1101']);
+  });
+
+  it("records the continuation as an arrival through the closed ticket's entry point", async () => {
+    const { service, context, recorder } = harness({
+      settings: settingsOf({ kind: 'never' }),
+      closedArrival: {
+        entry: 'mailbox',
+        entryId: 'mailbox-1',
+        address: 'billing@acme.test',
+        departmentId: DEPARTMENT,
+        reason: 'entry_department',
+      },
+    });
+
+    const landing = await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED);
+
+    expect(continuation(recorder, landing.ticket.id)?.arrival).toEqual({
+      entry: 'mailbox',
+      entryId: 'mailbox-1',
+      address: 'billing@acme.test',
+      departmentId: landing.ticket.departmentId,
+      reason: 'continued_from',
+    });
+  });
+
+  it('names the channel when the closed ticket predates arrival records', async () => {
+    const { service, context, recorder } = harness({ settings: settingsOf({ kind: 'never' }) });
+
+    const landing = await service.onCustomerReply(
+      context,
+      ticket({ closedAt: NOW, channel: 'telegram' }),
+      CLOSED,
+    );
+
+    expect(continuation(recorder, landing.ticket.id)?.arrival).toEqual({
+      entry: 'telegram_bot',
+      entryId: null,
+      departmentId: landing.ticket.departmentId,
+      reason: 'continued_from',
+    });
   });
 
   it('never reopens under `never`', async () => {

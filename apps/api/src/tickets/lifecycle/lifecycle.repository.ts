@@ -12,8 +12,9 @@ import {
   tickets,
 } from '@helpdock/db';
 import type { Locale } from '@helpdock/i18n';
-import { type BrandSettings, parseBrandSettings } from '@helpdock/schemas';
+import { type BrandSettings, parseBrandSettings, type TicketArrival } from '@helpdock/schemas';
 import { and, asc, count, desc, eq, ne, sql } from 'drizzle-orm';
+import { readArrival } from '../routing/routing.repository.js';
 
 /**
  * Every statement the lifecycle and the status list make.
@@ -264,6 +265,11 @@ export class TicketLifecycleRepository {
     settings: BrandSettings,
   ): Promise<void> {
     await tx.update(brands).set({ settings }).where(eq(brands.id, brandId));
+  }
+
+  /** M14-08: how a ticket arrived, for a continuation of it to carry on (§2.3). */
+  arrivalOf(tx: DbTransaction, ticketId: string): Promise<TicketArrival | undefined> {
+    return readArrival(tx, ticketId);
   }
 
   /**

@@ -731,6 +731,15 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
 
       expect(detail.body.ticket.channel).toBe('chat');
       expect(contact.body.primaryIdentity).toMatchObject({ kind: 'email', verified: false });
+
+      // M14-08: the widget files into the brand's first department, and says so.
+      const created = detail.body.activity.find((entry) => entry.action === 'ticket.created');
+      expect(created?.to?.arrival).toEqual({
+        entry: 'widget',
+        entryId: null,
+        departmentId: detail.body.ticket.departmentId,
+        reason: 'brand_first_department',
+      });
     });
 
     describe('signed identity (§4.2)', () => {

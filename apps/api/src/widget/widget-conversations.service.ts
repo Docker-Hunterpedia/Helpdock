@@ -37,6 +37,7 @@ import type {
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
+import { arrivalOf } from '../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
@@ -341,7 +342,18 @@ export class WidgetConversationsService {
         departmentId: ticket.departmentId,
         actor,
         action: 'ticket.created',
-        to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+        to: {
+          subject: ticket.subject,
+          statusId: status.id,
+          priority: ticket.priority,
+          // D-29: the widget files into the brand's first department until M19-02.
+          ...arrivalOf({
+            entry: 'widget',
+            entryId: null,
+            departmentId: ticket.departmentId,
+            reason: 'brand_first_department',
+          }),
+        },
       });
       // M5-08: "Still need help?" from a help center article.
       await recordHandoff(tx, { brandId, ticket, actor, articleId: body.articleId, locale });

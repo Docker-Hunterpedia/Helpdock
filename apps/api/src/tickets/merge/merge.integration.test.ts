@@ -908,6 +908,14 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
         ]);
 
         expect(await activityFor(original.ticket.id, 'ticket.split')).toHaveLength(1);
+        // M14-08: a split is filed by the person who split it, in the department they chose.
+        const [filed] = await activityFor(ticket.id, 'ticket.created');
+        expect(filed?.to?.arrival).toEqual({
+          entry: 'staff',
+          entryId: sam.id,
+          departmentId: support,
+          reason: 'chosen_by_staff',
+        });
         expect((await outboxFor(ticket.id)).map((entry) => entry.event)).toContain(
           'ticket.created',
         );

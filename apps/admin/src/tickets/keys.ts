@@ -31,4 +31,7 @@ export const ticketKeys = {
     ['tickets', brandId, 'assignable', departmentId] as const,
   /** M1-12's Time card. Under the brand prefix, so a brand switch cannot show it. */
   time: (brandId: string, ticketId: string) => ['tickets', brandId, 'time', ticketId] as const,
+  /** M14-08's routing trail. */
+  routing: (brandId: string, ticketId: string) =>
+    ['tickets', brandId, 'routing', ticketId] as const,
 } as const;

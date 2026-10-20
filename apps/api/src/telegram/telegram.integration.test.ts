@@ -37,6 +37,7 @@ import {
   type TelegramTicketContextResponse,
   type TelegramWebhookResult,
   type Ticket,
+  type TicketRouting,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -562,6 +563,19 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
           .where(eq(contacts.id, ticket?.contactId ?? '')),
       );
       expect(contact?.name).toBe('Mona Khalil');
+      // M14-08: the bot's department, read back as the trail's arrival.
+      const routing = await call<TicketRouting>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${ticket?.id}/routing`,
+        sam,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        channel: 'telegram',
+        entry: 'telegram_bot',
+        reason: 'entry_department',
+        department: { id: support },
+      });
 
       const reply = await call(
         'POST',

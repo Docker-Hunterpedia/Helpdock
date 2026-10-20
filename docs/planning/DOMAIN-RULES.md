@@ -176,6 +176,16 @@ WhatsApp, Messenger and Instagram let a business write to a customer only for a 
 - The 7-day extension belongs to a person. An AI reply, a rule's canned reply, an auto-responder and the satisfaction survey use the 24-hour window only, whatever the account's switch says.
 - Tests: a reply at 23 h 59 m is queued and sent; at 24 h 01 m it is refused at compose time; one queued at 23 h 59 m whose job runs at 24 h 01 m is `refused` by the job and the stand-in receives nothing; on Messenger at day 3 with the switch on, a person's reply goes out tagged `HUMAN_AGENT` and an AI reply does not go out.
 
+### 2.8 Arrival and the routing trail
+
+Every ticket records how it arrived, once, in the activity row that filed it (M14-08): `to.arrival` on `ticket.created`, on the new ticket's `ticket.continued` for a continuation (§2.3), and on `ticket.imported` for an import. The record is `{ entry, entryId, address?, departmentId, reason }`, written through one helper by every creation path, so no path can file a ticket without saying how. `reason` is why the ticket took its department: the entry point's own, the brand's first (the widget, or a form without one), named by an API key, chosen by a person, continued from a closed ticket, the department of a ticket an email named but its sender may not reply on (§4.3), or an importer's mapping.
+
+- **No new table.** The trail is derived from the activity log: the arrival, then every department, team, priority and assignee change the system made after it, until the first change by a person (staff or an API key; a reply or a note is not a change).
+- **Read under the ticket's own department policy.** The trail is read in the reader's transaction, so a ticket in another department answers 404 and its activity is invisible, as for every other read of it (§1.2).
+- **Deleted rules are named as such.** A step a rule made names the rule by its current name, and "a rule since deleted" when the rule is gone; nothing about a rule is copied into the activity row. AI triage's changes are the rule's, written with `via = ai`, and read as "by AI triage".
+- A ticket filed before M14 has no arrival and reads "Arrived on <channel>" with the activity that exists. An imported ticket reads "Imported from <source>" and nothing else: an import sends and runs nothing (M11).
+- Tests: the trail's composition for each actor kind and for a deleted rule (unit); the arrival written by each of the six creation paths, and a ticket in another department answering 404 (integration).
+
 ---
 
 ## 3. SLA calculation
@@ -506,3 +516,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |
 | 2026-10-11 | The Meta channels (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): §2.5 and the new §2.6 reply-window rule; §4.4's three scoped ids and the first verified phone, a WhatsApp `wa_id`; the new §4.7 identities and §4.8 message kinds; §6's keys; §11's delivery logs and erasure; §13's Graph client. |
 | 2026-10-18 | §7: imported tickets join the widget queue only when their customer continues them live (M11-17). |
+| 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |

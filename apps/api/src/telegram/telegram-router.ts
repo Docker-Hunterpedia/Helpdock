@@ -15,6 +15,7 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
+import { arrivalOf } from '../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
@@ -174,7 +175,17 @@ export class TelegramConversationRouter {
       departmentId: ticket.departmentId,
       actor,
       action: 'ticket.created',
-      to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+      to: {
+        subject: ticket.subject,
+        statusId: status.id,
+        priority: ticket.priority,
+        ...arrivalOf({
+          entry: 'telegram_bot',
+          entryId: context.bot.id,
+          departmentId: ticket.departmentId,
+          reason: 'entry_department',
+        }),
+      },
     });
     // M3-02: the clocks start when the conversation opens, as for any ticket.
     await this.#deps.lifecycle.onCreated(

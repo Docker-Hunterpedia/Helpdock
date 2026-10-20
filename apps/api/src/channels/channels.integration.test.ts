@@ -30,6 +30,7 @@ import type {
   Mailbox,
   MailboxList,
   TicketMessagePage,
+  TicketRouting,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -653,6 +654,20 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         departmentId: support,
       });
 
+      // M14-08: the arrival names the mailbox's address and why it took the department.
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${ticket?.id}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        entry: 'mailbox',
+        address: 'hello@helpdock.test',
+        reason: 'entry_department',
+        department: { id: support },
+      });
+
       // The thread's read: the card's facts, and no remote URL.
       const page = await call<TicketMessagePage>(
         'GET',
@@ -789,6 +804,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       expect(stranger?.ticketId).not.toBe(ticket?.id);
       const separate = await ticketOf(stranger?.ticketId ?? '');
       expect(separate?.departmentId).toBe(ticket?.departmentId);
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${separate?.id}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({ entry: 'mailbox', reason: 'referenced_ticket' });
 
       const page = await call<TicketMessagePage>(
         'GET',

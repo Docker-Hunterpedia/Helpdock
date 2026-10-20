@@ -50,6 +50,6 @@ These are known in 1.0.0. Each one is tracked where it says.
 
 Open an [accessibility barrier report](https://github.com/Docker-Hunterpedia/Helpdock/issues/new?template=accessibility_barrier.yml). It asks where it happened, your assistive technology, your browser, the language and direction, and what blocks you. Barriers are treated as bugs.
 
-If the report would expose something you would rather not post in public, such as your own health information or a customer's data, report it privately through GitHub instead: use the [private reporting form](https://github.com/Docker-Hunterpedia/Helpdock/security/advisories/new) with a title that starts with "Accessibility:", or contact the maintainer, [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia).
+If the report would expose something you would rather not post in public, such as your own health information or a customer's data, email it privately to [contact@oday-bakkour.com](mailto:contact@oday-bakkour.com) with a subject that starts with "Accessibility:".
 
 If you run Helpdock for your own customers, your organisation is responsible for its own accessibility statement; the audit and this page are there to help you write it.

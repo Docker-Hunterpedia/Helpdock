@@ -455,7 +455,10 @@ under the ticket's own department policy.
   writers, by a split, by a reopen-policy continuation (on its
   `ticket.continued` row, recording where the customer's reply came in) and
   by the importer (on `ticket.imported`). An email's `address` is the
-  recipient it was written to, not the mailbox's configured address.
+  mailbox address when present among recipients; otherwise the delivery
+  header (`Delivered-To`, or `X-Original-To` when absent) if nonempty and
+  at most 320 characters, falling back to the mailbox address. This avoids
+  recording a third party's To/Cc address for Bcc mail.
 - [x] `GET /tickets/:id/routing` and its Zod schema (`ticketRoutingSchema`).
 - [x] The "How it got here" card (`RoutingTrail`, DESIGN §6.3).
 - [x] DOMAIN-RULES §2.8; `tickets.md`.

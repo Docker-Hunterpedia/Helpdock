@@ -780,7 +780,12 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
           tx
             .update(outbox)
             .set({ publishedAt: new Date() })
-            .where(eq(outbox.event, 'csat.requested')),
+            .where(
+              and(
+                eq(outbox.event, 'csat.requested'),
+                sql`${outbox.payload}->>'ticketId' = ${conversationId}`,
+              ),
+            ),
         );
       }
 

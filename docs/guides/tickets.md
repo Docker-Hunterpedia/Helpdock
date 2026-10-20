@@ -349,7 +349,7 @@ drift:
 
 | Path | `entry` | `entryId` | `reason` |
 |---|---|---|---|
-| Inbound email | `mailbox` | the mailbox, with `address`: the address the message was written to — the mailbox's own when it is among the recipients, otherwise the first recipient (an alias forwarded into an IMAP mailbox), envelope first, then To, then Cc | `entry_department`; `referenced_ticket` when the mail named a ticket its sender is not a participant of and was filed in that ticket's department (§4.3) |
+| Inbound email | `mailbox` | the mailbox, with `address`: the address the message was written to — the mailbox's own when it is among the recipients, otherwise `Delivered-To` (or `X-Original-To` when absent) if nonempty and at most 320 characters, otherwise the mailbox's own address; unrelated To/Cc recipients are never used as a fallback | `entry_department`; `referenced_ticket` when the mail named a ticket its sender is not a participant of and was filed in that ticket's department (§4.3) |
 | Chat widget | `widget` | null | `brand_first_department`: the widget files into the brand's first department until M19-02 gives each widget its own |
 | Web form | `web_form` | null | `entry_department` when the form names a department, otherwise `brand_first_department` |
 | Telegram | `telegram_bot` | the bot | `entry_department` |

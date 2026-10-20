@@ -61,19 +61,22 @@ export const continuationArrival = (
 ): TicketArrival => ({ ...inbound, departmentId, reason: 'continued_from' });
 
 /**
- * The address the customer wrote to, as the inbound message names it: the
- * mailbox's own when it is among the recipients, otherwise the first
- * recipient (an alias forwarded into an IMAP mailbox), envelope first, then
- * To, then Cc. None, or one too long to be an address, records none rather
- * than refusing the mail.
+ * Prefer the mailbox among known recipients, then a delivery header. To/Cc
+ * alone may name only third parties when the customer Bcc'd the mailbox.
+ * An absent or oversized delivery header falls back to the mailbox.
  */
 export const addressWrittenTo = (
   recipients: readonly string[],
   mailboxAddress: string,
+  deliveryAddress?: string,
 ): string | undefined => {
   const mailbox = mailboxAddress.toLowerCase();
-  const written = recipients.includes(mailbox) ? mailbox : recipients[0];
-  return written !== undefined && written.length <= TICKET_ARRIVAL_ADDRESS_MAX
-    ? written
-    : undefined;
+  const written =
+    !recipients.includes(mailbox) &&
+    deliveryAddress !== undefined &&
+    deliveryAddress.length > 0 &&
+    deliveryAddress.length <= TICKET_ARRIVAL_ADDRESS_MAX
+      ? deliveryAddress
+      : mailbox;
+  return written.length <= TICKET_ARRIVAL_ADDRESS_MAX ? written : undefined;
 };

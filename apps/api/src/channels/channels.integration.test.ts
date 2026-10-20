@@ -1101,7 +1101,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         imap: TEST_IMAP,
       });
 
-    const deliver = async (subject: string, from: string): Promise<void> => {
+    const deliver = async (
+      subject: string,
+      from: string,
+      headers?: Readonly<Record<string, string>>,
+      to = 'desk@helpdock.test',
+    ): Promise<void> => {
       const transport = nodemailer.createTransport({
         host: greenmail.getHost(),
         port: greenmail.getMappedPort(SMTP_PORT),
@@ -1110,7 +1115,9 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       });
       await transport.sendMail({
         from,
-        to: 'desk@helpdock.test',
+        to,
+        envelope: { from, to: ['desk@helpdock.test'] },
+        headers,
         subject,
         text: `Body of ${subject}`,
       });
@@ -1161,6 +1168,37 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
           .where(eq(contacts.name, from)),
       );
       expect(again).toHaveLength(1);
+
+      // M14-08: an IMAP delivery may have only third parties in To/Cc.
+      for (const [headers, expected] of [
+        [{ 'Delivered-To': 'alias@acme.test' }, 'alias@acme.test'],
+        [{ 'X-Original-To': 'original@acme.test' }, 'original@acme.test'],
+        [{}, 'desk@helpdock.test'],
+        [{ 'Delivered-To': 'a'.repeat(321) }, 'desk@helpdock.test'],
+      ] as const) {
+        const sender = unique('bcc');
+        await deliver('Bcc arrival', sender, headers, 'colleague@acme.test');
+        await poller()({ data: { brandId: seeded.brandId, mailboxId: mailbox.body.id } });
+        const [bccTicket] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select({ id: tickets.id })
+            .from(tickets)
+            .innerJoin(contacts, eq(contacts.id, tickets.contactId))
+            .where(eq(contacts.name, sender)),
+        );
+        expect(bccTicket).toBeDefined();
+        const routing = await call<TicketRouting>(
+          'GET',
+          `${brandPath()}/tickets/${bccTicket?.id}/routing`,
+          ada,
+        );
+        expect(routing.status).toBe(200);
+        expect(routing.body.origin).toMatchObject({
+          kind: 'recorded',
+          entry: 'mailbox',
+          address: expected,
+        });
+      }
     });
 
     it('records a refused sign-in as the mailbox’s health, and does nothing for a mailbox that is gone', async () => {

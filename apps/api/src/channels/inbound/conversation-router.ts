@@ -118,7 +118,11 @@ export type RouteOutcome =
 
 /** M14-08: the mailbox a message came in through, and the address it was written to. */
 const mailboxEntry = (context: RouteContext, message: EmailInboundMessage): ArrivalEntryPoint => {
-  const address = addressWrittenTo(message.email.recipients, context.mailbox.address);
+  const address = addressWrittenTo(
+    message.email.recipients,
+    context.mailbox.address,
+    message.email.deliveryAddress,
+  );
   return {
     entry: 'mailbox',
     entryId: context.mailbox.id,

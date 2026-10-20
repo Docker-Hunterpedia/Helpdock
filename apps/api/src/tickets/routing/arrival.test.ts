@@ -52,19 +52,32 @@ describe('requestArrival', () => {
 
 describe('addressWrittenTo', () => {
   it('prefers the mailbox among the recipients, whatever case the mailbox was saved in', () => {
-    expect(addressWrittenTo(['ceo@acme.test', 'billing@acme.test'], 'Billing@acme.test')).toBe(
-      'billing@acme.test',
+    expect(
+      addressWrittenTo(
+        ['ceo@acme.test', 'billing@acme.test'],
+        'Billing@acme.test',
+        'alias@acme.test',
+      ),
+    ).toBe('billing@acme.test');
+  });
+
+  it('uses Delivered-To when the mailbox is absent from To/Cc', () => {
+    expect(
+      addressWrittenTo(['colleague@acme.test'], 'inbox@helpdock.test', 'alias@acme.test'),
+    ).toBe('alias@acme.test');
+  });
+
+  it.each([
+    ['only third parties in To/Cc', ['colleague@acme.test', 'cc@acme.test'], undefined],
+    ['no recipients', [], undefined],
+    ['an oversized delivery header', ['colleague@acme.test'], 'a'.repeat(321)],
+  ])('records the mailbox for %s', (_scenario, recipients, deliveredTo) => {
+    expect(addressWrittenTo(recipients, 'Inbox@helpdock.test', deliveredTo)).toBe(
+      'inbox@helpdock.test',
     );
   });
 
-  it('takes the first recipient when the mailbox is not named, as an alias forwarded into it', () => {
-    expect(addressWrittenTo(['sales@acme.test', 'cc@acme.test'], 'inbox@helpdock.test')).toBe(
-      'sales@acme.test',
-    );
-  });
-
-  it('records no address for no recipients, or for one too long to be an address', () => {
-    expect(addressWrittenTo([], 'inbox@helpdock.test')).toBeUndefined();
-    expect(addressWrittenTo([`${'a'.repeat(320)}@x.test`], 'inbox@helpdock.test')).toBeUndefined();
+  it('accepts a delivery header at the 320-character limit', () => {
+    expect(addressWrittenTo([], 'inbox@helpdock.test', 'a'.repeat(320))).toBe('a'.repeat(320));
   });
 });

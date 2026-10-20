@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { articleRoute, contactRoute, ROUTES, ticketRoute } from '../app/route-paths.js';
+import { isAuthError } from '../auth/api.js';
 import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../auth/session.tsx';
 import type { KeyStroke } from '../keyboard/keys.js';
 import { useQuickSearchApi } from './context.js';
@@ -21,6 +22,13 @@ import {
 import { type PageEntry, pagesFor } from './pages.js';
 import { forget, type Recent, readRecents } from './recents.js';
 import type { PaletteAction } from './use-palette-actions.js';
+
+class PageGoneError extends Error {}
+
+/** A 403 or 404 from the api, or a page the person is no longer offered. */
+const isGone = (reason: unknown): boolean =>
+  reason instanceof PageGoneError ||
+  (isAuthError(reason) && (reason.status === 403 || reason.status === 404));
 
 /** What choosing an option does: go somewhere now, or do something once the palette has closed. */
 export type PaletteEffect =
@@ -152,7 +160,7 @@ export function usePaletteOptions(
             case 'page': {
               const page = pages.find((candidate) => candidate.id === recent.id);
               if (page === undefined) {
-                throw new Error('The page is gone or not offered');
+                throw new PageGoneError();
               }
               return {
                 key: `recent:page:${recent.id}`,
@@ -165,11 +173,15 @@ export function usePaletteOptions(
           }
         }),
       );
-      // What the api no longer shows this person leaves the list for good.
+      // What the api refuses or no longer has leaves the list for good; a
+      // server error, a rate limit or a dropped connection does not.
       forget(
         userId,
         brandId,
-        stored.filter((_recent, index) => resolved[index]?.status === 'rejected'),
+        stored.filter((_recent, index) => {
+          const outcome = resolved[index];
+          return outcome?.status === 'rejected' && isGone(outcome.reason);
+        }),
       );
       return resolved
         .flatMap((outcome) => (outcome.status === 'fulfilled' ? [outcome.value] : []))

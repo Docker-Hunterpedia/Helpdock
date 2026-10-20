@@ -32,7 +32,11 @@ const dialect = new PgDialect();
 /** A transaction that records the statements it was given and answers the two reads the service makes itself. */
 const fakeTransaction = (drafts: readonly Record<string, unknown>[] = []) => {
   const statements: string[] = [];
-  const tx = {
+  const tx: { execute: unknown; transaction: unknown } = {
+    transaction: vi.fn(async (run: (nested: unknown) => Promise<unknown>) => {
+      statements.push('nested transaction');
+      return run(tx);
+    }),
     execute: vi.fn(async (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
       const text = dialect.sqlToQuery(query).sql;
       statements.push(text);
@@ -195,8 +199,7 @@ describe('QuickSearchService', () => {
         articles: { status: 'ok' },
       },
     });
-    expect(statements).toContain('rollback to savepoint quick_search_contacts');
-    expect(statements).toContain('release savepoint quick_search_tickets');
+    expect(statements.filter((text) => text === 'nested transaction')).toHaveLength(3);
   });
 
   it('marks a section that outlasts its budget as failed', async () => {

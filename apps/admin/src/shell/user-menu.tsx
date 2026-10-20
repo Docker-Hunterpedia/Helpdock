@@ -10,7 +10,6 @@ import {
   LogOut,
   Monitor,
   Moon,
-  Search,
   ShieldCheck,
   Sun,
 } from 'lucide-react';
@@ -24,7 +23,6 @@ import { useAuthApi, useSession, useSetSession } from '../auth/session.tsx';
 import { KeyCombo } from '../keyboard/key-combo.tsx';
 import { useAriaKeyShortcuts, useKeyboard } from '../keyboard/keyboard-provider.tsx';
 import { shortcutById } from '../keyboard/registry.js';
-import { usePalette } from '../palette/palette-provider.tsx';
 import { useRealtime } from '../realtime/realtime-provider.tsx';
 import { PresenceDot } from '../ui/presence-dot.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
@@ -73,8 +71,6 @@ export function UserMenu({
   const menuLabel = t('admin:currentUser.menuLabel', { name: session.user.name });
   const { openSheet } = useKeyboard();
   const sheetKeys = useAriaKeyShortcuts('general.shortcuts');
-  const palette = usePalette();
-  const paletteKeys = useAriaKeyShortcuts('general.palette');
 
   const signOut = useMutation({
     mutationFn: () => api.signOut(),
@@ -186,29 +182,6 @@ export function UserMenu({
             <Bell size={16} aria-hidden="true" />
           </ListItemIcon>
           {t('me:account.tabs.notifications')}
-        </MenuItem>
-
-        {/* M14-05: the palette without a key, for whoever has not met ⌘K. */}
-        <MenuItem
-          aria-keyshortcuts={paletteKeys}
-          onClick={() => {
-            close();
-            palette.open();
-          }}
-        >
-          <ListItemIcon>
-            <Search size={16} aria-hidden="true" />
-          </ListItemIcon>
-          {t('admin:palette.menuItem')}
-          {paletteKeys === undefined ? null : (
-            <Box
-              component="span"
-              aria-hidden="true"
-              sx={{ marginInlineStart: 'auto', paddingInlineStart: 4 }}
-            >
-              <KeyCombo keys={shortcutById('general.palette').keys} />
-            </Box>
-          )}
         </MenuItem>
 
         {/* M14-01: the sheet without a key, so a person who turned

@@ -354,7 +354,10 @@ const toError = async (
   const retryAfter = Number(response.headers.get('Retry-After'));
   const retryOptions = Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {};
   if (auth === undefined) {
-    return new AuthError(response.status === 429 ? 'rate-limited' : 'unavailable', retryOptions);
+    return new AuthError(response.status === 429 ? 'rate-limited' : 'unavailable', {
+      ...retryOptions,
+      status: response.status,
+    });
   }
 
   return new AuthError(auth.code, {

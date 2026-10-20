@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { AuthError } from '../auth/api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
@@ -120,11 +121,12 @@ describe('opening and closing', () => {
     expect(opener).toHaveFocus();
   });
 
-  it('opens from the account menu, which is the way in without a key', async () => {
+  it('opens from the sidebar’s Search, which shows the key', async () => {
     const { user } = await renderAt('/contacts');
 
-    await user.click(await screen.findByRole('button', { name: /Lina Haddad/ }));
-    await user.click(await screen.findByRole('menuitem', { name: /Search and commands/ }));
+    const button = await screen.findByRole('button', { name: 'Search' });
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Meta+k Control+k');
+    await user.click(button);
 
     expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeVisible();
   });
@@ -183,12 +185,18 @@ describe('the empty palette', () => {
     ).toEqual(['HD-1042Refund for order 42 has not arrived', 'Ticketing › SLAs']);
   });
 
-  it('drops a recent the api no longer shows, and forgets it', async () => {
-    const { user, session } = await renderAt('/tickets?view=all');
+  it.each([403, 404])('drops a recent the api answers %i for, and forgets it', async (status) => {
+    const { user, session, ticketsApi } = await renderAt('/tickets?view=all');
     const userId = session?.user.id ?? '';
     const brandId = session?.currentBrandId ?? '';
-    remember(userId, brandId, { kind: 'ticket', id: 'a-ticket-that-is-gone' });
     remember(userId, brandId, { kind: 'ticket', id: MOCK_TICKET_REFUND });
+    remember(userId, brandId, { kind: 'ticket', id: 'a-ticket-that-is-gone' });
+    const real = ticketsApi.ticket.bind(ticketsApi);
+    vi.spyOn(ticketsApi, 'ticket').mockImplementation((brand, id) =>
+      id === 'a-ticket-that-is-gone'
+        ? Promise.reject(new AuthError('unavailable', { status }))
+        : real(brand, id),
+    );
 
     await user.keyboard('{Control>}k{/Control}');
     await screen.findByRole('dialog', { name: 'Command palette' });
@@ -198,6 +206,22 @@ describe('the empty palette', () => {
     await waitFor(() => {
       expect(readRecents(userId, brandId)).toEqual([{ kind: 'ticket', id: MOCK_TICKET_REFUND }]);
     });
+  });
+
+  it.each([500, 429])('keeps a recent when the api answers %i', async (status) => {
+    const { user, session, ticketsApi } = await renderAt('/tickets?view=all');
+    const userId = session?.user.id ?? '';
+    const brandId = session?.currentBrandId ?? '';
+    remember(userId, brandId, { kind: 'ticket', id: MOCK_TICKET_REFUND });
+    vi.spyOn(ticketsApi, 'ticket').mockRejectedValue(new AuthError('unavailable', { status }));
+
+    await user.keyboard('{Control>}k{/Control}');
+    await screen.findByRole('dialog', { name: 'Command palette' });
+
+    await waitFor(() => {
+      expect(within(palette()).queryByRole('group', { name: 'Recent' })).toBeNull();
+    });
+    expect(readRecents(userId, brandId)).toEqual([{ kind: 'ticket', id: MOCK_TICKET_REFUND }]);
   });
 
   it('records a visit as ids only, never a title', async () => {

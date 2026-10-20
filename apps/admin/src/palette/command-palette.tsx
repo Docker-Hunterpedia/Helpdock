@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
+import { ROUTES } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
 import { KeyCombo } from '../keyboard/key-combo.tsx';
@@ -117,7 +118,7 @@ function PaletteBody({
   const [typed, setTyped] = useState('');
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const debounced = useDebounced(typed.trim(), SEARCH_DEBOUNCE_MS);
-  const actions = usePaletteActions(true);
+  const actions = usePaletteActions();
   const state = usePaletteOptions(typed, debounced, actions);
 
   const ordered = inListOrder(state.options);
@@ -284,7 +285,7 @@ function PaletteBody({
               component="button"
               type="button"
               onClick={() => {
-                onGo(`/tickets?q=${encodeURIComponent(query)}`);
+                onGo(`${ROUTES.tickets}?q=${encodeURIComponent(query)}`);
               }}
               sx={linkButton(tokens['text.link'], tokens['border.focus'])}
             >

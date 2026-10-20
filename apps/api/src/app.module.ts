@@ -303,7 +303,7 @@ export class AppModule implements NestModule {
         // M14-01: the single-key shortcuts switch.
         KeyboardModule.forRoot(),
         // M14-05: the command palette's quick search.
-        QuickSearchModule.forRoot({ tickets, contacts, helpCenter, redis: options.redis }),
+        QuickSearchModule.forRoot({ tickets, contacts, redis: options.redis }),
         // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
         DomainsModule.forRoot({ env: options.env, hostResolver }),
         // M4: Channels › Widget, the widget's routes, its SSE stream and the

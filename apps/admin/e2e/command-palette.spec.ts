@@ -203,4 +203,30 @@ test.describe('the command palette', () => {
     await expect(newTicket).toBeVisible();
     await expect(newTicket.locator('kbd')).toHaveCount(0);
   });
+
+  test('opens from the sidebar’s Search, expanded and collapsed to the rail', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    const dialog = page.getByRole('dialog', { name: t('admin:palette.label') });
+    const search = page.getByRole('button', {
+      name: t('admin:palette.sidebarSearch'),
+      exact: true,
+    });
+
+    await expect(search.locator('kbd').first()).toBeVisible();
+    await search.click();
+    await expect(dialog.getByRole('combobox')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(search).toBeFocused();
+
+    await page.getByRole('button', { name: t('admin:nav.collapse') }).click();
+    await expect(search.locator('kbd')).toHaveCount(0);
+    await search.click();
+    await expect(dialog).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+  });
 });

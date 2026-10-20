@@ -15,13 +15,15 @@ import type { QuickSearch, Ticket, TicketDetail } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { getTx } from '../context/request-context.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { TicketsService } from '../tickets/tickets.service.js';
 
 /**
  * M14-05's quick search against a real Postgres and Redis, over real sessions:
@@ -336,6 +338,29 @@ describe.skipIf(!hasDocker)('quick search', () => {
     expect(status).toBe(200);
     expect(body.tickets).toMatchObject({ status: 'ok' });
     expect(body.contacts).toMatchObject({ status: 'ok' });
+  });
+
+  it('fails a section that outruns its budget, leaves the others and the transaction healthy', async () => {
+    const real = TicketsService.prototype.list;
+    // Test seam: the ticket read first sleeps well past the 300 ms budget.
+    const slow = vi.spyOn(TicketsService.prototype, 'list').mockImplementation(async function (
+      this: TicketsService,
+      ...args
+    ) {
+      await getTx().execute(sql`select pg_sleep(2)`);
+      return real.apply(this, args);
+    });
+
+    const started = Date.now();
+    const { status, body } = await find(bo, 'Zelda');
+    slow.mockRestore();
+
+    expect(status).toBe(200);
+    expect(Date.now() - started).toBeLessThan(1_800);
+    expect(body.tickets).toEqual({ status: 'failed' });
+    expect(body.contacts).toMatchObject({ status: 'ok', items: [{ name: 'Zelda Quill' }] });
+    expect(body.articles.status).toBe('ok');
+    expect((await find(ada, 'Zelda')).body.tickets.status).toBe('ok');
   });
 
   it('refuses an empty or over-long query and an out-of-range limit', async () => {

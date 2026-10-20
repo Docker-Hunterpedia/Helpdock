@@ -165,7 +165,7 @@
       "open": "open",
       "close": "close"
     },
-    "menuItem": "Search and commands",
+    "sidebarSearch": "Search",
     "actions": {
       "general": {
         "newTicket": "New ticket",

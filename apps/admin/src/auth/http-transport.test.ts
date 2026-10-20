@@ -139,6 +139,17 @@ describe('cancelling a request', () => {
   });
 });
 
+describe('a failure with no body the screens understand', () => {
+  it.each([404, 500])('carries the HTTP status %i on the error', async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response('<html>', { status }));
+
+    await expect(new HttpTransport().request('GET', '/x')).rejects.toMatchObject({
+      code: 'unavailable',
+      status,
+    });
+  });
+});
+
 describe('429 sign-in refusals', () => {
   it.each([true, false])('carries Retry-After with an auth envelope: %s', async (envelope) => {
     const response = new Response(

@@ -445,18 +445,21 @@ differences:
 
 - **Opening.** `⌘K` / `Ctrl+K` is registry entry `general.palette`, a modifier
   chord, so it works with the single-key switch off and in a field. The
-  sidebar has no Search control on its board (`Admin/Shell` draws none), so
-  the palette is also "Search and commands" in the account menu, beside
-  "Keyboard shortcuts"; a Search row in the sidebar waits for an artboard.
+  sidebar's Search (`Admin/Settings-Shell`) opens it too: a 32 px field-shaped
+  button under the brand row with the `⌘K` caps, a 36 px icon with a Tooltip
+  in the collapsed rail.
 - **The read.** `quick-search` answers each section as `{ status: 'ok',
   items }`, `{ status: 'skipped' }` (no permission) or `{ status: 'failed' }`
   (an error, or over the 300 ms budget), which is what the board's "a section
   failed" panel is drawn from. The sections run one after another, each
-  inside a savepoint with a 300 ms `statement_timeout`, so one that fails
-  rolls back to its savepoint and the next still runs in the same request
+  inside a nested transaction (a savepoint the driver tracks) with a 300 ms
+  `statement_timeout`: the database cancels a slow query, the section rolls
+  back once it has settled, and the next still runs in the same request
   transaction. It takes a `locale` the articles are looked up in first.
-- **Articles** are the help-center search with the `internal` audience
-  (published versions, public and internal, never logged to `hc_search_log`),
+- **Articles** are the help-center search, full text only (`hc_search_documents`
+  through the lexical source, no query embedding: the palette calls no model),
+  with the `internal` audience (published versions, public and internal, never
+  logged to `hc_search_log`),
   plus, for `help_center:manage`, the titles of drafts and scheduled versions.
 - **Actions** are the registry shortcuts a screen has attached right now and
   the person may use, so "Reply", "Change priority", "Snooze this ticket…" are
@@ -473,8 +476,9 @@ differences:
 - **Recents** are `{ kind, id }` in this browser's storage per person and
   brand, written whenever the person lands on a ticket, a contact or a
   settings page (not only when they pick it from the palette), re-read through
-  the api when the palette opens; one the api no longer shows is dropped and
-  forgotten.
+  the api when the palette opens; one the api answers 403 or 404 for is dropped
+  and forgotten, one that fails with a server error, a rate limit or a dropped
+  connection is only left out of that view.
 - **Pages** (`apps/admin/src/palette/pages.ts`) are titled from the existing
   catalog keys (`Area › Tab`) with keywords in `admin:palette.keywords.<id>`,
   matched in both languages whatever the interface language, folded as the

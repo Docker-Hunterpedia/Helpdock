@@ -12,7 +12,7 @@ import { sql } from 'drizzle-orm';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import { contactContext } from '../contacts/contact-context.js';
 import type { ContactsService } from '../contacts/contacts.service.js';
-import { getTx } from '../context/request-context.js';
+import { getTx, requireRequestContext } from '../context/request-context.js';
 import type { HelpCenterSearch } from '../help-center/ports.js';
 import type { TicketsService } from '../tickets/tickets.service.js';
 
@@ -127,16 +127,18 @@ export class QuickSearchService {
     limit: number,
     locale: QuickSearchQuery['locale'],
   ): Promise<QuickSearchArticle[]> {
-    const found = await this.#articles.search({
-      brandId: scope.brandId,
-      audience: 'internal',
-      locale,
-      q,
-      limit,
-      offset: 0,
-      source: 'help_center',
-      log: false,
-    });
+    const found = await withBudget(
+      this.#articles.search({
+        brandId: scope.brandId,
+        audience: 'internal',
+        locale,
+        q,
+        limit,
+        offset: 0,
+        source: 'help_center',
+        log: false,
+      }),
+    );
     const published = found.hits.map(
       (hit): QuickSearchArticle => ({ id: hit.articleId, title: hit.title, status: 'published' }),
     );
@@ -156,34 +158,41 @@ export class QuickSearchService {
     if (!allowed) {
       return { status: 'skipped' };
     }
-    const tx = getTx();
-    const savepoint = sql.raw(`quick_search_${name}`);
-    await tx.execute(sql`savepoint ${savepoint}`);
+    const context = requireRequestContext();
+    const outer = getTx();
+    const [before] = await outer.execute<{ timeout: string }>(
+      sql`select current_setting('statement_timeout') as timeout`,
+    );
     try {
-      const [before] = await tx.execute<{ timeout: string }>(
-        sql`select current_setting('statement_timeout') as timeout`,
-      );
-      await tx.execute(
-        sql`select set_config('statement_timeout', ${`${SECTION_BUDGET_MS}ms`}, true)`,
-      );
-      const items = await withBudget(read());
-      await tx.execute(
+      // A nested transaction is a savepoint that the driver itself tracks: a
+      // statement that fails inside it is rolled back and does not mark the
+      // request's transaction as failed. The services under it read the
+      // transaction from the request context, so it stands in for the outer
+      // one while they run. The statement timeout makes the database cancel a
+      // slow query; the rollback only happens once that has settled.
+      const items = await outer.transaction(async (nested) => {
+        context.tx = nested;
+        await nested.execute(
+          sql`select set_config('statement_timeout', ${`${SECTION_BUDGET_MS}ms`}, true)`,
+        );
+        return read();
+      });
+      await outer.execute(
         sql`select set_config('statement_timeout', ${before?.timeout ?? '0'}, true)`,
       );
-      await tx.execute(sql`release savepoint ${savepoint}`);
       return { status: 'ok', items };
     } catch (error) {
       this.#logger.warn(
         `The ${name} section failed: ${error instanceof Error ? error.name : 'unknown error'}`,
       );
-      await tx.execute(sql`rollback to savepoint ${savepoint}`);
-      await tx.execute(sql`release savepoint ${savepoint}`);
       return { status: 'failed' };
+    } finally {
+      context.tx = outer;
     }
   }
 }
 
-/** Rejects when a read outlasts its budget, for the reads that run on a connection of their own. */
+/** Rejects when a read outlasts its budget. Only for the search, which runs on a connection of its own. */
 const withBudget = async <T>(read: Promise<T>): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_resolve, reject) => {

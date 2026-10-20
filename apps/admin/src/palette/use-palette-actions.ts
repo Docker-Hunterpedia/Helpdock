@@ -33,11 +33,11 @@ const THEMES: readonly ThemePreference[] = ['light', 'dark', 'auto'];
  * attached and the person may use, then the ones that are not shortcuts —
  * copy a ticket's link, switch brand, language and theme.
  *
- * Computed when the palette opens, from the handlers attached at that moment:
+ * Computed when the palette mounts, which is when it opens, from the handlers attached at that moment:
  * opening the palette does not detach a screen's handlers, so "Reply" is
  * there exactly while a ticket is open.
  */
-export function usePaletteActions(open: boolean): readonly PaletteAction[] {
+export function usePaletteActions(): readonly PaletteAction[] {
   const t = useT();
   const { i18n } = useTranslation(NAMESPACES);
   const { pathname } = useLocation();
@@ -49,9 +49,6 @@ export function usePaletteActions(open: boolean): readonly PaletteAction[] {
   const brand = currentBrand(session);
 
   return useMemo(() => {
-    if (!open) {
-      return [];
-    }
     const textsOf = (key: string): string[] =>
       (['en', 'ar'] as const).map((lng: Locale) => String(i18n.getFixedT(lng)(key as never)));
     const say = (key: string): string => String(t(key as never));
@@ -133,7 +130,6 @@ export function usePaletteActions(open: boolean): readonly PaletteAction[] {
 
     return [...fromShortcuts, ...copyLink, ...brands, languageAction, ...themes];
   }, [
-    open,
     i18n,
     t,
     pathname,

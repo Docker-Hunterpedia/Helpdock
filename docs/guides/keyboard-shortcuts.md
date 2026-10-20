@@ -198,8 +198,7 @@ filters*; and a search that finds nothing names what you typed and offers
 
 ## Command palette
 
-Press `⌘`/`Ctrl` + `K` anywhere in the signed-in admin, or choose **Search and
-commands** in the menu under your name. This is deliverable M14-05; the artboard
+Press `⌘`/`Ctrl` + `K` anywhere in the signed-in admin, or choose **Search** at the top of the sidebar. This is deliverable M14-05; the artboard
 is `Admin/CommandPalette`. It works with single-key shortcuts off, because it
 carries a modifier.
 

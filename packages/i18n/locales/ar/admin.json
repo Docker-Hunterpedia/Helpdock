@@ -189,7 +189,7 @@
       "open": "فتح",
       "close": "إغلاق"
     },
-    "menuItem": "البحث والأوامر",
+    "sidebarSearch": "بحث",
     "actions": {
       "general": {
         "newTicket": "تذكرة جديدة",

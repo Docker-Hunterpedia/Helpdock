@@ -1,14 +1,17 @@
 import { monoFontStyle } from '@helpdock/ui';
 import { Box, Popover, Typography } from '@mui/material';
-import { Layers, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Layers, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { NavLink } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
 import { useSession } from '../auth/session.tsx';
+import { KeyCombo } from '../keyboard/key-combo.tsx';
 import { useAriaKeyShortcuts } from '../keyboard/keyboard-provider.tsx';
 import { isMac } from '../keyboard/keys.js';
+import { shortcutById } from '../keyboard/registry.js';
+import { usePalette } from '../palette/palette-provider.tsx';
 import { TicketViewsNav } from '../screens/tickets/views-nav.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
 import { CountBadge } from './count-badge.tsx';
@@ -212,6 +215,75 @@ function RailViews(): ReactNode {
 }
 
 /**
+ * The sidebar's Search (`Admin/Settings-Shell`, M14-05): a 32 px field-shaped
+ * button under the brand row that opens the command palette, with the `⌘K`
+ * caps at its inline end. Collapsed it is a 36 px icon with a Tooltip, like the
+ * rail's other controls. The caps are `aria-hidden`; the shortcut is in
+ * `aria-keyshortcuts`.
+ */
+function SidebarSearch({
+  collapsed,
+  onNavigate,
+}: {
+  readonly collapsed: boolean;
+  readonly onNavigate?: (() => void) | undefined;
+}): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+  const palette = usePalette();
+  const keyShortcuts = useAriaKeyShortcuts('general.palette');
+  const label = t('admin:palette.sidebarSearch');
+
+  return (
+    <RailTooltip title={collapsed ? label : ''}>
+      <Box
+        component="button"
+        type="button"
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-keyshortcuts={keyShortcuts}
+        onClick={() => {
+          onNavigate?.();
+          palette.open();
+        }}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexShrink: 0,
+          boxSizing: 'border-box',
+          width: collapsed ? 36 : '100%',
+          height: collapsed ? 36 : 32,
+          paddingInline: collapsed ? 0 : 3,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          border: collapsed ? 0 : `1px solid ${tokens['border.strong']}`,
+          borderRadius: '6px',
+          backgroundColor: collapsed ? 'transparent' : tokens['bg.surface'],
+          color: tokens['text.secondary'],
+          font: 'inherit',
+          fontSize: 13,
+          cursor: 'pointer',
+          '&:hover': { backgroundColor: tokens['bg.muted'] },
+          '&:focus-visible': { outline: `2px solid ${tokens['border.focus']}`, outlineOffset: -2 },
+        }}
+      >
+        <Search size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+        {collapsed ? null : (
+          <>
+            <Box component="span" sx={{ flex: 1, textAlign: 'start' }}>
+              {label}
+            </Box>
+            <Box component="span" aria-hidden="true">
+              <KeyCombo keys={shortcutById('general.palette').keys} />
+            </Box>
+          </>
+        )}
+      </Box>
+    </RailTooltip>
+  );
+}
+
+/**
  * Collapse and expand (`Admin/Shell-SidebarCollapse`): one button in both
  * states, so the DOM node and the focus on it survive the toggle. Expanded, a
  * 32 px row with its label and the ⌘\ hint; collapsed, a 36 px icon with the
@@ -377,6 +449,8 @@ export function Sidebar({
         </Box>
         <NotificationBell />
       </Box>
+
+      <SidebarSearch collapsed={collapsed} onNavigate={onNavigate} />
 
       {/* Scrolls on its own: a brand's views (M1-05) can make the groups taller
           than the window, and the Admin group must stay reachable under them. */}

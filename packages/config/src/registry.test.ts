@@ -39,7 +39,9 @@ describe('the settings registry', () => {
   });
 
   it('derives a unique HD_ override name that cannot collide with a bootstrap key', () => {
-    const envKeys = SETTING_DEFINITIONS.map((definition) => definition.envKey);
+    const envKeys = SETTING_DEFINITIONS.flatMap((definition) =>
+      definition.envKey === null ? [] : [definition.envKey],
+    );
 
     expect(new Set(envKeys).size).toBe(envKeys.length);
     for (const envKey of envKeys) {

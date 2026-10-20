@@ -824,8 +824,8 @@ DESIGN.md changes in the same PRs:
 8. **Known gap, found in M18-10:** the `HD_CAPTCHA_*` environment pins in
    the configuration reference do not reach the widget or the web form, which
    read the brand's `captcha.*` rows directly. `captcha.difficulty` is
-   therefore not registered as a setting, and has no `HD_` pin, until that is
-   fixed.
+   therefore registered without an `HD_` pin (`envKey: null`, listed as "not
+   pinnable" in the configuration reference) until that is fixed.
 
 ## Build order
 

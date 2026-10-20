@@ -24,8 +24,8 @@ describe('docs/guides/configuration.md', () => {
     for (const key of ENV_KEYS) {
       expect(page, key).toContain(`| \`${key}\` |`);
     }
-    for (const { envKey } of SETTING_DEFINITIONS) {
-      expect(page, envKey).toContain(`| \`${envKey}\` |`);
+    for (const { envKey, key } of SETTING_DEFINITIONS) {
+      expect(page, key).toContain(envKey === null ? `| \`${key}\` |` : `| \`${envKey}\` |`);
     }
   });
 

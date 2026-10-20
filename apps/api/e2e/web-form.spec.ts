@@ -172,6 +172,42 @@ test.describe('the built-in check (ADR 0052, HelpCenter/WebForm-Verify)', () => 
     await expect(page.getByRole('heading', { level: 1 })).toContainText(REFERENCE);
   });
 
+  test('keeps the page responsive while it solves without WebCrypto', async ({
+    page,
+    pageLocale,
+  }) => {
+    const t = strings(pageLocale);
+    await page.addInitScript(() => {
+      Object.defineProperty(window.crypto, 'subtle', { get: () => undefined });
+      const record = window as unknown as { ticks: number[]; states: [string, number][] };
+      record.ticks = [];
+      record.states = [];
+      setInterval(() => record.ticks.push(performance.now()), 5);
+      new MutationObserver(() => {
+        const box = document.getElementById('wf-pow');
+        if (box?.dataset.state) record.states.push([box.dataset.state, performance.now()]);
+      }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-state'] });
+    });
+    // Its first challenge has no solution, so the plain digest runs all 50,000 numbers.
+    await open(page, pageLocale, BROKEN_POW_BRAND);
+    await expect(page.getByRole('alert', { name: t('captcha.label') })).toContainText(
+      t('captcha.failed'),
+      { timeout: 30_000 },
+    );
+
+    const { ticks, states } = await page.evaluate(() => {
+      const record = window as unknown as { ticks: number[]; states: [string, number][] };
+      return { ticks: record.ticks, states: record.states };
+    });
+    const began = states.find(([state]) => state === 'checking')?.[1] ?? 0;
+    const ended = states.find(([state]) => state === 'failed')?.[1] ?? 0;
+    const during = [began, ...ticks.filter((at) => at > began && at < ended), ended];
+    const longestTask = Math.max(...during.slice(1).map((at, i) => at - (during[i] ?? at)));
+    // A solve that never yielded would be one task as long as the whole solve.
+    expect(ended - began).toBeGreaterThan(longestTask * 3);
+    expect(longestTask).toBeLessThan(100);
+  });
+
   test('says when the check failed, keeps Send off, and passes on Try again', async ({
     page,
     pageLocale,

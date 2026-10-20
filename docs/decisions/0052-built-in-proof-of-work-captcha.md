@@ -45,7 +45,9 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    migration. The one brand this changes without a choice is a 1.0 brand that
    turned the check on but never saved a provider: its check had no keys, so
    it was "unavailable" and the web form took nothing. Under `pow` it works.
-   Accepted by the owner as a deviation from "existing brands keep theirs".
+   This deviation from "existing brands keep theirs" was accepted on
+   2026-10-20 by the maintainers while building M18-10: a 1.0 brand that
+   turned the check on without saving a provider had a non-working check.
 6. **Binding.** Each brand signs under its own key (HKDF info
    `helpdock:captcha:pow:<brandId>`), and the salt carries the surface
    (`widget-first-message` or `web-form`) next to `expires`, so a solution is
@@ -59,8 +61,12 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    than from `expires`, which a wrong device clock misreads.
 7. **Insecure contexts.** Browsers expose `crypto.subtle` only on HTTPS pages.
    On an `http://` page the widget and the web form fall back to a SHA-256
-   written in JavaScript (a few hundred bytes in the lazy chunk and in the
-   page): the check still works, several times slower.
+   written in JavaScript with FIPS 180-4's constants spelled out (about
+   0.6 KB gzipped in the lazy chunk, and the same in the page): the check
+   still works, several times slower. That digest runs on the page's thread,
+   so the solver posts itself a message between batches of 512, which lets
+   the page's own tasks and an abort run (not `scheduler.yield`, whose
+   continuation would outrank the page's timers).
 
 ## Consequences
 

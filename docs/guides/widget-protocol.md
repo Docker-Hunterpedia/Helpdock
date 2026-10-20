@@ -103,7 +103,8 @@ is the ALTCHA protocol, so the ALTCHA widget can answer it too.
 - It also works on a page served over plain `http://`, where browsers offer no
   `crypto.subtle`: the widget, and the web form, fall back to a SHA-256 written
   in JavaScript. That is several times slower, so `low` takes a few seconds
-  there rather than about one. Serve the site over HTTPS.
+  there rather than about one, and the solver hands the page a task between
+  batches of 512 so the page stays responsive. Serve the site over HTTPS.
 
 ## Errors
 

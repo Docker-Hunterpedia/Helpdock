@@ -167,6 +167,9 @@ const readEnvOverrides = (env: EnvSource): ReadonlyMap<SettingKey, unknown> => {
   const invalid: string[] = [];
 
   for (const definition of SETTING_DEFINITIONS) {
+    if (definition.envKey === null) {
+      continue;
+    }
     const raw = env[definition.envKey]?.trim();
     if (raw === undefined || raw === '') {
       continue;
@@ -268,7 +271,8 @@ export const createSettings = ({
     async set(key, value, { updatedBy }) {
       const definition = settingDefinitions[key];
       if (overrides.has(key)) {
-        throw new SettingLockedError(key, definition.envKey);
+        // Only a setting with a variable can be in `overrides`.
+        throw new SettingLockedError(key, definition.envKey ?? key);
       }
 
       const parsed = definition.schema.safeParse(value);

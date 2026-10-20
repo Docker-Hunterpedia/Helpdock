@@ -111,6 +111,13 @@ describe('environment overrides', () => {
     await expect(settings.get('captcha.provider')).resolves.toBe('turnstile');
   });
 
+  it('takes no variable for a setting registered without one (captcha.difficulty)', async () => {
+    const { settings } = harness({ HD_CAPTCHA_DIFFICULTY: 'not even a difficulty' });
+
+    await expect(settings.get('captcha.difficulty')).resolves.toBe('low');
+    expect(settings.isLockedByEnv('captcha.difficulty')).toBe(false);
+  });
+
   it('reads a list setting as JSON and locks it', async () => {
     const providers = [
       {

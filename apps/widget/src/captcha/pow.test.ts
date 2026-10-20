@@ -51,6 +51,30 @@ describe('solvePow (ADR 0052)', () => {
     expect(JSON.parse(atob(await solvePow(challengeFor(200)))).number).toBe(200);
   });
 
+  it('lets the page run a timer while it solves without WebCrypto', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    const events: string[] = [];
+
+    const solving = solvePow(challengeFor(3000, 3000)).then(() => events.push('solved'));
+    setTimeout(() => events.push('timer'), 0);
+    await solving;
+
+    expect(events).toEqual(['timer', 'solved']);
+  });
+
+  it('stops mid-solve without WebCrypto once the form is closed', async () => {
+    vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+    const closed = new AbortController();
+    // No number up to 200,000 solves this: only an abort can end it early.
+    const solving = solvePow(
+      { ...challengeFor(0, 200_000), challenge: '0'.repeat(64) },
+      closed.signal,
+    );
+    setTimeout(() => closed.abort(), 0);
+
+    await expect(solving).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('stops between batches once the form is closed', async () => {
     const digest = vi.spyOn(crypto.subtle, 'digest');
     const closed = new AbortController();

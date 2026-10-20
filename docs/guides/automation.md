@@ -213,7 +213,7 @@ turn moves; AI is never called. Asking twice gives the same pick. See
 [DOMAIN-RULES §2.9](../planning/DOMAIN-RULES.md#29-test-routing) for the exact
 steps.
 
-Two things the sample cannot show: only the sender's address is judged for
+Three things the sample cannot show: the rules a rule's changes could set off are listed with whether they would run, but their actions are not applied to the SLA and assignment shown; only the sender's address is judged for
 automated mail, so a real message can also be stopped by its headers
 (`Auto-Submitted`, `Precedence`); and a rule's conditions are judged on the ticket as
 it arrives, as the engine does, so a later rule's *conditions* do not see an earlier

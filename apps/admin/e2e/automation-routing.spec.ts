@@ -85,7 +85,8 @@ test('walks a Telegram sample through a rule that matches, AI triage, the SLA an
     label: t('rules:routing.test.entryOption.telegram_bot', { label: '@helpdock_bot' }),
   });
   await page.getByLabel(t('rules:routing.test.from'), { exact: true }).fill('700100200');
-  await page.getByLabel(t('rules:routing.test.subject')).fill('Hello');
+  await expect(page.getByLabel(t('rules:routing.test.subject'))).toHaveCount(0);
+  await page.getByLabel(t('rules:routing.test.message')).fill('Hello');
   await page.getByRole('button', { name: t('rules:routing.test.run') }).click();
 
   const outcome = result(page, locale);

@@ -554,12 +554,14 @@ department mode.
 name, subject, message and language. It builds synthetic `TicketFacts` and
 walks the real code with writes disabled:
 
-1. entry point → department, and whether the sender is on the block list (the
-   ticket would be Spam) or an auto-generated sender (no ticket at all);
+1. entry point → department, and whether the sender is on the block list (a real message is
+   dropped and counted; no ticket) or an auto-generated sender (no ticket at all);
 2. the contact a lookup would match, by name only, or "a new contact";
 3. each enabled *Ticket created* rule in order, using M3-05's evaluator: each
-   condition with what it found, what each action would do, applied to the
-   facts so later rules see earlier changes, and follow-on rules one level on;
+   condition with what it found, what each action would do, conditions judged on the
+   ticket as it arrived (as the engine does) and the matching rules' actions
+   applied in order to a copy, and follow-on rules one level on (listed, their
+   actions not applied);
 4. AI triage: "would be queued", never called;
 5. the SLA policy that would apply and the first-response due time;
 6. the department's mode and who the rotation would pick **now**, read with no
@@ -591,7 +593,7 @@ any case.
   gate of M1-11 never creates the ticket), so the result says "dropped, no
   ticket"; a rule's **conditions are judged on the ticket as it arrived** (the
   engine loads the facts once per event), while the actions of the matching
-  rules are applied in order to a copy; the AI triage step reports "would be
+  rules are applied in order to a copy (follow-on rules' actions are listed, not applied); the AI triage step reports "would be
   queued" when a matching rule has the action. An entry point outside a
   scoped Team Leader's departments answers 404, and a department outside the
   scope shows no rotation.

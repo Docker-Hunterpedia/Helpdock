@@ -76,7 +76,10 @@ export interface WebFormTicketWriterDependencies {
 const SUBJECT_FROM_MESSAGE_MAX = 80;
 
 /** The form's subject, or the message's first line when the form asks for none. */
-export const subjectFor = (submission: WebFormSubmission, locale: Locale): string => {
+export const subjectFor = (
+  submission: Pick<WebFormSubmission, 'subject' | 'message'>,
+  locale: Locale,
+): string => {
   if (submission.subject !== null) {
     return submission.subject;
   }

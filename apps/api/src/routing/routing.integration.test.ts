@@ -377,12 +377,33 @@ describe.skipIf(!hasDocker)('Routing and Test routing', () => {
         source: 'email.inbound',
       });
 
-      await tx.insert(blockedSenders).values({
-        brandId: seeded.brandId,
-        kind: 'email',
-        value: 'spammer@bad.example',
-        droppedCount: 3,
-      });
+      const [tariq] = await tx
+        .insert(contacts)
+        .values({ brandId: seeded.brandId, name: 'Tariq Haddad' })
+        .returning({ id: contacts.id });
+      await tx.insert(contactIdentities).values([
+        {
+          brandId: seeded.brandId,
+          contactId: tariq?.id ?? '',
+          kind: 'telegram',
+          value: '700100200',
+          verified: true,
+          source: 'telegram.bot',
+        },
+        {
+          brandId: seeded.brandId,
+          contactId: tariq?.id ?? '',
+          kind: 'whatsapp',
+          value: '15551239999',
+          verified: true,
+          source: 'whatsapp.cloud',
+        },
+      ]);
+
+      await tx.insert(blockedSenders).values([
+        { brandId: seeded.brandId, kind: 'email', value: 'spammer@bad.example', droppedCount: 3 },
+        { brandId: seeded.brandId, kind: 'phone', value: '+15557770000', droppedCount: 0 },
+      ]);
 
       await tx.insert(slaPolicies).values({
         brandId: seeded.brandId,
@@ -611,14 +632,91 @@ describe.skipIf(!hasDocker)('Routing and Test routing', () => {
       ada,
       sample({ entry: 'telegram_bot', entryId: bot, from: '700100200' }),
     );
+    const stranger = await test(
+      ada,
+      sample({ entry: 'telegram_bot', entryId: bot, from: '700100999' }),
+    );
     const meta = await test(
       ada,
-      sample({ entry: 'meta_account', entryId: whatsapp, from: '+15551230000' }),
+      sample({ entry: 'meta_account', entryId: whatsapp, from: '+1 (555) 123-9999' }),
     );
 
     expect(telegram.body.entry.channel).toBe('telegram');
-    expect(telegram.body.contact).toMatchObject({ kind: 'new' });
+    expect(telegram.body.contact).toEqual({
+      kind: 'matched',
+      name: 'Tariq Haddad',
+      matchedBy: 'telegram',
+    });
+    expect(stranger.body.contact).toMatchObject({ kind: 'new' });
     expect(meta.body.entry).toMatchObject({ channel: 'whatsapp', department: { name: 'Billing' } });
+    expect(meta.body.contact).toEqual({
+      kind: 'matched',
+      name: 'Tariq Haddad',
+      matchedBy: 'whatsapp',
+    });
+  });
+
+  it('stops a WhatsApp number that was blocked as a phone, as the inbound path does, and counts nothing', async () => {
+    const before = await snapshot();
+
+    const blocked = await test(
+      ada,
+      sample({ entry: 'meta_account', entryId: whatsapp, from: '+1 555 777 0000' }),
+    );
+
+    expect(blocked.body).toMatchObject({ verdict: 'blocked', ticket: null });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('derives the subject the way each door does', async () => {
+    const probe = await saveRule({
+      name: 'Subject probe',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: {
+        match: 'all',
+        groups: [
+          {
+            match: 'all',
+            conditions: [{ field: 'subject', operator: 'is', values: ['Where is my parcel?'] }],
+          },
+        ],
+      },
+      actions: [{ type: 'set_priority', priority: 'high' }],
+    });
+    const probeMatched = (response: { body: RoutingTestResult }) =>
+      response.body.rules.find((rule) => rule.ruleId === probe.id)?.matched;
+    const message = 'Where is my parcel?\nIt has been two weeks.';
+
+    // The chat widget, Telegram and Meta take the message's first line, whatever was typed as a subject.
+    expect(
+      probeMatched(
+        await test(ada, sample({ entry: 'widget', entryId: null, subject: 'x', message })),
+      ),
+    ).toBe(true);
+    expect(
+      probeMatched(
+        await test(ada, sample({ entry: 'telegram_bot', entryId: bot, from: '1', message })),
+      ),
+    ).toBe(true);
+    // A web form with no subject falls back to the message's first line; with one, uses it.
+    expect(
+      probeMatched(
+        await test(ada, sample({ entry: 'web_form', entryId: null, subject: '', message })),
+      ),
+    ).toBe(true);
+    expect(
+      probeMatched(
+        await test(ada, sample({ entry: 'web_form', entryId: null, subject: 'Other', message })),
+      ),
+    ).toBe(false);
+    // An email and an API request use the subject given.
+    expect(
+      probeMatched(await test(ada, sample({ subject: 'Where is my parcel?', message: 'x' }))),
+    ).toBe(true);
+    expect(probeMatched(await test(ada, sample({ subject: '', message })))).toBe(false);
+
+    await call('PATCH', `${brandPath()}/rules/${probe.id}`, ada, { enabled: false });
   });
 
   it('says nobody is online when the people who could take it are away, and nobody eligible when none could', async () => {
@@ -692,6 +790,20 @@ describe.skipIf(!hasDocker)('Routing and Test routing', () => {
     expect(unknown.body).toMatchObject({
       error: { code: 'not_found', message: 'No such entry point' },
     });
+  });
+
+  it('refuses an API request that names a department outside the Team Leader’s scope', async () => {
+    const own = await test(
+      tess,
+      sample({ entry: 'api_key', entryId: null, departmentId: support }),
+    );
+    const other = await test(
+      tess,
+      sample({ entry: 'api_key', entryId: null, departmentId: billing }),
+    );
+
+    expect(own.status).toBe(200);
+    expect(other.status).toBe(404);
   });
 
   it('does not show the rotation of a department outside the Team Leader’s scope', async () => {

@@ -67,7 +67,10 @@ export function TestRoutingPanel({
 
   const door = overview.entryPoints.find((candidate) => keyOf(candidate) === entryKey);
   const needsDepartment = door?.entry === 'api_key';
-  const departments = options?.departments ?? [];
+  // The reader's own departments: the overview is already narrowed to their scope.
+  const departments = overview.assignment.map((entry) => entry.department);
+  const takesSubject =
+    door?.entry === 'mailbox' || door?.entry === 'web_form' || door?.entry === 'api_key';
   const chosenDepartment = apiDepartment === '' ? (departments[0]?.id ?? '') : apiDepartment;
 
   const test = useMutation({
@@ -81,7 +84,7 @@ export function TestRoutingPanel({
         ...(needsDepartment ? { departmentId: chosenDepartment } : {}),
         from,
         fromName,
-        subject,
+        subject: takesSubject ? subject : '',
         message,
         language,
       });
@@ -198,17 +201,20 @@ export function TestRoutingPanel({
                 slotProps={{ htmlInput: { dir: 'auto' } }}
               />
             </Field>
-            <Field id="test-routing-subject" label={t('rules:routing.test.subject')}>
-              <TextField
-                id="test-routing-subject"
-                size="small"
-                value={subject}
-                onChange={(changed) => {
-                  setSubject(changed.target.value);
-                }}
-                slotProps={{ htmlInput: { dir: 'auto' } }}
-              />
-            </Field>
+            {takesSubject ? (
+              <Field id="test-routing-subject" label={t('rules:routing.test.subject')}>
+                <TextField
+                  id="test-routing-subject"
+                  size="small"
+                  value={subject}
+                  onChange={(changed) => {
+                    setSubject(changed.target.value);
+                  }}
+                  slotProps={{ htmlInput: { dir: 'auto' } }}
+                />
+              </Field>
+            ) : null}
+
             <Field id="test-routing-message" label={t('rules:routing.test.message')}>
               <TextField
                 id="test-routing-message"

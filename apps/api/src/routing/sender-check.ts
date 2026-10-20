@@ -44,7 +44,11 @@ export const senderIdentity = (entry: ResolvedEntry, from: string): SenderIdenti
       ? from
       : metaBlockEntry({ platform: entry.platform, externalId: entry.externalId ?? '' }, from)
           .value;
-  const normalised = normaliseIdentity(kind, raw);
+  // WhatsApp knows a customer by their number in digits (`waId`).
+  const normalised = normaliseIdentity(
+    kind,
+    entry.platform === 'whatsapp' ? raw.replace(/\D/g, '') : raw,
+  );
 
   return { kind, value: normalised.ok ? normalised.value : null };
 };
@@ -60,6 +64,14 @@ export const isBlocked = async (
     return false;
   }
   const sender: InboundSender = { kind: identity.kind, value: identity.value };
+  // The WhatsApp inbound path checks the number as a phone first (`+waId`).
+  if (
+    entry.platform === 'whatsapp' &&
+    (await findBlockingEntry(tx, brandId, { kind: 'phone', value: `+${identity.value}` })) !==
+      undefined
+  ) {
+    return true;
+  }
 
   return (await findBlockingEntry(tx, brandId, sender)) !== undefined;
 };

@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import { createI18n, type Locale } from '@helpdock/i18n';
+import type { Locale } from '@helpdock/i18n';
 import {
   evaluateConditions,
   type RoutingDepartmentRef,
@@ -19,6 +19,7 @@ import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import type { PresenceReader } from '../assignment/auto-assign.js';
 import { eligibleCandidates, pickAssignee } from '../assignment/rotation.js';
+import { subjectOf } from '../channels/inbound/conversation-router.js';
 import type { BusinessHoursProbe } from '../rules/ports.js';
 import type { RulesRepository } from '../rules/rules.repository.js';
 import { followOnsOf, previewActions } from '../rules/test-run.js';
@@ -26,6 +27,8 @@ import type { TicketFacts } from '../rules/ticket-facts.js';
 import { startClock } from '../sla/clock.js';
 import { matchPolicy } from '../sla/policy-match.js';
 import type { SlaService } from '../sla/sla.service.js';
+import { subjectFor as formSubjectFor } from '../web-form/web-form-ticket.writer.js';
+import { subjectFrom } from '../widget/plain-text.js';
 import type { ResolvedEntry } from './entry-points.js';
 import type { RoutingRepository } from './routing.repository.js';
 import { contactOf, isAutomated, isBlocked, senderIdentity } from './sender-check.js';
@@ -69,10 +72,27 @@ const storedRuleSchema = z.object({
   actions: z.array(ruleActionSchema),
 });
 
-const subjectOf = (subject: string, locale: Locale): string =>
-  subject === ''
-    ? createI18n({ lng: locale }).getFixedT(locale, 'ticket')('system.noSubject')
-    : subject;
+/**
+ * The ticket's subject as the door's own path derives it: an email's, with the
+ * "(no subject)" fallback; the first line of a web form's message when it asks
+ * for no subject; the first line of a chat, Telegram or Meta message; and the
+ * API's, as given. The functions are the channels' own.
+ */
+const subjectFor = (entry: ResolvedEntry, request: RoutingTestInput, locale: Locale): string => {
+  switch (entry.entry) {
+    case 'mailbox':
+      return subjectOf(request.subject, locale);
+    case 'web_form':
+      return formSubjectFor(
+        { subject: request.subject === '' ? null : request.subject, message: request.message },
+        locale,
+      );
+    case 'api_key':
+      return request.subject;
+    default:
+      return subjectFrom(request.message, locale);
+  }
+};
 
 const localeOf = async (
   deps: RoutingTestDeps,
@@ -323,7 +343,7 @@ export const walkRouting = async (
   const initial: TicketFacts = {
     id: NO_TICKET,
     reference: '',
-    subject: entry.channel === 'email' ? subjectOf(request.subject, locale) : request.subject,
+    subject: subjectFor(entry, request, locale),
     body: request.message,
     channel: entry.channel as TicketChannel,
     departmentId: entry.departmentId,

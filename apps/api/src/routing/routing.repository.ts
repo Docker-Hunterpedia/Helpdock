@@ -15,6 +15,8 @@ import {
 } from '@helpdock/db';
 import type { ContactIdentityKind, MetaPlatform, RoutingDepartmentRef } from '@helpdock/schemas';
 import { and, asc, eq, inArray } from 'drizzle-orm';
+import { WebFormRepository } from '../web-form/web-form.repository.js';
+import { WidgetRepository } from '../widget/widget.repository.js';
 
 /**
  * The reads behind the Routing tab and Test routing (M14-09). Nothing here
@@ -112,16 +114,14 @@ export class RoutingRepository {
     return row ?? { enabled: false, departmentId: null };
   }
 
-  /** The brand has no default department; the first in its own order stands in for one. */
-  async firstDepartmentId(tx: DbTransaction, brandId: string): Promise<string | undefined> {
-    const [row] = await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.brandId, brandId))
-      .orderBy(asc(departments.sortOrder), asc(departments.name))
-      .limit(1);
+  /** Where a widget conversation is filed: the widget's own query, so the two cannot disagree. */
+  widgetDepartmentId(tx: DbTransaction): Promise<string | undefined> {
+    return new WidgetRepository().firstDepartment(tx);
+  }
 
-    return row?.id;
+  /** Where a web form with no department of its own files: the form's own query. */
+  formFallbackDepartmentId(tx: DbTransaction, brandId: string): Promise<string | undefined> {
+    return new WebFormRepository().firstDepartmentId(tx, brandId);
   }
 
   async departments(

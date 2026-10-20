@@ -49,12 +49,13 @@ export const allEntries = async (
   tx: DbTransaction,
   brandId: string,
 ): Promise<ResolvedEntry[]> => {
-  const [mailboxes, bots, accounts, form, first] = await Promise.all([
+  const [mailboxes, bots, accounts, form, widgetFirst, formFirst] = await Promise.all([
     repository.mailboxes(tx, brandId),
     repository.telegramBots(tx, brandId),
     repository.metaAccounts(tx, brandId),
     repository.webForm(tx, brandId),
-    repository.firstDepartmentId(tx, brandId),
+    repository.widgetDepartmentId(tx),
+    repository.formFallbackDepartmentId(tx, brandId),
   ]);
   const own = 'entry_department' as const;
 
@@ -71,7 +72,7 @@ export const allEntries = async (
     ),
     {
       ...base('widget', 'chat'),
-      departmentId: first ?? null,
+      departmentId: widgetFirst ?? null,
       reason: 'brand_first_department',
     },
     ...bots.map(
@@ -97,7 +98,7 @@ export const allEntries = async (
     {
       ...base('web_form', 'form'),
       enabled: form.enabled,
-      departmentId: form.departmentId ?? first ?? null,
+      departmentId: form.departmentId ?? formFirst ?? null,
       reason: form.departmentId === null ? 'brand_first_department' : own,
     },
     { ...base('api_key', 'api'), departmentId: null, reason: 'named_by_api' },

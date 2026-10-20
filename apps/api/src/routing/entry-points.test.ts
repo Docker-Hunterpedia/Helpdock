@@ -24,7 +24,8 @@ const repository = (
     telegramBots: async () => [],
     metaAccounts: async () => [],
     webForm: async () => form,
-    firstDepartmentId: async () => FIRST,
+    widgetDepartmentId: async () => FIRST,
+    formFallbackDepartmentId: async () => FIRST,
     departments: async (_tx: DbTransaction, _brand: string, ids: readonly string[]) =>
       new Map(ids.map((id) => [id, { id, name: id, nameAr: null }])),
   }) as unknown as RoutingRepository;

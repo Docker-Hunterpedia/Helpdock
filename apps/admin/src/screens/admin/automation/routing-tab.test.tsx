@@ -94,6 +94,20 @@ describe('the explainer', () => {
 });
 
 describe('Test routing', () => {
+  it('asks for a subject only where the door takes one', async () => {
+    const { user } = await renderRouting();
+    await screen.findByRole('heading', { name: 'Test routing' }, LOAD);
+    const entry = screen.getByLabelText('Channel and entry point');
+
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument();
+    for (const door of [`telegram_bot:${MOCK_ROUTING.bot}`, 'widget:']) {
+      await user.selectOptions(entry, door);
+      expect(screen.queryByLabelText('Subject')).not.toBeInTheDocument();
+    }
+    await user.selectOptions(entry, 'web_form:');
+    expect(screen.getByLabelText('Subject')).toBeInTheDocument();
+  });
+
   const run = async (
     fill: (user: Awaited<ReturnType<typeof renderRouting>>['user']) => Promise<void>,
     automation = new MockAutomationApi(),
@@ -120,7 +134,7 @@ describe('Test routing', () => {
         `telegram_bot:${MOCK_ROUTING.bot}`,
       );
       await user.type(screen.getByLabelText('From'), '700100200');
-      await user.type(screen.getByLabelText('Subject'), 'Hello');
+      await user.type(screen.getByLabelText('Message'), 'Hello');
     });
 
     const result = await screen.findByRole('heading', { name: 'Result' });

@@ -201,7 +201,6 @@ export function StaffScreen(): ReactNode {
           body: t('staff:confirm.revoke.body'),
           confirmLabel: t('staff:confirm.revoke.submit'),
         };
-      case 'deactivate':
       default:
         return {
           title: t('staff:confirm.deactivate.title', { name: member?.name ?? '' }),

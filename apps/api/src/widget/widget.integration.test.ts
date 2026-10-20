@@ -894,11 +894,11 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
                 sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${stored?.verifiedContactId ?? ''}`,
               ),
           );
-        // External id and email are separate profile writes in the signed path.
-        const initial = await events();
-        expect(initial.length).toBeGreaterThanOrEqual(2);
+        // The external id and email are written in the transaction that creates the contact,
+        // so contact.created carries them and no contact.updated follows.
+        expect(await events()).toHaveLength(0);
         await identify(visitor, payload);
-        expect(await events()).toHaveLength(initial.length);
+        expect(await events()).toHaveLength(0);
         await widget('POST', '/session', {
           visitor,
           ip,
@@ -912,7 +912,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         );
         expect(contact?.locale).toBe('ar');
         const afterLocale = await events();
-        expect(afterLocale).toHaveLength(initial.length + 1);
+        expect(afterLocale).toHaveLength(1);
         await widget('POST', '/session', {
           visitor,
           ip,

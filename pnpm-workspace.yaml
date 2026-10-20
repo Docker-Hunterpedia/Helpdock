@@ -45,3 +45,7 @@ overrides:
   'vite@>=8.3.0 <8.3.3': '>=8.3.3'
   # high, via @changesets/cli
   'launch-editor@<2.14.2': '>=2.14.2'
+  # moderate, via drizzle-kit > @esbuild-kit/esm-loader
+  'esbuild@<0.25.0': '>=0.25.0'
+  # moderate and low, direct
+  'sanitize-html@<2.18.0': '>=2.18.0'

@@ -13,6 +13,8 @@ export function OidcFields({
   secret,
   secretConfigured,
   onSecretChange,
+  issuerHint,
+  issuerInvalid = false,
 }: {
   config: OidcConfig;
   onChange: (config: OidcConfig) => void;
@@ -20,6 +22,9 @@ export function OidcFields({
   secret: string | null;
   secretConfigured: boolean;
   onSecretChange: (secret: string | null) => void;
+  /** A preset's note under the issuer, such as the Entra tenant template (M18-09). */
+  issuerHint?: string | undefined;
+  issuerInvalid?: boolean;
 }) {
   const t = useT();
   const [scopes, setScopes] = useState(config.scopes.join(' '));
@@ -35,6 +40,8 @@ export function OidcFields({
         label={t('sso:issuer')}
         value={config.issuer}
         disabled={linked}
+        error={issuerInvalid}
+        helperText={issuerHint}
         onChange={(event) => onChange({ ...config, issuer: event.target.value })}
         slotProps={{ htmlInput: { dir: 'ltr' } }}
       />

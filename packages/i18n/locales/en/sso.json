@@ -6,11 +6,11 @@
   "empty": "No identity provider yet",
   "emptyHint": "Connect a SAML 2.0 or OpenID Connect provider.",
   "enforcement": "Require single sign-on",
-  "enforcementHint": "Applies at the next sign-in. Existing sessions stay open. Emergency access uses password and fresh TOTP only.",
+  "enforcementHint": "Applies at the next sign-in. Existing sessions stay open. Break-glass admins sign in with their password and an authenticator code or a passkey. Recovery codes, trusted browsers and passwordless passkey sign-in do not count.",
   "require": "Require single sign-on for all staff",
   "breakGlass": "Break-glass admins",
-  "breakGlassHint": "Choose up to three active install admins with a password and enabled two-factor authentication.",
-  "ineligible": "Password and two-factor required",
+  "breakGlassHint": "Choose up to three active install admins with a password and an authenticator app or a passkey.",
+  "ineligible": "Password and an authenticator app or a passkey required",
   "sp": "Service provider details",
   "spHint": "Shared by every SAML connection on this install.",
   "entityId": "Entity ID",
@@ -102,5 +102,27 @@
   "refusals": {
     "sso-email-domain-taken": "{{domains}} already belongs to another enabled connection. Each email domain signs in through one enabled connection only.",
     "sso-metadata-confirm-certificates": "The provider metadata lists a signing certificate that is not saved here. Verify it with your identity provider, add it under Signing certificates, then save."
+  },
+  "presets": {
+    "label": "Start from",
+    "hint": "A preset fills in the fields below. You can still change any of them.",
+    "guide": "Setup guide",
+    "custom": {
+      "name": "Custom OpenID Connect"
+    },
+    "google-workspace": {
+      "name": "Google Workspace (OIDC)",
+      "banner": "Google Workspace: create the OAuth client in the Google Cloud project of your Workspace, with the consent screen set to Internal.",
+      "issuerHint": "Google uses this one issuer for every Workspace.",
+      "groupsHint": "Leave empty. Google sends no groups in the ID token, so use default access or give roles by hand.",
+      "domainsHint": "Enter your Workspace domain, for example example.com. Only addresses there can link to this connection."
+    },
+    "entra-id": {
+      "name": "Microsoft Entra ID (OIDC)",
+      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI, and add the email and groups claims. Read the guide’s note on email verification before you enable it.",
+      "issuerHint": "Replace {tenant-id} with your Directory (tenant) ID.",
+      "groupsHint": "Add the groups claim in Token configuration. Values are group object IDs.",
+      "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."
+    }
   }
 }

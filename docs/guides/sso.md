@@ -21,6 +21,16 @@ connection when changing identity authority.
 | SAML entity ID and metadata URL | Service provider details; shared across the install |
 | SAML signing/encryption certificates | The public SP metadata XML |
 
+A new OpenID Connect connection has a **Start from** select: Custom OpenID
+Connect, Google Workspace (OIDC) or Microsoft Entra ID (OIDC). A preset fills
+the issuer (or its template), the email, name and groups claims, and hints for
+the email domains, and links to its section below. Change any field afterwards;
+the preset stays chosen and does not overwrite the edit. Picking another preset
+replaces only those preset fields, never the label, client ID, secret, scopes,
+domains or access rules. The preset is a form shortcut only: nothing about it is
+saved, and the connection behaves as any OIDC connection. There are no SAML
+presets, and GitHub is not an OIDC provider, so it stays a sign-in button.
+
 The first save gives a new connection its callback URL. Enable it after the IdP
 has registered that exact URL. A SAML metadata URL is optional: supply entity ID,
 SSO URL and trusted PEM certificates explicitly. A metadata refresh may drop a
@@ -95,6 +105,71 @@ tested; save it first. Direct public `test=1` requests are refused.
 Then perform a normal sign-in with a test person. Confirm mappings and local/IdP
 MFA before enabling enforcement. Keep the emergency admin's password and
 accessible authenticator available, and verify its fresh-TOTP sign-in separately.
+
+## Google Workspace (OIDC preset)
+
+Official documentation checked **2026-10-20**:
+[OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
+
+The preset sets the issuer to `https://accounts.google.com`, the email claim to
+`email`, the name claim to `name` and leaves the groups claim empty.
+
+1. In the Google Cloud console, use a project that belongs to your Workspace
+   organisation. Under **Google Auth Platform → Audience**, set the user type to
+   **Internal**, so only accounts in your organisation can sign in and the app
+   needs no verification.
+2. Under **Clients**, create an OAuth client of type **Web application**. Add
+   the connection's redirect URI (shown after the first save) as an authorised
+   redirect URI, exactly.
+3. In Helpdock, choose **Start from → Google Workspace (OIDC)**, then paste the
+   client ID and client secret. Keep the scopes `openid email profile`.
+4. Under **Email domains**, enter your Workspace domain, for example
+   `example.com`. Only addresses in these domains can link.
+5. Save, enable, and run **Test connection**.
+
+Google signs `email_verified` for the `email` claim, so first sign-in links by
+email as described above. Google puts no groups in the ID token: leave the
+groups claim empty and give access with **Grant default access**, or invite
+people and set their roles on Staff. Use Entra ID or a SAML app when roles must
+follow groups. Helpdock does
+not send Google's `hd` parameter; the Internal user type and the email domains
+are what limit who signs in.
+
+## Microsoft Entra ID (OIDC preset)
+
+Official documentation checked **2026-10-20**:
+[optional claims](https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims-reference),
+[group claims and limits](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-fed-group-claims).
+
+The preset sets the issuer to
+`https://login.microsoftonline.com/{tenant-id}/v2.0`, the email claim to
+`email`, the name claim to `name` and the groups claim to `groups`. The form
+refuses to save while the issuer still contains `{tenant-id}`.
+
+1. In the Microsoft Entra admin center, open **App registrations → New
+   registration**. Choose **Accounts in this organizational directory only**
+   (single tenant) and add a **Web** redirect URI: the connection's redirect URI.
+2. Under **Certificates & secrets**, add a client secret. Note its expiry (24
+   months at most) in your calendar: Helpdock cannot see it.
+3. Under **Token configuration**, add the optional `email` claim to the ID token,
+   then **Add groups claim**. Prefer **Groups assigned to the application**, so a
+   member of many groups stays under the 200-group limit; Helpdock refuses an
+   overage rather than treat it as no groups.
+4. In Helpdock, choose **Start from → Microsoft Entra ID (OIDC)**, replace
+   `{tenant-id}` with the **Directory (tenant) ID** from the app's overview, and
+   paste the **Application (client) ID** and the secret value.
+5. Under **Email domains**, enter the domains your tenant has verified. Map
+   group **object IDs**, not display names, in the role mappings.
+6. Under **Enterprise applications**, set **Assignment required** and assign
+   only the intended staff or groups. Save, enable, and run **Test connection**.
+
+**Known limitation.** Entra ID tokens do not carry `email_verified`, and Helpdock
+links or creates an account by email only when the provider signs
+`email_verified: true` (see [Configure a connection](#configure-a-connection)).
+A first sign-in through an Entra OIDC connection is therefore refused with
+`sso-email-unverified`, so the connection cannot link or create anyone yet.
+Until Helpdock accepts a different verification signal for Entra, connect Entra
+over [SAML](#microsoft-entra-id-saml) instead.
 
 ## Okta (OIDC)
 

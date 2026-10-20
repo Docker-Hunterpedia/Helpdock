@@ -463,6 +463,39 @@ Backlog or never:
 | M18-12 | **Docs.** `authentication.md` (passkeys, OAuth binding, Microsoft, rate limits), `sso.md` (presets, break-glass), `staff-and-roles.md` (Security page, enrolment), a new `docs/guides/sign-in-providers.md` (Google, Microsoft, GitHub app setup, step by step), the CAPTCHA section of `channels.md`/`web-form.md`, the configuration reference, `.env.example`, the release note on GitHub re-linking and RP-ID pinning, ARCHITECTURE §1/§7, DOMAIN-RULES additions (below) | A §2 | 2.5 | all |
 | M18-13 | **Security pass.** Re-walk ASVS V2/V3 rows (below) in `asvs-l2.md`; run the `security-audit` skill on the diff; negative tests listed below green; threat-model notes in the milestone doc | M9-02 | 1.5 | all |
 
+### Progress
+
+- [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
+  A "Start from" select on a new OIDC connection
+  (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom
+  OpenID Connect, Google Workspace (OIDC) and Microsoft Entra ID (OIDC). A
+  preset (`sso-presets.ts`) fills the issuer or the Entra
+  `https://login.microsoftonline.com/{tenant-id}/v2.0` template, the email,
+  name and groups claims, hint text on the issuer, groups and email domains
+  fields, and an info Banner linking to its `sso.md` section. It overwrites only
+  those fields, once, when picked; later edits stay, and nothing about the
+  preset is saved. The form refuses to save an issuer that still holds
+  `{tenant-id}`. No API, schema or protocol change. Two choices differ from
+  `Admin/Settings-SSO-M18`:
+  - The board's separate "Domain hint" field, "sent as `hd`", would add a
+    stored field and an authorization parameter, which is a protocol change.
+    The preset puts its domain hint on the existing **Email domains** field
+    instead.
+  - The select shows only on a new connection. On a saved connection it would
+    always read "Custom", because the preset is not stored.
+
+  The `Admin/Settings-SSO` break-glass copy now names "an authenticator app or
+  a passkey". Only the copy changed: the picker and the break-glass form still
+  require TOTP until M18-05 accepts a passkey.
+
+  **Gap found:** Entra ID tokens carry no `email_verified`, and an OIDC first
+  link requires it (`apps/api/src/sso/identity.service.ts`, `sso.md`), so an Entra OIDC
+  connection refuses every first sign-in with `sso-email-unverified`. `sso.md`
+  says so and points to Entra over SAML. Accepting Entra's `xms_edov` (as
+  M18-08 does for the Microsoft button) would be a protocol change, so it waits
+  for an owner decision.
+- [ ] The other deliverables.
+
 ## Data model
 
 One migration, numbered with the next free number at implementation time

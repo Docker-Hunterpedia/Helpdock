@@ -134,3 +134,56 @@ test('SAML configuration and enforced discovery use bilingual controls', async (
   await page.getByRole('button', { name: t('auth:sso.breakGlass') }).click();
   await expect(page.getByLabel(t('auth:signIn.passwordLabel'))).toBeVisible();
 });
+
+test('SSO presets fill the OpenID Connect fields and keep later edits (M18-09)', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openSettings(page, locale);
+  await page.getByRole('tab', { name: t('sso:title') }).click();
+  await page.getByRole('link', { name: t('sso:add'), exact: true }).click();
+  const startFrom = page.getByRole('combobox', { name: t('sso:presets.label') });
+  const issuer = page.getByLabel(t('sso:issuer'));
+  const emailClaim = page.getByLabel(t('sso:emailAttribute'));
+  const groups = page.getByLabel(t('sso:groups'), { exact: true });
+
+  await startFrom.click();
+  await page.getByRole('option', { name: t('sso:presets.entra-id.name') }).click();
+  await expect(issuer).toHaveValue('https://login.microsoftonline.com/{tenant-id}/v2.0');
+  await expect(groups).toHaveValue('groups');
+  await expect(page.getByText(t('sso:presets.entra-id.banner'))).toBeVisible();
+  await page.getByLabel(t('sso:label')).fill('Entra');
+  await page.getByLabel(t('sso:clientId')).fill('helpdock');
+  await page.getByRole('button', { name: t('sso:saveConnection') }).click();
+  await expect(page.getByRole('alert').filter({ hasText: t('sso:invalid') })).toBeVisible();
+  await expect(issuer).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('heading', { name: t('sso:add'), level: 1 })).toBeVisible();
+
+  await startFrom.click();
+  await page.getByRole('option', { name: t('sso:presets.google-workspace.name') }).click();
+  await expect(page.getByRole('listbox', { includeHidden: true })).toHaveCount(0);
+  await expect(issuer).toHaveValue('https://accounts.google.com');
+  await expect(emailClaim).toHaveValue('email');
+  await expect(groups).toHaveValue('');
+  await expect(page.getByRole('link', { name: t('sso:presets.guide') })).toHaveAttribute(
+    'href',
+    /sso\.md#google-workspace-oidc-preset$/,
+  );
+  expect(
+    (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
+      .violations,
+  ).toEqual([]);
+  await emailClaim.fill('primary_email');
+  await expect(startFrom).toHaveText(t('sso:presets.google-workspace.name'));
+  await expect(emailClaim).toHaveValue('primary_email');
+  await expect(issuer).toHaveValue('https://accounts.google.com');
+
+  await startFrom.click();
+  await page.getByRole('option', { name: t('sso:presets.custom.name') }).click();
+  await expect(issuer).toHaveValue('');
+  await expect(page.getByText(t('sso:presets.google-workspace.banner'))).toHaveCount(0);
+  await expect(page.getByLabel(t('sso:label'))).toHaveValue('Entra');
+  await expect(page.getByLabel(t('sso:clientId'))).toHaveValue('helpdock');
+});

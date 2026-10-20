@@ -159,6 +159,29 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
     });
   });
 
+  it('never takes xms_edov as email verification from an issuer that is not an Entra tenant', async () => {
+    const attempt = await flow();
+    idp.controls.claims = {
+      ...idp.controls.claims,
+      sub: 'staff-2',
+      email_verified: undefined,
+      tid: '0b6f6c1e-2f3c-4f63-9a7f-1d2c3b4a5e6f',
+      xms_edov: true,
+    };
+    const { assertion } = await complete(attempt);
+    expect(assertion).toMatchObject({ subject: 'staff-2', emailVerified: false });
+    const { AuthService } = await import('../auth/auth.service.js');
+    await expect(app.get(AuthService).completeSso(assertion, undefined)).rejects.toMatchObject({
+      auth: { code: 'sso-email-unverified' },
+    });
+    expect(
+      await owner.db
+        .select()
+        .from(userSsoIdentities)
+        .where(eq(userSsoIdentities.subject, 'staff-2')),
+    ).toEqual([]);
+  });
+
   it('consumes state atomically across concurrent callbacks', async () => {
     const attempt = await flow();
     const results = await Promise.allSettled([complete(attempt), complete(attempt)]);

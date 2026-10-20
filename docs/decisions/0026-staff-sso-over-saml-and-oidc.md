@@ -239,3 +239,21 @@ hand an already-linked account to another identity. The rules are now:
   A save confirms only the certificates the administrator submitted: one that
   omits a certificate the metadata lists is refused with
   `sso-metadata-confirm-certificates`.
+
+### 2026-10-20 — M18-09 Entra ID email verification
+
+- **Entra's `xms_edov` can stand in for `email_verified`, from one tenant
+  only.** Entra ID never sends `email_verified`, so under the rule above an
+  Entra OIDC connection could link or create nobody. For OIDC,
+  `SsoAssertion.emailVerified` is now also true when every one of these holds:
+  the configured email claim is `email`; the connection's issuer is exactly
+  `https://login.microsoftonline.com/<tenant GUID>/v2.0`, which leaves out
+  `common`, `organizations`, `consumers` and the personal-account tenant
+  `9188040d-6c67-4c5b-b112-36a304b66dad`; the ID token's `iss` is that issuer
+  and its `tid` is that GUID; and `xms_edov` is the boolean `true`. Nothing
+  else counts: a string, a missing claim or any other issuer leaves the address
+  unverified. `xms_edov` says the tenant holding the account verified the
+  address's domain. Pinning the tenant makes that tenant the one vouching,
+  and the connection's email domains still bound which addresses can link.
+  Recorded in DOMAIN-RULES §12. The connection form's Entra preset tells
+  admins to add the `email` and `xms_edov` optional claims.

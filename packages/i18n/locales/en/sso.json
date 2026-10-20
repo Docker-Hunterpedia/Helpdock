@@ -6,11 +6,11 @@
   "empty": "No identity provider yet",
   "emptyHint": "Connect a SAML 2.0 or OpenID Connect provider.",
   "enforcement": "Require single sign-on",
-  "enforcementHint": "Applies at the next sign-in. Existing sessions stay open. Break-glass admins sign in with their password and an authenticator code or a passkey. Recovery codes, trusted browsers and passwordless passkey sign-in do not count.",
+  "enforcementHint": "Applies at the next sign-in. Existing sessions stay open. Emergency access uses password and fresh TOTP only.",
   "require": "Require single sign-on for all staff",
   "breakGlass": "Break-glass admins",
-  "breakGlassHint": "Choose up to three active install admins with a password and an authenticator app or a passkey.",
-  "ineligible": "Password and an authenticator app or a passkey required",
+  "breakGlassHint": "Choose up to three active install admins with a password and enabled two-factor authentication.",
+  "ineligible": "Password and two-factor required",
   "sp": "Service provider details",
   "spHint": "Shared by every SAML connection on this install.",
   "entityId": "Entity ID",
@@ -119,7 +119,7 @@
     },
     "entra-id": {
       "name": "Microsoft Entra ID (OIDC)",
-      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI, and add the email and groups claims. Read the guide’s note on email verification before you enable it.",
+      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI. Under Token configuration, add the optional claims email and xms_edov, and the groups claim.",
       "issuerHint": "Replace {tenant-id} with your Directory (tenant) ID.",
       "groupsHint": "Add the groups claim in Token configuration. Values are group object IDs.",
       "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."

@@ -43,7 +43,9 @@ allowed domain. Each domain belongs to at most one enabled connection: saving,
 creating or enabling a connection that lists a domain another enabled connection
 already lists is refused, and the form names the domain. Disable the old
 connection first when moving a domain to a new provider. OIDC additionally
-requires signed `email_verified: true` on the standard `email` claim; SAML
+requires signed `email_verified: true` on the standard `email` claim, or, for a
+single Entra ID tenant, a signed `xms_edov: true` from that tenant (see
+[Microsoft Entra ID (OIDC preset)](#microsoft-entra-id-oidc-preset)); SAML
 trusts the configured IdP's signed email attribute. Only use domains the IdP
 administrator controls, with verified or centrally managed email attributes.
 A provider that lets people choose an unverified coworker's email is unsafe for
@@ -131,9 +133,8 @@ Google signs `email_verified` for the `email` claim, so first sign-in links by
 email as described above. Google puts no groups in the ID token: leave the
 groups claim empty and give access with **Grant default access**, or invite
 people and set their roles on Staff. Use Entra ID or a SAML app when roles must
-follow groups. Helpdock does
-not send Google's `hd` parameter; the Internal user type and the email domains
-are what limit who signs in.
+follow groups. Helpdock does not send Google's `hd` parameter; the Internal
+user type and the email domains are what limit who signs in.
 
 ## Microsoft Entra ID (OIDC preset)
 
@@ -151,8 +152,8 @@ refuses to save while the issuer still contains `{tenant-id}`.
    (single tenant) and add a **Web** redirect URI: the connection's redirect URI.
 2. Under **Certificates & secrets**, add a client secret. Note its expiry (24
    months at most) in your calendar: Helpdock cannot see it.
-3. Under **Token configuration**, add the optional `email` claim to the ID token,
-   then **Add groups claim**. Prefer **Groups assigned to the application**, so a
+3. Under **Token configuration**, choose **Add optional claim → ID** and add
+   `email` and `xms_edov`, then **Add groups claim**. Prefer **Groups assigned to the application**, so a
    member of many groups stays under the 200-group limit; Helpdock refuses an
    overage rather than treat it as no groups.
 4. In Helpdock, choose **Start from → Microsoft Entra ID (OIDC)**, replace
@@ -163,13 +164,20 @@ refuses to save while the issuer still contains `{tenant-id}`.
 6. Under **Enterprise applications**, set **Assignment required** and assign
    only the intended staff or groups. Save, enable, and run **Test connection**.
 
-**Known limitation.** Entra ID tokens do not carry `email_verified`, and Helpdock
-links or creates an account by email only when the provider signs
-`email_verified: true` (see [Configure a connection](#configure-a-connection)).
-A first sign-in through an Entra OIDC connection is therefore refused with
-`sso-email-unverified`, so the connection cannot link or create anyone yet.
-Until Helpdock accepts a different verification signal for Entra, connect Entra
-over [SAML](#microsoft-entra-id-saml) instead.
+**Email verification.** Entra ID tokens carry no `email_verified`. Instead,
+`xms_edov: true` says the tenant holding the account has verified the domain of
+its `email`. Helpdock accepts it in place of `email_verified` only when all of
+these hold; otherwise the first sign-in is refused with `sso-email-unverified`:
+
+- the email claim is `email`;
+- the connection's issuer is exactly
+  `https://login.microsoftonline.com/<tenant GUID>/v2.0`, never `common`,
+  `organizations`, `consumers` or the personal-account tenant;
+- the token's `iss` is that issuer and its `tid` is that tenant GUID;
+- `xms_edov` is the boolean `true`.
+
+Without the `xms_edov` optional claim nobody new can link or be created; people
+already linked still sign in.
 
 ## Okta (OIDC)
 
@@ -257,7 +265,7 @@ immediate revocation is required.
 
 | Error | Check |
 |---|---|
-| `sso-email-unverified` | Allowed domain; for OIDC, the standard `email` claim with `email_verified: true` |
+| `sso-email-unverified` | Allowed domain; for OIDC, the standard `email` claim with `email_verified: true`, or for Entra ID the `xms_edov` optional claim |
 | `sso-identity-conflict` | The account is already linked to another subject or connection; sign in through that identity |
 | `sso-no-access` | Active brands, group values/order, default access, departments and conflicting provider ownership |
 | `sso-connection-disabled` | Connection enabled; restart any pending MFA flow |

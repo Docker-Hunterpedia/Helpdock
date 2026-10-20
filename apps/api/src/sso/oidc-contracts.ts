@@ -53,8 +53,35 @@ export class OidcFailure extends Error {
   }
 }
 
+/**
+ * A single-tenant Entra ID v2.0 issuer. The tenant must be a GUID: `common`,
+ * `organizations` and `consumers` accept accounts from any tenant.
+ */
+const ENTRA_TENANT_ISSUER =
+  /^https:\/\/login\.microsoftonline\.com\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/v2\.0$/;
+/** The personal Microsoft account tenant: its users choose their own addresses. */
+const MICROSOFT_CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
+
+/**
+ * Entra ID never sends `email_verified`. Its `xms_edov` says the address's
+ * domain is verified by the tenant that holds the account, which counts only
+ * from the one tenant the connection names (M18-09).
+ */
+function entraVouchesForEmail(issuer: string, claims: Record<string, unknown>): boolean {
+  const tenant = ENTRA_TENANT_ISSUER.exec(issuer)?.[1];
+  return (
+    tenant !== undefined &&
+    tenant !== MICROSOFT_CONSUMER_TENANT &&
+    claims.iss === issuer &&
+    claims.tid === tenant &&
+    claims.xms_edov === true
+  );
+}
+
 export function oidcAssertion(input: {
   connectionId: string;
+  /** The connection's configured issuer, which the ID token's `iss` already matched. */
+  issuer: string;
   claims: Record<string, unknown>;
   supplemental: Record<string, unknown>;
   emailClaim: string;
@@ -83,7 +110,9 @@ export function oidcAssertion(input: {
     email,
     // `email_verified` speaks only for the `email` claim, never for an
     // administrator-chosen claim such as `upn`, which can hold any address.
-    emailVerified: input.emailClaim === 'email' && claims.email_verified === true,
+    emailVerified:
+      input.emailClaim === 'email' &&
+      (claims.email_verified === true || entraVouchesForEmail(input.issuer, claims)),
     name: claims[input.nameClaim] ?? supplemental[input.nameClaim],
     groups: typeof groups === 'string' ? [groups] : groups,
   });

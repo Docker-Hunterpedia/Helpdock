@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 1.0.3
+
+### Patch Changes
+
+- [#274](https://github.com/Docker-Hunterpedia/Helpdock/pull/274) [`46c42c3`](https://github.com/Docker-Hunterpedia/Helpdock/commit/46c42c395613cede8c551c77598adb134a7fa911) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Security page: a wrong current password or authenticator code is sent once. The admin used to take every 401 for an expired session, refresh it and send the same wrong credential again, which spent two of the five step-up attempts allowed in fifteen minutes for one click. It now refreshes only for the 401 that refuses the access token, and passes a refused password or code (a 401 carrying `error.auth`) straight to the screen.
+
 ## 1.0.2
 
 ### Patch Changes

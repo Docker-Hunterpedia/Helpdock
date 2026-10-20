@@ -390,7 +390,8 @@ export function Sidebar({
           '&::before, &::after': {
             content: '""',
             position: 'absolute',
-            insetInline: 0,
+            insetInlineStart: collapsed ? `${(RAIL_WIDTH - 1 - 36) / 2}px` : '8px',
+            width: collapsed ? 36 : SIDEBAR_WIDTH - 1 - 24,
             height: '1px',
             backgroundColor: tokens['border.default'],
             pointerEvents: 'none',
@@ -420,22 +421,17 @@ export function Sidebar({
             // Standard scrollbar properties override WebKit's width and button rules.
             '@supports not selector(::-webkit-scrollbar)': {
               scrollbarWidth: 'thin',
-              scrollbarColor: `${collapsed ? 'transparent' : tokens['border.strong']} transparent`,
-              '&:hover, &:focus-within': {
-                scrollbarColor: `${tokens['border.strong']} transparent`,
-              },
+              scrollbarColor: `${tokens['border.strong']} transparent`,
             },
             '& a:focus-visible, & button:focus-visible': {
+              outline: collapsed ? `2px solid ${tokens['border.focus']}` : undefined,
               outlineOffset: collapsed ? '-2px' : undefined,
             },
             '&::-webkit-scrollbar': { width: '4px', height: 0 },
             '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
             '&::-webkit-scrollbar-thumb': {
-              backgroundColor: collapsed ? 'transparent' : tokens['border.strong'],
-              borderRadius: '4px',
-            },
-            '&:hover::-webkit-scrollbar-thumb, &:focus-within::-webkit-scrollbar-thumb': {
               backgroundColor: tokens['border.strong'],
+              borderRadius: '4px',
             },
             '&::-webkit-scrollbar-button': { display: 'none', width: 0, height: 0 },
             // Stable gutters keep the icons still while scrollbars are hidden during width changes.

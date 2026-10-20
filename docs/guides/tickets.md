@@ -1424,7 +1424,7 @@ On short windows, scroll the navigation independently of the brand and account
 controls. A hairline at either edge means more items are available there;
 Tab brings each focused item and its focus ring fully into view. The rail uses
 an inset focus ring so the gutter cannot clip it. The rail shows its thin
-scrollbar on hover or keyboard focus.
+scrollbar whenever the navigation overflows.
 
 ### Tags and custom fields in the workspace
 

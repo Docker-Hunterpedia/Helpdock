@@ -382,6 +382,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
       const signedIn = await buttonSignIn('github', github);
 
       expect(wrong.statusCode).toBe(401);
+      expect(wrong.json()).toMatchObject({ error: { auth: { code: 'invalid-credentials' } } });
       expect(connected.pathname).toBe('/me/security');
       expect(connected.searchParams.get('connected')).toBe('github');
       expect(signedIn.searchParams.get('code')).not.toBeNull();

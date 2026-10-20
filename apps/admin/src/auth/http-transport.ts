@@ -50,12 +50,14 @@ import { AuthError } from './api.js';
  * an attacker. A reload starts with no token and calls `refresh()`, which is
  * what the `httpOnly` cookie is for.
  *
- * **A 401 is retried exactly once, and only when a token was sent.** With a
- * token, a 401 means it expired, so the transport refreshes and repeats the
- * request; a second 401 means the session is gone and retrying again would be a
- * loop. Without a token there is nothing to refresh, and the 401 is the answer
- * itself — a wrong password, a wrong authenticator code — which must reach the
- * screen unchanged.
+ * **A 401 is retried exactly once, and only when it refused the token.** The
+ * auth guard's 401 means the token sent has expired, so the transport refreshes
+ * and repeats the request; a second 401 means the session is gone and retrying
+ * again would be a loop. A 401 that carries `error.auth` refused something in
+ * the body instead — a sign-in, or the password or code a step-up asks for —
+ * and a refresh cannot change that answer. Repeating it would spend a second
+ * attempt against the step-up limit (#271), so it reaches the screen unchanged,
+ * as does any 401 to a request that sent no token.
  */
 /**
  * How long before a token's stated expiry it counts as spent. A socket
@@ -131,7 +133,7 @@ export class HttpTransport {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
-    if (response.status === 401 && retry && sent !== null) {
+    if (retry && sent !== null && (await refusedTheToken(response))) {
       this.accessToken = null;
       if (await this.refresh()) {
         return this.request(method, path, body, { retry: false });
@@ -160,7 +162,7 @@ export class HttpTransport {
       headers: sent === null ? {} : { authorization: `Bearer ${sent}` },
     });
 
-    if (response.status === 401 && retry && sent !== null) {
+    if (retry && sent !== null && (await refusedTheToken(response))) {
       this.accessToken = null;
       if (await this.refresh()) {
         return this.requestBlob(path, { retry: false });
@@ -202,6 +204,31 @@ export class HttpTransport {
     return true;
   }
 }
+
+/**
+ * Whether a response is the auth guard refusing the bearer token, the one 401 a
+ * refresh can cure. Every refusal of a credential in the body carries
+ * `error.auth`; the guard's never does. A body that is not the api's — a
+ * proxy's page — says nothing either way and is treated as the token, as before.
+ */
+const refusedTheToken = async (response: Response): Promise<boolean> => {
+  if (response.status !== 401) {
+    return false;
+  }
+
+  let body: unknown;
+  try {
+    body = await response.clone().json();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return true;
+    }
+    throw error;
+  }
+
+  const parsed = errorResponseSchema.safeParse(body);
+  return !parsed.success || parsed.data.error.auth === undefined;
+};
 
 /**
  * Turns a failed response into the error its screen understands. The api puts

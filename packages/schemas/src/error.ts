@@ -52,9 +52,11 @@ export const errorResponseSchema = z.object({
     requestId: z.string(),
     fields: z.array(fieldErrorSchema).optional(),
     /**
-     * Only on a sign-in failure. The sign-in screens turn this into a
-     * translated sentence and count the remaining attempts down with it, which
-     * `code` above is too coarse for (M0-05).
+     * Only on an auth failure: a refused sign-in or step-up, or another of the
+     * refusals in `authErrorCodeSchema`. The screens turn this into a translated sentence and count the
+     * remaining attempts down with it, which `code` above is too coarse for
+     * (M0-05). Its absence on a 401 is what marks the guard refusing the
+     * access token, the one 401 the admin refreshes and retries for (#271).
      */
     auth: authErrorSchema.optional(),
     /**

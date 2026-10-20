@@ -1,5 +1,5 @@
 import { authErrorCodeSchema } from '@helpdock/schemas';
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { errorBody, mapError } from '../http/error-response.js';
 import { AuthFailure, isAuthFailure } from './auth-failure.js';
@@ -53,6 +53,18 @@ describe('the body an auth failure produces', () => {
         auth: { code: 'totp-mismatch', attemptsLeft: 1 },
       },
     });
+  });
+
+  it('tells a refused credential from a spent token, which the admin refreshes for (#271)', () => {
+    const spentToken = errorBody(mapError(new UnauthorizedException('no token')), 'req-1').error;
+    const wrongPassword = errorBody(
+      mapError(new AuthFailure('invalid-credentials')),
+      'req-1',
+    ).error;
+
+    expect(spentToken.code).toBe(wrongPassword.code);
+    expect(spentToken).not.toHaveProperty('auth');
+    expect(wrongPassword.auth).toEqual({ code: 'invalid-credentials' });
   });
 
   it('adds nothing to an ordinary failure', () => {

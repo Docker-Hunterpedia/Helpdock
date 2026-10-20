@@ -928,6 +928,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
         headers: bearer(person.accessToken),
       });
       expect(wrong.statusCode).toBe(401);
+      expect(wrong.json()).toMatchObject({ error: { auth: { code: 'invalid-credentials' } } });
 
       const changed = await request('POST', '/api/me/password', {
         body: { currentPassword: NEW_PASSWORD, newPassword: 'another long password' },

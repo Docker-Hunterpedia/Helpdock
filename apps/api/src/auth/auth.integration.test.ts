@@ -382,8 +382,12 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       });
     });
 
-    it('refuses /api/auth/me without a bearer token', async () => {
-      expect((await get('/api/auth/me')).statusCode).toBe(401);
+    it('refuses /api/auth/me without a bearer token, with no credential refusal in the body', async () => {
+      const refused = await get('/api/auth/me');
+
+      // The admin refreshes on a 401 only when `error.auth` is absent (#271).
+      expect(refused.statusCode).toBe(401);
+      expect(refused.json().error).not.toHaveProperty('auth');
     });
 
     it('rotates the refresh token and issues a new access token', async () => {

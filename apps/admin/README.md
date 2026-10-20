@@ -538,9 +538,11 @@ screen turns into a toast.
 **`HttpTransport` holds the access token in a field and nowhere else** — not in
 `localStorage`, not in `sessionStorage`, not in a cookie a script can read. A
 reload starts with none and refreshes from the `httpOnly` cookie the api set. A
-401 is retried once, after a refresh, and only when a token was actually sent:
-without one the 401 *is* the answer — a wrong password, a wrong code — and it
-has to reach the screen unchanged.
+401 is retried once, after a refresh, and only when a token was actually sent
+and the 401 refused it. A 401 that carries `error.auth` refused a credential in
+the body instead — a wrong password or code at sign-in, or at a step-up on the
+security page — so it *is* the answer and reaches the screen unchanged;
+repeating it would spend a second step-up attempt (#271).
 
 The endpoints behind it are in [the authentication
 guide](../../docs/guides/authentication.md#endpoints).

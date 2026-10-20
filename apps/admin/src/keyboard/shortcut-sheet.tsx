@@ -30,14 +30,12 @@ import {
 export function ShortcutSheet({
   open,
   singleKeys,
-  saving,
   permits,
   onSingleKeysChange,
   onClose,
 }: {
   readonly open: boolean;
   readonly singleKeys: boolean;
-  readonly saving: boolean;
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
   onSingleKeysChange(on: boolean): void;
   onClose(): void;
@@ -147,7 +145,6 @@ export function ShortcutSheet({
           checked={singleKeys}
           label={t('tickets:keyboard.singleKey')}
           describedBy={hintId}
-          disabled={saving}
           onChange={onSingleKeysChange}
         />
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>

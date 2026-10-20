@@ -127,6 +127,21 @@ describe('isTyping', () => {
     expect(isTyping(element('div', true))).toBe(true);
   });
 
+  it.each(['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'])(
+    'is false on an input of type %s, which takes no letters',
+    (type) => {
+      const input = document.createElement('input');
+      input.type = type;
+      expect(isTyping(input)).toBe(false);
+    },
+  );
+
+  it.each(['search', 'email', 'number', 'date'])('is true in an input of type %s', (type) => {
+    const input = document.createElement('input');
+    input.type = type;
+    expect(isTyping(input)).toBe(true);
+  });
+
   it('is false on the page itself', () => {
     expect(isTyping(element('div'))).toBe(false);
     expect(isTyping(null)).toBe(false);

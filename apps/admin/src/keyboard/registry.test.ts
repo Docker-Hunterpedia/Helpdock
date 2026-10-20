@@ -17,37 +17,78 @@ import {
 } from './registry.js';
 
 /**
- * The registry is the one place a shortcut is named (M14-01, ADR 0038). These
- * tests are what keep it so: every entry has a handler somewhere, every
- * handler has an entry, no two shortcuts that can answer at once share keys,
- * every entry has a name in both languages, and the guide's table is the
- * registry's.
+ * The registry is the one place a shortcut is named (M14-01, ADR 0038). What
+ * these tests guarantee, and what they do not:
+ *
+ * - Every key-press entry is in exactly one screen's list of handled ids, and
+ *   every listed id is an entry. `useShortcutHandlers` is typed to take a
+ *   handler for exactly the ids of the list it is given, so a listed id cannot
+ *   be left without a handler in the code.
+ * - Each list is attached: the source of the screen that owns it calls
+ *   `useShortcutHandlers` with that list (and the shell mounts the global and
+ *   ticket hooks). This is a source check, not a render; whether a handler is
+ *   attached *right now* (a ticket open, a writer signed in) is the screens'
+ *   own tests' business (`keyboard.test.tsx`).
+ * - A `typed` entry (`composer.savedReply`, `/` typed into an empty reply) has
+ *   no key handler: the dispatcher never runs it. It is held instead to the
+ *   composer reading its key from the registry.
+ * - No two shortcuts that can answer at once share keys, every entry is named
+ *   in both languages, and the guide's tables are the registry's.
  */
 
-/** Every list of ids a screen attaches handlers for, with where it lives. */
+/** Every list of ids a screen attaches handlers for, by the file that attaches it. */
 const HANDLED = {
-  'shell/app-shell.tsx': SHELL_SHORTCUTS,
-  'keyboard/global-shortcuts.ts': GLOBAL_SHORTCUTS,
-  'screens/tickets/tickets-page.tsx': LIST_SHORTCUTS,
-  'screens/tickets/ticket-shortcuts.ts': TICKET_SHORTCUTS,
-  'screens/tickets/composer.tsx': COMPOSER_SHORTCUTS,
+  'apps/admin/src/shell/app-shell.tsx': ['SHELL_SHORTCUTS', SHELL_SHORTCUTS],
+  'apps/admin/src/keyboard/global-shortcuts.ts': ['GLOBAL_SHORTCUTS', GLOBAL_SHORTCUTS],
+  'apps/admin/src/screens/tickets/tickets-page.tsx': ['LIST_SHORTCUTS', LIST_SHORTCUTS],
+  'apps/admin/src/screens/tickets/ticket-shortcuts.ts': ['TICKET_SHORTCUTS', TICKET_SHORTCUTS],
+  'apps/admin/src/screens/tickets/composer.tsx': ['COMPOSER_SHORTCUTS', COMPOSER_SHORTCUTS],
 } as const;
 
-const handledIds = Object.values(HANDLED).flat();
+/** The hooks above that are not components themselves, and the screen that mounts each. */
+const MOUNTED_BY = {
+  'apps/admin/src/shell/app-shell.tsx': 'useGlobalShortcuts()',
+  'apps/admin/src/screens/tickets/ticket-view.tsx': 'useTicketShortcuts(',
+} as const;
+
+const handledIds: readonly string[] = Object.values(HANDLED).flatMap(([, ids]) => ids);
+const pressedIds: readonly string[] = SHORTCUT_LIST.filter(
+  (shortcut) => shortcut.typed !== true,
+).map((shortcut) => shortcut.id);
 const registeredIds = SHORTCUT_LIST.map((shortcut) => shortcut.id);
 
 const repoFile = (...parts: string[]): string =>
   readFileSync(path.resolve(import.meta.dirname, '../../../..', ...parts), 'utf8');
 
 describe('the shortcut registry', () => {
-  it('has a handler for every entry', () => {
-    expect(registeredIds.filter((id) => !handledIds.includes(id))).toEqual([]);
-  });
-
-  it('has an entry for every handler, and each handler in one place only', () => {
-    expect(handledIds.filter((id) => !registeredIds.includes(id))).toEqual([]);
+  it('has a handler list for every key-press entry, and an entry for every listed id', () => {
+    expect(pressedIds.filter((id) => !handledIds.includes(id))).toEqual([]);
+    expect(handledIds.filter((id) => !pressedIds.includes(id))).toEqual([]);
     expect(handledIds.filter((id, index) => handledIds.indexOf(id) !== index)).toEqual([]);
     expect(registeredIds.filter((id, index) => registeredIds.indexOf(id) !== index)).toEqual([]);
+  });
+
+  it('attaches every list where it is declared, and mounts the hooks that attach them', () => {
+    const unattached = Object.entries(HANDLED)
+      .filter(
+        ([file, [name]]) =>
+          !repoFile(file).includes(`useShortcutHandlers<(typeof ${name})[number]>(`),
+      )
+      .map(([file]) => file);
+    const unmounted = Object.entries(MOUNTED_BY)
+      .filter(([file, call]) => !repoFile(file).includes(call))
+      .map(([file]) => file);
+
+    expect({ unattached, unmounted }).toEqual({ unattached: [], unmounted: [] });
+  });
+
+  it('reads the typed saved-reply trigger from the registry in the composer', () => {
+    expect(SHORTCUT_LIST.filter((shortcut) => shortcut.typed === true).map((s) => s.id)).toEqual([
+      'composer.savedReply',
+    ]);
+    expect(repoFile('apps/admin/src/screens/tickets/composer.tsx')).toContain(
+      "shortcutById('composer.savedReply')",
+    );
   });
 
   it('never gives two shortcuts that can answer at once the same keys', () => {

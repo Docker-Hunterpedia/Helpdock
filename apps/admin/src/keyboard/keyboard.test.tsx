@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { MockAuthApi } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
 import { MOCK_STATUS_CLOSED, MOCK_TICKET_REFUND } from '../tickets/mock-api.js';
@@ -36,12 +37,12 @@ type Role = 'admin' | 'viewer';
 
 const renderAt = async (
   path: string,
-  {
-    role = 'admin',
-    keyboardApi = new MockKeyboardApi(),
-  }: { role?: Role; keyboardApi?: MockKeyboardApi } = {},
+  { role = 'admin', singleKeys }: { role?: Role; singleKeys?: boolean } = {},
 ) => {
   const apis = await signedInMockApis();
+  if (singleKeys !== undefined && apis.auth instanceof MockAuthApi) {
+    apis.auth.saveSingleKeyShortcuts(singleKeys);
+  }
   if (role === 'viewer') {
     const session = await apis.auth.me();
     vi.spyOn(apis.auth, 'me').mockResolvedValue(
@@ -57,11 +58,10 @@ const renderAt = async (
     ticketingApi: apis.ticketing,
     ticketsApi: apis.tickets,
     uploader: apis.uploader,
-    keyboardApi,
     initialEntries: [path],
   });
   await screen.findByRole('navigation', { name: 'Main' });
-  return rendered;
+  return { ...rendered, auth: apis.auth };
 };
 
 /** A key as the browser sends it from an Arabic layout: the letter it types, the key it is. */
@@ -124,8 +124,7 @@ describe('the ? sheet', () => {
 
 describe('the single-key switch', () => {
   it('turns every key without a modifier off, says so, and saves it to the account', async () => {
-    const keyboardApi = new MockKeyboardApi();
-    const { user } = await renderAt('/tickets?view=all', { keyboardApi });
+    const { user, auth } = await renderAt('/tickets?view=all');
     await screen.findByRole('link', { name: /HD-1042/ });
 
     await user.keyboard('?');
@@ -140,7 +139,7 @@ describe('the single-key switch', () => {
     expect(within(sheet()).getByText(/Next ticket/).textContent).toContain('(off)');
     expect(within(sheet()).getByText(/^Send$/).textContent).not.toContain('(off)');
     await waitFor(async () => {
-      expect(await keyboardApi.preferences()).toEqual({ singleKeyShortcuts: false });
+      expect((await auth.me())?.user.singleKeyShortcuts).toBe(false);
     });
 
     await user.click(within(sheet()).getByRole('button', { name: 'Close' }));
@@ -154,26 +153,46 @@ describe('the single-key switch', () => {
     expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
   });
 
-  it('starts from what the account says', async () => {
-    const keyboardApi = new MockKeyboardApi();
-    await keyboardApi.save({ singleKeyShortcuts: false });
-    const { user } = await renderAt('/tickets?view=all', { keyboardApi });
-    await screen.findByRole('link', { name: /HD-1042/ });
+  it('keeps focus on the switch when Space toggles it', async () => {
+    const { user } = await renderAt('/contacts');
+    await user.keyboard('?');
+    const toggle = within(
+      await screen.findByRole('dialog', { name: 'Keyboard shortcuts' }),
+    ).getByRole('switch');
+    toggle.focus();
+
+    await user.keyboard(' ');
+
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'New ticket' })).not.toHaveAttribute(
-        'aria-keyshortcuts',
-      );
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
+    expect(toggle).toHaveFocus();
+  });
+
+  // WCAG 2.1.4: the switch arrives with the session, which the shell waits
+  // for, so no letter is ever taken before the person's choice is known.
+  it('takes no letter from the very first press when the account has the switch off', async () => {
+    const { user } = await renderAt('/tickets?view=all', { singleKeys: false });
+    await screen.findByRole('link', { name: /HD-1042/ });
+    const toggle = screen.getByRole('button', { name: /Collapse sidebar|Expand sidebar/ });
+    const before = toggle.getAttribute('aria-expanded');
 
     await user.keyboard('j');
+    // A chord still answers, which is also the sign the `j` before it was heard.
+    await user.keyboard('{Control>}\\{/Control}');
 
+    await waitFor(() => {
+      expect(toggle.getAttribute('aria-expanded')).not.toBe(before);
+    });
     expect(screen.queryByRole('heading', { name: /Refund for order 42/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'New ticket' })).not.toHaveAttribute(
+      'aria-keyshortcuts',
+    );
   });
 
   it('goes back on, with a message, when the account cannot save it', async () => {
-    const keyboardApi = new MockKeyboardApi();
-    vi.spyOn(keyboardApi, 'save').mockRejectedValue(new Error('offline'));
-    const { user } = await renderAt('/contacts', { keyboardApi });
+    vi.spyOn(MockKeyboardApi.prototype, 'save').mockRejectedValue(new Error('offline'));
+    const { user } = await renderAt('/contacts');
 
     await user.keyboard('?');
     await user.click(
@@ -182,6 +201,39 @@ describe('the single-key switch', () => {
 
     expect(await screen.findByText('The shortcut setting was not saved. Try again.')).toBeVisible();
     expect(within(sheet()).getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('shows the ? cap on the account menu’s item only while ? works', async () => {
+    const { user } = await renderAt('/contacts');
+    const item = async () => {
+      await user.click(screen.getByRole('button', { name: /Account menu for/ }));
+      return screen.findByRole('menuitem', { name: /Keyboard shortcuts/ });
+    };
+
+    const on = await item();
+    expect(on).toHaveAttribute('aria-keyshortcuts', '?');
+    expect(on.querySelector('kbd')?.textContent).toBe('?');
+
+    await user.click(on);
+    await user.click(within(sheet()).getByRole('switch'));
+    await user.click(within(sheet()).getByRole('button', { name: 'Close' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
+    });
+
+    const off = await item();
+    expect(off).not.toHaveAttribute('aria-keyshortcuts');
+    expect(off.querySelector('kbd')).toBeNull();
+  });
+
+  it('leaves a key alone while an input method is composing', async () => {
+    await renderAt('/contacts');
+
+    fireEvent.keyDown(document.body, { key: '?', code: 'Slash', isComposing: true });
+
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
+    fireEvent.keyDown(document.body, { key: '?', code: 'Slash' });
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
   });
 });
 
@@ -201,6 +253,19 @@ describe('g sequences', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'My open' })).toBeVisible();
     expect(chip.textContent).toBe('');
+  });
+
+  it('lets a chord after g be itself, so ⌘\\ still folds the sidebar', async () => {
+    const { user } = await renderAt('/contacts');
+    const toggle = screen.getByRole('button', { name: /Collapse sidebar|Expand sidebar/ });
+    const before = toggle.getAttribute('aria-expanded');
+
+    await user.keyboard('g');
+    await user.keyboard('{Control>}\\{/Control}');
+
+    await waitFor(() => {
+      expect(toggle.getAttribute('aria-expanded')).not.toBe(before);
+    });
   });
 
   it('works on an Arabic layout, where g types ل and c types ؤ', async () => {

@@ -233,6 +233,6 @@ export function createApis(
     // files an approved proposal's draft in the help center fixture.
     assist: new MockAssistApi({ tickets, helpCenter }),
     developers: new MockDevelopersApi(),
-    keyboard: new MockKeyboardApi(),
+    keyboard: new MockKeyboardApi(auth),
   };
 }

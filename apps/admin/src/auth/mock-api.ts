@@ -78,6 +78,21 @@ export const MOCK_USER: Session['user'] = {
   installAdmin: true,
 };
 
+/**
+ * Set to `off` before the app loads, it makes the fixture's account start with
+ * single-key shortcuts off (M14-01), which is how a browser test proves the
+ * switch is read from the account rather than from the browser.
+ */
+export const MOCK_SINGLE_KEY_STORAGE = 'helpdock.mock.singleKeyShortcuts';
+
+const seededSingleKeyShortcuts = (): false | undefined => {
+  try {
+    return globalThis.localStorage?.getItem(MOCK_SINGLE_KEY_STORAGE) === 'off' ? false : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const MOCK_SESSION: Session = {
   user: MOCK_USER,
   brands: [...MOCK_BRANDS],
@@ -102,6 +117,11 @@ export class MockAuthApi implements AuthApi {
    */
   readonly #staff: MockStaffApi | undefined;
   #session: Session | null = null;
+  /**
+   * M14-01: the account's single-key switch, absent (on) unless a test seeds
+   * it off under `MOCK_SINGLE_KEY_STORAGE` or the sheet saves it.
+   */
+  #singleKeyShortcuts: boolean | undefined = seededSingleKeyShortcuts();
   #challengeCounter = 0;
   ssoEnforced = false;
   ssoConnections: { id: string; name: string; emailDomains: string[] }[] = [];
@@ -185,8 +205,8 @@ export class MockAuthApi implements AuthApi {
     // A browser the user chose to trust skips the second factor, which is what
     // "Trust this browser for 30 days" buys them.
     if (this.#trustedDevice) {
-      this.#session = MOCK_SESSION;
-      return { kind: 'session', session: MOCK_SESSION };
+      const session = this.#signIn();
+      return { kind: 'session', session };
     }
 
     this.#challengeCounter += 1;
@@ -213,9 +233,7 @@ export class MockAuthApi implements AuthApi {
 
     this.#challenges.delete(challengeId);
     this.#trustedDevice = trustDevice;
-    this.#session = MOCK_SESSION;
-
-    return MOCK_SESSION;
+    return this.#signIn();
   }
 
   async useRecoveryCode(challengeId: string, code: string): Promise<Session> {
@@ -227,9 +245,7 @@ export class MockAuthApi implements AuthApi {
 
     this.#recoveryCodeUsed = true;
     this.#challenges.delete(challengeId);
-    this.#session = MOCK_SESSION;
-
-    return MOCK_SESSION;
+    return this.#signIn();
   }
 
   oauthStartUrl(provider: OauthProvider): string {
@@ -275,8 +291,7 @@ export class MockAuthApi implements AuthApi {
    * screen under test is the one that reads the parameter, not the exchange.
    */
   async exchange(_code: string): Promise<Session> {
-    this.#session = MOCK_SESSION;
-    return MOCK_SESSION;
+    return this.#signIn();
   }
 
   /** The same answer for any address, for the same reason as the magic link. */
@@ -328,9 +343,9 @@ export class MockAuthApi implements AuthApi {
   ): Promise<RecoveryCodes & { readonly session: Session }> {
     await this.startEnrolment(challengeId);
     const { recoveryCodes } = await this.confirmTotp(code);
-    this.#session = MOCK_SESSION;
+    const session = this.#signIn();
 
-    return { recoveryCodes, session: MOCK_SESSION };
+    return { recoveryCodes, session };
   }
 
   async previewInvite(token: string): Promise<PublicInvite> {
@@ -382,6 +397,26 @@ export class MockAuthApi implements AuthApi {
 
   async me(): Promise<Session | null> {
     return this.#session;
+  }
+
+  /** M14-01: what `PUT /api/me/keyboard` does to the account, as the session shows it. */
+  saveSingleKeyShortcuts(on: boolean): void {
+    this.#singleKeyShortcuts = on;
+    if (this.#session !== null) {
+      this.#session = this.#withSwitch(this.#session);
+    }
+  }
+
+  #signIn(): Session {
+    const session = this.#withSwitch(MOCK_SESSION);
+    this.#session = session;
+    return session;
+  }
+
+  #withSwitch(session: Session): Session {
+    return this.#singleKeyShortcuts === undefined
+      ? session
+      : { ...session, user: { ...session.user, singleKeyShortcuts: this.#singleKeyShortcuts } };
   }
 
   /** A value shaped like a token, so a caller can tell "signed in" from "not". */

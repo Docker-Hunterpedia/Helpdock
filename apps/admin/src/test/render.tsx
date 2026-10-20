@@ -146,7 +146,9 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const assistApi =
     options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
   const developersApi = options.developersApi ?? new MockDevelopersApi();
-  const keyboardApi = options.keyboardApi ?? new MockKeyboardApi();
+  const keyboardApi =
+    options.keyboardApi ??
+    new MockKeyboardApi(authApi instanceof MockAuthApi ? authApi : undefined);
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 

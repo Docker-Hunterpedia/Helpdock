@@ -86,11 +86,9 @@ export const SHORTCUTS = [
   {
     id: 'composer.savedReply',
     scope: 'composer',
-    // Typed into an empty reply rather than pressed beside it: the composer
-    // reads it from the text (`composer.tsx`), so it is the one composer
-    // shortcut without a modifier, and the switch turns it off with the rest.
     keys: [KEY('/')],
     permission: 'ticket:write',
+    typed: true,
   },
 ] as const satisfies readonly {
   readonly id: string;
@@ -98,6 +96,7 @@ export const SHORTCUTS = [
   readonly keys: readonly KeyStroke[];
   readonly alternates?: readonly (readonly KeyStroke[])[];
   readonly permission?: ShortcutPermission;
+  readonly typed?: true;
 }[];
 
 export type ShortcutId = (typeof SHORTCUTS)[number]['id'];
@@ -110,6 +109,13 @@ export interface Shortcut {
   /** Other strokes that do the same; not drawn in the sheet. */
   readonly alternates?: readonly (readonly KeyStroke[])[];
   readonly permission?: ShortcutPermission;
+  /**
+   * Read from the text it types rather than from a key press: `/` typed into
+   * an empty reply opens the saved replies (`composer.tsx`). The dispatcher
+   * never runs it and no handler is attached for it; the switch turns it off
+   * with every other key without a modifier.
+   */
+  readonly typed?: true;
 }
 
 export const SHORTCUT_LIST: readonly Shortcut[] = SHORTCUTS;

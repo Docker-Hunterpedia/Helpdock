@@ -1,6 +1,6 @@
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import { createDb, type DbHandle, userBrandRoles, users, uuidv7, withSystem } from '@helpdock/db';
-import type { KeyboardPreferences } from '@helpdock/schemas';
+import type { KeyboardPreferences, Session } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { sql } from 'drizzle-orm';
@@ -73,11 +73,12 @@ describe.skipIf(!hasDocker)('the single-key shortcuts switch', () => {
     method: 'GET' | 'PUT',
     token: string | null,
     payload?: unknown,
+    url = '/api/me/keyboard',
   ): Promise<{ status: number; body: T }> =>
     app
       .inject({
         method,
-        url: '/api/me/keyboard',
+        url,
         headers: {
           ...(token === null ? {} : { authorization: `Bearer ${token}` }),
           ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
@@ -143,7 +144,7 @@ describe.skipIf(!hasDocker)('the single-key shortcuts switch', () => {
     expect(agent.body).toEqual({ singleKeyShortcuts: true });
   });
 
-  it('keeps the choice on the account, so a new sign-in finds it', async () => {
+  it('keeps the choice on the account, so a new sign-in finds it in its session', async () => {
     const saved = await call<KeyboardPreferences>('PUT', agentToken, {
       singleKeyShortcuts: false,
     });
@@ -153,6 +154,9 @@ describe.skipIf(!hasDocker)('the single-key shortcuts switch', () => {
     expect((await call<KeyboardPreferences>('GET', again)).body).toEqual({
       singleKeyShortcuts: false,
     });
+    // The shell reads it from the session it already waits for (WCAG 2.1.4).
+    const session = await call<Session>('GET', again, undefined, '/api/auth/me');
+    expect(session.body.user.singleKeyShortcuts).toBe(false);
   });
 
   it('changes nobody else’s switch', async () => {

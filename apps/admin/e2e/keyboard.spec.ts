@@ -1,7 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { MOCK_USER } from '../src/auth/mock-api.js';
-import { MOCK_SINGLE_KEY_STORAGE } from '../src/keyboard/api.js';
+import { MOCK_SINGLE_KEY_STORAGE, MOCK_USER } from '../src/auth/mock-api.js';
 import { MOCK_TICKET_REFUND } from '../src/tickets/mock-api.js';
 import { expect, test } from './fixtures.js';
 import { openTicket, openTickets, signIn } from './flows.js';
@@ -171,11 +170,13 @@ test.describe('the single-key switch', () => {
     await page.keyboard.press('j');
     await arabicPress(page, 'ت', 'KeyJ');
     await page.keyboard.press('Shift+Slash');
-    await expect(page).not.toHaveURL(new RegExp(MOCK_TICKET_REFUND));
-    await expect(sheet).toBeHidden();
-
+    // A chord still answers. Keys are handled in order, so once it has, the
+    // three presses before it have been heard and ignored.
     await page.keyboard.press('Control+Backslash');
     await expect(page.getByRole('button', { name: t('admin:nav.expand') })).toBeVisible();
+
+    await expect(page).not.toHaveURL(new RegExp(MOCK_TICKET_REFUND));
+    await expect(sheet).toBeHidden();
   });
 
   test('starts off when the account says so, and the account menu still opens the sheet', async ({
@@ -191,8 +192,13 @@ test.describe('the single-key switch', () => {
     await page.getByRole('link', { name: /HD-1042/ }).waitFor();
 
     await page.keyboard.press('Shift+Slash');
+    await page.keyboard.press('j');
+    // The positive sync point, as above.
+    await page.keyboard.press('Control+Backslash');
+    await expect(page.getByRole('button', { name: t('admin:nav.expand') })).toBeVisible();
     const sheet = page.getByRole('dialog', { name: t('tickets:keyboard.label') });
     await expect(sheet).toBeHidden();
+    await expect(page).not.toHaveURL(new RegExp(MOCK_TICKET_REFUND));
 
     await page
       .getByRole('button', { name: t('admin:currentUser.menuLabel', { name: MOCK_USER.name }) })

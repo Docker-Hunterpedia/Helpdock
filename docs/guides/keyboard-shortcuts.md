@@ -11,11 +11,18 @@ artboard is `Admin/ShortcutSheet`.
 
 Every shortcut is named once, in `apps/admin/src/keyboard/registry.ts`. The
 `?` sheet, the `aria-keyshortcuts` of the buttons that do the same thing, and
-the tables below are all read from it: a unit test
-(`apps/admin/src/keyboard/registry.test.ts`) fails when a shortcut has no
-handler, when a handler has no entry, or when these tables differ from the
-registry. To change a table, change the registry and the `tickets:keyboard`
-strings, run that test, and paste the text it expects between the markers.
+the tables below are all read from it. A unit test
+(`apps/admin/src/keyboard/registry.test.ts`) fails when a key-press shortcut
+is in no screen's list of handled ids, when a listed id is not in the
+registry, when a screen does not attach its list (checked in its source:
+`useShortcutHandlers` is typed so that every listed id needs a handler), or
+when these tables differ from the registry. The one shortcut typed rather
+than pressed — `/` in an empty reply — has no key handler; the test holds the
+composer to reading it from the registry instead. Whether a handler is
+attached at a given moment (a ticket open, a person who may write) is covered
+by the screens' own tests. To change a table, change the registry and the
+`tickets:keyboard` strings, run that test, and paste the text it expects
+between the markers.
 
 `⌘` is the Command key on a Mac; `Ctrl` works the same on every platform. A
 shortcut a person cannot use is left out of their sheet: a Viewer sees
@@ -95,15 +102,19 @@ and so to the sheet and this guide, with the deliverable that builds it.
 
 A key without a modifier is never taken from you while you are writing: in a
 text field, a select, the composer or a rich-text editor, a letter is a
-letter. Nor is it taken inside a dialog, a menu or a list box, whose own keys
+letter, and nothing is taken while an input method is composing a character.
+A checkbox, a radio or a button with focus takes no letters, so there `j`
+still moves the list. Nor is it taken inside a dialog, a menu or a list box, whose own keys
 win. A shortcut with `⌘` or `Ctrl` still works in a field.
 
 ## Sequences
 
 `g` then a letter opens a page: `g` `i` My open, `g` `c` Contacts, and so on.
 After `g`, a chip at the bottom of the screen lists the letters that can
-follow; it goes after 1.5 seconds, or at the next key. A key that is not one
-of them ends the wait and does nothing else.
+follow; it goes after 1.5 seconds, or at the next key. Another character that
+is not one of them ends the wait and does nothing else; any other key — Tab,
+Esc, a chord such as `⌘`+`\`, or a key typed into a field — ends the wait and
+does what it always does.
 
 ## Keyboard layouts
 
@@ -127,11 +138,15 @@ asks for: speech-input users and anyone who types into the page by accident
 can have letters stay letters.
 
 The switch is **saved to your account** (`users.single_key_shortcuts`), not
-to the browser, so it follows you to every browser you sign in on. It is on
+to the browser, so it follows you to every browser you sign in on. It arrives
+with your session (`user.singleKeyShortcuts` in `GET /api/auth/me`), which the
+admin reads before it draws anything, so no letter is taken before your choice
+is known. It is on
 by default (owner decision D-32). Until M14-12 adds it to Your account ›
 Profile, the sheet's footer is the only place to change it. With the switch
 off `?` is off too, so the sheet is also in the menu under your name, as
-**Keyboard shortcuts**: that is how you turn the switch back on.
+**Keyboard shortcuts** (showing the `?` key while `?` works): that is how you
+turn the switch back on.
 
 The api behind the switch:
 
@@ -143,7 +158,8 @@ PUT /api/me/keyboard
 
 Both act on the signed-in caller only and answer
 `{ "singleKeyShortcuts": boolean }`. A request without a session gets 401; a
-body that is not a boolean gets 400.
+body that is not a boolean gets 400. The admin saves with the `PUT` and reads
+the switch from the session; the `GET` is for a client without one.
 
 ## Screen readers
 

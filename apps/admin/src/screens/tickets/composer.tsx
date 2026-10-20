@@ -20,7 +20,7 @@ import {
   useKeyboard,
   useShortcutHandlers,
 } from '../../keyboard/keyboard-provider.tsx';
-import type { ShortcutId } from '../../keyboard/registry.js';
+import { type ShortcutId, shortcutById } from '../../keyboard/registry.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import {
   type ComposerEmail,
@@ -61,15 +61,17 @@ export type ComposerMode = 'reply' | 'note';
 
 /**
  * The composer's shortcuts (M14-01). They answer only while the caret is in
- * the composer (`data-shortcut-scope`). `/` is read from what is typed into
- * an empty reply rather than from the key, so the browser's own `/` is never
- * taken; the switch turns it off with every other key without a modifier.
+ * the composer (`data-shortcut-scope`). The registry's `composer.savedReply`
+ * is not here: `/` is read from what is typed into an empty reply rather than
+ * from the key, so it has no handler of its own (`SAVED_REPLY_TRIGGER`).
  */
 export const COMPOSER_SHORTCUTS = [
   'composer.send',
   'composer.sendAndClose',
-  'composer.savedReply',
 ] as const satisfies readonly ShortcutId[];
+
+/** `/`, typed into an empty reply, opens the saved replies. */
+const SAVED_REPLY_TRIGGER = shortcutById('composer.savedReply').keys[0]?.key;
 
 export interface ComposerProps {
   readonly mode: ComposerMode;
@@ -182,7 +184,6 @@ export function Composer({
   useShortcutHandlers<(typeof COMPOSER_SHORTCUTS)[number]>({
     'composer.send': canSend ? onSend : null,
     'composer.sendAndClose': canSend && onSendAndClose !== undefined ? onSendAndClose : null,
-    'composer.savedReply': onOpenMacros ?? null,
   });
 
   // A layout effect: refs are attached and the caret moves before the browser
@@ -282,7 +283,7 @@ export function Composer({
           if (
             singleKeys &&
             body === '' &&
-            event.target.value === '/' &&
+            event.target.value === SAVED_REPLY_TRIGGER &&
             onOpenMacros !== undefined
           ) {
             onOpenMacros();

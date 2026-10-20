@@ -91,11 +91,36 @@ export const strokeMatches = (stroke: KeyStroke, event: KeyEventLike): boolean =
   return !shiftMatters || (event.shiftKey === true) === (stroke.shift === true);
 };
 
-const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+/**
+ * The inputs a letter is typed into. A checkbox, a radio, a button or a range
+ * takes no letters, so `j` still moves the list while one has focus.
+ */
+const TEXT_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'email',
+  'url',
+  'tel',
+  'password',
+  'number',
+  'date',
+  'datetime-local',
+  'month',
+  'week',
+  'time',
+]);
 
 /** Whether the keystroke belongs to whatever the person is writing in. */
-export const isTyping = (target: EventTarget | null | undefined): boolean =>
-  target instanceof HTMLElement && (TYPING_TAGS.has(target.tagName) || target.isContentEditable);
+export const isTyping = (target: EventTarget | null | undefined): boolean => {
+  if (target instanceof HTMLInputElement) {
+    return TEXT_INPUT_TYPES.has(target.type);
+  }
+  return (
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+};
 
 /**
  * Whether the keystroke happened inside a dialog, a menu or a listbox, whose

@@ -10,9 +10,10 @@ import { isSequence, SHORTCUT_LIST, type Shortcut, type ShortcutId } from './reg
  *   carries `⌘`/`Ctrl` still answers in a field.
  * - **A composer shortcut answers only inside the composer**, so `⌘Enter` in
  *   the list's search box sends nothing.
- * - **`g` then a letter within 1.5 s** is a sequence. The `g` waits; any other
- *   key ends the wait and does nothing else, so a stray letter after `g` is
- *   never taken for a shortcut of its own.
+ * - **`g` then a letter within 1.5 s** is a sequence. The `g` waits; another
+ *   character typed on the page ends the wait and does nothing else, so a
+ *   stray letter after `g` is never taken for a shortcut of its own. Any other
+ *   key (Tab, Esc, a chord) ends the wait and is itself.
  */
 
 export const SEQUENCE_WINDOW_MS = 1500;
@@ -51,7 +52,7 @@ type Strokes = Shortcut['keys'];
 
 /** The key lists a shortcut answers to here and now: its keys and any alternates. */
 const usableStrokes = (shortcut: Shortcut, context: DispatchContext): readonly Strokes[] => {
-  if (!context.available(shortcut.id)) {
+  if (shortcut.typed === true || !context.available(shortcut.id)) {
     return [];
   }
   if (shortcut.scope === 'composer' && !context.inComposer) {
@@ -61,11 +62,21 @@ const usableStrokes = (shortcut: Shortcut, context: DispatchContext): readonly S
     if (strokes[0]?.mod === true) {
       return true;
     }
-    // `/` in the composer is read from the text it types (`composer.tsx`).
-    return (
-      shortcut.scope !== 'composer' && context.singleKeys && !context.typing && !context.inOverlay
-    );
+    return context.singleKeys && !context.typing && !context.inOverlay;
   });
+};
+
+const isPlainCharacter = (event: KeyEventLike, context: DispatchContext): boolean => {
+  const key = keyOf(event);
+  return (
+    key !== null &&
+    key.length === 1 &&
+    event.metaKey !== true &&
+    event.ctrlKey !== true &&
+    event.altKey !== true &&
+    !context.typing &&
+    !context.inOverlay
+  );
 };
 
 export function resolveShortcut(
@@ -85,7 +96,10 @@ export function resolveShortcut(
   const sequences = candidates.filter(({ shortcut }) => isSequence(shortcut));
   const waiting = pending !== null && context.now - pending.at <= SEQUENCE_WINDOW_MS;
 
-  if (waiting) {
+  // Only a character typed on the page can be a sequence's second key. Tab,
+  // Esc, a chord such as ⌘\, or a key in a field ends the wait and is then
+  // whatever it would have been without the `g`.
+  if (waiting && isPlainCharacter(event, context)) {
     const second = sequences.find(
       ({ shortcut: { keys } }) =>
         keys[0]?.key === pending.prefix && keys[1] !== undefined && strokeMatches(keys[1], event),

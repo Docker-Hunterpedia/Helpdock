@@ -162,6 +162,17 @@ describe('buildSession', () => {
     expect(session?.user).toMatchObject({ installAdmin: true, role: 'viewer' });
   });
 
+  it('carries the single-key shortcuts switch, so the shell knows it before it draws (M14-01)', () => {
+    const session = buildSession({
+      ...base,
+      user: { ...user, singleKeyShortcuts: false },
+      memberships: [membership(BRAND_A, 'agent')],
+      brands: [brand(BRAND_A, 'Helpdock', 'HD')],
+    });
+
+    expect(session?.user.singleKeyShortcuts).toBe(false);
+  });
+
   it('never carries a password hash or a TOTP secret into the response', () => {
     const session = buildSession({
       ...base,

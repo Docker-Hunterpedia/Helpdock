@@ -215,9 +215,11 @@ first, and Dvorak and AZERTY users press the key engraved with the letter);
 `Enter` on a row, `x`, `Shift`+`x`, `Esc` to clear a selection, `h` and `⌘K`
 wait for the deliverables that build what they act on (M14-04, M14-02,
 M14-05); `g` `n` is left out, because notifications have no page of their own;
-the sheet shows the Latin letter only, as the artboard does; the switch lives
-in the sheet's footer until M14-12's Profile tab, and the sheet is also in the
-account menu so a person who turned `?` off can reach it; `Kbd` lands here
+the sheet shows the Latin letter only, as the artboard does; the switch also
+travels in the session (`user.singleKeyShortcuts`), so no letter is taken
+before it is known, and lives in the sheet's footer until M14-12's Profile
+tab, with the sheet also in the account menu so a person who turned `?` off
+can reach it; `Kbd` lands here
 rather than in M14-06, because the sheet draws with it. Guide:
 [Keyboard shortcuts](../guides/keyboard-shortcuts.md).
 

@@ -91,6 +91,28 @@ describe('resolveShortcut', () => {
       });
     });
 
+    it.each([
+      { case: 'Esc', event: { key: 'Escape', code: 'Escape' }, overrides: {}, id: null },
+      { case: 'Tab', event: { key: 'Tab', code: 'Tab' }, overrides: {}, id: null },
+      {
+        case: '⌘\\',
+        event: { key: '\\', code: 'Backslash', metaKey: true },
+        overrides: {},
+        id: 'general.sidebar',
+      },
+      {
+        case: 'a letter in a field',
+        event: { key: 'i', code: 'KeyI' },
+        overrides: { typing: true },
+        id: null,
+      },
+    ])('ends the wait on $case and lets it be itself', ({ event, overrides, id }) => {
+      const first = press(g);
+      const after = press(event, first.pending, overrides);
+
+      expect(after).toEqual({ id, pending: null, consumed: id !== null });
+    });
+
     it('lets a lone Shift pass without ending the wait', () => {
       const first = press(g);
       expect(press({ key: 'Shift', code: 'ShiftLeft' }, first.pending).pending).toEqual(

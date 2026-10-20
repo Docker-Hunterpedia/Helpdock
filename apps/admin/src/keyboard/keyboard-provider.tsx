@@ -1,5 +1,4 @@
-import type { KeyboardPreferences } from '@helpdock/schemas';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import {
   createContext,
   type ReactNode,
@@ -12,7 +11,7 @@ import {
   useState,
 } from 'react';
 import { useT } from '../app/i18n.js';
-import { useSession } from '../auth/session.tsx';
+import { useSession, useUpdateSessionUser } from '../auth/session.tsx';
 import { ADMIN_NAV, NAV_BY_KEY, navFor } from '../shell/nav-items.js';
 import { useToast } from '../ui/toasts.tsx';
 import type { KeyboardApi } from './api.js';
@@ -29,7 +28,7 @@ import { ShortcutSheet } from './shortcut-sheet.tsx';
  * id, for as long as it is mounted; this provider owns the `keydown` listener,
  * decides with `resolveShortcut` which shortcut a press is, and calls the
  * handler attached last for it. It also holds the single-key switch, read from
- * and saved to the account, the `?` sheet and the chip that shows while a `g`
+ * the session and saved to the account, the `?` sheet and the chip that shows while a `g`
  * sequence waits.
  */
 
@@ -64,58 +63,49 @@ const useKeyboardApi = (): KeyboardApi => {
   return api;
 };
 
-export const KEYBOARD_PREFERENCES_KEY = ['me', 'keyboard'] as const;
+/** On when the session does not say, which is the default (D-32). */
+const SINGLE_KEYS_BY_DEFAULT = true;
 
-/** On until the account says otherwise, which is what every account was before (D-32). */
-const DEFAULT_PREFERENCES: KeyboardPreferences = { singleKeyShortcuts: true };
-
-/** The single-key switch, read from the account and saved back to it. */
+/**
+ * The single-key switch: read from the session, which the shell has before it
+ * draws, so no letter is taken before the person's choice is known (WCAG
+ * 2.1.4); saved to the account and written back into the session.
+ */
 function useSingleKeySwitch(): {
   readonly singleKeys: boolean;
-  readonly saving: boolean;
   readonly setSingleKeys: (on: boolean) => void;
 } {
   const t = useT();
   const toast = useToast();
   const api = useKeyboardApi();
-  const queryClient = useQueryClient();
-
-  const preferences = useQuery({
-    queryKey: KEYBOARD_PREFERENCES_KEY,
-    queryFn: () => api.preferences(),
-  });
+  const updateUser = useUpdateSessionUser();
+  const singleKeys = useSession().user.singleKeyShortcuts ?? SINGLE_KEYS_BY_DEFAULT;
 
   // Optimistic, so the sheet's rows grey out as the switch moves; a refusal
   // puts the switch back where the account still has it.
   const save = useMutation({
-    mutationFn: (next: KeyboardPreferences) => api.save(next),
-    onMutate: (next) => {
-      const before = queryClient.getQueryData<KeyboardPreferences>(KEYBOARD_PREFERENCES_KEY);
-      queryClient.setQueryData(KEYBOARD_PREFERENCES_KEY, next);
-      return { before };
+    mutationFn: (on: boolean) => api.save({ singleKeyShortcuts: on }),
+    onMutate: (on) => {
+      updateUser({ singleKeyShortcuts: on });
     },
-    onSuccess: (saved) => {
-      queryClient.setQueryData(KEYBOARD_PREFERENCES_KEY, saved);
-    },
-    onError: (_error, _next, held) => {
-      queryClient.setQueryData(KEYBOARD_PREFERENCES_KEY, held?.before ?? DEFAULT_PREFERENCES);
+    onError: (_error, on) => {
+      updateUser({ singleKeyShortcuts: !on });
       toast({ tone: 'danger', message: t('tickets:keyboard.saveFailed') });
     },
   });
 
-  const { mutate } = save;
+  const { mutate, isPending } = save;
   const setSingleKeys = useCallback(
     (on: boolean) => {
-      mutate({ singleKeyShortcuts: on });
+      // One save at a time, so two quick toggles cannot land out of order.
+      if (!isPending) {
+        mutate(on);
+      }
     },
-    [mutate],
+    [mutate, isPending],
   );
 
-  return {
-    singleKeys: (preferences.data ?? DEFAULT_PREFERENCES).singleKeyShortcuts,
-    saving: save.isPending,
-    setSingleKeys,
-  };
+  return { singleKeys, setSingleKeys };
 }
 
 /** Whether the signed-in person may use a shortcut that needs `permission`. */
@@ -142,7 +132,7 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
   const handlers = useRef(new Map<ShortcutId, ShortcutHandler[]>());
   const [pending, setPending] = useState<PendingSequence | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { singleKeys, saving, setSingleKeys } = useSingleKeySwitch();
+  const { singleKeys, setSingleKeys } = useSingleKeySwitch();
   const permits = usePermits();
 
   // Read when a key arrives rather than closed over when the listener was
@@ -154,8 +144,9 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      // A control that used the key itself (a menu's type-ahead) keeps it.
-      if (event.defaultPrevented) {
+      // A control that used the key itself (a menu's type-ahead) keeps it,
+      // and so does an input method composing a character (an IME).
+      if (event.defaultPrevented || event.isComposing) {
         return;
       }
       const { target } = event;
@@ -232,7 +223,6 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
       <ShortcutSheet
         open={sheetOpen}
         singleKeys={singleKeys}
-        saving={saving}
         permits={permits}
         onSingleKeysChange={setSingleKeys}
         onClose={() => {
@@ -300,7 +290,7 @@ export function useKeyboard(): {
 } {
   const context = useContext(KeyboardContext);
   return {
-    singleKeys: context?.singleKeys ?? DEFAULT_PREFERENCES.singleKeyShortcuts,
+    singleKeys: context?.singleKeys ?? SINGLE_KEYS_BY_DEFAULT,
     openSheet: context?.openSheet ?? (() => {}),
     permits: context?.permits ?? (() => true),
   };

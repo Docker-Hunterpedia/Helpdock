@@ -76,6 +76,18 @@ export async function signedInMockApis(): Promise<AdminApis> {
     meta: new MockMetaApi(),
     assist: new MockAssistApi(),
     developers: new MockDevelopersApi(),
-    keyboard: new MockKeyboardApi(),
+    keyboard: new MockKeyboardApi(auth),
   };
+}
+
+/**
+ * The auth fixture of {@link signedInMockApis}, typed as the fixture it is, for
+ * a test that drives its account (M14-01's single-key switch).
+ */
+export async function signedInMockAuth(): Promise<MockAuthApi> {
+  const { auth } = await signedInMockApis();
+  if (!(auth instanceof MockAuthApi)) {
+    throw new Error('signedInMockApis always builds a MockAuthApi');
+  }
+  return auth;
 }

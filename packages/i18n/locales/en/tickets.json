@@ -330,7 +330,55 @@
   },
   "keyboard": {
     "label": "Keyboard shortcuts",
-    "hint": "j and k move through the list, r replies, n writes a note, Esc closes."
+    "hint": "Off: only shortcuts with ⌘ or Ctrl work. Saved to your account.",
+    "singleKey": "Single-key shortcuts",
+    "offSuffix": " (off)",
+    "then": "then",
+    "close": "Close",
+    "saveFailed": "The shortcut setting was not saved. Try again.",
+    "groups": {
+      "general": "General",
+      "goTo": "Go to",
+      "list": "List",
+      "ticket": "Ticket",
+      "composer": "Composer"
+    },
+    "shortcut": {
+      "general": {
+        "search": "Search the list",
+        "newTicket": "New ticket",
+        "sidebar": "Toggle the sidebar",
+        "shortcuts": "All shortcuts"
+      },
+      "goTo": {
+        "myOpen": "My open",
+        "unassigned": "Unassigned",
+        "overdue": "Overdue",
+        "contacts": "Contacts",
+        "helpCenter": "Help center",
+        "reports": "Reports",
+        "settings": "Settings"
+      },
+      "list": {
+        "next": "Next ticket",
+        "previous": "Previous ticket",
+        "close": "Close"
+      },
+      "ticket": {
+        "reply": "Reply",
+        "note": "Internal note",
+        "assignee": "Assignee",
+        "status": "Status",
+        "priority": "Priority",
+        "tags": "Tags",
+        "macros": "Macros"
+      },
+      "composer": {
+        "send": "Send",
+        "sendAndClose": "Send and close",
+        "savedReply": "Insert a saved reply"
+      }
+    }
   },
   "attachments": {
     "settling": "processing",

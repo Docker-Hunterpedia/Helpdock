@@ -5,6 +5,7 @@ import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
 import { type TicketAction, TicketActionsMenu } from './ticket-actions-menu.tsx';
@@ -60,6 +61,7 @@ export function TicketHeader({
   const t = useT();
   const tokens = useSemanticTokens();
   const [first, ...rest] = viewers;
+  const macroKeys = useAriaKeyShortcuts('ticket.macros');
   const importedUrl = importSourceLink(ticket.imported?.url);
 
   return (
@@ -93,6 +95,7 @@ export function TicketHeader({
             size="small"
             aria-haspopup="dialog"
             aria-expanded={macroOpen}
+            aria-keyshortcuts={macroKeys}
             onClick={onMacro}
           >
             {t('tickets:header.macro')}

@@ -26,6 +26,7 @@ const user: StaffUser = {
   signatureEn: null,
   signatureAr: null,
   webauthnUserHandle: null,
+  singleKeyShortcuts: true,
 };
 
 const brand = (id: string, name: string, prefix: string): Brand => ({

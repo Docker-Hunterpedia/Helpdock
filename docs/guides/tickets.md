@@ -1344,23 +1344,12 @@ requests for pictures nobody has opened.
 
 ### Keyboard
 
-`j` and `k` move through the list and open what they land on, `r` puts the
-caret in the composer, `n` does the same in note mode, and `Esc` closes a
-drawer or a dialog. A single letter is only a shortcut while nobody is writing:
-anything typed into a field is left alone, as is anything carrying a modifier.
-
-The letters are the ones a Latin layout types, so on Dvorak `j` is still `j`.
-A layout that types no Latin letter, such as Arabic, uses the same physical
-keys as QWERTY: the key that types `ت` is `j`. There is no setting to turn the
-single-letter shortcuts off yet.
-
-Anywhere in the admin, `⌘\` on a Mac or `Ctrl+\` elsewhere collapses the
-sidebar to a 56 px icon rail and expands it again, which leaves the list and
-the thread more room (since 1.0.2). It carries a modifier, so it works while
-typing too, and it is matched by the physical key, so it is the same key on an
-Arabic layout. The **Collapse sidebar** button above your name does the same.
-The browser remembers the choice; until you make one, the sidebar is expanded
-on a window 1280 px or wider and collapsed between 1024 and 1279 px.
+The workspace answers to the keyboard: `j` and `k` through the list, `r` to
+reply, `e` to close, `⌘`/`Ctrl`+`Enter` to send, `g` then a letter to open a
+view, and more. Every shortcut, where each answers, how they work on an
+Arabic keyboard layout and how to turn single-key shortcuts off are in
+[Keyboard shortcuts](keyboard-shortcuts.md); `?` shows the same list in the
+app. The sidebar's `⌘\` / `Ctrl+\` (since 1.0.2) is one of them.
 
 ### Tags and custom fields in the workspace
 

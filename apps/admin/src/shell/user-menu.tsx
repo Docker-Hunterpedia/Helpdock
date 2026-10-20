@@ -5,6 +5,7 @@ import {
   Check,
   Circle,
   Clock,
+  Keyboard,
   Languages,
   LogOut,
   Monitor,
@@ -19,6 +20,7 @@ import { usePreferences } from '../app/providers.tsx';
 import { ROUTES } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { useAuthApi, useSession, useSetSession } from '../auth/session.tsx';
+import { useAriaKeyShortcuts, useKeyboard } from '../keyboard/keyboard-provider.tsx';
 import { useRealtime } from '../realtime/realtime-provider.tsx';
 import { PresenceDot } from '../ui/presence-dot.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
@@ -65,6 +67,8 @@ export function UserMenu({
 
   const other = otherLocale(locale);
   const menuLabel = t('admin:currentUser.menuLabel', { name: session.user.name });
+  const { openSheet } = useKeyboard();
+  const sheetKeys = useAriaKeyShortcuts('general.shortcuts');
 
   const signOut = useMutation({
     mutationFn: () => api.signOut(),
@@ -176,6 +180,21 @@ export function UserMenu({
             <Bell size={16} aria-hidden="true" />
           </ListItemIcon>
           {t('me:account.tabs.notifications')}
+        </MenuItem>
+
+        {/* M14-01: the sheet without a key, so a person who turned
+            single-key shortcuts off can still reach it, and its switch. */}
+        <MenuItem
+          aria-keyshortcuts={sheetKeys}
+          onClick={() => {
+            close();
+            openSheet();
+          }}
+        >
+          <ListItemIcon>
+            <Keyboard size={16} aria-hidden="true" />
+          </ListItemIcon>
+          {t('tickets:keyboard.label')}
         </MenuItem>
 
         <Divider />

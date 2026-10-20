@@ -302,6 +302,7 @@ const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> =
   signatureEn: null,
   signatureAr: null,
   webauthnUserHandle: null,
+  singleKeyShortcuts: true,
   ...overrides,
 });
 

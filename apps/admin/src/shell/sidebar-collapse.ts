@@ -1,5 +1,5 @@
 import { useMediaQuery } from '@mui/material';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 /**
  * Whether the admin sidebar is the 220 px column or the 56 px icon rail
@@ -38,35 +38,14 @@ export function storeSidebarChoice(state: SidebarState): void {
   }
 }
 
-export interface ShortcutKeys {
-  readonly key: string;
-  /** The physical key, so the shortcut sits in the same place on an Arabic layout. */
-  readonly code?: string;
-  readonly metaKey?: boolean;
-  readonly ctrlKey?: boolean;
-  readonly altKey?: boolean;
-  readonly shiftKey?: boolean;
-}
-
 /**
- * ⌘\ on a Mac, Ctrl+\ elsewhere; either modifier is taken on any platform.
- * Matched by the physical `Backslash` key first, as the ticket shortcuts are
- * (`screens/tickets/keyboard.ts`), and by the character for a layout that puts
- * the backslash on another key. It carries a modifier, so it is a shortcut
- * even while somebody is typing in a field.
+ * The sidebar's state and its toggle. The keys that toggle it — `b`, and ⌘\
+ * on a Mac or Ctrl+\ elsewhere — are in the shortcut registry
+ * (`keyboard/registry.ts`); the shell attaches this toggle to them only where
+ * the sidebar is a column, since a toggle nobody can see would silently
+ * change the remembered choice.
  */
-export const isSidebarShortcut = (event: ShortcutKeys): boolean =>
-  (event.metaKey === true || event.ctrlKey === true) &&
-  event.altKey !== true &&
-  event.shiftKey !== true &&
-  (event.code === 'Backslash' || event.key === '\\');
-
-/**
- * The sidebar's state and its toggle. `shortcut` is whether ⌘\ answers here:
- * only where the sidebar is a column, since a toggle nobody can see would
- * silently change the remembered choice.
- */
-export function useSidebarCollapse({ shortcut }: { readonly shortcut: boolean }): {
+export function useSidebarCollapse(): {
   readonly collapsed: boolean;
   readonly toggle: () => void;
 } {
@@ -79,22 +58,6 @@ export function useSidebarCollapse({ shortcut }: { readonly shortcut: boolean })
     setChoice(next);
     storeSidebarChoice(next);
   }, [collapsed]);
-
-  useEffect(() => {
-    if (!shortcut) {
-      return;
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (isSidebarShortcut(event)) {
-        event.preventDefault();
-        toggle();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [shortcut, toggle]);
 
   return { collapsed, toggle };
 }

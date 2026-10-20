@@ -207,6 +207,20 @@ screen agents use most.
 
 ### M14-01 Keyboard foundation
 
+**Status: built, in review** (issue #288). Built as below, with these
+differences: letters follow the character a Latin layout types and fall back
+to `event.code` only on a layout that types no Latin letter, which is what
+1.0's keys already did since #244 (so the Arabic layout needed no failing test
+first, and Dvorak and AZERTY users press the key engraved with the letter);
+`Enter` on a row, `x`, `Shift`+`x`, `Esc` to clear a selection, `h` and `⌘K`
+wait for the deliverables that build what they act on (M14-04, M14-02,
+M14-05); `g` `n` is left out, because notifications have no page of their own;
+the sheet shows the Latin letter only, as the artboard does; the switch lives
+in the sheet's footer until M14-12's Profile tab, and the sheet is also in the
+account menu so a person who turned `?` off can reach it; `Kbd` lands here
+rather than in M14-06, because the sheet draws with it. Guide:
+[Keyboard shortcuts](../guides/keyboard-shortcuts.md).
+
 One registry (`apps/admin/src/keyboard/registry.ts`, new) names every shortcut
 once: its id, keys, scope (global, list, ticket, composer), the i18n label, and
 the permission it needs. The `?` sheet, the palette's action list, each button's

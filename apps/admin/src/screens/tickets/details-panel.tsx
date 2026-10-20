@@ -13,12 +13,13 @@ import type {
 import { ticketPrioritySchema } from '@helpdock/schemas';
 import { Box, MenuItem, Link as MuiLink, TextField, Typography } from '@mui/material';
 import { BadgeCheck } from 'lucide-react';
-import { type ReactNode, useId } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { contactRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
@@ -28,6 +29,7 @@ import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
 import { type ContactHistoryState, PreviousTickets } from './previous-tickets.tsx';
 import { SlaCard } from './sla-card.tsx';
+import type { DetailsRequest } from './ticket-shortcuts.js';
 import { TicketTags } from './ticket-tags.tsx';
 
 /**
@@ -93,6 +95,12 @@ export interface DetailsPanelProps {
   readonly customFields: readonly CustomFieldDef[];
   /** Whether the reader holds `ticket:write`, which the tags and the custom fields need. */
   readonly canWrite: boolean;
+  /**
+   * M14-01: a shortcut (`a`, `s`, `p`, `t`) asking for one of the controls to
+   * open. Acted on once, then `onRequestHandled` is called.
+   */
+  readonly request?: DetailsRequest | null | undefined;
+  onRequestHandled?(): void;
   onTagsChange(tagIds: string[]): void;
   /** Resolves once saved; rejects with the api's refusal, which the field then shows. */
   onCustomSave(key: string, value: unknown): Promise<void>;
@@ -121,6 +129,8 @@ export function DetailsPanel({
   brandTags,
   customFields,
   canWrite,
+  request = null,
+  onRequestHandled,
   onTagsChange,
   onCustomSave,
   onChange,
@@ -132,6 +142,41 @@ export function DetailsPanel({
   const departmentId = useId();
   const statusId = useId();
   const priorityId = useId();
+  const assigneeButton = useRef<HTMLButtonElement | null>(null);
+  const tagsButton = useRef<HTMLButtonElement | null>(null);
+  const [openSelect, setOpenSelect] = useState<'status' | 'priority' | null>(null);
+  const statusKeys = useAriaKeyShortcuts('ticket.status');
+  const priorityKeys = useAriaKeyShortcuts('ticket.priority');
+
+  // In the drawer below 1280 px the panel mounts with the request already
+  // set, so the buttons exist by the time this runs either way.
+  useEffect(() => {
+    if (request === null) {
+      return;
+    }
+    if (request.control === 'assignee') {
+      assigneeButton.current?.click();
+    } else if (request.control === 'tags') {
+      tagsButton.current?.click();
+    } else if (!busy) {
+      setOpenSelect(request.control);
+    }
+    onRequestHandled?.();
+  }, [request, busy, onRequestHandled]);
+
+  /** A select opened by its shortcut, or by the person, and closed either way. */
+  const selectProps = (name: 'status' | 'priority', keys: string | undefined) => ({
+    select: {
+      open: openSelect === name,
+      onOpen: () => {
+        setOpenSelect(name);
+      },
+      onClose: () => {
+        setOpenSelect(null);
+      },
+      SelectDisplayProps: { 'aria-keyshortcuts': keys } as const,
+    },
+  });
 
   return (
     <Box
@@ -218,6 +263,7 @@ export function DetailsPanel({
 
       <AssigneePicker
         id={assigneeId}
+        buttonRef={assigneeButton}
         label={t('tickets:details.assignee')}
         assigneeId={ticket.assigneeId}
         assigneeName={assignee.name}
@@ -258,6 +304,7 @@ export function DetailsPanel({
         disabled={busy}
         label={t('tickets:details.status')}
         value={ticket.status.id}
+        slotProps={selectProps('status', statusKeys)}
         onChange={(event) => {
           onChange({ statusId: event.target.value });
         }}
@@ -276,6 +323,7 @@ export function DetailsPanel({
         disabled={busy}
         label={t('tickets:details.priority')}
         value={ticket.priority}
+        slotProps={selectProps('priority', priorityKeys)}
         onChange={(event) => {
           onChange({ priority: event.target.value as TicketPriority });
         }}
@@ -291,6 +339,7 @@ export function DetailsPanel({
         tags={ticket.tags ?? []}
         brandTags={brandTags}
         canWrite={canWrite}
+        buttonRef={tagsButton}
         onChange={onTagsChange}
       />
 

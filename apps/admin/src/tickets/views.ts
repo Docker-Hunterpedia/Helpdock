@@ -293,17 +293,26 @@ export const activeFilterCount = (filters: WorkspaceFilters): number =>
 // ------------------------------------------------------------------ intents
 
 /**
- * Something the sidebar asks the workspace to do once it is on screen: open
- * the filters of the view it named ("Edit filters"), or the "Save as a view"
- * dialog (the + beside Views). The workspace acts on it and drops it from the
- * URL, so a reload or the back button never opens a dialog by itself.
+ * Something the sidebar or a shortcut asks the workspace to do once it is on
+ * screen: open the filters of the view it named ("Edit filters"), the "Save
+ * as a view" dialog (the + beside Views), the new-ticket dialog (`c`) or the
+ * list's search box (`/`, M14-01). The workspace acts on it and drops it from
+ * the URL, so a reload or the back button never opens a dialog by itself.
  */
 export const INTENT = 'intent';
-export type WorkspaceIntent = 'filters' | 'save';
+const INTENTS = ['filters', 'save', 'new', 'search'] as const;
+export type WorkspaceIntent = (typeof INTENTS)[number];
 
 export const intentOf = (params: URLSearchParams): WorkspaceIntent | null => {
   const intent = params.get(INTENT);
-  return intent === 'filters' || intent === 'save' ? intent : null;
+  return INTENTS.find((candidate) => candidate === intent) ?? null;
+};
+
+/** `search` with `intent` added, everything else in it kept. */
+export const withIntent = (search: string, intent: WorkspaceIntent): string => {
+  const params = new URLSearchParams(search);
+  params.set(INTENT, intent);
+  return `?${params.toString()}`;
 };
 
 /** The query string of a link to a view, optionally with an intent. */

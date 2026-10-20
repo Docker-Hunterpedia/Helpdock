@@ -25,6 +25,7 @@ import type { HelpCenterApi } from '../help-center/api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
 import type { ImportsApi } from '../imports/api.js';
 import { MockImportsApi } from '../imports/mock-api.js';
+import { type KeyboardApi, MockKeyboardApi } from '../keyboard/api.js';
 import type { KnowledgeApi } from '../knowledge/api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
@@ -82,6 +83,7 @@ export interface RenderAppOptions {
   readonly metaApi?: MetaApi;
   readonly assistApi?: AssistApi;
   readonly developersApi?: DevelopersApi;
+  readonly keyboardApi?: KeyboardApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -109,6 +111,7 @@ export interface RenderedApp extends RenderResult {
   readonly metaApi: MetaApi;
   readonly assistApi: AssistApi;
   readonly developersApi: DevelopersApi;
+  readonly keyboardApi: KeyboardApi;
 }
 
 /**
@@ -143,6 +146,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const assistApi =
     options.assistApi ?? new MockAssistApi({ tickets: ticketsApi, helpCenter: helpCenterApi });
   const developersApi = options.developersApi ?? new MockDevelopersApi();
+  const keyboardApi = options.keyboardApi ?? new MockKeyboardApi();
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -172,6 +176,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       metaApi={metaApi}
       assistApi={assistApi}
       developersApi={developersApi}
+      keyboardApi={keyboardApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -208,5 +213,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     metaApi,
     assistApi,
     developersApi,
+    keyboardApi,
   };
 }

@@ -15,6 +15,12 @@ import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import {
+  useAriaKeyShortcuts,
+  useKeyboard,
+  useShortcutHandlers,
+} from '../../keyboard/keyboard-provider.tsx';
+import type { ShortcutId } from '../../keyboard/registry.js';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import {
   type ComposerEmail,
@@ -53,6 +59,18 @@ import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
 
 export type ComposerMode = 'reply' | 'note';
 
+/**
+ * The composer's shortcuts (M14-01). They answer only while the caret is in
+ * the composer (`data-shortcut-scope`). `/` is read from what is typed into
+ * an empty reply rather than from the key, so the browser's own `/` is never
+ * taken; the switch turns it off with every other key without a modifier.
+ */
+export const COMPOSER_SHORTCUTS = [
+  'composer.send',
+  'composer.sendAndClose',
+  'composer.savedReply',
+] as const satisfies readonly ShortcutId[];
+
 export interface ComposerProps {
   readonly mode: ComposerMode;
   readonly body: string;
@@ -79,6 +97,11 @@ export interface ComposerProps {
   onAttach(files: readonly File[]): void;
   onRemoveAttachment(attachmentId: string): void;
   onSend(): void;
+  /**
+   * M14-01: send, then close the ticket (`⌘⇧Enter`). Absent when the brand
+   * has no status to close into.
+   */
+  onSendAndClose?: (() => void) | undefined;
   /** The caret entered the body: M1-12's timer may start here. */
   onBodyFocus?(): void;
   /**
@@ -125,6 +148,7 @@ export function Composer({
   onAttach,
   onRemoveAttachment,
   onSend,
+  onSendAndClose,
   onBodyFocus,
   email,
   telegram,
@@ -148,6 +172,18 @@ export function Composer({
   // Held, not disabled: the button keeps its place and its focus, so the reason
   // is read where the agent is. Nothing is sent while it is.
   const sendHeld = metaReply && meta.closed;
+  const canSend = !sendHeld && !busy && !uploading && body.trim() !== '';
+  const { singleKeys } = useKeyboard();
+  const sendKeys = useAriaKeyShortcuts('composer.send');
+  const replyKeys = useAriaKeyShortcuts('ticket.reply');
+  const noteKeys = useAriaKeyShortcuts('ticket.note');
+  const macrosKeys = useAriaKeyShortcuts('ticket.macros');
+
+  useShortcutHandlers<(typeof COMPOSER_SHORTCUTS)[number]>({
+    'composer.send': canSend ? onSend : null,
+    'composer.sendAndClose': canSend && onSendAndClose !== undefined ? onSendAndClose : null,
+    'composer.savedReply': onOpenMacros ?? null,
+  });
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -162,6 +198,7 @@ export function Composer({
       component="form"
       elevation={1}
       aria-label={t('tickets:composer.label')}
+      data-shortcut-scope="composer"
       onSubmit={(event) => {
         event.preventDefault();
         if (!sendHeld) {
@@ -192,8 +229,12 @@ export function Composer({
             }
           }}
         >
-          <ToggleButton value="reply">{t('tickets:composer.reply')}</ToggleButton>
-          <ToggleButton value="note">{t('tickets:composer.note')}</ToggleButton>
+          <ToggleButton value="reply" aria-keyshortcuts={replyKeys}>
+            {t('tickets:composer.reply')}
+          </ToggleButton>
+          <ToggleButton value="note" aria-keyshortcuts={noteKeys}>
+            {t('tickets:composer.note')}
+          </ToggleButton>
         </ToggleButtonGroup>
 
         {emailReply ? (
@@ -238,7 +279,12 @@ export function Composer({
         value={body}
         onChange={(event) => {
           // `/` typed into an empty reply opens the picker instead of being text.
-          if (body === '' && event.target.value === '/' && onOpenMacros !== undefined) {
+          if (
+            singleKeys &&
+            body === '' &&
+            event.target.value === '/' &&
+            onOpenMacros !== undefined
+          ) {
             onOpenMacros();
             return;
           }
@@ -315,6 +361,7 @@ export function Composer({
           disabled={onOpenMacros === undefined}
           aria-haspopup="dialog"
           aria-expanded={macrosOpen}
+          aria-keyshortcuts={macrosKeys}
           startIcon={<Zap size={14} aria-hidden="true" />}
           onClick={onOpenMacros}
         >
@@ -345,6 +392,7 @@ export function Composer({
           variant="contained"
           disabled={!sendHeld && (busy || uploading || body.trim() === '')}
           aria-disabled={sendHeld ? true : undefined}
+          aria-keyshortcuts={sendKeys}
           aria-describedby={sendHeld ? meta.stripId : undefined}
           onClick={(event) => {
             if (sendHeld) {

@@ -38,6 +38,7 @@ export * from './import-source-link.js';
 export * from './import-zoho.js';
 export * from './install.js';
 export * from './install-settings.js';
+export * from './keyboard.js';
 export * from './knowledge.js';
 export * from './macros.js';
 export * from './media.js';

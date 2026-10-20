@@ -78,6 +78,7 @@ const MIGRATION_TAGS = [
   '0057_contact_ticket_count_skips_spam',
   '0058_webauthn_credentials',
   '0059_oauth_identity_use',
+  '0060_single_key_shortcuts',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

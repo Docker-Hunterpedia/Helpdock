@@ -1,4 +1,5 @@
 import { CANNED_PLACEHOLDERS, type CannedPlaceholder } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Paper, TextField, Typography } from '@mui/material';
 import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
@@ -135,10 +136,7 @@ export function PlaceholderPicker({ samples, onPick, onClose }: PlaceholderPicke
                   '&:hover': { backgroundColor: tokens['bg.muted'] },
                 }}
               >
-                <Box
-                  component="code"
-                  sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12 }}
-                >
+                <Box component="code" sx={{ ...monoFontStyle, fontSize: 12 }}>
                   <bdi>{`{{${name}}}`}</bdi>
                 </Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>

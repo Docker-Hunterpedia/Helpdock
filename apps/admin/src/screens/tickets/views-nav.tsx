@@ -139,7 +139,7 @@ export function TicketViewsNav({
           id={labelId}
           component="p"
           variant="caption"
-          sx={{ color: 'text.secondary', fontSize: 11, flex: 1 }}
+          sx={{ color: 'text.secondary', flex: 1 }}
         >
           {t('tickets:views.label')}
         </Typography>
@@ -179,7 +179,6 @@ export function TicketViewsNav({
               color: 'text.secondary',
               paddingInline: 3,
               marginBlock: '12px 4px',
-              fontSize: 11,
             }}
           >
             {t('tickets:views.mine')}

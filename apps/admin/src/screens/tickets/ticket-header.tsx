@@ -84,7 +84,7 @@ export function TicketHeader({
           <Typography variant="mono" component="p" sx={{ color: 'text.secondary', fontSize: 12 }}>
             <bdi>{ticketReference(ticket)}</bdi>
           </Typography>
-          <Typography variant="h2" component="h1" dir="auto" sx={{ fontSize: 18 }}>
+          <Typography variant="h2" component="h1" dir="auto">
             {ticket.subject}
           </Typography>
         </Box>

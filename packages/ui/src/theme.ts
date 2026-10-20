@@ -104,9 +104,12 @@ function buildPalette(mode: ThemeMode, semantic: SemanticTokens): ThemeOptions['
   };
 }
 
-function buildTypography(fonts: ResolvedBrandTheme['fontFamily']): ThemeOptions['typography'] {
+function buildTypography(
+  fonts: ResolvedBrandTheme['fontFamily'],
+  direction: Direction,
+): ThemeOptions['typography'] {
   return {
-    fontFamily: fonts.sans,
+    fontFamily: direction === 'rtl' ? fonts.arabic : fonts.sans,
     fontSize: tokens.typography.baseSize.admin,
     fontWeightRegular: tokens.typography.fontWeight.regular,
     fontWeightMedium: tokens.typography.fontWeight.medium,
@@ -369,13 +372,27 @@ export function createHelpdockTheme({ mode, direction, brand }: CreateHelpdockTh
   const radius = brand?.radius ?? tokens.radius;
   const fontFamily = brand?.fontFamily ?? tokens.typography.fontFamily;
 
+  const components = buildComponents(mode, semantic, radius);
   return createTheme({
     direction,
     spacing: tokens.spacing.base,
     shape: { borderRadius: radius.md },
     shadows: buildShadows(mode),
     palette: buildPalette(mode, semantic),
-    typography: buildTypography(fontFamily),
-    components: buildComponents(mode, semantic, radius),
+    typography: buildTypography(fontFamily, direction),
+    components: {
+      ...components,
+      MuiCssBaseline: {
+        styleOverrides: {
+          ':root': Object.fromEntries(
+            Object.entries(fontFamily).map(([name, value]) => [`--hd-font-${name}`, value]),
+          ),
+          // CssBaseline otherwise uses body1 (the content size), not the admin base.
+          body: typeStyle('body'),
+          // Match explicit language markers; inherited :lang(ar) would reset mono descendants.
+          ':lang(ar)[lang]': { fontFamily: 'var(--hd-font-arabic)' },
+        },
+      },
+    },
   });
 }

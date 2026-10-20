@@ -82,12 +82,7 @@ export function WidgetPreview({
       }}
     >
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-        <Typography
-          id={headingId}
-          variant="h3"
-          component="h2"
-          sx={{ fontSize: 16, flex: '1 1 auto' }}
-        >
+        <Typography id={headingId} variant="h3" component="h2" sx={{ flex: '1 1 auto' }}>
           {t('channels:widget.preview.heading')}
         </Typography>
         <ToggleButtonGroup
@@ -267,7 +262,7 @@ export function WidgetPreview({
           </Box>
           <Typography
             sx={{
-              fontSize: 11,
+              fontSize: 12,
               color: surface['text.secondary'],
               textAlign: 'center',
               paddingBlockEnd: 2,

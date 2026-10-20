@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
 import {
   type CustomerEmailLayout,
@@ -30,6 +31,9 @@ describe('renderCustomerEmail', () => {
 
     expect(html).toContain('##- Please type your reply above this line -##');
     expect(html).toContain('<p>Your refund was issued.</p>');
+    expect(html).toContain(`font-family:${fontFallbacks.sans}`);
+    expect(html).toContain(`font-family:${fontFallbacks.mono}`);
+    expect(html).not.toContain('IBM Plex');
     expect(html).toContain('Lina Haddad');
     expect(html).toContain('<bdi style="font-family:');
     expect(html).toContain('[HD-1042]');
@@ -70,7 +74,9 @@ describe('renderCustomerEmail', () => {
     const { html } = renderCustomerEmail({ ...layout, locale: 'ar', dir: 'rtl' });
 
     expect(html).toContain('<html lang="ar" dir="rtl">');
-    expect(html).toContain("'IBM Plex Sans Arabic'");
+    expect(html).toContain(`font-family:${fontFallbacks.sans}`);
+    expect(html).toContain(`font-family:${fontFallbacks.mono}`);
+    expect(html).not.toContain('IBM Plex');
   });
 
   it('escapes the brand name and ignores an accent that is not a colour', () => {

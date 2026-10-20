@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { escapeHtml } from './customer-layout.js';
 
 /**
@@ -44,8 +45,6 @@ const COLOURS = {
   strong: '#CFC9BD',
 } as const;
 
-const MONO = "'IBM Plex Mono',ui-monospace,monospace";
-
 const introHtml = (intro: string, reference: string): string => {
   const escaped = escapeHtml(intro);
   const token = escapeHtml(reference);
@@ -53,11 +52,11 @@ const introHtml = (intro: string, reference: string): string => {
 
   return at === -1
     ? escaped
-    : `${escaped.slice(0, at)}<bdi style="font-family:${MONO}">${token}</bdi>${escaped.slice(at + token.length)}`;
+    : `${escaped.slice(0, at)}<bdi style="font-family:${fontFallbacks.mono}">${token}</bdi>${escaped.slice(at + token.length)}`;
 };
 
 const cell = (choice: CsatSurveyChoice): string =>
-  `<td width="20%" style="padding:0 2px"><a href="${escapeHtml(choice.href)}" aria-label="${escapeHtml(choice.label)}" style="display:block;padding:10px 4px;border:1px solid ${COLOURS.strong};border-radius:6px;text-align:center;text-decoration:none;color:${COLOURS.text}"><span style="display:block;font-family:${MONO};font-size:20px;line-height:28px;font-weight:500">${String(choice.rating)}</span><span style="display:block;font-size:12px;line-height:16px;color:${COLOURS.secondary}">${escapeHtml(choice.word)}</span></a></td>`;
+  `<td width="20%" style="padding:0 2px"><a href="${escapeHtml(choice.href)}" aria-label="${escapeHtml(choice.label)}" style="display:block;padding:10px 4px;border:1px solid ${COLOURS.strong};border-radius:6px;text-align:center;text-decoration:none;color:${COLOURS.text}"><span style="display:block;font-family:${fontFallbacks.mono};font-size:20px;line-height:28px;font-weight:500">${String(choice.rating)}</span><span style="display:block;font-size:12px;line-height:16px;color:${COLOURS.secondary}">${escapeHtml(choice.word)}</span></a></td>`;
 
 export const renderCsatSurveyBody = (
   body: CsatSurveyBody,

@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, OutlinedInput, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -29,7 +30,7 @@ function WithCode({ text }: { readonly text: string }): ReactNode {
         key={index}
         component="span"
         dir="ltr"
-        sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}
+        sx={{ ...monoFontStyle }}
       >
         {part}
       </Box>
@@ -92,7 +93,7 @@ export function SetupKeyField({ value, onChange, error }: SetupKeyFieldProps): R
             spellCheck: false,
             'aria-invalid': errorText !== undefined,
             'aria-describedby': errorText === undefined ? HINT_ID : `${ERROR_ID} ${HINT_ID}`,
-            style: { fontFamily: 'var(--hd-font-mono, monospace)' },
+            style: { ...monoFontStyle },
           },
         }}
       />

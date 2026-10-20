@@ -8,6 +8,7 @@ import {
   type HcSiteImage,
   type HcTheme,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, MenuItem, Select, TextField, Typography } from '@mui/material';
 import { ImageUp } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
@@ -158,7 +159,7 @@ export function ThemeCard({
                     ),
                   },
                 }}
-                sx={{ flex: 1, '& input': { fontFamily: 'var(--hd-font-mono, monospace)' } }}
+                sx={{ flex: 1, '& input': { ...monoFontStyle } }}
               />
             </Box>
           </Field>

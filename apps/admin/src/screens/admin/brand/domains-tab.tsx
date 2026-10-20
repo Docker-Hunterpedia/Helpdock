@@ -1,5 +1,6 @@
 import type { CustomDomain, CustomDomainUpdateRequest, DnsRecord } from '@helpdock/schemas';
 import { MAX_HELPCENTER_DOMAINS } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -155,7 +156,7 @@ export function DomainsTab(): ReactNode {
             gap: '2px',
           }}
         >
-          <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+          <Typography id={headingId} variant="h3" component="h2">
             {t('brand:domains.heading')}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
@@ -304,7 +305,7 @@ function AddDomainForm({
                 maxLength: 253,
                 'aria-invalid': error !== undefined,
                 'aria-describedby': fieldDescribedBy(id, { hint, error }),
-                style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+                style: { ...monoFontStyle, fontSize: 13 },
               },
             }}
             sx={{ flexGrow: 1, minWidth: 0 }}
@@ -587,11 +588,7 @@ function RecordRow({ record }: { readonly record: DnsRecord }): ReactNode {
 
   return (
     <TableRow sx={{ height: 40 }}>
-      <TableCell
-        sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12, fontWeight: 500 }}
-      >
-        {record.type}
-      </TableCell>
+      <TableCell sx={{ ...monoFontStyle, fontSize: 12, fontWeight: 500 }}>{record.type}</TableCell>
       <TableCell>
         <CopyValue
           text={record.name}

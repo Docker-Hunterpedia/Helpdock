@@ -1,4 +1,6 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
+import { escapeHtml } from '../auth/email-templates.js';
 import { renderStaffNotificationEmail, type StaffEmailInput } from './staff-email.js';
 
 const RECIPIENT = '0199f4b2-1111-7000-8000-000000000002';
@@ -40,6 +42,8 @@ describe('renderStaffNotificationEmail', () => {
     expect(email.text).toContain('https://desk.example.com/me/notifications');
     expect(email.html).toContain('lang="en" dir="ltr"');
     expect(email.html).toContain('#B3261E');
+    expect(email.html).toContain(`font-family:${escapeHtml(fontFallbacks.sans)}`);
+    expect(email.html).toContain(`font-family:${escapeHtml(fontFallbacks.mono)}`);
   });
 
   it('ends with the footer every notification email shares (M14-10)', () => {
@@ -104,7 +108,7 @@ describe('renderStaffNotificationEmail', () => {
     expect(email.html).toContain('lang="ar" dir="rtl"');
     expect(email.subject).toContain('تجاوز مهلة الرد الأول');
     expect(email.html).toContain(
-      '<bdi style="font-family:\'IBM Plex Mono\', ui-monospace, monospace">HD-1042</bdi>',
+      `<bdi style="font-family:${escapeHtml(fontFallbacks.mono)}">HD-1042</bdi>`,
     );
   });
 

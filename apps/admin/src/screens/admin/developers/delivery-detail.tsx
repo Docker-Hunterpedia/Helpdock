@@ -4,6 +4,7 @@ import {
   type WebhookDelivery,
   type WebhookDeliveryDetail,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Link as MuiLink, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
@@ -94,7 +95,7 @@ export function DeliveryDetail({
     padding: 3,
     borderRadius: '6px',
     backgroundColor: tokens['bg.muted'],
-    fontFamily: 'var(--hd-font-mono, monospace)',
+    ...monoFontStyle,
     fontSize: 12,
     lineHeight: '20px',
     whiteSpace: 'pre-wrap',
@@ -112,7 +113,7 @@ export function DeliveryDetail({
               component="h3"
               dir="ltr"
               sx={{
-                fontFamily: 'var(--hd-font-mono, monospace)',
+                ...monoFontStyle,
                 fontSize: 14,
                 fontWeight: 600,
                 alignSelf: 'flex-start',
@@ -187,7 +188,7 @@ export function DeliveryDetail({
                 <Typography
                   component="span"
                   sx={{
-                    fontFamily: 'var(--hd-font-mono, monospace)',
+                    ...monoFontStyle,
                     fontSize: 12,
                     color: 'text.secondary',
                   }}

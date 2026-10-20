@@ -183,7 +183,7 @@ export function MacroEditor({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Typography id={headingId} variant="h2" sx={{ fontSize: 18, fontWeight: 600 }}>
+        <Typography id={headingId} variant="h2" sx={{ fontWeight: 600 }}>
           {macro?.name ?? t(`macros:editor.new.${draft.kind}`)}
         </Typography>
         <Typography

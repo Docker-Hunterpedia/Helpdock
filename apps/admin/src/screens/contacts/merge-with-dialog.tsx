@@ -101,7 +101,7 @@ export function MergeWithDialog({
       slotProps={{ paper: { sx: { maxWidth: 520, borderRadius: '14px' } } }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, paddingInlineEnd: 4 }}>
-        <DialogTitle id={titleId} sx={{ flex: 1, fontSize: 18, fontWeight: 600 }}>
+        <DialogTitle id={titleId} variant="h3" sx={{ flex: 1 }}>
           {t('contacts:mergeWith.title', { name: contact.name })}
           <Typography
             variant="body2"

@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
 import { type CsatSurveyBody, renderCsatSurveyBody } from './csat-survey.js';
 
@@ -33,6 +34,8 @@ describe('renderCsatSurveyBody', () => {
     const { bodyHtml } = renderCsatSurveyBody(body());
 
     expect(bodyHtml).toContain('How would you rate the help you received?</h1>');
+    expect(bodyHtml).toContain(`font-family:${fontFallbacks.mono}`);
+    expect(bodyHtml).not.toContain('IBM Plex');
     expect(bodyHtml).toMatch(/your request <bdi style="font-family:[^"]+">HD-1042<\/bdi> today/);
   });
 

@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Checkbox, Typography } from '@mui/material';
 import { type ReactNode, useId } from 'react';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -66,7 +67,7 @@ export function CheckList<Value extends string>({
                   htmlFor={inputId}
                   dir="ltr"
                   sx={{
-                    fontFamily: 'var(--hd-font-mono, monospace)',
+                    ...monoFontStyle,
                     fontSize: 13,
                     lineHeight: '20px',
                     alignSelf: 'flex-start',

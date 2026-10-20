@@ -1,4 +1,5 @@
 import type { WidgetAppearance, WidgetMode, WidgetSettings } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -221,7 +222,7 @@ export function AppearanceCard({
                     ),
                   },
                 }}
-                sx={{ flex: 1, '& input': { fontFamily: 'var(--hd-font-mono, monospace)' } }}
+                sx={{ flex: 1, '& input': { ...monoFontStyle } }}
               />
             </Box>
           </Field>

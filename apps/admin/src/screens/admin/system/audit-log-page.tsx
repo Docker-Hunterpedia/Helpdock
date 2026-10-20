@@ -1,4 +1,5 @@
 import type { AuditLogPage as AuditPage, AuditRecord } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -482,22 +483,20 @@ function EntryRows({
             </Box>
           </IconButton>
         </TableCell>
-        <TableCell
-          sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12, whiteSpace: 'nowrap' }}
-        >
+        <TableCell sx={{ ...monoFontStyle, fontSize: 12, whiteSpace: 'nowrap' }}>
           <bdi>{stamp}</bdi>
         </TableCell>
         <TableCell>
           <Actor entry={entry} />
         </TableCell>
-        <TableCell sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12 }}>
+        <TableCell sx={{ ...monoFontStyle, fontSize: 12 }}>
           <bdi>{entry.action}</bdi>
         </TableCell>
         <TableCell>
           <bdi>{targetLabel(entry, t)}</bdi>
         </TableCell>
         <TableCell>{entry.brandName ?? t('system:auditLog.install')}</TableCell>
-        <TableCell sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12 }}>
+        <TableCell sx={{ ...monoFontStyle, fontSize: 12 }}>
           <bdi>{entry.ip ?? '—'}</bdi>
         </TableCell>
       </TableRow>
@@ -534,7 +533,7 @@ function Actor({ entry }: { readonly entry: AuditRecord }): ReactNode {
             borderRadius: '999px',
             display: 'grid',
             placeItems: 'center',
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 600,
             backgroundColor: tokens['action.primary.tint'],
             color: tokens['action.primary'],
@@ -579,7 +578,7 @@ function Details({ entry }: { readonly entry: AuditRecord }): ReactNode {
         {entry.requestId === null ? null : (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('system:auditLog.request')}{' '}
-            <Box component="span" sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}>
+            <Box component="span" sx={{ ...monoFontStyle }}>
               <bdi>{entry.requestId}</bdi>
             </Box>
           </Typography>
@@ -599,7 +598,7 @@ function Details({ entry }: { readonly entry: AuditRecord }): ReactNode {
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {t('system:auditLog.target')}{' '}
-          <Box component="span" sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}>
+          <Box component="span" sx={{ ...monoFontStyle }}>
             <bdi>{`${entry.targetType}/${entry.targetId ?? '—'}`}</bdi>
           </Box>
         </Typography>
@@ -634,11 +633,7 @@ function Details({ entry }: { readonly entry: AuditRecord }): ReactNode {
           <TableBody>
             {entry.changes.map((change) => (
               <TableRow key={change.field}>
-                <TableCell
-                  component="th"
-                  scope="row"
-                  sx={{ fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 12 }}
-                >
+                <TableCell component="th" scope="row" sx={{ ...monoFontStyle, fontSize: 12 }}>
                   <bdi>{change.field}</bdi>
                 </TableCell>
                 <TableCell>
@@ -673,11 +668,7 @@ function Details({ entry }: { readonly entry: AuditRecord }): ReactNode {
         >
           {entry.details.map((detail) => (
             <Box key={detail.field} sx={{ display: 'contents' }}>
-              <Typography
-                component="dt"
-                variant="caption"
-                sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}
-              >
+              <Typography component="dt" variant="caption" sx={{ ...monoFontStyle }}>
                 <bdi>{detail.field}</bdi>
               </Typography>
               <Typography component="dd" variant="caption" sx={{ margin: 0 }}>
@@ -709,7 +700,7 @@ function Value({
         backgroundColor: tone,
         borderRadius: '4px',
         paddingInline: 1,
-        fontFamily: 'var(--hd-font-mono, monospace)',
+        ...monoFontStyle,
         fontSize: 12,
         wordBreak: 'break-all',
       }}

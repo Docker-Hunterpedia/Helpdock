@@ -220,7 +220,7 @@ function BotForm({
               <Send size={16} />
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <Typography variant="h1" component="h2" sx={{ fontSize: 20 }}>
+              <Typography variant="h2" component="h2">
                 <bdi>@{bot.username}</bdi>
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -358,11 +358,7 @@ function BotForm({
         <ActivityCard bot={bot} status={status} />
         <Card label={t('channels:telegram.detail.danger.heading')} tone="danger">
           <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Typography
-              variant="h3"
-              component="h2"
-              sx={{ fontSize: 16, color: tokens['status.danger.text'] }}
-            >
+            <Typography variant="h3" component="h2" sx={{ color: tokens['status.danger.text'] }}>
               {t('channels:telegram.detail.danger.heading')}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -425,7 +421,7 @@ function ActivityCard({
   return (
     <Card label={t('channels:telegram.detail.activity.heading')}>
       <Box sx={{ padding: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Typography variant="h3" component="h2" sx={{ fontSize: 16 }}>
+        <Typography variant="h3" component="h2">
           {t('channels:telegram.detail.activity.heading')}
         </Typography>
         <Box

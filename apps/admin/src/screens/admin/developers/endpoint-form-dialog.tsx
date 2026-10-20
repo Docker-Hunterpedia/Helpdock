@@ -1,4 +1,5 @@
 import type { Webhook, WebhookEvent, WebhookWithSecret } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -185,7 +186,7 @@ export function EndpointFormDialog({
                   maxLength: 2000,
                   'aria-invalid': urlError !== undefined,
                   'aria-describedby': fieldDescribedBy(urlId, { hint, error: urlError }),
-                  style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+                  style: { ...monoFontStyle, fontSize: 13 },
                 },
               }}
             />

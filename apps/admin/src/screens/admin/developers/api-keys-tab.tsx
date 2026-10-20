@@ -1,4 +1,5 @@
 import type { ApiKey, ApiKeyCreated } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -252,7 +253,7 @@ function KeyRow({
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const revoked = apiKey.revokedAt !== null;
-  const mono = { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 };
+  const mono = { ...monoFontStyle, fontSize: 13 };
   const caption = { fontSize: 12, color: 'text.secondary', display: 'block', whiteSpace: 'nowrap' };
 
   return (
@@ -330,7 +331,7 @@ function KeySummary({ apiKey }: { readonly apiKey: ApiKeyCreated }): ReactNode {
   const t = useT();
   const row = { display: 'grid', gridTemplateColumns: '88px minmax(0, 1fr)', gap: 3 };
   const label = { fontSize: 13, color: 'text.secondary' };
-  const mono = { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 };
+  const mono = { ...monoFontStyle, fontSize: 13 };
 
   return (
     <Box
@@ -403,7 +404,7 @@ function CurlCard(): ReactNode {
     <Card labelledBy={headingId}>
       <Box sx={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+          <Typography id={headingId} variant="h3" component="h2">
             {t('developers:keys.curl.heading')}
           </Typography>
           <Button
@@ -428,7 +429,7 @@ function CurlCard(): ReactNode {
             padding: 3,
             borderRadius: '6px',
             backgroundColor: tokens['bg.muted'],
-            fontFamily: 'var(--hd-font-mono, monospace)',
+            ...monoFontStyle,
             fontSize: 12,
             lineHeight: '20px',
             overflowX: 'auto',
@@ -438,7 +439,7 @@ function CurlCard(): ReactNode {
         </Box>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {t('developers:keys.curl.notePrefix')}{' '}
-          <Box component="code" dir="ltr" sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}>
+          <Box component="code" dir="ltr" sx={{ ...monoFontStyle }}>
             Idempotency-Key
           </Box>{' '}
           {t('developers:keys.curl.noteMiddle')}{' '}
@@ -468,7 +469,7 @@ function HowKeysWork(): ReactNode {
           color: 'text.secondary',
         }}
       >
-        <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+        <Typography id={headingId} variant="h3" component="h2">
           {t('developers:keys.how.heading')}
         </Typography>
         <Typography variant="body2" sx={{ color: 'inherit' }}>

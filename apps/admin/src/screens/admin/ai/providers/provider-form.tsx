@@ -5,6 +5,7 @@ import type {
   AiProviderUpsert,
   AiProviderView,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -557,7 +558,7 @@ function OAuthField({
             dir: 'ltr',
             spellCheck: false,
             'aria-describedby': fieldDescribedBy(id, { hint, error }),
-            style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+            style: { ...monoFontStyle, fontSize: 13 },
           },
         }}
       />

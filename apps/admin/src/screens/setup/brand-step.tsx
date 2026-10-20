@@ -7,6 +7,7 @@ import {
   TICKET_PREFIX_MAX_LENGTH,
   ticketNumberPreview,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Button, OutlinedInput, Select } from '@mui/material';
 import { type ReactNode, useMemo, useState } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -166,7 +167,7 @@ export function BrandStep({ onSubmit, onBack, pending, prefixTaken }: BrandStepP
           }}
           error={Boolean(prefixError)}
           fullWidth
-          sx={{ fontFamily: (theme) => theme.typography.mono.fontFamily }}
+          sx={{ ...monoFontStyle }}
           slotProps={{
             input: {
               dir: 'ltr',

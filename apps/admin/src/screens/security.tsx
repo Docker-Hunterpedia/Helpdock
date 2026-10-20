@@ -1,6 +1,7 @@
 import type { Locale } from '@helpdock/i18n';
 import { SUPPORTED_LNGS } from '@helpdock/i18n';
 import { PASSWORD_MIN_LENGTH, totpCodeRequestSchema } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Chip, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
@@ -366,7 +367,7 @@ export function SecurityScreen(): ReactNode {
                   margin: 0,
                   padding: 0,
                   listStyle: 'none',
-                  fontFamily: 'var(--hd-font-mono, monospace)',
+                  ...monoFontStyle,
                 }}
               >
                 {newCodes.map((recoveryCode) => (
@@ -510,7 +511,7 @@ export function SecurityScreen(): ReactNode {
               inputMode: 'numeric',
               autoComplete: 'one-time-code',
               maxLength: 6,
-              style: { fontFamily: 'var(--hd-font-mono, monospace)' },
+              style: { ...monoFontStyle },
             },
           }}
         />

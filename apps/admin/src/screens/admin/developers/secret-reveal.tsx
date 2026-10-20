@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -113,7 +114,7 @@ export function SecretReveal({
                   readOnly: true,
                   dir: 'ltr',
                   spellCheck: false,
-                  style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+                  style: { ...monoFontStyle, fontSize: 13 },
                   onFocus: (event: { currentTarget: HTMLInputElement }) => {
                     event.currentTarget.select();
                   },

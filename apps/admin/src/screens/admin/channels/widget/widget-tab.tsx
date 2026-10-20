@@ -4,6 +4,7 @@ import type {
   WidgetConversationSettings,
   WidgetSettings,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Link as MuiLink, Typography } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy } from 'lucide-react';
@@ -208,7 +209,7 @@ function EmbedCard({ brandId }: { readonly brandId: string }): ReactNode {
           paddingInline: '14px',
           borderRadius: '6px',
           backgroundColor: tokens['bg.muted'],
-          fontFamily: 'var(--hd-font-mono, monospace)',
+          ...monoFontStyle,
           fontSize: 13,
           lineHeight: '20px',
           whiteSpace: 'pre',

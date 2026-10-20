@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -33,7 +34,7 @@ export function MonoTag({
         border: `1px solid ${tokens['border.default']}`,
         backgroundColor: tokens['bg.canvas'],
         color: muted ? tokens['text.secondary'] : tokens['text.primary'],
-        ...(prose ? {} : { fontFamily: 'var(--hd-font-mono, monospace)' }),
+        ...(prose ? {} : { ...monoFontStyle }),
         fontSize: 12,
         fontWeight: 500,
         lineHeight: '16px',

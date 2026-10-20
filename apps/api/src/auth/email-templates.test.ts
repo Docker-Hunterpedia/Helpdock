@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
 import { magicLinkScreenUrl } from './auth.service.js';
 import { escapeHtml, renderAuthEmail } from './email-templates.js';
@@ -24,6 +25,7 @@ describe('renderAuthEmail', () => {
     });
 
     expect(message.subject).toBe('Your sign-in link for Helpdock');
+    expect(message.html).toContain(`font-family:${escapeHtml(fontFallbacks.sans)}`);
     expect(message.text).toContain('The link expires in 10 minutes.');
     expect(message.to).toEqual({ address: 'lina@helpdock.com', name: 'Lina' });
   });

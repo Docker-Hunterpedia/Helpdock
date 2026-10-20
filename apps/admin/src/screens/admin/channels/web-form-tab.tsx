@@ -4,6 +4,7 @@ import {
   type WebFormSettings,
   type WebFormSettingsUpdate,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -233,7 +234,7 @@ function HostedFormCard({
                 'aria-describedby': fieldDescribedBy(`${id}-url`, {
                   hint: t('channels:webForm.address.hint'),
                 }),
-                style: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13 },
+                style: { ...monoFontStyle, fontSize: 13 },
               },
             }}
           />
@@ -604,10 +605,7 @@ function PreviewCard({
             {before}
             {after === undefined ? null : (
               <>
-                <Box
-                  component="bdi"
-                  sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15 }}
-                >
+                <Box component="bdi" sx={{ ...monoFontStyle, fontSize: 16 }}>
                   {reference}
                 </Box>
                 {after}

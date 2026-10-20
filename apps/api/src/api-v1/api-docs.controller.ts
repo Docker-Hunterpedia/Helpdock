@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { Controller, Get, Header } from '@nestjs/common';
 import { Public } from '../auth/route-declaration.js';
 import { API_OPERATIONS, buildOpenApiDocument, type OpenApiDocument } from './openapi.js';
@@ -37,7 +38,7 @@ export const renderDocsPage = (document: OpenApiDocument): string => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(document.info.title)} ${escapeHtml(document.info.version)}</title>
-<style>body{font-family:system-ui,sans-serif;max-width:72rem;margin:0 auto;padding:1rem;line-height:1.5}table{border-collapse:collapse;width:100%}th,td{text-align:start;padding:.5rem;border-block-end:1px solid;vertical-align:top}</style>
+<style>body{font-family:${fontFallbacks.sans};max-width:72rem;margin:0 auto;padding:1rem;line-height:1.5}code{font-family:${fontFallbacks.mono}}table{border-collapse:collapse;width:100%}th,td{text-align:start;padding:.5rem;border-block-end:1px solid;vertical-align:top}</style>
 </head>
 <body>
 <main>

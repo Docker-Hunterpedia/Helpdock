@@ -1,4 +1,5 @@
 import { HC_TITLE_MAX, type HcLocale, slugify, videoEmbedUrl } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, IconButton, MenuItem, Select, TextField, Typography } from '@mui/material';
 import type { Editor } from '@tiptap/core';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
@@ -362,7 +363,7 @@ export function RichTextEditor({
             '& .hc-article-body h3': { fontSize: 16, lineHeight: '24px', fontWeight: 600 },
             '& .hc-article-body h2[id]::after, & .hc-article-body h3[id]::after': {
               content: '" #" attr(id)',
-              fontFamily: '"IBM Plex Mono", monospace',
+              ...monoFontStyle,
               fontSize: 12,
               fontWeight: 400,
               color: tokens['text.secondary'],
@@ -386,7 +387,7 @@ export function RichTextEditor({
               borderRadius: '6px',
               backgroundColor: tokens['bg.muted'],
               padding: '10px 12px',
-              fontFamily: '"IBM Plex Mono", monospace',
+              ...monoFontStyle,
               fontSize: 13,
               lineHeight: '20px',
               direction: 'ltr',

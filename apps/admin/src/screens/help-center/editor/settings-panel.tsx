@@ -7,6 +7,7 @@ import {
   type HcVersion,
   type HcVisibility,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -346,7 +347,7 @@ export function SettingsPanel(props: SettingsPanelProps): ReactNode {
                     hint: `/${props.locale}/articles/${props.slug}`,
                     error: props.slugError,
                   }),
-                  style: { fontFamily: '"IBM Plex Mono", monospace', fontSize: 13 },
+                  style: { ...monoFontStyle, fontSize: 13 },
                 },
               }}
             />

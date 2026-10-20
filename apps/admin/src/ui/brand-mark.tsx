@@ -28,7 +28,7 @@ export function BrandMark({
         borderRadius: '6px',
         backgroundColor: tokens['action.primary'],
         color: tokens['action.primary.text'],
-        fontSize: Math.round(size * 0.5),
+        fontSize: size >= 40 ? 20 : 14,
         fontWeight: 600,
         lineHeight: 1,
       }}

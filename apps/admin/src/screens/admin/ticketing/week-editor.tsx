@@ -1,4 +1,5 @@
 import type { WeeklyHours } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, IconButton, Switch, TextField, Typography } from '@mui/material';
 import { Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -202,7 +203,7 @@ function TimeInput({
           onChange(event.target.value);
         }
       }}
-      sx={{ inlineSize: 128, '& input': { fontFamily: 'var(--hd-font-mono, monospace)' } }}
+      sx={{ inlineSize: 128, '& input': { ...monoFontStyle } }}
     />
   );
 }

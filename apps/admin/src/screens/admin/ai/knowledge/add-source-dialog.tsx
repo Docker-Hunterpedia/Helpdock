@@ -1,4 +1,5 @@
 import type { KnowledgeSourceList } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -408,7 +409,7 @@ function CrawlFields({
             dir: 'ltr',
             spellCheck: false,
             'aria-describedby': `${id}-${field}-hint`,
-            style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+            style: { ...monoFontStyle, fontSize: 13 },
           },
         }}
       />

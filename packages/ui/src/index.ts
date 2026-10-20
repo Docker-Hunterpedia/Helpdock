@@ -53,6 +53,8 @@ export type {
 export {
   designTokensSchema,
   ELEVATION_LEVELS,
+  fontFallbacks,
+  monoFontStyle,
   NEUTRAL_STEPS,
   SEMANTIC_TOKEN_NAMES,
   STATUS_NAMES,

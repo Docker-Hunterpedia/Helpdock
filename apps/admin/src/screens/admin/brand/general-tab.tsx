@@ -1,5 +1,6 @@
 import type { Locale } from '@helpdock/i18n';
 import type { Brand, BrandUpdateRequest } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
@@ -123,7 +124,7 @@ export function GeneralTab(): ReactNode {
             borderBlockEnd: `1px solid ${tokens['bg.muted']}`,
           }}
         >
-          <Typography id={headingId} variant="h3" component="h2" sx={{ fontSize: 16 }}>
+          <Typography id={headingId} variant="h3" component="h2">
             {t('brand:general.heading')}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
@@ -174,7 +175,7 @@ export function GeneralTab(): ReactNode {
                   'aria-describedby': fieldDescribedBy(`${id}-prefix`, {
                     hint: t('brand:general.prefixHint'),
                   }),
-                  style: { fontFamily: 'var(--hd-font-mono, monospace)' },
+                  style: { ...monoFontStyle },
                 },
               }}
             />

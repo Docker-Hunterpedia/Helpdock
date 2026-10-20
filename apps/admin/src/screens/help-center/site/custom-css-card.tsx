@@ -1,4 +1,5 @@
 import { HC_CUSTOM_CSS_MAX, type HcCssRemoval, type HcCustomCssResult } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, IconButton, TextField, Typography } from '@mui/material';
 import { ShieldAlert, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
@@ -75,7 +76,7 @@ export function CustomCssCard({
         slotProps={{
           htmlInput: { dir: 'ltr', spellCheck: false, maxLength: HC_CUSTOM_CSS_MAX },
         }}
-        sx={{ '& textarea': { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 } }}
+        sx={{ '& textarea': { ...monoFontStyle, fontSize: 13 } }}
       />
       {removed.length === 0 ? null : (
         <Box
@@ -118,7 +119,7 @@ export function CustomCssCard({
                     component="code"
                     dir="ltr"
                     sx={{
-                      fontFamily: 'var(--hd-font-mono, monospace)',
+                      ...monoFontStyle,
                       fontSize: 12,
                       overflowWrap: 'anywhere',
                     }}

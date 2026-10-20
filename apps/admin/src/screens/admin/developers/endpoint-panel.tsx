@@ -1,4 +1,5 @@
 import type { WebhookOverview } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { Pencil, Power, PowerOff, RefreshCw, Send } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
@@ -63,8 +64,7 @@ export function EndpointPanel({
               component="h2"
               dir="ltr"
               sx={{
-                fontFamily: 'var(--hd-font-mono, monospace)',
-                fontSize: 16,
+                ...monoFontStyle,
                 overflowWrap: 'anywhere',
                 alignSelf: 'flex-start',
               }}

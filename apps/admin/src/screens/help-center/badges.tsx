@@ -1,4 +1,5 @@
 import type { HcArticleStatus, HcLocale, HcVisibility } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box } from '@mui/material';
 import { Globe, Lock, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -118,7 +119,7 @@ export function LanguageChip({
         border: `1px ${present ? 'solid' : 'dashed'} ${present ? tokens['border.default'] : tokens['border.strong']}`,
         backgroundColor: present ? tokens['bg.muted'] : 'transparent',
         color: present ? 'text.primary' : 'text.secondary',
-        fontFamily: '"IBM Plex Mono", monospace',
+        ...monoFontStyle,
         fontSize: 12,
         display: 'inline-flex',
         alignItems: 'center',

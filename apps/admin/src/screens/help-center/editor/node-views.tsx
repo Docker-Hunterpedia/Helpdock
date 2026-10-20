@@ -1,4 +1,5 @@
 import { CALLOUT_KINDS, type CalloutKind } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, MenuItem, Select } from '@mui/material';
 import { NodeViewContent, type NodeViewProps, NodeViewWrapper } from '@tiptap/react';
 import { Lightbulb, TriangleAlert, Video } from 'lucide-react';
@@ -31,8 +32,8 @@ export function CalloutView({ node, updateAttributes, editor }: NodeViewProps): 
         borderRadius: 10,
         backgroundColor: caution ? tokens['status.warning.tint'] : tokens['action.primary.tint'],
         border: `1px solid ${caution ? tokens['status.warning'] : tokens['border.default']}`,
-        fontSize: 15,
-        lineHeight: '22px',
+        fontSize: 16,
+        lineHeight: '24px',
       }}
     >
       <Box
@@ -94,9 +95,7 @@ export function VideoView({ node, selected }: NodeViewProps): ReactNode {
       <Video size={20} aria-hidden="true" />
       <span>
         {t('helpCenter:editor.video.label')}{' '}
-        <bdi style={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-          {String(node.attrs.src ?? '')}
-        </bdi>
+        <bdi style={{ ...monoFontStyle }}>{String(node.attrs.src ?? '')}</bdi>
       </span>
     </NodeViewWrapper>
   );

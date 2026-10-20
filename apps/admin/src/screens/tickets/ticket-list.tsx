@@ -137,7 +137,7 @@ export function TicketList({
         <Box
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}
         >
-          <Typography variant="h2" component="h1" sx={{ fontSize: 16 }}>
+          <Typography variant="h3" component="h1">
             {heading}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>

@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, IconButton, InputAdornment, OutlinedInput, Typography } from '@mui/material';
 import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -119,7 +120,7 @@ export function PasswordField({
             maxLength: 200,
             'aria-invalid': message !== null,
             'aria-describedby': message === null ? hintId(id) : errorId(id),
-            style: shown ? { fontFamily: 'var(--hd-font-mono, monospace)' } : undefined,
+            style: shown ? { ...monoFontStyle } : undefined,
           },
         }}
       />

@@ -1,4 +1,6 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
+import { escapeHtml } from '../auth/email-templates.js';
 import { renderSmtpTestEmail } from './setup-email.js';
 
 describe('renderSmtpTestEmail', () => {
@@ -14,6 +16,7 @@ describe('renderSmtpTestEmail', () => {
     expect(message.subject).toBe('Helpdock test message');
     expect(message.text).toContain('smtp.example.com');
     expect(message.html).toContain('smtp.example.com');
+    expect(message.html).toContain(`font-family:${escapeHtml(fontFallbacks.sans)}`);
   });
 
   it('renders Arabic right to left, because a mirrored message is a broken one', () => {

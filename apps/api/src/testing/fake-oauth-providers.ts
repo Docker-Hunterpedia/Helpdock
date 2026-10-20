@@ -51,7 +51,11 @@ export interface FakeGithubAccount {
 }
 
 /** A `fetch` that answers GitHub's token, emails and user endpoints for one account. */
-export const fakeGithubFetch = ({ id, email, login = 'octocat' }: FakeGithubAccount) =>
+export const fakeGithubFetch = ({
+  id,
+  email,
+  login = 'octocat',
+}: FakeGithubAccount): ReturnType<typeof vi.fn> =>
   vi.fn(async (url: string | URL) => {
     const target = String(url);
     if (target === OAUTH_PROVIDERS.github.tokenUrl) {

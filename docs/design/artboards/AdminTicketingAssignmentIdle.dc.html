@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin · idle agents marked away</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;background:#F7F5F0;color:#16181C}
+[lang="ar"]{font-family:'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0C5F59;text-decoration:underline}
+button{font-family:inherit;cursor:pointer} input,select,textarea{font-family:inherit}
+code{font-family:'IBM Plex Mono',monospace;font-size:12px;background:#EFECE5;padding:0 4px;border-radius:4px}
+</style>
+</helmet>
+<div data-board="Admin/Ticketing-Assignment-Idle" style="width: 1700px; min-height: 500px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 32px; background: #F7F5F0; font-size: 14px; line-height: 20px;">
+<div style="display: flex; align-items: baseline; gap: 12px;"><span style="font-size: 20px; line-height: 28px; font-weight: 600;">Admin/Ticketing-Assignment-Idle</span><span style="font-size: 13px; color: #5C564C;">M14 Inbox productivity</span></div>
+<div style="display: flex; gap: 40px; align-items: start; flex-wrap: nowrap;"><div style="display: flex; flex-direction: column; gap: 8px; "><span style="font-size: 12px; font-weight: 500; color: #5C564C;">en · department setting</span><div dir="ltr" lang="en" style="display: flex; flex-direction: column; gap: 16px; "><section style="width: 640px; box-sizing: border-box; border-radius: 10px; background: #FFFFFF; border: 1px solid #E3DFD6; display: flex; flex-direction: column;"><div style="padding: 16px 20px; border-bottom: 1px solid #EFECE5; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;"><div style="display: flex; flex-direction: column; gap: 2px;"><h2 style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; ">Assignment · Billing</h2><span style="font-size: 13px; color: #5C564C;">Round-robin among 4 people.</span></div></div><div style="padding: 20px; display: flex; flex-direction: column; gap: 18px;"><div style="display: flex; flex-direction: column; gap: 6px;"><label style="font-size: 13px; font-weight: 500;">Mark idle agents away after</label><select style="height: 36px; width: 240px; border-radius: 6px; border: 1px solid #CFC9BD; font-size: 14px;"><option>Off</option><option selected>30 minutes</option></select><span style="font-size: 12px; color: #5C564C;">Away agents are not picked by the rotation. Any activity brings them back. Only “active in the last minute” is reported, never what was done.</span></div></div><div style="padding: 12px 20px; border-top: 1px solid #EFECE5; display: flex; justify-content: flex-end; gap: 8px; background: #F7F5F0; border-radius: 0 0 10px 10px;"><button type="button"  style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: #16181C; font-size: 14px; font-weight: 500; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; ">Discard</button><button type="button"  style="height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid #0F766E; background: #0F766E; color: #FFFFFF; font-size: 14px; font-weight: 500; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; flex-shrink: 0; ">Save changes</button></div></section></div></div><div style="display: flex; flex-direction: column; gap: 8px; "><span style="font-size: 12px; font-weight: 500; color: #5C564C;">en · on return</span><div dir="ltr" lang="en" style="display: flex; flex-direction: column; gap: 16px; "><div style="display: flex; flex-direction: column; gap: 0px; width: 520px;"><div role="status" style="display: flex; gap: 10px; padding: 12px; border-radius: 6px; background: #EFECE5; color: #403C35; font-size: 13px; line-height: 20px;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg><span>You were set to away while idle. You're back now, and new tickets can be assigned to you again.</span></div></div></div></div><section style="width: 360px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 20px; color: #403C35;"><h2 style="margin: 0; font-size: 16px; font-weight: 600; color: #16181C;">Admin/Ticketing-Assignment-Idle</h2><ul style="margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px;"><li>A per-department setting on Ticketing › Assignment: Off, or 10 to 240 minutes.</li><li>The person sees the neutral notice once on return (and their presence dot changes from away back to online).</li></ul></section></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1700,"height":500}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@ A rendered snapshot of every artboard on the Helpdock design canvas, so contribu
 | Path | Contents |
 |---|---|
 | [`artboards/`](artboards/) | The source of each artboard (`*.dc.html`) and `canvas.json`, the canvas manifest with every board's title, size and position. Diff these in a PR to review a design change. |
-| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m11`. |
+| [`screens/`](screens/) | One PNG per artboard at its canvas size, grouped by the canvas section it sits under: `foundations`, `applications`, then `m0` to `m11`, and the 1.1 sections `m14` and `m18`, which are work in progress. |
 
 The artboards are static mockups. Names, numbers, domains and size caps on them are sample values; behaviour comes from [DOMAIN-RULES.md](../planning/DOMAIN-RULES.md).
 
@@ -192,6 +192,55 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | `Admin/Ticket-Meta` | M10-06, M10-08 | [Admin-Ticket-Meta.png](screens/m10/Admin-Ticket-Meta.png) | [AdminTicketMeta.dc.html](artboards/AdminTicketMeta.dc.html) |
 | `Meta/Chat-EN` | M10-06 | [Meta-Chat-EN.png](screens/m10/Meta-Chat-EN.png) | [MetaChatEN.dc.html](artboards/MetaChatEN.dc.html) |
 | `Meta/Chat-AR` | M10-06 | [Meta-Chat-AR.png](screens/m10/Meta-Chat-AR.png) | [MetaChatAR.dc.html](artboards/MetaChatAR.dc.html) |
+
+### M14 Inbox productivity
+
+Drawn for [M14](../in-development/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
+
+| Artboard | Deliverables | Screen | Source |
+|---|---|---|---|
+| `Admin/ShortcutSheet` | M14-01 | [Admin-ShortcutSheet.png](screens/m14/Admin-ShortcutSheet.png) | [AdminShortcutSheet.dc.html](artboards/AdminShortcutSheet.dc.html) |
+| `Admin/Ticket-Snooze` | M14-02 | [Admin-Ticket-Snooze.png](screens/m14/Admin-Ticket-Snooze.png) | [AdminTicketSnooze.dc.html](artboards/AdminTicketSnooze.dc.html) |
+| `Admin/Tickets-Bulk` | M14-04 | [Admin-Tickets-Bulk.png](screens/m14/Admin-Tickets-Bulk.png) | [AdminTicketsBulk.dc.html](artboards/AdminTicketsBulk.dc.html) |
+| `Admin/CommandPalette` | M14-05 | [Admin-CommandPalette.png](screens/m14/Admin-CommandPalette.png) | [AdminCommandPalette.dc.html](artboards/AdminCommandPalette.dc.html) |
+| `Admin/Tickets-Empty` | M14-06 | [Admin-Tickets-Empty.png](screens/m14/Admin-Tickets-Empty.png) | [AdminTicketsEmpty.dc.html](artboards/AdminTicketsEmpty.dc.html) |
+| `Admin/Tickets-SortSla` | M14-07 | [Admin-Tickets-SortSla.png](screens/m14/Admin-Tickets-SortSla.png) | [AdminTicketsSortSla.dc.html](artboards/AdminTicketsSortSla.dc.html) |
+| `Admin/Ticket-Routing` | M14-08 | [Admin-Ticket-Routing.png](screens/m14/Admin-Ticket-Routing.png) | [AdminTicketRouting.dc.html](artboards/AdminTicketRouting.dc.html) |
+| `Admin/Ticket-CompactComposer` | M14-19 | [Admin-Ticket-CompactComposer.png](screens/m14/Admin-Ticket-CompactComposer.png) | [AdminTicketCompactComposer.dc.html](artboards/AdminTicketCompactComposer.dc.html) |
+| `Admin/TicketRow-360` | M14-20 | [Admin-TicketRow-360.png](screens/m14/Admin-TicketRow-360.png) | [AdminTicketRow360.dc.html](artboards/AdminTicketRow360.dc.html) |
+| `Admin/Tickets-Narrow` | M14-22 | [Admin-Tickets-Narrow.png](screens/m14/Admin-Tickets-Narrow.png) | [AdminTicketsNarrow.dc.html](artboards/AdminTicketsNarrow.dc.html) |
+| `Admin/Automation-Routing` | M14-09 | [Admin-Automation-Routing.png](screens/m14/Admin-Automation-Routing.png) | [AdminAutomationRouting.dc.html](artboards/AdminAutomationRouting.dc.html) |
+| `Admin/Account-Notifications-Schedule` | M14-11, M14-25 | [Admin-Account-Notifications-Schedule.png](screens/m14/Admin-Account-Notifications-Schedule.png) | [AdminAccountNotificationsSchedule.dc.html](artboards/AdminAccountNotificationsSchedule.dc.html) |
+| `Email/NotificationBatch` | M14-10 | [Email-NotificationBatch.png](screens/m14/Email-NotificationBatch.png) | [EmailNotificationBatch.dc.html](artboards/EmailNotificationBatch.dc.html) |
+| `Public/Unsubscribe` | M14-11 | [Public-Unsubscribe.png](screens/m14/Public-Unsubscribe.png) | [PublicUnsubscribe.dc.html](artboards/PublicUnsubscribe.dc.html) |
+| `Admin/Account-Profile` | M14-12 | [Admin-Account-Profile.png](screens/m14/Admin-Account-Profile.png) | [AdminAccountProfile.dc.html](artboards/AdminAccountProfile.dc.html) |
+| `Admin/SetupChecklist` | M14-13 | [Admin-SetupChecklist.png](screens/m14/Admin-SetupChecklist.png) | [AdminSetupChecklist.dc.html](artboards/AdminSetupChecklist.dc.html) |
+| `Admin/Composer-Shortcuts` | M14-14, M14-15 | [Admin-Composer-Shortcuts.png](screens/m14/Admin-Composer-Shortcuts.png) | [AdminComposerShortcuts.dc.html](artboards/AdminComposerShortcuts.dc.html) |
+| `Admin/Ticketing-FieldFilters` | M14-16, M14-17, M14-26, M14-27 | [Admin-Ticketing-FieldFilters.png](screens/m14/Admin-Ticketing-FieldFilters.png) | [AdminTicketingFieldFilters.dc.html](artboards/AdminTicketingFieldFilters.dc.html) |
+| `Admin/Ticketing-Assignment-Idle` | M14-18 | [Admin-Ticketing-Assignment-Idle.png](screens/m14/Admin-Ticketing-Assignment-Idle.png) | [AdminTicketingAssignmentIdle.dc.html](artboards/AdminTicketingAssignmentIdle.dc.html) |
+| `Admin/M14-Amendments` | M14-26, M14-28, M14-29 | [Admin-M14-Amendments.png](screens/m14/Admin-M14-Amendments.png) | [AdminM14Amendments.dc.html](artboards/AdminM14Amendments.dc.html) |
+| `Admin/Settings-Shell` | M14-21 | [Admin-Settings-Shell.png](screens/m14/Admin-Settings-Shell.png) | [AdminSettingsShell.dc.html](artboards/AdminSettingsShell.dc.html) |
+| `Admin/Empty-States` | M14-23 | [Admin-Empty-States.png](screens/m14/Admin-Empty-States.png) | [AdminEmptyStates.dc.html](artboards/AdminEmptyStates.dc.html) |
+
+### M18 Sign-in options
+
+Drawn for [M18](../in-development/M18-sign-in-options.md#design-artboards), before implementation. Work in progress for 1.1: the canvas section may still change.
+
+| Artboard | Deliverables | Screen | Source |
+|---|---|---|---|
+| `Admin/Login-Passkey` | M18-06 | [Admin-Login-Passkey.png](screens/m18/Admin-Login-Passkey.png) | [AdminLoginPasskey.dc.html](artboards/AdminLoginPasskey.dc.html) |
+| `Admin/Login-Providers` | M18-07, M18-08 | [Admin-Login-Providers.png](screens/m18/Admin-Login-Providers.png) | [AdminLoginProviders.dc.html](artboards/AdminLoginProviders.dc.html) |
+| `Admin/SecondFactor` | M18-03 | [Admin-SecondFactor.png](screens/m18/Admin-SecondFactor.png) | [AdminSecondFactor.dc.html](artboards/AdminSecondFactor.dc.html) |
+| `Admin/Enrol2FA-Choose` | M18-03, M18-06 | [Admin-Enrol2FA-Choose.png](screens/m18/Admin-Enrol2FA-Choose.png) | [AdminEnrol2FAChoose.dc.html](artboards/AdminEnrol2FAChoose.dc.html) |
+| `Admin/Profile-Security-Passkeys` | M18-02, M18-06 | [Admin-Profile-Security-Passkeys.png](screens/m18/Admin-Profile-Security-Passkeys.png) | [AdminProfileSecurityPasskeys.dc.html](artboards/AdminProfileSecurityPasskeys.dc.html) |
+| `Admin/Profile-Security-SignInMethods` | M18-07 | [Admin-Profile-Security-SignInMethods.png](screens/m18/Admin-Profile-Security-SignInMethods.png) | [AdminProfileSecuritySignInMethods.dc.html](artboards/AdminProfileSecuritySignInMethods.dc.html) |
+| `Admin/Settings-Authentication` | M18-01, M18-07, M18-08 | [Admin-Settings-Authentication.png](screens/m18/Admin-Settings-Authentication.png) | [AdminSettingsAuthenticationM18.dc.html](artboards/AdminSettingsAuthenticationM18.dc.html) |
+| `Admin/Settings-SSO-M18` | M18-05, M18-09 | [Admin-Settings-SSO-M18.png](screens/m18/Admin-Settings-SSO-M18.png) | [AdminSettingsSSOM18.dc.html](artboards/AdminSettingsSSOM18.dc.html) |
+| `Email/SecurityChange-M18` | M18-02, M18-07 | [Email-SecurityChange-M18.png](screens/m18/Email-SecurityChange-M18.png) | [EmailSecurityChangeM18.dc.html](artboards/EmailSecurityChangeM18.dc.html) |
+| `Widget/PreChat-Verify` | M18-10 | [Widget-PreChat-Verify.png](screens/m18/Widget-PreChat-Verify.png) | [WidgetPreChatVerify.dc.html](artboards/WidgetPreChatVerify.dc.html) |
+| `HelpCenter/WebForm-Verify` | M18-10 | [HelpCenter-WebForm-Verify.png](screens/m18/HelpCenter-WebForm-Verify.png) | [HelpCenterWebFormVerify.dc.html](artboards/HelpCenterWebFormVerify.dc.html) |
+| `Admin/Channels-Widget-BotProtection` | M18-10 | [Admin-Channels-Widget-BotProtection.png](screens/m18/Admin-Channels-Widget-BotProtection.png) | [AdminChannelsWidgetBotProtection.dc.html](artboards/AdminChannelsWidgetBotProtection.dc.html) |
+| `Admin/AcceptInvite-Providers` | M18-07 | [Admin-AcceptInvite-Providers.png](screens/m18/Admin-AcceptInvite-Providers.png) | [AdminAcceptInviteProviders.dc.html](artboards/AdminAcceptInviteProviders.dc.html) |
 
 ## Gallery
 
@@ -665,3 +714,151 @@ Drawn 2026-10-13 for [M11](../completed/M11-sso-and-migration.md#artboards-to-dr
 #### `Admin/Ticket-Imported`
 
 ![Admin/Ticket-Imported](screens/m11/Admin-Ticket-Imported.png)
+
+### M14 Inbox productivity
+
+Drawn for [M14](../in-development/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
+
+#### `Admin/ShortcutSheet`
+
+![Admin/ShortcutSheet](screens/m14/Admin-ShortcutSheet.png)
+
+#### `Admin/Ticket-Snooze`
+
+![Admin/Ticket-Snooze](screens/m14/Admin-Ticket-Snooze.png)
+
+#### `Admin/Tickets-Bulk`
+
+![Admin/Tickets-Bulk](screens/m14/Admin-Tickets-Bulk.png)
+
+#### `Admin/CommandPalette`
+
+![Admin/CommandPalette](screens/m14/Admin-CommandPalette.png)
+
+#### `Admin/Tickets-Empty`
+
+![Admin/Tickets-Empty](screens/m14/Admin-Tickets-Empty.png)
+
+#### `Admin/Tickets-SortSla`
+
+![Admin/Tickets-SortSla](screens/m14/Admin-Tickets-SortSla.png)
+
+#### `Admin/Ticket-Routing`
+
+![Admin/Ticket-Routing](screens/m14/Admin-Ticket-Routing.png)
+
+#### `Admin/Ticket-CompactComposer`
+
+![Admin/Ticket-CompactComposer](screens/m14/Admin-Ticket-CompactComposer.png)
+
+#### `Admin/TicketRow-360`
+
+![Admin/TicketRow-360](screens/m14/Admin-TicketRow-360.png)
+
+#### `Admin/Tickets-Narrow`
+
+![Admin/Tickets-Narrow](screens/m14/Admin-Tickets-Narrow.png)
+
+#### `Admin/Automation-Routing`
+
+![Admin/Automation-Routing](screens/m14/Admin-Automation-Routing.png)
+
+#### `Admin/Account-Notifications-Schedule`
+
+![Admin/Account-Notifications-Schedule](screens/m14/Admin-Account-Notifications-Schedule.png)
+
+#### `Email/NotificationBatch`
+
+![Email/NotificationBatch](screens/m14/Email-NotificationBatch.png)
+
+#### `Public/Unsubscribe`
+
+![Public/Unsubscribe](screens/m14/Public-Unsubscribe.png)
+
+#### `Admin/Account-Profile`
+
+![Admin/Account-Profile](screens/m14/Admin-Account-Profile.png)
+
+#### `Admin/SetupChecklist`
+
+![Admin/SetupChecklist](screens/m14/Admin-SetupChecklist.png)
+
+#### `Admin/Composer-Shortcuts`
+
+![Admin/Composer-Shortcuts](screens/m14/Admin-Composer-Shortcuts.png)
+
+#### `Admin/Ticketing-FieldFilters`
+
+![Admin/Ticketing-FieldFilters](screens/m14/Admin-Ticketing-FieldFilters.png)
+
+#### `Admin/Ticketing-Assignment-Idle`
+
+![Admin/Ticketing-Assignment-Idle](screens/m14/Admin-Ticketing-Assignment-Idle.png)
+
+#### `Admin/M14-Amendments`
+
+![Admin/M14-Amendments](screens/m14/Admin-M14-Amendments.png)
+
+#### `Admin/Settings-Shell`
+
+![Admin/Settings-Shell](screens/m14/Admin-Settings-Shell.png)
+
+#### `Admin/Empty-States`
+
+![Admin/Empty-States](screens/m14/Admin-Empty-States.png)
+
+### M18 Sign-in options
+
+Drawn for [M18](../in-development/M18-sign-in-options.md#design-artboards), before implementation. Work in progress for 1.1: the canvas section may still change.
+
+#### `Admin/Login-Passkey`
+
+![Admin/Login-Passkey](screens/m18/Admin-Login-Passkey.png)
+
+#### `Admin/Login-Providers`
+
+![Admin/Login-Providers](screens/m18/Admin-Login-Providers.png)
+
+#### `Admin/SecondFactor`
+
+![Admin/SecondFactor](screens/m18/Admin-SecondFactor.png)
+
+#### `Admin/Enrol2FA-Choose`
+
+![Admin/Enrol2FA-Choose](screens/m18/Admin-Enrol2FA-Choose.png)
+
+#### `Admin/Profile-Security-Passkeys`
+
+![Admin/Profile-Security-Passkeys](screens/m18/Admin-Profile-Security-Passkeys.png)
+
+#### `Admin/Profile-Security-SignInMethods`
+
+![Admin/Profile-Security-SignInMethods](screens/m18/Admin-Profile-Security-SignInMethods.png)
+
+#### `Admin/Settings-Authentication`
+
+![Admin/Settings-Authentication](screens/m18/Admin-Settings-Authentication.png)
+
+#### `Admin/Settings-SSO-M18`
+
+![Admin/Settings-SSO-M18](screens/m18/Admin-Settings-SSO-M18.png)
+
+#### `Email/SecurityChange-M18`
+
+![Email/SecurityChange-M18](screens/m18/Email-SecurityChange-M18.png)
+
+#### `Widget/PreChat-Verify`
+
+![Widget/PreChat-Verify](screens/m18/Widget-PreChat-Verify.png)
+
+#### `HelpCenter/WebForm-Verify`
+
+![HelpCenter/WebForm-Verify](screens/m18/HelpCenter-WebForm-Verify.png)
+
+#### `Admin/Channels-Widget-BotProtection`
+
+![Admin/Channels-Widget-BotProtection](screens/m18/Admin-Channels-Widget-BotProtection.png)
+
+#### `Admin/AcceptInvite-Providers`
+
+![Admin/AcceptInvite-Providers](screens/m18/Admin-AcceptInvite-Providers.png)

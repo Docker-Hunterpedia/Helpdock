@@ -48,7 +48,10 @@ import {
   metaMediaFetchJob,
   metaProfileFetchJob,
   metaSendJob,
-  notifyEmailJob,
+  NOTIFY_DIGEST_CRON,
+  notifyDigestTickJob,
+  notifyEmailRebuildJob,
+  notifyEmailScheduleJob,
   notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
@@ -176,9 +179,13 @@ import {
 } from '../meta/meta-health.job.js';
 import { createMetaSendHandler, createMetaSendProcessor } from '../meta/meta-send.job.js';
 import { createNotifyProcessor } from '../notifications/delivery.js';
+import { NotificationEmailEngine } from '../notifications/email-engine.js';
+import { bullEmailQueue, createEmailJobProcessors } from '../notifications/email-jobs.js';
+import { EmailPacingRepository } from '../notifications/email-pacing.repository.js';
 import { InstallChannels } from '../notifications/install-channels.js';
 import { registerNotificationHandlers } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
+import { readPacingConfig } from '../notifications/pacing-settings.js';
 import { WebPushSender } from '../notifications/push.js';
 import { StorageUsageStore } from '../observability/storage-usage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
@@ -324,7 +331,12 @@ export interface WorkerDependencies {
     env: WorkerEnv;
     settings: WorkerSettings;
   }): Closable;
-  /** M3-07's `notify` consumer: notification emails and web pushes, and the auth emails. */
+  /**
+   * M3-07's `notify` consumer: web pushes and the auth emails, and M14-10's
+   * paced notification email with its hourly digest tick and the rebuild that
+   * runs on boot and hourly, whose schedules are upserted on every boot for
+   * the reason the retention schedule is.
+   */
   createNotifyWorker(options: {
     redis: Redis;
     db: Db;
@@ -735,8 +747,11 @@ export const workerDependencies: WorkerDependencies = {
       broadcast,
       pushConfigured: async () => (await channels.vapidKeys()) !== null,
       queue: {
-        addEmail: async (jobId, payload) => {
-          await notify.add(notifyEmailJob.name, payload, { ...notifyEmailJob.options, jobId });
+        addEmailSchedule: async (jobId, payload) => {
+          await notify.add(notifyEmailScheduleJob.name, payload, {
+            ...notifyEmailScheduleJob.options,
+            jobId,
+          });
         },
         addPush: async (jobId, payload) => {
           await notify.add(notifyPushJob.name, payload, { ...notifyPushJob.options, jobId });
@@ -1467,29 +1482,79 @@ export const workerDependencies: WorkerDependencies = {
   },
   createNotifyWorker: ({ redis, db, log, env, settings }) => {
     const channels = new InstallChannels(settings);
+    const repository = new NotificationsRepository();
+    const queue = new Queue(QUEUE_NAMES.notify, { connection: redis });
+    const presence = new StorePresenceReader(new PresenceStore(redis));
+    const email = createEmailJobProcessors({
+      db,
+      log,
+      queue: bullEmailQueue(queue),
+      engine: new NotificationEmailEngine({
+        repository: new EmailPacingRepository(),
+        notifications: repository,
+        config: () => readPacingConfig(settings),
+        presenceOf: (brandId, userId) => presence.statusOf(brandId, userId),
+        systemSender: () => channels.systemSender(),
+        appUrl: env.APP_URL,
+        log,
+      }),
+    });
     const notify = createNotifyProcessor(
       {
-        repository: new NotificationsRepository(),
+        repository,
         settings: channels,
         push: new WebPushSender({ subject: env.APP_URL, allowCidrs: env.OUTBOUND_ALLOW_CIDRS }),
-        appUrl: env.APP_URL,
       },
-      { db, log },
+      { db, log, email },
     );
+    // DOMAIN-RULES §10, §20: the rebuild on boot and hourly re-places every
+    // pending batch, so losing Redis loses no notification email; the digest
+    // tick runs at the top of every hour.
+    queue
+      .add(
+        notifyEmailRebuildJob.name,
+        {},
+        {
+          ...notifyEmailRebuildJob.options,
+          jobId: `${notifyEmailRebuildJob.name}.boot.${String(Date.now())}`,
+        },
+      )
+      .catch((error: unknown) =>
+        log.error({ err: error }, 'could not add the boot notification email rebuild'),
+      );
+    for (const [definition, repeat] of [
+      [notifyEmailRebuildJob, { every: 3_600_000 }],
+      [notifyDigestTickJob, { pattern: NOTIFY_DIGEST_CRON, tz: 'UTC' }],
+    ] as const) {
+      queue
+        .upsertJobScheduler(definition.name, repeat, {
+          name: definition.name,
+          data: {},
+          opts: definition.options,
+        })
+        .catch((error: unknown) =>
+          log.error({ err: error, job: definition.name }, 'could not register a notify schedule'),
+        );
+    }
     const authEmail = createAuthEmailProcessor(
       { senders: channels, keyring: createKeyring(env) },
       { db, log },
     );
     const worker = new Worker(
       QUEUE_NAMES.notify,
-      (job) => (job.name === authEmailJob.name ? authEmail(job) : notify(job)),
+      (job, token) => (job.name === authEmailJob.name ? authEmail(job) : notify(job, token)),
       { connection: redis },
     );
     worker.on('failed', (job, error) =>
       log.error({ job: job?.name, jobId: job?.id, err: error }, 'notify job failed'),
     );
 
-    return { close: () => worker.close() };
+    return {
+      close: async () => {
+        await worker.close();
+        await queue.close();
+      },
+    };
   },
   createDomainsWorker: ({ redis, db, log, env }) => {
     const queue = new Queue(QUEUE_NAMES.domains, { connection: redis });

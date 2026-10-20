@@ -6,6 +6,7 @@ import {
   type DbTransaction,
   hcSearchLog,
   metaDeliveries,
+  notificationEmailBatches,
   notifications,
   type RetentionSettingsRow,
   retentionSettings,
@@ -209,6 +210,43 @@ export class RetentionRepository {
         ),
       )
       .returning({ id: notifications.id });
+    return deleted.length;
+  }
+
+  /**
+   * M14-10's email batches, kept as long as the notifications they carried
+   * (DOMAIN-RULES §11). A pending one is still to be sent and is left alone.
+   */
+  async purgeNotificationEmailBatchesBatch(
+    tx: DbTransaction,
+    brandId: string,
+    cutoff: Date,
+    limit: number,
+  ): Promise<number> {
+    const batch = await tx
+      .select({ id: notificationEmailBatches.id })
+      .from(notificationEmailBatches)
+      .where(
+        and(
+          eq(notificationEmailBatches.brandId, brandId),
+          lt(notificationEmailBatches.createdAt, cutoff),
+          notInArray(notificationEmailBatches.status, ['pending']),
+        ),
+      )
+      .orderBy(asc(notificationEmailBatches.createdAt), asc(notificationEmailBatches.id))
+      .limit(limit);
+    if (batch.length === 0) {
+      return 0;
+    }
+    const deleted = await tx
+      .delete(notificationEmailBatches)
+      .where(
+        inArray(
+          notificationEmailBatches.id,
+          batch.map((row) => row.id),
+        ),
+      )
+      .returning({ id: notificationEmailBatches.id });
     return deleted.length;
   }
 

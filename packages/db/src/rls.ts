@@ -144,6 +144,11 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // the subject through `tickets`, whose department policy decides. So it is
   // brand-scoped, and narrowed to its recipient by the owner policy below.
   { name: 'notifications', departmentScoped: false },
+  // M14-10. A person's email batches and pacing hold ids and counters, no
+  // ticket content, so they are brand-scoped like `notifications` and narrowed
+  // to their owner below.
+  { name: 'notification_email_batches', departmentScoped: false },
+  { name: 'notification_email_pacing', departmentScoped: false },
   // M4-02, M4-03. A brand's widget configuration, like `mailboxes`, and its
   // visitors, who are brand-scoped like the contacts they become: a visitor
   // reaches a department only through a ticket, whose own policy decides.
@@ -249,6 +254,8 @@ export const OWNER_SCOPED_TABLES: readonly OwnerScopedTable[] = [
   { name: 'views', column: 'owner_id' },
   { name: 'canned_responses', column: 'owner_id' },
   { name: 'notifications', column: 'user_id', systemWrites: true },
+  { name: 'notification_email_batches', column: 'user_id', systemWrites: true },
+  { name: 'notification_email_pacing', column: 'user_id', systemWrites: true },
 ];
 
 /** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */

@@ -1,13 +1,10 @@
-import type { EmailSender } from '@helpdock/channels';
 import type { Db } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
 import {
   createJobProcessor,
   type JobHandler,
   type JobLogger,
-  type NotifyEmailPayload,
   type NotifyPushPayload,
-  notifyEmailJob,
   notifyPushJob,
   silentLogger,
 } from '@helpdock/jobs';
@@ -15,24 +12,23 @@ import { notificationDetailSchema } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
 import type { DeliveryFacts, NotificationsRepository } from './notifications.repository.js';
 import type { PushPayload, PushSender, VapidKeys } from './push.js';
-import { renderStaffNotificationEmail } from './staff-email.js';
 
 /**
- * The `notify` queue's two consumers (M3-07): one email per notification, one
- * push per notification per browser. Both run in the brand's system
- * transaction under a receipt keyed by what they send, so a redelivered job
- * sends nothing a second time (DOMAIN-RULES §6).
+ * The `notify` queue's consumers: one push per notification per browser
+ * (M3-07), and M14-10's paced email jobs, which `email-jobs.ts` builds. Push
+ * runs in the brand's system transaction under a receipt keyed by what it
+ * sends, so a redelivered job sends nothing a second time (DOMAIN-RULES §6).
  *
- * Neither is sure its channel exists. Email needs the install's SMTP settings
- * and push needs the VAPID key pair, and an install may have neither: a job
- * that finds its channel missing logs that and finishes, because retrying it
- * cannot make an operator configure SMTP.
+ * Push is not sure its channel exists: it needs the VAPID key pair, and an
+ * install may have none. A job that finds it missing logs that and finishes,
+ * because retrying it cannot make an operator configure push.
  */
 
-/** What delivery reads from the install's settings, as late as possible. */
+/** 1.0's one email per notification, retired by M14-10; a job left in Redis from before is let go. */
+const RETIRED_EMAIL_JOB = 'notify.email';
+
+/** What push reads from the install's settings, as late as possible. */
 export interface DeliverySettings {
-  /** The install's system sender — the one sign-in links use — or null without SMTP. */
-  systemSender(): Promise<EmailSender | null>;
   vapidKeys(): Promise<VapidKeys | null>;
 }
 
@@ -40,68 +36,10 @@ export interface DeliveryWorkerDeps {
   readonly repository: NotificationsRepository;
   readonly settings: DeliverySettings;
   readonly push: PushSender;
-  /** `APP_URL`, for links into the admin app. */
-  readonly appUrl: string;
 }
 
-export const createEmailHandler =
-  ({ repository, settings, appUrl }: DeliveryWorkerDeps): JobHandler<NotifyEmailPayload> =>
-  async ({ payload, tx, log }) => {
-    const notification = await repository.delivery(tx, payload.notificationId);
-    if (notification === undefined || !notification.email || notification.userDeactivated) {
-      return;
-    }
-
-    const ticket = await repository.ticket(tx, notification.ticketId);
-    if (ticket === undefined) {
-      return;
-    }
-
-    const sender = await settings.systemSender();
-    if (sender === null) {
-      log.warn(
-        { job: notifyEmailJob.name, notificationId: notification.id },
-        'Notification email not sent: this install has no SMTP settings.',
-      );
-      return;
-    }
-
-    const [assigneeName, message] = await Promise.all([
-      ticket.assigneeId === null
-        ? Promise.resolve(null)
-        : repository.userName(tx, ticket.assigneeId),
-      notification.messageId === null
-        ? Promise.resolve(undefined)
-        : repository.message(tx, notification.messageId),
-    ]);
-    const locale = notification.userLocale;
-
-    await sender.send(
-      renderStaffNotificationEmail({
-        kind: notification.kind,
-        locale,
-        to: { address: notification.userEmail, name: notification.userName },
-        recipientId: notification.userId,
-        ticket: {
-          id: ticket.id,
-          reference: ticket.reference,
-          subject: ticket.subject,
-          departmentName:
-            locale === 'ar'
-              ? (ticket.departmentNameAr ?? ticket.departmentName)
-              : ticket.departmentName,
-          priority: ticket.priority,
-          contactName: ticket.contactName,
-          assigneeId: ticket.assigneeId,
-          assigneeName: assigneeName ?? null,
-        },
-        actorName: notification.actorName,
-        messageText: message?.bodyText ?? null,
-        detail: detailOf(notification),
-        appUrl,
-      }),
-    );
-  };
+/** A processor per job name, as `createEmailJobProcessors` returns them. */
+export type JobProcessors = Readonly<Record<string, (job: Job, token?: string) => Promise<void>>>;
 
 const detailOf = (notification: DeliveryFacts) => {
   const parsed = notificationDetailSchema.safeParse(notification.detail);
@@ -206,24 +144,37 @@ const pushContent = async (
 };
 
 /**
- * One processor for the `notify` queue, which carries two job names: BullMQ
- * routes by queue, so the name decides which handler runs.
+ * One processor for the `notify` queue, which carries several job names:
+ * BullMQ routes by queue, so the name decides which handler runs.
  */
 export const createNotifyProcessor = (
   deps: DeliveryWorkerDeps,
-  { db, log = silentLogger }: { readonly db: Db; readonly log?: JobLogger | undefined },
-): ((job: Job) => Promise<void>) => {
-  const email = createJobProcessor(notifyEmailJob, createEmailHandler(deps), { db, log });
+  {
+    db,
+    log = silentLogger,
+    email = {},
+  }: {
+    readonly db: Db;
+    readonly log?: JobLogger | undefined;
+    /** M14-10's email jobs by name. */
+    readonly email?: JobProcessors;
+  },
+): ((job: Job, token?: string) => Promise<void>) => {
   const pushJob = createJobProcessor(notifyPushJob, createPushHandler(deps), { db, log });
 
-  return async (job) => {
-    switch (job.name) {
-      case notifyEmailJob.name:
-        return email(job);
-      case notifyPushJob.name:
-        return pushJob(job);
-      default:
-        throw new UnrecoverableError(`The notify queue does not handle ${job.name}.`);
+  return async (job, token) => {
+    if (job.name === notifyPushJob.name) {
+      return pushJob(job);
     }
+    if (job.name === RETIRED_EMAIL_JOB) {
+      log.info({ job: job.name, jobId: job.id }, 'retired notification email job let go (M14-10)');
+      return;
+    }
+    const emailJob = email[job.name];
+    if (emailJob === undefined) {
+      throw new UnrecoverableError(`The notify queue does not handle ${job.name}.`);
+    }
+
+    return emailJob(job, token);
   };
 };

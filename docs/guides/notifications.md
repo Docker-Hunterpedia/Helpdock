@@ -47,7 +47,8 @@ The bell sits at the inline end of the sidebar's brand row. Its accessible name
 carries the count ("Notifications, 3 unread"), and the badge shows it. The panel
 lists the **last 30 days** of the brand on screen, grouped by day, with an
 **Unread** filter and **Mark all read**. Opening a row marks it read and opens
-its ticket.
+its ticket. Opening a ticket any other way marks every notification about it
+read too (M14-10), so an email still waiting to go leaves it out.
 
 A row holds ids, never content: the subject and names are read when the panel
 is, under the reader's own department scope, so a ticket they can no longer see
@@ -78,11 +79,108 @@ language, set on the Security tab.
 Notification emails go from the install's **system sender** — the SMTP settings
 the first-run wizard saves (`smtp.*`, or `HD_SMTP_*`), the same one sign-in links
 use — never from a brand's support mailbox, so a reply to one cannot land in a
-ticket. They are written in the recipient's app language (English or Arabic),
-link to the ticket and to the settings page, and carry no remote images.
+ticket. They are written in the recipient's app language (English or Arabic,
+right to left), link to the tickets and to the settings page, and carry no
+remote images and no message bodies beyond a single notification's excerpt.
 
-An install without SMTP settings sends none: each job logs "Notification email
-not sent: this install has no SMTP settings." and finishes, rather than retrying.
+Since M14-10 email is **paced** ([ADR 0037](../decisions/0037-paced-notification-email-and-digests.md),
+[DOMAIN-RULES §20](../planning/DOMAIN-RULES.md#20-notification-delivery)). The
+bell is always immediate, and push stays immediate.
+
+### Email schedule
+
+Each person chooses one schedule, the same in every brand:
+
+| Schedule | What arrives |
+|---|---|
+| **Right away** (default) | One email a short wait after the first notification, gathering what arrives meanwhile. While more keeps coming, the waits grow. |
+| **Hourly digest** | At the top of each hour, what is still unread. |
+| **Daily digest** | Once a day, at the hour they choose (08:00 unless changed), in their time zone. |
+| **Off** | No notification email. |
+
+Right away is the default for everyone, existing accounts included: an upgrade
+from 1.0 replaces one email per notification with batched email (owner
+decision D-25).
+
+**Right away pacing.** The first email goes 2 minutes after the first
+notification. While more arrives, each next email waits a back-off step after
+the last one went: 10, 20, 40, then 60 minutes, and 60 after that. After 2 quiet
+hours with nothing new, the next one waits 2 minutes again. A **mention**, an
+**SLA breach** or an **escalation** may cut the wait and go at once, but no more
+often than every 5 minutes and no more than 8 times a day. However they come,
+one person gets at most **6** notification emails an hour and **40** a day from
+one brand, digests included. Twelve notifications in an hour reach the person
+as no more than six emails.
+
+**Nothing while they are working.** While the person is online (not away) in
+the brand, a Right away email waits until they have been away or offline for 5
+minutes, and never more than 15 minutes in all (owner decision D-27); what they
+read meanwhile drops out.
+
+**Digests are per brand.** A person in three brands gets up to three digests,
+each naming its brand in the subject (owner decision D-26). The daily digest's
+hour is read in the person's time zone; until M14-12 gives each person their
+own, it is the brand's time zone. On the day summer time ends, an hour that
+happens twice sends one digest; on the day it starts, an hour that does not
+exist sends none, and its rows wait for the next day's.
+
+### What an email says
+
+Following the `Email/NotificationBatch` artboard:
+
+- **One notification** is its own email, as in 1.0.
+- **Several** are one email, "[Acme] 6 updates since 14:52", headed by what
+  happened ("4 assigned, 2 replies"), then **Needs you now** (mentions,
+  breaches, escalations), then **Tickets**, folded per ticket ("Mona replied 2
+  times"). Each reference links to its ticket.
+- **A digest** says how many things happened since when and how many need the
+  person now, and folds a kind that touched several tickets into one line ("7
+  tickets assigned to you, by Omar and round-robin").
+
+Every notification email ends "You get these because of your notification
+settings. Change them", with a link to the settings page; M14-11 adds the
+one-click unsubscribe beside it. Each email's `Message-ID` is derived from its
+batch, so a batch that is retried is the same message.
+
+### Checked again before it goes
+
+A notification can wait minutes or a day for its email, so every row is checked
+again when the email is sent. It is left out, for good, when:
+
+| Check | Marked |
+|---|---|
+| The ticket is gone, or the person can no longer see its department, or no longer holds a role in the brand, or was deactivated | `skipped_scope` |
+| They read it, in the bell or by opening the ticket | `skipped_read` |
+| Their schedule is Off, they unsubscribed (M14-11), or the row was made with email off | `skipped_off` |
+| They are paused | `skipped_paused` |
+
+A batch whose every row is left out sends nothing. An install without SMTP
+settings sends nothing either: the job logs "Notification email not sent: this
+install has no SMTP settings.", marks the rows `skipped_off` and finishes rather
+than retrying.
+
+### Pause
+
+A pause (until a time, at most a year ahead) holds email **and** push. It drops
+rather than delays: what arrives during it is marked `skipped_paused` and stays
+in the bell, and nothing is sent when it ends.
+
+### Settings for an install
+
+Each pacing number is an install setting, pinned from the environment like any
+other ([configuration](configuration.md#settings-you-can-pin-with-hd_)):
+
+| Setting | Environment | Default |
+|---|---|---|
+| `notify.email.firstWaitMinutes` | `HD_NOTIFY_EMAIL_FIRST_WAIT_MINUTES` | `2` |
+| `notify.email.backoffMinutes` | `HD_NOTIFY_EMAIL_BACKOFF_MINUTES` | `[10,20,40,60]` |
+| `notify.email.quietResetMinutes` | `HD_NOTIFY_EMAIL_QUIET_RESET_MINUTES` | `120` |
+| `notify.email.urgentIntervalMinutes` | `HD_NOTIFY_EMAIL_URGENT_INTERVAL_MINUTES` | `5` |
+| `notify.email.urgentPerDay` | `HD_NOTIFY_EMAIL_URGENT_PER_DAY` | `8` |
+| `notify.email.perHour` | `HD_NOTIFY_EMAIL_PER_HOUR` | `6` |
+| `notify.email.perDay` | `HD_NOTIFY_EMAIL_PER_DAY` | `40` |
+
+The presence hold (5 minutes away, 15 at most) is fixed.
 
 ## Browser push
 
@@ -102,7 +200,8 @@ HD_PUSH_VAPID_PRIVATE_KEY=…
 ```
 
 Without them the push column of the settings page is disabled and the card says
-"Not set up on this install"; no push job is queued. Rotating the pair
+"Not set up on this install"; no push job is queued. While the person is
+paused, no push job is queued either. Rotating the pair
 invalidates every browser's subscription (ADR 0002); each person turns push on
 again.
 
@@ -127,9 +226,18 @@ subscription.
 ```
 ticket change, SLA step, rule   →  outbox: ticket.assigned, sla.breached, …   (same transaction)
 worker: fan-out                 →  notifications rows + outbox: notification.created
-worker: notification.created    →  socket frame; notify.email and notify.push jobs
-worker: notify queue            →  one email; one push per browser
+worker: notification.created    →  socket frame; notify.email_schedule and notify.push jobs
+worker: notify.email_schedule   →  the row joins the person's pending batch, or waits for a digest
+worker: notify.email_batch      →  at the batch's time: re-check, one email; one push per browser
+worker: notify.digest.tick      →  hourly, per brand: a digest batch for whoever's hour it is
+worker: notify.email_rebuild    →  on boot and hourly: every pending batch's job placed again
 ```
+
+Pacing lives in Postgres (`notification_email_batches` and
+`notification_email_pacing`, both owner-scoped like `notifications`), not in
+Redis, so losing Redis loses no email: `notify.email_rebuild` puts every
+pending batch's delayed job back and schedules any row whose schedule job was
+lost. A `notify.email` job left in Redis from 1.0 is let go with a log line.
 
 | Event consumed | Written by |
 |---|---|
@@ -140,7 +248,9 @@ worker: notify queue            →  one email; one push per browser
 | `rule.notify` | a workflow rule's *Notify* action (M3-03): `{ ticketId, recipients, message, ruleId }`, delivered as an escalation |
 
 A redelivered event writes nothing new: a notification is unique per source
-event and recipient, and the email and push jobs are keyed by what they send.
+event and recipient, a row joins one batch at most, a batch sends once (its
+`job_receipts` key is `notify.email_batch:<batchId>`), and push jobs are keyed
+by what they send.
 The consumers subscribe to these events as `notifications`, beside whichever
 module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling-an-event)).
 
@@ -152,10 +262,15 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 | `POST /api/brands/:brandId/notifications/:id/read` | `ticket:read` | Marks one of the caller's own read; `404` for anyone else's |
 | `POST /api/brands/:brandId/notifications/read-all` | `ticket:read` | Marks all of the caller's read in the brand |
 | `POST /api/brands/:brandId/notifications/test-push` | `ticket:read` | `{ subscriptionId }`; `409` without VAPID keys |
-| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, and push status |
+| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour` and `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and keeps the rest |
 | `POST /api/me/push-subscriptions` | signed in | `PushSubscription.toJSON()` plus a label; `https` endpoints only |
 | `DELETE /api/me/push-subscriptions/:id` | signed in | Removes one of the caller's browsers |
 
 ## Known gaps
 
-- None open. The VAPID pair is generated by the wizard since M9.
+- The schedule, digest hour and pause have an API but no screen until M14-11,
+  which also adds one-click unsubscribe and *Send me a test email*.
+- The daily digest uses the brand's time zone until M14-12 gives each person
+  their own.
+- A batch folds per bulk operation only once M14-03 records the operation on
+  each notification; until then a bulk change folds per ticket.

@@ -363,7 +363,7 @@ Domain changes and their side effects must not drift apart. Rule: **a side effec
 
 - Table `outbox(id uuid, brand_id, event text, payload jsonb, created_at, published_at null)`. Services write the domain rows and the outbox row in one transaction. `@nestjs/event-emitter` is used only for in-process, non-critical effects such as cache invalidation; it never enqueues jobs.
 - A relay in the worker (`outbox.relay`, wakes on `LISTEN outbox` and every 500 ms) reads unpublished rows in id order, adds a BullMQ job with `jobId = outbox.id` (so re-publishing after a crash is a no-op), and sets `published_at`. Rows are purged 7 days after publishing.
-- Consumers are idempotent by natural key: email send keyed by `ticket_message_id` (and the SMTP `Message-ID` is deterministic from it), Telegram and Meta sends keyed by `ticket_message_id`, the Meta media fetch by the attachment id, webhook delivery keyed by `(webhook_id, event_id)`, indexing keyed by `(source_id, content_hash)`. A `job_receipts(key, completed_at)` table backs consumers that have no natural key.
+- Consumers are idempotent by natural key: email send keyed by `ticket_message_id` (and the SMTP `Message-ID` is deterministic from it), Telegram and Meta sends keyed by `ticket_message_id`, the Meta media fetch by the attachment id, webhook delivery keyed by `(webhook_id, event_id)`, indexing keyed by `(source_id, content_hash)`, staff notification email keyed by its batch (and its `Message-ID` is deterministic from the batch id, §20). A `job_receipts(key, completed_at)` table backs consumers that have no natural key.
 - Inbound dedupe: `ticket_messages.external_message_id` is unique per channel, so re-delivered IMAP messages, Telegram updates, Meta webhook batches (`wamid`, `mid`), or inbound-parse webhooks do not create duplicates.
 - Tests: crash the process between commit and publish (kill the relay) and assert the job is published on restart; roll back a transaction and assert no job appears; deliver the same job twice and assert one email.
 
@@ -423,7 +423,7 @@ Backup tooling is out of scope for v1, but the procedure is not. `docs/guides/op
 - **Restore**: fresh Compose stack → restore dump with the owner role → point at the bucket → same `.env` → start; migrations bring an older dump forward. A restore drill on a clean VM is an M9 exit criterion.
 - **Upgrades**: pin the image tag; take a dump first; migrations are forward-only. A failed migration leaves the lock held and the api refuses to serve; recovery is restore + previous tag. Release notes flag migrations that cannot be rolled back by restore (none planned for 1.x).
 - **Master key rotation**: `helpdock keys rotate` reads `APP_MASTER_KEY_PREVIOUS` and `APP_MASTER_KEY`, re-encrypts every secret row to the new key id, and reports. Each secret row stores its key id, so the two keys can coexist during rotation. Loss of both keys is unrecoverable and the wizard says so.
-- **Redis**: named volume `redis_data:/data` with AOF. Losing Redis logs everyone out, drops rate-limit counters, and loses queued jobs; the outbox relay republishes anything unpublished, `sla.rebuild` recreates timers, and repeatable pollers are re-registered on worker boot. Nothing durable lives only in Redis.
+- **Redis**: named volume `redis_data:/data` with AOF. Losing Redis logs everyone out, drops rate-limit counters, and loses queued jobs; the outbox relay republishes anything unpublished, `sla.rebuild` recreates timers, `notify.email_rebuild` places every pending notification email batch again (§20), and repeatable pollers are re-registered on worker boot. Nothing durable lives only in Redis.
 
 ---
 
@@ -442,6 +442,7 @@ Per brand, set by Admin (defaults in bold):
 | Webhook, Telegram and Meta delivery logs | 30 days (fixed) | Hard delete of finished deliveries (sent, delivered, read, failed, refused); pending ones are kept |
 | API idempotency keys | 24 hours (fixed) | Hard delete |
 | Outbox, job receipts | 7 days after publish/complete | Hard delete |
+| Staff notifications and their email batches | 30 days (fixed) | Hard delete; a batch still pending is kept |
 | Knowledge chunks of a removed source | immediate | Hard delete |
 
 - `maintenance.retention` runs nightly per brand and logs counts to the audit log.
@@ -515,6 +516,21 @@ Technical gates alone do not show whether the product works for people. Tracked 
 
 ---
 
+## 20. Notification delivery
+
+How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md)). The bell is always immediate and push stays immediate; both obey a pause. Sections 17 to 19 are reserved for the rules other 1.x plans propose.
+
+- **Schedules.** Per person, the same in every brand: *Right away* (the default, for existing accounts too), *Hourly digest* (at the top of each hour), *Daily digest* (at an hour 0–23 in the person's time zone; the brand's until M14-12 gives people their own), or *Off*.
+- **Right away pacing** (install settings `notify.email.*`, `HD_NOTIFY_EMAIL_*`; defaults in brackets): the first email waits [2 min] from the first notification and gathers what arrives meanwhile; each next one waits a back-off step [10, 20, 40, 60 min, the last repeating] after the previous email; [2 h] with nothing arriving or sent resets the back-off. A mention, SLA breach or escalation may cut the wait, no more often than every [5 min] and [8] times a day. Every person gets at most [6] notification emails an hour and [40] a day from one brand, digests included; the windows start at the first email in them. Pacing state is in Postgres (`notification_email_pacing`, `notification_email_batches`), one row per person and brand, and every path that changes a person's batches takes that row's lock first.
+- **Re-checked at send time**, for every row of a batch, in this order: the ticket exists and the recipient still holds a role in the brand whose department scope covers it, and is not deactivated (else `skipped_scope`); unread (else `skipped_read`; opening the ticket reads it); the schedule is not Off, they have not unsubscribed, and the row was made with email on (else `skipped_off`); not paused (else `skipped_paused`). A skipped row is never sent later. An install without SMTP settings marks the rows `skipped_off`.
+- **Presence hold.** While the recipient is online (not away) in the brand, a Right away email waits until they have been away or offline for 5 minutes, measured from the last time the send found them online, or 15 minutes in all, whichever is first (owner decision D-27).
+- **Pause** (until a time at most a year ahead) drops, never delays: rows that arrive during it are `skipped_paused` and stay in the bell; a batch that comes due during it is skipped; nothing is sent when it ends. Push is not queued while paused.
+- **Digests are per brand** (§1.4, owner decision D-26): `notify.digest.tick` runs hourly and fans out one job per brand; a person in three brands gets up to three digests, each naming its brand. A local hour that happens twice sends one daily digest; one that does not exist sends none.
+- **Jobs.** `notify.email_schedule` (on `notification.created` with email on; the row's state is its key), `notify.email_batch` (job id `notify.batch.<batchId>`, receipt `notify.email_batch:<batchId>`, `Message-ID` `<notify.batch.<batchId>@<APP_URL host>>`), `notify.digest.tick` (hourly cron), `notify.email_rebuild` (boot and hourly). A batch job that wakes early, over a cap or held moves itself to the time it may go.
+- **Content.** References and who did what; one notification is 1.0's email, several are grouped into *Needs you now* (mentions, breaches, escalations) and *Tickets*, folded per ticket and per bulk operation. In the recipient's language, right to left for Arabic.
+
+---
+
 ## 16. Change log
 
 | Date | Change |
@@ -526,3 +542,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-10-20 | The new §12.1 Staff authentication factors, with its first rule, passkey origin (M18-01, [ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). |
 | 2026-10-20 | §12: the SSO first-link rule, with Entra ID's `xms_edov` from members of the one tenant a connection names (M18-09, ADR 0026). |
 | 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |
+| 2026-10-20 | New §20 Notification delivery: email schedules, Right away pacing, the send-time re-check, the presence hold, pause and per-brand digests (M14-10, [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md)); §6's email key, §10's rebuild and §11's batches follow. |

@@ -289,7 +289,7 @@ packages/ai
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
 | `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page`; `help_center.publish_due` (delayed, one per brand and scheduled minute) and `help_center.publish_due.sweep` (hourly) | rate-limited crawl; the scheduled publish of M5-01 |
 | `media` | `media.process`, `media.scan`, `help_center.media_process` | article images of M5-02 share the queue and its budget |
-| `notify` | `notify.inapp`, `notify.email`, `notify.push`, `auth.email` | `auth.email` sends sign-in links, password resets and invitations from the system sender (#104) |
+| `notify` | `notify.inapp`, `notify.email_schedule`, `notify.email_batch`, `notify.digest.tick`, `notify.email_rebuild`, `notify.push`, `auth.email` | `auth.email` sends sign-in links, password resets and invitations from the system sender (#104); the four `notify.email_*` and digest jobs pace staff notification email (M14-10, DOMAIN-RULES §20) |
 | `webhooks` | `webhook.deliver` | HMAC, retry, log |
 | `outbox` | `outbox.relay` | LISTEN/NOTIFY + 500 ms poll; publishes with `jobId = outbox.id` |
 | `assignment` | `assignment.offline_unassign` (delayed) | M1-07's auto-unassign timer; a no-op if the agent came back or left again later |

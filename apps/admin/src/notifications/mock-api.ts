@@ -190,6 +190,12 @@ export class MockNotificationsApi implements NotificationsApi {
         publicKey: this.#pushConfigured ? MOCK_VAPID_PUBLIC_KEY : null,
         subscriptions: this.#subscriptions.map(({ endpoint: _endpoint, ...view }) => view),
       },
+      emailDelivery: {
+        schedule: 'immediate',
+        digestHour: 8,
+        pausedUntil: null,
+        unsubscribedAt: null,
+      },
     };
   }
 

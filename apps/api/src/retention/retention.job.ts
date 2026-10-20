@@ -110,6 +110,20 @@ export const runBrandRetention = async ({
       ),
     batchSize,
   );
+  // The email batches share the window and are not a category of the form:
+  // they hold ids and counts, and the count a brand reads is the notifications'.
+  await drainInBatches(
+    () =>
+      inBrand((tx) =>
+        repository.purgeNotificationEmailBatchesBatch(
+          tx,
+          brandId,
+          cutoffs.notifications,
+          batchSize,
+        ),
+      ),
+    batchSize,
+  );
   counts.webhookDeliveries = await drainInBatches(
     () =>
       inBrand((tx) =>

@@ -503,6 +503,25 @@ any case.
 
 ### M14-10 Notification pacing engine
 
+**Status: built, in review** (issue #297). Built as below, with
+[ADR 0037](../decisions/0037-paced-notification-email-and-digests.md) accepted
+and [DOMAIN-RULES §20](../planning/DOMAIN-RULES.md#20-notification-delivery)
+written, and these differences: the schedule's Right away value is
+`immediate`, as the batch kind is; batches also keep `urgent`, `held_since`
+and `seen_online_at`, and pacing `last_urgent_at`, which the urgent interval
+and a resumable presence hold need; the hold's "away for 5 minutes" is
+measured from the last time the send found the person online, re-checked every
+minute; `bulk_operation_id` is left to M14-03, and the folding already groups
+by it; the daily digest's hour is read in the brand's time zone until M14-12
+adds `users.time_zone`; opening a ticket (`GET /tickets/:id` by a person)
+marks their notifications about it read; an install without SMTP marks rows
+`skipped_off` rather than leaving them pending; the English catalog says
+"replied 2 times" where the artboard says "twice" (English has no dual plural
+form; Arabic uses its own). For M14-11, `GET`/`PUT /api/me/notification-preferences`
+already carry the schedule, digest hour and pause (`emailDelivery`); the test
+email, the unsubscribe link and the `List-Unsubscribe` headers are left to it.
+Guide: [Notifications › Email](../guides/notifications.md#email).
+
 Email only; the bell is always immediate and push stays immediate (both obey
 pause). A person chooses an **email schedule**:
 

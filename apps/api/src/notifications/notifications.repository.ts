@@ -12,6 +12,8 @@ import {
   users,
 } from '@helpdock/db';
 import {
+  type EmailDelivery,
+  type EmailSchedule,
   type NotificationKind,
   type NotificationPreferences,
   resolveNotificationPreferences,
@@ -63,6 +65,7 @@ export interface NewNotificationRow {
   readonly inApp: boolean;
   readonly email: boolean;
   readonly push: boolean;
+  readonly emailState: 'pending' | null;
 }
 
 export interface DeliveryFacts {
@@ -81,6 +84,8 @@ export interface DeliveryFacts {
   readonly email: boolean;
   readonly push: boolean;
   readonly createdAt: Date;
+  /** The recipient's pause (M14-10): push waits for nothing while it lasts. */
+  readonly pausedUntil: Date | null;
 }
 
 export interface PanelRow {
@@ -276,9 +281,11 @@ export class NotificationsRepository {
         email: notifications.email,
         push: notifications.push,
         createdAt: notifications.createdAt,
+        pausedUntil: notificationPrefs.pausedUntil,
       })
       .from(notifications)
       .innerJoin(recipient, eq(recipient.id, notifications.userId))
+      .leftJoin(notificationPrefs, eq(notificationPrefs.userId, notifications.userId))
       .where(eq(notifications.id, notificationId))
       .limit(1);
 
@@ -455,6 +462,27 @@ export class NotificationsRepository {
     return updated.length === 1;
   }
 
+  /**
+   * Opening a ticket reads what you were told about it (M14-10), so a pending
+   * email about it drops out at its send-time re-check. Only the reader's own
+   * rows: the owner policy would refuse anyone else's.
+   */
+  async markTicketRead(
+    tx: DbTransaction,
+    { userId, ticketId, at }: { userId: string; ticketId: string; at: Date },
+  ): Promise<void> {
+    await tx
+      .update(notifications)
+      .set({ readAt: at })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.ticketId, ticketId),
+          isNull(notifications.readAt),
+        ),
+      );
+  }
+
   async markAllRead(
     tx: DbTransaction,
     { brandId, userId, at }: { brandId: string; userId: string; at: Date },
@@ -483,17 +511,47 @@ export class NotificationsRepository {
     return row?.preferences;
   }
 
+  /** M14-10's schedule, digest hour, pause and unsubscribe; the defaults without a row. */
+  async emailDelivery(tx: DbTransaction, userId: string): Promise<EmailDelivery> {
+    const [row] = await tx
+      .select({
+        schedule: notificationPrefs.emailSchedule,
+        digestHour: notificationPrefs.digestHour,
+        pausedUntil: notificationPrefs.pausedUntil,
+        unsubscribedAt: notificationPrefs.emailUnsubscribedAt,
+      })
+      .from(notificationPrefs)
+      .where(eq(notificationPrefs.userId, userId))
+      .limit(1);
+
+    return {
+      schedule: row?.schedule ?? 'immediate',
+      digestHour: row?.digestHour ?? 8,
+      pausedUntil: row?.pausedUntil?.toISOString() ?? null,
+      unsubscribedAt: row?.unsubscribedAt?.toISOString() ?? null,
+    };
+  }
+
+  /** Writes the matrix, and whichever of the email choices are given; the rest stay. */
   async savePreferences(
     tx: DbTransaction,
     userId: string,
     preferences: NotificationPreferences,
+    email: {
+      readonly emailSchedule?: EmailSchedule | undefined;
+      readonly digestHour?: number | undefined;
+      readonly pausedUntil?: Date | null | undefined;
+    } = {},
   ): Promise<void> {
+    const choices = Object.fromEntries(
+      Object.entries(email).filter(([, value]) => value !== undefined),
+    ) as typeof email;
     await tx
       .insert(notificationPrefs)
-      .values({ userId, preferences })
+      .values({ userId, preferences, ...choices })
       .onConflictDoUpdate({
         target: notificationPrefs.userId,
-        set: { preferences, updatedAt: sql`now()` },
+        set: { preferences, ...choices, updatedAt: sql`now()` },
       });
   }
 

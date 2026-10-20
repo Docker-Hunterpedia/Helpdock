@@ -1,6 +1,6 @@
 import type { DbTransaction } from '@helpdock/db';
 import { NOTIFICATION_PREFERENCE_DEFAULTS, type NotificationPreferences } from '@helpdock/schemas';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type {
   NotificationsRepository,
@@ -45,6 +45,7 @@ interface Calls {
   unreadOnly?: boolean;
   outbox: { event: string; payload: unknown }[];
   saved?: NotificationPreferences;
+  email: Record<string, unknown>;
 }
 
 const service = ({
@@ -58,7 +59,7 @@ const service = ({
   deleted?: boolean;
   subscriptionOwner?: string;
 } = {}) => {
-  const calls: Calls = { outbox: [] };
+  const calls: Calls = { outbox: [], email: {} };
   const repository = {
     panel: async (_tx: DbTransaction, query: { since: Date; unreadOnly: boolean }) => {
       calls.since = query.since;
@@ -70,9 +71,21 @@ const service = ({
     markAllRead: async () => undefined,
     subscription: async () => ({ ...subscription, userId: subscriptionOwner }),
     storedPreferences: async () => calls.saved,
-    savePreferences: async (_tx: DbTransaction, _user: string, saved: NotificationPreferences) => {
+    savePreferences: async (
+      _tx: DbTransaction,
+      _user: string,
+      saved: NotificationPreferences,
+      email: Record<string, unknown>,
+    ) => {
       calls.saved = saved;
+      calls.email = email;
     },
+    emailDelivery: async () => ({
+      schedule: 'immediate' as const,
+      digestHour: 8,
+      pausedUntil: null,
+      unsubscribedAt: null,
+    }),
     account: async () => ({ email: 'lina@helpdock.test', locale: 'en' as const }),
     subscriptionsOf: async () => [subscription],
     upsertSubscription: async (
@@ -183,6 +196,12 @@ describe('NotificationsService — preferences', () => {
           { id: SUBSCRIPTION, label: 'Chrome on macOS', createdAt: '2026-09-20T09:00:00.000Z' },
         ],
       },
+      emailDelivery: {
+        schedule: 'immediate',
+        digestHour: 8,
+        pausedUntil: null,
+        unsubscribedAt: null,
+      },
     });
   });
 
@@ -202,7 +221,39 @@ describe('NotificationsService — preferences', () => {
       replied: { inApp: true, email: true, push: false },
     };
 
-    expect((await notifications.updatePreferences(tx, ME, changed)).preferences).toEqual(changed);
+    expect(
+      (await notifications.updatePreferences(tx, ME, { preferences: changed })).preferences,
+    ).toEqual(changed);
+  });
+
+  it('saves the email schedule alone, keeping the matrix it had (M14-10)', async () => {
+    const { notifications, tx, calls } = service();
+
+    await notifications.updatePreferences(tx, ME, { emailSchedule: 'daily', digestHour: 7 });
+
+    expect(calls.saved).toEqual(NOTIFICATION_PREFERENCE_DEFAULTS);
+    expect(calls.email).toEqual({ emailSchedule: 'daily', digestHour: 7, pausedUntil: undefined });
+  });
+
+  it('pauses until a time ahead, and resumes with null', async () => {
+    const { notifications, tx, calls } = service();
+
+    await notifications.updatePreferences(tx, ME, { pausedUntil: '2026-09-27T13:00:00.000Z' });
+    expect(calls.email.pausedUntil).toEqual(new Date('2026-09-27T13:00:00.000Z'));
+
+    await notifications.updatePreferences(tx, ME, { pausedUntil: null });
+    expect(calls.email.pausedUntil).toBeNull();
+  });
+
+  it.each([
+    ['in the past', '2026-09-27T11:59:59.000Z'],
+    ['more than a year ahead', '2027-09-28T12:00:00.000Z'],
+  ])('refuses a pause that ends %s', async (_name, pausedUntil) => {
+    const { notifications, tx } = service();
+
+    await expect(notifications.updatePreferences(tx, ME, { pausedUntil })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('adds a browser and removes it, and a browser that is not the reader’s is a 404', async () => {

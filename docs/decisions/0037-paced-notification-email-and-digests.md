@@ -1,6 +1,6 @@
 # 0037 Paced notification email and digests
 
-Status: proposed
+Status: accepted (M14-10; owner decisions D-25 to D-27). Decisions 1 to 7 are built by M14-10; decision 8, the unsubscribe, by M14-11.
 Date: 2026-10-20
 
 ## Context
@@ -31,7 +31,9 @@ owner decisions D-25, D-26 and D-27.
    override.
 3. **Pacing state lives in Postgres** (`notification_email_batches`,
    `notification_email_pacing`), not Redis, and `notify.email_rebuild`
-   recreates batch jobs on boot and hourly, so Redis loss loses no email.
+   recreates batch jobs on boot and hourly, so Redis loss loses no email. The
+   pacing row is also the per-person lock every path takes before it changes
+   that person's batches.
 4. **Every send re-checks** each row: unread, the ticket exists and the
    recipient's department scope still covers it, the recipient is active with
    a role in the brand, not paused, not unsubscribed, schedule not Off. A row
@@ -63,8 +65,10 @@ owner decisions D-25, D-26 and D-27.
   person.
 - The per-notification `notify.email` job is retired; existing installs move to
   Right away (batched) on upgrade, which the release note states.
-- Two new owner-scoped tenant tables; DOMAIN-RULES gains a notification
-  delivery section (§20, number provisional) and the unsubscribe token in §4.6.
+- Two new owner-scoped tenant tables; DOMAIN-RULES gains §20 Notification
+  delivery (M14-10) and, with M14-11, the unsubscribe token in §4.6.
+- Until M14-12 gives each person a time zone, the daily digest's hour is read
+  in the brand's.
 
 ## Alternatives considered
 

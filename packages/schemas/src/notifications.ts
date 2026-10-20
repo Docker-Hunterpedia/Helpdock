@@ -83,6 +83,31 @@ export const resolveNotificationPreferences = (stored: unknown): NotificationPre
   return resolved;
 };
 
+// ------------------------------------------------------- email schedule
+
+/**
+ * How notification email reaches a person (M14-10, DOMAIN-RULES §20): Right
+ * away, paced and batched (the default, owner decision D-25), an hourly or a
+ * daily digest per brand, or none.
+ */
+export const EMAIL_SCHEDULES = ['immediate', 'hourly', 'daily', 'off'] as const;
+export const emailScheduleSchema = z.enum(EMAIL_SCHEDULES);
+export type EmailSchedule = z.infer<typeof emailScheduleSchema>;
+
+/** A pause runs for at most this long; "until a date" is capped here. */
+export const NOTIFICATION_PAUSE_MAX_DAYS = 365;
+
+export const emailDeliverySchema = z.object({
+  schedule: emailScheduleSchema,
+  /** The daily digest's hour, 0–23, in the person's time zone. */
+  digestHour: z.int().min(0).max(23),
+  /** Email and push are dropped, never delayed, until then; null when not paused. */
+  pausedUntil: z.iso.datetime().nullable(),
+  /** Set by M14-11's one-click unsubscribe; null while email is on. */
+  unsubscribedAt: z.iso.datetime().nullable(),
+});
+export type EmailDelivery = z.infer<typeof emailDeliverySchema>;
+
 export const pushSubscriptionSchema = z.object({
   id: z.uuid(),
   label: z.string(),
@@ -103,12 +128,25 @@ export const notificationPreferencesViewSchema = z.object({
     publicKey: z.string().nullable(),
     subscriptions: z.array(pushSubscriptionSchema),
   }),
+  emailDelivery: emailDeliverySchema,
 });
 export type NotificationPreferencesView = z.infer<typeof notificationPreferencesViewSchema>;
 
-export const notificationPreferencesUpdateSchema = z.strictObject({
-  preferences: notificationPreferencesSchema,
-});
+/**
+ * `PUT /api/me/notification-preferences`. Every part is optional, so the
+ * matrix, the schedule and a pause can each be saved on their own; a
+ * `pausedUntil` of null resumes.
+ */
+export const notificationPreferencesUpdateSchema = z
+  .strictObject({
+    preferences: notificationPreferencesSchema.optional(),
+    emailSchedule: emailScheduleSchema.optional(),
+    digestHour: z.int().min(0).max(23).optional(),
+    pausedUntil: z.iso.datetime().nullable().optional(),
+  })
+  .refine((update) => Object.values(update).some((value) => value !== undefined), {
+    message: 'must change something',
+  });
 export type NotificationPreferencesUpdate = z.infer<typeof notificationPreferencesUpdateSchema>;
 
 /** Base64url, as `PushSubscription.toJSON()` hands the keys over. */

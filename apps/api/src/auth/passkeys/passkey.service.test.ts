@@ -18,6 +18,8 @@ import { WebAuthnService } from '../webauthn/webauthn.service.js';
 import type { PasskeyRepository } from './passkey.repository.js';
 import { PasskeyService, type PasskeySession } from './passkey.service.js';
 
+type CreationOptions = Parameters<SoftwareAuthenticator['register']>[0];
+
 const APP_URL = 'https://desk.example.com';
 const tx = {} as DbTransaction;
 const userId = uuidv7();
@@ -172,7 +174,9 @@ const addOne = async (authenticator: SoftwareAuthenticator, name = 'Key') => {
   const { ceremonyId, options } = await service.beginRegistration(session, password);
   return service.finishRegistration(session, {
     ceremonyId,
-    response: authenticator.register(options, { origin: APP_URL }) as never,
+    response: authenticator.register(options as unknown as CreationOptions, {
+      origin: APP_URL,
+    }) as never,
     name,
   });
 };
@@ -268,7 +272,9 @@ describe('finishRegistration', () => {
     const { ceremonyId, options } = await service.beginRegistration(session, password);
     const input = {
       ceremonyId,
-      response: authenticator.register(options, { origin: APP_URL }) as never,
+      response: authenticator.register(options as unknown as CreationOptions, {
+        origin: APP_URL,
+      }) as never,
       name: 'Once',
     };
 
@@ -287,7 +293,9 @@ describe('finishRegistration', () => {
         { ...session, familyId: uuidv7() },
         {
           ceremonyId,
-          response: authenticator.register(options, { origin: APP_URL }) as never,
+          response: authenticator.register(options as unknown as CreationOptions, {
+            origin: APP_URL,
+          }) as never,
           name: 'Borrowed',
         },
       ),
@@ -304,7 +312,9 @@ describe('finishRegistration', () => {
     const code = await codeOf(
       service.finishRegistration(session, {
         ceremonyId,
-        response: authenticator.register(options, { origin: 'https://evil.example' }) as never,
+        response: authenticator.register(options as unknown as CreationOptions, {
+          origin: 'https://evil.example',
+        }) as never,
         name: 'Phished',
       }),
     );
@@ -333,7 +343,9 @@ describe('finishRegistration', () => {
     const code = await codeOf(
       service.finishRegistration(session, {
         ceremonyId,
-        response: new SoftwareAuthenticator().register(options, { origin: APP_URL }) as never,
+        response: new SoftwareAuthenticator().register(options as unknown as CreationOptions, {
+          origin: APP_URL,
+        }) as never,
         name: 'Late',
       }),
     );

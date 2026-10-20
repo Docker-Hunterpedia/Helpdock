@@ -15,17 +15,32 @@ images are served from the site itself, and there is no analytics or tracking.
 | `site/ar/index.html` | The same page in Arabic, right to left |
 | `site/404.html` | The page GitHub Pages serves for an unknown path |
 | `site/assets/site.css` | All styles, light and dark through `prefers-color-scheme` |
-| `site/assets/site.js` | The copy buttons on the install commands; the page works without it |
+| `site/assets/site.js` | The copy buttons on the install commands and the scroll reveal; the page works without it |
 | `site/assets/icons.svg` | A sprite of the Lucide icons the pages use |
 | `site/assets/fonts/` | IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono, copied from `packages/ui/fonts/` |
 | `site/assets/img/` | The screenshots as WebP, the Open Graph image (`og.png`) and the touch icon |
 | `site/CNAME`, `site/robots.txt`, `site/sitemap.xml` | The custom domain, crawler rules and the sitemap |
 
 The colours, families, spacing, radii, elevation and motion are the tokens of
-[DESIGN.md](../../DESIGN.md). The site adds three display sizes to the type scale
-(the hero heading, section headings and the evaluation figures), which only the
-website uses; the product screens keep DESIGN.md's scale. Layout uses logical
-CSS properties only, so the Arabic page is the English one mirrored.
+[DESIGN.md](../../DESIGN.md). The website adds its own display sizes, two
+section spacings (96 and 128 px) and a 640 ms reveal, all listed in DESIGN.md
+§11; the product screens keep DESIGN.md's scales. Layout uses logical CSS
+properties only, so the Arabic page is the English one mirrored.
+
+## Layout
+
+Each section makes one point, on alternating grounds: the canvas, the white
+surface, and a dark `n900` band for the release video and for security. The
+hero is a short headline, one sentence, a primary pill button and a text link,
+then the ticket workspace screenshot with an English and Arabic switch. Buttons
+are pills; most secondary actions are teal text links with a chevron. The FAQ uses
+native `<details>`, so it opens without script.
+
+`site.js` lets blocks marked `.reveal` rise into place the first time they
+scroll into view. It only holds back blocks that start below the fold, and it
+does nothing under `prefers-reduced-motion: reduce` or without
+`IntersectionObserver`, so no content depends on it. The hero's own entrance
+is CSS and is dropped under reduced motion too.
 
 ## What it may say
 
@@ -47,7 +62,7 @@ pull request. The install commands are copied from the
 | `ticket-view-en.webp`, `ticket-view-ar.webp` | The admin's Playwright baselines, `apps/admin/e2e/__screenshots__/{en,ar}/ticket-view.png` |
 | `sign-in-en.webp`, `sign-in-ar.webp` | The same baselines' `sign-in.png`, cropped to the form |
 | `widget-en.webp`, `widget-ar.webp`, `help-center-article.webp` | Renders of the design artboards in `docs/design/screens/applications/`; the pages say so |
-| `release-1-0.webp` | The poster of the 1.0 release video, which links to the video on X |
+| `release-1-0.webp` | The poster of the 1.0 release video, which links to the video on X. The poster carries its own title, so the play control sits in its empty lower band |
 | `og.png` | The 1280 × 640 social preview |
 
 Convert a PNG with `cwebp -q 88 -m 6 in.png -o out.webp`. Keep the HTML, CSS,

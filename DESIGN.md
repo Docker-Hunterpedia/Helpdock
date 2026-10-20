@@ -406,7 +406,22 @@ Every PR that touches UI ticks these in the description:
 | `packages/ui/src/brand.ts` | `resolveBrandTheme(brandTokens)`: derives hover/active/tint/text-on-accent, validates contrast, returns the final token set for a brand. Unit-tested against §8. |
 | `packages/ui/fonts/` | Subset woff2 files for the three families; served by the api with long cache headers. |
 | `packages/ui/src/__tests__/contrast.test.ts` | Asserts every pair in §2.2 and every status tint/text pair meets AA. |
-| `site/assets/site.css` | The product website ([website guide](docs/guides/website.md)). The §2 colours, §3 families, §4 spacing, radius, elevation and motion, and §5 icons, copied as CSS custom properties. It adds three display sizes, for the hero heading, section headings and figures, that only the website uses; product screens keep §3.1. |
+| `site/assets/site.css` | The product website ([website guide](docs/guides/website.md)). The §2 colours, §3 families, §4 spacing, radius, elevation and motion, and §5 icons, copied as CSS custom properties. It adds the website-only values in the table below; product screens keep §3.1 and §4. |
+
+Website-only values, used by `site/` and nowhere else:
+
+| Kind | Value | Use |
+|---|---|---|
+| Size | `clamp(48px, 6.4vw + 8px, 104px)` / 1.02, 600, −0.04em | Hero heading |
+| Size | `clamp(36px, 3.4vw + 16px, 64px)` / 1.06, 600, −0.035em | Section headings, roadmap version numbers |
+| Size | `clamp(28px, 1.8vw + 18px, 48px)` / 1.18, 600, −0.03em | The channels statement |
+| Size | `clamp(28px, 1.2vw + 20px, 40px)` / 1.12, 600, −0.03em | Feature tile headings |
+| Size | `clamp(56px, 4vw + 32px, 96px)` / 1, 600, −0.04em | AI evaluation figures |
+| Size | `clamp(18px, 0.5vw + 16px, 24px)` / 1.45, 400 | Lead paragraphs |
+| Spacing | 96, 128 | Section padding (phone, desktop) and the gap above the evaluation figures |
+| Motion | 640 ms `cubic-bezier(0.2, 0, 0, 1)` | Blocks rising into place once as they scroll into view; 0 ms under reduced motion |
+
+Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line height. The dark bands (release, security) use `n900` with the dark-mode tokens in both appearances.
 
 ## 12. Change log
 
@@ -441,3 +456,4 @@ Every PR that touches UI ticks these in the description:
 | 2026-10-19 | 1.25. M1-04 follow-up (#237), `Admin/Ticket-ContactHistory`: §6.3 adds PreviousTickets to the DetailsPanel's contact card, and the hidden-ticket count moves from under the contact's address into it. Built from the caption, mono, StatusBadge, Skeleton and the TicketRow's hover, so no token, size or radius is added. |
 | 2026-10-20 | 1.26. 1.0.1 UX fixes (UX-06, UX-12): §6.3 TicketRow says how the row is named for a screen reader — by its content, with the priority dot's priority and a bare SLA time in visually hidden words — and that the list loads behind skeleton rows of the same anatomy. No token, size or radius is added. |
 | 2026-10-20 | 1.27. The product website in `site/` is built from these tokens; §11 records the three marketing display sizes it adds outside §3.1, for the website only. No product token, size or radius changes. |
+| 2026-10-20 | 1.28. Website redesign: pill buttons, a translucent 48 px header, a dark `n900` band, large feature tiles and figures, and blocks that rise into place on scroll. §11 now lists every website-only size, the 96 and 128 section spacings and the 640 ms reveal. No product token, size or radius changes. |

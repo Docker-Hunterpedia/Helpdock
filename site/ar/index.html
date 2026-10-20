@@ -42,14 +42,14 @@
   "description": "منصة دعم عملاء مفتوحة المصدر تستضيفها بنفسك: نظام تذاكر ومركز مساعدة ونافذة دردشة مباشرة وذكاء اصطناعي مستند إلى معرفتك، في تثبيت واحد يخدم عدة علامات تجارية، بالعربية والإنجليزية.",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Linux (Docker Compose)",
-  "softwareVersion": "1.0.0",
+  "softwareVersion": "1.0.1",
   "datePublished": "2026-10-20",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
   "isAccessibleForFree": true,
   "inLanguage": ["ar", "en"],
   "image": "https://helpdock.oday-bakkour.com/assets/img/og.png",
   "screenshot": "https://helpdock.oday-bakkour.com/assets/img/ticket-view-ar.webp",
-  "downloadUrl": "https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.0",
+  "downloadUrl": "https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1",
   "releaseNotes": "https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md",
   "sameAs": "https://github.com/Docker-Hunterpedia/Helpdock",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -75,13 +75,11 @@
         <li><a href="#roadmap">خارطة الطريق</a></li>
         <li><a href="#faq">الأسئلة الشائعة</a></li>
         <li><a href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">التوثيق</a></li>
+        <li><a href="https://github.com/Docker-Hunterpedia/Helpdock">GitHub</a></li>
       </ul>
     </nav>
     <div class="header-actions">
       <a class="lang-link" href="../" hreflang="en" lang="en">English</a>
-      <a class="btn btn-secondary btn-sm header-github" href="https://github.com/Docker-Hunterpedia/Helpdock">
-        <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#star"/></svg>ضع نجمة على GitHub
-      </a>
       <a class="btn btn-primary btn-sm" href="#install">التثبيت</a>
       <details class="menu">
         <summary aria-label="القائمة"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#menu"/></svg></summary>
@@ -106,21 +104,17 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="container">
       <div class="hero-copy">
-        <a class="pill" href="https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.0">
-          <span class="pill-tag">1.0.0</span>
-          أول إصدار مستقر
-          <svg class="icon icon-dir" aria-hidden="true"><use href="../assets/icons.svg#arrow-right"/></svg>
-        </a>
-        <h1 class="hero-title" id="hero-title">مكتب الدعم كله، بتثبيت واحد.</h1>
-        <p class="lead">نظام تذاكر، ومركز مساعدة، ونافذة دردشة مباشرة، وذكاء اصطناعي لا يجيب إلا من معرفتك. مفتوح المصدر وتستضيفه على خادمك، بالعربية والإنجليزية، وتثبيت واحد يخدم كل علاماتك التجارية.</p>
+        <a class="news" href="https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1"><span class="news-tag">جديد</span>صدر Helpdock <bdi>1.0.1</bdi><svg class="icon news-chev" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
+        <h1 class="hero-title" id="hero-title">مكتب الدعم كله. بتثبيت&nbsp;واحد.</h1>
+        <p class="lead">نظام تذاكر، ومركز مساعدة، ودردشة مباشرة، وذكاء اصطناعي لا يجيب إلا من معرفتك. مفتوح المصدر. تستضيفه بنفسك. بالعربية والإنجليزية.</p>
         <div class="actions">
-          <a class="btn btn-primary" href="#install">التثبيت عبر Docker <svg class="icon icon-dir" aria-hidden="true"><use href="../assets/icons.svg#arrow-right"/></svg></a>
-          <a class="btn btn-secondary" href="https://github.com/Docker-Hunterpedia/Helpdock"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#star"/></svg>ضع نجمة على GitHub</a>
+          <a class="btn btn-primary" href="#install">التثبيت عبر Docker</a>
+          <a class="more" href="https://x.com/Oday_Hunter/status/2112356690876051954">شاهد فيديو الإصدار<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
         </div>
-        <p class="hero-meta"><span>AGPL-3.0</span><span aria-hidden="true">·</span><span>Docker Compose</span><span aria-hidden="true">·</span><span>العربية + <bdi lang="en" dir="ltr">English</bdi></span></p>
+        <p class="fineprint-row"><span>مجاني برخصة <bdi>AGPL-3.0</bdi></span><span aria-hidden="true">·</span><span>Docker Compose</span><span aria-hidden="true">·</span><span>تثبيت واحد لكل علاماتك</span></p>
       </div>
 
-      <figure class="stage hero-stage">
+      <figure class="showcase">
         <fieldset class="seg">
           <legend class="visually-hidden">لغة لقطة الشاشة</legend>
           <input type="radio" name="shot" id="shot-ar" checked>
@@ -132,159 +126,151 @@
           <img class="shot-ar" src="../assets/img/ticket-view-ar.webp" width="1280" height="720" alt="مساحة عمل التذاكر في Helpdock بالعربية، من اليمين إلى اليسار: قائمة التذاكر، وتذكرة بريد إلكتروني مع شارة اتفاقية مستوى الخدمة ومحرر الرد، وبطاقة جهة الاتصال مع تذاكرها السابقة" fetchpriority="high">
           <img class="shot-en" src="../assets/img/ticket-view-en.webp" width="1280" height="720" alt="مساحة عمل التذاكر نفسها بالإنجليزية، من اليسار إلى اليمين" loading="lazy">
         </div>
-        <figcaption class="stage-caption">مساحة عمل التذاكر، من لقطات الشاشة المرجعية لاختبارات Playwright في لوحة الإدارة.</figcaption>
+        <figcaption class="caption">مساحة عمل التذاكر، من لقطات الشاشة المرجعية لاختبارات Playwright في لوحة الإدارة.</figcaption>
       </figure>
     </div>
   </section>
 
-  <section class="section flush-top" aria-labelledby="release-title">
+  <section class="section on-surface" id="features" aria-labelledby="channels-title">
+    <div class="container narrow">
+      <h2 class="visually-hidden" id="channels-title">القنوات</h2>
+      <p class="statement reveal"><strong>كل محادثة. مكتب واحد.</strong> البريد الإلكتروني وWhatsApp وMessenger وInstagram وTelegram ونافذة الدردشة ونموذج الويب والواجهة البرمجية، كلها تصب في التذاكر نفسها، بالحالات واتفاقيات مستوى الخدمة والقواعد والإسناد نفسها.</p>
+      <ul class="channels reveal">
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#mail"/></svg></span><strong>البريد الإلكتروني</strong><span>IMAP أو خطاف ويب، والردود عبر SMTP الخاص بالعلامة</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#phone"/></svg></span><strong>WhatsApp</strong><span>رقم العلامة، عبر Graph API من Meta</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#messages-square"/></svg></span><strong>Messenger</strong><span>صفحة العلامة على Facebook</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#camera"/></svg></span><strong>Instagram</strong><span>الحساب الاحترافي للعلامة</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#send"/></svg></span><strong>Telegram</strong><span>بوت العلامة</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#message-circle"/></svg></span><strong>نافذة الدردشة</strong><span>مباشرة عبر WebSocket</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#file-text"/></svg></span><strong>نموذج الويب</strong><span>مستضاف على نطاق مركز المساعدة</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#code"/></svg></span><strong>REST API</strong><span><code>POST /api/v1/tickets</code></span></li>
+      </ul>
+      <p class="note-line reveal">تربط كل علامة تجارية حساباتها الخاصة، ويعود الرد عبر القناة التي كتب منها العميل.</p>
+    </div>
+  </section>
+
+  <section class="section band-dark" aria-labelledby="release-title">
     <div class="container">
-      <div class="release">
-        <div class="stack-lg">
-          <p class="eyebrow">الإصدار · 20 أكتوبر 2026</p>
-          <h2 class="display" id="release-title">Helpdock 1.0 مستقر.</h2>
-          <p class="muted">اكتملت كل مراحل خطة الإصدار 1.0. وقبل الإصدار أُنجز اختبار اختراق خارجي لنافذة الدردشة والواجهة البرمجية، واختبار حِمل، وجولة بقارئ الشاشة، وتجربة تثبيت مع ثلاثة مختبرين من خارج المشروع، وتمرين استعادة من نسخة احتياطية.</p>
-          <ul class="link-list">
-            <li><a href="https://x.com/Oday_Hunter/status/2112356690876051954">شاهد فيديو الإصدار على X <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#arrow-up-right"/></svg></a></li>
-            <li><a href="https://oday-bakkour.com/blog/helpdock-1-0-open-source-help-desk">اقرأ الإعلان (بالإنجليزية) <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#arrow-up-right"/></svg></a></li>
-            <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md">سجل التغييرات والحدود المعروفة (بالإنجليزية) <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#arrow-up-right"/></svg></a></li>
-          </ul>
-        </div>
+      <div class="film reveal">
+        <p class="eyebrow">Helpdock <bdi>1.0</bdi> · 20 أكتوبر 2026</p>
+        <h2 class="headline" id="release-title">مستقر. ومختبَر قبل أن يصدر.</h2>
+        <p class="lead">اكتملت كل مراحل خطة الإصدار 1.0. وقبل الإصدار: اختبار اختراق خارجي لنافذة الدردشة والواجهة البرمجية، واختبار حِمل، وجولة بقارئ الشاشة، وتجربة تثبيت مع ثلاثة مختبرين من خارج المشروع، وتمرين استعادة من نسخة احتياطية.</p>
         <a class="poster" href="https://x.com/Oday_Hunter/status/2112356690876051954">
-          <img src="../assets/img/release-1-0.webp" width="1280" height="720" alt="فيديو إصدار Helpdock 1.0: شاهده على X" loading="lazy">
-          <span class="poster-play"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#play"/></svg>شاهد على X · <bdi>1:09</bdi></span>
+          <img class="poster-img" src="../assets/img/release-1-0.webp" width="1280" height="720" alt="فيديو إصدار Helpdock 1.0: شاهده على X" loading="lazy">
+          <span class="poster-play"><span class="play"><svg class="icon play-icon" aria-hidden="true"><use href="../assets/icons.svg#play"/></svg></span>شاهد على X · <bdi>1:09</bdi></span>
         </a>
+        <div class="link-row">
+          <a class="more" href="https://oday-bakkour.com/blog/helpdock-1-0-open-source-help-desk">اقرأ الإعلان (بالإنجليزية)<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
+          <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md">سجل التغييرات والحدود المعروفة (بالإنجليزية)<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
+        </div>
+        <p class="update"><strong>الإصدار <bdi>1.0.1</bdi> هو الأحدث.</strong> يربط الدخول عبر Google وGitHub بحساب المزوّد نفسه، ويرفض اختبار CAPTCHA حُلّ على موقع آخر، ويصلح النص مختلط الاتجاه في لوحة الإدارة العربية. تحدّث من <bdi>1.0.0</bdi>؟ بعض حسابات الدخول عبر Google وGitHub يجب ربطها من جديد: <a href="https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1">اقرأ ملاحظات الإصدار</a> (بالإنجليزية).</p>
       </div>
     </div>
   </section>
 
-  <section class="section" id="features" aria-labelledby="features-title">
+  <section class="section" aria-labelledby="tour-title">
     <div class="container">
-      <div class="section-head">
-        <p class="eyebrow">المنتج</p>
-        <h2 class="display" id="features-title">مكتب واحد لكل محادثة.</h2>
-        <p class="lead">البريد الإلكتروني وتطبيقات المراسلة ونافذة الدردشة ونموذج الويب والواجهة البرمجية، كلها تصب في التذاكر نفسها، بالحالات واتفاقيات مستوى الخدمة والقواعد والإسناد نفسها.</p>
+      <div class="section-head reveal">
+        <h2 class="headline" id="tour-title">كل ما في الإصدار 1.0.</h2>
+        <p class="lead">مركز مساعدة، ونافذة دردشة، واتفاقيات خدمة، وقواعد، وتقارير، وتسجيل دخول، في التثبيت نفسه.</p>
       </div>
-
-      <div class="bento">
-        <article class="card b-7">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#messages-square"/></svg></span><h3 class="h3">كل القنوات في مكتب واحد</h3></div>
-          <p>تربط كل علامة تجارية حساباتها الخاصة، ويعود الرد عبر القناة التي كتب منها العميل.</p>
-          <ul class="channel-list">
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#mail"/></svg><strong>البريد الإلكتروني</strong><span>صندوق بريد عبر IMAP أو خطاف ويب للبريد الوارد، والردود عبر خادم SMTP الخاص بالعلامة</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#phone"/></svg><strong>WhatsApp</strong><span>رقم العلامة، عبر Graph API من Meta</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#messages-square"/></svg><strong>Messenger</strong><span>صفحة العلامة على Facebook</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#camera"/></svg><strong>Instagram</strong><span>الحساب الاحترافي للعلامة</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#send"/></svg><strong>Telegram</strong><span>بوت العلامة</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#message-circle"/></svg><strong>نافذة الدردشة</strong><span>سكربت على موقع العلامة، مباشر عبر WebSocket</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#file-text"/></svg><strong>نموذج الويب</strong><span>صفحة تواصل مستضافة على نطاق مركز المساعدة</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#code"/></svg><strong>REST API</strong><span><code>POST /api/v1/tickets</code> بمفتاح API محدد الصلاحيات</span></li>
-          </ul>
+      <div class="tiles">
+        <article class="tile t-full reveal">
+          <div class="tile-copy">
+            <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#book-open"/></svg>
+            <h3 class="tile-title">مركز مساعدة على نطاق كل علامة تجارية.</h3>
+            <p>مقالات بالعربية والإنجليزية، وبحث بكل لغة، وتقييم «هل كان هذا مفيدًا؟». مقالات عامة وداخلية، لتخدم المعرفة نفسها العملاء والموظفين.</p>
+            <p class="caption">الصورة: من لوحة تصميم مركز المساعدة، بالإنجليزية.</p>
+          </div>
+          <div class="tile-media"><img src="../assets/img/help-center-article.webp" width="1280" height="900" alt="صفحة مقالة في مركز المساعدة بالإنجليزية: قائمة القسم، والمقالة مع جدول ونصيحة، وبطاقة «هل ما زلت بحاجة إلى مساعدة؟»" loading="lazy"></div>
         </article>
 
-        <article class="card b-5">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#message-circle"/></svg></span><h3 class="h3">نافذة دردشة خفيفة</h3></div>
+        <article class="tile t-half reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#message-circle"/></svg>
+          <h3 class="tile-title">نافذة دردشة تبقى خفيفة.</h3>
           <p>مباشرة عبر WebSocket، مع هوية موقّعة اختيارية للمستخدمين المسجّلين. والسكربت الأول محصور في ميزانية <bdi>40 KB</bdi> بعد الضغط.</p>
-          <figure class="card-media">
-            <div class="stage media-stage"><img src="../assets/img/widget-ar.webp" width="440" height="760" alt="نافذة الدردشة بالعربية: إجابة من الذكاء الاصطناعي تستشهد بمقالة من مركز المساعدة، ثم تحويل إلى فريق الفوترة" loading="lazy"></div>
-            <figcaption class="caption">صورة من لوحة تصميم نافذة الدردشة.</figcaption>
-          </figure>
+          <p class="caption">الصورة: من لوحة تصميم نافذة الدردشة.</p>
+          <div class="tile-media portrait"><img src="../assets/img/widget-ar.webp" width="440" height="760" alt="نافذة الدردشة بالعربية: إجابة من الذكاء الاصطناعي تستشهد بمقالة من مركز المساعدة، ثم تحويل إلى فريق الفوترة" loading="lazy"></div>
         </article>
 
-        <article class="card b-4">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#clock"/></svg></span><h3 class="h3">اتفاقيات خدمة على ساعات عملك</h3></div>
-          <p>ساعات عمل مع العطلات والمناطق الزمنية. يتوقف عدّاد الرد الأول وعدّاد الحل في الحالات التي تحددها للإيقاف. ويُرسل استبيان رضا العملاء عند إغلاق التذكرة.</p>
-        </article>
-
-        <article class="card b-4">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#workflow"/></svg></span><h3 class="h3">القواعد والماكرو وطرق العرض</h3></div>
-          <p>قواعد سير عمل وقواعد زمنية مع تشغيل تجريبي وسجل تنفيذ. ماكرو بعناصر نائبة. طرق عرض محفوظة، ودمج وتقسيم، ومؤشر يظهر حين يفتح وكيلان التذكرة نفسها.</p>
-        </article>
-
-        <article class="card b-4">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chart-column"/></svg></span><h3 class="h3">التقارير والواجهة البرمجية</h3></div>
-          <p>الحجم وأزمنة الاستجابة والالتزام باتفاقيات الخدمة ورضا العملاء وعبء العمل، مع التصدير إلى CSV. واجهة REST بمفاتيح محددة الصلاحيات ووثيقة OpenAPI. خطافات ويب موقّعة بـ HMAC، مع إعادة المحاولة وإعادة الإرسال.</p>
-        </article>
-
-        <article class="card b-7">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#book-open"/></svg></span><h3 class="h3">مركز مساعدة على نطاق كل علامة</h3></div>
-          <p>مقالات بالعربية والإنجليزية، وبحث بكل لغة، وتقييم «هل كان هذا مفيدًا؟». مقالات عامة وداخلية، لتخدم المعرفة نفسها العملاء والموظفين.</p>
-          <figure class="card-media">
-            <div class="stage media-stage wide"><img src="../assets/img/help-center-article.webp" width="1280" height="900" alt="صفحة مقالة في مركز المساعدة بالإنجليزية: قائمة القسم، والمقالة مع جدول ونصيحة، وبطاقة «هل ما زلت بحاجة إلى مساعدة؟»" loading="lazy"></div>
-            <figcaption class="caption">صورة من لوحة تصميم مركز المساعدة، بالإنجليزية.</figcaption>
-          </figure>
-        </article>
-
-        <article class="card b-5">
-          <div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#key-round"/></svg></span><h3 class="h3">دخول الموظفين والدخول الموحد</h3></div>
-          <p>كلمات مرور بخوارزمية Argon2id تُفحص مقابل قائمة كلمات المرور المسرّبة، وعامل تحقق ثانٍ إلزامي للمسؤولين، وروابط دخول عبر البريد.</p>
-          <p>دخول موحد عبر SAML 2.0 وOpenID Connect، مع أدلة إعداد لـ:</p>
+        <article class="tile t-half reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#key-round"/></svg>
+          <h3 class="tile-title">دخول الموظفين، مع الدخول الموحد.</h3>
+          <p>كلمات مرور بخوارزمية Argon2id تُفحص مقابل قائمة كلمات المرور المسرّبة، وعامل تحقق ثانٍ إلزامي للمسؤولين، وروابط دخول عبر البريد. ودخول موحد عبر SAML 2.0 وOpenID Connect، مع أدلة إعداد لـ:</p>
           <ul class="chips" aria-label="أدلة الدخول الموحد">
             <li class="chip" lang="en">Okta</li>
             <li class="chip" lang="en">Microsoft Entra ID</li>
             <li class="chip" lang="en">Google Workspace</li>
             <li class="chip" lang="en">Keycloak</li>
           </ul>
-          <figure class="card-media">
-            <div class="stage media-stage"><img src="../assets/img/sign-in-ar.webp" width="448" height="608" alt="شاشة دخول الموظفين بالعربية: البريد وكلمة المرور، ورابط دخول بالبريد، وزرا Google وGitHub، مع ملاحظة أن التحقق بخطوتين إلزامي في هذا التثبيت" loading="lazy"></div>
-          </figure>
+          <div class="tile-media portrait"><img src="../assets/img/sign-in-ar.webp" width="448" height="608" alt="شاشة دخول الموظفين بالعربية: البريد وكلمة المرور، ورابط دخول بالبريد، وزرا Google وGitHub، مع ملاحظة أن التحقق بخطوتين إلزامي في هذا التثبيت" loading="lazy"></div>
+        </article>
+
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#clock"/></svg>
+          <h3 class="h3">اتفاقيات خدمة على ساعات عملك.</h3>
+          <p>ساعات عمل مع العطلات والمناطق الزمنية. تتوقف العدّادات في الحالات التي تحددها للإيقاف. ويُرسل استبيان رضا العملاء عند إغلاق التذكرة.</p>
+        </article>
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#workflow"/></svg>
+          <h3 class="h3">القواعد والماكرو وطرق العرض.</h3>
+          <p>قواعد سير عمل وقواعد زمنية مع تشغيل تجريبي وسجل تنفيذ. ماكرو بعناصر نائبة. طرق عرض محفوظة، ودمج وتقسيم، ومؤشر حين يفتح وكيلان التذكرة نفسها.</p>
+        </article>
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="../assets/icons.svg#chart-column"/></svg>
+          <h3 class="h3">التقارير والواجهة البرمجية وخطافات الويب.</h3>
+          <p>الحجم وأزمنة الاستجابة والالتزام باتفاقيات الخدمة ورضا العملاء وعبء العمل، مع التصدير إلى CSV. واجهة REST بمفاتيح محددة الصلاحيات ووثيقة OpenAPI. وخطافات ويب موقّعة بـ HMAC.</p>
         </article>
       </div>
     </div>
   </section>
 
-  <section class="section" id="ai" aria-labelledby="ai-title">
+  <section class="section on-surface" id="ai" aria-labelledby="ai-title">
     <div class="container">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">ذكاء اصطناعي مستند إلى معرفتك</p>
-        <h2 class="display" id="ai-title">يجيب من معرفتك، أو يسلّم المحادثة لفريقك.</h2>
+        <h2 class="headline" id="ai-title">يجيب من معرفتك. أو يسلّم المحادثة لفريقك.</h2>
         <p class="lead">يجيب المساعد العملاءَ ويساعد الموظفين من قاعدة معرفة العلامة نفسها. وحين لا تجيب عن السؤال، يجيب شخص من الفريق.</p>
       </div>
-      <div class="split">
-        <div class="stack-lg">
-          <ol class="steps">
-            <li><h3 class="h4">لا يجيب إلا من معرفتك</h3><p>مقالات مركز المساعدة، وملفات PDF وDOCX، والمواقع المؤرشفة، وNotion وGoogle Drive. والإجابات الموجهة للزوار لا تقرأ إلا المعرفة العامة.</p></li>
-            <li><h3 class="h4">يذكر مصادره</h3><p>ويحذف أي إشارة لا تقود إلى مستند استرجعه فعلًا.</p></li>
-            <li><h3 class="h4">يسلّم بدل أن يخمّن</h3><p>حين لا تجيب قاعدة المعرفة، أو تقل الثقة عن الحد المضبوط للقناة، تنتقل المحادثة إلى فريقك.</p></li>
-            <li><h3 class="h4">يقرأ النص ويكتبه، لا أكثر</h3><p>لا يملك النموذج أي أدوات. تُخفى البيانات الشخصية ويعمل مرشّح لحقن التعليمات قبل كل استدعاء، ويُسجَّل كل استدعاء بتكلفته، وتحدّ الميزانيات إنفاق كل علامة.</p></li>
-          </ol>
-          <p class="muted small">وأيضًا: ردود مقترحة وملخصات وترجمة للموظفين، وفرز بالذكاء الاصطناعي في قواعد سير العمل، وتفريغ الرسائل الصوتية. وكل الأوضاع معطلة حتى يفعّلها مسؤول العلامة.</p>
-        </div>
+      <ol class="points reveal">
+        <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#book-open"/></svg><h3 class="h4">معرفتك فقط.</h3><p>مقالات مركز المساعدة، وملفات PDF وDOCX، والمواقع المؤرشفة، وNotion وGoogle Drive. والإجابات الموجهة للزوار لا تقرأ إلا المعرفة العامة.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#list-checks"/></svg><h3 class="h4">مصادر مذكورة.</h3><p>تُحذف أي إشارة لا تقود إلى مستند استرجعه فعلًا.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#hand"/></svg><h3 class="h4">تسليم لا تخمين.</h3><p>حين لا تجيب قاعدة المعرفة، أو تقل الثقة عن الحد المضبوط للقناة، يتولى فريقك المحادثة.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#shield-check"/></svg><h3 class="h4">نص يدخل، ونص يخرج.</h3><p>لا يملك النموذج أي أدوات. تُخفى البيانات الشخصية ويعمل مرشّح لحقن التعليمات قبل كل استدعاء. ويُسجَّل كل استدعاء بتكلفته، وتحدّ الميزانيات إنفاق كل علامة.</p></li>
+      </ol>
 
-        <article class="card" aria-labelledby="eval-title">
-          <p class="eyebrow">تقييم مسجّل</p>
-          <h3 class="h3" id="eval-title">اجتاز التقييم ثنائي اللغة قبل الإصدار 1.0.0 كل العتبات.</h3>
-          <div class="metrics">
-            <div class="metric"><span class="metric-value ltr">97.5%</span><span class="metric-label">من الأسئلة القابلة للإجابة أُجيب عنها بشكل صحيح بالإنجليزية</span></div>
-            <div class="metric"><span class="metric-value ltr">94.6%</span><span class="metric-label">من الأسئلة القابلة للإجابة أُجيب عنها بشكل صحيح بالعربية</span></div>
-            <div class="metric"><span class="metric-value ltr">100%</span><span class="metric-label">من الأسئلة غير القابلة للإجابة سُلّمت للفريق، باللغتين</span></div>
-          </div>
-          <ul class="ticks">
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>لم تُتّبع أي تعليمات محقونة</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>كل إشارة إلى مصدر قادت إلى مستند فعلي</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>كل إجابة بلغة السؤال</span></li>
-          </ul>
-          <p class="fineprint"><code>glm-4.6</code> للإجابة، و<code>glm-5.1</code> للتحكيم، و<code>bge-m3:567m</code> للتضمين، في <a href="https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646">التشغيل <bdi>39322685646</bdi></a>. هذا زوج مزوّدين واحد: <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/ai.md#evaluation">قيّم النموذج الذي تختاره</a>.</p>
-        </article>
-      </div>
+      <section class="figures reveal" aria-labelledby="eval-title">
+        <h3 class="h3 figures-title" id="eval-title">اجتاز التقييم ثنائي اللغة قبل الإصدار <bdi>1.0.0</bdi> كل العتبات.</h3>
+        <div class="figure-row">
+          <div><span class="figure ltr">97.5%</span><span class="figure-label">من الأسئلة القابلة للإجابة أُجيب عنها بشكل صحيح بالإنجليزية</span></div>
+          <div><span class="figure ltr">94.6%</span><span class="figure-label">من الأسئلة القابلة للإجابة أُجيب عنها بشكل صحيح بالعربية</span></div>
+          <div><span class="figure ltr">100%</span><span class="figure-label">من الأسئلة غير القابلة للإجابة سُلّمت للفريق، باللغتين</span></div>
+        </div>
+        <ul class="checks">
+          <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg>لم تُتّبع أي تعليمات محقونة</li>
+          <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg>كل إشارة إلى مصدر قادت إلى مستند فعلي</li>
+          <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg>كل إجابة بلغة السؤال</li>
+        </ul>
+        <p class="fineprint"><code>glm-4.6</code> للإجابة، و<code>glm-5.1</code> للتحكيم، و<code>bge-m3:567m</code> للتضمين، في <a href="https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646">التشغيل <bdi>39322685646</bdi></a>. هذا زوج مزوّدين واحد: <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/ai.md#evaluation">قيّم النموذج الذي تختاره</a>. وهناك أيضًا ردود مقترحة وملخصات وترجمة وفرز بالذكاء الاصطناعي وتفريغ الرسائل الصوتية. وكل أوضاع الذكاء الاصطناعي معطلة حتى يفعّلها مسؤول العلامة.</p>
+      </section>
     </div>
   </section>
 
   <section class="section" id="arabic" aria-labelledby="arabic-title">
     <div class="container">
-      <div class="split reverse">
-        <figure class="stage media-stage tall">
-          <img src="../assets/img/widget-en.webp" width="440" height="760" alt="نافذة الدردشة بالإنجليزية، من اليسار إلى اليمين" loading="lazy">
+      <div class="split reverse even">
+        <figure class="stage reveal">
+          <img class="stage-img" src="../assets/img/widget-en.webp" width="440" height="760" alt="نافذة الدردشة بالإنجليزية، من اليسار إلى اليمين" loading="lazy">
         </figure>
-        <div class="stack-lg">
+        <div class="stack-lg reveal">
           <p class="eyebrow">ثنائي اللغة</p>
-          <h2 class="display" id="arabic-title">العربية والإنجليزية، من الشاشة الأولى.</h2>
+          <h2 class="headline" id="arabic-title">العربية والإنجليزية. من الشاشة الأولى.</h2>
           <p class="lead">لوحة الإدارة ومركز المساعدة ونافذة الدردشة ورسائل البريد تأتي باللغتين، بتخطيطات من اليمين إلى اليسار.</p>
-          <ul class="ticks">
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span><strong>انعكاس لا نسخة ثانية.</strong> التخطيطات مكتوبة بخصائص CSS المنطقية، فالواجهة العربية هي الشاشة نفسها معكوسة.</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span><strong>عائلة خطوط واحدة.</strong> صُمّم IBM Plex Sans وIBM Plex Sans Arabic معًا، فتتشارك الأسطر المختلطة الوزن والإيقاع.</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span><strong>النص المختلط يبقى مقروءًا.</strong> أرقام التذاكر وعناوين البريد والروابط داخل الجمل العربية تحتفظ باتجاهها من اليسار إلى اليمين.</span></li>
-            <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span><strong>مختبر باللغتين.</strong> اختبارات لقطات الشاشة في لوحة الإدارة وتقييم الذكاء الاصطناعي تعمل بالعربية كما بالإنجليزية.</span></li>
+          <ul class="facts">
+            <li><strong>انعكاس لا نسخة ثانية.</strong><span>التخطيطات مكتوبة بخصائص CSS المنطقية، فالواجهة العربية هي الشاشة نفسها معكوسة.</span></li>
+            <li><strong>عائلة خطوط واحدة.</strong><span>صُمّم IBM Plex Sans وIBM Plex Sans Arabic معًا، فتتشارك الأسطر المختلطة الوزن والإيقاع.</span></li>
+            <li><strong>النص المختلط يبقى مقروءًا.</strong><span>أرقام التذاكر وعناوين البريد والروابط داخل الجمل العربية تحتفظ باتجاهها من اليسار إلى اليمين.</span></li>
+            <li><strong>مختبر باللغتين.</strong><span>اختبارات لقطات الشاشة في لوحة الإدارة وتقييم الذكاء الاصطناعي تعمل بالعربية كما بالإنجليزية.</span></li>
           </ul>
           <p class="caption">صورة نافذة الدردشة من لوحة تصميمها. <a href="../" hreflang="en" lang="en">Read this page in English</a></p>
         </div>
@@ -292,13 +278,13 @@
     </div>
   </section>
 
-  <section class="section" id="brands" aria-labelledby="brands-title">
+  <section class="section on-surface" id="brands" aria-labelledby="brands-title">
     <div class="container">
       <div class="split">
-        <div class="stack-lg">
+        <div class="stack-lg reveal">
           <p class="eyebrow">علامات تجارية متعددة</p>
-          <h2 class="display" id="brands-title">تثبيت واحد، علامات كثيرة.</h2>
-          <p class="lead">أدِر كل علاماتك التجارية من تثبيت واحد، لكل منها واجهتها وبياناتها.</p>
+          <h2 class="headline" id="brands-title">تثبيت واحد. علامات كثيرة.</h2>
+          <p class="lead">كل علاماتك التجارية تعمل من التثبيت نفسه، لكل منها واجهتها وبياناتها.</p>
           <ul class="ticks">
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>صناديقها وقنواتها الخاصة</span></li>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>مركز مساعدة على نطاقها الخاص، بشهادة يصدرها Caddy عند الطلب</span></li>
@@ -307,7 +293,7 @@
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>أقسام وفرق، مع فرض نطاق القسم في قاعدة البيانات</span></li>
           </ul>
         </div>
-        <figure class="stack">
+        <figure class="stack reveal">
           <div class="code">
             <div class="code-head"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#database"/></svg><span class="label ltr">packages/db/drizzle/0036_telegram.sql</span></div>
 <pre><code><span class="k">ALTER TABLE</span> "telegram_bots" <span class="k">ENABLE ROW LEVEL SECURITY</span>;
@@ -325,57 +311,57 @@
     </div>
   </section>
 
-  <section class="section" id="migrate" aria-labelledby="migrate-title">
+  <section class="section band-dark" id="security" aria-labelledby="security-title">
     <div class="container">
-      <div class="section-head">
-        <p class="eyebrow">الانتقال</p>
-        <h2 class="display" id="migrate-title">انتقل من Zendesk أو Freshdesk أو Zoho Desk.</h2>
-        <p class="lead">معالج استيراد ثنائي اللغة ينقل سجلّك، ومطابق CSV يدوي لأي أداة أخرى.</p>
-      </div>
-      <ol class="step-grid">
-        <li class="card"><span class="step-num">01</span><h3 class="h4">الربط</h3><p>اختر المصدر واربط الحساب، أو ارفع ملف تصدير لمطابق CSV.</p></li>
-        <li class="card"><span class="step-num">02</span><h3 class="h4">المطابقة</h3><p>الأقسام والموظفون والحالات والأولويات والقنوات والوسوم والحقول المخصصة، مع إعدادات مسبقة محفوظة.</p></li>
-        <li class="card"><span class="step-num">03</span><h3 class="h4">التشغيل التجريبي</h3><p>قارن الأعداد المتوقعة وافحص الردود والملاحظات والكتّاب والتواريخ والملفات قبل كتابة أي شيء.</p></li>
-        <li class="card"><span class="step-num">04</span><h3 class="h4">الموافقة</h3><p>ابدأ التشغيل بعد مراجعته، وتابع سجله، وأوقفه مؤقتًا أو استأنفه.</p></li>
-      </ol>
-      <div class="notes">
-        <p class="note"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#circle-check"/></svg><span>السجل المستورد لا يرسل أي رسالة للعملاء، ولا يشغّل أي قاعدة أو إشعار أو مؤقت لاتفاقية الخدمة.</span></p>
-        <p class="note plain"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#list-checks"/></svg><span>جرى التحقق من أدوات الاستيراد مقابل خوادم بديلة بُنيت من وثائق الواجهات البرمجية المنشورة لكل مزوّد، لا مقابل حسابات حقيقية. <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/importing.md">دليل الاستيراد</a> (بالإنجليزية)</span></p>
-      </div>
-    </div>
-  </section>
-
-  <section class="section" id="security" aria-labelledby="security-title">
-    <div class="container">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">الأمان</p>
-        <h2 class="display" id="security-title">أمان يمكنك التحقق منه.</h2>
+        <h2 class="headline" id="security-title">أمان يمكنك التحقق منه.</h2>
         <p class="lead">القواعد مكتوبة، والشيفرة مفتوحة، وكل صورة إصدار موقّعة.</p>
       </div>
-      <div class="grid-3">
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#database"/></svg></span><h3 class="h4">أمان على مستوى الصفوف</h3></div><p>كل جدول خاص بالمستأجرين تحت سياسة Postgres مفروضة حسب العلامة، مع نطاق القسم على بيانات التذاكر.</p></article>
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#key-round"/></svg></span><h3 class="h4">أسرار مشفّرة</h3></div><p>AES-256-GCM بمفتاح رئيسي لا يُخزَّن في قاعدة البيانات، ولا تُعاد الأسرار بعد حفظها.</p></article>
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#globe-lock"/></svg></span><h3 class="h4">جلب محمي من SSRF</h3></div><p>كل جلب لرابط يقدّمه مستخدم يمر عبر عميل واحد يحجب عناوين الجهاز المحلي والشبكات الخاصة وبيانات السحابة الوصفية، ويعيد التحقق عند كل إعادة توجيه.</p></article>
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#file-scan"/></svg></span><h3 class="h4">رفع ملفات بحذر</h3></div><p>يُفحص نوع الملف من بايتاته، ويُعاد ترميزه، ويُحفظ في حاوية خاصة، ويُقدَّم عبر روابط موقّعة قصيرة العمر.</p></article>
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#list-checks"/></svg></span><h3 class="h4">OWASP ASVS المستوى 2</h3></div><p>رُوجعت متطلبات ASVS 4.0.3 للمستوى 2 كلها، وعددها 258، واحدًا واحدًا مع الدليل، دون أي ثغرة مفتوحة.</p></article>
-        <article class="card"><div class="card-title"><span class="tile"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#package-check"/></svg></span><h3 class="h4">صور موقّعة مع SBOM</h3></div><p>كل صورة إصدار موقّعة دون مفاتيح مخزّنة عبر Cosign، ومنشورة مع SBOM بصيغة CycloneDX.</p></article>
+      <div class="grid-3 reveal">
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#database"/></svg><h3 class="h4">أمان على مستوى الصفوف</h3><p>كل جدول خاص بالمستأجرين تحت سياسة Postgres مفروضة حسب العلامة، مع نطاق القسم على بيانات التذاكر.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#key-round"/></svg><h3 class="h4">أسرار مشفّرة</h3><p>AES-256-GCM بمفتاح رئيسي لا يُخزَّن في قاعدة البيانات، ولا تُعاد الأسرار بعد حفظها.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#globe-lock"/></svg><h3 class="h4">جلب محمي من SSRF</h3><p>كل جلب لرابط يقدّمه مستخدم يمر عبر عميل واحد يحجب عناوين الجهاز المحلي والشبكات الخاصة وبيانات السحابة الوصفية، ويعيد التحقق عند كل إعادة توجيه.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#file-scan"/></svg><h3 class="h4">رفع ملفات بحذر</h3><p>يُفحص نوع الملف من بايتاته، ويُعاد ترميزه، ويُحفظ في حاوية خاصة، ويُقدَّم عبر روابط موقّعة قصيرة العمر.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#list-checks"/></svg><h3 class="h4">OWASP ASVS المستوى 2</h3><p>رُوجعت متطلبات ASVS 4.0.3 للمستوى 2 كلها، وعددها 258، واحدًا واحدًا مع الدليل، دون أي ثغرة مفتوحة.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#package-check"/></svg><h3 class="h4">صور موقّعة مع SBOM</h3><p>كل صورة إصدار موقّعة دون مفاتيح مخزّنة عبر Cosign، ومنشورة مع SBOM بصيغة CycloneDX.</p></article>
       </div>
-      <dl class="spec" aria-label="صورة الإصدار 1.0.0">
-        <div><dt>الصورة</dt><dd class="ltr">ghcr.io/docker-hunterpedia/helpdock:1.0.0</dd></div>
+      <dl class="spec reveal" aria-label="صورة الإصدار 1.0.1">
+        <div><dt>الصورة</dt><dd class="ltr">ghcr.io/docker-hunterpedia/helpdock:1.0.1</dd></div>
         <div><dt>المنصات</dt><dd class="ltr">linux/amd64, linux/arm64</dd></div>
         <div><dt>التوقيع</dt><dd class="ltr">Cosign keyless, GitHub OIDC</dd></div>
-        <div><dt>SBOM</dt><dd class="ltr">helpdock-1.0.0.cdx.json</dd></div>
+        <div><dt>SBOM</dt><dd class="ltr">helpdock-1.0.1.cdx.json</dd></div>
       </dl>
       <p class="muted small after">اقرأ <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/security.md">دليل الأمان</a> و<a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/completed/asvs-l2.md">مراجعة ASVS</a> وكيف <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/release.md#verify-the-image-signature">تتحقق من توقيع الصورة</a> (بالإنجليزية). أبلغ عن الثغرات بشكل خاص كما يصف <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">SECURITY.md</a>.</p>
     </div>
   </section>
 
-  <section class="section" id="install" aria-labelledby="install-title">
+  <section class="section" id="migrate" aria-labelledby="migrate-title">
     <div class="container">
-      <div class="split install">
-        <div class="stack-lg">
+      <div class="section-head reveal">
+        <p class="eyebrow">الانتقال</p>
+        <h2 class="headline" id="migrate-title">انتقل من Zendesk أو Freshdesk أو Zoho&nbsp;Desk.</h2>
+        <p class="lead">معالج استيراد ثنائي اللغة ينقل سجلّك. ومطابق CSV يدوي يغطي أي أداة أخرى.</p>
+      </div>
+      <ol class="steps-row reveal">
+        <li><h3 class="h3">الربط</h3><p>اختر المصدر واربط الحساب، أو ارفع ملف تصدير لمطابق CSV.</p></li>
+        <li><h3 class="h3">المطابقة</h3><p>الأقسام والموظفون والحالات والأولويات والقنوات والوسوم والحقول المخصصة، مع إعدادات مسبقة محفوظة.</p></li>
+        <li><h3 class="h3">التشغيل التجريبي</h3><p>قارن الأعداد المتوقعة وافحص الردود والملاحظات والكتّاب والتواريخ والملفات قبل كتابة أي شيء.</p></li>
+        <li><h3 class="h3">الموافقة</h3><p>ابدأ التشغيل بعد مراجعته، وتابع سجله، وأوقفه مؤقتًا أو استأنفه.</p></li>
+      </ol>
+      <div class="notes reveal">
+        <p class="note"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#circle-check"/></svg><span>السجل المستورد لا يرسل أي رسالة للعملاء، ولا يشغّل أي قاعدة أو إشعار أو مؤقت لاتفاقية الخدمة.</span></p>
+        <p class="note"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#list-checks"/></svg><span>جرى التحقق من أدوات الاستيراد مقابل خوادم بديلة بُنيت من وثائق الواجهات البرمجية المنشورة لكل مزوّد، لا مقابل حسابات حقيقية. <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/importing.md">دليل الاستيراد</a> (بالإنجليزية)</span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="install" aria-labelledby="install-title">
+    <div class="container">
+      <div class="split top">
+        <div class="stack-lg reveal">
           <p class="eyebrow">بدء سريع</p>
-          <h2 class="display" id="install-title">ثبّت الإصدار 1.0.0 عبر Docker.</h2>
+          <h2 class="headline" id="install-title">ثبّت الإصدار <bdi>1.0.1</bdi> عبر Docker.</h2>
           <p class="lead">حزمة Docker Compose واحدة على خادم Linux خاص بك. تحتاج إلى:</p>
           <ul class="ticks">
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>Docker Engine مع إضافة Compose v2</span></li>
@@ -384,25 +370,25 @@
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>المنفذين 80 و443 مفتوحين ليحصل Caddy على الشهادات</span></li>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#check"/></svg><span>حاوية تخزين متوافقة مع S3 للمرفقات وصور المقالات</span></li>
           </ul>
-          <div class="actions">
-            <a class="btn btn-primary" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/install.md"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#book-open"/></svg>اقرأ دليل التثبيت</a>
-            <a class="btn btn-secondary" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/configuration.md">مرجع الإعدادات</a>
+          <div class="actions start">
+            <a class="btn btn-primary" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/install.md">اقرأ دليل التثبيت</a>
+            <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/configuration.md">مرجع الإعدادات<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
           </div>
           <p class="caption">التوثيق متاح بالإنجليزية.</p>
         </div>
 
-        <div class="code">
+        <div class="code reveal">
           <div class="code-head">
-            <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#terminal"/></svg><span class="label">1. احصل على ملف Compose للإصدار 1.0.0</span>
+            <svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#terminal"/></svg><span class="label">1. احصل على ملف Compose للإصدار <bdi>1.0.1</bdi></span>
             <button class="copy-btn" type="button" data-copy="cmd-get" data-done="نُسخ" data-failed="تعذّر النسخ" hidden><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#copy"/></svg><span data-label aria-live="polite">نسخ</span></button>
           </div>
-<pre><code id="cmd-get">git clone --depth 1 --branch v1.0.0 \
+<pre><code id="cmd-get">git clone --depth 1 --branch v1.0.1 \
   https://github.com/Docker-Hunterpedia/Helpdock.git
 cd Helpdock/docker
 cp ../.env.example .env
 openssl rand -base64 32   <span class="c"># the master key, for APP_MASTER_KEY</span></code></pre>
           <div class="code-note">
-            <p>2. عدّل <code>.env</code>: اضبط <code>HELPDOCK_VERSION=1.0.0</code> وعلى الأقل</p>
+            <p>2. عدّل <code>.env</code>: اضبط <code>HELPDOCK_VERSION=1.0.1</code> وعلى الأقل</p>
             <p class="env-keys ltr"><code>APP_URL</code><code>APP_MASTER_KEY</code><code>HELPDOCK_APP_PASSWORD</code><code>DATABASE_URL</code><code>POSTGRES_PASSWORD</code><code>DATABASE_MIGRATION_URL</code><code>ADMIN_HOST</code><code>API_HOST</code><code>ACME_EMAIL</code><code>S3_*</code></p>
           </div>
           <div class="code-head">
@@ -421,14 +407,14 @@ docker compose ps</code></pre>
 
   <section class="section" id="roadmap" aria-labelledby="roadmap-title">
     <div class="container">
-      <div class="section-head">
+      <div class="section-head reveal">
         <p class="eyebrow">خارطة الطريق</p>
-        <h2 class="display" id="roadmap-title">ما بعد الإصدار 1.0.</h2>
+        <h2 class="headline" id="roadmap-title">ما بعد الإصدار 1.0.</h2>
         <p class="lead">إصدارات مقترحة من خطة <bdi>1.x</bdi>. لم يبدأ العمل على أي منها بعد، وقد يتغير محتواها وترتيبها.</p>
       </div>
-      <div class="road">
-        <article class="card">
-          <span class="tag">1.1</span>
+      <div class="road reveal">
+        <article aria-labelledby="road-11">
+          <h3 class="version" id="road-11">1.1</h3>
           <ul class="ticks">
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#sparkles"/></svg><span><strong>مساحة عمل الذكاء الاصطناعي.</strong> بيئة تجريب، واختبارات محفوظة، وقائمة مراجعة، وشخصيات، وفرز مشروط بالثقة.</span></li>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#inbox"/></svg><span><strong>إنتاجية صندوق الوارد.</strong> التأجيل، والتعديل الجماعي مع التراجع، ولوحة أوامر واختصارات لوحة المفاتيح.</span></li>
@@ -436,8 +422,8 @@ docker compose ps</code></pre>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#code"/></svg><span><strong>Helpdock كخادم MCP</strong> لعملاء الذكاء الاصطناعي الخارجيين.</span></li>
           </ul>
         </article>
-        <article class="card">
-          <span class="tag">1.2</span>
+        <article aria-labelledby="road-12">
+          <h3 class="version" id="road-12">1.2</h3>
           <ul class="ticks">
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#hand"/></svg><span><strong>إجراءات للذكاء الاصطناعي</strong> لا تغيّر شيئًا حتى يوافق عليها شخص.</span></li>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#server"/></svg><span><strong>تشغيل الاستضافة الذاتية.</strong> مثبّت موقّع بأمر واحد، ونسخ احتياطي واستعادة، وتنبيهات بالتحديثات.</span></li>
@@ -445,8 +431,8 @@ docker compose ps</code></pre>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#message-circle"/></svg><span><strong>واجهات العملاء.</strong> محرر لتصميم البريد، وعدة نوافذ دردشة لكل علامة.</span></li>
           </ul>
         </article>
-        <article class="card">
-          <span class="tag">1.3</span>
+        <article aria-labelledby="road-13">
+          <h3 class="version" id="road-13">1.3</h3>
           <ul class="ticks">
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#languages"/></svg><span><strong>لغات أكثر</strong>، بدءًا بالواجهات الموجهة للعملاء، وترجمة دون لمس الشيفرة.</span></li>
             <li><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#users"/></svg><span><strong>تطبيق إدارة قابل للتثبيت</strong> على الحاسوب والهاتف، مع إشعارات وشارة.</span></li>
@@ -457,38 +443,37 @@ docker compose ps</code></pre>
     </div>
   </section>
 
-  <section class="section" id="faq" aria-labelledby="faq-title">
-    <div class="container faq">
-      <div class="section-head start">
-        <p class="eyebrow">الأسئلة الشائعة</p>
-        <h2 class="display" id="faq-title">أسئلة قبل التثبيت.</h2>
-        <p class="muted">سؤال آخر؟ راسلنا على <a href="mailto:contact@oday-bakkour.com"><bdi>contact@oday-bakkour.com</bdi></a> أو ابدأ <a href="https://github.com/Docker-Hunterpedia/Helpdock/discussions">نقاشًا على GitHub</a>.</p>
+  <section class="section on-surface" id="faq" aria-labelledby="faq-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <h2 class="headline" id="faq-title">أسئلة وأجوبة.</h2>
       </div>
-      <ol class="qa">
-        <li><h3 class="h4">كم يكلّف؟</h3><p>لا شيء. Helpdock برنامج حر برخصة GNU AGPL-3.0، بلا فئات مدفوعة ولا مفاتيح ترخيص. وإن عدّلته وأتحت نسختك المعدّلة للناس عبر الشبكة، تطلب منك الرخصة أن تتيح لهم مصدرها.</p></li>
-        <li><h3 class="h4">هل توجد نسخة مستضافة؟</h3><p>لا. Helpdock للاستضافة الذاتية فقط: تشغّله على خادمك وتبقى بياناتك عندك. والنسخة المستضافة خارج أهداف إصدارات <bdi>1.x</bdi> صراحةً.</p></li>
-        <li><h3 class="h4">ماذا أحتاج لتشغيله؟</h3><p>خادم Linux عليه Docker Engine وإضافة Compose v2، و<bdi>2 vCPU</bdi> و<bdi>4 GB</bdi> من الذاكرة (ويحتاج ClamAV إن فعّلته <bdi>2 GB</bdi> إضافية)، واسما نطاق، والمنفذان 80 و443، وحاوية متوافقة مع S3. وDocker Compose هي بيئة التشغيل المدعومة.</p></li>
-        <li><h3 class="h4">ما مزوّدو الذكاء الاصطناعي المدعومون؟</h3><p>أي مزوّد يدعمه pi-ai، مثل OpenAI وAnthropic وGoogle وOpenRouter وGroq وMistral وxAI وDeepSeek، بمفتاح API أو باشتراك، أو أي خادم متوافق مع OpenAI مثل Ollama أو vLLM، فيمكن أن يعمل النموذج على أجهزتك.</p></li>
-        <li><h3 class="h4">هل يجب أن أستخدم الذكاء الاصطناعي؟</h3><p>لا. كل أوضاع الذكاء الاصطناعي معطلة حتى يفعّلها مسؤول العلامة. ويعمل المكتب والقنوات ومركز المساعدة ونافذة الدردشة دونه.</p></li>
-        <li><h3 class="h4">ما اللغات المدعومة؟</h3><p>العربية والإنجليزية، بتخطيطات من اليمين إلى اليسار، في لوحة الإدارة ومركز المساعدة ونافذة الدردشة ورسائل البريد. ولغات أخرى مقترحة للإصدار 1.3.</p></li>
-        <li><h3 class="h4">هل يمكنني نقل تذاكري من مكتب دعم آخر؟</h3><p>نعم، من Zendesk وFreshdesk وZoho Desk بأدوات الاستيراد الخاصة بها، ومن أي أداة أخرى بمطابق CSV اليدوي. ابدأ بالتشغيل التجريبي: جرى التحقق من أدوات الاستيراد مقابل خوادم بديلة، لا حسابات حقيقية.</p></li>
-        <li><h3 class="h4">كيف أبلغ عن مشكلة أمنية؟</h3><p>بشكل خاص، كما يصف <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">SECURITY.md</a>. لا تفتح بلاغًا عامًا من فضلك.</p></li>
-        <li><h3 class="h4">من يطوّره؟</h3><p>يطوّر <a href="https://oday-bakkour.com/" lang="en">Oday Bakkour</a> Helpdock علنًا على GitHub. والمساهمات مرحّب بها؛ ابدأ بـ <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p></li>
-      </ol>
+      <div class="qa reveal">
+        <details><summary>كم يكلّف؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>لا شيء. Helpdock برنامج حر برخصة GNU AGPL-3.0، بلا فئات مدفوعة ولا مفاتيح ترخيص. وإن عدّلته وأتحت نسختك المعدّلة للناس عبر الشبكة، تطلب منك الرخصة أن تتيح لهم مصدرها.</p></details>
+        <details><summary>هل توجد نسخة مستضافة؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>لا. Helpdock للاستضافة الذاتية فقط: تشغّله على خادمك وتبقى بياناتك عندك. والنسخة المستضافة خارج أهداف إصدارات <bdi>1.x</bdi> صراحةً.</p></details>
+        <details><summary>ماذا أحتاج لتشغيله؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>خادم Linux عليه Docker Engine وإضافة Compose v2، و<bdi>2 vCPU</bdi> و<bdi>4 GB</bdi> من الذاكرة (ويحتاج ClamAV إن فعّلته <bdi>2 GB</bdi> إضافية)، واسما نطاق، والمنفذان 80 و443، وحاوية متوافقة مع S3. وDocker Compose هي بيئة التشغيل المدعومة.</p></details>
+        <details><summary>ما مزوّدو الذكاء الاصطناعي المدعومون؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>أي مزوّد يدعمه pi-ai، مثل OpenAI وAnthropic وGoogle وOpenRouter وGroq وMistral وxAI وDeepSeek، بمفتاح API أو باشتراك، أو أي خادم متوافق مع OpenAI مثل Ollama أو vLLM، فيمكن أن يعمل النموذج على أجهزتك.</p></details>
+        <details><summary>هل يجب أن أستخدم الذكاء الاصطناعي؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>لا. كل أوضاع الذكاء الاصطناعي معطلة حتى يفعّلها مسؤول العلامة. ويعمل المكتب والقنوات ومركز المساعدة ونافذة الدردشة دونه.</p></details>
+        <details><summary>ما اللغات المدعومة؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>العربية والإنجليزية، بتخطيطات من اليمين إلى اليسار، في لوحة الإدارة ومركز المساعدة ونافذة الدردشة ورسائل البريد. ولغات أخرى مقترحة للإصدار 1.3.</p></details>
+        <details><summary>هل يمكنني نقل تذاكري من مكتب دعم آخر؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>نعم، من Zendesk وFreshdesk وZoho Desk بأدوات الاستيراد الخاصة بها، ومن أي أداة أخرى بمطابق CSV اليدوي. ابدأ بالتشغيل التجريبي: جرى التحقق من أدوات الاستيراد مقابل خوادم بديلة، لا حسابات حقيقية.</p></details>
+        <details><summary>كيف أبلغ عن مشكلة أمنية؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>بشكل خاص، كما يصف <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">SECURITY.md</a>. لا تفتح بلاغًا عامًا من فضلك.</p></details>
+        <details><summary>من يطوّره؟<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#plus"/></svg></summary><p>يطوّر <a href="https://oday-bakkour.com/" lang="en">Oday Bakkour</a> Helpdock علنًا على GitHub. والمساهمات مرحّب بها؛ ابدأ بـ <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p></details>
+        <p class="muted qa-more">سؤال آخر؟ راسلنا على <a href="mailto:contact@oday-bakkour.com"><bdi>contact@oday-bakkour.com</bdi></a> أو ابدأ <a href="https://github.com/Docker-Hunterpedia/Helpdock/discussions">نقاشًا على GitHub</a>.</p>
+      </div>
     </div>
   </section>
 
   <section class="section" aria-labelledby="cta-title">
     <div class="container">
-      <div class="stage cta">
-        <svg viewBox="0 0 32 32" width="48" height="48" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
-        <h2 class="display" id="cta-title">شغّل مكتب الدعم على خادمك.</h2>
-        <p class="lead">ثبّت الإصدار 1.0.0 عبر Docker Compose، أو اقرأ التوثيق، أو ضع نجمة على المستودع لتتابع إصدارات <bdi>1.x</bdi>.</p>
+      <div class="cta reveal">
+        <svg class="cta-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
+        <h2 class="headline" id="cta-title">شغّل مكتب الدعم على خادمك.</h2>
+        <p class="lead">ثبّت الإصدار <bdi>1.0.1</bdi> عبر Docker Compose، أو اقرأ التوثيق، أو ضع نجمة على المستودع لتتابع إصدارات <bdi>1.x</bdi>.</p>
         <div class="actions">
-          <a class="btn btn-primary" href="#install">التثبيت عبر Docker <svg class="icon icon-dir" aria-hidden="true"><use href="../assets/icons.svg#arrow-right"/></svg></a>
+          <a class="btn btn-primary" href="#install">التثبيت عبر Docker</a>
           <a class="btn btn-secondary" href="https://github.com/Docker-Hunterpedia/Helpdock"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#star"/></svg>ضع نجمة على GitHub</a>
-          <a class="btn btn-secondary" href="https://github.com/Docker-Hunterpedia/Helpdock#documentation"><svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#book-open"/></svg>اقرأ التوثيق</a>
         </div>
+        <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">اقرأ التوثيق<svg class="icon" aria-hidden="true"><use href="../assets/icons.svg#chevron-right"/></svg></a>
       </div>
     </div>
   </section>
@@ -502,7 +487,7 @@ docker compose ps</code></pre>
           <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
           Helpdock
         </a>
-        <p class="muted small">دعم عملاء مفتوح المصدر تستضيفه بنفسك: نظام تذاكر، ومركز مساعدة، ونافذة دردشة مباشرة، وذكاء اصطناعي مستند إلى معرفتك، بالعربية والإنجليزية.</p>
+        <p class="footer-about">دعم عملاء مفتوح المصدر تستضيفه بنفسك: نظام تذاكر، ومركز مساعدة، ونافذة دردشة مباشرة، وذكاء اصطناعي مستند إلى معرفتك، بالعربية والإنجليزية.</p>
       </div>
       <nav aria-labelledby="f-product">
         <h2 id="f-product">المنتج</h2>

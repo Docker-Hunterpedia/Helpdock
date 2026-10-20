@@ -23,3 +23,25 @@ for (const button of document.querySelectorAll('[data-copy]')) {
 for (const link of document.querySelectorAll('.menu-panel a')) {
   link.addEventListener('click', () => link.closest('details')?.removeAttribute('open'));
 }
+
+// Let blocks rise into place as they scroll into view. Only blocks that start
+// below the fold are held back, so nothing on screen disappears, and with
+// reduced motion or without IntersectionObserver nothing is held back at all.
+const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (!calm && 'IntersectionObserver' in window) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.remove('is-pending');
+        observer.unobserve(entry.target);
+      }
+    },
+    { rootMargin: '0px 0px -10% 0px' },
+  );
+  for (const block of document.querySelectorAll('.reveal')) {
+    if (block.getBoundingClientRect().top < window.innerHeight) continue;
+    block.classList.add('is-pending');
+    observer.observe(block);
+  }
+}

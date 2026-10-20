@@ -125,11 +125,19 @@ export function TotpEnrolment(): ReactNode {
       setStep('codes');
     },
     onError: (error) => {
-      setCodeError(
-        isAuthError(error) && error.code === 'totp-mismatch'
-          ? t('me:twoFactor.codeWrong')
-          : t('auth:unavailable'),
-      );
+      if (isAuthError(error)) {
+        switch (error.code) {
+          case 'rate-limited': {
+            const minutes = Math.max(1, Math.ceil((error.retryAfter ?? 900) / 60));
+            setCodeError(t('auth:signIn.rateLimited', { count: minutes, minutes }));
+            return;
+          }
+          case 'totp-mismatch':
+            setCodeError(t('me:twoFactor.codeWrong'));
+            return;
+        }
+      }
+      setCodeError(t('auth:unavailable'));
     },
   });
 

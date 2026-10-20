@@ -466,9 +466,9 @@ Per brand, set by Admin (defaults in bold):
 
 Presence (`online`, `away`, `offline`) is derived from `/staff` socket connections and an explicit toggle. Auto-unassign on offline (R §4.1) runs after 15 minutes offline, configurable per department, and never during business hours closed periods.
 
-Staff credential sign-in counts failures only in a sliding 15-minute window: **10 per address** and **100 per IP**. Password, TOTP, recovery-code and sign-in enrolment failures share these limits. In-flight verification reserves a slot atomically; success removes only its own IP entry and clears the address failures. SSO discovery, starts and callbacks use separate buckets. Refusal is HTTP 429 with the same body for either bucket and for known or unknown accounts; `Retry-After` is the rounded-up seconds until the oldest failure expires, taking the larger wait when both buckets block.
-
 ### 12.1 Staff authentication factors
+
+Staff credential sign-in counts failures only in a sliding 15-minute window: **10 per address** and **100 per IP**. Password, TOTP, recovery-code and sign-in enrolment failures share these limits. In-flight verification reserves a slot atomically; a proved password removes only its own IP entry. Address failures are cleared only when all required factors succeed and a session opens. SSO discovery, starts and callbacks use separate buckets. Refusal is HTTP 429 with the same body for either bucket and for known or unknown accounts; `Retry-After` is the rounded-up seconds until the oldest failure expires, taking the larger wait when both buckets block.
 
 The rules arrive with the M18 deliverables that implement them ([plan](../in-development/M18-sign-in-options.md#domain-rules-to-add-or-change-proposed)).
 

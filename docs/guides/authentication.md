@@ -719,6 +719,12 @@ whole budget at the end of one window and again at the start of the next.
 |---|---|
 | Sign-in, per address | 10 failures per 15 minutes |
 | Sign-in, per IP | 100 failures per 15 minutes |
+| SSO discovery, per IP (`sso-discovery`) | 20 per minute |
+| SSO starts, per IP (`sso-start`) | 20 per minute |
+| SSO OIDC callbacks, per IP (`sso-callback`) | 40 per minute |
+| SSO SAML ACS, per IP (`sso-saml-acs`) | 40 per minute |
+| SSO SAML completion, per IP (`sso-saml-complete`) | 40 per minute |
+| SSO SAML metadata, per IP (`sso-saml-metadata`) | 30 per minute |
 | Sign-in link, password reset and staff invitation, per address | 5 per 15 minutes |
 | Sign-in link and password reset, per IP | 30 per 15 minutes |
 | Reading or accepting an invitation, per IP | 30 per 15 minutes |
@@ -726,14 +732,17 @@ whole budget at the end of one window and again at the start of the next.
 
 Password, TOTP, recovery-code and sign-in enrolment failures count. In-flight
 verification reserves a slot atomically so parallel guesses cannot exceed the
-limit. Success removes its own IP reservation and clears the address failures.
-SSO discovery, starts and callbacks have separate named buckets.
+limit. A proved password removes its own IP reservation; it clears address
+failures only if no further factor is required. TOTP, recovery-code or required
+enrolment completion clears address failures only after opening a session.
+SSO discovery, starts and callbacks have separate named buckets. Discovery moved
+from the shared 20-per-15-minute credential bucket to its own 20-per-minute bucket.
 
 Over a sign-in limit, the answer is HTTP 429 with `error.auth.code` set to
 `rate-limited` and a `Retry-After` header in seconds, rounded up until the oldest
 counted failure expires (the larger wait if both buckets block). The body is
-the same for either bucket and for known and unknown addresses. The sign-in
-screen rounds this duration up to minutes. A sign-in link or reset request
+the same for either bucket and for known and unknown addresses. The sign-in,
+TOTP, recovery-code and enrolment screens round this duration up to minutes. A sign-in link or reset request
 over its limit still answers 204 and sends nothing.
 
 The per-IP link and reset bucket is separate from the sign-in one, so somebody
@@ -744,8 +753,8 @@ CAPTCHA on these forms, since an email goes only to an existing account.
 The address is hashed before it becomes a key, so Redis holds no list of who has
 tried to sign in here.
 
-The last bucket is the one the security page spends. Signing in has a spendable
-challenge — three attempts, then a fifteen-minute lock — and the routes that
+The per-account credential bucket is the one the security page spends. Signing
+in has a spendable challenge — three attempts, then a fifteen-minute lock — and the routes that
 re-prove a credential from inside a session have none, so the budget is the
 lock. It covers `POST /api/me/password`, `POST /api/me/totp/disable` and
 `POST /api/me/recovery-codes/regenerate`.

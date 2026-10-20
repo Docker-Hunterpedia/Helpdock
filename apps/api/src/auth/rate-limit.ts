@@ -72,13 +72,14 @@ export const retryAfterSeconds = (retryAt: number, now: number): number =>
 
 /**
  * Reserve before verification: in-flight guesses occupy slots, so
- * parallel requests cannot all verify below the limit. A success removes only
- * its own IP member and resets the address; it cannot erase another IP failure.
+ * parallel requests cannot all verify below the limit. A proved password removes
+ * its own IP member; only a complete sign-in resets the address failures.
  * Both buckets are checked in one script before either is changed. A refusal
  * therefore spends neither bucket and does identical work for every address.
  */
 export const RESERVE_SIGN_IN_SCRIPT = `
 local now = tonumber(ARGV[1])
+-- Both credential rules share this window; rate-limit.test.ts guards the invariant.
 local window = tonumber(ARGV[2])
 local retry = 0
 local blocked = {0, 0}
@@ -215,11 +216,15 @@ export class RateLimiter {
     return { attempt, retryAfter: retryAt > 0 ? retryAfterSeconds(retryAt, now) : 0 };
   }
 
-  async signInSucceeded(attempt: SignInAttempt): Promise<void> {
+  async refundSignInIp(attempt: SignInAttempt): Promise<void> {
     await this.#redis.zrem(
       rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject(attempt.ip)),
       attempt.member,
     );
+  }
+
+  async signInSucceeded(attempt: SignInAttempt): Promise<void> {
+    await this.refundSignInIp(attempt);
     if (attempt.email !== undefined) await this.reset(SIGN_IN_EMAIL_RULE, attempt.email);
   }
 

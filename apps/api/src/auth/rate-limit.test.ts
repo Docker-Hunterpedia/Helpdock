@@ -122,6 +122,8 @@ describe('the rules the sign-in form runs under', () => {
   it('matches REQUIREMENTS §5.1: ten failures per address and one hundred per IP, each in fifteen minutes', () => {
     expect(SIGN_IN_EMAIL_RULE).toMatchObject({ limit: 10, windowSeconds: 900 });
     expect(SIGN_IN_IP_RULE).toMatchObject({ limit: 100, windowSeconds: 900 });
+    // The atomic reservation script uses one window for both buckets.
+    expect(SIGN_IN_EMAIL_RULE.windowSeconds).toBe(SIGN_IN_IP_RULE.windowSeconds);
   });
 
   it('counts an address and an IP in different buckets', () => {
@@ -134,6 +136,16 @@ describe('sign-in reservations', () => {
     expect(retryAfterSeconds(910_000, 10_001)).toBe(900);
     expect(retryAfterSeconds(910_000, 909_001)).toBe(1);
     expect(retryAfterSeconds(910_000, 910_000)).toBe(1);
+  });
+
+  it('a proved first factor refunds its IP entry while preserving address attempts', async () => {
+    await limiter.reserveSignIn('office', 'person@example.com');
+    const password = await limiter.reserveSignIn('office', 'person@example.com');
+    await limiter.refundSignInIp(password.attempt);
+    expect(await stub.zcard(rateLimitKey(SIGN_IN_IP_RULE.bucket, hashOf('office')))).toBe(1);
+    expect(
+      await stub.zcard(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashOf('person@example.com'))),
+    ).toBe(2);
   });
 
   it('success refunds only its own IP entry and clears the address', async () => {

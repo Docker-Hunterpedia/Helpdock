@@ -1,6 +1,10 @@
+import { createI18n } from '@helpdock/i18n';
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { LOCALE_STORAGE_KEY } from '../app/preferences.js';
 import { AppRoutes } from '../app/routes.tsx';
+import { AuthError } from '../auth/api.js';
+import { MockAuthApi } from '../auth/mock-api.js';
 import { MOCK_ENROLMENT_CODE, MOCK_TOTP_SECRET } from '../staff/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 
@@ -126,3 +130,22 @@ describe('step two', () => {
     expect(screen.getByRole('button', { name: 'Copy all' })).toBeInTheDocument();
   });
 });
+
+it.each(['en', 'ar'] as const)(
+  'shows the rounded-up enrolment rate-limit wait in %s',
+  async (locale) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    const t = createI18n({ lng: locale }).getFixedT(locale, 'auth');
+    const api = new MockAuthApi();
+    vi.spyOn(api, 'confirmTotp').mockRejectedValue(
+      new AuthError('rate-limited', { retryAfter: 61 }),
+    );
+    const { user } = renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in/enrol'] });
+    await screen.findByText(MOCK_TOTP_SECRET);
+    await user.type(screen.getByLabelText(t('enrolment.step1.codeLabel')), MOCK_ENROLMENT_CODE);
+    await user.click(screen.getByRole('button', { name: t('enrolment.step1.submit') }));
+    expect(
+      await screen.findByText(t('signIn.rateLimited', { count: 2, minutes: 2 })),
+    ).toBeInTheDocument();
+  },
+);

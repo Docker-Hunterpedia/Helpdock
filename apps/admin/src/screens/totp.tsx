@@ -38,6 +38,13 @@ function describeFailure(t: ReturnType<typeof useT>, error: unknown): Failure {
   }
 
   switch (error.code) {
+    case 'rate-limited': {
+      const minutes = Math.max(1, Math.ceil((error.retryAfter ?? 900) / 60));
+      return {
+        message: t('auth:signIn.rateLimited', { count: minutes, minutes }),
+        locked: false,
+      };
+    }
     case 'totp-locked':
       return { message: t('auth:totp.locked'), locked: true };
     case 'challenge-expired':

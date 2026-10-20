@@ -67,6 +67,11 @@ import { startWorker } from './worker/start-worker.js';
 
 let warnedUntrustedForwarding = false;
 
+/** Isolates warning assertions from earlier requests in the same test process. */
+export const resetUntrustedForwardingWarningForTests = (): void => {
+  warnedUntrustedForwarding = false;
+};
+
 export interface Runtime {
   readonly env: Env;
   readonly db: Db;

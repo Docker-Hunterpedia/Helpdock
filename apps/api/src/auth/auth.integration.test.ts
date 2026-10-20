@@ -14,7 +14,13 @@ import { desc, eq, like, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { generate } from 'otplib';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import {
+  type ApiApp,
+  createApiApp,
+  createRuntime,
+  type Runtime,
+  resetUntrustedForwardingWarningForTests,
+} from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { OidcService } from '../sso/oidc.service.js';
@@ -318,7 +324,8 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     });
 
     it('clears address failures after success but retains earlier IP failures', async () => {
-      for (let i = 0; i < 9; i++) {
+      // Password and TOTP each need a reservation before the full sign-in clears them.
+      for (let i = 0; i < 8; i++) {
         expect(
           (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
         ).toBe(401);
@@ -331,7 +338,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       }
       const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
       expect(keys).toHaveLength(1);
-      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(19);
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(18);
     });
 
     it('locks the IP after 100 failures across addresses and gives the same refusal for known and unknown accounts', async () => {
@@ -402,13 +409,48 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     });
 
     it('warns once when forwarded requests arrive with proxy trust off without logging the header', async () => {
-      for (let i = 0; i < 2; i++)
+      resetUntrustedForwardingWarningForTests();
+      const logStart = logLines.length;
+      for (let i = 0; i < 2; i++) {
         await get('/api/auth/methods', { 'x-forwarded-for': 'forwarded-header-marker' });
-      const warnings = logLines.filter((line) =>
-        line.includes('X-Forwarded-For received while TRUST_PROXY is off'),
-      );
+      }
+      const warnings = logLines
+        .slice(logStart)
+        .filter((line) => line.includes('X-Forwarded-For received while TRUST_PROXY is off'));
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).not.toContain('forwarded-header-marker');
+    });
+
+    it('refuses by the fourth password-and-two-bad-TOTP round even with fresh challenges (#344)', async () => {
+      const goodCode = await totpCode();
+      const badCode = goodCode === '000000' ? '111111' : '000000';
+      for (let round = 0; round < 4; round++) {
+        const first = await post('/api/auth/sign-in', {
+          email: seeded.email,
+          password: seeded.password,
+        });
+        expect(first.statusCode).toBe(201);
+        expect(first.json().kind).toBe('totp-required');
+        const challengeId = first.json().challengeId as string;
+        for (let guess = 0; guess < 2; guess++) {
+          const response = await post('/api/auth/totp', {
+            challengeId,
+            code: badCode,
+            trustDevice: false,
+          });
+          if (round === 3) {
+            expect(response.statusCode).toBe(429);
+            expect(response.json().error.auth.code).toBe('rate-limited');
+            expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+            return;
+          }
+          expect(response.statusCode).toBe(401);
+          expect(response.json().error.auth).toEqual({
+            code: 'totp-mismatch',
+            attemptsLeft: 2 - guess,
+          });
+        }
+      }
     });
 
     it('counts failed TOTP codes and refunds success without erasing earlier IP failures', async () => {

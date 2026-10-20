@@ -166,6 +166,16 @@ jobs:
           if (filters.length) execFileSync('pnpm', ['exec', 'turbo', 'run', 'typecheck', ...filters.map(name => `--filter=${name}`)], { stdio: 'inherit' });
           JS
 
+      # The second half of `pnpm typecheck`, which main runs in full: the root
+      # project covers every test file and the `src/testing` helpers, which no
+      # workspace typecheck includes. It needs every package built, since tests
+      # import across them.
+      - name: Typecheck tests and test helpers
+        if: needs.scope.outputs.run_full != 'true' && needs.scope.outputs.typecheck_filters != '[]'
+        run: |
+          pnpm exec turbo run build --filter='./packages/*'
+          pnpm exec tsc --noEmit
+
       # ARCHITECTURE §15: "CI runs `pnpm audit`". High and critical advisories
       # fail the run; Renovate's vulnerability alerts open the fix for anything
       # lower without waiting for its weekly window.

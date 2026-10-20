@@ -1,6 +1,6 @@
 # M18 Sign-in options
 
-Status: planned (not started)
+Status: in development since 2026-10-20 (issues #275 to #287, GitHub milestone “M18 Sign-in options”)
 Owner: @Docker-Hunterpedia
 Phase: 5 — 1.x. Proposed release: 1.1 (owner decision D-01)
 Depends on: M0 (auth, settings, outbox, SSRF-safe client), M4 (CAPTCHA interface, widget), M9 (ASVS walk), M11 (SSO enforcement, break-glass)
@@ -696,6 +696,8 @@ and ar each.
 | `Widget/PreChat-Verify-EN`, `-AR` | M18-10 | Proof-of-work "checking" and failure-with-retry states, no puzzle |
 | `HelpCenter/WebForm-Verify-EN`, `-AR` | M18-10 | The same on the API-rendered web form ([ADR 0013](../decisions/0013-web-form-page-rendered-by-the-api.md)) |
 | `Admin/Channels-Widget` access card (amend) | M18-10 | Provider select gains "Built-in (no third party)" and difficulty |
+
+**Drawn on 2026-10-20** in the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ) section “M18 Sign-in options”, en and ar panels on each board. Names that differ from the table: `Admin/Settings-SSO-Connection` and `Admin/Settings-SSO` (amendments) share `Admin/Settings-SSO-M18`; `Email/SecurityChange-EN-AR` is `Email/SecurityChange-M18`; the access-card amendment is `Admin/Channels-Widget-BotProtection`. `Admin/Settings-Authentication` adds one action the plan implies: when the pinned RP ID no longer matches `APP_URL`, an install admin can “Move passkeys to <new host>”, which re-pins `auth.webauthn.rpId` after a confirm that says every existing passkey stops working; it is audited and emails the staff who had one.
 
 DESIGN.md changes in the same PRs:
 

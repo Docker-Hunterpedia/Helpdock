@@ -1,6 +1,6 @@
 # M14 Inbox productivity
 
-Status: planned (not started)
+Status: in development since 2026-10-20 (issues #288 to #316, GitHub milestone “M14 Inbox productivity”)
 Owner: @Docker-Hunterpedia
 Phase: 5 — 1.x. Proposed release: 1.1 (owner decision D-01)
 Depends on: M1 (tickets, views, assignment, presence), M3 (SLA engine, rules and their test run, macros, notifications), M4 (widget agent name), M5 (help center search), M7 (AI triage, for the routing trail only), M8 (webhooks, OpenAPI), M11 (imported tickets, which every new path must leave alone)
@@ -1023,6 +1023,8 @@ everything a customer sees in both languages.
 | `Admin/Ticketing-CustomFields` (amended) | M14-27 | The four new types in the field editor and how each renders on a ticket, contact and account |
 | `Admin/Developers-Webhooks` (amended) | M14-28 | The event picker grouped by tickets, messages, contacts and accounts, with the notes opt-in |
 | `Admin/Reports` (amended) | M14-29 | The Volume by tag and Backlog by status cards |
+
+**Drawn on 2026-10-20** in the [design canvas](https://claude.ai/artifact/RQd32d1RXK8DST8SKC1VBQ) section “M14 Inbox productivity”, each board with its `en` and `ar` panels and a notes column. Some rows above share one board: `Admin/Account-Notifications-Sounds` is on `Admin/Account-Notifications-Schedule`; `Email/Reply-Signature` and `Widget/Chat-AgentProfile` are on `Admin/Account-Profile`; `Admin/Composer-Mentions` is on `Admin/Composer-Shortcuts`; `Admin/Ticket-Details-Order` is on `Admin/TicketRow-360`; `Admin/Ticketing-CustomFields` (amended) is on `Admin/Ticketing-FieldFilters`; `Admin/RuleBuilder`, `Admin/Developers-Webhooks` and `Admin/Reports` (amended) are on `Admin/M14-Amendments`; `Admin/Empty-*` is `Admin/Empty-States`. The board for M14-19 settles the breakpoint: the details panel becomes a drawer below 1440 px.
 
 ### DESIGN.md changes
 

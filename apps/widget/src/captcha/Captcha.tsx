@@ -80,6 +80,9 @@ export default function Captcha({
         }
         api.render(host.current, {
           sitekey: config.site_key,
+          // The surface the api checks Turnstile's answer against (M18-11);
+          // hCaptcha has no actions and is not sent one.
+          ...(config.provider === 'turnstile' ? { action: 'widget-first-message' } : {}),
           callback: (token: string) => {
             setStatus('verified');
             onToken(token);

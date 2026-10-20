@@ -239,7 +239,7 @@ const formBody = (
   const captcha =
     state.captcha === null
       ? '<span></span>'
-      : `<div class="hd-captcha" role="group" aria-label="${escapeHtml(t('captcha.label'))}"><div class="${escapeHtml(state.captcha.widgetClass)}" data-sitekey="${escapeHtml(state.captcha.siteKey)}" data-language="${view.locale}"></div></div>`;
+      : `<div class="hd-captcha" role="group" aria-label="${escapeHtml(t('captcha.label'))}"><div class="${escapeHtml(state.captcha.widgetClass)}" data-sitekey="${escapeHtml(state.captcha.siteKey)}"${state.captcha.action === null ? '' : ` data-action="${escapeHtml(state.captcha.action)}"`} data-language="${view.locale}"></div></div>`;
 
   return `<form class="hd-card" method="post" action="${escapeHtml(view.path)}" enctype="multipart/form-data" novalidate aria-labelledby="wf-heading">
 <div class="hd-intro"><h1 id="wf-heading">${escapeHtml(t('heading'))}</h1><p class="hd-lead">${escapeHtml(t('intro'))}</p></div>

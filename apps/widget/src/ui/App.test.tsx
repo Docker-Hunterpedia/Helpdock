@@ -229,9 +229,14 @@ describe('pre-chat form (M4-08)', () => {
 describe('CAPTCHA before the first message (ADR 0003)', () => {
   it('keeps Start chat disabled until the provider returns a token, then sends it along', async () => {
     let solve: ((token: string) => void) | null = null;
+    let action: unknown;
     vi.stubGlobal('turnstile', {
-      render: (_element: HTMLElement, options: { callback: (token: string) => void }) => {
+      render: (
+        _element: HTMLElement,
+        options: { callback: (token: string) => void; action?: string },
+      ) => {
         solve = options.callback;
+        action = options.action;
         return 'widget-1';
       },
     });
@@ -251,6 +256,8 @@ describe('CAPTCHA before the first message (ADR 0003)', () => {
     expect(start.disabled).toBe(true);
 
     await waitFor(() => expect(solve).not.toBeNull());
+    // The surface the api checks Turnstile's answer against (M18-11).
+    expect(action).toBe('widget-first-message');
     act(() => solve?.('token-1'));
     expect(screen.getByText('Verified. You can continue.')).toBeTruthy();
     expect(start.disabled).toBe(false);

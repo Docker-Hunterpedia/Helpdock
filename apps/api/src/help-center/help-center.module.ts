@@ -5,6 +5,7 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { safeAiTransport } from '../ai/ai-http.js';
 import { createAiRuntime } from '../ai/db-ai-ports.js';
+import { RateLimiter } from '../auth/rate-limit.js';
 import { RefreshStore } from '../auth/session/refresh-store.js';
 import type { SigningKeys } from '../auth/session/signing-keys.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
@@ -15,6 +16,7 @@ import { DB, HOST_PAGES, SETTINGS } from '../runtime/tokens.js';
 import { HelpCenterArticlesService } from './articles.service.js';
 import { HelpCenterContentService } from './content.service.js';
 import { HelpCenterFeedbackService } from './feedback/feedback.service.js';
+import { feedbackBudget } from './feedback/feedback-budget.js';
 import { HelpCenterInsightsController } from './feedback/insights.controller.js';
 import { HelpCenterInsightsService } from './feedback/insights.service.js';
 import { HelpCenterController } from './help-center.controller.js';
@@ -177,6 +179,7 @@ export class HelpCenterModule {
               appUrl: env.APP_URL,
               imageSources: imageSourcesOf(env),
               visitorSecret: `hd-help-center-visitor:${env.APP_MASTER_KEY}`,
+              feedbackBudget: feedbackBudget(new RateLimiter(redis)),
               log: logger,
             }),
         },

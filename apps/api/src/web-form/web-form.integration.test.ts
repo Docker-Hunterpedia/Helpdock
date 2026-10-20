@@ -65,11 +65,12 @@ const CONTAINER_STARTUP_MS = 120_000;
 const APP_URL = 'https://desk.example.com';
 const HELP_HOST = 'help.example.com';
 const GOOD_TOKEN = 'a-token-the-provider-accepts';
-/** Tokens the provider accepts, and the host each says the challenge was solved on. */
-const SOLVED_ON: Readonly<Record<string, string>> = {
-  [GOOD_TOKEN]: new URL(APP_URL).hostname,
-  'solved-on-the-help-center': HELP_HOST,
-  'solved-elsewhere': 'elsewhere.example.net',
+/** Tokens the provider accepts, and the host and surface each says it was solved on and for. */
+const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string }>> = {
+  [GOOD_TOKEN]: { hostname: new URL(APP_URL).hostname, action: 'web-form' },
+  'solved-on-the-help-center': { hostname: HELP_HOST, action: 'web-form' },
+  'solved-elsewhere': { hostname: 'elsewhere.example.net', action: 'web-form' },
+  'solved-for-the-widget': { hostname: new URL(APP_URL).hostname, action: 'widget-first-message' },
 };
 
 const PNG = Buffer.from(
@@ -267,9 +268,12 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
     const captchaTransport: CaptchaTransport = {
       postForm: async (url, form) => {
         verified.push(url);
-        const hostname = SOLVED_ON[form.get('response') ?? ''];
-        const success = hostname !== undefined && form.get('secret') === 'secret-key';
-        return { status: 200, body: JSON.stringify(success ? { success, hostname } : { success }) };
+        const solved = SOLVED_ON[form.get('response') ?? ''];
+        const success = solved !== undefined && form.get('secret') === 'secret-key';
+        return {
+          status: 200,
+          body: JSON.stringify(success ? { success, ...solved } : { success }),
+        };
       },
     };
     app = await createApiApp({
@@ -736,6 +740,12 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
 
     expect(elsewhere.status).toBe(422);
     expect(elsewhere.html).toContain('The security check did not pass');
+    // M18-11: a Turnstile token minted for the widget is not one for the form.
+    const forTheWidget = await post({
+      ...fields,
+      'cf-turnstile-response': 'solved-for-the-widget',
+    });
+    expect(forTheWidget.status).toBe(422);
     expect(unverifiedHost.status).toBe(422);
     expect(verifiedHost.status).toBe(200);
 

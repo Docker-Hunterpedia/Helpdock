@@ -322,6 +322,7 @@ export class WebFormPublicService {
           ? createCaptchaProvider(keys.provider, this.#options.captchaTransport).renderConfig(
               keys.siteKey,
               locale,
+              'web-form',
             )
           : null,
       thankYou: row?.thankYou[locale] ?? defaultThankYou(locale),
@@ -349,6 +350,7 @@ export class WebFormPublicService {
       remoteIp: post.ip,
       idempotencyKey: submissionId,
       hostnames: form.captchaHostnames,
+      action: 'web-form',
     });
     if (!verdict.success) {
       this.#options.log.warn(

@@ -130,24 +130,27 @@ interface Visitor {
 }
 
 /**
- * The siteverify double: `pass` passes as solved on the shop, `pass-elsewhere`
- * as solved on a site that is not the brand's, and anything else fails.
+ * The siteverify double: `pass` passes as solved on the shop for the widget,
+ * `pass-elsewhere` as solved on a site that is not the brand's,
+ * `pass-for-the-form` as solved on the shop for the web form, and anything
+ * else fails.
  */
 const captchaCalls: URLSearchParams[] = [];
-const SOLVED_ON: Readonly<Record<string, string>> = {
-  pass: 'shop.example.com',
-  'pass-elsewhere': 'elsewhere.example.net',
+const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string }>> = {
+  pass: { hostname: 'shop.example.com', action: 'widget-first-message' },
+  'pass-elsewhere': { hostname: 'elsewhere.example.net', action: 'widget-first-message' },
+  'pass-for-the-form': { hostname: 'shop.example.com', action: 'web-form' },
 };
 const captchaTransport: CaptchaTransport = {
   postForm: async (_url, form) => {
     captchaCalls.push(form);
-    const hostname = SOLVED_ON[form.get('response') ?? ''];
+    const solved = SOLVED_ON[form.get('response') ?? ''];
     return {
       status: 200,
       body: JSON.stringify(
-        hostname === undefined
+        solved === undefined
           ? { success: false, 'error-codes': ['invalid-input-response'] }
-          : { success: true, hostname },
+          : { success: true, ...solved },
       ),
     };
   },
@@ -1198,6 +1201,9 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       // one of the brand's allowed origins passes siteverify and must not here.
       const solvedElsewhere = await start(visitor, { captchaToken: 'pass-elsewhere' });
       expect(solvedElsewhere.status).toBe(403);
+      // M18-11: a Turnstile token carries the surface it was minted for.
+      const solvedForTheForm = await start(visitor, { captchaToken: 'pass-for-the-form' });
+      expect(solvedForTheForm.status).toBe(403);
       const before = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx.select().from(tickets).where(eq(tickets.visitorId, visitor.id)),
       );

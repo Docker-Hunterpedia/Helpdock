@@ -869,6 +869,18 @@ describe('the magic link', () => {
 
     expect(mail.sent.length).toBeLessThanOrEqual(5);
   });
+
+  it('stops one IP walking many addresses, without spending its sign-in budget (M18-11)', async () => {
+    staff.add(await newUser());
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await service.requestPasswordReset({ email: `walker-${attempt}@helpdock.com`, ip: IP });
+    }
+
+    await service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP });
+
+    expect(mail.sent).toEqual([]);
+    await expect(signIn({ ip: IP })).resolves.toMatchObject({ kind: 'session' });
+  });
 });
 
 describe('the invitation', () => {

@@ -325,7 +325,9 @@ A start opens the conversation, with or without its first message:
   solved on the host of one of the brand's allowed origins: the provider
   reports where the challenge ran, and a pass from any other site is refused
   in the same way. A native app that renders the challenge in a web view
-  must load it from one of those hosts.
+  must load it from one of those hosts. From 1.1 a Turnstile challenge must
+  be rendered with the action `widget-first-message`: a pass for any other
+  action (the web form's is `web-form`) is refused too.
 - `prechat` carries the pre-chat form's answers, or the contact form's, which
   asks the same fields. `prechat.custom` is keyed by ticket custom field keys.
   The api checks the values against the field definitions and keeps only the

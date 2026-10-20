@@ -560,12 +560,19 @@ whole budget at the end of one window and again at the start of the next.
 | Sign-in, per address | 5 attempts per 15 minutes |
 | Sign-in, per IP | 20 attempts per 15 minutes |
 | Sign-in link, password reset and staff invitation, per address | 5 per 15 minutes |
+| Sign-in link and password reset, per IP | 30 per 15 minutes |
 | Reading or accepting an invitation, per IP | 30 per 15 minutes |
 | Re-proving a credential from inside a session, per account | 5 per 15 minutes |
 
 Over the limit, the answer is `unavailable` — the same answer a lock gives, so
 neither confirms that an address exists. A successful sign-in gives that
-address its budget back.
+address its budget back. A sign-in link or reset request over its limit still
+answers 204 and sends nothing.
+
+The per-IP link and reset bucket is separate from the sign-in one, so somebody
+asking for many links from an office's address does not lock that office out
+of signing in. It stops one source walking many addresses; there is no
+CAPTCHA on these forms, since an email goes only to an existing account.
 
 The address is hashed before it becomes a key, so Redis holds no list of who has
 tried to sign in here.

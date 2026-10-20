@@ -1,4 +1,5 @@
 import {
+  type CaptchaAction,
   type CaptchaProvider as CaptchaAdapter,
   type CaptchaTransport,
   createCaptchaProvider,
@@ -108,6 +109,7 @@ export class CaptchaVerifier {
     readonly remoteIp: string | null;
     /** Where the challenge may have been solved; see `CaptchaVerifyInput.hostnames`. */
     readonly hostnames: readonly string[];
+    readonly action: CaptchaAction;
     readonly tx?: DbTransaction;
   }): Promise<CaptchaCheck> {
     const keys = await this.#keys.forBrand(input.brandId, input.tx);
@@ -125,6 +127,7 @@ export class CaptchaVerifier {
       token: input.token,
       remoteIp: input.remoteIp,
       hostnames: input.hostnames,
+      action: input.action,
     });
     return verdict.success ? 'passed' : 'failed';
   }

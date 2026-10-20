@@ -31,6 +31,7 @@ import type { OauthIdentityRepository } from './oauth/oauth-identity.repository.
 import { decideOauthSignIn } from './oauth/oauth-linking.js';
 import type { PasswordHasher } from './password.js';
 import {
+  EMAIL_DISPATCH_IP_RULE,
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
   type RateLimiter,
@@ -1215,7 +1216,7 @@ export class AuthService {
 
   async #allowEmailDispatch(email: string, ip: string): Promise<boolean> {
     const withinEmailBudget = await this.#parts.limiter.consume(EMAIL_DISPATCH_RULE, email);
-    const withinIpBudget = await this.#parts.limiter.consume(SIGN_IN_IP_RULE, ip);
+    const withinIpBudget = await this.#parts.limiter.consume(EMAIL_DISPATCH_IP_RULE, ip);
 
     return withinEmailBudget && withinIpBudget;
   }

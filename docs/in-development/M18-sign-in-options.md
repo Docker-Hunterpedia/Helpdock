@@ -544,6 +544,76 @@ Backlog or never:
   warning counts them. One shared Entra rule
   (`apps/api/src/auth/entra.ts`) serves this provider and the SSO OIDC preset:
   `xms_edov === true` and `acct === 0` only.
+  protects you" line; and the board's sentence that a passkey "can sign you
+  in" is softened, because that is not true until M18-04 and the passwordless
+  screens (M18-06): the notice emails still say only that the passkey is saved
+  and can confirm changes on this page, and M18-04 restores the sign-in wording
+  there. The card's caption said the same until M18-03 made "a passkey counts as
+  your second factor" true, and now says so. Left for the other deliverables: the
+  Settings › Authentication card (M18-06).
+- [x] **M18-03** Passkey as a second factor ([#277](https://github.com/Docker-Hunterpedia/Helpdock/issues/277)).
+  `POST /api/auth/passkey/second-factor/options` and `/verify` answer the
+  challenge beside TOTP and recovery codes (`AuthService.verifyPasskeySecondFactor`):
+  the attempt is reserved on the challenge and the per-account counter before
+  the assertion is evaluated and the challenge is consumed by the same atomic
+  script, so a passkey, a code and a recovery code share one budget and one
+  lock, in a parallel burst too. The ceremony (`purpose: second-factor`) is
+  bound to the person and to the challenge id and spent when it is checked, so a
+  replay, another person's passkey, a wrong challenge, another origin and a
+  regressed counter all answer the new `passkey-invalid` (with `attemptsLeft`)
+  and cost an attempt; the reason goes to the audit trail. The sign-in answer
+  carries `factors: { totp, passkey }` (and the OAuth/SSO redirect
+  `factors=`), "has a second factor" is TOTP or a passkey everywhere it decides
+  (sign-in, last-factor refusal, the staff list's column), the enrolment
+  challenge is `second-factor-enrolment-required` (the old name is read as the
+  same answer for one release) and accepts a passkey at
+  `POST /api/auth/enrolment/passkey/{options,confirm}`. Recovery codes are drawn
+  with the first second factor of either kind (the `recoveryCodes` field of
+  `POST /api/me/passkeys/finish`, and of the enrolment answer), kept while
+  either remains, forgotten with the last, and redrawn with a live code or with
+  a passkey assertion (`POST /api/me/passkeys/recovery-codes`). From the #364
+  security review: turning TOTP off now takes the same `FOR UPDATE` lock on the
+  user row that passkey add and remove take, and refuses an account that must
+  have a second factor unless a passkey remains; a parallel test on a real
+  database ("remove the last passkey" against "turn the app off", six rounds)
+  proves an Admin is never left with none, and fails without the lock. Screens:
+  `Admin/SecondFactor` (the passkey first, then the code, then the recovery
+  link; a passkey-only account sees no code field; a closed prompt is a neutral
+  notice that spends nothing) and `Admin/Enrol2FA-Choose` (two RadioCards, the
+  browser prompt, "Name this passkey", then the existing recovery-codes step),
+  en and ar, with a Playwright spec against the fixture and one against the real
+  api. Differences and gaps:
+  - **Admin "reset second factor" does not exist in the code.** The plan and
+    ADR 0050 say to extend it; there is no such action in 1.0, so nothing was
+    extended. What exists, deleting a person (`anonymise`), now deletes their
+    passkeys with the rest of the identity, and the staff list counts a
+    passkey as a second factor. A reset action is a feature of its own and is
+    not built here.
+  - **Under SSO enforcement** a passkey second factor and a passkey enrolment
+    answer `sso-required`, as a recovery code does: the break-glass door takes a
+    code until M18-05 (ADR 0053) opens it to a passkey.
+  - **Redrawing with a passkey has an API and no screen.** The Security page's
+    redraw button still asks for a code; no artboard shows a passkey option
+    there, and one is left to M18-06. The first passkey added from the
+    Passkeys card shows the recovery codes it drew in the page's existing
+    "Your new recovery codes" block rather than a new dialog.
+  - The security emails' "can now sign you in" wording waits for M18-04, as
+    planned.
+  - **Alias direction.** The enrolment challenge is `second-factor-enrolment-required`
+    everywhere in code, but the api still sends `totp-enrolment-required` on the
+    wire for one release so a cached admin bundle works; readers accept both.
+    The wire name flips in the release after (remove `toWireSignInResponse`).
+  - **Changing an enabled authenticator** needs a step-up the plan does not
+    define, so it is refused: `POST /api/auth/totp/enrol` and the sign-in
+    enrolment never stage over an app that is on (turn it off with a live code,
+    then enrol again), answering `409 totp-already-enabled`. An enrolment
+    challenge is honoured only while the account has no second factor.
+  - **Open item: rotating the app of a required account.** An Admin whose only
+    factor is the app can neither turn it off nor enrol over it. Workaround: add
+    a passkey, turn the app off with a code, enrol the new app; with a lost
+    phone only recovery codes remain. The removed path was the vulnerability and
+    no screen offered it. An atomic "Replace authenticator" (current code or
+    recovery code, plus the new code) is the follow-up issue.
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom
@@ -585,6 +655,7 @@ Backlog or never:
 | Id | Status | Notes |
 |---|---|---|
 | M18-08 | in review (#282) | Done: see the Progress entry. Tests: `oauth-microsoft.service.test.ts` (wrong `tid`, wrong issuer, wrong audience and nonce, guest, no `xms_edov`, replayed state, other browser, other provider's state, discovery that lies), `oauth-microsoft.integration.test.ts` (the same over HTTP against Postgres and Redis, with binding, connect, invitation, a tenant change that strands the old identities and their lazy replacement (first link, connect, rollback, Microsoft-only), and personal accounts on and off), `microsoftIsAuthoritative`, the settings service and schemas, the admin card, sign-in, refusal and invitation screens, Playwright in `en` and `ar`. Screenshot baselines of Settings are regenerated by the Screenshots workflow. |
+| M18-03 | in review (#277) | Done: see Progress. Not built: a screen for redrawing the recovery codes with a passkey (API only), and the admin "reset second factor" action, which does not exist in 1.0. |
 | M18-07 | in review (#281, PR #321) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in, connect and invitation, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input refusing gmail.com); the `Admin/Login-Providers` callback screens; the card renamed Sign-in methods with "last used" per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout; binding at invitation acceptance (`Admin/AcceptInvite-Providers`, `oauth-invite-mismatch`, `invite-expired`); migration `0059_oauth_identity_use` (`linked_via`, `last_used_at`). Not built, by design: the `issuer` column (ADR 0051, "No issuer column": one issuer per provider per install). Left to other deliverables: passkey step-up and passkey-as-first-factor (M18-02/M18-06), Microsoft (M18-08). |
 
 ## Data model

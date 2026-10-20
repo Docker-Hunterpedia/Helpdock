@@ -1,5 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { type Db, users, type WebauthnCredential, webauthnCredentials } from '@helpdock/db';
+import {
+  type Db,
+  type DbTransaction,
+  users,
+  type WebauthnCredential,
+  webauthnCredentials,
+} from '@helpdock/db';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Queryable } from '../staff.repository.js';
 import type { RegisteredPasskey } from '../webauthn/webauthn.service.js';
@@ -19,6 +25,11 @@ export class PasskeyRepository {
 
   constructor({ db }: { readonly db: Db }) {
     this.#db = db;
+  }
+
+  /** For the sign-in path, which has no request transaction and needs a real one (lock, count, insert). */
+  async transaction<T>(run: (tx: DbTransaction) => Promise<T>): Promise<T> {
+    return this.#db.transaction(run);
   }
 
   async ofUser(userId: string, tx?: Queryable): Promise<WebauthnCredential[]> {
@@ -62,8 +73,9 @@ export class PasskeyRepository {
    * The account's 32-byte user handle, drawn at its first registration. The
    * handle is not the account id, which would leak when the account was made.
    */
-  async userHandle(userId: string, tx: Queryable): Promise<Uint8Array> {
-    const [existing] = await tx
+  async userHandle(userId: string, tx?: Queryable): Promise<Uint8Array> {
+    const db = tx ?? this.#db;
+    const [existing] = await db
       .select({ handle: users.webauthnUserHandle })
       .from(users)
       .where(eq(users.id, userId));
@@ -71,7 +83,7 @@ export class PasskeyRepository {
       return existing.handle;
     }
 
-    const [drawn] = await tx
+    const [drawn] = await db
       .update(users)
       .set({ webauthnUserHandle: new Uint8Array(randomBytes(USER_HANDLE_BYTES)) })
       .where(and(eq(users.id, userId), sql`${users.webauthnUserHandle} IS NULL`))
@@ -81,7 +93,7 @@ export class PasskeyRepository {
     }
 
     // Lost a race to another request that drew one first.
-    const [raced] = await tx
+    const [raced] = await db
       .select({ handle: users.webauthnUserHandle })
       .from(users)
       .where(eq(users.id, userId));
@@ -145,9 +157,9 @@ export class PasskeyRepository {
     credentialId: Uint8Array,
     signCount: number,
     backedUp: boolean,
-    tx: Queryable,
+    tx?: Queryable,
   ): Promise<void> {
-    await tx
+    await (tx ?? this.#db)
       .update(webauthnCredentials)
       .set({ signCount, backedUp, lastUsedAt: new Date() })
       .where(eq(webauthnCredentials.credentialId, credentialId));

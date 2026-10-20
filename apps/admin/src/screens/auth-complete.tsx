@@ -1,4 +1,4 @@
-import { oauthProviderSchema } from '@helpdock/schemas';
+import { oauthProviderSchema, type SecondFactorOptions } from '@helpdock/schemas';
 import { Box, CircularProgress, Link, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useRef } from 'react';
@@ -31,6 +31,18 @@ import { isOauthRefusal, OauthRefusal } from './oauth-refusal.tsx';
 
 /** The provider account answered an invitation for another address (M18-07). */
 const INVITE_MISMATCH = 'oauth-invite-mismatch';
+
+/**
+ * The ways to answer the challenge the api named in the redirect (`factors=totp,passkey`).
+ * A link from before passkeys names none, which reads as an authenticator app alone.
+ */
+const factorsOf = (value: string | null): SecondFactorOptions => {
+  if (value === null) {
+    return { totp: true, passkey: false };
+  }
+  const names = value.split(',');
+  return { totp: names.includes('totp'), passkey: names.includes('passkey') };
+};
 
 /** The callback puts the provider's address in the fragment, which no server log sees. */
 const accountFromFragment = (hash: string): string =>
@@ -81,6 +93,7 @@ export function AuthComplete(): ReactNode {
         state={{
           challengeId: challenge,
           email: searchParams.get('email') ?? '',
+          factors: factorsOf(searchParams.get('factors')),
           returnTo: safeReturnTo(searchParams.get('returnTo')),
         }}
       />

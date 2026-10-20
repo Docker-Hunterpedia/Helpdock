@@ -61,7 +61,7 @@ export const toStaffMember = ({
     role: toClientRole(row.membership.role),
     departments: scope === 'all' ? 'all' : assigned,
     status: row.user.status as StaffStatus,
-    twoFactorEnabled: row.user.totpEnabled,
+    twoFactorEnabled: row.user.totpEnabled || (row.hasPasskey ?? false),
     installAdmin: row.user.installAdmin,
     lastActiveAt: lastActiveAt === null ? null : new Date(lastActiveAt * 1000).toISOString(),
     invitedAt: invited ? new Date(pendingInvite.issuedAt).toISOString() : null,

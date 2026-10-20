@@ -1,6 +1,11 @@
 import type { Env } from '@helpdock/config';
-import type { OauthConnectStart, PublicInvite, SignInResponse } from '@helpdock/schemas';
-import { oauthProviderSchema, signInResponseSchema } from '@helpdock/schemas';
+import type { OauthConnectStart, PublicInvite } from '@helpdock/schemas';
+import {
+  oauthProviderSchema,
+  signInResponseSchema,
+  toWireSignInResponse,
+  type WireSignInResponse,
+} from '@helpdock/schemas';
 import { Body, Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
@@ -67,7 +72,7 @@ export class InvitesController {
     @Body(new ZodValidationPipe(InviteAcceptRequestDto)) body: InviteAcceptRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     requireRequestContext().path = '/api/auth/invites/:token/accept';
 
     const outcome = await this.#invites.accept(token, body, {
@@ -118,9 +123,9 @@ export class InvitesController {
    * is applied by hand: `signInResponseSchema` is a discriminated union, which
    * `createZodDto` cannot wrap.
    */
-  #answer(outcome: SignInOutcome, reply: FastifyReply): SignInResponse {
+  #answer(outcome: SignInOutcome, reply: FastifyReply): WireSignInResponse {
     if (outcome.kind !== 'session') {
-      return signInResponseSchema.parse(outcome);
+      return toWireSignInResponse(signInResponseSchema.parse(outcome));
     }
 
     const cookie = refreshCookieOf(this.#env);
@@ -131,11 +136,13 @@ export class InvitesController {
       cookie.attributes,
     );
 
-    return signInResponseSchema.parse({
-      kind: 'session',
-      accessToken: outcome.issued.accessToken,
-      expiresInSeconds: outcome.issued.expiresInSeconds,
-      session: outcome.issued.session,
-    });
+    return toWireSignInResponse(
+      signInResponseSchema.parse({
+        kind: 'session',
+        accessToken: outcome.issued.accessToken,
+        expiresInSeconds: outcome.issued.expiresInSeconds,
+        session: outcome.issued.session,
+      }),
+    );
   }
 }

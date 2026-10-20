@@ -5,7 +5,7 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01 and adding and managing passkeys by M18-02.
+Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01, adding and managing passkeys by M18-02 and a passkey as a second factor by M18-03.
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
@@ -22,8 +22,8 @@ invitations and a person's own security page.
 | **Staff SSO** | OIDC or SAML company sign-in; see [SSO setup](sso.md). |
 | **Password reset** | A single-use link by email, valid for 10 minutes. |
 
-Except when an administrator vouches for IdP MFA on an SSO connection, if the account has an authenticator enrolled the
-second factor is asked for afterwards. There is no path that skips it, apart
+Except when an administrator vouches for IdP MFA on an SSO connection, if the account has a second factor (an
+authenticator app, a passkey, or both) it is asked for afterwards. There is no path that skips it, apart
 from a browser the person has explicitly chosen to trust. An account that must
 have one and has none — an Admin, an install admin, or anybody on an install
 with `auth.require2fa` on — is sent to enrolment instead of being given a
@@ -185,8 +185,11 @@ means somebody else saw it.
   (ASVS 4.3.1): their sessions decide who else works here.
 - **Everybody**, when `auth.require2fa` is on.
 
-Such an account cannot turn its second factor off, and the security page says
-why. An Admin who had none before this rule existed keeps their current session
+"Has a second factor" means an authenticator app is on **or** at least one
+passkey is registered; either meets the rule. Such an account cannot remove its
+last second factor of either kind (turning the app off while a passkey remains
+is allowed, and so is removing a passkey while the app is on), and the security
+page says why. An Admin who had none before this rule existed keeps their current session
 until it ends (at most `AUTH_SESSION_MAX_HOURS`) and is sent to enrolment at the
 next sign-in, as is somebody invited as an Admin.
 
@@ -199,12 +202,41 @@ next sign-in, as is somebody invited as an Admin.
    returns **ten recovery codes, once**.
 
 Before a session exists, the same two steps take the **enrolment challenge**
-that sign-in answered with (`totp-enrolment-required`) instead:
+that sign-in answered with instead. Its name is `second-factor-enrolment-required`
+in this documentation and in the code, but for one release the api still **sends**
+`totp-enrolment-required` on the wire, so an admin bundle cached from before 1.1
+keeps working; every reader accepts both, and the new name goes on the wire in the
+release after. The challenge is honoured only while the account has no second
+factor: if an app or a passkey was set since it was handed out, `enrolment/start`,
+`enrolment/confirm` and the passkey routes answer `challenge-expired`, and the
+check and the enabling run under the account-row lock.
+
 `POST /api/auth/enrolment/start` stages the secret, and
 `POST /api/auth/enrolment/confirm` with a live code turns it on, spends the
 challenge, sets the refresh cookie and answers the recovery codes together with
 the session. A wrong code costs one of the challenge's three attempts. The
 challenge lasts fifteen minutes.
+
+The enrolment challenge also takes **a passkey** instead of an app. The screen
+offers the passkey first and marked recommended; a browser that cannot create
+passkeys, or an install that has paused them, disables that card and
+preselects the app.
+
+| Route | |
+|---|---|
+| `POST /api/auth/enrolment/passkey/options` | `{ challengeId }`; answers `{ ceremonyId, options }` for `navigator.credentials.create()`. The ceremony is bound to the person and to the challenge, and the challenge is not spent |
+| `POST /api/auth/enrolment/passkey/confirm` | `{ challengeId, ceremonyId, response, name }`; checks the registration, spends the challenge, stores the passkey, draws the recovery codes, sets the refresh cookie and answers the codes together with the session, as `enrolment/confirm` does |
+
+A registration that does not verify (another origin, a ceremony that is spent or
+belongs to another challenge, an attestation this install does not take) costs
+one of the challenge's three attempts and answers `401 passkey-invalid` with
+`attemptsLeft`; the budget and the 15-minute lock are the ones codes use. The
+registration is checked before the challenge is spent, and the challenge is spent
+before anything is stored, so a challenge enrols once. The first successful
+registration pins the RP ID, as it does from the security page. Under SSO
+enforcement the route answers `403 sso-required` for a challenge that followed a
+local first factor, because a local second factor opens no session there; one
+that followed an SSO assertion is honoured.
 
 The screen that draws the QR code is `/sign-in/enrol`, which sign-in sends an
 account that must have an authenticator and has none to. It stages the
@@ -214,12 +246,41 @@ in the browser as SVG, because the `otpauth://` URI is a credential and asking a
 server to draw it would put it in a second place. [Staff and
 roles](staff-and-roles.md#two-factor-enrolment) walks through it.
 
+`POST /api/auth/totp/enrol` never replaces an authenticator that is on: it answers
+`409 totp-already-enabled`. Changing one is not a step-up the plan defines, so the
+way is to turn it off with a live code and enrol again.
+
+**Known gap: replacing the app of an account that must have a second factor.**
+For such an account (an Admin, an install admin, `auth.require2fa`) whose only
+factor is the app, turning it off is refused and so is enrolling over it, so the
+app cannot be rotated in place. The workaround is to add a passkey, turn the app
+off with a live code, then enrol the new app. With a lost phone only the recovery
+codes remain. The path that was removed was the vulnerability itself (a bare
+session could switch the required app off with no proof), and no screen ever
+offered it. An atomic "Replace authenticator" (current code or recovery code, plus
+the new code) is tracked in the follow-up issue.
+
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed
 in, not that the person at the keyboard now is the account holder. Turning it
 off is not offered to an account that must have one.
 
 ### Recovery codes
+
+One set per account, drawn with the account's **first** second factor of either
+kind: with the app at `totp/confirm` or `enrolment/confirm`, and with the first
+passkey at `enrolment/passkey/confirm` or, from the security page, in the
+`recoveryCodes` field of the `POST /api/me/passkeys/finish` answer. An app added
+beside a passkey, or a passkey beside an app, brings no new set. Removing the
+last second factor forgets the set; turning the app off while a passkey remains
+keeps it.
+
+Redrawing them needs a live authenticator code (`POST /api/me/recovery-codes/regenerate`)
+**or** an assertion from a passkey the account holds (`POST /api/me/passkeys/recovery-codes`
+with `{ passkey: { ceremonyId, response } }`, answering the ceremony from
+`POST /api/me/passkeys/step-up/options`). Both spend the step-up budget. A recovery
+code answers a second-factor challenge only: it never opens a passwordless
+sign-in, and it is not a break-glass credential.
 
 Ten, shaped `RC-4KQ2-9XMT`, in an alphabet with no character that can be
 confused with another on paper. Each works once. They are stored as argon2
@@ -228,13 +289,54 @@ password.
 
 ### Attempts and the lock
 
-A challenge allows **three** attempts in total, whichever field the value was
-typed into: an authenticator code and a recovery code share the budget, so a
-lock cannot be dodged by switching forms. On the third failure the challenge is
-deleted and the account is locked for **15 minutes**.
+A challenge allows **three** attempts in total, whatever answered it: an
+authenticator code, a recovery code and a passkey share the budget, so a lock
+cannot be dodged by switching forms. An attempt is reserved, atomically, on the
+challenge and on a per-account counter **before** the answer is evaluated, so no
+more than three answers are ever evaluated for an account within 15 minutes of
+each other, even in a parallel burst; the answer that is correct spends the
+challenge in one atomic step that fails if a lock has landed meanwhile. On the
+third failure the challenge is deleted and the account is locked for **15
+minutes**. Minting a passkey's options evaluates no answer and spends no
+attempt; a closed browser prompt never reaches the api, so it spends none either.
 
 The lock is reported only after the password has been proved. Saying it earlier
 would tell a stranger that the address exists.
+
+### A passkey as the second factor
+
+After a password, a sign-in link, OAuth or an SSO assertion that does not vouch
+for IdP MFA, the sign-in answer is `{ kind: "totp-required", challengeId, email,
+factors: { totp, passkey } }`: `factors` says which ways can answer it (the
+redirect from OAuth and SSO carries them as `factors=totp,passkey`; none means an
+app alone). `passkey` is false for an account with an app when the install has
+paused passkeys, and true regardless for a passkey-only account, so the screen
+can say why it cannot be used.
+
+| Route | |
+|---|---|
+| `POST /api/auth/passkey/second-factor/options` | `{ challengeId }`; answers `{ ceremonyId, options }` for `navigator.credentials.get()`, with the account's passkeys in `allowCredentials` (named only now that a first factor is proved) |
+| `POST /api/auth/passkey/second-factor/verify` | `{ challengeId, ceremonyId, response, trustDevice }`; answers a session and sets the refresh cookie, and `hd_trust` when asked |
+
+User presence is enough here, so a security key with no PIN works. The ceremony
+is bound to the person and to the challenge and is spent when it is checked,
+whether it then passes or fails, so a captured answer replayed on the same or on
+a later challenge fails and costs an attempt. Every refusal answers `401
+passkey-invalid` with `attemptsLeft`: another person's passkey (even one signed
+over this challenge's options), a credential nobody holds, another origin, a
+wrong challenge, a counter that went backwards, or a ceremony that is gone. The
+reason goes to the audit trail as `auth.second_factor.failed` with `meta.factor`
+`passkey` and `meta.reason` (`unknown-credential`, `wrong-user`, `bad-assertion`,
+`counter-regressed`, `ceremony-gone`); a counter regression also writes
+`auth.passkey.counter_regressed`. A success writes `auth.sign_in.succeeded` with
+`secondFactor: passkey`, and records the use (`last_used_at`, the counter).
+
+"Trust this browser" applies to whichever factor succeeded. Under SSO
+enforcement a passkey second factor after a local first factor answers `403
+sso-required` (from `options` too, so no ceremony is minted for it), as a recovery
+code does; after an SSO assertion that does not vouch for IdP MFA it is a valid
+second factor. Break-glass with a passkey is
+[ADR 0053](../decisions/0053-break-glass-with-a-passkey.md).
 
 ### Trusting a browser
 
@@ -251,9 +353,11 @@ Staff passkeys (WebAuthn) arrive in 1.1 with M18
 ([ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). M18-01
 lays the foundation described here and M18-02 adds
 [registering and managing them](#adding-renaming-and-removing-passkeys); using
-one as a second factor (M18-03) or on its own (M18-04), break-glass (M18-05)
-and the sign-in screens (M18-06) build on it. Until they land, a passkey is
-stored and listed but no sign-in path accepts one yet.
+one as a second factor ([A passkey as the second factor](#a-passkey-as-the-second-factor),
+M18-03) builds on it. Using one on its own (M18-04), break-glass (M18-05) and the
+sign-in screens (M18-06) are still to come: until they land a passkey answers the
+second step of a sign-in and confirms changes on the security page, and nothing
+else.
 
 ### Where passkeys work
 
@@ -353,7 +457,8 @@ that does not exist (`404`).
 | `GET /api/me/passkeys` | The caller's passkeys (name, when added, last used, "synced" when the platform backs it up), the limit, the install's passkey state (`available`, `paused`, `unavailable`), `removalBlocked` and `authenticatorApp` |
 | `POST /api/me/passkeys/step-up/options` | Options for answering a step-up with a passkey the account holds |
 | `POST /api/me/passkeys/begin` | `{ proof }`; answers `{ ceremonyId, options }` for `navigator.credentials.create()` |
-| `POST /api/me/passkeys/finish` | `{ ceremonyId, response, name }`; stores the credential and answers it |
+| `POST /api/me/passkeys/finish` | `{ ceremonyId, response, name }`; stores the credential and answers it, with `recoveryCodes` (once) when it is the account's first second factor of either kind |
+| `POST /api/me/passkeys/recovery-codes` | `{ passkey: { ceremonyId, response } }`; redraws the recovery codes after an assertion from a passkey the account holds |
 | `PATCH /api/me/passkeys/:id` | `{ name, proof }` |
 | `DELETE /api/me/passkeys/:id` | `{ proof }` |
 
@@ -392,7 +497,11 @@ an install admin, or any account while `auth.require2fa` is on) and has no
 authenticator app. Another passkey, or an app, is enough; `GET` reports
 `removalBlocked` so the card disables the button instead of letting the person
 find out. Removal stays available while passkeys are paused after an `APP_URL`
-change: nobody is stuck with passkeys that cannot sign.
+change: nobody is stuck with passkeys that cannot sign. Removing a passkey and
+turning the authenticator app off take the same lock on the account row and each
+count the other factor under it, so the two done at once cannot leave an Admin
+with neither: one of them is refused. Removing the last second factor of an
+account that may go without one also forgets its recovery codes.
 
 Each change writes an audit row in install scope, actor `staff`:
 
@@ -551,11 +660,11 @@ ASVS 7.1.3, 7.2.1):
 |---|---|
 | `auth.sign_in.succeeded` | A session was opened. `meta` has the first factor (`password`, `magic-link`, `oauth`, `invite`) and the second (`totp`, `recovery-code`, `trusted-browser` or none) |
 | `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role`, `invalid-link` for a sign-in link that was dead, used or never issued, and for OAuth `link-required` or `identity-conflict` (see [Which account a provider signs in as](#which-account-a-provider-signs-in-as)) |
-| `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code; a code used twice |
+| `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code, or a passkey that did not verify (`meta.factor`, `meta.reason`); a code used twice |
 | `auth.account.locked` | A challenge spent its last attempt |
 | `auth.step_up.refused` | A security-page check refused: wrong password, a wrong or replayed code, a passkey assertion that did not verify, or the rate limit |
 | `auth.refresh_token.reused` | A rotated refresh token came back; the family was revoked |
-| `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
+| `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated` (`meta.proof`: `code` or `passkey`), `auth.recovery_code.used` | A credential changed |
 | `auth.oauth.linked` / `.unlinked` | A Google, Microsoft or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
 | `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |

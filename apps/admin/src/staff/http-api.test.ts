@@ -298,7 +298,9 @@ describe('the invite and enrolment calls on the auth adapter', () => {
 
   it('posts an acceptance and keeps the session it answers with', async () => {
     const auth = new HttpAuthApi(transport);
-    fetchMock.mockResolvedValue(json({ kind: 'totp-enrolment-required', challengeId: 'c1' }));
+    fetchMock.mockResolvedValue(
+      json({ kind: 'second-factor-enrolment-required', challengeId: 'c1' }),
+    );
 
     const result = await auth.acceptInvite('token', {
       name: 'Karim',
@@ -307,7 +309,7 @@ describe('the invite and enrolment calls on the auth adapter', () => {
     });
 
     expect(lastCall().url).toBe('/api/auth/invites/token/accept');
-    expect(result).toEqual({ kind: 'totp-enrolment-required', challengeId: 'c1' });
+    expect(result).toEqual({ kind: 'second-factor-enrolment-required', challengeId: 'c1' });
   });
 
   it('stages and confirms a second factor', async () => {

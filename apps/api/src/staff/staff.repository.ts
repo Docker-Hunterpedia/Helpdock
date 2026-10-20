@@ -9,6 +9,7 @@ import {
   userBrandRoles,
   userSsoIdentities,
   users,
+  webauthnCredentials,
 } from '@helpdock/db';
 import type { Locale } from '@helpdock/i18n';
 import type { BrandRole } from '@helpdock/schemas';
@@ -37,6 +38,8 @@ export interface StaffRow {
   readonly user: User;
   readonly ssoLinked?: boolean;
   readonly managedBy?: string | null;
+  /** At least one passkey, which is a second factor beside the authenticator app (M18-03). */
+  readonly hasPasskey?: boolean;
 }
 
 export class StaffRepository {
@@ -56,6 +59,7 @@ export class StaffRepository {
         user: users,
         ssoLinked: sql<boolean>`exists (select 1 from ${userSsoIdentities} where ${userSsoIdentities.userId} = ${users.id})`,
         managedBy: ssoConnections.name,
+        hasPasskey: sql<boolean>`exists (select 1 from ${webauthnCredentials} where ${webauthnCredentials.userId} = ${users.id})`,
       })
       .from(userBrandRoles)
       .innerJoin(users, eq(users.id, userBrandRoles.userId))
@@ -80,6 +84,7 @@ export class StaffRepository {
         user: users,
         ssoLinked: sql<boolean>`exists (select 1 from ${userSsoIdentities} where ${userSsoIdentities.userId} = ${users.id})`,
         managedBy: ssoConnections.name,
+        hasPasskey: sql<boolean>`exists (select 1 from ${webauthnCredentials} where ${webauthnCredentials.userId} = ${users.id})`,
       })
       .from(userBrandRoles)
       .innerJoin(users, eq(users.id, userBrandRoles.userId))
@@ -293,6 +298,10 @@ export class StaffRepository {
       .where(and(eq(users.id, userId), eq(users.status, 'deactivated')))
       .returning({ id: users.id });
 
+    if (updated.length > 0) {
+      // The row survives, so its passkeys would too: they go with the identity.
+      await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.userId, userId));
+    }
     return updated.length > 0;
   }
 

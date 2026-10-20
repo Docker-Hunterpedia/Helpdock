@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  enrolmentPasskeyConfirmRequestSchema,
   MAX_PASSKEYS_PER_ACCOUNT,
+  passkeyAddedSchema,
   passkeyFinishRequestSchema,
   passkeyNameSchema,
   passkeyProofSchema,
+  passkeyRecoveryRedrawRequestSchema,
+  passkeySecondFactorOptionsRequestSchema,
+  passkeySecondFactorVerifyRequestSchema,
   registrationResponseSchema,
 } from './passkeys.js';
 
@@ -94,6 +99,82 @@ describe('registrationResponseSchema', () => {
 describe('passkeyFinishRequestSchema', () => {
   it('needs the ceremony, the answer and a name', () => {
     expect(passkeyFinishRequestSchema.safeParse({ ceremonyId: CEREMONY_ID }).success).toBe(false);
+  });
+});
+
+describe('a passkey as the second factor (M18-03)', () => {
+  it('needs the challenge, the ceremony, the answer and whether to trust the browser', () => {
+    const body = {
+      challengeId: 'c1',
+      ceremonyId: CEREMONY_ID,
+      response: assertion,
+      trustDevice: false,
+    };
+
+    expect(passkeySecondFactorVerifyRequestSchema.safeParse(body).success).toBe(true);
+    for (const missing of ['challengeId', 'ceremonyId', 'response', 'trustDevice']) {
+      expect(
+        passkeySecondFactorVerifyRequestSchema.safeParse({ ...body, [missing]: undefined }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('refuses an empty challenge and a ceremony that is not 256 bits', () => {
+    expect(passkeySecondFactorOptionsRequestSchema.safeParse({ challengeId: '' }).success).toBe(
+      false,
+    );
+    expect(
+      passkeySecondFactorVerifyRequestSchema.safeParse({
+        challengeId: 'c1',
+        ceremonyId: 'short',
+        response: assertion,
+        trustDevice: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('needs a name to enrol a passkey from a challenge', () => {
+    const body = {
+      challengeId: 'c1',
+      ceremonyId: CEREMONY_ID,
+      response: {
+        id: 'AQID',
+        rawId: 'AQID',
+        type: 'public-key',
+        response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+        clientExtensionResults: {},
+      },
+      name: 'MacBook',
+    };
+
+    expect(enrolmentPasskeyConfirmRequestSchema.safeParse(body).success).toBe(true);
+    expect(enrolmentPasskeyConfirmRequestSchema.safeParse({ ...body, name: '' }).success).toBe(
+      false,
+    );
+  });
+
+  it('carries recovery codes on an added passkey only when there are some', () => {
+    const passkey = {
+      id: '0190a1f2-4c3b-7d2e-8f10-1a2b3c4d5e6f',
+      name: 'Key',
+      createdAt: '2026-10-20T10:00:00.000Z',
+      lastUsedAt: null,
+      synced: false,
+    };
+
+    expect(passkeyAddedSchema.parse(passkey)).not.toHaveProperty('recoveryCodes');
+    expect(passkeyAddedSchema.parse({ ...passkey, recoveryCodes: ['AAAA-1111'] })).toMatchObject({
+      recoveryCodes: ['AAAA-1111'],
+    });
+  });
+
+  it('redraws the recovery codes only with an assertion', () => {
+    expect(passkeyRecoveryRedrawRequestSchema.safeParse({}).success).toBe(false);
+    expect(
+      passkeyRecoveryRedrawRequestSchema.safeParse({
+        passkey: { ceremonyId: CEREMONY_ID, response: assertion },
+      }).success,
+    ).toBe(true);
   });
 });
 

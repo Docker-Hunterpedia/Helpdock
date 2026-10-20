@@ -55,7 +55,7 @@ const membership = (overrides: Partial<UserBrandRole> = {}): UserBrandRole => ({
 });
 
 const view = (
-  row: { user: User; membership: UserBrandRole },
+  row: { user: User; membership: UserBrandRole; hasPasskey?: boolean },
   extra: {
     pendingInvite?: PendingInvite | null;
     lastActiveAt?: number | null;
@@ -75,6 +75,20 @@ describe('toStaffMember', () => {
     const member = view({ user: user(), membership: membership() });
 
     expect(member.departments).toEqual([{ id: SUPPORT.id, name: 'Support' }]);
+  });
+
+  it.each([
+    ['an authenticator app', true, { totp: true, passkey: false }],
+    ['a passkey', true, { totp: false, passkey: true }],
+    ['neither', false, { totp: false, passkey: false }],
+  ])('reports %s as a second factor: %s', (_label, expected, factors) => {
+    const member = view({
+      user: user({ totpEnabled: factors.totp }),
+      membership: membership(),
+      hasPasskey: factors.passkey,
+    });
+
+    expect(member.twoFactorEnabled).toBe(expected);
   });
 
   it('reads a null department column as every department', () => {

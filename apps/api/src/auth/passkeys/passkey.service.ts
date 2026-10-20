@@ -1,16 +1,17 @@
 import type { DbTransaction, WebauthnCredential } from '@helpdock/db';
 import {
-  type AuthenticationResponse,
   MAX_PASSKEYS_PER_ACCOUNT,
   type Passkey,
+  type PasskeyAdded,
   type PasskeyList,
   type PasskeyProof,
+  type PasskeyRecoveryRedrawRequest,
   type PasskeyRegistrationOptions,
   type PasskeyStepUpOptions,
+  type RecoveryCodes,
   type RegistrationResponse,
 } from '@helpdock/schemas';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
-import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
 import { currentRequestContext } from '../../context/request-context.js';
 import type { Logger } from '../../logging/logger.js';
 import type { AuthService } from '../auth.service.js';
@@ -20,8 +21,9 @@ import type { RateLimiter, RateLimitRule } from '../rate-limit.js';
 import { bearerTokenOf, verifyAccessToken } from '../session/access-token.js';
 import type { SigningKeys } from '../session/signing-keys.js';
 import type { StaffUser } from '../staff.repository.js';
-import type { StoredPasskey, WebAuthnService } from '../webauthn/webauthn.service.js';
+import type { WebAuthnService } from '../webauthn/webauthn.service.js';
 import type { PasskeyRepository } from './passkey.repository.js';
+import { toAuthenticationJson, toRegistrationJson, toStored } from './webauthn-json.js';
 
 /**
  * Registering, renaming and removing a person's own passkeys (M18-02, ADR 0050,
@@ -76,65 +78,6 @@ const toPasskey = (row: WebauthnCredential): Passkey => ({
   createdAt: row.createdAt.toISOString(),
   lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
   synced: row.backedUp,
-});
-
-/**
- * The validated body in the library's own shape. Optional fields are copied
- * only when present, because the library's types do not take `undefined`.
- */
-const toRegistrationJson = (response: RegistrationResponse): RegistrationResponseJSON => ({
-  id: response.id,
-  rawId: response.rawId,
-  type: response.type,
-  response: {
-    clientDataJSON: response.response.clientDataJSON,
-    attestationObject: response.response.attestationObject,
-    ...(response.response.authenticatorData === undefined
-      ? {}
-      : { authenticatorData: response.response.authenticatorData }),
-    ...(response.response.transports === undefined
-      ? {}
-      : { transports: response.response.transports }),
-    ...(response.response.publicKeyAlgorithm === undefined
-      ? {}
-      : { publicKeyAlgorithm: response.response.publicKeyAlgorithm }),
-    ...(response.response.publicKey === undefined
-      ? {}
-      : { publicKey: response.response.publicKey }),
-  },
-  ...(response.authenticatorAttachment === undefined
-    ? {}
-    : { authenticatorAttachment: response.authenticatorAttachment }),
-  clientExtensionResults:
-    response.clientExtensionResults.credProps?.rk === undefined
-      ? {}
-      : { credProps: { rk: response.clientExtensionResults.credProps.rk } },
-});
-
-const toAuthenticationJson = (response: AuthenticationResponse): AuthenticationResponseJSON => ({
-  id: response.id,
-  rawId: response.rawId,
-  type: response.type,
-  response: {
-    clientDataJSON: response.response.clientDataJSON,
-    authenticatorData: response.response.authenticatorData,
-    signature: response.response.signature,
-    ...(response.response.userHandle === undefined
-      ? {}
-      : { userHandle: response.response.userHandle }),
-  },
-  ...(response.authenticatorAttachment === undefined
-    ? {}
-    : { authenticatorAttachment: response.authenticatorAttachment }),
-  clientExtensionResults: {},
-});
-
-const toStored = (row: WebauthnCredential): StoredPasskey => ({
-  userId: row.userId,
-  credentialId: row.credentialId,
-  publicKey: row.publicKey,
-  signCount: row.signCount,
-  transports: row.transports,
 });
 
 export class PasskeyService {
@@ -240,12 +183,12 @@ export class PasskeyService {
       readonly response: RegistrationResponse;
       readonly name: string;
     },
-  ): Promise<Passkey> {
+  ): Promise<PasskeyAdded> {
     const { userId, tx } = session;
     const { passkeys, webauthn, auth, logger } = this.#parts;
     // Two registrations at once must not both pass the count below.
     await passkeys.lockAccount(userId, tx);
-    await auth.activeAccount(userId, tx);
+    const user = await auth.activeAccount(userId, tx);
 
     const registered = await webauthn.verifyRegistration({
       ceremonyId: input.ceremonyId,
@@ -253,7 +196,8 @@ export class PasskeyService {
       response: toRegistrationJson(input.response),
     });
 
-    if ((await passkeys.count(userId, tx)) >= MAX_PASSKEYS_PER_ACCOUNT) {
+    const held = await passkeys.count(userId, tx);
+    if (held >= MAX_PASSKEYS_PER_ACCOUNT) {
       throw new AuthFailure('passkey-limit');
     }
     const row = await passkeys.add(userId, input.name, registered, tx);
@@ -261,6 +205,9 @@ export class PasskeyService {
       logger.warn({ userId }, 'A passkey registration named an authenticator already stored');
       throw new AuthFailure('passkey-duplicate');
     }
+    // One set of codes per account, drawn with its first second factor of either kind.
+    const recoveryCodes =
+      !user.totpEnabled && held === 0 ? await auth.issueRecoveryCodes(userId, tx) : undefined;
 
     logger.info({ userId, passkeyId: row.id }, 'Registered a passkey');
     await auth.recordCredentialEvent('auth.passkey.added', userId, 'staff', {
@@ -274,7 +221,7 @@ export class PasskeyService {
       ...describeClient(client?.userAgent, client?.ip),
     });
 
-    return toPasskey(row);
+    return { ...toPasskey(row), ...(recoveryCodes === undefined ? {} : { recoveryCodes }) };
   }
 
   async rename(
@@ -327,6 +274,10 @@ export class PasskeyService {
     if (removed === undefined) {
       throw new NotFoundException('No such passkey');
     }
+    if (held.length === 1 && !user.totpEnabled) {
+      // No second factor is left, so the codes that stood in for one go with it.
+      await auth.clearRecoveryCodes(userId, tx);
+    }
     logger.warn({ userId, passkeyId: id }, 'Removed a passkey');
     await auth.recordCredentialEvent('auth.passkey.removed', userId, 'staff', {
       passkey: id,
@@ -337,6 +288,23 @@ export class PasskeyService {
       remaining: String(held.length - 1),
       totp: user.totpEnabled ? '1' : '0',
     });
+  }
+
+  /**
+   * Draws ten new recovery codes after an assertion from a passkey the account
+   * holds (M18-03); the TOTP route, `POST /api/me/recovery-codes/regenerate`,
+   * stays the way to do it with a code. The step-up budget is spent as for any
+   * other change, and the account is locked so the answer cannot race the
+   * removal of the passkey that proved it.
+   */
+  async regenerateRecoveryCodes(
+    session: PasskeySession,
+    request: PasskeyRecoveryRedrawRequest,
+  ): Promise<RecoveryCodes> {
+    const { userId, tx } = session;
+    await this.#parts.passkeys.lockAccount(userId, tx);
+    await this.#confirmWithPasskey(session, request.passkey);
+    return this.#parts.auth.regenerateRecoveryCodesAfterPasskey(userId, tx);
   }
 
   /**

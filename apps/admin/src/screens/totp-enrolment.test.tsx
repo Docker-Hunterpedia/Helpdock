@@ -147,3 +147,17 @@ it.each(['en', 'ar'] as const)(
     expect(await screen.findByText(t('signIn.rateLimited', { count: 2 }))).toBeInTheDocument();
   },
 );
+
+describe('an authenticator that is already on', () => {
+  it('says so instead of "unavailable" when the api refuses to stage over it', async () => {
+    const api = new MockAuthApi();
+    vi.spyOn(api, 'enrolTotp').mockRejectedValueOnce(new AuthError('totp-already-enabled'));
+    renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in/enrol'] });
+
+    expect(
+      await screen.findByText(
+        'An authenticator app is already on for this account. Turn it off with a code before enrolling another.',
+      ),
+    ).toBeInTheDocument();
+  });
+});

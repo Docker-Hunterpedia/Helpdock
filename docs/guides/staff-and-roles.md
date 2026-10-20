@@ -242,10 +242,21 @@ administrator removes the "Former staff" row with the brand-scoped action.
 
 ## Two-factor enrolment
 
-`/sign-in/enrol` is where sign-in sends an account that must have an
-authenticator and has none — an Admin, an install admin, or anybody while
+`/sign-in/enrol` is where sign-in sends an account that must have a second
+factor and has none — an Admin, an install admin, or anybody while
 `auth.require2fa` is on — with the enrolment challenge sign-in answered, and where **Turn on two-factor** on the security page
 leads.
+
+**Choosing.** With an enrolment challenge the screen starts by asking how: **Add
+a passkey** (recommended: a fingerprint, face, device PIN or security key) or
+**Use an authenticator app**. A browser that cannot create passkeys, or an
+install that has paused them, disables the passkey card and says why. A passkey
+takes the browser's prompt, then a name for it, then the recovery codes below; an
+app takes the two steps that follow. A prompt that is closed returns to the
+chooser and saves nothing. **Turn on two-factor** on the security page goes
+straight to the app steps; a passkey is added there from the Passkeys card, and
+the recovery codes it brings, if it is the first second factor, appear once
+under Two-factor.
 
 1. **Scan.** The screen stages a secret and draws it as a QR code, with the same
    key in text for a machine with no camera and the account and issuer named

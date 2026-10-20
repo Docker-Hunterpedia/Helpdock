@@ -74,7 +74,12 @@ type Flow =
     }
   | { readonly kind: 'limit' };
 
-export function PasskeysCard(): ReactNode {
+export function PasskeysCard({
+  onRecoveryCodes,
+}: {
+  /** The recovery codes drawn with the account's first second factor, shown once by the page. */
+  readonly onRecoveryCodes?: (codes: readonly string[]) => void;
+} = {}): ReactNode {
   const t = useT();
   const api = useAuthApi();
   const [flow, setFlow] = useState<Flow | null>(null);
@@ -131,6 +136,7 @@ export function PasskeysCard(): ReactNode {
         onClose={() => {
           setFlow(null);
         }}
+        {...(onRecoveryCodes === undefined ? {} : { onRecoveryCodes })}
       />
     </AccountCard>
   );
@@ -257,10 +263,11 @@ type FlowProps = {
   readonly flow: Flow | null;
   setFlow: Dispatch<SetStateAction<Flow | null>>;
   onClose(): void;
+  readonly onRecoveryCodes?: (codes: readonly string[]) => void;
 };
 
 /** Which dialog the current step of the current flow shows. */
-function PasskeyFlow({ list, flow, setFlow, onClose }: FlowProps): ReactNode {
+function PasskeyFlow({ list, flow, setFlow, onClose, onRecoveryCodes }: FlowProps): ReactNode {
   const t = useT();
   const api = useAuthApi();
   const toast = useToast();
@@ -339,7 +346,12 @@ function PasskeyFlow({ list, flow, setFlow, onClose }: FlowProps): ReactNode {
   const store = useMutation({
     mutationFn: (request: { ceremonyId: string; response: RegistrationResponse; name: string }) =>
       api.finishPasskey(request),
-    onSuccess: () => finish(t('me:passkeys.addedToast')),
+    onSuccess: (added) => {
+      if (added.recoveryCodes !== undefined) {
+        onRecoveryCodes?.(added.recoveryCodes);
+      }
+      finish(t('me:passkeys.addedToast'));
+    },
     onError: fail,
   });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PASSWORD_MAX_LENGTH } from './auth.js';
+import { PASSWORD_MAX_LENGTH, recoveryCodesSchema } from './auth.js';
 
 /**
  * Staff passkeys on `/api/me/passkeys` (M18-02, ADR 0050): the wire shapes of
@@ -167,3 +167,57 @@ export type PasskeyList = z.infer<typeof passkeyListSchema>;
 
 export const passkeyIdParamSchema = z.object({ id: z.uuid() });
 export type PasskeyIdParam = z.infer<typeof passkeyIdParamSchema>;
+
+/**
+ * A passkey as the second factor of a sign-in (M18-03). The challenge id is the
+ * credential for the options call, as it is for `/api/auth/totp`; the
+ * ceremony id ties the assertion to the options the same challenge was handed.
+ */
+export const passkeySecondFactorOptionsRequestSchema = z.object({
+  challengeId: z.string().min(1),
+});
+export type PasskeySecondFactorOptionsRequest = z.infer<
+  typeof passkeySecondFactorOptionsRequestSchema
+>;
+
+export const passkeySecondFactorVerifyRequestSchema = z.object({
+  challengeId: z.string().min(1),
+  ceremonyId: CEREMONY_ID,
+  response: authenticationResponseSchema,
+  trustDevice: z.boolean(),
+});
+export type PasskeySecondFactorVerifyRequest = z.infer<
+  typeof passkeySecondFactorVerifyRequestSchema
+>;
+
+/** The part of a second-factor answer the browser makes; the screen adds the challenge. */
+export type PasskeySecondFactorAnswer = Pick<
+  PasskeySecondFactorVerifyRequest,
+  'ceremonyId' | 'response'
+>;
+
+/** Enrolling a passkey before there is a session: the enrolment challenge stands in for it. */
+export const enrolmentPasskeyConfirmRequestSchema = z.object({
+  challengeId: z.string().min(1),
+  ceremonyId: CEREMONY_ID,
+  response: registrationResponseSchema,
+  name: passkeyNameSchema,
+});
+export type EnrolmentPasskeyConfirmRequest = z.infer<typeof enrolmentPasskeyConfirmRequestSchema>;
+export type PasskeyEnrolmentRequest = Omit<EnrolmentPasskeyConfirmRequest, 'challengeId'>;
+
+/**
+ * A passkey that has just been added. `recoveryCodes` is present only when it
+ * is the account's first second factor of either kind: the codes are drawn with
+ * it and shown once (DOMAIN-RULES §12.1).
+ */
+export const passkeyAddedSchema = passkeySchema.extend({
+  recoveryCodes: recoveryCodesSchema.shape.recoveryCodes.optional(),
+});
+export type PasskeyAdded = z.infer<typeof passkeyAddedSchema>;
+
+/** Redrawing the recovery codes with a passkey, from the step-up ceremony this session began. */
+export const passkeyRecoveryRedrawRequestSchema = z.object({
+  passkey: z.object({ ceremonyId: CEREMONY_ID, response: authenticationResponseSchema }),
+});
+export type PasskeyRecoveryRedrawRequest = z.infer<typeof passkeyRecoveryRedrawRequestSchema>;

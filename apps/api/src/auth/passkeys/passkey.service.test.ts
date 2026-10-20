@@ -35,6 +35,18 @@ class FakeAuth {
   events: { action: string; actor: string; meta: unknown }[] = [];
   notices: { change: string; values: Record<string, string> }[] = [];
   refuseSecret = false;
+  cleared = 0;
+  redrawn = 0;
+
+  issueRecoveryCodes = vi.fn(() => Promise.resolve(['AAAA-1111', 'BBBB-2222']));
+  clearRecoveryCodes = vi.fn(() => {
+    this.cleared += 1;
+    return Promise.resolve();
+  });
+  regenerateRecoveryCodesAfterPasskey = vi.fn(() => {
+    this.redrawn += 1;
+    return Promise.resolve({ recoveryCodes: ['CCCC-3333'] });
+  });
 
   activeAccount = vi.fn(() => Promise.resolve(this.user));
   isSecondFactorRequired = vi.fn(() => Promise.resolve(this.required));
@@ -265,6 +277,24 @@ describe('finishRegistration', () => {
       { change: 'passkeyAdded', values: expect.objectContaining({ passkey: 'MacBook' }) },
     ]);
     expect(rows.locked).toBe(1);
+  });
+
+  it('draws the recovery codes with the first second factor of either kind, once', async () => {
+    const first = await addOne(new SoftwareAuthenticator(), 'First');
+    const second = await addOne(new SoftwareAuthenticator(), 'Second');
+
+    expect(first.recoveryCodes).toEqual(['AAAA-1111', 'BBBB-2222']);
+    expect(second.recoveryCodes).toBeUndefined();
+    expect(auth.issueRecoveryCodes).toHaveBeenCalledOnce();
+  });
+
+  it('draws none for an account that already has an authenticator app', async () => {
+    auth.user = { ...auth.user, totpEnabled: true } as StaffUser;
+
+    const stored = await addOne(new SoftwareAuthenticator(), 'Beside the app');
+
+    expect(stored.recoveryCodes).toBeUndefined();
+    expect(auth.issueRecoveryCodes).not.toHaveBeenCalled();
   });
 
   it('spends the ceremony: a second finish with it finds nothing', async () => {
@@ -536,6 +566,25 @@ describe('remove', () => {
     expect(rows.rows).toHaveLength(others);
   });
 
+  it('forgets the recovery codes when the last second factor goes, and only then', async () => {
+    const first = hold('First');
+    const second = hold('Second');
+
+    await service.remove(session, first.id, password);
+    expect(auth.cleared).toBe(0);
+    await service.remove(session, second.id, password);
+    expect(auth.cleared).toBe(1);
+  });
+
+  it('keeps the recovery codes while an authenticator app remains', async () => {
+    const only = hold('Only');
+    auth.user = { ...auth.user, totpEnabled: true } as StaffUser;
+
+    await service.remove(session, only.id, password);
+
+    expect(auth.cleared).toBe(0);
+  });
+
   it('answers 404 for another account’s passkey and removes nothing', async () => {
     const key = new SoftwareAuthenticator();
     rows.rows.push(rowFor(uuidv7(), 'Theirs', key.credentialId, key.cosePublicKey));
@@ -553,6 +602,62 @@ describe('remove', () => {
     expect(await codeOf(service.remove(session, only.id, password))).toBe('invalid-credentials');
     expect(rows.rows).toHaveLength(1);
     expect(auth.notices).toEqual([]);
+  });
+});
+
+describe('regenerateRecoveryCodes', () => {
+  const holder = new SoftwareAuthenticator();
+
+  const redrawProof = async (authenticator: SoftwareAuthenticator, origin = APP_URL) => {
+    const { ceremonyId, options } = await service.stepUpOptions(session);
+    return {
+      passkey: {
+        ceremonyId,
+        response: authenticator.assert(options as never, { origin }) as never,
+      },
+    };
+  };
+
+  beforeEach(() => {
+    rows.rows.push(rowFor(userId, 'Held', holder.credentialId, holder.cosePublicKey));
+  });
+
+  it('redraws after an assertion from a held passkey, under the account lock and one step-up attempt', async () => {
+    const codes = await service.regenerateRecoveryCodes(session, await redrawProof(holder));
+
+    expect(codes).toEqual({ recoveryCodes: ['CCCC-3333'] });
+    expect(rows.locked).toBe(1);
+    expect(auth.attempts).toBe(1);
+    expect(auth.redrawn).toBe(1);
+  });
+
+  it('redraws nothing for another account’s passkey', async () => {
+    const stranger = new SoftwareAuthenticator();
+    rows.rows.push(rowFor(uuidv7(), 'Stranger', stranger.credentialId, stranger.cosePublicKey));
+
+    const code = await codeOf(
+      service.regenerateRecoveryCodes(session, await redrawProof(stranger)),
+    );
+
+    expect(code).toBe('invalid-credentials');
+    expect(auth.redrawn).toBe(0);
+  });
+
+  it('redraws nothing for an assertion made for another origin', async () => {
+    const code = await codeOf(
+      service.regenerateRecoveryCodes(session, await redrawProof(holder, 'https://evil.example')),
+    );
+
+    expect(code).toBe('invalid-credentials');
+    expect(auth.redrawn).toBe(0);
+  });
+
+  it('redraws nothing when the ceremony was already spent', async () => {
+    const proof = await redrawProof(holder);
+    await service.regenerateRecoveryCodes(session, proof);
+
+    expect(await codeOf(service.regenerateRecoveryCodes(session, proof))).toBe('challenge-expired');
+    expect(auth.redrawn).toBe(1);
   });
 });
 

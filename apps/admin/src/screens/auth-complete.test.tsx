@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { HttpAuthApi } from '../auth/http-api.js';
 import { MockAuthApi } from '../auth/mock-api.js';
@@ -7,6 +7,12 @@ import { renderApp } from '../test/render.tsx';
 import { AuthComplete } from './auth-complete.tsx';
 
 afterEach(() => vi.unstubAllGlobals());
+
+/** Shows what the code screen would be handed. */
+function TotpProbe() {
+  const state = useLocation().state as { factors?: { passkey: boolean } } | null;
+  return <p>{`passkey:${String(state?.factors?.passkey)}`}</p>;
+}
 
 it('exchanges an SSO completion code once when React replays effects', async () => {
   const session = await new MockAuthApi().exchange('fixture');
@@ -135,4 +141,25 @@ it('says an invitation spent by another tab is no longer valid', async () => {
   );
 
   expect(await screen.findByRole('alert')).toHaveTextContent('This invitation is no longer valid.');
+});
+
+it.each([
+  ['an app alone, when a link from before passkeys names none', '', false],
+  ['a passkey as well as the app', '&factors=totp,passkey', true],
+  ['a passkey alone', '&factors=passkey', true],
+])('hands the second-factor screen the ways to answer: %s', async (_label, query, passkey) => {
+  const api = new MockAuthApi();
+  api.seedPasskeys({ count: 1 });
+  renderApp(
+    <Routes>
+      <Route path="/sign-in/complete" element={<AuthComplete />} />
+      <Route path="/sign-in/totp" element={<TotpProbe />} />
+    </Routes>,
+    {
+      authApi: api,
+      initialEntries: [`/sign-in/complete?challenge=c1&email=lina%40helpdock.com${query}`],
+    },
+  );
+
+  expect(await screen.findByText(`passkey:${String(passkey)}`)).toBeInTheDocument();
 });

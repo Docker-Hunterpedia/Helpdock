@@ -1,4 +1,9 @@
-import { type RecoveryCodes, type Session, totpCodeRequestSchema } from '@helpdock/schemas';
+import {
+  type PasskeyEnrolmentRequest,
+  type RecoveryCodes,
+  type Session,
+  totpCodeRequestSchema,
+} from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
@@ -24,10 +29,16 @@ import { AlertBanner } from '../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../ui/field.tsx';
 import { QrCode } from '../ui/qr-code.tsx';
 import { AuthLayout } from './auth-layout.tsx';
+import { EnrolmentChoose, EnrolmentName, type PromptedPasskey } from './enrolment-passkey.tsx';
 
 /**
  * `Admin/Enrol2FA`: where an install with `auth.require2fa` on sends an account
  * that has no authenticator yet, and where a newly accepted invitation lands.
+ *
+ * With an enrolment challenge, a chooser comes first (`Admin/Enrol2FA-Choose`,
+ * M18-03): a passkey (the browser prompt, then a name) or an authenticator app
+ * (the two steps below). From the security page there is no chooser: the
+ * Passkeys card is where a passkey is added there.
  *
  * Two steps, in this order for a reason. The secret is **staged** by step one
  * and only becomes the account's second factor when a live code proves the
@@ -37,7 +48,7 @@ import { AuthLayout } from './auth-layout.tsx';
  * install can generate is somebody who clicked past them.
  */
 
-type Step = 'scan' | 'codes';
+type Step = 'choose' | 'scan' | 'name' | 'codes';
 
 /**
  * The enrolment challenge sign-in handed over instead of a session, when the
@@ -89,7 +100,9 @@ export function TotpEnrolment(): ReactNode {
   const tokens = useSemanticTokens();
   const codeFieldId = useId();
 
-  const [step, setStep] = useState<Step>('scan');
+  const [step, setStep] = useState<Step>(challengeId === null ? 'scan' : 'choose');
+  const [prompted, setPrompted] = useState<PromptedPasskey | null>(null);
+  const [passkeyFailure, setPasskeyFailure] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [copied, setCopied] = useState<'key' | 'codes' | null>(null);
@@ -112,18 +125,24 @@ export function TotpEnrolment(): ReactNode {
    * one-shot effect that has a side effect it cannot repeat.
    */
   useEffect(() => {
-    if (staged.current) {
+    if (staged.current || step !== 'scan') {
       return;
     }
 
     staged.current = true;
     startEnrolment();
-  }, [startEnrolment]);
+  }, [startEnrolment, step]);
 
   const confirm = useMutation({
     mutationFn: (value: string): Promise<RecoveryCodes & { readonly session?: Session }> =>
       challengeId === null ? api.confirmTotp(value) : api.completeEnrolment(challengeId, value),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // An app added beside a passkey keeps the set the passkey brought: there
+      // is nothing new to save, so the person goes straight on.
+      if (data.recoveryCodes.length === 0) {
+        finish(data.session);
+        return;
+      }
       setStep('codes');
     },
     onError: (error) => {
@@ -143,6 +162,40 @@ export function TotpEnrolment(): ReactNode {
     },
   });
 
+  const finishPasskey = useMutation({
+    mutationFn: (request: PasskeyEnrolmentRequest) =>
+      api.completePasskeyEnrolment(challengeId ?? '', request),
+    onSuccess: () => {
+      setStep('codes');
+    },
+    onError: (error) => {
+      if (isAuthError(error)) {
+        switch (error.code) {
+          case 'passkey-invalid':
+            setPasskeyFailure(
+              t('auth:enrolment.choose.failedAttempt', { count: error.attemptsLeft ?? 0 }),
+            );
+            return;
+          case 'totp-locked':
+            setPasskeyFailure(t('auth:enrolment.choose.locked'));
+            return;
+          case 'challenge-expired':
+            setPasskeyFailure(t('auth:enrolment.choose.expired'));
+            return;
+          case 'passkey-duplicate':
+            setPasskeyFailure(t('me:passkeys.duplicate'));
+            return;
+          case 'rate-limited':
+            setPasskeyFailure(
+              t('auth:signIn.rateLimited', { count: retryAfterMinutes(error.retryAfter) }),
+            );
+            return;
+        }
+      }
+      setPasskeyFailure(t('auth:enrolment.choose.failed'));
+    },
+  });
+
   const signOut = useMutation({
     mutationFn: () => api.signOut(),
     onSettled: () => {
@@ -150,10 +203,21 @@ export function TotpEnrolment(): ReactNode {
     },
   });
 
-  const recoveryCodes = confirm.data?.recoveryCodes ?? [];
+  const finished = finishPasskey.data ?? confirm.data;
+  const recoveryCodes = finished?.recoveryCodes ?? [];
   const uri = enrolment.data?.uri ?? '';
   const secret = enrolment.data?.secret ?? '';
   const { account, issuer } = describeUri(uri);
+  const viaPasskey = finishPasskey.data !== undefined;
+  const bannerEmail = finished?.session?.user.email ?? account;
+
+  /** Opens the session the challenge stood in for and goes where the person was headed. */
+  function finish(session: Session | undefined): void {
+    if (session !== undefined) {
+      setSession(session);
+    }
+    void navigate(returnTo, { replace: true });
+  }
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
@@ -189,7 +253,9 @@ export function TotpEnrolment(): ReactNode {
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <AlertBanner tone="info">
-            {t('auth:enrolment.step2.banner', { email: account })}
+            {viaPasskey
+              ? t('auth:enrolment.step2.bannerPasskey', { email: bannerEmail })
+              : t('auth:enrolment.step2.banner', { email: bannerEmail })}
           </AlertBanner>
 
           <Box
@@ -257,17 +323,49 @@ export function TotpEnrolment(): ReactNode {
             variant="contained"
             disabled={!saved}
             onClick={() => {
-              const session = confirm.data?.session;
-              if (session !== undefined) {
-                setSession(session);
-              }
-              void navigate(returnTo, { replace: true });
+              finish(finished?.session);
             }}
           >
             {t('auth:enrolment.step2.continue')}
           </Button>
         </Box>
       </AuthLayout>
+    );
+  }
+
+  if (step === 'choose' && challengeId !== null) {
+    return (
+      <EnrolmentChoose
+        challengeId={challengeId}
+        onApp={() => {
+          setStep('scan');
+        }}
+        onPrompted={(made) => {
+          setPrompted(made);
+          setPasskeyFailure(null);
+          setStep('name');
+        }}
+        onSignOut={() => {
+          signOut.mutate();
+        }}
+      />
+    );
+  }
+
+  if (step === 'name' && prompted !== null) {
+    return (
+      <EnrolmentName
+        prompted={prompted}
+        failure={passkeyFailure}
+        pending={finishPasskey.isPending}
+        onSubmit={(request) => {
+          setPasskeyFailure(null);
+          finishPasskey.mutate(request);
+        }}
+        onSignOut={() => {
+          signOut.mutate();
+        }}
+      />
     );
   }
 
@@ -301,7 +399,11 @@ export function TotpEnrolment(): ReactNode {
         </Typography>
 
         {enrolment.isError ? (
-          <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
+          <AlertBanner tone="danger">
+            {isAuthError(enrolment.error) && enrolment.error.code === 'totp-already-enabled'
+              ? t('auth:enrolment.alreadyOn')
+              : t('auth:unavailable')}
+          </AlertBanner>
         ) : null}
 
         {uri === '' ? (

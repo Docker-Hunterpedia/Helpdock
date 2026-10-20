@@ -152,16 +152,22 @@ export class StaffRepository {
     await (tx ?? this.#db).update(users).set({ passwordHash }).where(eq(users.id, userId));
   }
 
-  /** Stores an enrolment that no live code has confirmed yet. */
+  /**
+   * Stores an enrolment that no live code has confirmed yet. It never replaces
+   * an authenticator that is on: that would switch the account's factor off
+   * with no proof, so `false` says nothing was staged.
+   */
   async stageTotpSecret(
     userId: string,
     totpSecretEncrypted: string,
     tx?: Queryable,
-  ): Promise<void> {
-    await (tx ?? this.#db)
+  ): Promise<boolean> {
+    const staged = await (tx ?? this.#db)
       .update(users)
-      .set({ totpSecretEncrypted, totpEnabled: false })
-      .where(eq(users.id, userId));
+      .set({ totpSecretEncrypted })
+      .where(and(eq(users.id, userId), eq(users.totpEnabled, false)))
+      .returning({ id: users.id });
+    return staged.length > 0;
   }
 
   async enableTotp(userId: string, recoveryCodesHashed: string[], tx?: Queryable): Promise<void> {
@@ -184,10 +190,18 @@ export class StaffRepository {
    * secret would mean a later "turn it back on" silently re-enrolled the old
    * authenticator, including one the person meant to walk away from.
    */
-  async disableTotp(userId: string, tx?: Queryable): Promise<void> {
+  async disableTotp(
+    userId: string,
+    tx?: Queryable,
+    { keepRecoveryCodes = false }: { readonly keepRecoveryCodes?: boolean } = {},
+  ): Promise<void> {
     await (tx ?? this.#db)
       .update(users)
-      .set({ totpEnabled: false, totpSecretEncrypted: null, recoveryCodesHashed: [] })
+      .set({
+        totpEnabled: false,
+        totpSecretEncrypted: null,
+        ...(keepRecoveryCodes ? {} : { recoveryCodesHashed: [] }),
+      })
       .where(eq(users.id, userId));
   }
 

@@ -307,28 +307,91 @@ export const authSessionResponseSchema = accessTokenSchema.extend({ session: ses
 export type AuthSessionResponse = z.infer<typeof authSessionResponseSchema>;
 
 /**
+ * The ways an account can answer a second-factor challenge (M18-03). An
+ * authenticator app and recovery codes are one entry, `totp`, because the
+ * recovery link is always offered; `passkey` is true when the account holds a
+ * passkey this install can use now. Older redirects carry neither, which reads
+ * as an authenticator app alone.
+ */
+export const secondFactorOptionsSchema = z.object({ totp: z.boolean(), passkey: z.boolean() });
+export type SecondFactorOptions = z.infer<typeof secondFactorOptionsSchema>;
+
+const secondFactorChallengeSchema = z.object({
+  kind: z.literal('totp-required'),
+  challengeId: z.string().min(1),
+  email: z.email(),
+  factors: secondFactorOptionsSchema.default({ totp: true, passkey: false }),
+});
+
+/**
+ * `totp-enrolment-required` was renamed `second-factor-enrolment-required` when
+ * a passkey became a way to enrol (M18-03). Both are read as the new one; the
+ * api sends the old one for one release ({@link toWireSignInResponse}).
+ */
+function aliasEnrolmentKind(value: unknown): unknown {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === 'totp-enrolment-required'
+  ) {
+    return { ...value, kind: 'second-factor-enrolment-required' };
+  }
+  return value;
+}
+
+/**
  * `POST /api/auth/sign-in` on the wire. Either the session, the id of a
  * second-factor challenge to answer at `POST /api/auth/totp`, or — when the
  * install requires 2FA and this account has none — the enrolment that has to
  * happen first (M0-06 builds that screen).
  */
-export const signInResponseSchema = z.discriminatedUnion('kind', [
-  authSessionResponseSchema.extend({ kind: z.literal('session') }),
-  z.object({ kind: z.literal('totp-required'), challengeId: z.string().min(1), email: z.email() }),
-  z.object({ kind: z.literal('totp-enrolment-required'), challengeId: z.string().min(1) }),
-]);
+export const signInResponseSchema = z.preprocess(
+  aliasEnrolmentKind,
+  z.discriminatedUnion('kind', [
+    authSessionResponseSchema.extend({ kind: z.literal('session') }),
+    secondFactorChallengeSchema,
+    z.object({
+      kind: z.literal('second-factor-enrolment-required'),
+      challengeId: z.string().min(1),
+    }),
+  ]),
+);
 export type SignInResponse = z.infer<typeof signInResponseSchema>;
+
+/** What the api still sends for the enrolment challenge: an admin bundle cached from before M18-03 only knows this name. */
+export const LEGACY_ENROLMENT_KIND = 'totp-enrolment-required';
+
+export type WireSignInResponse =
+  | Exclude<SignInResponse, { kind: 'second-factor-enrolment-required' }>
+  | { readonly kind: typeof LEGACY_ENROLMENT_KIND; readonly challengeId: string };
+
+/**
+ * The answer as it goes out. For one release the enrolment challenge keeps its
+ * old name on the wire, so a browser still running an older admin bundle works;
+ * every reader here accepts both. The new name is sent from the release after,
+ * when the cached bundles have gone.
+ */
+export const toWireSignInResponse = (response: SignInResponse): WireSignInResponse =>
+  response.kind === 'second-factor-enrolment-required'
+    ? { kind: LEGACY_ENROLMENT_KIND, challengeId: response.challengeId }
+    : response;
 
 /**
  * The same three outcomes as the admin's `AuthApi` reports them. The access
  * token is missing on purpose: `HttpAuthApi` keeps it in memory and no screen
  * ever holds one, so no screen can put it somewhere that persists.
  */
-export const signInResultSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('session'), session: sessionSchema }),
-  z.object({ kind: z.literal('totp-required'), challengeId: z.string().min(1), email: z.email() }),
-  z.object({ kind: z.literal('totp-enrolment-required'), challengeId: z.string().min(1) }),
-]);
+export const signInResultSchema = z.preprocess(
+  aliasEnrolmentKind,
+  z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('session'), session: sessionSchema }),
+    secondFactorChallengeSchema,
+    z.object({
+      kind: z.literal('second-factor-enrolment-required'),
+      challengeId: z.string().min(1),
+    }),
+  ]),
+);
 export type SignInResult = z.infer<typeof signInResultSchema>;
 
 /** What `POST /api/auth/totp/enrol` returns for the QR the profile screen draws (M0-06). */
@@ -399,13 +462,17 @@ const authErrorCodes = [
   'passkey-limit',
   /** This authenticator is already registered for the account (M18-02). */
   'passkey-duplicate',
+  /** An authenticator app is already on; staging a new secret would replace it with no proof (M18-03). */
+  'totp-already-enabled',
+  /** A passkey assertion that did not verify, as a second factor or when enrolling (M18-03). Carries `attemptsLeft`. */
+  'passkey-invalid',
 ] as const;
 export const authErrorCodeSchema = z.enum(authErrorCodes);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;
 
 export const authErrorSchema = z.object({
   code: authErrorCodeSchema,
-  /** Present on `totp-mismatch`: how many tries are left before the lock. */
+  /** Present on `totp-mismatch`, `recovery-invalid` and `passkey-invalid`: how many tries are left before the lock. */
   attemptsLeft: z.number().int().nonnegative().optional(),
 });
 export type AuthErrorBody = z.infer<typeof authErrorSchema>;

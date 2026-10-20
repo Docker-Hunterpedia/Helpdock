@@ -87,7 +87,9 @@ answers the menu's four instants, the department's name and its zone. It needs
 `ticket:read` and writes nothing.
 
 The list filter is `snoozed=exclude|only|include` on
-`GET /api/brands/:brandId/tickets`.
+`GET /api/brands/:brandId/tickets` (default `exclude`) and on `GET /api/v1/tickets` (default `include`).
+
+A rule, a macro or an import mapping cannot target the Snoozed status: the api refuses it at save, and the editors do not offer it, because it needs a wake time.
 
 ## How it works
 
@@ -113,7 +115,6 @@ The list filter is `snoozed=exclude|only|include` on
 
 - Snoozing from the bulk bar and from the command palette arrives with M14-04
   and M14-05.
-- A rule's or macro's "set status" action cannot pick Snoozed; there is no
-  "snooze" action for rules in 1.1.
+- There is no "snooze" action for rules or macros in 1.1.
 - A brand with no business hours set gets 09:00 in the agent's time zone for the
   calendar presets.

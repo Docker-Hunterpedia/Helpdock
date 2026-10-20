@@ -85,6 +85,8 @@ async function statusProposal(tx: DbTransaction, scope: Scope, row: ImportMappin
       and(
         eq(ticketStatuses.brandId, scope.brandId),
         eq(ticketStatuses.excludedFromReports, false),
+        // Snoozed needs a wake time an imported ticket does not have (M14-02).
+        sql`${ticketStatuses.systemKey} IS DISTINCT FROM 'snoozed'`,
         key
           ? eq(ticketStatuses.systemKey, key)
           : sql`(lower(${ticketStatuses.name}) = lower(${row.label}) OR lower(${ticketStatuses.nameAr}) = lower(${row.label}))`,

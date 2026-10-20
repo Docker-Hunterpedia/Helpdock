@@ -223,10 +223,20 @@ export const createSlaProcessor =
       }
 
       const brandId = payload.brandId;
-      const result = await withSystemJob(db, brandId, jobId, (tx) =>
-        rebuildSnoozes(tx, deps, brandId),
-      );
-      log.info({ job: job.name, brandId, ...result }, 'Snooze timers rebuilt');
+      let after: string | undefined;
+      let woke = 0;
+      let scheduled = 0;
+      // One batch per transaction: a long outage can leave thousands overdue.
+      do {
+        const cursor = after;
+        const batch = await withSystemJob(db, brandId, jobId, (tx) =>
+          rebuildSnoozes(tx, deps, brandId, cursor),
+        );
+        woke += batch.woke;
+        scheduled += batch.scheduled;
+        after = batch.next;
+      } while (after !== undefined);
+      log.info({ job: job.name, brandId, woke, scheduled }, 'Snooze timers rebuilt');
       return;
     }
 

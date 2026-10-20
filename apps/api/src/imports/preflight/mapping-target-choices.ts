@@ -43,7 +43,8 @@ function destinationCatalog(
       return scalarCatalog(kind);
     case 'status':
       return sql`SELECT s.id::text AS id, s.name AS label, s.name_ar, NULL::text AS detail,
-      jsonb_build_object('statusId', s.id) AS target FROM ticket_statuses s WHERE s.brand_id = ${scope.brandId}::uuid`;
+      jsonb_build_object('statusId', s.id) AS target FROM ticket_statuses s WHERE s.brand_id = ${scope.brandId}::uuid
+      AND s.system_key IS DISTINCT FROM 'snoozed'`;
     case 'tag':
       return sql`SELECT t.id::text AS id, t.name AS label, NULL::text AS name_ar, NULL::text AS detail,
       jsonb_build_object('tagId', t.id) AS target FROM tags t WHERE t.brand_id = ${scope.brandId}::uuid`;

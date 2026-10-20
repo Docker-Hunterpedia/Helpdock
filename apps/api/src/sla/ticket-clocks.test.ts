@@ -190,6 +190,15 @@ describe('Snoozed (M14-02)', () => {
     expect(of(woke, 'first_response').pausedAt).toBeNull();
   });
 
+  it('moved from Awaiting customer to Snoozed at 11:00, resumes the first-response clock: 0.5 h left is due 11:30', () => {
+    const waitingOnCustomer = reconcile(created, awaiting, high, ry('2026-10-04T09:30'));
+    const snoozedLater = reconcile(waitingOnCustomer, snoozed, high, ry('2026-10-04T11:00'));
+
+    expect(of(snoozedLater, 'first_response').pausedAt).toBeNull();
+    expect(of(snoozedLater, 'first_response').dueAt).toEqual(ry('2026-10-04T11:30'));
+    expect(of(snoozedLater, 'resolution').pausedAt).not.toBeNull();
+  });
+
   it('still pauses both clocks for Awaiting customer, which is not snoozed', () => {
     const awaitingToo = reconcile(created, awaiting, high, ry('2026-10-04T09:30'));
 

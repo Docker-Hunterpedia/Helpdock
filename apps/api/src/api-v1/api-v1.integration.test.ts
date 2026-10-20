@@ -549,6 +549,29 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       ).toBe(404);
     });
 
+    it('lists snoozed tickets by default, so a sync by listing loses none, and hides them on request (M14-02)', async () => {
+      const { key } = await issueKey(['tickets:read', 'tickets:write']);
+      const created = await call<V1TicketDetail>('POST', '/api/v1/tickets', key, newTicket('Away'));
+      const ticketId = created.body.ticket.id;
+      const until = new Date(Date.now() + 3 * 3_600_000).toISOString();
+      const snoozed = await call<{ snoozedUntil: string | null }>(
+        'PATCH',
+        `/api/v1/tickets/${ticketId}`,
+        key,
+        { snoozedUntil: until },
+      );
+      expect(snoozed.body.snoozedUntil).toBe(until);
+
+      const ids = async (query: string) =>
+        (await call<TicketList>('GET', `/api/v1/tickets?limit=100${query}`, key)).body.tickets.map(
+          (ticket) => ticket.id,
+        );
+      expect(await ids('')).toContain(ticketId);
+      expect(await ids('&snoozed=include')).toContain(ticketId);
+      expect(await ids('&snoozed=exclude')).not.toContain(ticketId);
+      expect(await ids('&snoozed=only')).toContain(ticketId);
+    });
+
     it('replays a POST sent again with the same Idempotency-Key, and refuses the key for another body', async () => {
       const { key } = await issueKey(['tickets:write']);
       const headers = { 'idempotency-key': 'order-1042' };

@@ -1,5 +1,6 @@
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
+  brands,
   createDb,
   type Db,
   type DbHandle,
@@ -23,7 +24,13 @@ import {
   silentLogger,
   ticketUnsnoozeJobId,
 } from '@helpdock/jobs';
-import type { SlaPolicy, TicketDetail, TicketList, TicketStatusList } from '@helpdock/schemas';
+import type {
+  SlaPolicy,
+  SnoozePresets,
+  TicketDetail,
+  TicketList,
+  TicketStatusList,
+} from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { Queue } from 'bullmq';
@@ -32,6 +39,7 @@ import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
+import { validateImportMappingTarget } from '../../imports/preflight/mapping-targets.js';
 import { createLogger } from '../../logging/logger.js';
 import { registerNotificationHandlers } from '../../notifications/notification-events.js';
 import { NotificationsRepository } from '../../notifications/notifications.repository.js';
@@ -362,6 +370,12 @@ describe.skipIf(!hasDocker)('snooze', () => {
 
     it('writes the Snoozed view for a brand that lacks it at boot, once', async () => {
       const snoozedViews = () => owner.db.select().from(views).where(eq(views.builtIn, 'snoozed'));
+      const second = uuidv7();
+      const third = uuidv7();
+      await owner.db.insert(brands).values([
+        { id: second, name: 'Globex', prefix: 'GLX' },
+        { id: third, name: 'Initech', prefix: 'INI' },
+      ]);
       await owner.db.delete(views).where(eq(views.builtIn, 'snoozed'));
       expect(await snoozedViews()).toHaveLength(0);
 
@@ -369,12 +383,95 @@ describe.skipIf(!hasDocker)('snooze', () => {
       await backfillBuiltInViews(runtime.db);
 
       const rows = await snoozedViews();
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        brandId: seeded.brandId,
-        name: 'Snoozed',
-        filters: { assigneeId: ['me'], snoozed: 'only' },
+      expect(rows.map((row) => row.brandId).sort()).toEqual([seeded.brandId, second, third].sort());
+      expect(rows.every((row) => row.name === 'Snoozed')).toBe(true);
+      expect(rows[0]?.filters).toMatchObject({ assigneeId: ['me'], snoozed: 'only' });
+    });
+  });
+
+  describe('the presets', () => {
+    it('answers the four times in order, in the future, with the department', async () => {
+      const { ticket } = await createTicket();
+
+      const response = await call<SnoozePresets>(
+        'GET',
+        `${brandPath()}/tickets/${ticket.id}/snooze-presets?timeZone=Europe/Berlin`,
+        ada,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.presets.map((preset) => preset.key)).toEqual([
+        'in_1_hour',
+        'in_4_hours',
+        'next_business_day',
+        'next_week',
+      ]);
+      expect(response.body.presets.every((preset) => Date.parse(preset.at) > Date.now())).toBe(
+        true,
+      );
+      expect(response.body.departmentName).toBe('Support');
+    });
+
+    it('refuses a time zone that is not one, and says not found for another department’s ticket', async () => {
+      const { ticket } = await createTicket({ departmentId: support });
+      const path = `${brandPath()}/tickets/${ticket.id}/snooze-presets`;
+
+      expect((await call('GET', `${path}?timeZone=Not/AZone`, ada)).status).toBe(400);
+      expect((await call('GET', path, ada)).status).toBe(400);
+      expect((await call('GET', `${path}?timeZone=UTC`, bea)).status).toBe(404);
+    });
+  });
+
+  describe('merge and unmerge', () => {
+    it('wakes a snoozed secondary on merge, and an unmerge puts it back awake where it would have woken', async () => {
+      const secondary = (await createIn(awaiting)).ticket;
+      const primary = (await createTicket()).ticket;
+      await snooze(secondary.id, new Date(Date.now() + 3 * HOUR));
+
+      const merged = await call('POST', `${brandPath()}/tickets/${secondary.id}/merge`, ada, {
+        primaryTicketId: primary.id,
       });
+      expect(merged.status).toBe(200);
+      expect(await rowOf(secondary.id)).toMatchObject({
+        snoozedUntil: null,
+        snoozeResumeStatusId: null,
+        preMergeStatusId: awaiting,
+      });
+      expect((await activityOf(secondary.id, 'ticket.woke'))[0]?.to).toMatchObject({
+        reason: 'status_changed',
+      });
+
+      const back = await call('POST', `${brandPath()}/tickets/${secondary.id}/unmerge`, ada);
+      expect(back.status).toBe(200);
+      expect(await rowOf(secondary.id)).toMatchObject({ statusId: awaiting, snoozedUntil: null });
+    });
+  });
+
+  describe('a Snoozed status without a wake time', () => {
+    it('is refused as an import target, and a ticket found in it is repaired by Wake now', async () => {
+      const scope = { brandId: seeded.brandId, source: 'zendesk' as const, runId: uuidv7() };
+      const mapping = (statusId: string) =>
+        ({ kind: 'status', externalValue: 'pending', target: { statusId } }) as const;
+
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          validateImportMappingTarget(tx, scope, mapping(snoozedStatus)),
+        ),
+      ).toBe('target-missing');
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          validateImportMappingTarget(tx, scope, mapping(open)),
+        ),
+      ).toBeNull();
+
+      const { ticket } = await createTicket();
+      await owner.db
+        .update(tickets)
+        .set({ statusId: snoozedStatus })
+        .where(eq(tickets.id, ticket.id));
+      const woke = await snooze(ticket.id, null);
+      expect(woke.status).toBe(200);
+      expect(woke.body.status.id).toBe(open);
     });
   });
 
@@ -750,6 +847,7 @@ describe.skipIf(!hasDocker)('snooze', () => {
       const result = await withSystem(runtime.db, seeded.brandId, (tx) =>
         rebuildSnoozes(tx, slaDeps(), seeded.brandId),
       );
+      expect(result.next).toBeUndefined();
 
       expect(result.woke).toBeGreaterThanOrEqual(1);
       expect(result.scheduled).toBeGreaterThanOrEqual(1);

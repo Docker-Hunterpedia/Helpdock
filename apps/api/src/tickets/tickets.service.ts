@@ -69,6 +69,7 @@ import { ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
 import { enqueueTicketSnoozed } from './snooze/snooze-events.js';
 import {
+  isSnoozedStatus,
   snoozeValues,
   WAKE_VALUES,
   wakeStatusFor,
@@ -1077,7 +1078,8 @@ export class TicketsService {
     now: Date,
   ): Promise<PlannedSnooze | undefined> {
     if (snoozedUntil === null) {
-      if (ticket.snoozedUntil === null) {
+      // A ticket in Snoozed with no wake time is a repair, not a no-op.
+      if (ticket.snoozedUntil === null && !isSnoozedStatus(status)) {
         return undefined;
       }
       const target = await wakeStatusFor(tx, ticket.snoozeResumeStatusId);

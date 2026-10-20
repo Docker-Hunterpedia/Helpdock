@@ -133,74 +133,64 @@ export const registerSnoozeEventHandlers = (
 export interface RebuildResult {
   readonly woke: number;
   readonly scheduled: number;
+  /** The last ticket id read when more may follow; pass it back for the next batch. */
+  readonly next: string | undefined;
 }
 
 /**
- * `snooze.rebuild` for one brand: wakes every snooze that is already due and
- * re-adds the timer of every other. Idempotent, so it may run any time, and it
- * is what makes losing Redis lose no snooze (DOMAIN-RULES §10).
+ * `snooze.rebuild` for one batch of a brand: wakes every snooze in it that is
+ * already due and re-adds the timer of every other. The caller runs one batch per
+ * transaction, so a brand with thousands of overdue snoozes (a long outage) never
+ * holds thousands of ticket locks at once. Idempotent, so it may run any time, and
+ * it is what makes losing Redis lose no snooze (DOMAIN-RULES §10).
  */
 export const rebuildSnoozes = async (
   tx: DbTransaction,
   deps: SnoozeWorkerDeps,
   brandId: string,
+  after?: string,
 ): Promise<RebuildResult> => {
   const now = deps.now?.() ?? new Date();
   let woke = 0;
   let scheduled = 0;
-  let after: string | undefined;
 
-  for (;;) {
-    const rows = await tx
-      .select({
-        id: tickets.id,
-        version: tickets.snoozeVersion,
-        until: tickets.snoozedUntil,
-        status: ticketStatuses.systemKey,
-      })
-      .from(tickets)
-      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(
-        and(
-          eq(tickets.brandId, brandId),
-          isNotNull(tickets.snoozedUntil),
-          isNull(tickets.deletedAt),
-          after === undefined ? undefined : gt(tickets.id, after),
-        ),
-      )
-      .orderBy(asc(tickets.id))
-      .limit(REBUILD_BATCH);
+  const rows = await tx
+    .select({
+      id: tickets.id,
+      version: tickets.snoozeVersion,
+      until: tickets.snoozedUntil,
+      status: ticketStatuses.systemKey,
+    })
+    .from(tickets)
+    .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+    .where(
+      and(
+        eq(tickets.brandId, brandId),
+        isNotNull(tickets.snoozedUntil),
+        isNull(tickets.deletedAt),
+        after === undefined ? undefined : gt(tickets.id, after),
+      ),
+    )
+    .orderBy(asc(tickets.id))
+    .limit(REBUILD_BATCH);
 
-    for (const row of rows) {
-      if (row.until === null || row.status !== 'snoozed') {
-        continue;
-      }
-      if (row.until.getTime() <= now.getTime()) {
-        const outcome = await unsnoozeTicket(
-          tx,
-          deps,
-          { brandId, ticketId: row.id, version: row.version },
-          now,
-        );
-        woke += outcome.kind === 'woke' ? 1 : 0;
-      } else {
-        await deps.snoozeTimers.upsert(
-          {
-            jobId: ticketUnsnoozeJobId({ ticketId: row.id, version: row.version }),
-            fireAt: row.until,
-            payload: { brandId, ticketId: row.id, version: row.version },
-          },
-          now,
-        );
-        scheduled += 1;
-      }
+  for (const row of rows) {
+    if (row.until === null || row.status !== 'snoozed') {
+      continue;
     }
-
-    after = rows.at(-1)?.id;
-    if (rows.length < REBUILD_BATCH) {
-      return { woke, scheduled };
+    const payload = { brandId, ticketId: row.id, version: row.version };
+    if (row.until.getTime() <= now.getTime()) {
+      woke += (await unsnoozeTicket(tx, deps, payload, now)).kind === 'woke' ? 1 : 0;
+    } else {
+      await deps.snoozeTimers.upsert(
+        { jobId: ticketUnsnoozeJobId(payload), fireAt: row.until, payload },
+        now,
+      );
+      scheduled += 1;
     }
   }
+
+  return { woke, scheduled, next: rows.length < REBUILD_BATCH ? undefined : rows.at(-1)?.id };
 };
 
 /**

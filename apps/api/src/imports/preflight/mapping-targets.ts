@@ -42,6 +42,8 @@ export async function validateImportMappingTarget(
           and(
             eq(ticketStatuses.brandId, scope.brandId),
             eq(ticketStatuses.id, mapping.target.statusId),
+            // Snoozed needs a wake time (M14-02); an imported ticket has none.
+            sql`${ticketStatuses.systemKey} IS DISTINCT FROM 'snoozed'`,
           ),
         );
       return row ? null : 'target-missing';

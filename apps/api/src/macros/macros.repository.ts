@@ -117,6 +117,20 @@ export class MacrosRepository {
     return rows.length > 0;
   }
 
+  /** Whether any of these statuses is Snoozed, which a macro cannot set (it needs a wake time). */
+  async includesSnoozed(tx: DbTransaction, ids: readonly string[]): Promise<boolean> {
+    if (ids.length === 0) {
+      return false;
+    }
+    const rows = await tx
+      .select({ id: ticketStatuses.id })
+      .from(ticketStatuses)
+      .where(and(inArray(ticketStatuses.id, [...ids]), eq(ticketStatuses.systemKey, 'snoozed')))
+      .limit(1);
+
+    return rows.length > 0;
+  }
+
   /**
    * Whether every id an action names is this brand's. Each table is brand-scoped
    * by its own policy, so an id of another brand is simply not found.

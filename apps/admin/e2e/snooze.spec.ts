@@ -141,7 +141,10 @@ test('refuses a time more than ninety days ahead, or too soon, and offers no sno
 
   // A closed ticket has nothing to put away: no button, and `h` does nothing.
   await openTickets(page, locale, 'all');
-  await page.getByRole('link', { name: /HD-1030/ }).click();
+  await page
+    .getByRole('region', { name: t('tickets:list.label') })
+    .getByRole('link', { name: /HD-1030/ })
+    .click();
   await page.getByRole('region', { name: t('tickets:header.label') }).waitFor();
   await expect(
     page.getByRole('button', { name: t('tickets:snooze.button'), exact: true }),

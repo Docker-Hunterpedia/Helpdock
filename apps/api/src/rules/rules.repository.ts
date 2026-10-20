@@ -468,6 +468,20 @@ export class RulesRepository {
   }
 
   /** How many of `ids` are rows of that kind in this brand. */
+  /** Whether any of these statuses is Snoozed, which a rule cannot set (it needs a wake time). */
+  async includesSnoozed(tx: DbTransaction, ids: readonly string[]): Promise<boolean> {
+    if (ids.length === 0) {
+      return false;
+    }
+    const rows = await tx
+      .select({ id: ticketStatuses.id })
+      .from(ticketStatuses)
+      .where(and(inArray(ticketStatuses.id, [...ids]), eq(ticketStatuses.systemKey, 'snoozed')))
+      .limit(1);
+
+    return rows.length > 0;
+  }
+
   async countExisting(
     tx: DbTransaction,
     kind: 'status' | 'department' | 'team' | 'tag',

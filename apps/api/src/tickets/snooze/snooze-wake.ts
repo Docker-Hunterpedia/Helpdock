@@ -6,7 +6,8 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import { asc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { TicketLifecycleRepository } from '../lifecycle/lifecycle.repository.js';
 import { type ActivityActor, writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
 import { enqueueSnoozeEnded } from './snooze-events.js';
@@ -74,12 +75,7 @@ export const wakeStatusFor = async (
     }
   }
 
-  const [open] = await tx
-    .select()
-    .from(ticketStatuses)
-    .where(eq(ticketStatuses.isDefault, true))
-    .orderBy(asc(ticketStatuses.sortOrder))
-    .limit(1);
+  const open = await new TicketLifecycleRepository().defaultOpenStatus(tx);
 
   return open;
 };

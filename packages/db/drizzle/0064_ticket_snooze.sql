@@ -76,7 +76,13 @@ ALTER TABLE "ticket_statuses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- The Snoozed view takes the place under My open. It cannot be inserted here:
 -- a value added to an enum cannot be used in the transaction that added it, so
 -- the api writes it for existing brands at boot (`seedBrandViews`).
+--
+-- WARNING: drizzle applies every pending migration in ONE transaction, so on a
+-- fresh install no later migration may use `'snoozed'::ticket_view_built_in`
+-- (or `'snooze_ended'::notification_kind`) either: it would fail with "unsafe use
+-- of new value of enum type". Write such rows from the api at boot instead.
 ALTER TABLE "views" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 UPDATE "views" SET "sort_order" = 2 WHERE "built_in" = 'unassigned' AND "sort_order" = 1;--> statement-breakpoint
 UPDATE "views" SET "sort_order" = 3 WHERE "built_in" = 'overdue' AND "sort_order" = 2;--> statement-breakpoint
+UPDATE "views" SET "sort_order" = "sort_order" + 1 WHERE "built_in" = 'department_open';--> statement-breakpoint
 ALTER TABLE "views" FORCE ROW LEVEL SECURITY;

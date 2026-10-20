@@ -371,7 +371,14 @@ export const v1TicketCreateRequestSchema = z
   .superRefine(requireUnlessTemplate);
 export type V1TicketCreateRequest = z.infer<typeof v1TicketCreateRequestSchema>;
 
-export const v1TicketListQuerySchema = ticketListQuerySchema;
+/**
+ * The public list includes snoozed tickets unless told otherwise (M14-02): an
+ * integration that syncs by listing must not lose tickets because an agent put
+ * one away. The admin list's default is `exclude`.
+ */
+export const v1TicketListQuerySchema = ticketListQuerySchema.extend({
+  snoozed: ticketListQuerySchema.shape.snoozed.default('include'),
+});
 
 export const v1TicketSchema = ticketSchema;
 

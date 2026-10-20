@@ -99,8 +99,15 @@ requirement ([ADR 0053](../decisions/0053-break-glass-with-a-passkey.md)). A
 security key with no PIN or biometric set cannot give user verification and is
 refused for break-glass. A break-glass admin who holds only a passkey is locked out if the install's
 address (`APP_URL`) changes and pauses passkeys, so keep an authenticator app on
-the account too, or unset `HD_SSO_ENFORCED` from the environment to recover.
-Someone who signed in through SSO may still use a passkey as a second factor.
+the account too, or set `HD_SSO_ENFORCED=false` in the environment to turn enforcement off
+(unsetting the variable does nothing when enforcement was switched on in Settings).
+Someone who signed in through SSO may still use an authenticator code or a
+passkey as a second factor, but not a recovery code or a trusted browser: under
+enforcement recovery codes are refused after any first factor, including SSO.
+A passkey counts for break-glass only if it registered with user verification
+(a PIN or a biometric); Helpdock records this when the key is added, and keys
+added before 1.1 count as unverified. The Settings picker says so beside an
+admin whose only keys are unverified.
 The Settings picker lists an install admin as ineligible until they have a
 password and an app or a passkey. Discovery matches domains, never account existence.
 Settings pinned by `HD_SSO_ENFORCED` or `HD_SSO_BREAK_GLASS_USER_IDS` are read-only.

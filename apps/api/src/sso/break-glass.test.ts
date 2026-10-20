@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
+import {
+  enforcementAllows,
+  isBreakGlassEligible,
+  passkeyCounts,
+  passkeyHoldings,
+} from './break-glass.js';
 
 const SECOND_FACTORS = [
   'totp',
@@ -75,6 +80,46 @@ describe('who may be a break-glass admin', () => {
 });
 
 describe('counting passkeys', () => {
+  const rows = [
+    { userId: 'a', verified: 2, unverified: 1 },
+    { userId: 'b', verified: 0, unverified: 3 },
+  ];
+  const txReturning = (result: unknown[]) => ({
+    select: () => ({
+      from: () => ({ where: () => ({ groupBy: () => Promise.resolve(result) }) }),
+    }),
+  });
+
+  it('reports verified and unverified keys apart', async () => {
+    await expect(passkeyHoldings(txReturning(rows) as never, ['a', 'b'])).resolves.toEqual(
+      new Map([
+        ['a', { verified: 2, unverified: 1 }],
+        ['b', { verified: 0, unverified: 3 }],
+      ]),
+    );
+  });
+
+  it('counts only the keys that gave user verification', async () => {
+    await expect(passkeyCounts(txReturning(rows) as never, ['a', 'b'])).resolves.toEqual(
+      new Map([
+        ['a', 2],
+        ['b', 0],
+      ]),
+    );
+  });
+
+  it('leaves an admin with only unverified keys ineligible', () => {
+    const admin = {
+      installAdmin: true,
+      status: 'active',
+      passwordHash: 'hash',
+      totpEnabled: false,
+      totpSecretEncrypted: null,
+    } as const;
+
+    expect(isBreakGlassEligible(admin, 0)).toBe(false);
+  });
+
   it('asks nothing of the database for no accounts', async () => {
     const tx = {
       select: () => {

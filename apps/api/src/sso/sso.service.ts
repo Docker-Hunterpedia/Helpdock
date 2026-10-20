@@ -25,7 +25,7 @@ import type { Redis } from 'ioredis';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
-import { isBreakGlassEligible, passkeyCounts } from './break-glass.js';
+import { isBreakGlassEligible, passkeyCounts, passkeyHoldings } from './break-glass.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
 import { addsCertificates, fetchSamlMetadata, samlCertificate } from './saml-metadata.js';
 import { loadSpKeys, SSO_CONFIG_LOCK } from './sp-keys.js';
@@ -235,7 +235,7 @@ export class SsoService {
       .select()
       .from(users)
       .where(and(eq(users.installAdmin, true), eq(users.status, 'active')));
-    const held = await passkeyCounts(
+    const held = await passkeyHoldings(
       this.options.db,
       adminRows.map((user) => user.id),
     );
@@ -249,7 +249,11 @@ export class SsoService {
         id: user.id,
         name: user.name,
         email: user.email,
-        eligible: isBreakGlassEligible(user, held.get(user.id) ?? 0),
+        eligible: isBreakGlassEligible(user, held.get(user.id)?.verified ?? 0),
+        // Only keys that never gave user verification stand between this admin and eligibility.
+        passkeyNeedsVerification:
+          !isBreakGlassEligible(user, held.get(user.id)?.verified ?? 0) &&
+          (held.get(user.id)?.unverified ?? 0) > 0,
       })),
     };
   }

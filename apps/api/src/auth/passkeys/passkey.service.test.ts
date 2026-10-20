@@ -140,6 +140,7 @@ const rowFor = (
   discoverable: true,
   backupEligible: false,
   backedUp: false,
+  userVerified: true,
   name,
   createdAt: new Date('2026-10-20T10:00:00Z'),
   lastUsedAt: null,

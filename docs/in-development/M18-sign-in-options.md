@@ -714,13 +714,22 @@ Backlog or never:
   recovery code, trusted browser, magic link and pending challenges, over HTTP
   on real Postgres and Redis), `sso.integration.test.ts` (settings validation
   and the picker flag) and `sso.spec.ts` in `en` and `ar`. Gaps:
-  - The SSO-first column is covered by the table and the unit scenarios, and
-    by the existing identity integration tests, not by a new round trip against
-    an IdP. A recovery code after an SSO assertion stays refused under
-    enforcement, as in 1.0.
+  - Migration `0067_passkey_user_verified` adds `webauthn_credentials.user_verified`
+    (default false; existing rows count as unverified). Registration stores
+    the ceremony's user-verification flag, and break-glass eligibility,
+    `passkeyCounts` and the picker count only verified keys. The targets
+    response gains `passkeyNeedsVerification`, shown as
+    `sso:ineligibleUnverified` (a line the artboard does not draw).
+  - The SSO-first column is covered by the table, the unit scenarios and
+    `identity.integration.test.ts` (recovery code refused when enforced and
+    accepted when not; app code accepted; enrolment completes; a local enrolment
+    begun earlier is refused). A trusted browser is never honoured after SSO
+    (`completeSso` passes no cookie), so that cell is the policy table only.
+    A recovery code after an SSO assertion stays refused under enforcement, as
+    in 1.0; the owner is deciding whether that should change.
   - A break-glass admin who holds only a passkey cannot sign in while passkeys
     are paused after an `APP_URL` change; the SSO guide says to keep an app on
-    the account too, or to unset `HD_SSO_ENFORCED`.
+    the account too, or to set `HD_SSO_ENFORCED=false`.
   - There is no real-api Playwright spec for break-glass: the second-factor
     screen is unchanged and server-driven, and a spec would need an SSO
     connection and enforcement set up against the real api.
@@ -756,6 +765,7 @@ webauthn_credentials                              -- install scope, GLOBAL_TABLE
   discoverable     boolean null                   -- credProps.rk
   backup_eligible  boolean not null
   backed_up        boolean not null
+  user_verified    boolean not null default false  -- registration carried UV; break-glass needs it (M18-05)
   name             varchar(80) not null           -- user-chosen, rendered in <bdi>
   created_at       timestamptz not null default now()
   last_used_at     timestamptz null

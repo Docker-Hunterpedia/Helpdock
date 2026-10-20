@@ -395,6 +395,7 @@ const credentialRow = (
   discoverable: true,
   backupEligible: false,
   backedUp: false,
+  userVerified: true,
   name,
   createdAt: new Date(),
   lastUsedAt: null,

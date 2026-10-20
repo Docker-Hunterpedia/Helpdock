@@ -120,6 +120,9 @@ test('SAML configuration and enforced discovery use bilingual controls', async (
   const ineligible = page.getByRole('option', { name: /Ola Saeed/ });
   await expect(ineligible).toContainText(t('sso:ineligible'));
   await expect(ineligible).toHaveAttribute('aria-disabled', 'true');
+  const unverified = page.getByRole('option', { name: /Omar Nasser/ });
+  await expect(unverified).toContainText(t('sso:ineligibleUnverified'));
+  await expect(unverified).toHaveAttribute('aria-disabled', 'true');
   await page.getByRole('option', { name: 'Lina Haddad' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: t('common:actions.save'), exact: true }).click();

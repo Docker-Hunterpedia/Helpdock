@@ -124,5 +124,6 @@
       "groupsHint": "Add the groups claim in Token configuration. Values are group object IDs.",
       "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."
     }
-  }
+  },
+  "ineligibleUnverified": "Its passkeys have no PIN or biometric. Add an authenticator app or a passkey that has one"
 }

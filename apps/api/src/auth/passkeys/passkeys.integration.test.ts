@@ -270,6 +270,20 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
       });
     });
 
+    it('records whether the registration carried user verification, for break-glass (ADR 0053)', async () => {
+      const verified = new SoftwareAuthenticator();
+      const pinless = new SoftwareAuthenticator({ userVerified: false });
+
+      expect((await addPasskey(verified, 'With PIN')).statusCode).toBe(201);
+      expect((await addPasskey(pinless, 'No PIN')).statusCode).toBe(201);
+
+      const rows = await storedFor(seeded.userId);
+      expect(Object.fromEntries(rows.map((row) => [row.name, row.userVerified]))).toEqual({
+        'With PIN': true,
+        'No PIN': false,
+      });
+    });
+
     it('stores a passkey after a password step-up, pins the RP ID, audits it and emails the holder', async () => {
       const authenticator = new SoftwareAuthenticator({ backedUp: true, backupEligible: true });
 

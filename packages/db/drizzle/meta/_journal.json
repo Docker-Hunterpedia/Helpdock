@@ -456,6 +456,13 @@
       "when": 1792528690426,
       "tag": "0066_bulk_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792540513457,
+      "tag": "0067_passkey_user_verified",
+      "breakpoints": true
     }
   ]
 }

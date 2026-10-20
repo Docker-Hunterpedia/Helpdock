@@ -230,7 +230,9 @@ function EnforcementCard({ settings, targets }: { settings: SsoSettings; targets
             disabled={!admin.eligible || (admins.length >= 3 && !admins.includes(admin.id))}
           >
             {admin.name}
-            {!admin.eligible ? ` · ${t('sso:ineligible')}` : ''}
+            {!admin.eligible
+              ? ` · ${t(admin.passkeyNeedsVerification ? 'sso:ineligibleUnverified' : 'sso:ineligible')}`
+              : ''}
           </MenuItem>
         ))}
       </TextField>

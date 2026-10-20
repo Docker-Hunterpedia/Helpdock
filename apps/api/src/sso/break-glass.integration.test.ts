@@ -126,6 +126,7 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
     installAdmin: boolean;
     totp: boolean;
     passkey: boolean;
+    passkeyVerified?: boolean;
   }): Promise<Account> => {
     const id = uuidv7();
     const email = `${id}@example.com`;
@@ -158,6 +159,7 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
         algorithm: -7,
         backupEligible: false,
         backedUp: false,
+        userVerified: options.passkeyVerified ?? true,
         name: 'Key',
       });
     }
@@ -371,6 +373,36 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
       expect(row?.recoveryCodesHashed).toHaveLength(3);
     });
 
+    it('is refused when its only passkey registered without user verification', async () => {
+      const account = await makeAccount({
+        installAdmin: true,
+        totp: false,
+        passkey: true,
+        passkeyVerified: false,
+      });
+      await setPolicy({ enforced: true, breakGlass: [account.id] });
+
+      const { response } = await signIn(account.email);
+
+      expect(response.statusCode).toBe(403);
+      expect(authOf(response).code).toBe('sso-required');
+      expect(sessionCookie(response)).toBe(false);
+    });
+
+    it('still signs in with its app when its passkey has no user verification', async () => {
+      const account = await makeAccount({
+        installAdmin: true,
+        totp: true,
+        passkey: true,
+        passkeyVerified: false,
+      });
+      await setPolicy({ enforced: true, breakGlass: [account.id] });
+
+      const { body } = await signIn(account.email);
+
+      expect(sessionCookie(await answerTotp(body.challengeId))).toBe(true);
+    });
+
     it('keeps its other factor when one is removed, so it is never locked out', async () => {
       const account = await makeAccount({ installAdmin: true, totp: true, passkey: true });
       await setPolicy({ enforced: true, breakGlass: [account.id] });
@@ -393,6 +425,7 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
         algorithm: -7,
         backupEligible: false,
         backedUp: false,
+        userVerified: true,
         name: 'Key',
       });
       const withKey = await signIn(account.email);

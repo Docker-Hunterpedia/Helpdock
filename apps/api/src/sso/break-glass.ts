@@ -33,26 +33,53 @@ type BreakGlassCandidate = Pick<
   'installAdmin' | 'status' | 'passwordHash' | 'totpEnabled' | 'totpSecretEncrypted'
 >;
 
-/** An active install admin with a password and (an authenticator app or a passkey). */
-export const isBreakGlassEligible = (user: BreakGlassCandidate, passkeyCount: number): boolean =>
+/**
+ * An active install admin with a password and (an authenticator app or a
+ * passkey that registered with user verification). Break-glass asserts with user
+ * verification, so a key that cannot give it would lock the admin out of the
+ * very outage it is for.
+ */
+export const isBreakGlassEligible = (
+  user: BreakGlassCandidate,
+  verifiedPasskeyCount: number,
+): boolean =>
   user.installAdmin &&
   user.status === 'active' &&
   user.passwordHash !== null &&
-  ((user.totpEnabled && user.totpSecretEncrypted !== null) || passkeyCount > 0);
+  ((user.totpEnabled && user.totpSecretEncrypted !== null) || verifiedPasskeyCount > 0);
+
+export interface PasskeyHoldings {
+  /** Registered with user verification (a PIN or a biometric). */
+  readonly verified: number;
+  /** Registered without it, or before the column existed. */
+  readonly unverified: number;
+}
 
 /** Passkeys held per account, for the ids given (accounts with none are absent). */
-export const passkeyCounts = async (
+export const passkeyHoldings = async (
   tx: Db | DbTransaction,
   userIds: readonly string[],
-): Promise<Map<string, number>> => {
+): Promise<Map<string, PasskeyHoldings>> => {
   if (userIds.length === 0) return new Map();
   const rows = await tx
     .select({
       userId: webauthnCredentials.userId,
-      held: sql<number>`count(*)::int`,
+      verified: sql<number>`count(*) filter (where ${webauthnCredentials.userVerified})::int`,
+      unverified: sql<number>`count(*) filter (where not ${webauthnCredentials.userVerified})::int`,
     })
     .from(webauthnCredentials)
     .where(inArray(webauthnCredentials.userId, [...userIds]))
     .groupBy(webauthnCredentials.userId);
-  return new Map(rows.map((row) => [row.userId, row.held]));
+  return new Map(
+    rows.map((row) => [row.userId, { verified: row.verified, unverified: row.unverified }]),
+  );
 };
+
+/** User-verified passkeys held per account; the count eligibility is judged on. */
+export const passkeyCounts = async (
+  tx: Db | DbTransaction,
+  userIds: readonly string[],
+): Promise<Map<string, number>> =>
+  new Map(
+    [...(await passkeyHoldings(tx, userIds))].map(([userId, held]) => [userId, held.verified]),
+  );

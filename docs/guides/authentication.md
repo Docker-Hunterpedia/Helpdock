@@ -336,7 +336,8 @@ reason goes to the audit trail as `auth.second_factor.failed` with `meta.factor`
 enforcement a passkey second factor is accepted in two cases only: after an SSO
 assertion that does not vouch for IdP MFA, and after the password of a configured
 break-glass install admin ([ADR 0053](../decisions/0053-break-glass-with-a-passkey.md)).
-For break-glass the ceremony has its own purpose and requires user verification,
+For break-glass the ceremony has its own purpose and requires user verification
+(and the key must have registered with it),
 so a key that proves presence only is refused as `passkey-invalid` and costs an
 attempt. After any other local first factor it answers `403 sso-required` (from
 `options` too, so no ceremony is minted for it), as a recovery code does. A

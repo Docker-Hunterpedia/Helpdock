@@ -281,6 +281,7 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
       label: string,
       overrides: Partial<typeof users.$inferInsert>,
       passkeys = 0,
+      verified = true,
     ) => {
       const id = uuidv7();
       await runtime.db.insert(users).values({
@@ -300,12 +301,14 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
           algorithm: -7,
           backupEligible: false,
           backedUp: false,
+          userVerified: verified,
           name: 'Key',
         });
       }
       return id;
     };
     const passkeyOnly = await make('passkey-only', {}, 1);
+    const pinless = await make('pinless', {}, 1, false);
     const neither = await make('neither', {});
     const noPassword = await make('no-password', { passwordHash: null }, 1);
     const ordinary = await make('ordinary', { installAdmin: false }, 1);
@@ -317,21 +320,29 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
     try {
       expect((await save([passkeyOnly])).statusCode).toBe(200);
       expect((await save([passkeyOnly, ADMIN])).statusCode).toBe(200);
-      for (const refused of [neither, noPassword, ordinary, deactivated]) {
+      for (const refused of [pinless, neither, noPassword, ordinary, deactivated]) {
         expect((await save([refused])).statusCode).toBe(400);
       }
       const { admins } = (await request('GET', 'targets')).json() as {
-        admins: { id: string; eligible: boolean }[];
+        admins: { id: string; eligible: boolean; passkeyNeedsVerification: boolean }[];
       };
       const eligible = (id: string) => admins.find((admin) => admin.id === id)?.eligible;
       expect(eligible(passkeyOnly)).toBe(true);
       expect(eligible(ADMIN)).toBe(true);
       expect(eligible(neither)).toBe(false);
+      expect(eligible(pinless)).toBe(false);
+      const needsPin = (id: string) =>
+        admins.find((admin) => admin.id === id)?.passkeyNeedsVerification;
+      expect(needsPin(pinless)).toBe(true);
+      expect(needsPin(neither)).toBe(false);
+      expect(needsPin(passkeyOnly)).toBe(false);
       expect(eligible(noPassword)).toBe(false);
     } finally {
       await owner.db.delete(users).where(
         sql`${users.id} IN (${sql.join(
-          [passkeyOnly, neither, noPassword, ordinary, deactivated].map((id) => sql`${id}`),
+          [passkeyOnly, pinless, neither, noPassword, ordinary, deactivated].map(
+            (id) => sql`${id}`,
+          ),
           sql`, `,
         )})`,
       );

@@ -21,7 +21,9 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
 1. Under SSO enforcement, a break-glass admin signs in with a **password, then a
    fresh TOTP code or a fresh passkey assertion with user verification**.
 2. The enforcement precondition becomes "an active install admin with a
-   password and (TOTP or a passkey)".
+   password and (TOTP or a passkey that registered with user verification)".
+   The flag is stored per credential (`webauthn_credentials.user_verified`);
+   rows from before it existed count as unverified.
 3. Recovery codes, trusted browsers and passwordless passkey sign-in stay
    excluded from break-glass, as recovery codes and trusted browsers are today.
 4. A pending second-factor challenge re-checks enforcement before it completes.

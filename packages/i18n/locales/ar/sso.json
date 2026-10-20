@@ -124,5 +124,6 @@
       "groupsHint": "أضف مطالبة groups من Token configuration. القيم هي معرّفات كائنات المجموعات.",
       "domainsHint": "أدخل النطاقات الموثّقة في مستأجر Entra، مثل example.com."
     }
-  }
+  },
+  "ineligibleUnverified": "مفاتيح المرور لديه بلا رمز PIN أو بصمة. أضف تطبيق مصادقة أو مفتاح مرور يتضمن أحدهما"
 }

@@ -175,7 +175,14 @@ export const ssoTargetsSchema = z.object({
     }),
   ),
   admins: z.array(
-    z.object({ id: z.uuid(), name: z.string(), email: z.email(), eligible: z.boolean() }),
+    z.object({
+      id: z.uuid(),
+      name: z.string(),
+      email: z.email(),
+      eligible: z.boolean(),
+      /** Ineligible only because every passkey registered without user verification. */
+      passkeyNeedsVerification: z.boolean().default(false),
+    }),
   ),
 });
 export type SsoTargets = z.infer<typeof ssoTargetsSchema>;

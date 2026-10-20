@@ -124,6 +124,7 @@ export class PasskeyRepository {
         discoverable: passkey.discoverable,
         backupEligible: passkey.backupEligible,
         backedUp: passkey.backedUp,
+        userVerified: passkey.userVerified,
       })
       .onConflictDoNothing({ target: webauthnCredentials.credentialId })
       .returning();

@@ -36,11 +36,14 @@ const TIMELINE_PAGE = 50;
 const openTicket = ne(ticketStatuses.systemState, 'closed');
 
 /**
- * DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views", and the
- * contact screens are views. Every read here carries it, as the ticket list's
- * `liveTicketsOf` does; `helpdock_contact_ticket_count` applies it in SQL.
+ * The tickets that are a contact's history. DOMAIN-RULES §2.2: a soft-deleted
+ * ticket is "hidden from all views", and the contact screens are views (the
+ * ticket list's `liveTicketsOf` skips it too). Spam is left out (owner decision,
+ * 1.0.2): it is not something the contact asked. A merged ticket stays, listed
+ * with its Merged status. Every read here carries this, so each joins
+ * `ticket_statuses`; `helpdock_contact_ticket_count` applies the same in SQL.
  */
-const notDeleted = isNull(tickets.deletedAt);
+const inHistory = and(isNull(tickets.deletedAt), eq(ticketStatuses.isSpam, false));
 
 /**
  * `max(created_at)` inside a raw fragment is an *expression*, not a column, so
@@ -86,7 +89,7 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       })
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(and(inArray(tickets.contactId, [...contactIds]), notDeleted))
+      .where(and(inArray(tickets.contactId, [...contactIds]), inHistory))
       .groupBy(tickets.contactId);
 
     const satisfaction = await this.#satisfaction(tx, contactIds);
@@ -122,10 +125,11 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       })
       .from(csatResponses)
       .innerJoin(tickets, eq(tickets.id, csatResponses.ticketId))
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .where(
         and(
           inArray(tickets.contactId, [...contactIds]),
-          notDeleted,
+          inHistory,
           isNotNull(csatResponses.rating),
         ),
       )
@@ -157,7 +161,7 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       .selectDistinct({ contactId: tickets.contactId })
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(and(inArray(tickets.contactId, [...candidates]), openTicket, notDeleted));
+      .where(and(inArray(tickets.contactId, [...candidates]), openTicket, inHistory));
 
     return rows.flatMap((row) => (row.contactId === null ? [] : [row.contactId]));
   }
@@ -203,14 +207,15 @@ export class DbContactTimelineProvider implements ContactTimelineProvider {
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .innerJoin(departments, eq(departments.id, tickets.departmentId))
       .leftJoin(assignee, eq(assignee.id, tickets.assigneeId))
-      .where(and(eq(tickets.contactId, contactId), notDeleted))
+      .where(and(eq(tickets.contactId, contactId), inHistory))
       .orderBy(desc(tickets.createdAt), desc(tickets.id))
       .limit(TIMELINE_PAGE);
 
     const [visible] = await tx
       .select({ total: sql<number>`count(*)::int` })
       .from(tickets)
-      .where(and(eq(tickets.contactId, contactId), notDeleted));
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+      .where(and(eq(tickets.contactId, contactId), inHistory));
 
     const [all] = await tx.execute<{ total: number }>(
       sql`SELECT helpdock_contact_ticket_count(${brandId}::uuid, ${contactId}::uuid)::int AS total`,

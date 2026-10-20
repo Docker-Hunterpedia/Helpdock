@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ssoConfigurationSchema,
+  ssoConnectionConfigSchema,
   ssoConnectionCreateSchema,
   ssoConnectionSchema,
   ssoMappingSchema,
@@ -25,6 +26,10 @@ describe('SSO configuration boundaries', () => {
     expect(
       ssoConnectionCreateSchema.safeParse({ ...oidc, config: { ...oidc.config, issuer } }).success,
     ).toBe(false);
+  });
+  it('still reads a stored issuer that holds the template placeholder', () => {
+    const issuer = 'https://login.microsoftonline.com/{tenant-id}/v2.0';
+    expect(ssoConnectionConfigSchema.parse({ ...oidc.config, issuer })).toMatchObject({ issuer });
   });
   it('requires OIDC identity scope and verified email', () => {
     for (const override of [{ scopes: ['profile'] }, { requireEmailVerified: false }]) {

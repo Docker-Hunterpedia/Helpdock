@@ -25,11 +25,7 @@ export const ssoAccessSchema = z
 export const ssoConnectionConfigSchema = z.discriminatedUnion('protocol', [
   z.object({
     protocol: z.literal('oidc'),
-    // A preset's `{tenant-id}` template is a URL the parser accepts but no provider serves.
-    issuer: endpoint.refine(
-      (issuer) => !/[{}]/.test(issuer),
-      'Replace the template placeholder in the issuer',
-    ),
+    issuer: endpoint,
     clientId: z.string().trim().min(1).max(300),
     scopes: z
       .array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]+$/))
@@ -75,10 +71,17 @@ const connectionFields = z.object({
   config: ssoConnectionConfigSchema,
   clientSecret: z.string().min(1).max(16000).optional(),
 });
-export const ssoConnectionCreateSchema = connectionFields.refine(
-  (connection) => connection.config.protocol === 'oidc' || connection.clientSecret === undefined,
-  'Only OIDC connections accept a client secret',
-);
+export const ssoConnectionCreateSchema = connectionFields
+  .refine(
+    (connection) => connection.config.protocol === 'oidc' || connection.clientSecret === undefined,
+    'Only OIDC connections accept a client secret',
+  )
+  // A preset's `{tenant-id}` template is a URL the parser accepts but no provider
+  // serves. Only input is refused: stored rows still parse through the config schema.
+  .refine(
+    (connection) => connection.config.protocol !== 'oidc' || !/[{}]/.test(connection.config.issuer),
+    { message: 'Replace the template placeholder in the issuer', path: ['config', 'issuer'] },
+  );
 // Updates replace the public configuration; an omitted secret retains the stored value.
 export const ssoConnectionUpdateSchema = ssoConnectionCreateSchema;
 export const ssoConnectionSchema = connectionFields.omit({ clientSecret: true }).extend({

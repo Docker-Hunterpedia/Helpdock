@@ -242,12 +242,7 @@ export const PAGES: readonly PageEntry[] = [
     roles: ['admin', 'teamLeader'],
   }),
 
-  tabPage(
-    'developersApi',
-    'developers',
-    developersRoute('api-keys'),
-    'developers:tabs.apiKeys',
-  ),
+  tabPage('developersApi', 'developers', developersRoute('api-keys'), 'developers:tabs.apiKeys'),
   tabPage(
     'developersWebhooks',
     'developers',

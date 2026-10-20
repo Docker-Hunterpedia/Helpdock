@@ -286,11 +286,11 @@ does not orphan them silently:
   sign-in screen can say so instead of drawing the button;
 - password, sign-in links, TOTP, OAuth and SSO keep working.
 
-Moving the passkeys to the new host, which re-pins the setting and has staff
-add their passkeys again, is an install-admin action under Settings ›
-Authentication that comes with the screens (M18-06). An operator who knows the
-final host in advance can set it with `HD_AUTH_WEBAUTHN_RP_ID`, in which case
-nothing is written and the environment value is the pin.
+Moving the passkeys to the new host means re-pinning the setting, after which
+staff add their passkeys again. Settings › Authentication is planned to offer
+that to install admins with the passkey screens (M18-06). `HD_AUTH_WEBAUTHN_RP_ID`
+also sets the pin: while it is set, the environment value is the pin and
+nothing is written to the database.
 
 ### Ceremonies
 

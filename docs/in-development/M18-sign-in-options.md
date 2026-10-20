@@ -475,9 +475,10 @@ Backlog or never:
   `passkeysPaused` in `GET /api/auth/methods`; the auth codes
   `passkeys-unavailable` and `passkeys-rp-changed`. A software authenticator
   for tests (`apps/api/src/testing/software-authenticator.ts`) signs with
-  `node:crypto` P-256 keys. Not in M18-01: the Settings › Authentication
-  passkeys card reads `WebAuthnService.status()` (state, current and pinned RP
-  ID, pin date) and a credential count, wired with the screens in M18-06.
+  `node:crypto` P-256 keys. Left for M18-06: the Settings › Authentication
+  passkeys card can read `WebAuthnService.status()` (state, current and pinned
+  RP ID, pin date); the "in use" count and the route that serves the card are
+  not built yet.
 - [ ] M18-02 to M18-13.
 
 ## Data model

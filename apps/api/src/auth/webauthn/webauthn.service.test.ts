@@ -282,16 +282,14 @@ describe('an assertion', () => {
     ).resolves.toMatchObject({ ok: true, userVerified: false });
   });
 
-  it('refuses an assertion signed for another origin', async () => {
-    await expect(
-      assertFor('passwordless', { origin: 'https://desk-example.com' }),
-    ).resolves.toMatchObject({ ok: false, reason: 'bad-assertion' });
-  });
-
-  it('refuses an assertion made for another RP ID', async () => {
-    await expect(
-      assertFor('passwordless', { origin: ORIGIN, rpId: 'example.com' }),
-    ).resolves.toMatchObject({ ok: false, reason: 'bad-assertion' });
+  it.each([
+    ['signed for a lookalike origin', { origin: 'https://desk-example.com' }],
+    ['made for another RP ID', { origin: ORIGIN, rpId: 'example.com' }],
+  ])('refuses an assertion %s', async (_case, overrides) => {
+    await expect(assertFor('passwordless', overrides)).resolves.toMatchObject({
+      ok: false,
+      reason: 'bad-assertion',
+    });
   });
 
   it('refuses a credential this install does not hold', async () => {

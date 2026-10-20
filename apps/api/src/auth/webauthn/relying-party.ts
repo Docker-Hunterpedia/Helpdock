@@ -23,12 +23,9 @@ export interface RelyingParty {
 export const relyingPartyFor = (appUrl: string): RelyingParty | null => {
   const url = new URL(appUrl);
   const host = url.hostname;
-  const isLocalhost = host === 'localhost';
-
-  if (url.protocol === 'http:' && !isLocalhost) {
-    return null;
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+  const secureContext =
+    url.protocol === 'https:' || (url.protocol === 'http:' && host === 'localhost');
+  if (!secureContext) {
     return null;
   }
   // `URL` keeps the brackets around an IPv6 literal.

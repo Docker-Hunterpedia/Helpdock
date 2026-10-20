@@ -11,12 +11,12 @@ import {
 
 const userId = uuidv7();
 const familyId = uuidv7();
-const ceremony: WebAuthnCeremony = {
+const unbound: WebAuthnCeremony = {
   purpose: 'second-factor',
   challenge: 'A'.repeat(43),
   rpId: 'desk.example.com',
-  userId,
 };
+const ceremony: WebAuthnCeremony = { ...unbound, userId };
 
 let stub: RedisStub;
 let store: WebAuthnCeremonyStore;
@@ -50,28 +50,15 @@ describe('WebAuthnCeremonyStore', () => {
     await expect(store.consume(id, 'second-factor', { userId })).resolves.toBeNull();
   });
 
-  it('refuses a ceremony bound to another person', async () => {
-    const id = await store.begin(ceremony);
+  it.each([
+    ['bound to another person', ceremony, { userId: uuidv7() }],
+    ['presented without its binding', ceremony, {}],
+    ['bound to another browser session', { ...ceremony, familyId }, { userId, familyId: uuidv7() }],
+    ['unbound, presented by a bound caller', unbound, { userId }],
+  ])('refuses a ceremony %s', async (_case, begun: WebAuthnCeremony, binding) => {
+    const id = await store.begin(begun);
 
-    await expect(store.consume(id, 'second-factor', { userId: uuidv7() })).resolves.toBeNull();
-  });
-
-  it('refuses a bound ceremony presented without its binding', async () => {
-    const id = await store.begin(ceremony);
-
-    await expect(store.consume(id, 'second-factor')).resolves.toBeNull();
-  });
-
-  it('refuses a ceremony bound to another browser session', async () => {
-    const id = await store.begin({ ...ceremony, purpose: 'register', familyId });
-
-    await expect(store.consume(id, 'register', { userId, familyId: uuidv7() })).resolves.toBeNull();
-  });
-
-  it('completes an unbound ceremony only for an unbound caller', async () => {
-    const id = await store.begin({ purpose: 'passwordless', challenge: 'B'.repeat(43), rpId: 'x' });
-
-    await expect(store.consume(id, 'passwordless', { userId })).resolves.toBeNull();
+    await expect(store.consume(id, 'second-factor', binding)).resolves.toBeNull();
   });
 
   it('refuses an id it never issued', async () => {

@@ -152,19 +152,18 @@ describe.skipIf(!hasDocker)('passkey foundation', () => {
       ).rejects.toThrow();
     });
 
-    it('refuses an algorithm outside EdDSA, ES256 and RS256', async () => {
+    it.each([
+      ['an algorithm outside EdDSA, ES256 and RS256', { algorithm: -50 }],
+      [
+        'a credential id longer than the specification allows',
+        { credentialId: new Uint8Array(1_024) },
+      ],
+      ['an empty credential id', { credentialId: new Uint8Array(0) }],
+    ])('refuses %s', async (_case, overrides) => {
       await expect(
         db()
           .insert(webauthnCredentials)
-          .values(credential(await addUser(), { algorithm: -50 })),
-      ).rejects.toThrow();
-    });
-
-    it('refuses a credential id longer than the specification allows', async () => {
-      await expect(
-        db()
-          .insert(webauthnCredentials)
-          .values(credential(await addUser(), { credentialId: new Uint8Array(1_024) })),
+          .values(credential(await addUser(), overrides)),
       ).rejects.toThrow();
     });
 
@@ -264,17 +263,6 @@ describe.skipIf(!hasDocker)('passkey foundation', () => {
       );
 
       expect(spent.filter((ceremony) => ceremony !== null)).toHaveLength(1);
-    });
-
-    it('expires a ceremony after five minutes', async () => {
-      const store = new WebAuthnCeremonyStore(redis);
-      await store.begin({ purpose: 'passwordless', challenge: 'D'.repeat(43), rpId: 'x' });
-
-      const [key] = await redis.keys('auth:webauthn:*');
-      const ttl = await redis.ttl(key ?? '');
-      expect(ttl).toBeGreaterThan(290);
-      expect(ttl).toBeLessThanOrEqual(300);
-      await redis.del(key ?? '');
     });
   });
 

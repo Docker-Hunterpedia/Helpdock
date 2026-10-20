@@ -6,6 +6,8 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
   type RegistrationResponseJSON,
+  type VerifiedAuthenticationResponse,
+  type VerifiedRegistrationResponse,
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
@@ -177,6 +179,115 @@ const descriptorsOf = (credentials: readonly PasskeyDescriptor[]) =>
     transports: credential.transports.filter((transport) => TRANSPORTS.has(transport)),
   }));
 
+type RegistrationInfo = Extract<
+  VerifiedRegistrationResponse,
+  { verified: true }
+>['registrationInfo'];
+
+/** The library's verdict on a new credential, or null when it refuses (it throws to refuse). */
+const verifyAttestation = async (
+  response: RegistrationResponseJSON,
+  ceremony: WebAuthnCeremony,
+  relyingParty: RelyingParty,
+): Promise<RegistrationInfo | null> => {
+  try {
+    const verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: ceremony.challenge,
+      expectedOrigin: relyingParty.origin,
+      expectedRPID: relyingParty.id,
+      requireUserVerification: false,
+      supportedAlgorithmIDs: [...SUPPORTED_ALGORITHM_IDS],
+    });
+    return verification.verified ? verification.registrationInfo : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * What is stored for a verified credential, or null for one this install
+ * will not hold. There is no check on `fmt`: asking for `none` lets the
+ * browser strip the statement, but some authenticators still send a `packed`
+ * self-attestation, which the library verifies like any other.
+ */
+const toRegisteredPasskey = (
+  info: RegistrationInfo,
+  response: RegistrationResponseJSON,
+): RegisteredPasskey | null => {
+  const credentialId = Buffer.from(info.credential.id, 'base64url');
+  const algorithm = decodeCredentialPublicKey(info.credential.publicKey).get(cose.COSEKEYS.alg);
+  if (
+    credentialId.length === 0 ||
+    credentialId.length > CREDENTIAL_ID_MAX_BYTES ||
+    algorithm === undefined ||
+    !SUPPORTED_ALGORITHM_IDS.includes(algorithm)
+  ) {
+    return null;
+  }
+
+  return {
+    credentialId: new Uint8Array(credentialId),
+    publicKey: info.credential.publicKey,
+    algorithm,
+    signCount: info.credential.counter,
+    transports: (response.response.transports ?? []).filter((transport) =>
+      TRANSPORTS.has(transport),
+    ),
+    aaguid: info.aaguid === NO_AAGUID ? null : info.aaguid,
+    discoverable: response.clientExtensionResults.credProps?.rk ?? null,
+    backupEligible: info.credentialDeviceType === 'multiDevice',
+    backedUp: info.credentialBackedUp,
+    userVerified: info.userVerified,
+  };
+};
+
+/** The stored credential an assertion names, or undefined for an id no credential can have. */
+const lookUpCredential = async (
+  rawId: string,
+  findCredential: (credentialId: Uint8Array) => Promise<StoredPasskey | undefined>,
+): Promise<StoredPasskey | undefined> => {
+  const credentialId = Buffer.from(rawId, 'base64url');
+  if (credentialId.length === 0 || credentialId.length > CREDENTIAL_ID_MAX_BYTES) {
+    return undefined;
+  }
+  return findCredential(new Uint8Array(credentialId));
+};
+
+/**
+ * The library's verdict on the challenge, origin, RP ID, flags and signature,
+ * or null when it refuses. The library reports every refusal, malformed
+ * input included, by throwing; on an unauthenticated endpoint each one gets
+ * the same answer, so the error carries nothing the caller could use.
+ */
+const verifySignature = async (input: {
+  readonly response: AuthenticationResponseJSON;
+  readonly ceremony: WebAuthnCeremony;
+  readonly relyingParty: RelyingParty;
+  readonly credential: StoredPasskey;
+  readonly requireUserVerification: boolean;
+}): Promise<VerifiedAuthenticationResponse['authenticationInfo'] | null> => {
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: input.response,
+      expectedChallenge: input.ceremony.challenge,
+      expectedOrigin: input.relyingParty.origin,
+      expectedRPID: input.relyingParty.id,
+      credential: {
+        id: toBase64Url(input.credential.credentialId),
+        publicKey: new Uint8Array(input.credential.publicKey),
+        // The counter rule is the caller's, applied after this check.
+        counter: 0,
+        transports: input.credential.transports.filter((transport) => TRANSPORTS.has(transport)),
+      },
+      requireUserVerification: input.requireUserVerification,
+    });
+    return verification.verified ? verification.authenticationInfo : null;
+  } catch {
+    return null;
+  }
+};
+
 export class WebAuthnService {
   readonly #appUrl: string;
   readonly #ceremonies: WebAuthnCeremonyStore;
@@ -256,52 +367,12 @@ export class WebAuthnService {
     const ceremony = await this.#spend(input.ceremonyId, 'register', input.binding);
     const relyingParty = await this.#currentRelyingParty(ceremony);
 
-    let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
-    try {
-      verification = await verifyRegistrationResponse({
-        response: input.response,
-        expectedChallenge: ceremony.challenge,
-        expectedOrigin: relyingParty.origin,
-        expectedRPID: relyingParty.id,
-        requireUserVerification: false,
-        supportedAlgorithmIDs: [...SUPPORTED_ALGORITHM_IDS],
-      });
-    } catch {
+    const info = await verifyAttestation(input.response, ceremony, relyingParty);
+    const registered = info === null ? null : toRegisteredPasskey(info, input.response);
+    if (registered === null) {
       throw new AuthFailure('invalid-credentials');
     }
-    if (!verification.verified) {
-      throw new AuthFailure('invalid-credentials');
-    }
-
-    const info = verification.registrationInfo;
-    const credentialId = Buffer.from(info.credential.id, 'base64url');
-    const algorithm = decodeCredentialPublicKey(info.credential.publicKey).get(cose.COSEKEYS.alg);
-    // No check on `fmt`: asking for `none` lets the browser strip the
-    // statement, but some authenticators still send a `packed`
-    // self-attestation, which the library verifies like any other.
-    if (
-      credentialId.length === 0 ||
-      credentialId.length > CREDENTIAL_ID_MAX_BYTES ||
-      algorithm === undefined ||
-      !SUPPORTED_ALGORITHM_IDS.includes(algorithm)
-    ) {
-      throw new AuthFailure('invalid-credentials');
-    }
-
-    return {
-      credentialId: new Uint8Array(credentialId),
-      publicKey: info.credential.publicKey,
-      algorithm,
-      signCount: info.credential.counter,
-      transports: (input.response.response.transports ?? []).filter((transport) =>
-        TRANSPORTS.has(transport),
-      ),
-      aaguid: info.aaguid === NO_AAGUID ? null : info.aaguid,
-      discoverable: input.response.clientExtensionResults.credProps?.rk ?? null,
-      backupEligible: info.credentialDeviceType === 'multiDevice',
-      backedUp: info.credentialBackedUp,
-      userVerified: info.userVerified,
-    };
+    return registered;
   }
 
   /**
@@ -350,12 +421,7 @@ export class WebAuthnService {
     const ceremony = await this.#spend(input.ceremonyId, input.purpose, input.binding ?? {});
     const relyingParty = await this.#currentRelyingParty(ceremony);
 
-    const rawId = typeof input.response.rawId === 'string' ? input.response.rawId : '';
-    const credentialId = Buffer.from(rawId, 'base64url');
-    const credential =
-      credentialId.length === 0 || credentialId.length > CREDENTIAL_ID_MAX_BYTES
-        ? undefined
-        : await input.findCredential(new Uint8Array(credentialId));
+    const credential = await lookUpCredential(input.response.rawId, input.findCredential);
     if (credential === undefined) {
       return { ok: false, reason: 'unknown-credential', userId: null };
     }
@@ -363,42 +429,28 @@ export class WebAuthnService {
       return { ok: false, reason: 'wrong-user', userId: ceremony.userId };
     }
 
-    let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
-    try {
-      verification = await verifyAuthenticationResponse({
-        response: input.response,
-        expectedChallenge: ceremony.challenge,
-        expectedOrigin: relyingParty.origin,
-        expectedRPID: relyingParty.id,
-        credential: {
-          id: toBase64Url(credential.credentialId),
-          publicKey: new Uint8Array(credential.publicKey),
-          // The counter rule is applied below, once the signature is known to
-          // be good: a forged assertion must not be able to raise a
-          // counter-regression alarm.
-          counter: 0,
-          transports: credential.transports.filter((transport) => TRANSPORTS.has(transport)),
-        },
-        requireUserVerification: USER_VERIFICATION[input.purpose] === 'required',
-      });
-    } catch {
+    const signed = await verifySignature({
+      response: input.response,
+      ceremony,
+      relyingParty,
+      credential,
+      requireUserVerification: USER_VERIFICATION[input.purpose] === 'required',
+    });
+    if (signed === null) {
       return { ok: false, reason: 'bad-assertion', userId: credential.userId };
     }
-    if (!verification.verified) {
-      return { ok: false, reason: 'bad-assertion', userId: credential.userId };
-    }
-
-    const { newCounter, userVerified, credentialBackedUp } = verification.authenticationInfo;
-    if (counterRegressed(credential.signCount, newCounter)) {
+    // Applied only now that the signature is good: a forged assertion must not
+    // be able to raise a counter-regression alarm.
+    if (counterRegressed(credential.signCount, signed.newCounter)) {
       return { ok: false, reason: 'counter-regressed', userId: credential.userId };
     }
 
     return {
       ok: true,
       credential,
-      newSignCount: newCounter,
-      userVerified,
-      backedUp: credentialBackedUp,
+      newSignCount: signed.newCounter,
+      userVerified: signed.userVerified,
+      backedUp: signed.credentialBackedUp,
     };
   }
 

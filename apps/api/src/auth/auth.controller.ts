@@ -382,6 +382,18 @@ export class AuthController {
       await this.#redirect(reply, '/me/security', { connected: known.data });
       return;
     }
+    if (outcome.kind === 'invite-mismatch') {
+      // The provider account's address goes in the fragment, which no server
+      // or proxy log receives; the invite screen reads it to say which
+      // account answered.
+      await this.#redirect(
+        reply,
+        '/oauth/callback',
+        { error: 'oauth-invite-mismatch', provider: known.data },
+        new URLSearchParams({ account: outcome.account }).toString(),
+      );
+      return;
+    }
     await this.#redirectFor(outcome, reply, '/oauth/callback', { provider });
   }
 
@@ -587,10 +599,14 @@ export class AuthController {
     reply: FastifyReply,
     path: string,
     params: Record<string, string>,
+    fragment?: string,
   ): Promise<void> {
     const url = new URL(path, this.#env.APP_URL);
     for (const [key, value] of Object.entries(params)) {
       url.searchParams.set(key, value);
+    }
+    if (fragment !== undefined) {
+      url.hash = fragment;
     }
 
     await reply.redirect(url.toString(), HttpStatus.FOUND);

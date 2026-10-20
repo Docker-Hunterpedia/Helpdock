@@ -8,7 +8,10 @@ export interface OauthLink {
   readonly provider: OauthProvider;
   readonly subject: string;
   readonly email: string;
+  readonly via: OauthLinkedVia;
 }
+
+export type OauthLinkedVia = NonNullable<UserOauthIdentity['linkedVia']>;
 
 /**
  * `user_oauth_identities`, read and written by the sign-in path before any
@@ -72,6 +75,9 @@ export class OauthIdentityRepository {
         provider: link.provider,
         providerSubject: link.subject,
         emailAtLink: link.email,
+        linkedVia: link.via,
+        // A link made by signing in, or by accepting an invitation, is also its first use.
+        lastUsedAt: link.via === 'connect' ? null : new Date(),
       })
       .onConflictDoNothing()
       .returning({ id: userOauthIdentities.id });
@@ -84,14 +90,31 @@ export class OauthIdentityRepository {
       : 'conflict';
   }
 
-  /** Whether there was a link to remove. */
-  async unlink(userId: string, provider: OauthProvider, tx?: Queryable): Promise<boolean> {
-    const removed = await (tx ?? this.#db)
+  /** Records a sign-in through this provider account, for the person's list of sign-in methods. */
+  async markUsed(provider: OauthProvider, subject: string, tx?: Queryable): Promise<void> {
+    await (tx ?? this.#db)
+      .update(userOauthIdentities)
+      .set({ lastUsedAt: new Date() })
+      .where(
+        and(
+          eq(userOauthIdentities.provider, provider),
+          eq(userOauthIdentities.providerSubject, subject),
+        ),
+      );
+  }
+
+  /** The address the removed link was made with, or undefined when there was none to remove. */
+  async unlink(
+    userId: string,
+    provider: OauthProvider,
+    tx?: Queryable,
+  ): Promise<{ readonly emailAtLink: string } | undefined> {
+    const [removed] = await (tx ?? this.#db)
       .delete(userOauthIdentities)
       .where(
         and(eq(userOauthIdentities.userId, userId), eq(userOauthIdentities.provider, provider)),
       )
-      .returning({ id: userOauthIdentities.id });
-    return removed.length > 0;
+      .returning({ emailAtLink: userOauthIdentities.emailAtLink });
+    return removed;
   }
 }

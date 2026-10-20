@@ -1,6 +1,6 @@
 import type { EmailMessage, EmailSender } from '@helpdock/channels';
 import { decryptSecret, type Keyring, SecretDecryptionError } from '@helpdock/config';
-import { type Db, type DbTransaction, type User, users } from '@helpdock/db';
+import { brands, type Db, type DbTransaction, type User, users } from '@helpdock/db';
 import {
   type AuthEmailPayload,
   authEmailJob,
@@ -15,6 +15,7 @@ import { type Job, UnrecoverableError } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { authEmailEventSchema } from './auth-email.js';
 import { renderAuthEmail } from './email-templates.js';
+import { renderSecurityNoticeEmail } from './security-notice-email.js';
 
 /**
  * The worker half of auth email. The `auth.email_requested` outbox handler
@@ -57,21 +58,48 @@ export const createAuthEmailEventHandler =
     await queue.add(authEmailJobId(outboxId), { ...event, brandId, sourceOutboxId: outboxId });
   };
 
-/** The message one job sends. Also what the integration suites read a link back out of. */
+/**
+ * The message one job sends. Also what the integration suites read a link back
+ * out of. `timeZone` is the routing brand's, which a security notice tells its
+ * "When" in: a staff account has no zone of its own.
+ */
 export const composeAuthEmail = (
   payload: Pick<AuthEmailPayload, 'kind' | 'urlEncrypted' | 'expiresIn' | 'values'>,
   recipient: Pick<User, 'email' | 'name' | 'locale'>,
   keyring: Keyring,
-): EmailMessage =>
-  renderAuthEmail({
+  timeZone?: string,
+): EmailMessage => {
+  const url = decryptSecret(payload.urlEncrypted, keyring);
+  if (payload.kind === 'securityChange') {
+    return renderSecurityNoticeEmail({
+      to: recipient.email,
+      name: recipient.name,
+      url,
+      locale: recipient.locale,
+      values: payload.values ?? {},
+      ...(timeZone === undefined ? {} : { timeZone }),
+    });
+  }
+  return renderAuthEmail({
     kind: payload.kind,
     to: recipient.email,
     name: recipient.name,
-    url: decryptSecret(payload.urlEncrypted, keyring),
+    url,
     locale: recipient.locale,
     ...(payload.expiresIn === undefined ? {} : { expiresIn: payload.expiresIn }),
     ...(payload.values === undefined ? {} : { values: payload.values }),
   });
+};
+
+const timeZoneOf = async (tx: DbTransaction, brandId: string): Promise<string | undefined> => {
+  const [row] = await tx
+    .select({ timezone: brands.timezone })
+    .from(brands)
+    .where(eq(brands.id, brandId))
+    .limit(1);
+
+  return row?.timezone;
+};
 
 const recipientOf = async (tx: DbTransaction, userId: string): Promise<User | undefined> => {
   const [row] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -98,7 +126,12 @@ export const createAuthEmailHandler =
 
     let message: EmailMessage;
     try {
-      message = composeAuthEmail(payload, recipient, keyring);
+      message = composeAuthEmail(
+        payload,
+        recipient,
+        keyring,
+        payload.kind === 'securityChange' ? await timeZoneOf(tx, payload.brandId) : undefined,
+      );
     } catch (error) {
       if (error instanceof SecretDecryptionError) {
         // A master key that changed without the rotation procedure. No retry

@@ -1,6 +1,7 @@
 import type {
   AuthMethods,
   InviteAcceptRequest,
+  InviteProviderStartRequest,
   MagicLinkPreview,
   OauthIdentity,
   OauthIdentityList,
@@ -30,6 +31,8 @@ import { type AuthApi, AuthError } from './api.js';
  */
 
 export const MOCK_EMAIL = 'lina@helpdock.com';
+/** The GitHub account the fixture answers an invitation with: not the invited address. */
+export const MOCK_INVITE_MISMATCH_ACCOUNT = 'nour.s@users.noreply.github.com';
 export const MOCK_PASSWORD = 'correct horse';
 export const MOCK_TOTP_CODE = '482913';
 export const MOCK_RECOVERY_CODE = 'RC-1234-5678';
@@ -248,7 +251,12 @@ export class MockAuthApi implements AuthApi {
     if (this.#identities.some((identity) => identity.provider === provider)) {
       throw new AuthError('oauth-identity-conflict');
     }
-    this.#identities.push({ provider, email: MOCK_EMAIL, connectedAt: new Date().toISOString() });
+    this.#identities.push({
+      provider,
+      email: MOCK_EMAIL,
+      connectedAt: new Date().toISOString(),
+      lastUsedAt: null,
+    });
 
     return `/me/security?connected=${provider}`;
   }
@@ -348,6 +356,28 @@ export class MockAuthApi implements AuthApi {
     this.#challengeCounter += 1;
 
     return { kind: 'totp-enrolment-required', challengeId: `mock-enrol-${this.#challengeCounter}` };
+  }
+
+  /**
+   * Answers the page the real callback would redirect to. Google's account is
+   * the invited address's, so it accepts and goes on to enrolment as a
+   * password would; GitHub's is another address, which is the mismatch state.
+   */
+  async startInviteOauth(
+    token: string,
+    provider: OauthProvider,
+    _request: InviteProviderStartRequest,
+  ): Promise<string> {
+    if (this.#staff?.inviteFor(token) === undefined) {
+      throw new AuthError('challenge-expired');
+    }
+    if (provider === 'github') {
+      return `/oauth/callback?error=oauth-invite-mismatch&provider=github#account=${encodeURIComponent(MOCK_INVITE_MISMATCH_ACCOUNT)}`;
+    }
+
+    this.#staff?.spendInvite(token);
+    this.#challengeCounter += 1;
+    return `/oauth/callback?enrol=mock-enrol-${this.#challengeCounter}&provider=${provider}`;
   }
 
   async me(): Promise<Session | null> {

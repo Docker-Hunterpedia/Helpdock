@@ -27,7 +27,13 @@
     "replace": "استبدال",
     "replaceLabel": "استبدال سر عميل {{provider}}",
     "secretKept": "محفوظ. لا تُعرض الأسرار مرة أخرى بعد الحفظ.",
-    "secretSaved": "حُفظ في {{date}} بواسطة {{name}}. لا تُعرض الأسرار مرة أخرى بعد الحفظ."
+    "secretSaved": "حُفظ في {{date}} بواسطة {{name}}. لا تُعرض الأسرار مرة أخرى بعد الحفظ.",
+    "allowedDomains": "نطاقات Workspace المسموح بها",
+    "allowedDomainsPlaceholder": "أضف نطاقًا",
+    "allowedDomainsHint": "فارغ: أي حساب Google يضمنه Google (حساب Workspace على نطاقه، أو حساب Gmail). مع نطاقات: حسابات Workspace على هذه النطاقات فقط. اضغط Enter بعد كل نطاق.",
+    "allowedDomainsInvalid": "أدخل نطاقًا مثل example.com، دون @.",
+    "allowedDomainsConsumer": "Gmail ليس نطاق Workspace. اترك القائمة فارغة للسماح بحسابات Gmail.",
+    "allowedDomainsTooMany": "أدرج {{count}} نطاقًا على الأكثر."
   },
   "status": {
     "enabled": "مفعّل",

@@ -1,3 +1,4 @@
+import { MOCK_INVITE_MISMATCH_ACCOUNT } from '../src/auth/mock-api.js';
 import {
   MOCK_ENROLMENT_CODE,
   MOCK_EXPIRED_INVITE_TOKEN,
@@ -50,6 +51,47 @@ test.describe('accepting an invitation', () => {
     await expect(
       page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
     ).toBeVisible();
+  });
+
+  test('accepts with a provider whose account is the invited address', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.goto(`/invite/${MOCK_INVITE_TOKEN}`);
+
+    await expect(page.getByRole('group', { name: t('auth:invite.providers.label') })).toBeVisible();
+    await page.getByLabel(t('auth:invite.nameLabel')).fill('Karim Aziz');
+    await page.getByRole('button', { name: t('auth:signIn.google') }).click();
+
+    await expect(
+      page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
+    ).toBeVisible();
+  });
+
+  test('comes back with the mismatch when the provider account is another address', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.goto(`/invite/${MOCK_INVITE_TOKEN}`);
+
+    await page.getByRole('button', { name: t('auth:signIn.github') }).click();
+    await expect(page.getByText(t('auth:invite.nameRequired'))).toBeVisible();
+
+    await page.getByLabel(t('auth:invite.nameLabel')).fill('Karim Aziz');
+    await page.getByRole('button', { name: t('auth:signIn.github') }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/invite/${MOCK_INVITE_TOKEN}$`));
+    await expect(page.getByRole('status').or(page.getByRole('alert'))).toContainText(
+      MOCK_INVITE_MISMATCH_ACCOUNT,
+    );
+    await expect(page.getByLabel(t('auth:invite.passwordLabel'))).toBeHidden();
+
+    await page.getByRole('button', { name: t('auth:invite.providers.choosePassword') }).click();
+
+    await expect(page.getByLabel(t('auth:invite.nameLabel'))).toHaveValue('Karim Aziz');
+    await expect(page.getByLabel(t('auth:invite.passwordLabel'))).toBeVisible();
   });
 
   test('says plainly when the link has run out, and offers the way back', async ({

@@ -1,15 +1,24 @@
 import type { Env } from '@helpdock/config';
-import type { PublicInvite, SignInResponse } from '@helpdock/schemas';
-import { signInResponseSchema } from '@helpdock/schemas';
+import type { OauthConnectStart, PublicInvite, SignInResponse } from '@helpdock/schemas';
+import { oauthProviderSchema, signInResponseSchema } from '@helpdock/schemas';
 import { Body, Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import type { SignInOutcome } from '../auth/auth.service.js';
+import { AuthFailure } from '../auth/auth-failure.js';
+import { OauthConnectStartDto } from '../auth/dto.js';
+import { OAUTH_STATE_TTL_SECONDS } from '../auth/oauth/oauth.service.js';
 import { Public } from '../auth/route-declaration.js';
-import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
+import { encodeRefreshCookie, oauthNonceCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { requireRequestContext } from '../context/request-context.js';
 import { ENV } from '../runtime/tokens.js';
-import { InviteAcceptRequestDto, InviteTokenParamDto, PublicInviteDto } from './dto.js';
+import {
+  InviteAcceptRequestDto,
+  InviteProviderParamDto,
+  InviteProviderStartRequestDto,
+  InviteTokenParamDto,
+  PublicInviteDto,
+} from './dto.js';
 import { InviteService } from './invite.service.js';
 
 /**
@@ -67,6 +76,41 @@ export class InvitesController {
     });
 
     return this.#answer(outcome, reply);
+  }
+
+  /**
+   * Starts accepting the invitation with a provider (M18-07). It answers the
+   * provider URL rather than redirecting, as connecting from the security page
+   * does, and sets the `hd_oauth` cookie the callback checks. The callback
+   * (`AuthController`) finishes the acceptance.
+   */
+  @Post(':token/oauth/:provider')
+  @Public()
+  @ZodSerializerDto(OauthConnectStartDto)
+  async startWithProvider(
+    @Param(new ZodValidationPipe(InviteProviderParamDto)) {
+      token,
+      provider,
+    }: InviteProviderParamDto,
+    @Body(new ZodValidationPipe(InviteProviderStartRequestDto)) body: InviteProviderStartRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<OauthConnectStart> {
+    requireRequestContext().path = '/api/auth/invites/:token/oauth/:provider';
+    const known = oauthProviderSchema.safeParse(provider);
+    if (!known.success) {
+      throw new AuthFailure('unavailable');
+    }
+
+    const { url, browserNonce } = await this.#invites.startWithProvider(
+      token,
+      known.data,
+      body,
+      request.ip,
+    );
+    const nonce = oauthNonceCookie(this.#env.APP_URL, OAUTH_STATE_TTL_SECONDS, known.data);
+    reply.setCookie(nonce.name, browserNonce, nonce.attributes);
+    return { url };
   }
 
   /**

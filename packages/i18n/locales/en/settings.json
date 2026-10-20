@@ -27,7 +27,13 @@
     "replace": "Replace",
     "replaceLabel": "Replace the {{provider}} client secret",
     "secretKept": "Saved. Secrets are never shown again after saving.",
-    "secretSaved": "Saved {{date}} by {{name}}. Secrets are never shown again after saving."
+    "secretSaved": "Saved {{date}} by {{name}}. Secrets are never shown again after saving.",
+    "allowedDomains": "Allowed Workspace domains",
+    "allowedDomainsPlaceholder": "Add a domain",
+    "allowedDomainsHint": "Empty: any Google account Google vouches for (Workspace on its own domain, or @gmail.com). With domains: only Workspace accounts on these domains. Press Enter after each one.",
+    "allowedDomainsInvalid": "Enter a domain like example.com, without @.",
+    "allowedDomainsConsumer": "Gmail is not a Workspace domain. Leave the list empty to allow Gmail accounts.",
+    "allowedDomainsTooMany": "List at most {{count}} domains."
   },
   "status": {
     "enabled": "Enabled",

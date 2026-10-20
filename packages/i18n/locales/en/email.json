@@ -33,16 +33,32 @@
   "securityChange": {
     "subject": "Your {{appName}} sign-in details changed",
     "heading": "Your sign-in details changed",
+    "eyebrow": "Security",
     "body_password": "The password of {{email}} was changed from its security page. Every other browser was signed out.",
     "body_passwordReset": "The password of {{email}} was reset with an emailed link. Every browser was signed out.",
     "body_twoFactorEnabled": "Two-factor sign-in was turned on for {{email}}.",
     "body_twoFactorDisabled": "Two-factor sign-in was turned off for {{email}}. Signing in now needs only the password.",
     "body_recoveryCodes": "New recovery codes were made for {{email}}. The old ones no longer work.",
-    "body_oauthConnected": "A {{provider}} account was connected to {{email}}. It can now be used to sign in.",
-    "body_oauthDisconnected": "The {{provider}} account was disconnected from {{email}}. It can no longer be used to sign in.",
     "action": "Review your security page",
-    "expiry": "If this was you, there is nothing more to do.",
-    "ignore": "If it was not you, reset your password now and tell your administrator."
+    "warning": "If it was not you, reset your password now and tell your administrator.",
+    "when": "When",
+    "footer": "Sent because a security change happened on your account at {{host}}. Security emails can't be turned off.",
+    "oauthConnected": {
+      "subject": "{{provider}} was connected to your account",
+      "eyebrow": "Security · sign-in methods",
+      "heading": "You can now sign in with {{provider}}",
+      "body": "The {{provider}} account {{account}} is connected. You can disconnect it from the same page.",
+      "warning": "If this wasn't you, disconnect it and change your password.",
+      "action": "Review sign-in methods"
+    },
+    "oauthDisconnected": {
+      "subject": "{{provider}} was disconnected from your account",
+      "eyebrow": "Security · sign-in methods",
+      "heading": "You can no longer sign in with {{provider}}",
+      "body": "The {{provider}} account {{account}} is no longer connected. You can connect it again from the same page.",
+      "warning": "If this wasn't you, sign in and check your security page now.",
+      "action": "Review sign-in methods"
+    }
   },
   "smtpTest": {
     "subject": "{{appName}} test message",

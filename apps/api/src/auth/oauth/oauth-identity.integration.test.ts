@@ -26,6 +26,7 @@ import {
   type FakeGoogle,
   fakeGithubFetch,
 } from '../../testing/fake-oauth-providers.js';
+import { EmailTokenStore } from '../email-token.store.js';
 import { PasswordHasher } from '../password.js';
 import { oauthNonceCookie } from '../session/cookies.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth.service.js';
@@ -188,6 +189,46 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
     );
   };
 
+  /** An invited account of the seeded brand and the token its invitation link carries. */
+  const addInvited = async (address: string): Promise<{ id: string; token: string }> => {
+    const id = uuidv7();
+    await runtime.db.insert(users).values({ id, email: address, name: address, status: 'invited' });
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .insert(userBrandRoles)
+        .values({ userId: id, brandId: seeded.brandId, role: 'agent', departmentIds: [] }),
+    );
+    const token = await new EmailTokenStore(runtime.redis).issue(
+      {
+        purpose: 'invite',
+        userId: id,
+        email: address,
+        brandId: seeded.brandId,
+        role: 'agent',
+        departmentIds: [],
+        issuedAt: Date.now(),
+      },
+      3_600,
+    );
+    return { id, token };
+  };
+
+  /** Accepting an invitation with a provider: the invite screen's start, then the callback. */
+  const acceptWith = async (
+    provider: OauthProvider,
+    token: string,
+    providerFetch: ReturnType<typeof vi.fn>,
+  ) => {
+    const started = await post(`/api/auth/invites/${token}/oauth/${provider}`, {
+      name: 'Nour Saleh',
+      locale: 'ar',
+    });
+    expect(started.statusCode).toBe(201);
+    const nonce =
+      started.cookies.find((cookie) => cookie.name === nonceCookieOf(provider))?.value ?? '';
+    return { started, url: (started.json() as { url: string }).url, nonce, providerFetch };
+  };
+
   const googleAs = async (claims: Record<string, unknown>) =>
     google.fetch(await google.idToken({ email_verified: true, ...claims }));
 
@@ -220,7 +261,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
   const securityNotices = async (address: string) =>
     (await email.all()).filter(
       (message) =>
-        message.to.address === address && message.subject.includes('sign-in details changed'),
+        message.to.address === address && message.text.includes(`${APP_URL}/me/security`),
     );
 
   beforeAll(async () => {
@@ -282,7 +323,9 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         meta: { provider: 'google', via: 'sign-in' },
       });
       const [notice] = await securityNotices(lina.email);
-      expect(notice?.text).toContain('A Google account was connected to lina@acme.test.');
+      expect(notice?.subject).toBe('Google was connected to your account');
+      expect(notice?.text).toContain('The Google account lina@acme.test is connected.');
+      expect(notice?.text).toMatch(/When: \d{1,2} \w{3} \d{4}, \d{2}:\d{2} \(/);
     });
 
     it('binds a Gmail address', async () => {
@@ -366,6 +409,218 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
     });
   });
 
+  describe('the allowed Workspace domains (oauth.google.allowedDomains)', () => {
+    const allow = (domains: string[]) =>
+      runtime.settings.set('oauth.google.allowedDomains', domains, { updatedBy: 'test' });
+
+    afterEach(async () => {
+      await allow([]);
+    });
+
+    it('signs in a listed domain and refuses Gmail with its own code', async () => {
+      const kamal = await addAgent('kamal@listed.test');
+      const lama = await addAgent('lama.helpdock@gmail.com');
+      await allow(['listed.test']);
+
+      const listed = await buttonSignIn(
+        'google',
+        await googleAs({ sub: 'g-kamal', email: kamal.email, hd: 'listed.test' }),
+      );
+      const gmail = await buttonSignIn(
+        'google',
+        await googleAs({ sub: 'g-lama', email: lama.email }),
+      );
+
+      expect(listed.searchParams.get('code')).not.toBeNull();
+      expect(gmail.pathname).toBe('/oauth/callback');
+      expect(gmail.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+      expect(await identitiesOf(lama.id)).toEqual([]);
+    });
+
+    it('turns away an account bound before its domain left the list', async () => {
+      const majd = await addAgent('majd@listed.test');
+      const majdGoogle = await googleAs({ sub: 'g-majd', email: majd.email, hd: 'listed.test' });
+      await buttonSignIn('google', majdGoogle);
+      await allow(['other.test']);
+
+      const landed = await buttonSignIn('google', majdGoogle);
+
+      expect(landed.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+      expect(await authRowsOf(majd.id)).toContainEqual({
+        action: 'auth.sign_in.failed',
+        actorType: 'system',
+        meta: { method: 'oauth', provider: 'google', reason: 'domain-not-allowed' },
+      });
+    });
+  });
+
+  describe('accepting an invitation with a provider (M18-07)', () => {
+    const userRow = async (id: string) => {
+      const [row] = await runtime.db
+        .select({ status: users.status, passwordHash: users.passwordHash, name: users.name })
+        .from(users)
+        .where(eq(users.id, id));
+      return row;
+    };
+    const linkRow = async (id: string) => {
+      const [row] = await runtime.db
+        .select({
+          linkedVia: userOauthIdentities.linkedVia,
+          lastUsedAt: userOauthIdentities.lastUsedAt,
+        })
+        .from(userOauthIdentities)
+        .where(eq(userOauthIdentities.userId, id));
+      return row;
+    };
+
+    it('binds the provider account whose verified address is the invited one, with no password', async () => {
+      const nour = await addInvited('nour@acme.test');
+      const flow = await acceptWith(
+        'google',
+        nour.token,
+        await googleAs({ sub: 'g-nour-invited', email: 'nour@acme.test', hd: 'acme.test' }),
+      );
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, flow.providerFetch));
+
+      expect(landed.pathname).toBe('/oauth/callback');
+      expect(landed.searchParams.get('code')).not.toBeNull();
+      expect(await userRow(nour.id)).toEqual({
+        status: 'active',
+        passwordHash: null,
+        name: 'Nour Saleh',
+      });
+      expect(await identitiesOf(nour.id)).toEqual([
+        { provider: 'google', subject: 'g-nour-invited' },
+      ]);
+      expect(await linkRow(nour.id)).toEqual({ linkedVia: 'invite', lastUsedAt: expect.any(Date) });
+      expect(await authRowsOf(nour.id)).toContainEqual({
+        action: 'auth.oauth.linked',
+        actorType: 'staff',
+        meta: { provider: 'google', via: 'invite' },
+      });
+      // Spent: the link no longer opens, and a second acceptance has nothing to spend.
+      expect((await get(`/api/auth/invites/${nour.token}`)).statusCode).toBe(410);
+    });
+
+    it('takes any verified GitHub address that is the invited one', async () => {
+      const salma = await addInvited('salma@acme.test');
+      const github = fakeGithubFetch({
+        id: 6060,
+        email: 'salma.personal@elsewhere.test',
+        alsoVerified: ['salma@acme.test'],
+      });
+      const flow = await acceptWith('github', salma.token, github);
+
+      const landed = landing(await callback('github', flow.url, flow.nonce, github));
+
+      expect(landed.searchParams.get('code')).not.toBeNull();
+      expect(await identitiesOf(salma.id)).toEqual([{ provider: 'github', subject: '6060' }]);
+    });
+
+    it('refuses another address with the mismatch, and spends and creates nothing', async () => {
+      const omar = await addInvited('omar.invited@acme.test');
+      const github = fakeGithubFetch({ id: 7070, email: 'omar@elsewhere.test' });
+      const flow = await acceptWith('github', omar.token, github);
+
+      const landed = landing(await callback('github', flow.url, flow.nonce, github));
+
+      expect(landed.pathname).toBe('/oauth/callback');
+      expect(landed.searchParams.get('error')).toBe('oauth-invite-mismatch');
+      // The provider's address rides in the fragment, never in a logged query string.
+      expect(landed.searchParams.has('account')).toBe(false);
+      expect(new URLSearchParams(landed.hash.slice(1)).get('account')).toBe('omar@elsewhere.test');
+      expect(await userRow(omar.id)).toMatchObject({ status: 'invited' });
+      expect(await identitiesOf(omar.id)).toEqual([]);
+      expect((await get(`/api/auth/invites/${omar.token}`)).statusCode).toBe(200);
+    });
+
+    it('accepts an invitation once, however many provider round trips were started', async () => {
+      const rana = await addInvited('rana@acme.test');
+      const google = await googleAs({ sub: 'g-rana', email: 'rana@acme.test', hd: 'acme.test' });
+      // A second Google account on the same address, so the refusal is the spent
+      // invitation and not the already-bound provider account.
+      const other = await googleAs({ sub: 'g-rana-2', email: 'rana@acme.test', hd: 'acme.test' });
+      const first = await acceptWith('google', rana.token, google);
+      const second = await acceptWith('google', rana.token, other);
+
+      const won = landing(await callback('google', first.url, first.nonce, google));
+      const lost = landing(await callback('google', second.url, second.nonce, other));
+
+      expect(won.searchParams.get('code')).not.toBeNull();
+      expect(lost.searchParams.get('error')).toBe('invite-expired');
+      expect(lost.searchParams.get('code')).toBeNull();
+      expect(await identitiesOf(rana.id)).toEqual([{ provider: 'google', subject: 'g-rana' }]);
+    });
+
+    it('refuses a provider account bound to somebody else before the invitation is spent', async () => {
+      const holder = await addAgent('holder@acme.test');
+      const google = await googleAs({ sub: 'g-taken', email: holder.email, hd: 'acme.test' });
+      await buttonSignIn('google', google);
+      const invited = await addInvited('invited@acme.test');
+      const taken = await googleAs({ sub: 'g-taken', email: 'invited@acme.test', hd: 'acme.test' });
+      const flow = await acceptWith('google', invited.token, taken);
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, taken));
+
+      expect(landed.searchParams.get('error')).toBe('oauth-identity-conflict');
+      expect(await userRow(invited.id)).toMatchObject({ status: 'invited' });
+      expect((await get(`/api/auth/invites/${invited.token}`)).statusCode).toBe(200);
+      expect(await authRowsOf(holder.id)).toContainEqual({
+        action: 'auth.sign_in.failed',
+        actorType: 'system',
+        meta: { method: 'invite', provider: 'google', reason: 'identity-conflict' },
+      });
+    });
+
+    it('applies the allowed Workspace domains, and spends nothing', async () => {
+      const ali = await addInvited('ali@acme.test');
+      await runtime.settings.set('oauth.google.allowedDomains', ['listed.test'], {
+        updatedBy: 'test',
+      });
+      try {
+        const google = await googleAs({ sub: 'g-ali', email: 'ali@acme.test', hd: 'acme.test' });
+        const flow = await acceptWith('google', ali.token, google);
+
+        const landed = landing(await callback('google', flow.url, flow.nonce, google));
+
+        expect(landed.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+        expect(await userRow(ali.id)).toMatchObject({ status: 'invited' });
+        expect((await get(`/api/auth/invites/${ali.token}`)).statusCode).toBe(200);
+      } finally {
+        await runtime.settings.set('oauth.google.allowedDomains', [], { updatedBy: 'test' });
+      }
+    });
+
+    it('says the invitation expired when it was withdrawn in the round trip, and leaves no link', async () => {
+      const hadi = await addInvited('hadi@acme.test');
+      const google = await googleAs({ sub: 'g-hadi', email: 'hadi@acme.test', hd: 'acme.test' });
+      const flow = await acceptWith('google', hadi.token, google);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(userBrandRoles).where(eq(userBrandRoles.userId, hadi.id)),
+      );
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, google));
+
+      expect(landed.searchParams.get('error')).toBe('invite-expired');
+      expect(await userRow(hadi.id)).toMatchObject({ status: 'invited' });
+      expect(await identitiesOf(hadi.id)).toEqual([]);
+      // The link audit is written after the acceptance commits, so a rollback leaves none.
+      expect((await authRowsOf(hadi.id)).map((row) => row.action)).not.toContain(
+        'auth.oauth.linked',
+      );
+    });
+
+    it('refuses to start for a link that is not a live invitation', async () => {
+      const response = await post('/api/auth/invites/not-a-real-token/oauth/google', {
+        name: 'Nour',
+        locale: 'en',
+      });
+
+      expect(response.statusCode).toBe(410);
+    });
+  });
+
   describe('connecting from a session', () => {
     it('reconnects GitHub behind a step-up, signs in by it, and disconnects it again', async () => {
       const dina = await addAgent('dina@acme.test');
@@ -388,7 +643,13 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
       expect(signedIn.searchParams.get('code')).not.toBeNull();
       expect((await get('/api/auth/oauth/identities', token)).json()).toEqual({
         identities: [
-          { provider: 'github', email: 'dina-old@acme.test', connectedAt: expect.any(String) },
+          {
+            provider: 'github',
+            email: 'dina-old@acme.test',
+            connectedAt: expect.any(String),
+            // Signed in with once, just above.
+            lastUsedAt: expect.any(String),
+          },
         ],
         passwordSet: true,
       });
@@ -416,8 +677,8 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         meta: { provider: 'github', via: 'connect' },
       });
       expect((await securityNotices(dina.email)).map((notice) => notice.text)).toEqual([
-        expect.stringContaining('A GitHub account was connected to dina@acme.test.'),
-        expect.stringContaining('The GitHub account was disconnected from dina@acme.test.'),
+        expect.stringContaining('The GitHub account dina-old@acme.test is connected.'),
+        expect.stringContaining('The GitHub account dina-old@acme.test is no longer connected.'),
       ]);
     });
 

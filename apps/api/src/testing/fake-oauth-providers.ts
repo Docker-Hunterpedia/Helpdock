@@ -46,8 +46,11 @@ export const createFakeGoogle = async (): Promise<FakeGoogle> => {
 
 export interface FakeGithubAccount {
   readonly id: number;
+  /** The verified primary address. */
   readonly email: string;
   readonly login?: string;
+  /** More verified, non-primary addresses on the account. */
+  readonly alsoVerified?: readonly string[];
 }
 
 /** A `fetch` that answers GitHub's token, emails and user endpoints for one account. */
@@ -55,6 +58,7 @@ export const fakeGithubFetch = ({
   id,
   email,
   login = 'octocat',
+  alsoVerified = [],
 }: FakeGithubAccount): ReturnType<typeof vi.fn> =>
   vi.fn(async (url: string | URL) => {
     const target = String(url);
@@ -62,7 +66,12 @@ export const fakeGithubFetch = ({
       return new Response(JSON.stringify({ access_token: 'gho_test' }));
     }
     if (target === GITHUB_IDENTITY.emailsUrl) {
-      return new Response(JSON.stringify([{ email, primary: true, verified: true }]));
+      return new Response(
+        JSON.stringify([
+          { email, primary: true, verified: true },
+          ...alsoVerified.map((other) => ({ email: other, primary: false, verified: true })),
+        ]),
+      );
     }
     if (target === GITHUB_IDENTITY.userUrl) {
       return new Response(JSON.stringify({ id, name: null, login }));

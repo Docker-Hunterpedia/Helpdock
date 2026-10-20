@@ -222,7 +222,7 @@ export class StaffRepository {
       name,
       locale,
       passwordHash,
-    }: { readonly name: string; readonly locale: Locale; readonly passwordHash: string },
+    }: { readonly name: string; readonly locale: Locale; readonly passwordHash: string | null },
   ): Promise<boolean> {
     const updated = await tx
       .update(users)

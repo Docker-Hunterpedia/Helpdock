@@ -38,6 +38,25 @@ export const googleIsAuthoritative = ({
   return hostedDomain?.toLowerCase() === domain || GOOGLE_MAIL_DOMAINS.has(domain);
 };
 
+/**
+ * Whether the install's `oauth.google.allowedDomains` lets this Google account
+ * in. An empty list allows every account; a list allows only managed
+ * Workspace accounts whose `hd` claim is one of its domains, so a Gmail or
+ * other consumer account (no `hd`) is refused. The check is on `hd`, which
+ * Google asserts, not on the address's domain, which a consumer account can
+ * borrow. It applies to a bound account too: narrowing the list is how an
+ * operator turns away accounts linked before.
+ */
+export const googleDomainAllowed = ({
+  hostedDomain,
+  allowedDomains,
+}: {
+  readonly hostedDomain: string | undefined;
+  readonly allowedDomains: readonly string[];
+}): boolean =>
+  allowedDomains.length === 0 ||
+  (hostedDomain !== undefined && allowedDomains.includes(hostedDomain.toLowerCase()));
+
 export type OauthSignInDecision =
   | { readonly kind: 'sign-in'; readonly userId: string; readonly link: boolean }
   | {

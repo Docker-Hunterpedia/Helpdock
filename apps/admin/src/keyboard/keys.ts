@@ -91,44 +91,55 @@ export const strokeMatches = (stroke: KeyStroke, event: KeyEventLike): boolean =
   return !shiftMatters || (event.shiftKey === true) === (stroke.shift === true);
 };
 
-/**
- * The inputs a letter is typed into. A checkbox, a radio, a button or a range
- * takes no letters, so `j` still moves the list while one has focus.
- */
-const TEXT_INPUT_TYPES = new Set([
-  'text',
-  'search',
-  'email',
-  'url',
-  'tel',
-  'password',
-  'number',
-  'date',
-  'datetime-local',
-  'month',
-  'week',
-  'time',
-]);
-
-/** Whether the keystroke belongs to whatever the person is writing in. */
+/** Whether a control owns unmodified keys, including custom MUI controls. */
 export const isTyping = (target: EventTarget | null | undefined): boolean => {
-  if (target instanceof HTMLInputElement) {
-    return TEXT_INPUT_TYPES.has(target.type);
+  if (!(target instanceof HTMLElement)) {
+    return false;
   }
+  if (
+    target.closest(
+      'input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"], [role="spinbutton"], [role="slider"], [role="checkbox"], [role="radio"], [role="switch"]',
+    ) !== null
+  ) {
+    return true;
+  }
+  // Read the nearest explicit value so an editable ancestor covers its
+  // descendants, while a contenteditable="false" island keeps its own keys.
+  const editor = target.closest('[contenteditable]');
   return (
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
+    target.isContentEditable ||
+    (editor !== null && editor.getAttribute('contenteditable')?.toLowerCase() !== 'false')
   );
 };
 
-/**
- * Whether the keystroke happened inside a dialog, a menu or a listbox, whose
- * own keys (letters that jump to an option, `Esc`) win over the page's.
- */
-export const isInOverlay = (target: EventTarget | null | undefined): boolean =>
-  target instanceof Element &&
-  target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') !== null;
+const OVERLAY_SELECTOR =
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], dialog[open]';
+
+const isVisibleOverlay = (overlay: Element): boolean => {
+  for (let node: Element | null = overlay; node !== null; node = node.parentElement) {
+    if (node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    const style = getComputedStyle(node);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse'
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** Open overlays own the keyboard even during a focus transfer or in a portal. */
+export const isInOverlay = (target: EventTarget | null | undefined): boolean => {
+  const containing = target instanceof Element ? target.closest(OVERLAY_SELECTOR) : null;
+  if (containing !== null && isVisibleOverlay(containing)) {
+    return true;
+  }
+  return [...document.querySelectorAll(OVERLAY_SELECTOR)].some(isVisibleOverlay);
+};
 
 export const isMac = (): boolean => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
 

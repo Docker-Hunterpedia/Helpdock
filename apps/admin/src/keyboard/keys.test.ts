@@ -128,11 +128,11 @@ describe('isTyping', () => {
   });
 
   it.each(['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'])(
-    'is false on an input of type %s, which takes no letters',
+    'is true on a form input of type %s',
     (type) => {
       const input = document.createElement('input');
       input.type = type;
-      expect(isTyping(input)).toBe(false);
+      expect(isTyping(input)).toBe(true);
     },
   );
 

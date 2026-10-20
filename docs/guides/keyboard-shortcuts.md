@@ -103,16 +103,21 @@ and so to the sheet and this guide, with the deliverable that builds it.
 A key without a modifier is never taken from you while you are writing: in a
 text field, a select, the composer or a rich-text editor, a letter is a
 letter, and nothing is taken while an input method is composing a character.
-A checkbox, a radio or a button with focus takes no letters, so there `j`
-still moves the list. Nor is it taken inside a dialog, a menu or a list box, whose own keys
-win. A shortcut with `⌘` or `Ctrl` still works in a field.
+Form controls also keep their keys, including checkboxes, radios, MUI
+Select and Autocomplete controls, and date inputs. A focused button outside
+an overlay can still use letter shortcuts. An open dialog, menu or list box
+owns the keyboard even while focus is moving into it; page shortcuts,
+including modifier shortcuts, wait until it closes. Outside overlays, a
+shortcut with `⌘` or `Ctrl` still works in a field; send shortcuts only answer
+inside the composer.
 
 ## Sequences
 
 `g` then a letter opens a page: `g` `i` My open, `g` `c` Contacts, and so on.
 After `g`, a chip at the bottom of the screen lists the letters that can
 follow; it goes after 1.5 seconds, or at the next key. Another character that
-is not one of them ends the wait and does nothing else; any other key — Tab,
+is not one of them ends the wait without cancelling the key or running a
+shortcut; any other key — Tab,
 Esc, a chord such as `⌘`+`\`, or a key typed into a field — ends the wait and
 does what it always does.
 

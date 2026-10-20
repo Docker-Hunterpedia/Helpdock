@@ -223,6 +223,15 @@ can reach it; `Kbd` lands here
 rather than in M14-06, because the sheet draws with it. Guide:
 [Keyboard shortcuts](../guides/keyboard-shortcuts.md).
 
+Review regression fix (PR #324): the sequence chip keeps its polite live
+region mounted but exposes `status` only while a sequence is pending, so an
+idle chip does not compete with toast statuses. The keyboard guard covers
+native and ARIA form controls, editable descendants, open overlays even
+outside the event target, and IME composition. Overlay keys remain with the
+overlay, including modified Enter; a closed sheet releases the keyboard
+before its exit animation ends. Unmatched sequence keys are not cancelled.
+The unchanged statuses and SLA specs reproduce the idle-status failure.
+
 One registry (`apps/admin/src/keyboard/registry.ts`, new) names every shortcut
 once: its id, keys, scope (global, list, ticket, composer), the i18n label, and
 the permission it needs. The `?` sheet, the palette's action list, each button's

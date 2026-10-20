@@ -70,6 +70,9 @@ export function ShortcutSheet({
       maxWidth={false}
       slotProps={{
         paper: {
+          // The exit animation keeps the paper mounted after Close. It no
+          // longer owns keys once closed, even before that animation ends.
+          'aria-hidden': !open || undefined,
           sx: {
             width: 860,
             maxWidth: 'calc(100% - 32px)',

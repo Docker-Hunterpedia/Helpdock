@@ -7,7 +7,7 @@ import { isSequence, SHORTCUT_LIST, type Shortcut, type ShortcutId } from './reg
  *
  * - **Nothing without a modifier while somebody is writing**, in a dialog or
  *   a menu, or with the single-key switch off (WCAG 2.1.4). A shortcut that
- *   carries `⌘`/`Ctrl` still answers in a field.
+ *   carries `⌘`/`Ctrl` still answers in a field outside an overlay.
  * - **A composer shortcut answers only inside the composer**, so `⌘Enter` in
  *   the list's search box sends nothing.
  * - **`g` then a letter within 1.5 s** is a sequence. The `g` waits; another
@@ -29,7 +29,7 @@ export interface DispatchContext {
   readonly singleKeys: boolean;
   /** The caret is in a field, a select or a rich-text area. */
   readonly typing: boolean;
-  /** The press happened in a dialog, a menu or a listbox. */
+  /** A dialog, menu or listbox owns the keyboard. */
   readonly inOverlay: boolean;
   /** The press happened inside the composer. */
   readonly inComposer: boolean;
@@ -58,11 +58,14 @@ const usableStrokes = (shortcut: Shortcut, context: DispatchContext): readonly S
   if (shortcut.scope === 'composer' && !context.inComposer) {
     return [];
   }
+  if (context.inOverlay) {
+    return [];
+  }
   return [shortcut.keys, ...(shortcut.alternates ?? [])].filter((strokes) => {
     if (strokes[0]?.mod === true) {
       return true;
     }
-    return context.singleKeys && !context.typing && !context.inOverlay;
+    return context.singleKeys && !context.typing;
   });
 };
 
@@ -104,7 +107,7 @@ export function resolveShortcut(
       ({ shortcut: { keys } }) =>
         keys[0]?.key === pending.prefix && keys[1] !== undefined && strokeMatches(keys[1], event),
     );
-    return { id: second?.shortcut.id ?? null, pending: null, consumed: true };
+    return { id: second?.shortcut.id ?? null, pending: null, consumed: second !== undefined };
   }
 
   const starts = sequences.some(

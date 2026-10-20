@@ -92,6 +92,17 @@ describe('the ? sheet', () => {
     });
   });
 
+  it('returns keyboard ownership as soon as the sheet closes', async () => {
+    const { user } = await renderAt('/tickets?view=all');
+    await screen.findByRole('link', { name: /HD-1042/ });
+    await user.keyboard('?');
+    await user.click(within(sheet()).getByRole('button', { name: 'Close' }));
+
+    await user.keyboard('j');
+
+    expect(await screen.findByRole('heading', { name: /Refund for order 42/ })).toBeVisible();
+  });
+
   it('opens on the Arabic ؟ too', async () => {
     await renderAt('/contacts');
 

@@ -82,12 +82,12 @@ describe('resolveShortcut', () => {
       expect(press({ key: 'c', code: 'KeyC' }, first.pending).id).toBe('goTo.contacts');
     });
 
-    it('ends the wait on any other key and does nothing with it', () => {
+    it('ends the wait on an unmatched character without cancelling it', () => {
       const first = press(g);
       expect(press({ key: 'j', code: 'KeyJ' }, first.pending)).toEqual({
         id: null,
         pending: null,
-        consumed: true,
+        consumed: false,
       });
     });
 

@@ -145,13 +145,26 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
   });
 
   useEffect(() => {
+    let composing = false;
+    const clearSequence = (): void => {
+      latest.current = { ...latest.current, pending: null };
+      setPending(null);
+    };
+    const onCompositionStart = (): void => {
+      composing = true;
+      clearSequence();
+    };
+    const onCompositionEnd = (): void => {
+      composing = false;
+    };
     const onKeyDown = (event: KeyboardEvent): void => {
       // A control that used the key itself (a menu's type-ahead) keeps it,
       // and so does an input method composing a character (an IME).
-      if (event.defaultPrevented || event.isComposing) {
+      if (event.defaultPrevented || composing || event.isComposing || event.keyCode === 229) {
+        clearSequence();
         return;
       }
-      const { target } = event;
+      const target = event.target instanceof Element ? event.target : document.activeElement;
       const now = Date.now();
       const result = resolveShortcut(event, latest.current.pending, {
         now,
@@ -176,8 +189,12 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
     };
 
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('compositionstart', onCompositionStart);
+    window.addEventListener('compositionend', onCompositionEnd);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('compositionstart', onCompositionStart);
+      window.removeEventListener('compositionend', onCompositionEnd);
     };
   }, []);
 

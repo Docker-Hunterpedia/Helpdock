@@ -45,6 +45,7 @@ import { countRateLimitRefusalsIn } from './observability/rate-limit-refusals.js
 import { METRICS, QUEUE_REGISTRY } from './observability/tokens.js';
 import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
+import { backfillBuiltInViews } from './seed/backfill-built-in-views.js';
 import { SAML_ACS_ROUTE } from './sso/sso-saml.controller.js';
 import { resolveAdminDist } from './static/admin-assets.js';
 import { WEB_FORM_ROUTE } from './web-form/web-form-page.controller.js';
@@ -120,6 +121,10 @@ export const createRuntime = async ({
   const closers: (() => Promise<unknown>)[] = [closeDb];
 
   try {
+    if (env.APP_ROLE === 'api') {
+      await backfillBuiltInViews(db);
+    }
+
     if (env.APP_ROLE === 'worker') {
       await waitForMigrations({ db, logger });
     }

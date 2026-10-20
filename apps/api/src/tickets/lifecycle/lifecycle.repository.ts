@@ -81,6 +81,17 @@ export class TicketLifecycleRepository {
     return rows[0];
   }
 
+  /** The Snoozed system status (M14-02), found by its key; a brand may rename it. */
+  async snoozedStatus(tx: DbTransaction): Promise<TicketStatusRow | undefined> {
+    const rows = await tx
+      .select()
+      .from(ticketStatuses)
+      .where(eq(ticketStatuses.systemKey, 'snoozed'))
+      .limit(1);
+
+    return rows[0];
+  }
+
   async listStatuses(tx: DbTransaction): Promise<TicketStatusRow[]> {
     return tx
       .select()

@@ -20,6 +20,16 @@ import { timeEntrySecondsSchema } from './time-entries.js';
  * reach a handler.
  */
 
+/** Whether `Intl` knows this IANA zone, so a bad one is a 400 and not a thrown RangeError later. */
+const isTimeZone = (value: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // --------------------------------------------------------------------------
 // Vocabulary
 // --------------------------------------------------------------------------
@@ -84,6 +94,11 @@ export const ticketStatusSchema = z.object({
    * "spam" from "closed and not counted"; see `isSpamStatus`.
    */
   isSpam: z.boolean(),
+  /**
+   * M14-02. The Snoozed status, which a person enters with a wake time through
+   * `snoozedUntil`, never by picking it. Optional for the reason `tags` is.
+   */
+  isSnoozed: z.boolean().optional(),
   sortOrder: z.int(),
   color: statusColorSchema,
 });
@@ -202,6 +217,10 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'attachments-in-flight',
   /** Unmerging a ticket whose primary an Admin has since deleted (M1-15 part 2). */
   'merge-primary-deleted',
+  /** M14-02. A closed ticket cannot be snoozed; reopen it first. */
+  'ticket-closed',
+  /** M14-02. Snoozed is entered with a wake time through `snoozedUntil`, never as a bare status. */
+  'snooze-requires-time',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 
@@ -261,6 +280,13 @@ export const ticketSchema = z.object({
   resolutionDueAt: z.iso.datetime().nullable(),
   slaBreached: z.boolean(),
   closedAt: z.iso.datetime().nullable(),
+  /**
+   * M14-02. When a Snoozed ticket wakes by time, and who snoozed it; both null
+   * unless the ticket is in the Snoozed status (DOMAIN-RULES §2.1). Optional
+   * for the reason `tags` is.
+   */
+  snoozedUntil: z.iso.datetime().nullable().optional(),
+  snoozedBy: z.uuid().nullable().optional(),
   custom: z.record(z.string(), z.unknown()),
   /**
    * The chips this ticket carries (M1-06), embedded for the reason the status
@@ -596,6 +622,13 @@ export const ticketListQuerySchema = z.object({
    * same as leaving it off — "not overdue" is not a queue anybody works.
    */
   overdue: queryBoolean.optional(),
+  /**
+   * M14-02. Snoozed tickets leave every list unless asked for: `exclude` (the
+   * default, so My open and every saved view stop showing them with no edit),
+   * `only` (the Snoozed view) or `include`; absent means `exclude`. A term that names one ticket by its
+   * number still finds it, whatever this says (#221).
+   */
+  snoozed: z.enum(['exclude', 'only', 'include']).optional(),
   sort: ticketSortSchema
     .default('updatedAt')
     .describe(
@@ -719,6 +752,12 @@ export const ticketUpdateRequestSchema = z.object({
   assigneeId: z.uuid().nullable().optional(),
   statusId: z.uuid().optional(),
   /**
+   * M14-02. An instant 5 minutes to 90 days ahead snoozes the ticket (or moves
+   * its wake time); `null` wakes it. The server holds the range, not the
+   * schema, because it is measured against its own clock.
+   */
+  snoozedUntil: z.iso.datetime().nullable().optional(),
+  /**
    * Custom field values to write over the stored ones (M1-06). A **patch**: a
    * key that is absent is left alone and a key set to `null` is cleared, so
    * `required` is not enforced here — a request that names two fields says
@@ -790,3 +829,36 @@ export const ticketParamSchema = z.object({
   ticketId: z.uuid(),
 });
 export type TicketParam = z.infer<typeof ticketParamSchema>;
+
+// --------------------------------------------------------------------------
+// Snooze (M14-02)
+// --------------------------------------------------------------------------
+
+/** The shortest and longest snooze the server accepts, from its own clock. */
+export const SNOOZE_MIN_MS = 5 * 60_000;
+export const SNOOZE_MAX_MS = 90 * 86_400_000;
+
+export const snoozePresetKeySchema = z.enum([
+  'in_1_hour',
+  'in_4_hours',
+  'next_business_day',
+  'next_week',
+]);
+export type SnoozePresetKey = z.infer<typeof snoozePresetKeySchema>;
+
+export const snoozePresetsQuerySchema = z.object({
+  /** The agent's IANA time zone, from the browser; the fallback when a department has no calendar. */
+  timeZone: z.string().min(1).max(64).refine(isTimeZone, 'must be an IANA time zone'),
+});
+
+/**
+ * `GET /tickets/:ticketId/snooze-presets`: the four menu items as instants,
+ * worked out against the ticket's department calendar. `departmentTimeZone` is
+ * null when the department has no calendar, and then the caption is not shown.
+ */
+export const snoozePresetsSchema = z.object({
+  presets: z.array(z.object({ key: snoozePresetKeySchema, at: z.iso.datetime() })),
+  departmentName: z.string(),
+  departmentTimeZone: z.string().nullable(),
+});
+export type SnoozePresets = z.infer<typeof snoozePresetsSchema>;

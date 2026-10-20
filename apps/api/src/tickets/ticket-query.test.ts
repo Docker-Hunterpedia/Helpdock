@@ -50,8 +50,36 @@ describe('ticketFilters', () => {
     // DOMAIN-RULES §2.2's "hidden from all views", which no caller may turn off.
     const sql = render(ticketFilters(query()));
 
-    expect(sql?.sql).toBe('("tickets"."brand_id" = $1 and "tickets"."deleted_at" is null)');
+    expect(sql?.sql).toBe(
+      '("tickets"."brand_id" = $1 and "tickets"."deleted_at" is null and "tickets"."snoozed_until" is null)',
+    );
     expect(sql?.params).toEqual([BRAND]);
+  });
+
+  it('leaves snoozed tickets out unless asked, and reads only them for the Snoozed view (M14-02)', () => {
+    expect(render(ticketFilters(query({ snoozed: 'exclude' })))?.sql).toContain(
+      '"tickets"."snoozed_until" is null',
+    );
+    expect(render(ticketFilters(query({ snoozed: 'only' })))?.sql).toContain(
+      '"tickets"."snoozed_until" is not null',
+    );
+    expect(render(ticketFilters(query({ snoozed: 'include' })))?.sql).not.toContain(
+      'snoozed_until',
+    );
+  });
+
+  it('does not hide a snoozed ticket from the read of the tickets a search term names (#221)', () => {
+    const named = render(
+      namedTicketFilters({
+        brandId: BRAND,
+        q: 'HD-1042',
+        sort: 'updatedAt',
+        direction: 'desc',
+        cursor: undefined,
+      }),
+    );
+
+    expect(named?.sql).not.toContain('snoozed_until');
   });
 
   it('keeps the soft-delete clause alongside whatever was asked for', () => {

@@ -32,7 +32,7 @@ import {
  * | unmerged | restart; the merged time is not counted |
  * | closed | resolution met; an unmet response clock stops; spam stops both |
  * | open-like, no policy applies | stop, no verdict |
- * | open-like, a policy applies | start what is missing, retarget what differs (§3.3), pause or resume on `pauses_sla` (§3.2) |
+ * | open-like, a policy applies | start what is missing, retarget what differs (§3.3), pause or resume on `pauses_sla` (§3.2); Snoozed pauses the resolution clock only |
  */
 
 /** Everything about a ticket the clocks depend on, read inside the transaction. */
@@ -42,6 +42,12 @@ export interface TicketFacts {
   readonly previousDepartmentId?: string | undefined;
   readonly systemState: TicketSystemState;
   readonly pausesSla: boolean;
+  /**
+   * M14-02. The ticket is Snoozed, the one status whose `pauses_sla` applies
+   * per clock: the resolution clock pauses and a response clock keeps running,
+   * because putting a ticket away is not answering it (DOMAIN-RULES §3.2).
+   */
+  readonly snoozed?: boolean;
   /** Spam or Merged: a close that is not a resolution. */
   readonly excludedFromReports: boolean;
   readonly merged: boolean;
@@ -143,7 +149,9 @@ export const reconcileClocks = ({
         )
       : clock;
 
-    return facts.pausesSla ? pause(targeted, calendar, at) : resume(targeted, calendar, at);
+    const paused = facts.pausesSla && !(facts.snoozed === true && isResponseClock(clock.kind));
+
+    return paused ? pause(targeted, calendar, at) : resume(targeted, calendar, at);
   });
 };
 

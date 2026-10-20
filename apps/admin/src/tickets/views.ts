@@ -30,6 +30,8 @@ import type { TicketQuery } from './api.js';
 
 export const ALL_VIEW = 'all';
 
+export type SnoozedFilter = 'exclude' | 'only' | 'include';
+
 /** Every filter the workspace carries, whether it came from a view or from the URL. */
 export interface WorkspaceFilters {
   readonly statusId: readonly string[];
@@ -42,6 +44,8 @@ export interface WorkspaceFilters {
   readonly channel: readonly TicketChannel[];
   readonly overdue: boolean;
   readonly imported?: boolean | undefined;
+  /** M14-02. Snoozed tickets are left out unless a view (Snoozed) or the URL asks for them. */
+  readonly snoozed: SnoozedFilter;
   readonly q: string;
   readonly sort: TicketSort;
   readonly direction: TicketSortDirection;
@@ -57,6 +61,7 @@ export const EMPTY_FILTERS: WorkspaceFilters = {
   channel: [],
   overdue: false,
   imported: undefined,
+  snoozed: 'exclude',
   q: '',
   sort: 'updatedAt',
   direction: 'desc',
@@ -77,6 +82,7 @@ export const filtersOfView = (filters: TicketViewFilters): WorkspaceFilters => (
   channel: filters.channel ?? [],
   overdue: filters.overdue ?? false,
   imported: filters.imported,
+  snoozed: filters.snoozed ?? 'exclude',
   q: filters.q ?? '',
   sort: filters.sort,
   direction: filters.direction,
@@ -97,6 +103,7 @@ export const viewFiltersOf = (filters: WorkspaceFilters): TicketViewFiltersInput
     channel: some(filters.channel),
     overdue: filters.overdue ? true : undefined,
     imported: filters.imported,
+    snoozed: filters.snoozed === 'exclude' ? undefined : filters.snoozed,
     q: filters.q === '' ? undefined : filters.q,
     sort: filters.sort,
     direction: filters.direction,
@@ -133,6 +140,7 @@ const PARAM = {
 
 const OVERDUE = 'overdue';
 const IMPORTED = 'imported';
+const SNOOZED = 'snoozed';
 const SORT = 'sort';
 const DIRECTION = 'dir';
 const SEARCH = 'q';
@@ -155,6 +163,10 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
     overdue: params.get(OVERDUE) === '1',
     imported:
       params.get(IMPORTED) === '1' ? true : params.get(IMPORTED) === '0' ? false : undefined,
+    snoozed:
+      params.get(SNOOZED) === 'only' || params.get(SNOOZED) === 'include'
+        ? (params.get(SNOOZED) as SnoozedFilter)
+        : 'exclude',
     q: params.get(SEARCH) ?? '',
     sort: SORTS.includes(sort as TicketSort) ? (sort as TicketSort) : EMPTY_FILTERS.sort,
     direction: params.get(DIRECTION) === 'asc' ? 'asc' : 'desc',
@@ -164,7 +176,16 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
 /** `params` without any filter, keeping the view and anything else it carried. */
 export const withoutFilters = (params: URLSearchParams): URLSearchParams => {
   const next = new URLSearchParams(params);
-  for (const key of [...Object.values(PARAM), OVERDUE, IMPORTED, SORT, DIRECTION, SEARCH, CUSTOM]) {
+  for (const key of [
+    ...Object.values(PARAM),
+    OVERDUE,
+    IMPORTED,
+    SNOOZED,
+    SORT,
+    DIRECTION,
+    SEARCH,
+    CUSTOM,
+  ]) {
     next.delete(key);
   }
 
@@ -186,6 +207,9 @@ export const withFilters = (
     next.set(OVERDUE, '1');
   }
   if (filters.imported !== undefined) next.set(IMPORTED, filters.imported ? '1' : '0');
+  if (filters.snoozed !== 'exclude') {
+    next.set(SNOOZED, filters.snoozed);
+  }
   if (filters.q !== '') {
     next.set(SEARCH, filters.q);
   }
@@ -214,6 +238,7 @@ export const sameFilters = (left: WorkspaceFilters, right: WorkspaceFilters): bo
   sameSet(left.channel, right.channel) &&
   left.overdue === right.overdue &&
   left.imported === right.imported &&
+  left.snoozed === right.snoozed &&
   left.q === right.q &&
   left.sort === right.sort &&
   left.direction === right.direction;

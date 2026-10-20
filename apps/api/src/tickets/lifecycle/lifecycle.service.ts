@@ -8,6 +8,7 @@ import { createI18n, type Locale } from '@helpdock/i18n';
 import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { type ArrivalEntryPoint, arrivalOf, continuationArrival } from '../routing/arrival.js';
+import { isSnoozedStatus, type WakeReason, writeWokeActivity } from '../snooze/snooze-wake.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -332,6 +333,7 @@ export class TicketLifecycleService {
       closedAt: ticket.closedAt ?? context.now,
     });
 
+    await this.#noteWoke(context, ticket, status, spam, 'status_changed');
     await writeTicketActivity(context.tx, {
       brandId: context.brandId,
       ticketId: ticket.id,
@@ -459,8 +461,32 @@ export class TicketLifecycleService {
     }
 
     const updated = await this.#applyStatus(context, ticket, status, open, { closedAt: null });
+    await this.#noteWoke(context, ticket, status, open, 'customer_reply');
 
     return { ticket: updated, status: open, continued: false };
+  }
+
+  /**
+   * M14-02. A snoozed ticket that leaves Snoozed by a customer's reply or a
+   * mark as spam has woken; the `tickets_snooze_guard` trigger cleared the
+   * columns, and this is the line in the thread saying why.
+   */
+  async #noteWoke(
+    context: LifecycleContext,
+    before: TicketRow,
+    from: TicketStatusRow,
+    to: TicketStatusRow,
+    reason: WakeReason,
+  ): Promise<void> {
+    if (isSnoozedStatus(from) && before.snoozedUntil !== null) {
+      await writeWokeActivity(context.tx, {
+        brandId: context.brandId,
+        ticket: before,
+        actor: context.actor,
+        reason,
+        statusId: to.id,
+      });
+    }
   }
 
   /**

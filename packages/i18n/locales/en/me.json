@@ -216,6 +216,10 @@
       "escalated": {
         "label": "Escalation",
         "hint": "An SLA step or a rule escalates a ticket to you or your team"
+      },
+      "snooze_ended": {
+        "label": "Snooze ended",
+        "hint": "A ticket you snoozed wakes by time or because an SLA is close to its target"
       }
     },
     "footer": "Browser push reaches every browser where you turned it on.",

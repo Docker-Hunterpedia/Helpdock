@@ -103,7 +103,8 @@
       "mentioned": "{{actor}} mentioned you",
       "sla_warning": "SLA warning · {{clock}}",
       "sla_breached": "SLA breach · {{clock}}",
-      "escalated": "Escalated to you or your team"
+      "escalated": "Escalated to you or your team",
+      "snooze_ended": "Snooze ended"
     },
     "clock": {
       "first_response": "first response",

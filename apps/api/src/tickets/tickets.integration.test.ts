@@ -407,7 +407,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
   // ----------------------------------------------------------------- statuses
 
   describe('statuses', () => {
-    it('seeds every brand with the built-in six (DOMAIN-RULES §2.1, §2.4)', async () => {
+    it('seeds every brand with the built-in seven (DOMAIN-RULES §2.1, §2.4, M14-02)', async () => {
       const { body } = await call<TicketStatusList>(
         'GET',
         `${brandPath(seeded.brandId)}/ticket-statuses`,
@@ -420,6 +420,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
         'Escalated',
         'Merged',
         'Open',
+        'Snoozed',
         'Spam',
       ]);
     });
@@ -443,7 +444,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
         ola,
       );
 
-      expect(body.statuses).toHaveLength(6);
+      expect(body.statuses).toHaveLength(7);
     });
   });
 

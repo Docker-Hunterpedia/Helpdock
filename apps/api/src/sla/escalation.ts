@@ -16,6 +16,7 @@ import {
 import { eq } from 'drizzle-orm';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { worksDepartment } from '../assignment/ticket-assignment.js';
+import { isSnoozedStatus, wakeTicket } from '../tickets/snooze/snooze-wake.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import {
   enqueueTicketAssigned,
@@ -26,7 +27,7 @@ import { breach, hasFired, isCounting, markFired, timeOfPercent } from './clock.
 import type { SlaRepository } from './sla.repository.js';
 import type { SlaService } from './sla.service.js';
 import { enqueueSlaBreached, enqueueSlaWarning, enqueueTicketEscalated } from './sla-events.js';
-import { summaryColumns } from './ticket-clocks.js';
+import { isResponseClock, summaryColumns } from './ticket-clocks.js';
 
 /**
  * What one SLA timer does when it fires (DOMAIN-RULES §3.4), inside the
@@ -107,7 +108,7 @@ export const fireSlaTimer = async (
     return { kind: 'early', fireAt };
   }
 
-  const ticket = found.ticket;
+  let ticket = found.ticket;
   const breaching = percent >= SLA_BREACH_PERCENT && clock.breachedAt === null;
   const fired = markFired(breaching ? breach(clock, now) : clock, percent, now);
   const current = clocks.map((candidate) => (candidate.id === fired.id ? fired : candidate));
@@ -132,6 +133,20 @@ export const fireSlaTimer = async (
       clock: clock.kind,
       cause: 'timer',
     });
+  }
+
+  // M14-02: "putting a ticket away is not answering it". A response clock that
+  // reaches a step wakes a snoozed ticket into the status it had before, so the
+  // step's own actions act on a ticket that is back in the queue.
+  if (
+    isSnoozedStatus(found.status) &&
+    ticket.snoozedUntil !== null &&
+    isResponseClock(clock.kind)
+  ) {
+    const woke = await wakeTicket(tx, { ticket, cause: 'sla', now });
+    if (woke !== undefined) {
+      ticket = woke.ticket;
+    }
   }
 
   const policy = brand.policies.find((candidate) => candidate.id === fired.policyId);

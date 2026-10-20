@@ -28,17 +28,24 @@ export const BUILT_IN_BRAND_VIEWS = [
     filters: { assigneeId: ['me'], systemState: [...LIVE_STATES], ...DEFAULT_ORDER },
   },
   {
+    builtIn: 'snoozed',
+    name: 'Snoozed',
+    nameAr: 'المؤجَّلة',
+    sortOrder: 1,
+    filters: { assigneeId: ['me'], snoozed: 'only', ...DEFAULT_ORDER },
+  },
+  {
     builtIn: 'unassigned',
     name: 'Unassigned',
     nameAr: 'غير المسندة',
-    sortOrder: 1,
+    sortOrder: 2,
     filters: { assigneeId: ['unassigned'], systemState: [...LIVE_STATES], ...DEFAULT_ORDER },
   },
   {
     builtIn: 'overdue',
     name: 'Overdue',
     nameAr: 'المتأخرة',
-    sortOrder: 2,
+    sortOrder: 3,
     filters: { overdue: true, systemState: [...LIVE_STATES], ...DEFAULT_ORDER },
   },
   {
@@ -51,8 +58,8 @@ export const BUILT_IN_BRAND_VIEWS = [
   },
 ] as const;
 
-/** Where the per-department views start: after the three brand-wide ones above them. */
-const DEPARTMENT_VIEW_ORDER = 3;
+/** Where the per-department views start: after the brand-wide ones above them. */
+const DEPARTMENT_VIEW_ORDER = 4;
 
 /** The default name of a department's "All open" view, in both languages. */
 export const departmentViewName = (department: {
@@ -71,7 +78,7 @@ const departmentViewFilters = (departmentId: string) => ({
 
 /**
  * Writes whichever defaults the brand is missing, through the caller's
- * transaction: the four brand-wide ones and an "All open" for every department
+ * transaction: the brand-wide ones and an "All open" for every department
  * that has none. Idempotent on the unique `(brand, built_in, department)`
  * index, so it is safe to call after a brand is created, after a department is
  * created, and on a brand that predates M1-05.

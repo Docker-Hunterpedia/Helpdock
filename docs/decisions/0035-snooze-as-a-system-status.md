@@ -1,6 +1,6 @@
 # 0035 Snooze as a system status with a wake timer
 
-Status: proposed
+Status: accepted
 Date: 2026-10-20
 
 ## Context

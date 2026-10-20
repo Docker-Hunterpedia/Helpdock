@@ -34,6 +34,7 @@ export const ticketViewBuiltInSchema = z.enum([
   'overdue',
   'department_open',
   'escalated',
+  'snoozed',
 ]);
 export type TicketViewBuiltIn = z.infer<typeof ticketViewBuiltInSchema>;
 

@@ -101,3 +101,45 @@ describe('the article proposal line in the thread (M7-05)', () => {
     );
   });
 });
+
+describe('snooze activity (M14-02)', () => {
+  const entry = (action: string, to: Record<string, unknown>): TicketActivityEntry => ({
+    id: '0193b000-0000-7000-8000-000000000921',
+    ticketId: '0193b000-0000-7000-8000-000000000913',
+    actorType: 'staff',
+    actorId: 'lina',
+    action,
+    via: 'ui',
+    createdAt: '2026-10-21T10:00:00Z',
+    from: null,
+    to,
+  });
+  const NOW = Date.parse('2026-10-21T12:00:00Z');
+
+  it('draws a snooze and its wake time in the thread, in both languages', () => {
+    const snoozed = entry('ticket.snoozed', { snoozedUntil: '2026-10-25T09:00:00Z' });
+
+    expect(buildThread([], [snoozed], [])).toMatchObject([{ kind: 'event' }]);
+    expect(describeEvent(snoozed, names, en, 'en', NOW)).toContain('snoozed the ticket until');
+    expect(describeEvent(snoozed, names, ar, 'ar', NOW)).toContain('أجّل');
+  });
+
+  it.each([
+    ['time', 'its time came'],
+    ['customer_reply', 'the customer replied'],
+    ['sla', 'SLA was about to run out'],
+    ['status_changed', 'its status changed'],
+    ['manual', 'woke the ticket'],
+  ])('says why a ticket woke: %s', (reason, text) => {
+    const woke = entry('ticket.woke', { reason });
+
+    expect(buildThread([], [woke], [])).toMatchObject([{ kind: 'event' }]);
+    expect(describeEvent(woke, names, en, 'en', NOW)).toContain(text);
+  });
+
+  it('falls back to the time wake for a reason it does not know', () => {
+    expect(
+      describeEvent(entry('ticket.woke', { reason: 'later' }), names, en, 'en', NOW),
+    ).toContain('its time came');
+  });
+});

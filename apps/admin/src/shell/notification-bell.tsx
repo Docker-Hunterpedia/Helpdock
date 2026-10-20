@@ -3,6 +3,7 @@ import type { StatusName } from '@helpdock/ui';
 import { Box, Button, Popover, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
+  AlarmClock,
   AtSign,
   Bell,
   CheckCheck,
@@ -52,6 +53,7 @@ const KIND_LOOK: Record<NotificationKind, { readonly icon: LucideIcon; readonly 
   mentioned: { icon: AtSign, tone: 'primary' },
   assigned: { icon: UserPlus, tone: 'neutral' },
   replied: { icon: MessageSquare, tone: 'neutral' },
+  snooze_ended: { icon: AlarmClock, tone: 'warning' },
 };
 
 export function NotificationBell(): ReactNode {

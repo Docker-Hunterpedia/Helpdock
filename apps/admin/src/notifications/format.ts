@@ -47,6 +47,7 @@ export const notificationTitle = (t: T, item: NotificationView): string => {
       return t(`admin:notifications.title.${item.kind}`, { clock: clockOf(t, item) });
     case 'replied':
     case 'escalated':
+    case 'snooze_ended':
       return t(`admin:notifications.title.${item.kind}`);
   }
 };

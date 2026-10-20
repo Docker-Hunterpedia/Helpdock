@@ -353,6 +353,7 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
     expect(keys.map((row) => row.system_key)).toEqual([
       'open',
       'awaiting_customer',
+      'snoozed',
       'escalated',
       'closed',
       'spam',

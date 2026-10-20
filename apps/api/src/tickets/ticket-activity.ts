@@ -72,7 +72,14 @@ export type TicketActivityAction =
    */
   | 'ticket.source_article'
   /** M7-05. An agent sent an article drafted from this ticket for approval: `to.proposalId`, `to.title`. */
-  | 'ticket.article_proposed';
+  | 'ticket.article_proposed'
+  /**
+   * M14-02. A snooze was set or moved (`to.snoozedUntil`, `to.resumeStatusId`),
+   * and it ended (`to.reason`: time, customer_reply, sla, status_changed,
+   * manual; `from.snoozedUntil` is when it was due).
+   */
+  | 'ticket.snoozed'
+  | 'ticket.woke';
 
 /**
  * The actor behind a change, in the three words the activity log records.

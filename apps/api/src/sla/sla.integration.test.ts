@@ -61,6 +61,7 @@ import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketingSettingsService } from '../tickets/lifecycle/ticketing-settings.service.js';
+import { bullSnoozeQueue } from '../tickets/snooze/snooze-worker.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
 import { fireSlaTimer } from './escalation.js';
@@ -287,6 +288,7 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       sla: new SlaService(repository),
       assignment: new AssignmentRepository(),
       timers: bullTimerQueue(queue),
+      snoozeTimers: bullSnoozeQueue(queue),
     };
   };
 

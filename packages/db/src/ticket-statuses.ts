@@ -51,6 +51,21 @@ export const BUILT_IN_TICKET_STATUSES = [
     color: 'warning',
   },
   {
+    key: 'snoozed',
+    name: 'Snoozed',
+    nameAr: 'مؤجَّلة',
+    systemState: 'on_hold',
+    // The one status whose `pauses_sla` applies per clock: it pauses the
+    // resolution clock and leaves an unanswered response clock running
+    // (DOMAIN-RULES §3.2, M14-02).
+    pausesSla: true,
+    awaitingCustomer: false,
+    isDefault: false,
+    excludedFromReports: false,
+    sortOrder: 25,
+    color: 'warning',
+  },
+  {
     key: 'escalated',
     name: 'Escalated',
     nameAr: 'مُصعَّدة',

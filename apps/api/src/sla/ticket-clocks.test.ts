@@ -135,6 +135,69 @@ describe('DOMAIN-RULES §3.6', () => {
   });
 });
 
+/**
+ * DOMAIN-RULES §3.2 as M14-02 amended it: Snoozed pauses the resolution clock
+ * and leaves an unanswered response clock running, because putting a ticket
+ * away is not answering it. The ticket of example 1, unanswered, is snoozed
+ * from Sunday 09:30 (1.5 h of both clocks used) to Monday 12:00.
+ */
+describe('Snoozed (M14-02)', () => {
+  const snoozed: TicketFacts = { ...awaiting, snoozed: true };
+  const away = reconcile(created, snoozed, high, ry('2026-10-04T09:30'));
+
+  it('pauses the resolution clock at 1.5 h and leaves the first-response clock running', () => {
+    const resolution = of(away, 'resolution');
+    expect(resolution.pausedAt).toEqual(ry('2026-10-04T09:30'));
+    expect(resolution.elapsedMs).toBe(1.5 * HOUR);
+    expect(resolution.dueAt).toBeNull();
+
+    const response = of(away, 'first_response');
+    expect(response.pausedAt).toBeNull();
+    // 30 minutes of the 2 h target are left at 09:30, so it is still due at 10:00.
+    expect(response.dueAt).toEqual(ry('2026-10-04T10:00'));
+  });
+
+  it('summarises only the response clock as due while snoozed', () => {
+    const columns = summaryColumns(away, high.id);
+
+    expect(columns.firstResponseDueAt).toEqual(ry('2026-10-04T10:00'));
+    expect(columns.resolutionDueAt).toBeNull();
+  });
+
+  it('breaches the response clock while snoozed, and counts none of the snooze against resolution', () => {
+    const response = of(away, 'first_response');
+    expect(elapsedAt(response, riyadh, ry('2026-10-04T10:00'))).toBe(2 * HOUR);
+
+    const resolution = of(away, 'resolution');
+    expect(elapsedAt(resolution, riyadh, ry('2026-10-05T11:00'))).toBe(1.5 * HOUR);
+  });
+
+  it('resumes the resolution clock when it wakes: 6.5 h left from Monday 12:00 is due Tuesday 10:30', () => {
+    const woke = reconcile(away, open, high, ry('2026-10-05T12:00'));
+    const resolution = of(woke, 'resolution');
+
+    expect(resolution.pausedAt).toBeNull();
+    expect(resolution.dueAt).toEqual(ry('2026-10-06T10:30'));
+    expect(resolution.pausedTotalMs).toBe(
+      ry('2026-10-05T12:00').getTime() - ry('2026-10-04T09:30').getTime(),
+    );
+  });
+
+  it('resumes at Sunday 10:00 when the first-response step wakes it: 6.5 h left is due Sunday 16:30', () => {
+    const woke = reconcile(away, open, high, ry('2026-10-04T10:00'));
+
+    expect(of(woke, 'resolution').dueAt).toEqual(ry('2026-10-04T16:30'));
+    expect(of(woke, 'first_response').pausedAt).toBeNull();
+  });
+
+  it('still pauses both clocks for Awaiting customer, which is not snoozed', () => {
+    const awaitingToo = reconcile(created, awaiting, high, ry('2026-10-04T09:30'));
+
+    expect(of(awaitingToo, 'first_response').pausedAt).toEqual(ry('2026-10-04T09:30'));
+    expect(of(awaitingToo, 'resolution').pausedAt).toEqual(ry('2026-10-04T09:30'));
+  });
+});
+
 describe('reconcileClocks', () => {
   it('records a breach at the moment a change uses the target up (§3.3)', () => {
     // 2.5 h elapsed by Tuesday 13:00; a 2 h target is already gone.

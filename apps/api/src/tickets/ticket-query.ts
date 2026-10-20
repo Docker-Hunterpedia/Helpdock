@@ -478,6 +478,13 @@ export const ticketFilters = ({
   if (filters.overdue === true) {
     clauses.push(overdueFilter());
   }
+  // M14-02: snoozed tickets leave every list unless asked for. The tickets a
+  // search term names are read by `namedTicketFilters`, which does not call this.
+  if (filters.snoozed === 'only') {
+    clauses.push(isNotNull(tickets.snoozedUntil));
+  } else if (filters.snoozed !== 'include') {
+    clauses.push(isNull(tickets.snoozedUntil));
+  }
   // One filter, two spellings: `tagId=a&tagId=b` and `tagIds=a&tagIds=b` are
   // the same question, so naming both is naming their union.
   const tagIds = [...(filters.tagId ?? []), ...(filters.tagIds ?? [])];

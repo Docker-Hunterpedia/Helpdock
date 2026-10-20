@@ -113,6 +113,8 @@ const eventText = (voice: Voice, event: TicketEvent, contactName: string | null)
       return t('event.sla_breached', { clock });
     case 'escalated':
       return t('event.escalated', { count: event.count });
+    case 'snooze_ended':
+      return t('event.snooze_ended');
   }
 };
 

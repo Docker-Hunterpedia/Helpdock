@@ -6,6 +6,7 @@ import type {
   MarkSpamRequest,
   MessageCreateRequest,
   RenderedMacro,
+  SnoozePresets,
   Ticket,
   TicketActivityList,
   TicketActivityQuery,
@@ -38,6 +39,7 @@ import {
   assignableAgentListSchema,
   macroRunResponseSchema,
   renderedMacroSchema,
+  snoozePresetsSchema,
   ticketActivityListSchema,
   ticketActivityQuerySchema,
   ticketAiCallsSchema,
@@ -119,6 +121,15 @@ export class HttpTicketsApi implements TicketsApi {
       await this.#transport.request(
         'GET',
         `${this.#ticket(brandId, ticketId)}/activity${query ? `?${search}` : ''}`,
+      ),
+    );
+  }
+
+  async snoozePresets(brandId: string, ticketId: string, timeZone: string): Promise<SnoozePresets> {
+    return snoozePresetsSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#ticket(brandId, ticketId)}/snooze-presets?${new URLSearchParams({ timeZone })}`,
       ),
     );
   }

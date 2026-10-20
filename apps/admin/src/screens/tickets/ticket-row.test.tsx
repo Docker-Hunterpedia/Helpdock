@@ -106,3 +106,39 @@ describe('the assistant on a ticket row', () => {
     expect(captionsOnRow(ai)).toEqual(expected);
   });
 });
+
+describe('a snoozed row (M14-02)', () => {
+  const snoozedUntil = new Date(NOW + 3 * 24 * HOUR).toISOString();
+
+  it('shows a clock and the wake time where the SLA timer was', () => {
+    renderApp(
+      <ul>
+        <TicketRow
+          ticket={testTicket({
+            snoozedUntil,
+            firstResponseDueAt: new Date(NOW - HOUR).toISOString(),
+          })}
+          selected={false}
+          now={NOW}
+          search=""
+        />
+      </ul>,
+    );
+
+    const label = screen.getByLabelText(/^Snoozed until /);
+    expect(label.querySelector('svg')).not.toBeNull();
+    expect(label.querySelector('bdi')).not.toBeNull();
+    // The SLA timer is the reason it is replaced: a breached clock would read "overdue".
+    expect(screen.queryByText(/over/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the SLA timer for a ticket that is not snoozed', () => {
+    renderApp(
+      <ul>
+        <TicketRow ticket={testTicket()} selected={false} now={NOW} search="" />
+      </ul>,
+    );
+
+    expect(screen.queryByLabelText(/^Snoozed until /)).not.toBeInTheDocument();
+  });
+});

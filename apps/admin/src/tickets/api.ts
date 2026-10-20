@@ -6,6 +6,7 @@ import type {
   MarkSpamRequest,
   MessageCreateRequest,
   RenderedMacro,
+  SnoozePresets,
   Ticket,
   TicketActivityList,
   TicketActivityQuery,
@@ -118,6 +119,9 @@ export interface TicketsApi {
   ): Promise<TimeEntryList>;
   deleteTimeEntry(brandId: string, ticketId: string, entryId: string): Promise<TimeEntryList>;
 
+  /** M14-02: the Snooze menu's four items as instants, against the ticket's department calendar. */
+  snoozePresets(brandId: string, ticketId: string, timeZone: string): Promise<SnoozePresets>;
+
   /** M14-08: "How it got here", composed by the api from the ticket's activity. */
   routing(brandId: string, ticketId: string): Promise<TicketRouting>;
 
@@ -203,6 +207,8 @@ export interface TicketQuery {
   /** Only tickets whose SLA has run out (M1-05). */
   readonly overdue?: boolean;
   readonly imported?: boolean;
+  /** M14-02. `exclude` (the api's default), `only` (the Snoozed view) or `include`. */
+  readonly snoozed?: 'exclude' | 'only' | 'include';
   /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */
   readonly q?: string;
   readonly sort?: TicketSort;

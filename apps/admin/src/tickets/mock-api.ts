@@ -12,6 +12,7 @@ import type {
   MessageCreateRequest,
   RelatedTicket,
   RenderedMacro,
+  SnoozePresets,
   Tag,
   Ticket,
   TicketActivityEntry,
@@ -55,6 +56,8 @@ import {
   mergeCustomValues,
   normaliseEmail,
   renderSegments,
+  SNOOZE_MAX_MS,
+  SNOOZE_MIN_MS,
   splitName,
   TICKET_PAGE_SIZE_DEFAULT,
   ticketActivityQuerySchema,
@@ -162,12 +165,13 @@ export const MOCK_STATUS_ESCALATED = '0192c3f0-1a2b-7c3d-8e4f-000000000053';
 export const MOCK_STATUS_CLOSED = '0192c3f0-1a2b-7c3d-8e4f-000000000054';
 export const MOCK_STATUS_SPAM = '0192c3f0-1a2b-7c3d-8e4f-000000000055';
 export const MOCK_STATUS_MERGED = '0192c3f0-1a2b-7c3d-8e4f-000000000056';
+export const MOCK_STATUS_SNOOZED = '0192c3f0-1a2b-7c3d-8e4f-000000000057';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** The six a brand is seeded with (`seedBrandStatuses`, DOMAIN-RULES §2.1). */
+/** The seven a brand is seeded with (`seedBrandStatuses`, DOMAIN-RULES §2.1). */
 const seedStatuses = (): TicketStatus[] => [
   status(MOCK_STATUS_OPEN, 'Open', 'مفتوحة', 'open', 'info', { isDefault: true, sortOrder: 1 }),
   status(MOCK_STATUS_AWAITING, 'Awaiting customer', 'بانتظار العميل', 'on_hold', 'warning', {
@@ -185,6 +189,12 @@ const seedStatuses = (): TicketStatus[] => [
     sortOrder: 5,
   }),
   status(MOCK_STATUS_MERGED, 'Merged', 'مدمجة', 'closed', 'info', { sortOrder: 6 }),
+  // M14-02: pauses the resolution clock only, which the fixture's SLA does not model.
+  status(MOCK_STATUS_SNOOZED, 'Snoozed', 'مؤجَّلة', 'on_hold', 'warning', {
+    pausesSla: true,
+    isSnoozed: true,
+    sortOrder: 7,
+  }),
 ];
 
 function status(
@@ -803,6 +813,8 @@ export class MockTicketsApi implements TicketsApi {
   readonly #csat = new Map<string, TicketCsat>();
   /** Keyed by the secondary's id; present while it is merged. */
   readonly #merges = new Map<string, MergeRecord>();
+  /** M14-02: the status each snoozed ticket was in before, which a wake returns it to. */
+  readonly #resume = new Map<string, TicketStatus>();
   /** M7-06: the AI log of each ticket. */
   readonly #aiCalls = new Map<string, readonly AiCallView[]>();
   /** M1-05. Counted against this fixture's own tickets, as the api counts its own. */
@@ -1054,10 +1066,18 @@ export class MockTicketsApi implements TicketsApi {
     ) {
       throw new TicketLifecycleError('ticket-merged');
     }
-    const status =
+    const requested =
       request.statusId === undefined
-        ? ticket.status
-        : (this.#statuses.find((candidate) => candidate.id === request.statusId) ?? ticket.status);
+        ? undefined
+        : this.#statuses.find((candidate) => candidate.id === request.statusId);
+    // M14-02: Snoozed is entered with a time, never by picking the status.
+    if (requested?.isSnoozed === true && requested.id !== ticket.status.id) {
+      throw new TicketLifecycleError('snooze-requires-time');
+    }
+    const snooze = this.#snoozeChange(ticket, request);
+    const status = snooze?.status ?? requested ?? ticket.status;
+    const leavesSnooze =
+      ticket.snoozedUntil != null && snooze === undefined && status.id !== ticket.status.id;
     const custom =
       request.custom === undefined
         ? ticket.custom
@@ -1071,6 +1091,11 @@ export class MockTicketsApi implements TicketsApi {
       ...(request.departmentId === undefined ? {} : { departmentId: request.departmentId }),
       ...(request.assigneeId === undefined ? {} : { assigneeId: request.assigneeId }),
       status,
+      ...(snooze === undefined
+        ? leavesSnooze
+          ? { snoozedUntil: null, snoozedBy: null }
+          : {}
+        : { snoozedUntil: snooze.until, snoozedBy: snooze.until === null ? null : MOCK_SELF_ID }),
       closedAt: status.systemState === 'closed' ? (ticket.closedAt ?? isoNow()) : null,
       updatedAt: isoNow(),
     };
@@ -1081,6 +1106,7 @@ export class MockTicketsApi implements TicketsApi {
     if (ticket.closedAt === null && updated.closedAt !== null && !status.excludedFromReports) {
       this.#csat.set(ticketId, pendingSurvey());
     }
+    const statusChanged = request.statusId !== undefined || snooze?.status !== undefined;
     this.#activity = [
       ...this.#activity,
       {
@@ -1088,15 +1114,98 @@ export class MockTicketsApi implements TicketsApi {
         ticketId,
         actorType: 'staff',
         actorId: MOCK_SELF_ID,
-        action: request.statusId === undefined ? 'ticket.updated' : 'ticket.status.changed',
-        from: request.statusId === undefined ? null : { status: ticket.status.name },
-        to: request.statusId === undefined ? null : { status: status.name },
+        action: statusChanged ? 'ticket.status.changed' : 'ticket.updated',
+        from: statusChanged ? { status: ticket.status.name } : null,
+        to: statusChanged ? { status: status.name } : null,
         via: 'ui',
         createdAt: isoNow(),
       },
+      ...(snooze === undefined
+        ? leavesSnooze
+          ? [this.#snoozeEntry(ticketId, 'ticket.woke', { reason: 'status_changed' })]
+          : []
+        : [
+            snooze.until === null
+              ? this.#snoozeEntry(ticketId, 'ticket.woke', { reason: 'manual' })
+              : this.#snoozeEntry(ticketId, 'ticket.snoozed', { snoozedUntil: snooze.until }),
+          ]),
     ];
 
     return updated;
+  }
+
+  /** M14-02. What `snoozedUntil` in a `PATCH` asks for, under the api's rules (5 minutes to 90 days). */
+  #snoozeChange(
+    ticket: Ticket,
+    request: TicketUpdateRequest,
+  ): { readonly until: string | null; readonly status?: TicketStatus } | undefined {
+    if (request.snoozedUntil === undefined) {
+      return undefined;
+    }
+    if (request.snoozedUntil === null) {
+      if (ticket.snoozedUntil == null) {
+        return undefined;
+      }
+      const back = this.#resume.get(ticket.id) ?? this.#statusOf(MOCK_STATUS_OPEN);
+      this.#resume.delete(ticket.id);
+      return { until: null, status: back };
+    }
+    if (ticket.status.systemState === 'closed') {
+      throw new TicketLifecycleError('ticket-closed');
+    }
+    const ahead = Date.parse(request.snoozedUntil) - Date.now();
+    if (ahead < SNOOZE_MIN_MS || ahead > SNOOZE_MAX_MS) {
+      throw new Error('snoozedUntil must be between 5 minutes and 90 days from now');
+    }
+    if (ticket.snoozedUntil == null) {
+      this.#resume.set(ticket.id, ticket.status);
+    }
+    const snoozed = this.#statusOf(MOCK_STATUS_SNOOZED);
+
+    return {
+      until: request.snoozedUntil,
+      ...(ticket.status.id === snoozed.id ? {} : { status: snoozed }),
+    };
+  }
+
+  #snoozeEntry(
+    ticketId: string,
+    action: 'ticket.snoozed' | 'ticket.woke',
+    to: Record<string, unknown>,
+  ): TicketActivityEntry {
+    return {
+      id: this.#nextId('8'),
+      ticketId,
+      actorType: 'staff',
+      actorId: MOCK_SELF_ID,
+      action,
+      from: null,
+      to,
+      via: 'ui',
+      createdAt: isoNow(),
+    };
+  }
+
+  async snoozePresets(
+    _brandId: string,
+    _ticketId: string,
+    _timeZone: string,
+  ): Promise<SnoozePresets> {
+    const now = Date.now();
+    const at = (offset: number): string => new Date(now + offset).toISOString();
+
+    // The department works in another zone than any reviewer, so the menu's
+    // caption is drawn; the api does the calendar maths (`snooze-presets.ts`).
+    return {
+      presets: [
+        { key: 'in_1_hour', at: at(HOUR) },
+        { key: 'in_4_hours', at: at(4 * HOUR) },
+        { key: 'next_business_day', at: at(DAY) },
+        { key: 'next_week', at: at(7 * DAY) },
+      ],
+      departmentName: 'Support',
+      departmentTimeZone: 'Asia/Tokyo',
+    };
   }
 
   /**
@@ -1980,9 +2089,15 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
     (query.overdue !== true || isOverdue(ticket, now)) &&
     (query.imported === undefined || Boolean(ticket.imported) === query.imported) &&
+    snoozeMatches(ticket, query.snoozed) &&
     (term === '' || ticket.subject.toLowerCase().includes(term))
   );
 };
+
+/** M14-02: snoozed tickets are left out of a list unless it asks for them. */
+const snoozeMatches = (ticket: Ticket, wanted: TicketQuery['snoozed']): boolean =>
+  wanted === 'include' ||
+  (wanted === 'only' ? ticket.snoozedUntil != null : ticket.snoozedUntil == null);
 
 const searchTermOf = (query: TicketQuery): string => query.q?.trim().toLowerCase() ?? '';
 

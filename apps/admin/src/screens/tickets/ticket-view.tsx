@@ -51,7 +51,7 @@ import { previousTickets } from './contact-history.js';
 import { CsatCard } from './csat-card.tsx';
 import { DETAILS_WIDTH, DetailsPanel } from './details-panel.tsx';
 import { assigneeName, staffName } from './directory.js';
-import { paragraph, statusName, ticketReference } from './format.js';
+import { isolate, paragraph, statusName, ticketReference, wakeTime } from './format.js';
 import { LogTimeDialog } from './log-time-dialog.tsx';
 import { MacroPicker } from './macro-picker.tsx';
 import { MergeDialog } from './merge-dialog.tsx';
@@ -59,6 +59,8 @@ import { MergedIntoBanner } from './merged-block.tsx';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
 import { useTicketMeta } from './meta/use-ticket-meta.tsx';
 import { RoutingTrail } from './routing-trail.tsx';
+import { SnoozeControl } from './snooze/snooze-control.tsx';
+import { SnoozedStrip } from './snooze/snoozed-strip.tsx';
 import { SplitDialog } from './split-dialog.tsx';
 import { StagedMacroChips } from './staged-macro.tsx';
 import { ChannelIdentityCard } from './telegram/channel-identity-card.tsx';
@@ -450,6 +452,27 @@ export function TicketView({
     onError: refused,
   });
 
+  // M14-02. `null` wakes the ticket now; an instant snoozes it or moves its time.
+  const [snoozeSignal, setSnoozeSignal] = useState(0);
+  const snooze = useMutation({
+    mutationFn: (until: string | null) => api.update(brandId, ticketId, { snoozedUntil: until }),
+    onSuccess: async (updated) => {
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      await queryClient.invalidateQueries({ queryKey: ticketKeys.counts(brandId) });
+      toast({
+        tone: 'success',
+        message:
+          updated.snoozedUntil == null
+            ? t('tickets:snooze.toast.woke')
+            : t('tickets:snooze.toast.snoozed', {
+                time: isolate(wakeTime(updated.snoozedUntil, locale, Date.now())),
+              }),
+      });
+    },
+    onError: refused,
+  });
+
   /** Both tickets moved, so both reads, every list and every count are stale. */
   const refreshPair = async (result: TicketMergeResult): Promise<void> => {
     await Promise.all([
@@ -605,6 +628,12 @@ export function TicketView({
     onMacros: () => {
       setPicking((open) => !open);
     },
+    onSnooze:
+      shortcutTicket?.status.systemState === 'closed'
+        ? null
+        : () => {
+            setSnoozeSignal(Date.now());
+          },
     onClose:
       closeStatus === null || shortcutTicket?.status.systemState === 'closed'
         ? null
@@ -935,6 +964,19 @@ export function TicketView({
             onDetailsOpenChange(true);
           }}
           macroOpen={picking}
+          snooze={
+            canWrite && mergedInto === null && ticket.status.systemState !== 'closed' ? (
+              <SnoozeControl
+                brandId={brandId}
+                ticketId={ticketId}
+                busy={snooze.isPending}
+                openSignal={snoozeSignal}
+                onSnooze={(until) => {
+                  snooze.mutate(until);
+                }}
+              />
+            ) : undefined
+          }
           {...(canWrite && mergedInto === null
             ? {
                 onMacro: () => {
@@ -955,6 +997,21 @@ export function TicketView({
               busy={unmerge.isPending}
               onUnmerge={() => {
                 unmerge.mutate(ticketId);
+              }}
+            />
+          </Box>
+        )}
+
+        {/* M14-02: above the thread too, so what wakes this ticket stays in view. */}
+        {ticket.snoozedUntil == null ? null : (
+          <Box sx={{ paddingInline: 5, paddingBlockStart: 4 }}>
+            <SnoozedStrip
+              by={names.nameFor('staff', ticket.snoozedBy ?? null)}
+              until={isolate(wakeTime(ticket.snoozedUntil, locale, now))}
+              canWake={canWrite && mergedInto === null}
+              busy={snooze.isPending}
+              onWake={() => {
+                snooze.mutate(null);
               }}
             />
           </Box>

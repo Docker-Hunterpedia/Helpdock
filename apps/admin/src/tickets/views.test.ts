@@ -284,5 +284,30 @@ describe('emptyKindOf', () => {
   it('falls back to "nothing in this view" with no filters on', () => {
     expect(emptyKindOf(shared, '', EMPTY_FILTERS)).toBe('plain');
     expect(emptyKindOf(null, '', EMPTY_FILTERS)).toBe('plain');
+describe('snoozed (M14-02)', () => {
+  it.each(['only', 'include'] as const)(
+    'keeps the %s choice across URLs, saved views and the list query',
+    (snoozed) => {
+      const filters = { ...EMPTY_FILTERS, snoozed };
+      const params = withFilters(new URLSearchParams(), filters);
+
+      expect(filtersFromParams(params).snoozed).toBe(snoozed);
+      expect(filtersOfView(ticketViewFiltersSchema.parse(viewFiltersOf(filters))).snoozed).toBe(
+        snoozed,
+      );
+      expect(queryOf(filters).snoozed).toBe(snoozed);
+      expect(sameFilters(filters, EMPTY_FILTERS)).toBe(false);
+      expect(filtersFromParams(withoutFilters(params)).snoozed).toBe('exclude');
+    },
+  );
+
+  it('leaves the default out of the query and the URL, so a list asks only for what differs', () => {
+    expect(queryOf(EMPTY_FILTERS)).not.toHaveProperty('snoozed');
+    expect(withFilters(new URLSearchParams(), EMPTY_FILTERS).has('snoozed')).toBe(false);
+    expect(filtersOfView(ticketViewFiltersSchema.parse({})).snoozed).toBe('exclude');
+  });
+
+  it('ignores a snoozed value it does not know', () => {
+    expect(filtersFromParams(new URLSearchParams('snoozed=sometimes')).snoozed).toBe('exclude');
   });
 });

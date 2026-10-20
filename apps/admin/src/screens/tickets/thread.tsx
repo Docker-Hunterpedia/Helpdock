@@ -21,7 +21,7 @@ import { AutoReplyMessage } from './ai/auto-reply-message.tsx';
 import type { ThreadAi } from './ai/use-ticket-ai.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import { EmailMessageCard, ThreadMismatch } from './email-message-card.tsx';
-import { messageTime, ticketReference } from './format.js';
+import { isolate, messageTime, ticketReference, wakeTime } from './format.js';
 import { ImportedCsatEvent } from './imported-csat-event.js';
 import { ImportedMessageDetails } from './imported-message-details.js';
 import { MergedBlock } from './merged-block.tsx';
@@ -576,6 +576,22 @@ export const describeEvent = (
   // M7-05: an article drafted from this ticket, sent for approval.
   if (entry.action === 'ticket.article_proposed') {
     return `${t('tickets:event.articleProposed', { actor })} · ${at}`;
+  }
+  // M14-02: a snooze set or moved, and the one that ended.
+  if (entry.action === 'ticket.snoozed') {
+    const until = typeof entry.to?.snoozedUntil === 'string' ? entry.to.snoozedUntil : null;
+    return `${t('tickets:event.snoozed', {
+      actor,
+      until: until === null ? '—' : isolate(wakeTime(until, locale, now)),
+    })} ${via} · ${at}`;
+  }
+  if (entry.action === 'ticket.woke') {
+    const reason = ['time', 'customer_reply', 'sla', 'status_changed', 'manual'].includes(
+      String(entry.to?.reason),
+    )
+      ? String(entry.to?.reason)
+      : 'time';
+    return `${t(`tickets:event.woke.${reason}`, { actor })} · ${at}`;
   }
   // M5-08: "Still need help?" from a help center article.
   if (entry.action === 'ticket.source_article') {

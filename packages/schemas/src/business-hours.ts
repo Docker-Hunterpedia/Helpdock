@@ -254,6 +254,17 @@ export const nextOpening = (calendar: BusinessCalendar, at: Date): Date | null =
   return ms === null ? null : new Date(ms);
 };
 
+/** A calendar day in a zone, as days since 1970-01-01: what {@link localTimeToUtc} counts from. */
+export const localDayNumber = (timezone: string, at: Date): number =>
+  localDateOf(timezone, at.getTime());
+
+/** The weekday (0 = Sunday) of a {@link localDayNumber}. */
+export const weekdayOfDay = (day: number): number => new Date(day * DAY_MS).getUTCDay();
+
+/** The instant `minute` minutes into local day `day` happens in `timezone`. */
+export const localTimeToUtc = (timezone: string, day: number, minute: number): Date =>
+  new Date(zonedToUtc(timezone, day, minute));
+
 // --------------------------------------------------------------------------
 // The walk
 // --------------------------------------------------------------------------

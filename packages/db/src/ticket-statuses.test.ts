@@ -43,7 +43,19 @@ describe('the built-in statuses', () => {
   it('pauses the SLA exactly where §2.1 says it does', () => {
     const pausing = BUILT_IN_TICKET_STATUSES.filter((status) => status.pausesSla);
 
-    expect(pausing.map((status) => status.key)).toEqual(['awaiting_customer']);
+    expect(pausing.map((status) => status.key)).toEqual(['awaiting_customer', 'snoozed']);
+  });
+
+  it('seeds Snoozed as an on-hold system status that is not awaiting the customer (M14-02)', () => {
+    const snoozed = BUILT_IN_TICKET_STATUSES.find((status) => status.key === 'snoozed');
+
+    expect(snoozed).toMatchObject({
+      systemState: 'on_hold',
+      pausesSla: true,
+      awaitingCustomer: false,
+      isDefault: false,
+      excludedFromReports: false,
+    });
   });
 
   it('flags awaiting_customer only on Awaiting customer', () => {

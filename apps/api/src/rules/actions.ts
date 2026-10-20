@@ -23,6 +23,7 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
+import { isSnoozedStatus, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
 import { applyStatusChange } from '../tickets/status-change.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import {
@@ -203,6 +204,15 @@ const moveStatus = async (
     from: { statusId: previous.id },
     to: { statusId: next.id },
   });
+  if (isSnoozedStatus(previous) && state.ticket.snoozedUntil !== null) {
+    await writeWokeActivity(context.tx, {
+      brandId: context.brandId,
+      ticket: state.ticket,
+      actor,
+      reason: 'status_changed',
+      statusId: next.id,
+    });
+  }
 
   if (result.closing) {
     await writeTicketActivity(context.tx, {

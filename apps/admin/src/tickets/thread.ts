@@ -33,6 +33,8 @@ const THREAD_EVENT_ACTIONS: readonly string[] = [
   'ticket.macro_applied',
   'ticket.source_article',
   'ticket.article_proposed',
+  'ticket.snoozed',
+  'ticket.woke',
 ];
 
 export type ThreadItem =

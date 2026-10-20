@@ -15,9 +15,10 @@ transactional outbox of [DOMAIN-RULES §6](../planning/DOMAIN-RULES.md#6-transac
 | **Mentioned in a note** | Everyone an internal note `@`-mentions (below). | in-app, email, push |
 | **SLA warning** | The people, team members and department Team Leaders the warning step names; if it names none, the assignee. | in-app |
 | **SLA breach** | The assignee; on a ticket nobody holds, the members of its team. | in-app, email, push |
+| **Snooze ended** | The assignee, or the person who snoozed it when nobody holds the ticket, when a snooze wakes by time or because an SLA step is about to run (M14-02, [Snooze](snooze.md)). A reply, a status change or *Wake now* tells nobody. | in-app, push |
 | **Escalation** | The people, team members and department Team Leaders an SLA escalation step names; if it names none, the assignee and the ticket's team. Also the recipients of a workflow rule's *Notify* action, with the rule's message quoted. | in-app, email |
 
-Three rules hold for all six:
+Three rules hold for all seven:
 
 - **Only about tickets they can see.** A recipient must hold a role in the brand
   whose department scope covers the ticket's department — the same scope the

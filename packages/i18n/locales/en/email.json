@@ -130,7 +130,8 @@
       "mentioned": "Mention",
       "sla_warning": "SLA warning · {{clock}}",
       "sla_breached": "SLA breach · {{clock}}",
-      "escalated": "Escalation"
+      "escalated": "Escalation",
+      "snooze_ended": "Snooze ended"
     },
     "subject": {
       "assigned": "[{{reference}}] Assigned to you: {{subject}}",
@@ -138,7 +139,8 @@
       "mentioned": "[{{reference}}] {{actor}} mentioned you",
       "sla_warning": "[{{reference}}] SLA warning: {{percent}} % of the {{clock}} target used",
       "sla_breached": "[{{reference}}] SLA breached: {{clock}}",
-      "escalated": "[{{reference}}] Escalated: {{subject}}"
+      "escalated": "[{{reference}}] Escalated: {{subject}}",
+      "snooze_ended": "[{{reference}}] Snooze ended: {{subject}}"
     },
     "heading": {
       "assigned": "{{reference}} is yours now",
@@ -146,7 +148,8 @@
       "mentioned": "{{actor}} mentioned you on {{reference}}",
       "sla_warning": "{{reference}} is close to its {{clock}} target",
       "sla_breached": "{{reference}} missed its {{clock}} target",
-      "escalated": "{{reference}} was escalated"
+      "escalated": "{{reference}} was escalated",
+      "snooze_ended": "{{reference}} is back"
     },
     "body": {
       "assigned": {
@@ -160,7 +163,8 @@
       "mentioned": "In an internal note on {{subject}}. Customers never see notes.",
       "sla_warning": "{{percent}} % of the {{clock}} target is used and the ticket still needs an answer.",
       "sla_breached": "The {{clock}} target has passed and the ticket still needs an answer.",
-      "escalated": "An SLA step or a rule escalated it to you or your team."
+      "escalated": "An SLA step or a rule escalated it to you or your team.",
+      "snooze_ended": "A ticket you snoozed woke up. It is back in your queue."
     },
     "clock": {
       "first_response": "first response",
@@ -223,7 +227,9 @@
       "sla_breached_one": "{{count}} breach",
       "sla_breached_other": "{{count}} breaches",
       "escalated_one": "{{count}} escalation",
-      "escalated_other": "{{count}} escalations"
+      "escalated_other": "{{count}} escalations",
+      "snooze_ended_one": "{{count}} snooze ended",
+      "snooze_ended_other": "{{count}} snoozes ended"
     },
     "heading": {
       "digest_one": "{{count}} thing since {{since}}",
@@ -256,7 +262,8 @@
       "sla_warning": "{{percent}} % of the {{clock}} target used",
       "sla_breached": "Missed its {{clock}} target",
       "escalated_one": "Escalated to you or your team",
-      "escalated_other": "Escalated {{count}} times"
+      "escalated_other": "Escalated {{count}} times",
+      "snooze_ended": "Snooze ended"
     },
     "bulk": {
       "assigned_one": "{{actor}} assigned you {{count}} ticket",

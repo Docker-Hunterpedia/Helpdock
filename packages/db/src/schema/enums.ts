@@ -297,6 +297,7 @@ export const ticketViewBuiltInEnum = pgEnum('ticket_view_built_in', [
   'overdue',
   'department_open',
   'escalated',
+  'snoozed',
 ]);
 
 /**
@@ -387,6 +388,7 @@ export const notificationKindEnum = pgEnum('notification_kind', [
   'sla_warning',
   'sla_breached',
   'escalated',
+  'snooze_ended',
 ]);
 
 /**

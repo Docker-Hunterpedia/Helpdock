@@ -1,9 +1,10 @@
 import type { AssignableAgent } from '@helpdock/schemas';
 import { Box, Button, MenuItem, MenuList, Popover, TextField, Typography } from '@mui/material';
 import { ChevronDown } from 'lucide-react';
-import { type ReactNode, useId, useRef, useState } from 'react';
+import { type ReactNode, type Ref, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { PresenceDot } from '../../ui/presence-dot.tsx';
 
 /**
@@ -32,6 +33,7 @@ export function AssigneePicker({
   departmentName,
   unavailable,
   busy,
+  buttonRef,
   onChange,
 }: {
   readonly id: string;
@@ -45,6 +47,8 @@ export function AssigneePicker({
   /** The read failed: the list says so rather than looking empty. */
   readonly unavailable: boolean;
   readonly busy: boolean;
+  /** The button, so `a` can open the picker (M14-01). */
+  readonly buttonRef?: Ref<HTMLButtonElement> | undefined;
   onChange(assigneeId: string | null): void;
 }): ReactNode {
   const t = useT();
@@ -53,6 +57,7 @@ export function AssigneePicker({
   const listRef = useRef<HTMLUListElement>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [term, setTerm] = useState('');
+  const keyShortcuts = useAriaKeyShortcuts('ticket.assignee');
 
   const shown = agents.filter((agent) => matchesSearch(agent.name, term));
   const current = assigneeName ?? t('tickets:details.unassigned');
@@ -110,9 +115,11 @@ export function AssigneePicker({
       </Typography>
       <Button
         id={id}
+        ref={buttonRef}
         variant="outlined"
         fullWidth
         disabled={busy}
+        aria-keyshortcuts={keyShortcuts}
         aria-haspopup="listbox"
         aria-expanded={anchor !== null}
         aria-controls={anchor === null ? undefined : listId}

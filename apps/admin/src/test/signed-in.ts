@@ -10,6 +10,7 @@ import { MockDomainsApi } from '../domains/mock-api.js';
 import { MockEmailApi } from '../email/mock-api.js';
 import { MockHelpCenterApi } from '../help-center/mock-api.js';
 import { MockImportsApi } from '../imports/mock-api.js';
+import { MockKeyboardApi } from '../keyboard/api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
 import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockMetaApi } from '../meta/mock-api.js';
@@ -75,5 +76,18 @@ export async function signedInMockApis(): Promise<AdminApis> {
     meta: new MockMetaApi(),
     assist: new MockAssistApi(),
     developers: new MockDevelopersApi(),
+    keyboard: new MockKeyboardApi(auth),
   };
+}
+
+/**
+ * The auth fixture of {@link signedInMockApis}, typed as the fixture it is, for
+ * a test that drives its account (M14-01's single-key switch).
+ */
+export async function signedInMockAuth(): Promise<MockAuthApi> {
+  const { auth } = await signedInMockApis();
+  if (!(auth instanceof MockAuthApi)) {
+    throw new Error('signedInMockApis always builds a MockAuthApi');
+  }
+  return auth;
 }

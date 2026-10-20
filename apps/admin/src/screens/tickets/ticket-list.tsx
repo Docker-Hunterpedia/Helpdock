@@ -4,6 +4,7 @@ import { ListFilter, Search, TicketIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
@@ -44,6 +45,7 @@ export function TicketList({
   viewerId,
   changes,
   openFiltersToken,
+  focusSearchToken = null,
   hasMore,
   loading,
   failed,
@@ -81,6 +83,8 @@ export function TicketList({
   } | null;
   /** Changes whenever something outside asks for the filters to open ("Edit filters"). */
   readonly openFiltersToken: number | null;
+  /** Changes whenever `/` asks for the search box (M14-01). */
+  readonly focusSearchToken?: number | null;
   readonly hasMore: boolean;
   readonly loading: boolean;
   readonly failed: boolean;
@@ -95,6 +99,9 @@ export function TicketList({
   const tokens = useSemanticTokens();
   const searchId = useId();
   const filterButton = useRef<HTMLButtonElement | null>(null);
+  const searchInput = useRef<HTMLInputElement | null>(null);
+  const newTicketKeys = useAriaKeyShortcuts('general.newTicket');
+  const searchKeys = useAriaKeyShortcuts('general.search');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const active = activeFilterCount(filters);
   const summary = useFilterSummary({ statuses, departments, tags, staff });
@@ -105,6 +112,12 @@ export function TicketList({
       setFiltersOpen(true);
     }
   }, [openFiltersToken]);
+
+  useEffect(() => {
+    if (focusSearchToken !== null) {
+      searchInput.current?.focus();
+    }
+  }, [focusSearchToken]);
 
   return (
     <Box
@@ -144,7 +157,12 @@ export function TicketList({
                 ? t('tickets:list.filter')
                 : t('tickets:list.filterActive', { count: active })}
             </Button>
-            <Button variant="contained" size="small" onClick={onNewTicket}>
+            <Button
+              variant="contained"
+              size="small"
+              aria-keyshortcuts={newTicketKeys}
+              onClick={onNewTicket}
+            >
               {t('tickets:newTicket.action')}
             </Button>
           </Box>
@@ -218,6 +236,7 @@ export function TicketList({
 
         <TextField
           id={searchId}
+          inputRef={searchInput}
           size="small"
           type="search"
           value={typed}
@@ -226,7 +245,10 @@ export function TicketList({
             onTypedChange(event.target.value);
           }}
           slotProps={{
-            htmlInput: { 'aria-label': t('tickets:list.searchLabel') },
+            htmlInput: {
+              'aria-label': t('tickets:list.searchLabel'),
+              'aria-keyshortcuts': searchKeys,
+            },
             input: {
               sx: { height: 32 },
               startAdornment: (

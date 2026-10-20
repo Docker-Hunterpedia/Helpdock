@@ -121,6 +121,7 @@ export const buildSession = ({
       // is built from the memberships themselves.
       role: toClientRole(currentRole?.role ?? 'viewer'),
       installAdmin: user.installAdmin,
+      singleKeyShortcuts: user.singleKeyShortcuts,
     },
     brands: held.map((brand) => toSessionBrand(brand, appUrl)),
     currentBrandId,

@@ -121,6 +121,7 @@
       "assigned": {
         "person": "{{actor}} assigned it to you.",
         "rule": "A workflow rule assigned it to you.",
+        "sla": "SLA escalation assigned it to you.",
         "round_robin": "Round-robin assigned it to you.",
         "skill_based": "Skill-based assignment gave it to you."
       },
@@ -214,7 +215,8 @@
         "person": "{{actor}} assigned it to you",
         "rule": "A rule assigned it to you",
         "round_robin": "Round-robin assigned it to you",
-        "skill_based": "Skill-based assignment gave it to you"
+        "skill_based": "Skill-based assignment gave it to you",
+        "sla": "SLA escalation assigned it to you"
       },
       "replied_one": "{{contact}} replied",
       "replied_other": "{{contact}} replied {{count}} times",
@@ -243,7 +245,8 @@
       "rule": "a rule",
       "round_robin": "round-robin",
       "skill_based": "skill-based assignment",
-      "someone": "Someone"
+      "someone": "Someone",
+      "sla": "SLA escalation"
     },
     "action": "Open your notifications",
     "footer": {

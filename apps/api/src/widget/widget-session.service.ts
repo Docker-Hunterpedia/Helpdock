@@ -3,6 +3,7 @@ import { auditLog, contacts, type DbTransaction, type WidgetVisitor } from '@hel
 import type { SignedIdentity, WidgetSession, WidgetSessionRequest } from '@helpdock/schemas';
 import { and, eq, isNull } from 'drizzle-orm';
 import { ContactFailure } from '../contacts/contact-failure.js';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import { attachUnverifiedIdentity, findOrCreateContactByIdentity } from '../contacts/identity.js';
 import type { Logger } from '../logging/logger.js';
 import {
@@ -146,18 +147,21 @@ export class WidgetSessionService {
     );
     // The brand's own label for the person, as the contact screen shows it,
     // when nothing else has set one.
-    await tx
-      .update(contacts)
-      .set({ externalId: payload.user_id })
-      .where(and(eq(contacts.id, contact.id), isNull(contacts.externalId)));
+    await withContactProfileChange(tx, contact.id, async () => {
+      await tx
+        .update(contacts)
+        .set({ externalId: payload.user_id })
+        .where(and(eq(contacts.id, contact.id), isNull(contacts.externalId)));
+    });
 
-    if (payload.email !== undefined && payload.email !== '') {
+    const email = payload.email;
+    if (email !== undefined && email !== '') {
       // The site vouches for the user id, not for the mailbox: the address is
       // recorded unverified, like one typed into the pre-chat form.
       try {
         await attachUnverifiedIdentity(tx, brand.id, contact.id, {
           kind: 'email',
-          value: payload.email,
+          value: email,
           source: 'widget.form',
         });
       } catch (error) {
@@ -179,9 +183,11 @@ export class WidgetSessionService {
     if (contactId === null) {
       return;
     }
-    await tx
-      .update(contacts)
-      .set({ locale })
-      .where(and(eq(contacts.id, contactId), isNull(contacts.locale)));
+    await withContactProfileChange(tx, contactId, async () => {
+      await tx
+        .update(contacts)
+        .set({ locale })
+        .where(and(eq(contacts.id, contactId), isNull(contacts.locale)));
+    });
   }
 }

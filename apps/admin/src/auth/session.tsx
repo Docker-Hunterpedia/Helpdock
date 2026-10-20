@@ -168,6 +168,24 @@ export function useSetSession(): (session: Session | null) => void {
   );
 }
 
+/**
+ * Writes a change to the signed-in person's own settings into the cached
+ * session (M14-01's single-key switch), so every screen reading the session
+ * sees it without another `me()`.
+ */
+export function useUpdateSessionUser(): (patch: Partial<Session['user']>) => void {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    (patch: Partial<Session['user']>) => {
+      queryClient.setQueryData(SESSION_QUERY_KEY, (session: Session | null | undefined) =>
+        session ? { ...session, user: { ...session.user, ...patch } } : session,
+      );
+    },
+    [queryClient],
+  );
+}
+
 export function SessionProvider({
   session,
   children,

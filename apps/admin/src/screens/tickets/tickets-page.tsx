@@ -16,6 +16,8 @@ import { usePreferences } from '../../app/providers.tsx';
 import { ROUTES, ticketIdFromPath, ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../../auth/session.tsx';
+import { useShortcutHandlers } from '../../keyboard/keyboard-provider.tsx';
+import type { ShortcutId } from '../../keyboard/registry.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { ticketKeys } from '../../tickets/keys.js';
 import { mergePages, moveSelection } from '../../tickets/pages.js';
@@ -34,7 +36,6 @@ import {
 import { useToast } from '../../ui/toasts.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { paragraph } from './format.js';
-import { shortcutFor } from './keyboard.js';
 import { NewTicketDialog, type NewTicketValue } from './new-ticket-dialog.tsx';
 import { TICKET_LIST_WIDTH, TicketList } from './ticket-list.tsx';
 import { TicketView } from './ticket-view.tsx';
@@ -59,6 +60,12 @@ import { SaveViewDialog } from './view-dialogs.tsx';
  * the details panel becomes a drawer; below 1024 px the list does too, which is
  * the same breakpoint at which the shell's own sidebar becomes one.
  */
+
+/** The list shortcuts the workspace answers; `e` is the open ticket's (`ticket-view.tsx`). */
+export const LIST_SHORTCUTS = [
+  'list.next',
+  'list.previous',
+] as const satisfies readonly ShortcutId[];
 
 const DETAILS_BREAKPOINT = '(min-width:1280px)';
 const LIST_BREAKPOINT = '(min-width:1024px)';
@@ -105,11 +112,8 @@ export function TicketsPage(): ReactNode {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [openFiltersToken, setOpenFiltersToken] = useState<number | null>(null);
+  const [focusSearchToken, setFocusSearchToken] = useState<number | null>(null);
   const [contactTerm, setContactTerm] = useState('');
-  const [replyFocusToken, setReplyFocusToken] = useState<{
-    mode: 'reply' | 'note';
-    at: number;
-  } | null>(null);
 
   const directory = useWorkspaceData(brand.id);
   const summary = useFilterSummary(directory);
@@ -143,8 +147,14 @@ export function TicketsPage(): ReactNode {
     }
     if (intent === 'filters') {
       setOpenFiltersToken(Date.now());
-    } else {
+    } else if (intent === 'save') {
       setSaveOpen(true);
+    } else if (intent === 'new') {
+      setDialogOpen(true);
+    } else {
+      // `/` (M14-01). Below 1024 px the search box is in the list's drawer.
+      setListOpen(true);
+      setFocusSearchToken(Date.now());
     }
     setParams(
       (previous) => {
@@ -214,9 +224,9 @@ export function TicketsPage(): ReactNode {
 
   /**
    * What the shortcuts act on, read at the moment a key arrives rather than
-   * closed over when the listener was attached.
+   * closed over when the handler was attached.
    *
-   * The listener is attached once. Re-attaching it whenever the list or the
+   * The handlers are attached once. Re-attaching them whenever the list or the
    * open ticket changed would leave a window — between the navigation and the
    * next render — in which the handler still believed nothing was selected,
    * and `j` pressed twice quickly would open the same ticket twice.
@@ -230,46 +240,26 @@ export function TicketsPage(): ReactNode {
     latest.current = { tickets, ticketId, linkSearch };
   });
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      const shortcut = shortcutFor(event);
-      if (shortcut === null) {
-        return;
-      }
+  const move = (step: 1 | -1): void => {
+    const open = latest.current.ticketId;
+    const next = moveSelection(latest.current.tickets, open, step);
+    if (next !== null && next !== open) {
+      // Recorded before the navigation rather than waiting to be told: this
+      // handler is what moved the selection, and `j` held down must step
+      // through the list rather than re-open the first row each time.
+      latest.current = { ...latest.current, ticketId: next };
+      void navigate({ pathname: ticketRoute(next), search: latest.current.linkSearch });
+    }
+  };
 
-      if (shortcut === 'dismiss') {
-        setListOpen(false);
-        setDetailsOpen(false);
-        return;
-      }
-
-      const open = latest.current.ticketId;
-
-      if (shortcut === 'reply' || shortcut === 'note') {
-        if (open !== null) {
-          event.preventDefault();
-          setReplyFocusToken({ mode: shortcut === 'note' ? 'note' : 'reply', at: Date.now() });
-        }
-        return;
-      }
-
-      const next = moveSelection(latest.current.tickets, open, shortcut === 'next' ? 1 : -1);
-      if (next !== null && next !== open) {
-        event.preventDefault();
-        // Recorded before the navigation rather than waiting to be told: this
-        // handler is what moved the selection, and `j` held down must step
-        // through the list rather than re-open the first row each time.
-        latest.current = { ...latest.current, ticketId: next };
-        void navigate({ pathname: ticketRoute(next), search: latest.current.linkSearch });
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [navigate]);
+  useShortcutHandlers<(typeof LIST_SHORTCUTS)[number]>({
+    'list.next': () => {
+      move(1);
+    },
+    'list.previous': () => {
+      move(-1);
+    },
+  });
 
   // ------------------------------------------------------------- mutations
 
@@ -337,6 +327,7 @@ export function TicketsPage(): ReactNode {
       viewerId={session.user.id}
       changes={changes}
       openFiltersToken={openFiltersToken}
+      focusSearchToken={focusSearchToken}
       hasMore={list.hasNextPage}
       loading={list.isPending || list.isFetchingNextPage}
       failed={list.isError}
@@ -414,7 +405,6 @@ export function TicketsPage(): ReactNode {
             now={now}
             detailsInDrawer={!wideDetails}
             detailsOpen={detailsOpen}
-            focusToken={replyFocusToken}
             onDetailsOpenChange={setDetailsOpen}
             onGoToList={() => {
               void navigate({ pathname: ROUTES.tickets, search: linkSearch });

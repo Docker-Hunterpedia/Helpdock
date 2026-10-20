@@ -382,6 +382,51 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
       expect(response.body.error.ticketing?.reason).toBe('macro-changed');
     });
 
+    it('publishes status and assignment changes from a Reply and close macro', async () => {
+      const fresh = await createTicket(billing);
+      const statuses = await call<{ statuses: { id: string; systemState: string }[] }>(
+        'GET',
+        `${brandPath()}/ticket-statuses`,
+        ada,
+      );
+      const closedStatus = statuses.body.statuses.find((row) => row.systemState === 'closed');
+      if (closedStatus === undefined) throw new Error('Missing closed status');
+      const macro = await createMacro(ada, {
+        kind: 'macro',
+        name: 'Reply and close',
+        scope: 'shared',
+        departmentId: billing,
+        bodies: { en: 'Done', ar: '' },
+        actions: [
+          { type: 'set_status', statusId: closedStatus.id },
+          { type: 'assign', assignee: { kind: 'self' } },
+        ],
+      });
+      const response = await call<MacroRunResponse>(
+        'POST',
+        `${brandPath()}/tickets/${fresh.ticket.id}/macro-runs`,
+        ada,
+        {
+          macroId: macro.id,
+          actions: macro.actions,
+          reply: { kind: 'public', bodyHtml: '<p>Done</p>', clientId: uuidv7() },
+        },
+      );
+      expect(response.status).toBe(201);
+      const events = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(outbox).where(sql`${outbox.payload}->>'ticketId' = ${fresh.ticket.id}`),
+      );
+      expect(
+        events.filter(
+          (row) =>
+            row.event === 'ticket.status_changed' && row.payload.statusId === closedStatus.id,
+        ),
+      ).toHaveLength(1);
+      expect(
+        events.filter((row) => row.event === 'ticket.assigned').map((row) => row.payload),
+      ).toEqual([expect.objectContaining({ assigneeId: ada.id, assignedBy: 'person' })]);
+    });
+
     it('runs the reply and the kept actions in one go, as one activity entry', async () => {
       const response = await call<MacroRunResponse>(
         'POST',

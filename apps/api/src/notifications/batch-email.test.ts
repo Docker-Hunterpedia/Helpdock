@@ -138,6 +138,34 @@ describe('renderBatchEmail (M14-10, artboard Email/NotificationBatch)', () => {
     expect(email.html).not.toContain('<b>Mona</b>');
   });
 
+  it.each([
+    ['en', 'immediate', 'SLA escalation assigned it to you'],
+    ['ar', 'immediate', 'أسنده إليك تصعيد اتفاقية مستوى الخدمة'],
+    ['en', 'daily', 'SLA escalation'],
+    ['ar', 'daily', 'تصعيد اتفاقية مستوى الخدمة'],
+  ] as const)('names SLA assignments in %s %s email', (locale, kind, label) => {
+    const content = groupBatch(
+      [1, 2].map((number) =>
+        item({
+          kind: 'assigned',
+          ticketId: `sla-${number}`,
+          reference: `HD-${number}`,
+          detail: { assignedBy: 'sla' },
+        }),
+      ),
+      kind === 'immediate' ? 'batch' : 'digest',
+    );
+    if (content === null) {
+      throw new Error('the fixture has assignments');
+    }
+
+    const email = renderBatchEmail(input({ locale, kind, content }));
+
+    expect(email.text).toContain(label);
+    expect(email.text).not.toContain('event.assigned.sla');
+    expect(email.text).not.toContain('actor.sla');
+  });
+
   it('ends with the footer every notification email shares', () => {
     expect(renderBatchEmail(input()).text).toContain(
       'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',

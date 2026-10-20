@@ -1,17 +1,14 @@
-import {
-  WEBHOOK_EVENTS,
-  type Webhook,
-  type WebhookEvent,
-  type WebhookWithSecret,
-} from '@helpdock/schemas';
+import type { Webhook, WebhookEvent, WebhookWithSecret } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   TextField,
   Typography,
@@ -63,6 +60,7 @@ export function EndpointFormDialog({
   const titleId = useId();
   const urlId = useId();
   const editing = mode.kind === 'edit' ? mode.webhook : null;
+  const [includeInternalNotes, setIncludeInternalNotes] = useState(false);
   const [url, setUrl] = useState('');
   const [events, setEvents] = useState<readonly WebhookEvent[]>([]);
   const [urlError, setUrlError] = useState<string | undefined>(undefined);
@@ -71,6 +69,7 @@ export function EndpointFormDialog({
   useEffect(() => {
     if (open) {
       setUrl(editing?.url ?? '');
+      setIncludeInternalNotes(editing?.includeInternalNotes ?? false);
       setEvents(editing?.events ?? []);
       setUrlError(undefined);
       setEventsError(undefined);
@@ -79,7 +78,7 @@ export function EndpointFormDialog({
 
   const save = useMutation({
     mutationFn: async () => {
-      const request = { url: url.trim(), events: [...events] };
+      const request = { url: url.trim(), events: [...events], includeInternalNotes };
       return editing === null
         ? { added: await api.createWebhook(brand.id, request) }
         : { saved: await api.updateWebhook(brand.id, editing.id, request) };
@@ -132,9 +131,14 @@ export function EndpointFormDialog({
       aria-labelledby={titleId}
       maxWidth="xs"
       fullWidth
-      slotProps={{ paper: { sx: { maxWidth: 480, borderRadius: '10px' } } }}
+      slotProps={{ paper: { sx: { maxWidth: 520, borderRadius: '10px' } } }}
     >
-      <Box component="form" noValidate onSubmit={submit}>
+      <Box
+        component="form"
+        noValidate
+        onSubmit={submit}
+        sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
+      >
         <DialogTitle
           id={titleId}
           sx={{
@@ -216,19 +220,73 @@ export function EndpointFormDialog({
             )}
           </Box>
 
-          <CheckList
-            legend={t('developers:webhooks.form.events')}
-            options={WEBHOOK_EVENTS.map((event) => ({
-              value: event,
-              hint: t(`developers:webhooks.eventHints.${event}`),
-            }))}
-            selected={events}
-            error={eventsError}
-            onChange={(next) => {
-              setEvents(next);
-              setEventsError(undefined);
+          <Box
+            component="fieldset"
+            aria-describedby={eventsError === undefined ? undefined : `${urlId}-events-error`}
+            sx={{
+              border: 0,
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
             }}
-          />
+          >
+            <Typography component="legend" sx={{ fontSize: 14, fontWeight: 600 }}>
+              {t('developers:webhooks.form.events')}
+            </Typography>
+            {EVENT_GROUPS.map(({ key, events: group }) => (
+              <CheckList<WebhookEvent>
+                key={key}
+                legend={t(`developers:webhooks.groups.${key}`)}
+                options={group.map((event) => ({
+                  value: event,
+                  hint: t(`developers:webhooks.eventHints.${event}`),
+                  badge: NEW_EVENTS.has(event) ? t('developers:webhooks.newEvent') : undefined,
+                }))}
+                selected={events}
+                onChange={(next) => {
+                  setEvents([
+                    ...events.filter((event) => !group.includes(event)),
+                    ...next.filter((event) => group.includes(event)),
+                  ]);
+                  setEventsError(undefined);
+                }}
+              />
+            ))}
+            {eventsError === undefined ? null : (
+              <Typography
+                role="alert"
+                id={`${urlId}-events-error`}
+                variant="caption"
+                sx={{ color: tokens['status.danger.text'] }}
+              >
+                {eventsError}
+              </Typography>
+            )}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  slotProps={{ input: { 'aria-describedby': `${urlId}-notes-hint` } }}
+                  checked={includeInternalNotes}
+                  onChange={(event) => setIncludeInternalNotes(event.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {t('developers:webhooks.includeInternalNotes')}
+                </Typography>
+              }
+            />
+            <Typography
+              id={`${urlId}-notes-hint`}
+              variant="caption"
+              sx={{ color: 'text.secondary' }}
+            >
+              {t('developers:webhooks.notesHint')}
+            </Typography>
+          </Box>
 
           {editing === null ? (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -248,3 +306,42 @@ export function EndpointFormDialog({
     </Dialog>
   );
 }
+
+const EVENT_GROUPS: readonly {
+  key: 'tickets' | 'messages' | 'contacts' | 'other';
+  events: readonly WebhookEvent[];
+}[] = [
+  {
+    key: 'tickets',
+    events: [
+      'ticket.created',
+      'ticket.updated',
+      'ticket.assigned',
+      'ticket.status_changed',
+      'ticket.merged',
+      'ticket.closed',
+    ],
+  },
+  { key: 'messages', events: ['ticket.replied', 'message.created'] },
+  {
+    key: 'contacts',
+    events: [
+      'contact.created',
+      'contact.updated',
+      'contact.merged',
+      'account.created',
+      'account.updated',
+    ],
+  },
+  { key: 'other', events: ['csat.received', 'article.published'] },
+];
+const NEW_EVENTS = new Set<WebhookEvent>([
+  'ticket.assigned',
+  'ticket.status_changed',
+  'ticket.merged',
+  'message.created',
+  'contact.updated',
+  'contact.merged',
+  'account.created',
+  'account.updated',
+]);

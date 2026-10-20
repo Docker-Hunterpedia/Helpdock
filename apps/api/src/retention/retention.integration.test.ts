@@ -1318,6 +1318,16 @@ describe.skipIf(!hasDocker)('data retention', () => {
             ),
             copy('ticket.created', { ticket: { id: ticket.id, contactId } }, 'pending'),
             copy(
+              'message.created',
+              { message: { ticketId: ticket.id, bodyText: 'Private copy' } },
+              'pending',
+            ),
+            copy(
+              'message.created',
+              { message: { ticketId: ticket.id, bodyText: 'Delivered copy' } },
+              'succeeded',
+            ),
+            copy(
               'csat.received',
               { survey: { id: uuidv7(), ticketId: ticket.id, comment: 'Thanks' } },
               'succeeded',
@@ -1328,6 +1338,11 @@ describe.skipIf(!hasDocker)('data retention', () => {
               'succeeded',
             ),
             copy('contact.created', { contact: { id: bystanderId } }, 'succeeded'),
+            copy(
+              'message.created',
+              { message: { ticketId: bystanderTicket.id, bodyText: 'Keep this copy' } },
+              'pending',
+            ),
           ]);
       });
 
@@ -1367,12 +1382,13 @@ describe.skipIf(!hasDocker)('data retention', () => {
         ),
       ).toEqual([
         { contact: { id: bystanderId } },
+        { message: { ticketId: bystanderTicket.id, bodyText: 'Keep this copy' } },
         { ticket: { id: bystanderTicket.id, contactId: bystanderId } },
       ]);
       expect(after.audit?.meta).toMatchObject({
         telegramChatCount: 1,
         aiCallCount: 1,
-        webhookDeliveryCount: 3,
+        webhookDeliveryCount: 5,
       });
       expect(JSON.stringify(after.audit?.meta)).not.toContain(CHAT);
 

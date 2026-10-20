@@ -421,6 +421,20 @@
       "when": 1792507261086,
       "tag": "0061_ticket_sla_next_due",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792507718893,
+      "tag": "0062_webhook_note_opt_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792508366292,
+      "tag": "0063_single_key_shortcuts",
+      "breakpoints": true
     }
   ]
 }

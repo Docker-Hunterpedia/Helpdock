@@ -207,6 +207,22 @@ screen agents use most.
 
 ### M14-01 Keyboard foundation
 
+**Status: built, in review** (issue #288). Built as below, with these
+differences: letters follow the character a Latin layout types and fall back
+to `event.code` only on a layout that types no Latin letter, which is what
+1.0's keys already did since #244 (so the Arabic layout needed no failing test
+first, and Dvorak and AZERTY users press the key engraved with the letter);
+`Enter` on a row, `x`, `Shift`+`x`, `Esc` to clear a selection, `h` and `⌘K`
+wait for the deliverables that build what they act on (M14-04, M14-02,
+M14-05); `g` `n` is left out, because notifications have no page of their own;
+the sheet shows the Latin letter only, as the artboard does; the switch also
+travels in the session (`user.singleKeyShortcuts`), so no letter is taken
+before it is known, and lives in the sheet's footer until M14-12's Profile
+tab, with the sheet also in the account menu so a person who turned `?` off
+can reach it; `Kbd` lands here
+rather than in M14-06, because the sheet draws with it. Guide:
+[Keyboard shortcuts](../guides/keyboard-shortcuts.md).
+
 One registry (`apps/admin/src/keyboard/registry.ts`, new) names every shortcut
 once: its id, keys, scope (global, list, ticket, composer), the i18n label, and
 the permission it needs. The `?` sheet, the palette's action list, each button's
@@ -347,6 +363,8 @@ the email batcher fold one actor's operation into one line ("Omar assigned you
 Limits: 50 tickets, 20 operations a minute per person. Permission
 `ticket:write`, then per ticket. Not in the public API v1 (staff only; an API
 client can loop with idempotency keys).
+
+**M14-03 acceptance test:** A bulk status or assignee change emits one webhook event per changed ticket through the shared mutation paths, including Undo.
 
 ### M14-04 Bulk edit UI
 
@@ -920,6 +938,16 @@ mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 
 ### M14-28 More webhook events
 
+Rebase compatibility: SLA assignment notifications retain their automatic source in batched and digest emails, with English and Arabic labels. The notes opt-in migration is `0062_webhook_note_opt_in`, generated after `0061_ticket_sla_next_due`.
+
+Status: implemented for #315; PR #335 second-review fixes applied; pending independent re-review and CI. Migration regenerated as `0062_webhook_note_opt_in` after `0061_ticket_sla_next_due` at the owner's queue signal.
+
+- [x] Eight additional events, Zod source/output contracts, transactional producers, brand and department scope.
+- [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.
+- [x] Merge undo publishes profile updates for the changed survivor and restored contact; identity transfers lock contact pairs in id order; the notes hint remains an accessible description outside the checkbox label.
+- [x] Focused unit, real Postgres/Redis integration and en/ar Playwright coverage; payload reference in `webhooks.md`, OpenAPI webhooks and API minor changeset.
+- [ ] Deferred to M14-03: bulk apply/undo status and assignee changes emit one event per ticket through the shared ticket mutation paths; implementation and acceptance coverage belong to M14-03.
+
 `WEBHOOK_EVENTS` today holds `ticket.created`, `ticket.updated`,
 `ticket.replied`, `ticket.closed`, `contact.created`, `csat.received` and
 `article.published`. It gains `ticket.assigned`, `ticket.status_changed`,
@@ -1180,7 +1208,7 @@ radii: Snoozed uses the `on_hold` hue it is mapped to.
 |---|---|---|---|
 | M14-01 | Registry ↔ handler parity; `event.code` matching with an Arabic layout (failing first); sequences and timeout; switch off disables all unmodified keys | Profile switch persists | `?` sheet; `g i`; `j`/`k` with an Arabic layout fixture; switch off |
 | M14-02 | Preset maths against business hours in Asia/Riyadh and Europe/Berlin; transition table rows; resume-status fallback | Snooze, timer fires and wakes; customer reply wakes and the job is a no-op; SLA warning wakes; resolution paused while response runs (a §3.6-style worked example to the minute); kill Redis and `snooze.rebuild` restores; exact number finds a snoozed ticket; RLS: Agent of another department cannot snooze | Snooze from header and `h`; Snoozed view; wake now; failure: too far ahead |
-| M14-03 | Change validation; undo merge logic (field changed since is kept) | 50 tickets in one transaction; mixed departments (a hidden one is `not_found`); one refusal in preview; apply rolls back on `bulk-changed`; every per-ticket outbox event present; bulk close delays CSAT and Undo sends none; Undo by another person refused; RLS on both new tables | — |
+| M14-03 | Change validation; undo merge logic (field changed since is kept) | 50 tickets in one transaction; mixed departments (a hidden one is `not_found`); one refusal in preview; apply rolls back on `bulk-changed`; every per-ticket outbox event present; a bulk status or assignee change emits one webhook event per ticket; bulk close delays CSAT and Undo sends none; Undo by another person refused; RLS on both new tables | — |
 | M14-04 | Range selection logic | — | Select with `x`, `Shift`+`x` and Shift-click; close 10 and Undo; preview with refusals; the 50 cap |
 | M14-05 | Registry ↔ `route-paths` drift test; Arabic folding; action filtering by permission | Quick search under RLS: a ticket in another department and a contact's hidden tickets never appear; Viewer gets no actions; exact number | Open with `⌘K`/`Ctrl+K`, find by number, by Arabic setting name, run an action; failure: a section errors |
 | M14-06 | Copy per view | — | Each empty state; hints hidden when the switch is off |
@@ -1204,7 +1232,7 @@ radii: Snoozed uses the `on_hold` hue it is mapped to.
 | M14-25 | Event-to-sound selection; reminder timer stops when the chat is picked up | Preference persists per person | Switches persist; a waiting chat plays and repeats until picked up (audio stubbed) |
 | M14-26 | Condition and action schemas; reply mailbox limited to the department's mailboxes | Filter and conditions on arrival facts under RLS; `mark_spam` sends no auto-reply or survey; pre-M14 tickets never match | Filter by mailbox, save as a view; rule with a mailbox condition in the test run |
 | M14-27 | Validation per type (https only for link, email format, person in the brand) | Values on ticket, contact and account; person removed from the brand reads as former staff | Each type in the editor and on a ticket, `en` and `ar` |
-| M14-28 | Payload schemas per event | Each event written to the outbox in the change's transaction; a bulk change emits one per ticket; note bodies only to opted-in endpoints | Event picker |
+| M14-28 | Payload schemas per event | Each event written to the outbox in the change's transaction; note bodies only to opted-in endpoints | Event picker |
 | M14-29 | Tag rollup arithmetic | Report figures match seeded data under department scope | The two cards and their CSV |
 
 ## Docs

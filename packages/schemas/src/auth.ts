@@ -48,6 +48,14 @@ export const sessionUserSchema = z.object({
   role: staffRoleSchema,
   /** Install admins are shown as such instead of by brand role (DESIGN §6.5). */
   installAdmin: z.boolean(),
+  /**
+   * M14-01: whether shortcuts without a modifier answer for this person (see
+   * `keyboardPreferencesSchema`). In the session so the shell knows it before
+   * it draws, rather than taking letters until a second read answers (WCAG
+   * 2.1.4). The api always sends it; absent counts as on, which is the
+   * default (D-32) and what a session without the field always meant.
+   */
+  singleKeyShortcuts: z.boolean().optional(),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 

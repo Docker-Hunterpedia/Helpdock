@@ -1,6 +1,7 @@
 import { type DbTransaction, ticketActivity } from '@helpdock/db';
 import type { ActivityVia } from '@helpdock/schemas';
 import type { Principal } from '../auth/principal.js';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 
 /**
  * "Activity log: every state change with who/when/via what (UI, rule, API, AI)"
@@ -128,4 +129,26 @@ export const writeTicketActivity = async (
     to: to ?? null,
     via: actor.via,
   });
+  if (
+    action === 'ticket.status.changed' &&
+    typeof from?.statusId === 'string' &&
+    typeof to?.statusId === 'string' &&
+    from.statusId !== to.statusId
+  ) {
+    await enqueueWebhookEvent(tx, brandId, 'ticket.status_changed', {
+      ticketId,
+      departmentId,
+      previousStatusId: String(from?.statusId),
+      statusId: String(to?.statusId),
+    });
+  }
+  // Merge activity is written on both tickets; publish once for the secondary.
+  if (action === 'ticket.merged' && from?.ticketId === ticketId) {
+    await enqueueWebhookEvent(tx, brandId, 'ticket.merged', {
+      ticketId,
+      departmentId: String(to?.departmentId),
+      mergedIntoId: String(to?.ticketId),
+      previousDepartmentId: departmentId,
+    });
+  }
 };

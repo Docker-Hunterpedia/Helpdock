@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import type { DbTransaction } from '@helpdock/db';
+import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '../auth/principal.js';
-import { activityActorFor } from './ticket-activity.js';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
+import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 
 const ID = '01937f5e-7e53-7000-8000-000000000001';
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
@@ -42,4 +44,19 @@ describe('activityActorFor', () => {
       via: 'system',
     });
   });
+});
+
+vi.mock('../webhooks/enqueue-webhook-event.js', () => ({ enqueueWebhookEvent: vi.fn() }));
+it('does not stringify missing status ids into an invalid webhook reference', async () => {
+  const tx = { insert: () => ({ values: async () => undefined }) } as unknown as DbTransaction;
+  await writeTicketActivity(tx, {
+    brandId: BRAND,
+    ticketId: ID,
+    departmentId: ID,
+    actor: { actorType: 'system', actorId: 'test', via: 'system' },
+    action: 'ticket.status.changed',
+    from: {},
+    to: { statusId: ID },
+  });
+  expect(enqueueWebhookEvent).not.toHaveBeenCalled();
 });

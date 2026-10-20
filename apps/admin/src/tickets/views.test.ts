@@ -18,6 +18,7 @@ import {
   viewLabel,
   viewSearch,
   withFilters,
+  withIntent,
   withoutFilters,
 } from './views.js';
 
@@ -206,11 +207,19 @@ describe('activeFilterCount', () => {
 });
 
 describe('intents and links', () => {
-  it('reads only the two intents the workspace acts on', () => {
+  it('reads only the intents the workspace acts on', () => {
     expect(intentOf(new URLSearchParams('intent=save'))).toBe('save');
     expect(intentOf(new URLSearchParams('intent=filters'))).toBe('filters');
+    expect(intentOf(new URLSearchParams('intent=new'))).toBe('new');
+    expect(intentOf(new URLSearchParams('intent=search'))).toBe('search');
     expect(intentOf(new URLSearchParams('intent=delete'))).toBeNull();
     expect(intentOf(new URLSearchParams())).toBeNull();
+  });
+
+  it('adds an intent to a query string and keeps the rest of it (M14-01)', () => {
+    expect(withIntent('?view=abc&q=refund', 'new')).toBe('?view=abc&q=refund&intent=new');
+    expect(withIntent('', 'search')).toBe('?intent=search');
+    expect(withIntent('?intent=save', 'new')).toBe('?intent=new');
   });
 
   it('links to a view, with an intent when one is asked for', () => {

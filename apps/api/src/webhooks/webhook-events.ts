@@ -5,11 +5,17 @@ import {
   outboxEvents,
   type WebhookDeliverPayload,
 } from '@helpdock/jobs';
-import { HC_ARTICLE_CHANGED_EVENT, type WebhookEvent } from '@helpdock/schemas';
+import {
+  type AdditionalWebhookEvent,
+  HC_ARTICLE_CHANGED_EVENT,
+  type WebhookEvent,
+  webhookSourcePayloadSchemas,
+} from '@helpdock/schemas';
 import { z } from 'zod';
 import { CONTACT_CREATED_EVENT } from '../contacts/contact-events.js';
 import { CSAT_EVENTS } from '../csat/csat-events.js';
 import { TICKET_EVENTS } from '../tickets/ticket-events.js';
+import { redactWebhookNotes } from './webhook-note-redaction.js';
 import { webhookDataFor } from './webhook-payload.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
 
@@ -40,12 +46,13 @@ const deliveryRequestedSchema = z.object({ deliveryId: z.uuid() });
 /**
  * Which webhook event a domain event is, if any. A reopen is an update to a
  * receiver; `ticket.closed` keeps its own name because "it was resolved" is
- * what most integrations wait for. Spam and notes are not sent at all.
+ * what most integrations wait for. Spam is not a ticket.closed event; notes use message.created only.
  */
 export const webhookEventFor = (
   event: string,
   payload: Record<string, unknown>,
 ): WebhookEvent | undefined => {
+  if (Object.hasOwn(webhookSourcePayloadSchemas, event)) return event as AdditionalWebhookEvent;
   switch (event) {
     case TICKET_EVENTS.created:
       return 'ticket.created';
@@ -69,6 +76,7 @@ export const webhookEventFor = (
 
 /** The domain events the subscriber listens to. */
 export const WEBHOOK_SOURCE_EVENTS = [
+  ...Object.keys(webhookSourcePayloadSchemas),
   TICKET_EVENTS.created,
   TICKET_EVENTS.updated,
   TICKET_EVENTS.reopened,
@@ -105,6 +113,13 @@ export const createWebhookSourceHandler =
       event: webhookEvent,
       createdAt: now().toISOString(),
       brandId,
+      ...(Object.hasOwn(webhookSourcePayloadSchemas, event)
+        ? {
+            departmentId:
+              webhookSourcePayloadSchemas[event as AdditionalWebhookEvent].parse(payload)
+                .departmentId,
+          }
+        : {}),
       data,
     };
     for (const endpoint of endpoints) {
@@ -113,7 +128,7 @@ export const createWebhookSourceHandler =
         webhookId: endpoint.id,
         eventId: outboxId,
         event: webhookEvent,
-        payload: envelope,
+        payload: redactWebhookNotes(envelope, endpoint.includeInternalNotes),
       });
       if (delivery !== undefined) {
         await enqueueOutbox(tx, {

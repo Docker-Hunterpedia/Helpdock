@@ -40,6 +40,7 @@ export const webhooks = pgTable(
     events: text('events').array().notNull().default(sql`'{}'::text[]`),
     secret: text('secret').notNull(),
     secretRotatedAt: timestamp('secret_rotated_at', { withTimezone: true }),
+    includeInternalNotes: boolean('include_internal_notes').notNull().default(false),
     enabled: boolean('enabled').notNull().default(true),
     consecutiveFailures: integer('consecutive_failures').notNull().default(0),
     disabledAt: timestamp('disabled_at', { withTimezone: true }),

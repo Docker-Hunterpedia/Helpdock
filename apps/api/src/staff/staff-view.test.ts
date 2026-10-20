@@ -38,6 +38,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   signatureEn: null,
   signatureAr: null,
   webauthnUserHandle: null,
+  singleKeyShortcuts: true,
   ...overrides,
 });
 

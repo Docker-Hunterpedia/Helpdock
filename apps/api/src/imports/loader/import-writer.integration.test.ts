@@ -336,6 +336,19 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       email: { date: null },
       importDetails: { mailDate: 'Unknown source time' },
     });
+    const newWebhookEvents = [
+      'ticket.assigned',
+      'ticket.status_changed',
+      'ticket.merged',
+      'message.created',
+      'contact.updated',
+      'contact.merged',
+      'account.created',
+      'account.updated',
+    ];
+    expect(
+      (await owner.db.select().from(outbox)).filter((row) => newWebhookEvents.includes(row.event)),
+    ).toEqual([]);
     expect(await owner.db.select().from(outbox)).toEqual([]);
   });
 

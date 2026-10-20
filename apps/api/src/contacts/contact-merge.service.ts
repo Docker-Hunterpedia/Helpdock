@@ -6,9 +6,11 @@ import type {
   ContactMergeSide,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
 import type { ContactMergesRepository } from './contact-merges.repository.js';
+import { withContactProfileChange } from './contact-profile-change.js';
 import { identityView } from './contact-view.js';
 import type { ContactsRepository } from './contacts.repository.js';
 import type { ContactContext, ContactsService } from './contacts.service.js';
@@ -145,6 +147,11 @@ export class ContactMergeService {
       },
     });
 
+    await enqueueWebhookEvent(tx, brandId, 'contact.merged', {
+      contactId: survivor.id,
+      mergedContactId: merged.id,
+      departmentId: null,
+    });
     return this.#detail.detail(context, survivor.id);
   }
 
@@ -176,11 +183,13 @@ export class ContactMergeService {
     }
 
     const identityCount = (
-      await this.#merges.moveIdentities(tx, {
-        from: survivor.id,
-        to: merged.id,
-        ids: merge.movedIdentityIds,
-      })
+      await withContactProfileChange(tx, survivor.id, () =>
+        this.#merges.moveIdentities(tx, {
+          from: survivor.id,
+          to: merged.id,
+          ids: merge.movedIdentityIds,
+        }),
+      )
     ).length;
     await this.#merges.moveNotes(tx, { from: survivor.id, to: merged.id, ids: merge.movedNoteIds });
     const ticketCount = (
@@ -192,6 +201,11 @@ export class ContactMergeService {
       })
     ).length;
     await this.#merges.markMerged(tx, merged.id, null);
+    // Undo restores an existing contact, including merges that moved no identities.
+    await enqueueWebhookEvent(tx, brandId, 'contact.updated', {
+      contactId: merged.id,
+      departmentId: null,
+    });
     await this.#merges.setPairSuggestions(tx, {
       a: survivor.id,
       b: merged.id,

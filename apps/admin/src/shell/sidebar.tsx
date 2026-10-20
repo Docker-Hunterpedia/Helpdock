@@ -7,6 +7,8 @@ import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
 import { useSession } from '../auth/session.tsx';
+import { useAriaKeyShortcuts } from '../keyboard/keyboard-provider.tsx';
+import { isMac } from '../keyboard/keys.js';
 import { TicketViewsNav } from '../screens/tickets/views-nav.tsx';
 import { BrandSwitcher } from './brand-switcher.tsx';
 import { CountBadge } from './count-badge.tsx';
@@ -25,8 +27,6 @@ export interface SidebarCollapse {
   readonly collapsed: boolean;
   readonly onToggle: () => void;
 }
-
-const isMac = (): boolean => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
 
 function NavItemLink({
   item,
@@ -236,6 +236,7 @@ function SidebarToggle({
   const label = collapsed ? t('admin:nav.expand') : t('admin:nav.collapse');
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
   const modifier = isMac() ? '⌘' : t('admin:nav.ctrlKey');
+  const keyShortcuts = useAriaKeyShortcuts('general.sidebar');
 
   return (
     <RailTooltip title={collapsed ? label : ''}>
@@ -245,7 +246,7 @@ function SidebarToggle({
         aria-label={label}
         aria-expanded={!collapsed}
         aria-controls={controls}
-        aria-keyshortcuts={'Meta+\\ Control+\\'}
+        aria-keyshortcuts={keyShortcuts}
         onClick={onToggle}
         sx={{
           display: 'flex',

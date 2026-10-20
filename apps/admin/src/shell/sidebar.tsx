@@ -384,7 +384,7 @@ export function Sidebar({
           minHeight: 0,
           minWidth: 0,
           alignSelf: 'stretch',
-          marginInlineStart: collapsed ? -2 : -1,
+          marginInlineStart: -2,
           marginInlineEnd: collapsed ? -2 : -3,
           position: 'relative',
           '&::before, &::after': {
@@ -452,10 +452,11 @@ export function Sidebar({
             ref={contentRef}
             sx={{
               paddingBlock: 1,
-              width: collapsed ? 36 : 'auto',
+              width: collapsed ? 36 : SIDEBAR_WIDTH - 1 - 8,
+              maxWidth: '100%',
               // Use the full rail's centre, independent of the reserved scrollbar gutter.
               marginInlineStart: collapsed ? `${(RAIL_WIDTH - 1 - 36) / 2}px` : 0,
-              paddingInlineStart: collapsed ? 0 : 1,
+              paddingInlineStart: collapsed ? 0 : 2,
               paddingInlineEnd: collapsed ? 0 : 2,
             }}
           >

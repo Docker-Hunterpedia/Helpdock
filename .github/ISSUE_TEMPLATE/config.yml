@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Docker-Hunterpedia/Helpdock/security/advisories/new
+    about: Report it privately through GitHub's private vulnerability reporting, never in a public issue. SECURITY.md says what to include.
+  - name: Ask a question or get help
+    url: https://github.com/Docker-Hunterpedia/Helpdock/discussions/categories/q-a
+    about: Questions about installing, configuring or using Helpdock go to Q&A in GitHub Discussions.
+  - name: Share an idea
+    url: https://github.com/Docker-Hunterpedia/Helpdock/discussions/categories/ideas
+    about: An idea that is still taking shape can start in Ideas before it becomes a feature request.
+  - name: Read the documentation
+    url: https://github.com/Docker-Hunterpedia/Helpdock/tree/main/docs/guides
+    about: The install, configuration, operations and feature guides.

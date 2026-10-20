@@ -179,6 +179,14 @@ Node.js 24 and pnpm 12, then `pnpm install`. The root scripts are `pnpm build`, 
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request: every change is tied to a deliverable in the [PRD](docs/planning/PRD.md), carries its tests and docs, and is reviewed by a code owner. Every screen is designed in [DESIGN.md](DESIGN.md)'s system before it is built. Coding agents should also read [AGENTS.md](AGENTS.md).
 
+## Community
+
+- [Code of conduct](CODE_OF_CONDUCT.md): the Contributor Covenant 2.1, for everyone taking part.
+- [Contributing](CONTRIBUTING.md): how a change gets from an issue to a merged pull request.
+- [Support](SUPPORT.md): where to ask questions, in [GitHub Discussions](https://github.com/Docker-Hunterpedia/Helpdock/discussions), and which issue form to use.
+- [Security](SECURITY.md): supported versions and private vulnerability reporting.
+- [Accessibility](ACCESSIBILITY.md): what Helpdock commits to, what is checked, the known limitations and how to report a barrier.
+
 ## Security
 
 Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do not open a public issue.

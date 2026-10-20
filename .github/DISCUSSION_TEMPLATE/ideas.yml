@@ -1,0 +1,21 @@
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share an idea that is still taking shape. When it is clear what Helpdock should do, it can become a [feature request](https://github.com/Docker-Hunterpedia/Helpdock/issues/new?template=feature_request.yml).
+
+        What is already planned is in [Phase 5 of the PRD](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#phase-5--1x) and the [post-1.0 backlog](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#5-post-10-backlog-v11); what is out of scope is in the [non-goals for 1.x](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#non-goals-for-1x).
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: The problem it solves and who it is for, then what you have in mind.
+    validations:
+      required: true
+  - type: input
+    id: related
+    attributes:
+      label: Related milestone or deliverable
+      description: A PRD milestone or deliverable id it touches, if any.
+      placeholder: M19, or none

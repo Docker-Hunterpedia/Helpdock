@@ -1,0 +1,47 @@
+name: Documentation
+description: A guide or reference page that is wrong, out of date, unclear or missing.
+title: "Docs: "
+labels: ["documentation", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The guides are in [`docs/guides/`](https://github.com/Docker-Hunterpedia/Helpdock/tree/main/docs/guides), and [docs/README.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/README.md) explains how the documents are organised. A small fix is welcome as a pull request straight away.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The file or link, with the section if it is a long page.
+      placeholder: docs/guides/install.md#the-setup-key
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - It is wrong (it does not match what Helpdock does)
+        - It is out of date
+        - It is unclear or hard to follow
+        - Something is missing
+        - A broken link or image
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: Quote the text, and say what happened when you followed it.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change
+      description: Optional. What it should say instead.
+  - type: input
+    id: version
+    attributes:
+      label: Helpdock version
+      description: The version you followed the page with, if it matters.
+      placeholder: 1.0.0

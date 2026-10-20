@@ -860,6 +860,11 @@ The saved views of [Views](#views) are under the same prefix, every one
 
 ### Listing
 
+The ticket-list header uses icon-only **Sort** and **Filter** buttons so its
+360 px column fits in English and Arabic. Hover or keyboard focus shows their
+localized tooltips; Filter includes the active count in its tooltip and accessible
+name. **New ticket** keeps its text label.
+
 In 1.1, the list's **Sort** menu and the view editor offer **SLA due**:
 oldest breached running clock first, then the soonest due clock, then tickets
 without a running clock. Paused, satisfied and stopped clocks do not count.

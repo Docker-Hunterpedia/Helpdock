@@ -436,6 +436,13 @@ M14-23.
 
 ### M14-07 Sort by SLA due
 
+Regression fix #353: the 360 px ticket-list header uses outlined square sm
+Sort and Filter buttons with localized tooltips and accessible names (including
+the active filter count). New ticket keeps its text label; the view title stays
+on one line. The `Admin/Tickets-SortSla` menu and ordering are unchanged. The
+webhook endpoint test also derives its all-events count from `WEBHOOK_EVENTS.length`
+after M14-28 expanded the event picker.
+
 `sort=slaDue`: the nearest due time of the ticket's running, unpaused,
 unsatisfied clocks, breached ones first by how long ago, then soonest due, then
 tickets without a clock. A stored generated column `tickets.sla_next_due_at`

@@ -1,4 +1,4 @@
-import { Box, Button, ListSubheader, Menu, MenuItem, Typography } from '@mui/material';
+import { Box, Button, ListSubheader, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
 import { ArrowDownUp, Check } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -27,18 +27,21 @@ export function SortMenu({
 
   return (
     <>
-      <Button
-        id={id}
-        variant="outlined"
-        size="small"
-        startIcon={<ArrowDownUp size={14} aria-hidden="true" />}
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        aria-controls={anchor === null ? undefined : `${id}-menu`}
-        onClick={(event) => setAnchor(event.currentTarget)}
-      >
-        {t('tickets:sort.action')}
-      </Button>
+      <Tooltip title={t('tickets:sort.action')} describeChild>
+        <Button
+          id={id}
+          variant="outlined"
+          size="small"
+          aria-label={t('tickets:sort.action')}
+          sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0 }}
+          aria-haspopup="menu"
+          aria-expanded={anchor !== null}
+          aria-controls={anchor === null ? undefined : `${id}-menu`}
+          onClick={(event) => setAnchor(event.currentTarget)}
+        >
+          <ArrowDownUp size={14} aria-hidden="true" />
+        </Button>
+      </Tooltip>
       <Menu
         id={`${id}-menu`}
         anchorEl={anchor}

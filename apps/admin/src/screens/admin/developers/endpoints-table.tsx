@@ -264,7 +264,7 @@ function LastDelivery({
   );
 }
 
-/** The first two events and "+n", or "All 7 events". */
+/** The first two events and "+n", or "All events". */
 export function EventTags({ events }: { readonly events: readonly string[] }): ReactNode {
   const t = useT();
   if (events.length === WEBHOOK_EVENTS.length) {

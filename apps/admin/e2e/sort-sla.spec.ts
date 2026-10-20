@@ -77,3 +77,53 @@ test('saves SLA due in the view editor and opens the view in that order', async 
     page.getByRole('menuitemradio', { name: new RegExp(t('tickets:sort.slaDue.asc')) }),
   ).toHaveAttribute('aria-checked', 'true');
 });
+
+// #353: adding Sort must not squeeze the 360 px header into wrapped controls.
+test('ticket header fits its 360 px column with active filters', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTickets(page, locale);
+  await page.evaluate(() => document.fonts.ready);
+  const region = page.getByRole('region', { name: t('tickets:list.label') });
+  expect(await region.evaluate((element) => element.getBoundingClientRect().width)).toBe(360);
+  const title = region.getByRole('heading', { level: 1 });
+  expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const header = title.locator('..');
+  const buttons = header.getByRole('button');
+  await expect(buttons).toHaveCount(3);
+  for (const button of await buttons.all()) {
+    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+    expect(await button.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(
+      true,
+    );
+    expect(
+      await button.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const row = element.parentElement?.parentElement?.getBoundingClientRect();
+        return row !== undefined && bounds.left >= row.left && bounds.right <= row.right;
+      }),
+    ).toBe(true);
+  }
+  expect(
+    await title.evaluate(
+      (element) =>
+        element.getBoundingClientRect().height <=
+        Number.parseFloat(getComputedStyle(element).lineHeight),
+    ),
+  ).toBe(true);
+  await region
+    .getByRole('button', { name: t('tickets:list.filterActive', { count: 4 }), exact: true })
+    .click();
+  await expect(page.getByRole('region', { name: t('tickets:filters.title') })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(
+    region.getByRole('button', { name: t('tickets:list.filterActive', { count: 4 }), exact: true }),
+  ).toBeFocused();
+  await region.getByRole('button', { name: t('tickets:newTicket.action'), exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});

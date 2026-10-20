@@ -48,6 +48,7 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    This deviation from "existing brands keep theirs" was accepted on
    2026-10-20 by the maintainers while building M18-10: a 1.0 brand that
    turned the check on without saving a provider had a non-working check.
+   Accepted by the owner on 2026-10-20.
 6. **Binding.** Each brand signs under its own key (HKDF info
    `helpdock:captcha:pow:<brandId>`), and the salt carries the surface
    (`widget-first-message` or `web-form`) next to `expires`, so a solution is

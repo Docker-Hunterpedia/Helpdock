@@ -57,7 +57,9 @@ days in bounded batches for each brand.
 
 New rows arrive as a `notification:created` frame on the person's own
 `user:<id>` room (see [realtime](realtime.md)). The frame carries ids only; the
-bell re-reads its list over REST.
+bell re-reads its list over REST. Reading a ticket emits a separate
+`notification:read` frame that refreshes the bell without announcing a new
+notification or triggering a new-notification sound.
 
 ## Your account › Notifications
 
@@ -284,8 +286,10 @@ The old sender claimed that receipt in the send transaction. Older, disabled,
 or already-sent legacy rows are dropped with an info log.
 
 Send failures (including rendering failures) are counted durably on the batch
-across BullMQ retries and rebuilds. After five failed attempts, its remaining
-rows become `skipped_failed`, the batch becomes `failed`, and its pending slot
+only when a BullMQ job exhausts its attempts. Retries within that job do not
+consume the batch budget; hourly rebuilds place fresh jobs. Database and other
+infrastructure errors never consume this budget. After five exhausted send
+jobs, its remaining rows become `skipped_failed`, the batch becomes `failed`, and its pending slot
 is released. The worker logs that terminal transition once at warn; new
 notifications can open a fresh batch.
 

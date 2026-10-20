@@ -477,7 +477,7 @@ export const createPushTestHandler =
     });
   };
 
-/** Reuses the bell's invalidation frame, without scheduling email or push again. */
+/** Refreshes read state without announcing a new notification or scheduling email/push. */
 export const createNotificationReadHandler =
   ({ broadcast }: Pick<DeliveryDeps, 'broadcast'>): OutboxEventHandler =>
   async ({ brandId, payload }) => {
@@ -486,7 +486,7 @@ export const createNotificationReadHandler =
       .parse(payload);
     await broadcast.emit({
       rooms: [userRoom(userId)],
-      event: REALTIME_EVENTS.notificationCreated,
+      event: REALTIME_EVENTS.notificationRead,
       data: { brandId, notificationId },
       seq: null,
     });

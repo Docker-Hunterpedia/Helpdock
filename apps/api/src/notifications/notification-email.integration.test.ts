@@ -21,6 +21,7 @@ import {
 } from '@helpdock/db';
 import {
   createQueueConnection,
+  notifyEmailBatchJob,
   notifyEmailBatchJobId,
   QUEUE_NAMES,
   silentLogger,
@@ -529,17 +530,30 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       });
       const id = await notify();
       const batchId = await opened(id);
-      clock = at(2);
-      for (let attempt = 1; attempt <= 5; attempt++) {
-        await withSystem(runtime.db, seeded.brandId, (tx) => poison.rebuild(tx, seeded.brandId));
-        const result = processors['notify.email_batch']({
-          id: batchId,
-          name: 'notify.email_batch',
-          data: { brandId: seeded.brandId, batchId },
+      for (let rebuild = 0; rebuild < 5; rebuild++) {
+        clock = at(2 + rebuild * 60);
+        await processors['notify.email_rebuild']({
+          id: `rebuild-${rebuild}`,
+          name: 'notify.email_rebuild',
+          data: { brandId: seeded.brandId },
         } as Job);
-        if (attempt < 5) await expect(result).rejects.toThrow('SMTP rejected');
-        else await expect(result).resolves.toBeUndefined();
-        expect((await batch(batchId))?.sendFailures).toBe(attempt);
+        const job = await queue.getJob(notifyEmailBatchJobId(batchId));
+        expect(job).toBeDefined();
+        if (job === undefined) throw new Error('rebuild did not place the batch job');
+        const attempts = job.opts.attempts ?? 1;
+        for (let attemptsMade = 0; attemptsMade < attempts; attemptsMade++) {
+          job.attemptsMade = attemptsMade;
+          const result = processors['notify.email_batch'](job);
+          if (rebuild === 4 && attemptsMade === attempts - 1) {
+            await expect(result).resolves.toBeUndefined();
+          } else {
+            await expect(result).rejects.toThrow('SMTP rejected');
+          }
+          expect((await batch(batchId))?.sendFailures).toBe(
+            rebuild + (attemptsMade === attempts - 1 ? 1 : 0),
+          );
+        }
+        await job.remove();
       }
       expect(await batch(batchId)).toMatchObject({ status: 'failed' });
       expect((await row(id))?.emailState).toBe('skipped_failed');
@@ -554,10 +568,117 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(warnings).toHaveLength(1);
       const next = await opened(await notify());
       expect(next).not.toBe(batchId);
-      clock = at(4);
+      clock = at(244);
       await send(next);
       expect(sent).toHaveLength(1);
     });
+
+    it('keeps the batch pending when one job exhausts its SMTP retries, then recovers', async () => {
+      const id = await notify();
+      const batchId = await opened(id);
+      clock = at(2);
+      let unavailable = true;
+      const retryingEngine = new NotificationEmailEngine({
+        repository: new EmailPacingRepository(),
+        notifications: new NotificationsRepository(),
+        config: async () => config,
+        presenceOf: async () => 'offline',
+        systemSender: async () => ({
+          send: async (message) => {
+            if (unavailable) throw new Error('SMTP unavailable');
+            sent.push(message);
+          },
+        }),
+        appUrl: APP_URL,
+        log: silentLogger,
+        now: () => clock,
+      });
+      const processors = createEmailJobProcessors({
+        db: runtime.db,
+        engine: retryingEngine,
+        queue: bullEmailQueue(queue),
+        log: silentLogger,
+      });
+      const attempts = (notifyEmailBatchJob.options.attempts ?? 1) + 2;
+      const job = {
+        id: batchId,
+        name: 'notify.email_batch',
+        data: { brandId: seeded.brandId, batchId },
+        opts: { attempts },
+        attemptsMade: 0,
+      } as Job;
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        job.attemptsMade = attempt;
+        await expect(processors['notify.email_batch'](job)).rejects.toThrow('SMTP unavailable');
+        expect(await batch(batchId)).toMatchObject({
+          status: 'pending',
+          sendFailures: attempt === attempts - 1 ? 1 : 0,
+        });
+        expect((await row(id))?.emailState).toBe('pending');
+      }
+      unavailable = false;
+      clock = at(62);
+      await processors['notify.email_rebuild']({
+        id: 'rebuild',
+        name: 'notify.email_rebuild',
+        data: { brandId: seeded.brandId },
+      } as Job);
+      const rebuilt = await queue.getJob(notifyEmailBatchJobId(batchId));
+      if (rebuilt === undefined) throw new Error('rebuild did not place the batch job');
+      await processors['notify.email_batch'](rebuilt);
+      expect(await batch(batchId)).toMatchObject({ status: 'sent', sendFailures: 1 });
+      expect(sent).toHaveLength(1);
+    });
+
+    it.each(['40P01', '40001', '08006'])(
+      'does not count database failure %s on a last attempt',
+      async (code) => {
+        const id = await notify();
+        const batchId = await opened(id);
+        clock = at(2);
+        class FailingRepository extends EmailPacingRepository {
+          override async batchItems(
+            tx: Parameters<EmailPacingRepository['batchItems']>[0],
+            batchId: string,
+          ) {
+            await tx.execute(
+              sql`do $$ begin raise exception using errcode = ${sql.raw(`'${code}'`)}; end $$`,
+            );
+            return super.batchItems(tx, batchId);
+          }
+        }
+        const failingEngine = new NotificationEmailEngine({
+          repository: new FailingRepository(),
+          notifications: new NotificationsRepository(),
+          config: async () => config,
+          presenceOf: async () => 'offline',
+          systemSender: async () => ({ send: async (message) => void sent.push(message) }),
+          appUrl: APP_URL,
+          log: silentLogger,
+          now: () => clock,
+        });
+        const processors = createEmailJobProcessors({
+          db: runtime.db,
+          engine: failingEngine,
+          queue: bullEmailQueue(queue),
+          log: silentLogger,
+        });
+        for (let rebuild = 0; rebuild < 5; rebuild++) {
+          await expect(
+            processors['notify.email_batch']({
+              id: batchId,
+              name: 'notify.email_batch',
+              data: { brandId: seeded.brandId, batchId },
+              opts: { attempts: 5 },
+              attemptsMade: 4,
+            } as Job),
+          ).rejects.toMatchObject({ cause: { code } });
+        }
+        expect(await batch(batchId)).toMatchObject({ status: 'pending', sendFailures: 0 });
+        expect((await row(id))?.emailState).toBe('pending');
+        expect(sent).toEqual([]);
+      },
+    );
 
     it('keeps a partial preference matrix untouched when only the schedule changes', async () => {
       const preferences = { replied: { inApp: true, email: false, push: false } };
@@ -617,7 +738,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(frames).toMatchObject([
         {
           rooms: [`user:${sam.id}`],
-          event: 'notification:created',
+          event: 'notification:read',
           data: { brandId: seeded.brandId, notificationId: id },
         },
       ]);

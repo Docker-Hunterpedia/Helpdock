@@ -582,10 +582,14 @@ compute its send time from the pacing state, add a delayed
 The current per-notification `notify.email` job hands off recent (at most 24
 hours), email-enabled legacy rows without a transactional send receipt; the
 schedule path does the same for delayed `notification.created` events. Other
-legacy rows are dropped with a log. Five send/render failures across retries
-and rebuilds terminally mark a batch `failed` and its rows `skipped_failed`,
+legacy rows are dropped with a log. Send/render failures count only on a job's
+last attempt, once per exhausted job across hourly rebuilds; database and other
+infrastructure errors do not count. Five exhausted send jobs terminally mark a
+batch `failed` and its rows `skipped_failed`,
 freeing the pending slot and logging once at warn. Rebuild locks people in
-user-id order, matching digest ticks.
+user-id order, matching digest ticks. Ticket-read bell invalidation uses a
+dedicated `notification:read` realtime event; `notification:created` remains
+reserved for new notifications, including future new-notification sounds (M14-25).
 
 The daily repeat guard uses the represented tick hour. A daily digest over a
 cap at its tick waits for the next day; a missed cron hour skips that day.

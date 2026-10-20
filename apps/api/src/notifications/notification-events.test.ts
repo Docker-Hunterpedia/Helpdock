@@ -589,7 +589,7 @@ describe('the push test handler', () => {
 });
 
 describe('ticket-read bell invalidation', () => {
-  it('refreshes the recipient bell on the existing realtime path', async () => {
+  it('refreshes the recipient bell on the dedicated read frame', async () => {
     const frames: RealtimeBroadcastInput[] = [];
     await createNotificationReadHandler({
       broadcast: { emit: async (frame) => void frames.push(frame) },
@@ -604,7 +604,7 @@ describe('ticket-read bell invalidation', () => {
     expect(frames).toEqual([
       {
         rooms: [userRoom(OMAR)],
-        event: REALTIME_EVENTS.notificationCreated,
+        event: REALTIME_EVENTS.notificationRead,
         data: { brandId: BRAND, notificationId: NOTIFICATION },
         seq: null,
       },

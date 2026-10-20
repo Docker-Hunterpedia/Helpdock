@@ -3,6 +3,7 @@ import {
   brandPresenceSchema,
   brandRoom,
   notificationCreatedEnvelopeSchema,
+  notificationReadEnvelopeSchema,
   PRESENCE_HEARTBEAT_INTERVAL_MS,
   type PresenceMap,
   presenceChangedEnvelopeSchema,
@@ -256,6 +257,13 @@ export class SocketRealtimeClient implements RealtimeClient {
       const parsed = notificationCreatedEnvelopeSchema.safeParse(envelope);
       if (parsed.success) {
         this.#listeners.notificationCreated(parsed.data.data);
+      }
+    });
+
+    socket.on(REALTIME_EVENTS.notificationRead, (envelope) => {
+      const parsed = notificationReadEnvelopeSchema.safeParse(envelope);
+      if (parsed.success) {
+        this.#listeners.notificationRead(parsed.data.data);
       }
     });
 

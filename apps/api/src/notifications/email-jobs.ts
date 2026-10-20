@@ -12,7 +12,12 @@ import {
 import { DelayedError, type Job, type Queue } from 'bullmq';
 import { ne } from 'drizzle-orm';
 import { withSystemJob } from '../tenant/system-job.js';
-import type { NotificationEmailEngine, Placement, SendOutcome } from './email-engine.js';
+import {
+  NotificationEmailDeliveryError,
+  type NotificationEmailEngine,
+  type Placement,
+  type SendOutcome,
+} from './email-engine.js';
 
 /**
  * The `notify` queue's four M14-10 jobs around {@link NotificationEmailEngine}:
@@ -129,13 +134,16 @@ export const createEmailJobProcessors = ({
           engine.send(tx, brandId, batchId),
         );
       } catch (error) {
+        const lastAttempt =
+          job.attemptsMade + 1 >= (job.opts.attempts ?? notifyEmailBatchJob.options.attempts ?? 1);
+        if (!(error instanceof NotificationEmailDeliveryError) || !lastAttempt) throw error;
         const failed = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
           engine.recordFailure(tx, brandId, batchId),
         );
         if (failed) {
           log.warn(
             { brandId, batchId },
-            'Notification email batch failed after 5 send attempts; rows skipped.',
+            'Notification email batch failed after 5 exhausted send jobs; rows skipped.',
           );
           return;
         }

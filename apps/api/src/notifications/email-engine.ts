@@ -51,6 +51,22 @@ export type SendOutcome =
   | { readonly kind: 'done'; readonly sent: boolean }
   | { readonly kind: 'later'; readonly at: Date };
 
+/** Only render/SMTP failures consume a batch's failure budget, never database or Redis errors. */
+export class NotificationEmailDeliveryError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : 'Notification email delivery failed', { cause });
+    this.name = 'NotificationEmailDeliveryError';
+  }
+}
+
+const emailDelivery = async <T>(operation: () => T | Promise<T>): Promise<T> => {
+  try {
+    return await operation();
+  } catch (cause) {
+    throw new NotificationEmailDeliveryError(cause);
+  }
+};
+
 export interface EmailEngineDeps {
   readonly repository: EmailPacingRepository;
   readonly notifications: NotificationsRepository;
@@ -340,7 +356,9 @@ export class NotificationEmailEngine {
       return false;
     }
 
-    await sender.send({ ...message, messageId: batchMessageId(batch.id, this.#deps.appUrl) });
+    await emailDelivery(() =>
+      sender.send({ ...message, messageId: batchMessageId(batch.id, this.#deps.appUrl) }),
+    );
     await repository.markRows(tx, ids(sendable), 'sent', now);
     await repository.updateBatch(tx, batch.id, {
       status: 'sent',
@@ -374,16 +392,18 @@ export class NotificationEmailEngine {
       return null;
     }
 
-    return renderBatchEmail({
-      kind: batch.kind,
-      locale: recipient.locale,
-      timeZone: brand.timeZone,
-      to: { address: recipient.email, name: recipient.name },
-      brandName: brand.name,
-      content,
-      appUrl,
-      now,
-    });
+    return emailDelivery(() =>
+      renderBatchEmail({
+        kind: batch.kind,
+        locale: recipient.locale,
+        timeZone: brand.timeZone,
+        to: { address: recipient.email, name: recipient.name },
+        brandName: brand.name,
+        content,
+        appUrl,
+        now,
+      }),
+    );
   }
 
   async #renderSingle(tx: DbTransaction, notificationId: string): Promise<EmailMessage | null> {
@@ -407,29 +427,31 @@ export class NotificationEmailEngine {
     ]);
     const locale = notification.userLocale;
 
-    return renderStaffNotificationEmail({
-      kind: notification.kind,
-      locale,
-      to: { address: notification.userEmail, name: notification.userName },
-      recipientId: notification.userId,
-      ticket: {
-        id: ticket.id,
-        reference: ticket.reference,
-        subject: ticket.subject,
-        departmentName:
-          locale === 'ar'
-            ? (ticket.departmentNameAr ?? ticket.departmentName)
-            : ticket.departmentName,
-        priority: ticket.priority,
-        contactName: ticket.contactName,
-        assigneeId: ticket.assigneeId,
-        assigneeName: assigneeName ?? null,
-      },
-      actorName: notification.actorName,
-      messageText: message?.bodyText ?? null,
-      detail: notification.detail,
-      appUrl,
-    });
+    return emailDelivery(() =>
+      renderStaffNotificationEmail({
+        kind: notification.kind,
+        locale,
+        to: { address: notification.userEmail, name: notification.userName },
+        recipientId: notification.userId,
+        ticket: {
+          id: ticket.id,
+          reference: ticket.reference,
+          subject: ticket.subject,
+          departmentName:
+            locale === 'ar'
+              ? (ticket.departmentNameAr ?? ticket.departmentName)
+              : ticket.departmentName,
+          priority: ticket.priority,
+          contactName: ticket.contactName,
+          assigneeId: ticket.assigneeId,
+          assigneeName: assigneeName ?? null,
+        },
+        actorName: notification.actorName,
+        messageText: message?.bodyText ?? null,
+        detail: notification.detail,
+        appUrl,
+      }),
+    );
   }
 
   // --------------------------------------------------------------- digest

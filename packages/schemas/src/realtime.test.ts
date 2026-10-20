@@ -65,6 +65,7 @@ describe('the message schemas', () => {
       REALTIME_EVENTS.attachmentChanged,
       REALTIME_EVENTS.ticketViewing,
       REALTIME_EVENTS.notificationCreated,
+      REALTIME_EVENTS.notificationRead,
       REALTIME_EVENTS.visitorTyping,
       REALTIME_EVENTS.visitorRead,
     ]);

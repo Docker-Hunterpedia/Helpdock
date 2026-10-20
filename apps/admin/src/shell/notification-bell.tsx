@@ -1,14 +1,6 @@
 import type { NotificationKind, NotificationView } from '@helpdock/schemas';
 import type { StatusName } from '@helpdock/ui';
-import {
-  Box,
-  Button,
-  Popover,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-  useTheme,
-} from '@mui/material';
+import { Box, Button, Popover, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AtSign,
@@ -39,6 +31,7 @@ import {
 import { notificationsKey, useNotificationList } from '../notifications/use-notifications.js';
 import { useToast } from '../ui/toasts.tsx';
 import { visuallyHidden } from '../ui/visually-hidden.js';
+import { CountBadge } from './count-badge.tsx';
 
 /**
  * The bell in the sidebar's brand row and the panel it opens (M3-07, artboard
@@ -61,12 +54,8 @@ const KIND_LOOK: Record<NotificationKind, { readonly icon: LucideIcon; readonly 
   replied: { icon: MessageSquare, tone: 'neutral' },
 };
 
-/** A two-digit badge at most: past 99 the exact number stops being information. */
-const badgeText = (count: number): string => (count > 99 ? '99+' : String(count));
-
 export function NotificationBell(): ReactNode {
   const t = useT();
-  const theme = useTheme();
   const { locale } = usePreferences();
   // MUI anchors by physical side, so "the inline end of the sidebar" is
   // spelled per direction.
@@ -112,31 +101,7 @@ export function NotificationBell(): ReactNode {
         }}
       >
         <Bell size={16} aria-hidden="true" />
-        {unread === 0 ? null : (
-          <Box
-            component="span"
-            aria-hidden="true"
-            sx={{
-              position: 'absolute',
-              insetBlockStart: 0,
-              insetInlineEnd: 0,
-              minWidth: 18,
-              height: 18,
-              paddingInline: 1,
-              boxSizing: 'border-box',
-              borderRadius: '999px',
-              backgroundColor: tokens['action.primary'],
-              color: tokens['action.primary.text'],
-              fontFamily: theme.typography.mono.fontFamily,
-              fontSize: 11,
-              fontWeight: 500,
-              lineHeight: '18px',
-              textAlign: 'center',
-            }}
-          >
-            {badgeText(unread)}
-          </Box>
-        )}
+        {unread === 0 ? null : <CountBadge count={unread} />}
       </Box>
 
       <Popover

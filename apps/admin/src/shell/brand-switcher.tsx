@@ -4,6 +4,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../app/i18n.js';
 import { currentBrand, useSession, useSwitchBrand } from '../auth/session.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
+import { RailTooltip } from './rail-tooltip.tsx';
 import { SidebarMenuTrigger } from './sidebar-menu-trigger.tsx';
 
 /**
@@ -12,7 +13,12 @@ import { SidebarMenuTrigger } from './sidebar-menu-trigger.tsx';
  * brands this session can work in. The current one is a checked radio item, so
  * the state is announced and not only drawn.
  */
-export function BrandSwitcher(): ReactNode {
+export function BrandSwitcher({
+  variant = 'full',
+}: {
+  /** `mark` is the collapsed rail's: the brand's mark alone, its name in a Tooltip. */
+  readonly variant?: 'full' | 'mark';
+} = {}): ReactNode {
   const t = useT();
   const session = useSession();
   const switchBrand = useSwitchBrand();
@@ -21,26 +27,41 @@ export function BrandSwitcher(): ReactNode {
 
   const brand = currentBrand(session);
   const label = t('admin:brandSwitcher.action');
+  const mark = <BrandMark initial={brand.name.slice(0, 1)} />;
 
   return (
     <>
-      <SidebarMenuTrigger label={label} menuId={menuId} open={anchor !== null} onOpen={setAnchor}>
-        <BrandMark initial={brand.name.slice(0, 1)} />
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="bodyStrong" noWrap component="span" sx={{ display: 'block' }}>
-            {brand.name}
-          </Typography>
-          <Typography
-            variant="caption"
-            noWrap
-            component="span"
-            sx={{ display: 'block', color: 'text.secondary' }}
+      {variant === 'mark' ? (
+        <RailTooltip title={brand.name} describeChild>
+          <SidebarMenuTrigger
+            label={label}
+            menuId={menuId}
+            open={anchor !== null}
+            onOpen={setAnchor}
+            shape="square"
           >
-            {t('admin:brandSwitcher.caption')}
-          </Typography>
-        </Box>
-        <ChevronsUpDown size={16} aria-hidden="true" />
-      </SidebarMenuTrigger>
+            {mark}
+          </SidebarMenuTrigger>
+        </RailTooltip>
+      ) : (
+        <SidebarMenuTrigger label={label} menuId={menuId} open={anchor !== null} onOpen={setAnchor}>
+          {mark}
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="bodyStrong" noWrap component="span" sx={{ display: 'block' }}>
+              {brand.name}
+            </Typography>
+            <Typography
+              variant="caption"
+              noWrap
+              component="span"
+              sx={{ display: 'block', color: 'text.secondary' }}
+            >
+              {t('admin:brandSwitcher.caption')}
+            </Typography>
+          </Box>
+          <ChevronsUpDown size={16} aria-hidden="true" />
+        </SidebarMenuTrigger>
+      )}
 
       <Menu
         id={menuId}

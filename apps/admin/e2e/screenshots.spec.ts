@@ -62,6 +62,16 @@ test.describe('reference screens @screenshot', () => {
     await expect(page).toHaveScreenshot('shell-tickets.png', { fullPage: true });
   });
 
+  test('the shell with the sidebar collapsed to its rail', async ({ page, appLocale: locale }) => {
+    await signIn(page, locale);
+    await page.getByRole('button', { name: strings(locale)('admin:nav.collapse') }).click();
+    // The pointer is still on the toggle, whose tooltip would be in the picture.
+    await page.mouse.move(640, 400);
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+    await expect(page).toHaveScreenshot('shell-collapsed.png', { fullPage: true });
+  });
+
   test('an admin page', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
 

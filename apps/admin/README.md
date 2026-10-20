@@ -555,6 +555,13 @@ sidebar renders a count only for the keys it receives — the api sends none in
 production shows — and switching brand is a client-side change to the cached
 session until a milestone gives it somewhere to persist.
 
+The sidebar collapses to a 56 px icon rail (1.0.2, `Admin/Shell-SidebarCollapse`,
+`src/shell/sidebar-collapse.ts`). The choice is stored under
+`helpdock.admin.sidebar` in `localStorage`. With none stored, the viewport
+decides, and happy-dom's 1024 px window would open every screen test on the
+rail, so `src/test/setup.ts` stores `expanded` before each test; the rail's own
+tests set what they need.
+
 ### The socket
 
 `src/realtime/` is the same shape as the auth boundary: one interface

@@ -95,6 +95,26 @@ test.describe('accessibility', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('the collapsed sidebar has no violations, with a tooltip and the views open', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+
+    await signIn(page, locale);
+    await page.getByRole('button', { name: t('admin:nav.collapse') }).click();
+    // From the icon before it, so the focus is a keyboard one and draws the tooltip.
+    await page.getByRole('link', { name: t('admin:nav.tickets'), exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await page.getByRole('tooltip', { name: t('admin:nav.contacts') }).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('tickets:views.label') }).click();
+    await page.getByRole('dialog', { name: t('tickets:views.label') }).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('the staff screen has no violations, table and invite dialog alike', async ({
     page,
     appLocale: locale,

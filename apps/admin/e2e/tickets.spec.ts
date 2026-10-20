@@ -458,9 +458,11 @@ test.describe('one ticket', () => {
 test.describe('the breakpoints of DESIGN §6.5', () => {
   test('puts the details panel in a drawer below 1280 px', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
-    await page.setViewportSize({ width: 1200, height: 800 });
+    // Signed in at the artboard's width first: below 1280 px the sidebar opens
+    // as the icon rail, and the flow that gets here clicks a view by its name.
     await signIn(page, locale);
     await openTicket(page, locale);
+    await page.setViewportSize({ width: 1200, height: 800 });
 
     const details = page.getByRole('complementary', { name: t('tickets:details.label') });
     await expect(details).toBeHidden();

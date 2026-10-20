@@ -1,11 +1,12 @@
 import type { Session } from '@helpdock/schemas';
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
 import type { MockAuthApi } from '../auth/mock-api.js';
 import type { AdminApis } from '../auth/select-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
+import { SIDEBAR_STORAGE_KEY } from './sidebar-collapse.js';
 
 /**
  * System and Settings are install-wide — schema, queues, database role and
@@ -97,5 +98,47 @@ describe('the admin nav', () => {
     expect(navLinks()).toContain('Staff and roles');
     // API keys and webhooks act for the whole brand: `brand:manage` (M8-01, M8-03).
     expect(navLinks()).not.toContain('Developers');
+  });
+});
+
+describe('collapsing the sidebar (Admin/Shell-SidebarCollapse)', () => {
+  const renderWithCounts = async () => {
+    const apis = await signedInMockApis();
+    const session = await apis.auth.me();
+    vi.spyOn(apis.auth, 'me').mockResolvedValue(
+      session === null ? null : { ...session, navCounts: { tickets: 38 } },
+    );
+    const rendered = renderApp(<AppRoutes />, { ...asProps(apis), initialEntries: ['/tickets'] });
+    await screen.findByRole('navigation', { name: 'Main' });
+
+    return rendered;
+  };
+
+  it('folds to a rail of named icons, keeps focus on the toggle and remembers it', async () => {
+    const { user } = await renderWithCounts();
+    const collapse = screen.getByRole('button', { name: 'Collapse sidebar' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    expect(document.getElementById(collapse.getAttribute('aria-controls') ?? '')).not.toBeNull();
+
+    await user.click(collapse);
+
+    const expand = screen.getByRole('button', { name: 'Expand sidebar' });
+    expect(expand).toBe(collapse);
+    expect(expand).toHaveFocus();
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Tickets · 38' })).toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Contacts' })).toHaveTextContent('');
+    expect(localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
+  });
+
+  it('opens the views from the rail in a popover', async () => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, 'collapsed');
+    const { user } = await renderWithCounts();
+
+    await user.click(screen.getByRole('button', { name: 'Views' }));
+
+    const views = await screen.findByRole('dialog', { name: 'Views' });
+    expect(await within(views).findByRole('link', { name: /^All tickets/ })).toBeInTheDocument();
   });
 });

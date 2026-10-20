@@ -1354,6 +1354,14 @@ A layout that types no Latin letter, such as Arabic, uses the same physical
 keys as QWERTY: the key that types `ت` is `j`. There is no setting to turn the
 single-letter shortcuts off yet.
 
+Anywhere in the admin, `⌘\` on a Mac or `Ctrl+\` elsewhere collapses the
+sidebar to a 56 px icon rail and expands it again, which leaves the list and
+the thread more room (since 1.0.2). It carries a modifier, so it works while
+typing too, and it is matched by the physical key, so it is the same key on an
+Arabic layout. The **Collapse sidebar** button above your name does the same.
+The browser remembers the choice; until you make one, the sidebar is expanded
+on a window 1280 px or wider and collapsed between 1024 and 1279 px.
+
 ### Tags and custom fields in the workspace
 
 The details panel edits both (artboard `Admin/Ticket-Tags`). A Viewer, who has

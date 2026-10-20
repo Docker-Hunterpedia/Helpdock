@@ -151,7 +151,7 @@ export function TicketList({
                 variant="outlined"
                 size="small"
                 aria-label={filterLabel}
-                sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0 }}
+                sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0, overflow: 'visible' }}
                 aria-expanded={filtersOpen}
                 aria-haspopup="dialog"
                 onClick={() => {
@@ -159,7 +159,7 @@ export function TicketList({
                 }}
               >
                 <ListFilter size={14} aria-hidden="true" />
-                {active > 0 ? <CountBadge count={active} /> : null}
+                {active > 0 ? <CountBadge count={active} offset={-6} /> : null}
               </Button>
             </Tooltip>
             <Button

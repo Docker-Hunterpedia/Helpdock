@@ -67,7 +67,9 @@ describe('saved views in the workspace', () => {
   it('shows the full active count on the filter icon', async () => {
     await renderTickets();
     const filter = await screen.findByRole('button', { name: 'Filter (4)' });
-    expect(within(filter).getByText('4')).toHaveAttribute('aria-hidden', 'true');
+    const badge = within(filter).getByText('4');
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(badge).toHaveStyle({ insetBlockStart: '-6px', insetInlineEnd: '-6px' });
   });
 
   it.each([
@@ -79,7 +81,7 @@ describe('saved views in the workspace', () => {
     expect(within(filter).getByText('1')).toHaveAttribute('aria-hidden', 'true');
     await user.click(screen.getByRole('button', { name: `Remove Source: ${label}` }));
     expect(screen.getByRole('button', { name: 'Filter' })).toBeVisible();
-    expect(within(filter).queryByText('1')).not.toBeInTheDocument();
+    expect(filter.querySelector('span[aria-hidden="true"]')).toBeNull();
     expect(
       screen.queryByRole('button', { name: `Remove Source: ${label}` }),
     ).not.toBeInTheDocument();

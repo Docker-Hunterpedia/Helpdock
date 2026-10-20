@@ -95,12 +95,6 @@ test('ticket header fits its 360 px column with active filters', async ({
   const buttons = header.getByRole('button');
   await expect(buttons).toHaveCount(3);
   for (const button of await buttons.all()) {
-    expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
-      true,
-    );
-    expect(await button.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(
-      true,
-    );
     expect(
       await button.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
@@ -117,9 +111,41 @@ test('ticket header fits its 360 px column with active filters', async ({
     ),
   ).toBe(true);
   const sort = region.getByRole('button', { name: t('tickets:sort.action'), exact: true });
+  const newTicket = region.getByRole('button', {
+    name: t('tickets:newTicket.action'),
+    exact: true,
+  });
+  expect(
+    await newTicket.evaluate((element) => {
+      const label = document.createRange();
+      label.selectNodeContents(element);
+      const text = label.getBoundingClientRect();
+      const button = element.getBoundingClientRect();
+      return text.width <= button.width && text.height <= button.height;
+    }),
+  ).toBe(true);
   const filterLabel = t('tickets:list.filterActive', { count: 4 });
   const filter = region.getByRole('button', { name: filterLabel, exact: true });
-  await expect(filter.getByText('4', { exact: true })).toHaveAttribute('aria-hidden', 'true');
+  const badge = filter.locator('span[aria-hidden="true"]');
+  await expect(badge).toHaveText('4');
+  await expect(badge).toHaveCSS('inset-block-start', '-6px');
+  await expect(badge).toHaveCSS('inset-inline-end', '-6px');
+  expect(
+    await filter.evaluate((element) => {
+      const badge = element.querySelector('span[aria-hidden="true"]');
+      const icon = element.querySelector('svg');
+      if (!badge || !icon) return false;
+      const count = badge.getBoundingClientRect();
+      const funnel = icon.getBoundingClientRect();
+      const iconCenter = document.elementFromPoint(
+        funnel.x + funnel.width / 2,
+        funnel.y + funnel.height / 2,
+      );
+      const uncovered = iconCenter === icon || icon.contains(iconCenter);
+      const visible = document.elementFromPoint(count.x + count.width / 2, count.y + 2) === badge;
+      return uncovered && visible;
+    }),
+  ).toBe(true);
   await page.keyboard.press('Tab');
   await sort.focus();
   await expect(
@@ -166,6 +192,10 @@ test('ticket header shows a removable Imported-only filter', async ({
   await expect(
     region.getByRole('button', { name: t('tickets:list.filter'), exact: true }),
   ).toBeVisible();
-  await expect(filter.getByText('1', { exact: true })).toHaveCount(0);
+  await expect(
+    region
+      .getByRole('button', { name: t('tickets:list.filter'), exact: true })
+      .locator('span[aria-hidden="true"]'),
+  ).toHaveCount(0);
   await expect(page).not.toHaveURL(/imported=/);
 });

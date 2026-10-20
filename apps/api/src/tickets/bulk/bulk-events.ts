@@ -14,7 +14,10 @@ import { z } from 'zod';
  */
 export const BULK_EVENTS = { undone: 'ticket.bulk_undone' } as const;
 
-export const bulkUndonePayloadSchema = z.object({ operationId: z.uuid() });
+export const bulkUndonePayloadSchema = z.object({
+  operationId: z.uuid(),
+  ticketIds: z.array(z.uuid()).min(1),
+});
 export type BulkUndonePayload = z.infer<typeof bulkUndonePayloadSchema>;
 
 export const enqueueBulkUndone = (

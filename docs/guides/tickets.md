@@ -1682,7 +1682,7 @@ answers per ticket `reverted`, `partly_reverted`, `kept` or `not_found`, with th
 `reverted` and `kept` fields. A field somebody changed since is kept; tags are put
 back as a set. It answers 404 for another person's operation, 409
 `bulk-undo-expired` after the 60 seconds and 409 `bulk-already-undone` the second
-time. It withdraws the notifications the operation made that nobody has read; a
+time. An Undo that closes a ticket again keeps the original close time and sends no survey. It withdraws the assignment notifications for the tickets whose assignee it put back, if nobody has read them; a
 webhook or push already sent, and an email already delivered, are not recalled.
 
 A bulk close asks for its satisfaction survey 60 seconds later, so an Undo inside

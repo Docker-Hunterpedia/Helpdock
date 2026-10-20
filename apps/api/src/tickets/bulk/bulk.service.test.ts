@@ -7,7 +7,13 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import { TicketingFailure } from '../../brands/ticketing-failure.js';
 import { TicketLifecycleFailure } from '../lifecycle/lifecycle-failure.js';
-import { BULK_APPLY_RULE, BULK_PREVIEW_RULE, BulkService, refusalCode } from './bulk.service.js';
+import {
+  BULK_APPLY_RULE,
+  BULK_PREVIEW_RULE,
+  BulkService,
+  deadlockAsConflict,
+  refusalCode,
+} from './bulk.service.js';
 
 const BRAND = '0199f4b2-0000-7000-8000-0000000000b1';
 const TICKET = '0199f4b2-2222-7000-8000-0000000000aa';
@@ -94,5 +100,21 @@ describe('BulkService rate limits', () => {
 
     await expect(bulk.undo(BRAND, staff, OPERATION)).rejects.toMatchObject({ status: 429 });
     expect(limiter.consume).toHaveBeenCalledWith(BULK_APPLY_RULE, `${BRAND}:u1`);
+  });
+});
+
+describe('deadlockAsConflict', () => {
+  it('turns a detected deadlock into a conflict that asks to preview again', () => {
+    const error = deadlockAsConflict({ cause: { code: '40P01' } });
+
+    expect(error).toBeInstanceOf(TicketLifecycleFailure);
+    expect(error).toMatchObject({ reason: 'bulk-changed', status: 409 });
+  });
+
+  it('leaves every other error as it was', () => {
+    const other = new Error('connection lost');
+
+    expect(deadlockAsConflict(other)).toBe(other);
+    expect(deadlockAsConflict(null)).toBeNull();
   });
 });

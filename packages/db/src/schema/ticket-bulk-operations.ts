@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, integer, jsonb, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
@@ -63,6 +64,11 @@ export const ticketBulkOperationItems = pgTable(
       .references(() => departments.id, { onDelete: 'restrict' }),
     before: jsonb('before').$type<Record<string, unknown>>().notNull(),
     after: jsonb('after').$type<Record<string, unknown>>().notNull(),
+    /**
+     * The fields an Undo actually put back, set by it. An Undo withdraws the
+     * notifications of an assignment only for a ticket whose assignee it reverted.
+     */
+    reverted: jsonb('reverted').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

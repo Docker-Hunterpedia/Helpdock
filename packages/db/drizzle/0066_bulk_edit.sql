@@ -8,6 +8,7 @@ CREATE TABLE "ticket_bulk_operation_items" (
 	"department_id" uuid NOT NULL,
 	"before" jsonb NOT NULL,
 	"after" jsonb NOT NULL,
+	"reverted" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

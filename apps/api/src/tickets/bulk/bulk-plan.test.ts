@@ -26,6 +26,7 @@ const UNTIL = '2026-10-21T12:00:00.000Z';
 
 const snapshot = (overrides: Partial<TicketSnapshot> = {}): TicketSnapshot => ({
   statusId: OPEN,
+  closedAt: null,
   priority: 'medium',
   assigneeId: null,
   teamId: null,
@@ -121,11 +122,14 @@ describe('itemDiff', () => {
   it('records any other status change by the status, not the snooze it cleared', () => {
     const diff = itemDiff(
       snapshot({ statusId: SNOOZED, snoozedUntil: UNTIL }),
-      snapshot({ statusId: CLOSED }),
+      snapshot({ statusId: CLOSED, closedAt: UNTIL }),
       { close: true },
     );
 
-    expect(diff).toEqual({ before: { statusId: SNOOZED }, after: { statusId: CLOSED } });
+    expect(diff).toEqual({
+      before: { statusId: SNOOZED, closedAt: null },
+      after: { statusId: CLOSED, closedAt: UNTIL },
+    });
   });
 
   it('compares a custom value by content', () => {
@@ -250,6 +254,41 @@ describe('planUndo', () => {
     );
 
     expect(plan.update).toEqual({ custom: { order_ref: null } });
+  });
+
+  it('restores the original close time when the undo closes a ticket again', () => {
+    const closedAt = '2026-10-01T08:00:00.000Z';
+    const plan = planUndo(
+      {
+        before: { statusId: CLOSED, closedAt },
+        after: { statusId: OPEN, closedAt: null },
+      },
+      snapshot({ statusId: OPEN }),
+      { statusId: OPEN },
+      undefined,
+    );
+
+    expect(plan.update).toEqual({ statusId: CLOSED });
+    expect(plan.closedAt).toEqual(new Date(closedAt));
+    expect(plan.reverted).toEqual(['statusId']);
+  });
+
+  it('asks for no close time when the undo reopens, or the status was not put back', () => {
+    const reopen = planUndo(
+      { before: { statusId: OPEN, closedAt: null }, after: { statusId: CLOSED, closedAt: UNTIL } },
+      snapshot({ statusId: CLOSED, closedAt: UNTIL }),
+      { close: true },
+      undefined,
+    );
+    const kept = planUndo(
+      { before: { statusId: CLOSED, closedAt: UNTIL }, after: { statusId: OPEN, closedAt: null } },
+      snapshot({ statusId: SNOOZED }),
+      { statusId: OPEN },
+      undefined,
+    );
+
+    expect(reopen.closedAt).toBeNull();
+    expect(kept.closedAt).toBeUndefined();
   });
 
   it('names a spam undo spam', () => {

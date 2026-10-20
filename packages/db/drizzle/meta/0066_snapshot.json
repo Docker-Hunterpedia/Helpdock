@@ -1,5 +1,5 @@
 {
-  "id": "690be77d-6963-41e8-bb92-9487c39d6e4d",
+  "id": "a9af9e81-0130-4b83-b460-eaf74b99e6fe",
   "prevId": "9b3e311c-2f6e-4838-8fc9-337cca1d3a08",
   "version": "7",
   "dialect": "postgresql",
@@ -12394,6 +12394,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "reverted": {
+          "name": "reverted",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "created_at": {
           "name": "created_at",

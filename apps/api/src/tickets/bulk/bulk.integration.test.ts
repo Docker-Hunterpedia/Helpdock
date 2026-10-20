@@ -674,24 +674,25 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
   });
 
   describe('a batch that races single edits', () => {
-    it('completes overlapping batches and single edits on the same tickets without a deadlock', async () => {
-      const ids = await createMany(6);
-      const forward = ids;
-      const backward = [...ids].reverse();
-      const high = await bulk(ada, 'preview', forward, { priority: 'high' });
-      const mine = await bulk(ada, 'preview', backward, { assigneeId: cy.id });
-      const expectedHigh = high.body.results.map((result) => result.ticketId);
-      const expectedMine = mine.body.results.map((result) => result.ticketId);
+    it('completes overlapping batches with reversed id lists and single edits without a deadlock', async () => {
+      const ids = await createMany(20);
+      const forward = [...ids].sort();
+      const backward = [...forward].reverse();
+      const expectedHigh = (await bulk(ada, 'preview', forward, { priority: 'high' })).body.results
+        .filter((result) => result.outcome === 'will_change')
+        .map((result) => result.ticketId);
+      const expectedMine = (
+        await bulk(ada, 'preview', backward, { assigneeId: cy.id })
+      ).body.results
+        .filter((result) => result.outcome === 'will_change')
+        .map((result) => result.ticketId);
 
       const responses = await Promise.all([
         bulk(ada, 'apply', forward, { priority: 'high' }, expectedHigh),
-        bulk(ada, 'apply', backward, { assigneeId: cy.id }, expectedMine),
+        bulk(cy, 'apply', backward, { assigneeId: cy.id }, expectedMine),
         ...ids.flatMap((id) => [
           call('PATCH', `${brandPath()}/tickets/${id}`, ada, { subject: `edited ${id}` }),
-          call('PATCH', `${brandPath()}/tickets/${id}`, cy, {
-            teamId: null,
-            subject: `again ${id}`,
-          }),
+          call('PATCH', `${brandPath()}/tickets/${id}`, cy, { subject: `again ${id}` }),
         ]),
       ]);
 
@@ -814,6 +815,41 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
       expect(await rowOf(asleep as string)).toMatchObject({ statusId: open, snoozedUntil: null });
     });
 
+    it('puts a bulk reopen’s tickets back as they were closed, with the original close time and no new survey', async () => {
+      const ids = await createMany(2);
+      for (const id of ids) {
+        await call('PATCH', `${brandPath()}/tickets/${id}`, ada, { statusId: closed });
+      }
+      const closedAt = await Promise.all(ids.map(async (id) => (await rowOf(id)).closedAt));
+      const surveys = (await outboxOf('csat.requested', ids)).length;
+      const reopened = await previewAndApply(ada, ids, { statusId: open });
+      expect(reopened.body.counts.willChange).toBe(2);
+
+      const response = await undo(ada, reopened.body.operationId as string);
+
+      expect(response.body.results.map((result) => result.outcome)).toEqual([
+        'reverted',
+        'reverted',
+      ]);
+      for (const [index, id] of ids.entries()) {
+        expect(await rowOf(id)).toMatchObject({ statusId: closed, closedAt: closedAt[index] });
+      }
+      expect(await outboxOf('csat.requested', ids)).toHaveLength(surveys);
+    });
+
+    it('sends no survey when the undo of a bulk close reopens the tickets', async () => {
+      const ids = await createMany(2);
+      const closedAll = await previewAndApply(ada, ids, { close: true });
+      const surveys = (await outboxOf('csat.requested', ids)).length;
+
+      await undo(ada, closedAll.body.operationId as string);
+
+      expect(await outboxOf('csat.requested', ids)).toHaveLength(surveys);
+      for (const id of ids) {
+        expect(await rowOf(id)).toMatchObject({ statusId: open, closedAt: null });
+      }
+    });
+
     it('is the actor’s alone, and gone after its 60 seconds', async () => {
       const [id] = await createMany(1);
       const applied = await previewAndApply(ada, [id] as string[], { priority: 'high' });
@@ -930,6 +966,67 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
 
       const left = await bulkNotifications(operationId);
       expect(left.map((row) => row.id)).toEqual([made[0]?.id]);
+    });
+
+    it('withdraws only the tickets whose assignee the Undo put back, and keeps one it had to keep', async () => {
+      const [reverted, kept] = await createMany(2);
+      const applied = await previewAndApply(ada, [reverted, kept] as string[], {
+        assigneeId: cy.id,
+      });
+      const operationId = applied.body.operationId as string;
+      for (const row of await outboxOf('ticket.assigned', [reverted, kept] as string[])) {
+        await dispatch('ticket.assigned', row);
+      }
+      // A colleague reassigns one ticket after the bulk edit, so the Undo has to leave it.
+      await call('PATCH', `${brandPath()}/tickets/${kept}`, ada, { assigneeId: ada.id });
+
+      const response = await undo(ada, operationId);
+      expect(response.body.results.map((result) => [result.ticketId, result.outcome])).toEqual(
+        expect.arrayContaining([
+          [reverted, 'reverted'],
+          [kept, 'kept'],
+        ]),
+      );
+      const [undone] = await owner.db
+        .select({ id: outbox.id, payload: outbox.payload })
+        .from(outbox)
+        .where(
+          and(
+            eq(outbox.event, BULK_EVENTS.undone),
+            sql`${outbox.payload}->>'operationId' = ${operationId}`,
+          ),
+        );
+      expect(undone?.payload).toMatchObject({ ticketIds: [reverted] });
+      await dispatch(BULK_EVENTS.undone, { ...(undone?.payload as object), id: undone?.id ?? '' });
+
+      expect((await bulkNotifications(operationId)).map((row) => row.ticketId)).toEqual([kept]);
+    });
+
+    it('withdraws nothing for tickets the Undo could not follow out of sight', async () => {
+      const mine = await createMany(2, { departmentId: billing });
+      const applied = await previewAndApply(bea, mine, {
+        assigneeId: cy.id,
+        departmentId: support,
+      });
+      const operationId = applied.body.operationId as string;
+      for (const row of await outboxOf('ticket.assigned', mine)) {
+        await dispatch('ticket.assigned', row);
+      }
+
+      const response = await undo(bea, operationId);
+
+      expect(response.body).toMatchObject({ results: [], notFound: 2 });
+      const withdrawals = await owner.db
+        .select()
+        .from(outbox)
+        .where(
+          and(
+            eq(outbox.event, BULK_EVENTS.undone),
+            sql`${outbox.payload}->>'operationId' = ${operationId}`,
+          ),
+        );
+      expect(withdrawals).toEqual([]);
+      expect(await bulkNotifications(operationId)).toHaveLength(2);
     });
 
     it('makes no notification for an operation that was undone before its event ran', async () => {

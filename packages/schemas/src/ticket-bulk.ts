@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customFieldKeySchema } from './custom-fields.js';
 import { MAX_TAGS_PER_BRAND } from './tags.js';
 import { ticketPrioritySchema } from './ticket.js';
 
@@ -51,7 +52,7 @@ export const bulkChangesSchema = z
     /** Marks spam. Never blocks the sender: that stays a single-ticket choice. */
     spam: z.literal(true).optional(),
     /** One custom field value, by the field's key; `null` clears it. */
-    customField: z.strictObject({ key: z.string().min(1).max(64), value: z.unknown() }).optional(),
+    customField: z.strictObject({ key: customFieldKeySchema, value: z.unknown() }).optional(),
   })
   .superRefine((changes, ctx) => {
     const named = Object.values(changes).filter((value) => value !== undefined);

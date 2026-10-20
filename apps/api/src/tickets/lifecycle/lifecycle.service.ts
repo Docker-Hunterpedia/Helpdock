@@ -209,7 +209,13 @@ export class TicketLifecycleService {
 
     await this.#hooks.onResolved(context.tx, event);
 
-    if (ticket.mergedIntoId === null && !isSpamStatus(status)) {
+    // An Undo that closes a ticket again puts back a close that was already
+    // surveyed (or declined); it is not a new one (M14-03).
+    if (
+      ticket.mergedIntoId === null &&
+      !isSpamStatus(status) &&
+      context.actor.via !== 'bulk_undo'
+    ) {
       await this.#hooks.onClosedForCsat(context.tx, {
         ...event,
         // The Undo window of a bulk edit (ADR 0036): the survey asks after it.

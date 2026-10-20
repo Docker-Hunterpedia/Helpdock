@@ -14,6 +14,8 @@ import { BULK_ME } from '@helpdock/schemas';
 /** The fields of a ticket a bulk edit can move, as ids, enums and instants. */
 export interface TicketSnapshot {
   readonly statusId: string;
+  /** When the ticket was closed, so an Undo that closes it again restores the original. */
+  readonly closedAt: string | null;
   readonly priority: TicketPriority;
   readonly assigneeId: string | null;
   readonly teamId: string | null;
@@ -29,6 +31,7 @@ export interface TicketSnapshot {
 /** What a bulk edit stores of a ticket: only the keys that moved, never text. */
 export type ItemValues = Partial<{
   statusId: string;
+  closedAt: string | null;
   priority: TicketPriority;
   assigneeId: string | null;
   teamId: string | null;
@@ -66,7 +69,9 @@ export const updateFor = (
   }
   if (changes.snoozedUntil !== undefined) update.snoozedUntil = changes.snoozedUntil;
   if (changes.customField !== undefined) {
-    update.custom = { [changes.customField.key]: changes.customField.value ?? null };
+    update.custom = Object.fromEntries([
+      [changes.customField.key, changes.customField.value ?? null],
+    ]);
   }
 
   return Object.keys(update).length === 0 ? undefined : update;
@@ -106,7 +111,10 @@ export const itemDiff = (
   };
 
   const snoozing = changes.snoozedUntil !== undefined;
-  if (before.statusId !== after.statusId && !snoozing) note('statusId');
+  if (before.statusId !== after.statusId && !snoozing) {
+    note('statusId');
+    note('closedAt');
+  }
   if (before.snoozedUntil !== after.snoozedUntil && snoozing) note('snoozedUntil');
   if (before.priority !== after.priority) note('priority');
   if (before.assigneeId !== after.assigneeId) note('assigneeId');
@@ -118,7 +126,8 @@ export const itemDiff = (
   return { before: from as ItemValues, after: to as ItemValues };
 };
 
-const FIELD_OF_KEY: Readonly<Record<keyof ItemValues, BulkField>> = {
+/** `closedAt` travels with a status move and is not a field of its own. */
+const FIELD_OF_KEY: Readonly<Record<Exclude<keyof ItemValues, 'closedAt'>, BulkField>> = {
   statusId: 'statusId',
   priority: 'priority',
   assigneeId: 'assigneeId',
@@ -130,11 +139,15 @@ const FIELD_OF_KEY: Readonly<Record<keyof ItemValues, BulkField>> = {
 };
 
 /** The name the screens use for a stored key; a status move made by Mark spam is `spam`. */
-export const fieldOf = (key: keyof ItemValues, changes: BulkChanges): BulkField =>
-  key === 'statusId' && changes.spam !== undefined ? 'spam' : FIELD_OF_KEY[key];
+export const fieldOf = (
+  key: Exclude<keyof ItemValues, 'closedAt'>,
+  changes: BulkChanges,
+): BulkField => (key === 'statusId' && changes.spam !== undefined ? 'spam' : FIELD_OF_KEY[key]);
 
 export const fieldsOf = (values: ItemValues, changes: BulkChanges): BulkField[] =>
-  (Object.keys(values) as (keyof ItemValues)[]).map((key) => fieldOf(key, changes));
+  (Object.keys(values) as (keyof ItemValues)[])
+    .filter((key): key is Exclude<keyof ItemValues, 'closedAt'> => key !== 'closedAt')
+    .map((key) => fieldOf(key, changes));
 
 /** What an Undo does to one ticket. */
 export interface UndoPlan {
@@ -142,6 +155,8 @@ export interface UndoPlan {
   readonly update: Record<string, unknown> | undefined;
   /** The tag set to write, or `undefined` when tags are left alone. */
   readonly tagIds: string[] | undefined;
+  /** The close time to restore when the update puts a ticket back into a closed status. */
+  readonly closedAt: Date | null | undefined;
   readonly reverted: readonly BulkField[];
   readonly kept: readonly BulkField[];
 }
@@ -164,6 +179,9 @@ export const planUndo = (
   let tagIds: string[] | undefined;
 
   for (const key of Object.keys(item.after) as (keyof ItemValues)[]) {
+    if (key === 'closedAt') {
+      continue;
+    }
     const field = fieldOf(key, changes);
 
     if (key === 'tagIds') {
@@ -191,7 +209,7 @@ export const planUndo = (
 
     reverted.push(field);
     if (key === 'custom' && customKey !== undefined) {
-      update.custom = { [customKey]: item.before.custom ?? null };
+      update.custom = Object.fromEntries([[customKey, item.before.custom ?? null]]);
     } else if (key !== 'custom') {
       update[key] = item.before[key];
     }
@@ -200,6 +218,12 @@ export const planUndo = (
   return {
     update: Object.keys(update).length === 0 ? undefined : update,
     tagIds,
+    closedAt:
+      update.statusId === undefined || item.before.closedAt === undefined
+        ? undefined
+        : item.before.closedAt === null
+          ? null
+          : new Date(item.before.closedAt),
     reverted,
     kept,
   };

@@ -352,11 +352,11 @@ export const createFanOutHandler =
       return;
     }
 
-    // An Undo that ran before this event did takes its notifications with it
-    // (M14-03); the withdrawal can only delete rows that exist by then.
+    // An Undo that put this assignment back before this event ran takes its
+    // notification with it (M14-03); the withdrawal only deletes rows that exist by then.
     if (
       plan.bulkOperationId != null &&
-      (await repository.bulkOperationUndone(tx, plan.bulkOperationId))
+      (await repository.bulkAssignmentReverted(tx, plan.bulkOperationId, plan.ticketId))
     ) {
       return;
     }
@@ -438,8 +438,8 @@ export const createFanOutHandler =
 export const createBulkUndoneHandler =
   ({ repository }: Pick<FanOutDeps, 'repository'>): OutboxEventHandler =>
   async ({ tx, brandId, payload, log }: OutboxEventContext): Promise<void> => {
-    const { operationId } = bulkUndonePayloadSchema.parse(payload);
-    const withdrawn = await repository.withdrawBulkOperation(tx, operationId);
+    const { operationId, ticketIds } = bulkUndonePayloadSchema.parse(payload);
+    const withdrawn = await repository.withdrawBulkOperation(tx, operationId, ticketIds);
     log.info({ brandId, operationId, withdrawn }, 'bulk operation notifications withdrawn');
   };
 

@@ -130,9 +130,13 @@ const fakeRepository = ({
       teamIds.length === 0 ? [] : team,
     departmentLeadIds: async () => leads,
     preferencesOf: async () => preferences,
-    bulkOperationUndone: async () => undone,
-    withdrawBulkOperation: async (_tx: DbTransaction, operationId: string) => {
-      withdrawn.push(operationId);
+    bulkAssignmentReverted: async () => undone,
+    withdrawBulkOperation: async (
+      _tx: DbTransaction,
+      operationId: string,
+      ticketIds: readonly string[],
+    ) => {
+      withdrawn.push(`${operationId}:${ticketIds.join(',')}`);
       return 1;
     },
     insert: async (_tx: DbTransaction, rows: readonly NewNotificationRow[]) => {
@@ -278,7 +282,7 @@ describe('the fan-out handler', () => {
     expect(rows).toEqual([expect.objectContaining({ userId: OMAR, bulkOperationId: OPERATION })]);
   });
 
-  it('makes no notification for a bulk edit that was undone before its event ran', async () => {
+  it('makes no notification for an assignment an Undo put back before its event ran', async () => {
     const { rows, outbox } = await fanOut(
       'ticket.assigned',
       assigned,
@@ -297,15 +301,15 @@ describe('the fan-out handler', () => {
       outboxId: OUTBOX,
       brandId: BRAND,
       event: 'ticket.bulk_undone',
-      payload: { operationId: OPERATION },
+      payload: { operationId: OPERATION, ticketIds: [TICKET] },
       tx,
       log: silentLogger,
     });
 
-    expect(fake.withdrawn).toEqual([OPERATION]);
+    expect(fake.withdrawn).toEqual([`${OPERATION}:${TICKET}`]);
   });
 
-  it('refuses a withdrawal that names no operation', async () => {
+  it('refuses a withdrawal that names no operation or no ticket', async () => {
     const { tx } = recordingTx();
 
     await expect(

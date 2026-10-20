@@ -139,6 +139,8 @@ export interface UpdateOptions {
   readonly bundle?: ActivityBundle;
   readonly via?: Extract<ActivityVia, 'bulk' | 'bulk_undo'>;
   readonly bulkOperationId?: string;
+  /** An Undo that closes a ticket again keeps the time it was first closed (M14-03). */
+  readonly closedAt?: Date | null;
 }
 
 /** First activity page; older history uses a scoped UUID anchor without losing timestamp precision. */
@@ -573,7 +575,10 @@ export class TicketsService {
 
     if (statusMove?.changed === true) {
       values.statusId = statusMove.statusId;
-      values.closedAt = statusMove.closedAt;
+      values.closedAt =
+        statusMove.closing && options.closedAt !== undefined
+          ? options.closedAt
+          : statusMove.closedAt;
     }
     Object.assign(values, snooze?.values);
 

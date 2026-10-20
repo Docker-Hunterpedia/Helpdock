@@ -418,6 +418,19 @@ describe('closing (§2.2 row 4)', () => {
     );
   });
 
+  it('asks for no survey when an Undo closes a ticket again (M14-03)', async () => {
+    const { service, context, hooks } = harness({});
+
+    await service.onClosed(
+      { ...context, actor: { ...context.actor, via: 'bulk_undo' } },
+      ticket({ closedAt: NOW }),
+      CLOSED,
+    );
+
+    expect(hooks.onResolved).toHaveBeenCalledTimes(1);
+    expect(hooks.onClosedForCsat).not.toHaveBeenCalled();
+  });
+
   it('asks for no delay on a close made any other way', async () => {
     const { service, context, hooks } = harness({});
 

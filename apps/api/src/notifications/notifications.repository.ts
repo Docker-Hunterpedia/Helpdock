@@ -6,7 +6,7 @@ import {
   notifications,
   pushSubscriptions,
   teamMembers,
-  ticketBulkOperations,
+  ticketBulkOperationItems,
   ticketMessages,
   tickets,
   userBrandRoles,
@@ -263,36 +263,53 @@ export class NotificationsRepository {
     return inserted.map((row) => row.id);
   }
 
-  /** M14-03. Whether the bulk edit has been undone, so a late notification for it is not made. */
-  async bulkOperationUndone(tx: DbTransaction, operationId: string): Promise<boolean> {
+  /**
+   * M14-03. Whether an Undo put this ticket's assignee back, so a notification
+   * for the assignment it undid is not made late.
+   */
+  async bulkAssignmentReverted(
+    tx: DbTransaction,
+    operationId: string,
+    ticketId: string,
+  ): Promise<boolean> {
     const [row] = await tx
-      .select({ undoneAt: ticketBulkOperations.undoneAt })
-      .from(ticketBulkOperations)
-      .where(eq(ticketBulkOperations.id, operationId))
+      .select({ id: ticketBulkOperationItems.id })
+      .from(ticketBulkOperationItems)
+      .where(
+        and(
+          eq(ticketBulkOperationItems.operationId, operationId),
+          eq(ticketBulkOperationItems.ticketId, ticketId),
+          sql`${ticketBulkOperationItems.reverted} @> '["assigneeId"]'::jsonb`,
+        ),
+      )
       .limit(1);
 
-    return row?.undoneAt != null;
+    return row !== undefined;
   }
 
   /**
-   * M14-03. An Undo takes back what the operation told people: an email still
-   * waiting is withdrawn, and every notification nobody has read is deleted.
-   * One someone has read stays, as the record of what they were told. Runs as
-   * the worker: the rows belong to their recipients (the owner policy).
+   * M14-03. An Undo takes back what an operation told people on the tickets
+   * whose assignee it put back: an email still waiting is withdrawn, and every
+   * such notification nobody has read is deleted. One someone has read stays, as
+   * the record of what they were told. Runs as the worker: the rows belong to
+   * their recipients (the owner policy).
    */
-  async withdrawBulkOperation(tx: DbTransaction, operationId: string): Promise<number> {
+  async withdrawBulkOperation(
+    tx: DbTransaction,
+    operationId: string,
+    ticketIds: readonly string[],
+  ): Promise<number> {
+    const ofTheseTickets = and(
+      eq(notifications.bulkOperationId, operationId),
+      inArray(notifications.ticketId, [...ticketIds]),
+    );
     await tx
       .update(notifications)
       .set({ emailState: 'withdrawn' })
-      .where(
-        and(
-          eq(notifications.bulkOperationId, operationId),
-          eq(notifications.emailState, 'pending'),
-        ),
-      );
+      .where(and(ofTheseTickets, eq(notifications.emailState, 'pending')));
     const deleted = await tx
       .delete(notifications)
-      .where(and(eq(notifications.bulkOperationId, operationId), isNull(notifications.readAt)))
+      .where(and(ofTheseTickets, isNull(notifications.readAt)))
       .returning({ id: notifications.id });
 
     return deleted.length;

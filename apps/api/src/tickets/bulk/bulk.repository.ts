@@ -8,7 +8,7 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 
 /**
  * M14-03's rows: the operation log and the locks a batch takes. Stateless:
@@ -121,6 +121,14 @@ export class BulkRepository {
     await tx
       .update(ticketBulkOperations)
       .set({ undoneAt: at })
-      .where(and(eq(ticketBulkOperations.id, operationId)));
+      .where(eq(ticketBulkOperations.id, operationId));
+  }
+
+  /** The fields an Undo put back on one item, which decides whose notification it withdraws. */
+  async markReverted(tx: DbTransaction, itemId: string, fields: readonly string[]): Promise<void> {
+    await tx
+      .update(ticketBulkOperationItems)
+      .set({ reverted: [...fields] })
+      .where(eq(ticketBulkOperationItems.id, itemId));
   }
 }

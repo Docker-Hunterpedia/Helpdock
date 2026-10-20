@@ -31,6 +31,26 @@ test.describe('the contact list', () => {
     ).toBeVisible();
   });
 
+  test('counts the brand’s accounts in the caption on the People tab', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openContacts(page, locale);
+
+    // The fixture's eight people and two accounts; it used to say "0 accounts".
+    await expect(
+      page.getByText(
+        t('contacts:subtitle', {
+          people: t('contacts:peopleCount', { count: 8 }),
+          accounts: t('contacts:accountCount', { count: 2 }),
+        }),
+        { exact: true },
+      ),
+    ).toBeVisible();
+  });
+
   test('dates the last ticket in Latin digits, in Arabic too', async ({
     page,
     appLocale: locale,

@@ -25,6 +25,28 @@ test.describe('install settings', () => {
     });
   });
 
+  test('copies a redirect URL whole, from a button that names it', async ({
+    page,
+    context,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await signIn(page, locale);
+    await openSettings(page, locale);
+
+    await page
+      .getByRole('button', {
+        name: t('settings:aside.redirectUrls.copy', { provider: t('settings:oauth.google') }),
+      })
+      .click();
+
+    await expect(page.getByText(t('settings:aside.redirectUrls.copied'))).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      'http://localhost:5273/api/auth/oauth/google/callback',
+    );
+  });
+
   test('saves a provider credential without showing the secret again', async ({
     page,
     appLocale: locale,

@@ -5,9 +5,11 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
+import type { ShortcutId } from '../../keyboard/registry.js';
+import { ShortcutHints } from '../../keyboard/shortcut-hints.tsx';
 import { CountBadge } from '../../shell/count-badge.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
-import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
+import { activeFilterCount, type EmptyKind, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
@@ -32,12 +34,28 @@ import { TicketListSkeleton } from './ticket-skeletons.tsx';
 
 export const TICKET_LIST_WIDTH = 360;
 
+const EMPTY_COPY = {
+  search: { heading: 'tickets:empty.searchHeading', body: 'tickets:empty.searchBody' },
+  myOpen: { heading: 'tickets:empty.myOpenHeading', body: 'tickets:empty.myOpenBody' },
+  unassigned: { heading: 'tickets:empty.unassignedHeading', body: 'tickets:empty.unassignedBody' },
+  overdue: { heading: 'tickets:empty.overdueHeading', body: 'tickets:empty.overdueBody' },
+  filtered: { heading: 'tickets:empty.filteredHeading', body: 'tickets:empty.filteredBody' },
+  plain: { heading: 'tickets:empty.listHeading', body: 'tickets:empty.listBody' },
+} as const satisfies Record<EmptyKind, { heading: string; body: string }>;
+
+const EMPTY_HINTS = [
+  'general.newTicket',
+  'goTo.unassigned',
+  'general.shortcuts',
+] as const satisfies readonly ShortcutId[];
+
 export function TicketList({
   heading,
   tickets,
   selectedId,
   now,
   search,
+  emptyKind,
   typed,
   filters,
   statuses,
@@ -64,6 +82,8 @@ export function TicketList({
   readonly now: number;
   /** The term the list was read with, which decides which empty state shows. */
   readonly search: string;
+  /** Which words the empty list says (M14-06). */
+  readonly emptyKind: EmptyKind;
   /** The term in the box, which is ahead of it while somebody is typing. */
   readonly typed: string;
   readonly filters: WorkspaceFilters;
@@ -110,6 +130,22 @@ export function TicketList({
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
   const summary = useFilterSummary({ statuses, departments, tags, staff });
   const chips = summary.chips(filters);
+
+  const emptyAction =
+    emptyKind === 'search' ? (
+      <Button
+        variant="outlined"
+        onClick={() => {
+          onTypedChange('');
+        }}
+      >
+        {t('tickets:empty.clearSearch')}
+      </Button>
+    ) : emptyKind === 'filtered' ? (
+      <Button variant="outlined" onClick={() => setFiltersOpen(true)}>
+        {t('tickets:empty.editFilters')}
+      </Button>
+    ) : undefined;
 
   useEffect(() => {
     if (openFiltersToken !== null) {
@@ -283,8 +319,10 @@ export function TicketList({
         ) : tickets.length === 0 ? (
           <EmptyState
             icon={TicketIcon}
-            heading={t(search === '' ? 'tickets:empty.listHeading' : 'tickets:empty.searchHeading')}
-            body={t(search === '' ? 'tickets:empty.listBody' : 'tickets:empty.searchBody')}
+            heading={t(EMPTY_COPY[emptyKind].heading, { term: search })}
+            body={t(EMPTY_COPY[emptyKind].body)}
+            action={emptyAction}
+            hints={<ShortcutHints ids={EMPTY_HINTS} fallbackFocus={() => searchInput.current} />}
           />
         ) : (
           <>

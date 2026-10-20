@@ -179,3 +179,15 @@ Macros, the assignee, status, priority and tag controls, the sidebar toggle,
 Keyboard shortcuts in the account menu) carry its keys in `aria-keyshortcuts`
 while they work. The sheet's rows are a description list per group, and a row
 the switch turned off says "(off)". While a change of the switch is being saved it is `aria-busy`, never disabled, so the focus stays on it.
+
+## Hints in an empty list
+
+A ticket list with nothing in it says why in words and, under them, one line
+of hints read from the same registry as the sheet: `c` New ticket, `g` `u`
+Unassigned and `?` All shortcuts (a button that opens the sheet). A hint is
+left out for a shortcut your role cannot use, and the whole line is left out
+while single-key shortcuts are off, because the keys it names would do
+nothing. The words differ by view: My open, Unassigned and Overdue each have
+their own; a saved view whose filters exclude every ticket offers *Edit
+filters*; and a search that finds nothing names what you typed and offers
+*Clear search*.

@@ -23,6 +23,7 @@ import { ticketKeys } from '../../tickets/keys.js';
 import { mergePages, moveSelection } from '../../tickets/pages.js';
 import {
   ALL_VIEW,
+  emptyKindOf,
   INTENT,
   intentOf,
   queryOf,
@@ -318,6 +319,7 @@ export function TicketsPage(): ReactNode {
       selectedId={ticketId}
       now={now}
       search={search}
+      emptyKind={emptyKindOf(view, search, filters, resolved.changed)}
       typed={typed}
       filters={filters}
       statuses={directory.statuses}

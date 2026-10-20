@@ -164,7 +164,9 @@ test.describe('the ticket list', () => {
     await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(1);
 
     await search.fill('nothing at all');
-    await expect(page.getByText(t('tickets:empty.searchHeading'))).toBeVisible();
+    await expect(
+      page.getByText(t('tickets:empty.searchHeading', { term: 'nothing at all' })),
+    ).toBeVisible();
   });
 
   test('finds a closed ticket by its reference from "My open", and not by its words (#221)', async ({
@@ -184,7 +186,9 @@ test.describe('the ticket list', () => {
     await expect(page.getByRole('link', { name: /HD-/ })).toHaveCount(1);
 
     await search.fill('Duplicate charge');
-    await expect(page.getByText(t('tickets:empty.searchHeading'))).toBeVisible();
+    await expect(
+      page.getByText(t('tickets:empty.searchHeading', { term: 'Duplicate charge' })),
+    ).toBeVisible();
   });
 
   test('filters from the popover and counts what is on', async ({ page, appLocale: locale }) => {

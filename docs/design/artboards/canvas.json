@@ -736,6 +736,13 @@
       "w": 1340,
       "h": 720,
       "title": "Admin/Ticket-ContactHistory"
+    },
+    "AdminMeSignInProviders.dc.html": {
+      "x": 0,
+      "y": 62240,
+      "w": 1880,
+      "h": 640,
+      "title": "Admin/Me-SignInProviders"
     }
   },
   "createdOnFiles": {
@@ -1030,7 +1037,8 @@
     "AdminTicketImported.dc.html",
     "AdminMagicLink.dc.html",
     "AdminMagicLinkAR.dc.html",
-    "AdminTicketContactHistory.dc.html"
+    "AdminTicketContactHistory.dc.html",
+    "AdminMeSignInProviders.dc.html"
   ],
   "pages": [],
   "title": "Helpdock Design System"

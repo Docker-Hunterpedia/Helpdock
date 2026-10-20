@@ -119,6 +119,65 @@ test.describe('the security page', () => {
     }
   });
 
+  test('connects a sign-in provider after confirming it is you, then disconnects it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const provider = t('auth:signIn.github');
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+    const card = page.getByRole('region', { name: t('me:signInProviders.title') });
+
+    await expect(card.getByText(t('me:signInProviders.notice'))).toBeVisible();
+    await card.getByRole('button', { name: t('me:signInProviders.connect', { provider }) }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog
+      .getByRole('button', { name: t('me:signInProviders.continueTo', { provider }) })
+      .click();
+
+    await expect(
+      page.getByText(t('me:signInProviders.connectedToast', { provider })),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/me\/security$/);
+    await expect(card.getByText(t('me:signInProviders.notice'))).toBeHidden();
+
+    await card
+      .getByRole('button', { name: t('me:signInProviders.disconnect', { provider }) })
+      .click();
+    await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill(MOCK_CURRENT_PASSWORD);
+    await dialog
+      .getByRole('button', { name: t('me:signInProviders.disconnect', { provider }) })
+      .click();
+
+    await expect(
+      page.getByText(t('me:signInProviders.disconnectedToast', { provider })),
+    ).toBeVisible();
+    await expect(
+      card.getByRole('button', { name: t('me:signInProviders.connect', { provider }) }),
+    ).toBeVisible();
+  });
+
+  test('refuses to connect a provider with the wrong password', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const provider = t('auth:signIn.google');
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:signInProviders.connect', { provider }) }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill('not the password');
+    await dialog
+      .getByRole('button', { name: t('me:signInProviders.continueTo', { provider }) })
+      .click();
+
+    await expect(dialog.getByText(t('me:signInProviders.proofWrong'))).toBeVisible();
+  });
+
   test('signs out everywhere, which ends this browser too', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

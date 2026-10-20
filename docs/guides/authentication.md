@@ -432,7 +432,18 @@ the person who holds it here.
 
 ### Connecting and disconnecting a provider
 
-A signed-in person connects a provider account from their session:
+A signed-in person connects a provider account from **Your account → Security
+→ Sign-in providers** (`/me/security`, since 1.0.2). The card lists each
+provider the install has configured; with none configured it is not shown.
+Each row says whether the provider is connected, with the address it had and
+the day it was linked, and offers **Connect** or **Disconnect**. Both open a
+"Confirm it's you" dialog that takes the current password or a 6-digit code
+from the authenticator app. Connect then goes to the provider and back to the
+page, which says the provider is connected; a refusal lands on the sign-in
+callback screen with its reason. While nothing is linked, the card explains
+that since 1.0.1 a provider signs in only after it is connected here once.
+
+Under the card, the API does the following:
 
 1. `POST /api/auth/oauth/<provider>/connect` with a step-up, either
    `{ "currentPassword": "…" }` or `{ "code": "123456" }` (a live authenticator
@@ -451,24 +462,27 @@ limit of the other security-page checks. Connecting is refused with
 `sso-required` while single sign-on is enforced; disconnecting is not, since it
 only removes a way in. An account with neither a
 password nor an authenticator cannot pass the step-up; it sets a password
-through the reset flow first. Disconnecting never leaves an account without a
-way in, because the sign-in link is always there while SSO is not enforced.
-`GET /api/auth/oauth/identities` lists the caller's own.
+through the reset flow first. Disconnecting the account's last way in, when it
+has no password and no other provider account, is refused with
+`oauth-last-sign-in` (409) before the step-up is checked, so the refusal
+spends no attempt; the security page disables that button and says why.
+`GET /api/auth/oauth/identities` lists the caller's own as
+`{ identities, passwordSet }`; `passwordSet` is what the page needs to tell
+which provider is the last way in.
 
-The **security page has no control for this yet**: it needs a design before it
-is built. Until it ships, the routes above are the way to connect. 1.0.1 adds
-the API, the sign-in screen's message for `oauth-link-required`, and the
-security notice.
+1.0.1 added the API, the sign-in screen's message for `oauth-link-required`
+and the security notice; 1.0.2 adds the security page's card and the
+last-way-in refusal.
 
 ### Upgrading from 1.0
 
 - **Google:** people whose Workspace or Gmail address matches their account
   sign in as before; that sign-in binds their Google account. People who signed
   in with a consumer Google account on a company address get
-  `oauth-link-required` and connect it once from a session.
+  `oauth-link-required` and connect it once from Your account → Security.
 - **GitHub:** everybody who signed in with GitHub gets `oauth-link-required`
   once. They sign in with their password or a sign-in link, then connect GitHub
-  from their session.
+  from Your account → Security.
 
 ### Configuring a provider
 
@@ -596,9 +610,9 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/password/reset` | `@Public()` | Token and a new password |
 | `GET /api/auth/oauth/:provider/start` | `@Public()` | Redirects to the provider |
 | `GET /api/auth/oauth/:provider/callback` | `@Public()` | Redirects back to the app |
-| `GET /api/auth/oauth/identities` | `@Authenticated()` | The caller's connected Google and GitHub accounts |
+| `GET /api/auth/oauth/identities` | `@Authenticated()` | The caller's connected Google and GitHub accounts, and whether they have a password |
 | `POST /api/auth/oauth/:provider/connect` | `@Authenticated()` | Step-up, then the provider URL to connect one |
-| `POST /api/auth/oauth/:provider/disconnect` | `@Authenticated()` | Step-up, then removes it. 204 |
+| `POST /api/auth/oauth/:provider/disconnect` | `@Authenticated()` | Step-up, then removes it. 204; 409 `oauth-last-sign-in` for the last way in |
 | `POST /api/auth/refresh` | `@Public()` | The cookie is the credential |
 | `GET /api/auth/me` | `@Authenticated()` | The session: user, brands, current brand |
 | `POST /api/auth/sign-out` | `@Authenticated()` | This browser |

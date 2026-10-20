@@ -13,7 +13,7 @@ import type {
   Session,
   TotpEnrolment,
 } from '@helpdock/schemas';
-import { OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
+import { isLastSignInMethod, OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
 import type { SsoIdentityService } from '../sso/identity.service.js';
 import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
@@ -748,8 +748,13 @@ export class AuthService {
     return this.#signInWithOauth(completion.identity, userAgent);
   }
 
-  /** The provider accounts that sign in as this person, for their security page. */
+  /**
+   * The provider accounts that sign in as this person, for their security
+   * page, and whether they also have a password: the page needs both to say
+   * which provider is their last way in.
+   */
   async oauthIdentities(userId: string, tx?: Queryable): Promise<OauthIdentityList> {
+    const user = await this.#requireUser(userId, tx);
     const rows = await this.#parts.oauthIdentities.ofUser(userId, tx);
     return {
       identities: rows.map((row) => ({
@@ -757,6 +762,7 @@ export class AuthService {
         email: row.emailAtLink,
         connectedAt: row.createdAt.toISOString(),
       })),
+      passwordSet: user.passwordHash !== null,
     };
   }
 
@@ -790,7 +796,11 @@ export class AuthService {
     }
   }
 
-  /** Removes a provider account from the signed-in account, behind the same step-up. */
+  /**
+   * Removes a provider account from the signed-in account, behind the same
+   * step-up. Refused before the step-up when it is the account's last way in
+   * (no password and no other provider), so the refusal spends no attempt.
+   */
   async disconnectOauth({
     userId,
     provider,
@@ -802,6 +812,9 @@ export class AuthService {
     readonly proof: OauthStepUpRequest;
     readonly tx?: DbTransaction;
   }): Promise<void> {
+    if (isLastSignInMethod(await this.oauthIdentities(userId, tx), provider)) {
+      throw new AuthFailure('oauth-last-sign-in');
+    }
     await this.#requireStepUp(userId, proof, tx);
     if (!(await this.#parts.oauthIdentities.unlink(userId, provider, tx))) {
       return;

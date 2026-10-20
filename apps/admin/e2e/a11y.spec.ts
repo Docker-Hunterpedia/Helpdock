@@ -358,9 +358,20 @@ test.describe('accessibility', () => {
 
     await signIn(page, locale);
     await openSecurity(page, locale);
+    await page.getByRole('heading', { name: t('me:signInProviders.title'), level: 2 }).waitFor();
     expect(await violations(page)).toEqual([]);
 
     await page.getByRole('button', { name: t('me:twoFactor.disable'), exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+
+    expect(await violations(page)).toEqual([]);
+    await page.keyboard.press('Escape');
+
+    await page
+      .getByRole('button', {
+        name: t('me:signInProviders.connect', { provider: t('auth:signIn.github') }),
+      })
+      .click();
     await page.getByRole('dialog').waitFor();
 
     expect(await violations(page)).toEqual([]);

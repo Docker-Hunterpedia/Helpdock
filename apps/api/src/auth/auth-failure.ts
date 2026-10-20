@@ -24,6 +24,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'sso-identity-conflict': HttpStatus.FORBIDDEN,
   'oauth-link-required': HttpStatus.FORBIDDEN,
   'oauth-identity-conflict': HttpStatus.FORBIDDEN,
+  'oauth-last-sign-in': HttpStatus.CONFLICT,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
   'totp-mismatch': HttpStatus.UNAUTHORIZED,
   'recovery-invalid': HttpStatus.UNAUTHORIZED,
@@ -47,6 +48,8 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
     'Sign in another way once, then connect this provider account from the security page',
   'oauth-identity-conflict':
     'That provider account is linked to another person, or this account already has one',
+  'oauth-last-sign-in':
+    'This provider account is the only way to sign in; set a password or connect another first',
   'invalid-credentials': 'That email and password do not match',
   'totp-mismatch': 'That authentication code does not match',
   'recovery-invalid': 'That recovery code is not valid or has already been used',

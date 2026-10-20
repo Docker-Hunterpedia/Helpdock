@@ -655,9 +655,13 @@ The daily repeat guard uses the represented tick hour. A daily digest over a
 cap at its tick waits for the next day; a missed cron hour skips that day.
 Ticks run at UTC hour boundaries: in half-hour or quarter-hour zones, the
 chosen hour sends at the tick within that local hour (08:30 in Asia/Kolkata
-for hour 08). Opening a ticket also invalidates the bell over its existing
-realtime path. Updating the schedule alone preserves the stored preference
+for hour 08). Updating the schedule alone preserves the stored preference
 matrix, including missing keys that follow defaults.
+
+An urgent cut that commits while the batch job is running cannot move that
+job. After the job moves itself to the committed time it reads the batch's due
+time again and pulls itself earlier if a cut landed meanwhile, so the urgent
+email does not wait for the hourly rebuild.
 
 M12-09's AI notification kinds (`ai_budget`, `ai_provider`, `ai_handoff`) are
 rows in the same preference matrix and follow these pacing rules.

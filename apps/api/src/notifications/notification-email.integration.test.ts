@@ -953,6 +953,39 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       );
       expect(moved).toEqual([at(3).getTime()]);
     });
+
+    it('pulls the delayed job earlier when an urgent cut landed while it was active', async () => {
+      const batchId = await opened(await notify());
+      presence.set(sam.id, 'online');
+      clock = at(2);
+      const moved: number[] = [];
+      const changed: number[] = [];
+      const processors = createEmailJobProcessors({
+        db: runtime.db,
+        engine,
+        queue: bullEmailQueue(queue),
+        log: silentLogger,
+        now: () => clock,
+      });
+      const job = {
+        id: notifyEmailBatchJobId(batchId),
+        name: 'notify.email_batch',
+        data: { brandId: seeded.brandId, batchId },
+        // The hold has committed; the mention's cut commits before the job is delayed.
+        moveToDelayed: async (timestamp: number) => {
+          moved.push(timestamp);
+          const mention = await schedule(await notify({ kind: 'mentioned', actorId: ada.id }));
+          expect(mention).toEqual({ batchId, at: at(2) });
+        },
+        changeDelay: async (delay: number) => void changed.push(delay),
+      } as unknown as Job;
+
+      await expect(processors['notify.email_batch'](job, 'token')).rejects.toBeInstanceOf(
+        DelayedError,
+      );
+      expect(moved).toEqual([at(3).getTime()]);
+      expect(changed).toEqual([0]);
+    });
   });
 
   describe('digests', () => {

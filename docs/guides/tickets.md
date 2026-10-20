@@ -1486,7 +1486,7 @@ by the same function the send job cuts them with: "Plain text. Sent as 3 message
 "Sent as 2 messages: the text is cut at 2000 characters." (Messenger), "Sent as 3
 messages: the text in 2 parts of up to 1000 bytes, 1 attachment." (Instagram). The
 first message opens with the agent's first name and the brand, "Lina · Helpdock"
-([Replying](meta-channels.md#what-is-sent)), and that line is counted: a reply that is
+([Replying](meta-channels.md#replying)), and that line is counted: a reply that is
 only files counts it as one text message. On Instagram a file that is not a PDF is
 named in the warning colour before Send, because it will be left out. While the strip
 is closed, **Send** keeps its place but is `aria-disabled` and described by the strip,

@@ -81,7 +81,7 @@ organisation is already an SSO connection (M11).
 Decisions 1, 2 and 6 for Google and GitHub, and decision 3 except the passkey,
 the invitation and the security page control:
 
-- `user_oauth_identities` (migration `0055_oauth_identities`): `provider`
+- `user_oauth_identities` (migration `0056_oauth_identities`): `provider`
   (`google` | `github`), `provider_subject`, `user_id`, `email_at_link`,
   `created_at`; unique `(provider, provider_subject)` and `(user_id, provider)`.
   It has no `issuer` column: each of the two providers has one fixed issuer, so

@@ -152,6 +152,24 @@ export class WebFormRepository {
     };
   }
 
+  /**
+   * Every verified help center host of the brand: each serves the form at
+   * `/contact`, so each is a host its CAPTCHA may be solved on.
+   */
+  async helpCenterHosts(tx: DbTransaction, brandId: string): Promise<string[]> {
+    const rows = await tx
+      .select({ domain: brandDomains.domain })
+      .from(brandDomains)
+      .where(
+        and(
+          eq(brandDomains.brandId, brandId),
+          eq(brandDomains.kind, 'helpcenter'),
+          isNotNull(brandDomains.verifiedAt),
+        ),
+      );
+    return rows.map((row) => row.domain);
+  }
+
   /** The brand's verified help center host, where the form is served at `/contact`. */
   async helpCenterHost(tx: DbTransaction, brandId: string): Promise<string | undefined> {
     const rows = await tx

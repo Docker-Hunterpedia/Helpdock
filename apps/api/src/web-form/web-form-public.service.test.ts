@@ -68,6 +68,7 @@ describe('WebFormPublicService.submit before anything is read', () => {
       writer: writer as unknown as WebFormTicketWriter,
       captchaKeys: { forBrand: async () => null },
       captchaTransport: { postForm: vi.fn() },
+      appHost: 'desk.example.com',
       limiter: limiter as unknown as RateLimiter,
       sink: vi.fn(),
       removeObject: vi.fn(),

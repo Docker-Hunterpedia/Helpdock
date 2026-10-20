@@ -46,7 +46,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { noCsatDelivery } from '../testing/csat-doubles.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
-import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { registerTicketOutboxForTest } from '../testing/ticket-outbox.js';
 import { CsatRepository } from './csat.repository.js';
 import { CSAT_PUBLIC_RULE } from './csat.service.js';
 import { CSAT_EVENTS, registerCsatEventHandlers } from './csat-events.js';
@@ -270,7 +270,7 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
 
     // The worker's handlers, registered in this process as start-up does.
     worker = new Redis(redisContainer.getConnectionUrl());
-    registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    registerTicketOutboxForTest(new RedisRealtimeBroadcast(worker));
     ignoreAuthEmailInThisSuite();
     registerCsatEventHandlers({
       repository: new CsatRepository(),

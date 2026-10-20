@@ -470,6 +470,26 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     );
   });
 
+  const lockContacts = (tx: DbTransaction, ids: string[]) =>
+    tx
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(inArray(contacts.id, ids))
+      .orderBy(contacts.id)
+      .for('update');
+  const waitingOnLocks = async (count: number): Promise<void> => {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const rows = await owner.db.execute<{ total: number }>(
+        sql`SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname = 'helpdock' AND wait_event_type = 'Lock'`,
+      );
+      if ((rows[0]?.total ?? 0) >= count) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('The transactions never queued on the contact locks');
+  };
+
   it('sends no contact.updated for a profile change on a contact created in the same transaction', async () => {
     const contactId = await withSystem(db(), seeded.brandId, async (tx) => {
       const { contact } = await findOrCreateContactByIdentity(
@@ -525,26 +545,6 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     }
     expect([low, target, holder]).toEqual([low, target, holder].toSorted());
 
-    const lockContacts = (tx: DbTransaction, ids: string[]) =>
-      tx
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(inArray(contacts.id, ids))
-        .orderBy(contacts.id)
-        .for('update');
-    const waitingOnLocks = async (count: number): Promise<void> => {
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const rows = await owner.db.execute<{ total: number }>(
-          sql`SELECT count(*)::int AS total FROM pg_stat_activity WHERE datname = 'helpdock' AND wait_event_type = 'Lock'`,
-        );
-        if ((rows[0]?.total ?? 0) >= count) {
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      throw new Error('The transactions never queued on the contact locks');
-    };
-
     // The mover holds the current holder and is about to hand the value to `low`.
     let commitMover: () => void = () => undefined;
     const moverMayCommit = new Promise<void>((resolve) => {
@@ -572,7 +572,9 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     });
     await waitingOnLocks(1);
 
-    // A well-behaved writer: holds the new holder, then queues for `holder`.
+    // A writer that takes its locks in id order: it holds `low`, where the
+    // identity is about to land, and queues for `holder`. If the attach kept
+    // `target` and `holder` and then asked for `low`, the two would wait on each other.
     const bystander = withSystem(db(), seeded.brandId, async (tx) => {
       await lockContacts(tx, [low]);
       await lockContacts(tx, [low, holder]);
@@ -588,6 +590,68 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
       otherContactId: low,
       identity: { contactId: target, verified: true },
     });
+  });
+
+  it('moves a proven identifier off the holder it finds under the lock, not the one it read', async () => {
+    const email = `${uuidv7()}@example.test`;
+    const [lowHolder, readHolder] = await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      const first = await service.create(context, { name: 'Moved to', identities: [] });
+      const second = await service.create(context, {
+        name: 'Read as holder',
+        identities: [{ kind: 'email', value: email }],
+      });
+      return [first.id, second.id];
+    });
+    if (lowHolder === undefined || readHolder === undefined) {
+      throw new Error('Missing contacts');
+    }
+
+    // Hands the value from the contact the claim will read to a lower-id one.
+    const moverLocked = Promise.withResolvers<void>();
+    const moverMayCommit = Promise.withResolvers<void>();
+    const mover = withSystem(db(), seeded.brandId, async (tx) => {
+      // NO KEY UPDATE, so the claim's duplicate suggestion (a foreign key on
+      // this contact) is not held up and the claim reaches its own lock.
+      await tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(eq(contacts.id, readHolder))
+        .for('no key update');
+      await tx
+        .update(contactIdentities)
+        .set({ contactId: lowHolder })
+        .where(eq(contactIdentities.value, email));
+      moverLocked.resolve();
+      await moverMayCommit.promise;
+    });
+    await moverLocked.promise;
+
+    // Reads `readHolder`, creates its own contact and queues for the lock.
+    const claim = withSystem(db(), seeded.brandId, (tx) =>
+      findOrCreateContactByIdentity(tx, seeded.brandId, {
+        kind: 'email',
+        value: email,
+        source: 'email.inbound',
+      }),
+    );
+    await waitingOnLocks(1);
+    moverMayCommit.resolve();
+    await mover;
+
+    const { contact, identity } = await claim;
+    expect(identity).toMatchObject({ contactId: contact.id, verified: true });
+    const updates = await withSystem(db(), seeded.brandId, async (tx) =>
+      (await tx.select().from(outbox).where(eq(outbox.event, 'contact.updated'))).filter(
+        (row) => row.payload.contactId === lowHolder,
+      ),
+    );
+    expect(updates).toHaveLength(1);
   });
 
   it('undoing a contact merge emits exactly one update for each existing contact', async () => {

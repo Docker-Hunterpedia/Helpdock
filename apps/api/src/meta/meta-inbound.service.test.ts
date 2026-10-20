@@ -7,6 +7,7 @@ import {
 import { type MetaWebhookBody, pageDelivery, pageText } from '@helpdock/channels/testing';
 import type { Db, DbTransaction, MetaAccount } from '@helpdock/db';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { markContactCreated, wasContactCreatedIn } from '../contacts/contact-events.js';
 import type { AccountLocator, MetaRepository } from './meta.repository.js';
 import {
   describeFailure,
@@ -100,6 +101,22 @@ beforeEach(() => {
 });
 
 describe('MetaInboundService.receive', () => {
+  it('keeps a contact one event created new for the later events of the batch, in their own savepoints', async () => {
+    const afterCreation: boolean[] = [];
+    const { service } = harness(async ({ tx }, event) => {
+      if (event.kind === 'message' && event.messageId === 'mid.1') {
+        markContactCreated(tx, 'contact-1');
+      } else {
+        afterCreation.push(wasContactCreatedIn(tx, 'contact-1'));
+      }
+      return { outcome: 'handled' };
+    });
+
+    await service.receive(locator, messages('mid.1', 'mid.2'));
+
+    expect(afterCreation).toEqual([true]);
+  });
+
   it('hands each event to the platform’s service in order, with the account and the time', async () => {
     const { service, calls, repository } = harness();
 

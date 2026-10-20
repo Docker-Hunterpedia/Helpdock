@@ -460,7 +460,7 @@ export const attachVerifiedIdentity = async (
     }
   }
 
-  throw new Error('The identifier kept changing hands while it was being attached');
+  throw new IdentityContentionError();
 };
 
 const MAX_HOLDER_ATTEMPTS = 5;
@@ -469,6 +469,13 @@ const MAX_HOLDER_ATTEMPTS = 5;
 class HolderMovedError extends Error {
   constructor() {
     super('The identifier changed hands before its holder was locked');
+  }
+}
+
+/** The identifier changed hands on every attempt; the caller's transaction is not usable to retry in. */
+export class IdentityContentionError extends Error {
+  constructor() {
+    super('The identifier kept changing hands while it was being moved');
   }
 }
 
@@ -652,26 +659,62 @@ const takeVerified = async (
   contactId: string,
   source: string,
 ): Promise<ContactIdentityRow> => {
-  const [previous] = await tx
-    .select({ contactId: contactIdentities.contactId })
-    .from(contactIdentities)
-    .where(eq(contactIdentities.id, identityId));
-  const change = async () => {
-    const updated = await tx
-      .update(contactIdentities)
-      .set({ contactId, verified: true, verifiedAt: new Date(), source })
-      .where(eq(contactIdentities.id, identityId))
-      .returning();
-
-    const identity = updated[0];
-    /* c8 ignore next 3 -- the row was read in this same transaction. */
-    if (identity === undefined) {
-      throw new Error('The contact identity vanished mid-transaction');
+  // Same pattern as attachVerifiedIdentity: the holder is read before its lock,
+  // so each attempt locks in a savepoint and re-reads the row under the lock.
+  for (let attempt = 0; attempt < MAX_HOLDER_ATTEMPTS; attempt += 1) {
+    const [previous] = await tx
+      .select({ contactId: contactIdentities.contactId })
+      .from(contactIdentities)
+      .where(eq(contactIdentities.id, identityId));
+    if (previous === undefined || previous.contactId === contactId) {
+      return moveIdentity(tx, identityId, contactId, source);
     }
+    try {
+      return await tx.transaction((savepoint) => {
+        shareCreatedContacts(tx, savepoint);
+        return withContactProfileChange(
+          savepoint,
+          previous.contactId,
+          async () => {
+            const [held] = await savepoint
+              .select({ contactId: contactIdentities.contactId })
+              .from(contactIdentities)
+              .where(eq(contactIdentities.id, identityId));
+            if (held?.contactId !== previous.contactId) {
+              throw new HolderMovedError();
+            }
+            return moveIdentity(savepoint, identityId, contactId, source);
+          },
+          [contactId],
+        );
+      });
+    } catch (error) {
+      if (!(error instanceof HolderMovedError)) {
+        throw error;
+      }
+    }
+  }
 
-    return identity;
-  };
-  return previous !== undefined && previous.contactId !== contactId
-    ? withContactProfileChange(tx, previous.contactId, change, [contactId])
-    : change();
+  throw new IdentityContentionError();
+};
+
+const moveIdentity = async (
+  tx: DbTransaction,
+  identityId: string,
+  contactId: string,
+  source: string,
+): Promise<ContactIdentityRow> => {
+  const updated = await tx
+    .update(contactIdentities)
+    .set({ contactId, verified: true, verifiedAt: new Date(), source })
+    .where(eq(contactIdentities.id, identityId))
+    .returning();
+
+  const identity = updated[0];
+  /* c8 ignore next 3 -- the row was read in this same transaction. */
+  if (identity === undefined) {
+    throw new Error('The contact identity vanished mid-transaction');
+  }
+
+  return identity;
 };

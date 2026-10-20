@@ -24,6 +24,12 @@ const createdInTransaction = new WeakMap<DbTransaction, Set<string>>();
 export const wasContactCreatedIn = (tx: DbTransaction, contactId: string): boolean =>
   createdInTransaction.get(tx)?.has(contactId) ?? false;
 
+export const markContactCreated = (tx: DbTransaction, contactId: string): void => {
+  const created = createdInTransaction.get(tx) ?? new Set<string>();
+  created.add(contactId);
+  createdInTransaction.set(tx, created);
+};
+
 /** A savepoint is a new transaction object over the same transaction: it shares what the parent created. */
 export const shareCreatedContacts = (parent: DbTransaction, savepoint: DbTransaction): void => {
   const created = createdInTransaction.get(parent) ?? new Set<string>();

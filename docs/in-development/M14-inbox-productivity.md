@@ -574,6 +574,28 @@ per-brand widget department setting here (about 1 d) is owner decision D-29;
 M19-02 (several widgets per brand) gives each widget a department default in
 any case.
 
+**Status: built, in review** (issue [#296](https://github.com/Docker-Hunterpedia/Helpdock/issues/296)).
+- [x] `GET /routing` and `POST /routing/test` (`ticketing:manage`), schemas in
+  `automation-routing.ts`; the walk is `apps/api/src/routing/routing-test.ts`.
+- [x] The Routing tab (`RoutingSteps`) and Test routing (`RoutingResult`),
+  `Admin/Automation-Routing`, in `en` and `ar`.
+- [x] No writes: the walk runs in a read-only savepoint that is always rolled
+  back, and uses the block list without its counter (`findBlockingEntry`), the
+  rules' evaluator and action preview, the SLA clock's due time and
+  `pickAssignee` with no advisory lock and no "last picked" stamp.
+- [x] DOMAIN-RULES §2.9; `docs/guides/automation.md`.
+- D-29 is settled as recommended: no widget department setting here; the widget
+  is shown as filing into the brand's first department (M19-02 adds the setting).
+- Differences from the text above, because the code is the source of truth:
+  a **blocked sender is dropped and counted, not filed as Spam** (the inbound
+  gate of M1-11 never creates the ticket), so the result says "dropped, no
+  ticket"; a rule's **conditions are judged on the ticket as it arrived** (the
+  engine loads the facts once per event), while the actions of the matching
+  rules are applied in order to a copy; the AI triage step reports "would be
+  queued" when a matching rule has the action. An entry point outside a
+  scoped Team Leader's departments answers 404, and a department outside the
+  scope shows no rotation.
+
 ### M14-10 Notification pacing engine
 
 **Status: built, in review** (issue #297). Built as below, with

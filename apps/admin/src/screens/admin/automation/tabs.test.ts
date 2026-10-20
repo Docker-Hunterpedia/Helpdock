@@ -3,8 +3,9 @@ import { tabForSegment, tabOfKind, tabsFor } from './tabs.js';
 
 describe('tabsFor', () => {
   it('offers an Admin and a Team Leader every tab, in order', () => {
-    expect(tabsFor('admin').map((tab) => tab.key)).toEqual(['rules', 'timeBased', 'macros']);
-    expect(tabsFor('teamLeader').map((tab) => tab.key)).toEqual(['rules', 'timeBased', 'macros']);
+    const every = ['rules', 'timeBased', 'routing', 'macros'];
+    expect(tabsFor('admin').map((tab) => tab.key)).toEqual(every);
+    expect(tabsFor('teamLeader').map((tab) => tab.key)).toEqual(every);
   });
 
   it('offers an Agent Macros alone, and a Viewer nothing', () => {
@@ -16,6 +17,8 @@ describe('tabsFor', () => {
 describe('tabForSegment', () => {
   it('finds a tab the reader has by its url segment, and no other', () => {
     expect(tabForSegment(tabsFor('admin'), 'time-based')?.key).toBe('timeBased');
+    expect(tabForSegment(tabsFor('admin'), 'routing')?.key).toBe('routing');
+    expect(tabForSegment(tabsFor('agent'), 'routing')).toBeUndefined();
     expect(tabForSegment(tabsFor('agent'), 'rules')).toBeUndefined();
     expect(tabForSegment(tabsFor('admin'), undefined)).toBeUndefined();
   });

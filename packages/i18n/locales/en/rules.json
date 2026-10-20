@@ -6,6 +6,7 @@
   "tabs": {
     "rules": "Rules",
     "timeBased": "Time-based",
+    "routing": "Routing",
     "macros": "Macros"
   },
   "list": {
@@ -372,5 +373,167 @@
     "applied": "applied",
     "nothing": "nothing to change",
     "failed": "failed"
+  },
+  "routing": {
+    "heading": "How tickets are routed",
+    "subtitle": "From arrival to an assignee, in this order.",
+    "loading": "Reading how tickets are routed…",
+    "failed": "How tickets are routed could not be read.",
+    "retry": "Try again",
+    "edit": "Edit",
+    "editStep": "Edit {{step}}",
+    "steps": {
+      "arrival": {
+        "title": "Arrival",
+        "body": "Each entry point files into a department."
+      },
+      "rules": {
+        "title": "Rules on “Ticket created”",
+        "body_one": "Run in order. {{count}} enabled.",
+        "body_other": "Run in order. {{count}} enabled.",
+        "none": "No rule runs when a ticket is created.",
+        "off": "Off"
+      },
+      "triage": {
+        "title": "AI triage",
+        "body": "Runs only when a rule queues it.",
+        "none": "No enabled rule queues it.",
+        "queuedBy": "Queued by “{{name}}”"
+      },
+      "assignment": {
+        "title": "Assignment",
+        "body": "By each department’s mode.",
+        "none": "No departments in your scope."
+      }
+    },
+    "entry": {
+      "mailbox": "{{label}}",
+      "widget": "Chat widget",
+      "web_form": "Web form",
+      "web_formOff": "Web form (switched off)",
+      "telegram_bot": "{{label}} (Telegram)",
+      "meta_account": "{{label}} ({{channel}})",
+      "api_key": "API requests"
+    },
+    "department": {
+      "own": "{{name}}",
+      "firstOfBrand": "{{name}} (the brand’s first department)",
+      "namedByApi": "The department each request names"
+    },
+    "assignment": {
+      "row": "{{mode}} · {{people}}",
+      "rowCap": "{{mode}} · {{people}} · cap {{cap}}",
+      "manual": "Manual",
+      "people_one": "{{count}} person",
+      "people_other": "{{count}} people"
+    },
+    "test": {
+      "heading": "Test routing",
+      "body": "Walks the real rules with a sample message. Nothing is created, sent or logged; no rule counters move; the rotation’s turn does not move.",
+      "entry": "Channel and entry point",
+      "entryOption": {
+        "mailbox": "Email · {{label}}",
+        "widget": "Chat widget",
+        "web_form": "Web form",
+        "web_formOff": "Web form (switched off)",
+        "telegram_bot": "Telegram · {{label}}",
+        "meta_account": "{{channel}} · {{label}}",
+        "api_key": "API request"
+      },
+      "department": "Department the request names",
+      "from": "From",
+      "fromHint": {
+        "email": "An email address",
+        "telegram": "The Telegram chat id",
+        "whatsapp": "A phone number",
+        "messenger": "The customer’s Messenger id",
+        "instagram": "The customer’s Instagram id"
+      },
+      "fromName": "Name (optional)",
+      "subject": "Subject",
+      "message": "Message",
+      "language": "Language",
+      "languages": {
+        "auto": "Language: auto",
+        "en": "English",
+        "ar": "العربية"
+      },
+      "run": "Run test",
+      "failed": "The test could not run. Try again.",
+      "noEntries": "There is no entry point to test."
+    },
+    "result": {
+      "heading": "Result",
+      "files": "{{entry}} files into {{department}}.",
+      "filesFirst": "{{entry}} files into the brand’s first department, {{department}}.",
+      "filesApi": "This request names its department: {{department}}.",
+      "senderOk": "The sender isn’t blocked.",
+      "blocked": "Blocked: {{from}} is on the block list. A real message would be dropped and counted, and no ticket would be created.",
+      "automated": "No ticket would be created. {{from}} is an automated sender, and this mailbox does not accept those.",
+      "contactMatched": {
+        "title": "Contact: {{name}}",
+        "body": "Matched by {{kind}}."
+      },
+      "contactNew": {
+        "title": "A new contact",
+        "bodyNamed": "It would be created as {{name}}.",
+        "body": "It would be created from the sender’s details."
+      },
+      "identity": {
+        "email": "email",
+        "telegram": "Telegram chat",
+        "whatsapp": "WhatsApp number",
+        "messenger": "Messenger id",
+        "instagram": "Instagram id"
+      },
+      "ruleMatches": "Rule “{{name}}” matches",
+      "ruleSkips": "Rule “{{name}}” doesn’t match",
+      "noRules": {
+        "title": "No rules",
+        "body": "No enabled rule runs when a ticket is created."
+      },
+      "ticket": {
+        "title": "The ticket would be in {{department}}",
+        "unassigned": "Unassigned"
+      },
+      "triage": {
+        "queued": "AI triage would be queued",
+        "queuedBody": "Not called in a test.",
+        "notQueued": "AI triage would not run",
+        "notQueuedBody": "No rule queues it."
+      },
+      "sla": {
+        "title": "SLA: {{policy}}",
+        "due": "First response due {{due}}",
+        "none": "No SLA policy applies",
+        "noneBody": "The ticket would run no clocks."
+      },
+      "assign": {
+        "picked": {
+          "title": "Would assign to {{name}} now",
+          "body": "{{mode}} in {{department}}."
+        },
+        "rule": {
+          "title": "A rule would assign it to {{name}}",
+          "body": "The rotation is not asked."
+        },
+        "manual": {
+          "title": "Would stay unassigned",
+          "body": "{{department}} assigns by hand."
+        },
+        "nobodyOnline": {
+          "title": "Nobody in {{department}} is online",
+          "body": "The ticket would wait unassigned until someone comes online or the offline timer moves it."
+        },
+        "nobodyEligible": {
+          "title": "Nobody in {{department}} could take it",
+          "body": "No one is in the rotation, or everyone in it is at their cap."
+        },
+        "outOfScope": {
+          "title": "Outside your departments",
+          "body": "The rules move the ticket to a department you do not manage, so its rotation is not shown."
+        }
+      }
+    }
   }
 }

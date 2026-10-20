@@ -12,6 +12,7 @@ import { automationKeys } from '../../../automation/api.js';
 import { useAutomationApi } from '../../../automation/context.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { MacrosTab } from './macros-tab.tsx';
+import { RoutingTab } from './routing-tab.tsx';
 import { RuleBuilder } from './rule-builder.tsx';
 import { RulesTab } from './rules-tab.tsx';
 import { tabForSegment, tabOfKind, tabsFor } from './tabs.js';
@@ -112,6 +113,8 @@ export function AutomationPage(): ReactNode {
             (rules.data?.rules.filter((rule) => rule.kind === newKind).length ?? 0) + 1
           }
         />
+      ) : tab.key === 'routing' ? (
+        <RoutingTab />
       ) : tab.kind === null ? (
         <MacrosTab />
       ) : (

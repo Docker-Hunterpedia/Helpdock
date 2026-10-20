@@ -186,6 +186,21 @@ Every ticket records how it arrived, once, in the activity row that filed it (M1
 - A ticket filed before M14 has no arrival and reads "Arrived on <channel>" with the activity that exists. An imported ticket reads "Imported from <source>" and nothing else: an import sends and runs nothing (M11).
 - Tests: the trail's composition for each actor kind and for a deleted rule (unit); the arrival written by each of the six creation paths, and a ticket in another department answering 404 (integration).
 
+### 2.9 Test routing
+
+Test routing (M14-09, `POST /api/brands/:id/routing/test`, `ticketing:manage`) answers "where would this message go?" by walking a sample through the code a real arrival takes, with every write left out. The Routing tab's explainer (`GET /api/brands/:id/routing`) reads the same configuration.
+
+1. **The door.** One of the brand's mailboxes, Telegram bots or Meta accounts, the widget, the web form, or an API request that names a department. The department is the door's own, the brand's first department (the widget, and a form without one) or the one the request names (§2.8's reasons).
+2. **The sender.** A mailbox sender who looks automated (`noreply@` and the like, §4.3) and is not on the mailbox's allow-list files no ticket. A sender on the block list (M1-11) is dropped and counted by a real message; the test reports it and counts nothing. The widget and the API do not consult the block list, as they do not for a real arrival. Only the address is judged from a sample, so a real message can be stopped by a header (`Auto-Submitted`, `Precedence`) the sample does not carry.
+3. **The contact.** The contact holding the sender's identifier, by name only, or "a new contact".
+4. **The rules.** Every enabled *Ticket created* rule, in order. As in the engine, each rule's conditions are judged on the ticket as it arrived; the actions of the rules that match are applied in order to a copy, so a later rule's actions see an earlier one's changes. Each condition shows what it found, each action what it would do, and the rules a rule's changes could set off one level on show whether they would run (M3-05). AI triage is never called: it is reported as queued when a matching rule would queue it.
+5. **The SLA.** The policy that would apply to the ticket as the rules leave it, and the first-response due time, from the real clock.
+6. **The assignment.** A rule that names an assignee wins; otherwise the department's mode. The rotation's pick is the worker's `pickAssignee` over the same reads (members, rotation, presence, load), read **now**, with no advisory lock and no "last picked" stamp, so asking twice answers the same and the turn does not move. Nobody online, and nobody eligible (not in rotation, or at the cap), are told apart.
+
+- **Nothing is written.** The walk runs in a savepoint that is `SET LOCAL transaction_read_only` and always rolled back: no ticket, contact, activity, message, outbox row, audit row, notification, SLA clock or rule-run row is written; no block-list counter, rule counter or rotation stamp moves. The database refuses a write made inside it.
+- **Department scope (§1.2).** A reader whose scope is some departments sees and tests only the doors that file into them; any other door answers 404 as an unknown one does. If the rules move the sample into a department outside the reader's scope, the result says so and does not show that department's rotation.
+- Tests: the row counts of every table a real arrival writes, the block-list counters and the rotation stamps unchanged after a run, and a second run picking the same person; a write made inside a dry run refused by the database; each verdict (ticket, blocked, automated); the scope and permission rules (integration).
+
 ---
 
 ## 3. SLA calculation
@@ -550,3 +565,4 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |
 | 2026-10-21 | §12.1 rule 2: adding, renaming and removing a passkey need a step-up, at most 10 per account, the last-factor refusal, the `securityChange` email and the audit rows (M18-02). |
 | 2026-10-20 | New §20 Notification delivery: email schedules, Right away pacing, the send-time re-check, the presence hold, pause and per-brand digests (M14-10, [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md)); §6's email key, §10's rebuild and §11's batches follow. |
+| 2026-10-20 | The new §2.9: Test routing walks a sample through the arrival path read-only, with the engine's own evaluation order, and shows no rotation outside the reader's scope (M14-09). |

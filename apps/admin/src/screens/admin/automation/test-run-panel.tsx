@@ -357,7 +357,7 @@ function TestRunResult({
   );
 }
 
-function GroupTraceItem({
+export function GroupTraceItem({
   group,
   n,
   text,
@@ -452,7 +452,7 @@ function TraceLine({
   );
 }
 
-function ActionPreview({
+export function ActionPreview({
   n,
   outcome,
   options,

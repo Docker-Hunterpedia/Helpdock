@@ -4,6 +4,7 @@ import {
   createDb,
   type Db,
   type DbHandle,
+  type DbTransaction,
   departments,
   importExternalIds,
   importRuns,
@@ -58,6 +59,8 @@ import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { TicketingSettingsService } from '../tickets/lifecycle/ticketing-settings.service.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
 import { fireSlaTimer } from './escalation.js';
@@ -1017,20 +1020,59 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
         await expectPaused(ids, true);
       });
 
-      it('ends on the committed flag when two admins save at once', async () => {
+      it('re-syncs after a save that raced another admin, when the worker ran between their commits', async () => {
         const { statusId, ids } = await statusWithTickets('Race', 2);
         const { drain } = drainer(statusId);
+        const settings = new TicketingSettingsService(new TicketLifecycleRepository());
+        const save = (tx: DbTransaction, pausesSla: boolean) =>
+          settings.update(
+            {
+              tx,
+              brandId: seeded.brandId,
+              actor: { actorType: 'staff', actorId: ada.id, via: 'web' },
+              now: new Date(),
+            },
+            statusId,
+            { pausesSla },
+          );
+        const gate = () => {
+          let open!: () => void;
+          const opened = new Promise<void>((resolve) => {
+            open = resolve;
+          });
+          return { open, opened };
+        };
+        const aMayCommit = gate();
+        const bMayCommit = gate();
+        const aSaved = gate();
+        const bSaved = gate();
 
-        const [first, second] = await Promise.all([
-          patchStatus(statusId, { pausesSla: true }),
-          patchStatus(statusId, { pausesSla: false }),
-        ]);
-        expect([first.status, second.status]).toEqual([200, 200]);
-        const list = await call<TicketStatusList>('GET', `${brandPath()}/ticket-statuses`, ada);
-        const final = list.body.statuses.find((status) => status.id === statusId)?.pausesSla;
+        // A saves "pause" and holds its transaction open.
+        const a = withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await save(tx, true);
+          aSaved.open();
+          await aMayCommit.opened;
+        });
+        await aSaved.opened;
+        // B saves "resume" having started before A commits, and holds its own open.
+        const b = withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await save(tx, false);
+          bSaved.open();
+          await bMayCommit.opened;
+        });
+        await waitForLock(300);
 
+        aMayCommit.open();
+        await a;
+        await bSaved.opened;
+        // The worker handles A's event between A's commit and B's.
         await drain();
-        await expectPaused(ids, final === true);
+        await expectPaused(ids, true);
+
+        bMayCommit.open();
+        await b;
+        await drain();
+        await expectPaused(ids, false);
       });
 
       it('never rewinds a clock another sync already moved past the change time', async () => {
@@ -1052,20 +1094,6 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
         const clock = await clockOf(id, 'resolution');
         expect(clock.pausedAt).toEqual(checkpoint);
         expect(clock.checkpointAt).toEqual(checkpoint);
-      });
-
-      it('closes the clocks of the tickets in a status whose system state becomes closed', async () => {
-        const { statusId, ids } = await statusWithTickets('Soon done', 2);
-        const { drain } = drainer(statusId);
-
-        expect((await patchStatus(statusId, { systemState: 'closed' })).status).toBe(200);
-        expect(await drain()).toBe(2);
-
-        for (const id of ids) {
-          const clock = await clockOf(id, 'resolution');
-          expect(clock.satisfiedAt).not.toBeNull();
-          expect((await columns(id))?.resolution).toBeNull();
-        }
       });
     });
 

@@ -180,7 +180,7 @@ finds every timer back at its time.
 | Outbox event | Payload | Written when |
 |---|---|---|
 | `sla.schedule` | `{ ticketIds }` | any clock of these tickets changed |
-| `sla.status_resync` | `{ statusId, at, afterId? }` | a status's `pauses_sla` or system state changed; the handler syncs one batch of 200 live (not deleted, not merged) tickets in it and writes the next event, with `afterId` set to the last ticket, while batches come back full |
+| `sla.status_resync` | `{ statusId, at, afterId? }` | a status's `pauses_sla` changed; the handler syncs one batch of 200 open tickets in it and writes the next event, with `afterId` set to the last ticket, while batches come back full |
 | `sla.warning` | `{ ticketId, departmentId, clock, stepPercent, userIds?, teamIds?, departmentLeads? }` | a step below 100 % ran |
 | `sla.breached` | `{ ticketId, departmentId, clock, cause: 'timer' \| 'change' }` | a clock breached |
 | `ticket.escalated` | as `sla.warning` | a step at or past 100 % ran, or a step set status Escalated |

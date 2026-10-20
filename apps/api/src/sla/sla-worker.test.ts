@@ -81,7 +81,7 @@ describe('createSlaStatusResyncHandler', () => {
     const handler = createSlaStatusResyncHandler({
       statusResyncBatch,
       repository: {
-        liveTicketIdsInStatus: async (_tx: unknown, _status: string, after?: string) => {
+        openTicketIdsInStatus: async (_tx: unknown, _status: string, after?: string) => {
           asked.push(after);
           return found;
         },

@@ -127,13 +127,8 @@ export class TicketingSettingsService {
     }
 
     // Tickets already in the status keep their stored clocks until each next
-    // syncs, so the worker re-syncs them (§3.2), a batch at a time. Both the
-    // pause flag and the system state (closing resolves, reopening restarts)
-    // decide what the clocks do.
-    const clocksDepend =
-      (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) ||
-      (request.systemState !== undefined && request.systemState !== status.systemState);
-    if (clocksDepend) {
+    // syncs, so the worker re-syncs them (§3.2), a batch at a time.
+    if (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) {
       await enqueueSlaStatusResync(context.tx, context.brandId, { statusId, at: context.now });
     }
 

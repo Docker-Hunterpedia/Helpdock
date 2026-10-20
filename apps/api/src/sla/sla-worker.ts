@@ -105,7 +105,7 @@ export const createSlaStatusResyncHandler =
   async ({ brandId, payload, tx }) => {
     const { statusId, at, afterId } = slaStatusResyncPayloadSchema.parse(payload);
     const limit = deps.statusResyncBatch ?? SLA_STATUS_RESYNC_BATCH;
-    const ids = await deps.repository.liveTicketIdsInStatus(tx, statusId, afterId, limit);
+    const ids = await deps.repository.openTicketIdsInStatus(tx, statusId, afterId, limit);
 
     await deps.sla.syncMany(tx, brandId, ids, { at, notBeforeCheckpoint: true });
     const last = ids.at(-1);

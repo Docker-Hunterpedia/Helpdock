@@ -284,7 +284,7 @@ packages/ai
 | `import` | `import.extract`, `import.load`, `import.attachments`, `import.finish` (M11, in development) | resumable staging; per-brand load lock; vendor retry delays |
 | `inbound` | `email.poll` (per mailbox, repeatable), `telegram.poll` (per bot, development only; production updates arrive by webhook and are filed in the request), `form.submit`, `meta.media_fetch` (M10: the bytes of an attachment a Meta webhook named, into the pipeline) | dedupe by external id |
 | `outbound` | `email.send`, `telegram.send`, `meta.send` (M10, paced per recipient), `widget.deliver` | retries 5, backoff exp, DLQ |
-| `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02); `sla.status_resync` syncs the open tickets of a status whose `pauses_sla` or system state changed (#336) |
+| `sla` | `sla.timer` (delayed, one per clock and step, jobId `sla.<ticket>.<clock>.<step>`), `sla.rebuild` (on boot and hourly) | timers re-planned by the `sla.schedule` outbox handler after any clock change (M3-02); `sla.status_resync` syncs the open tickets of a status whose `pauses_sla` changed (#336) |
 | `rules` | `rules.evaluate`, `rules.time_based` (cron) | depth guard |
 | `ai` | `ai.assist`, `ai.autoreply`, `ai.classify`, `ai.transcribe` | per-brand concurrency + budget check |
 | `knowledge` | `ingest.source`, `ingest.chunk_embed`, `crawl.page`; `help_center.publish_due` (delayed, one per brand and scheduled minute) and `help_center.publish_due.sweep` (hourly) | rate-limited crawl; the scheduled publish of M5-01 |

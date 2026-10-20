@@ -147,7 +147,7 @@ created:
 
 | Flag | Meaning |
 |---|---|
-| **Pauses SLA clocks** | Both clocks stop while the ticket is in this status (§3.2). Changing the flag also pauses or resumes the tickets already in the status: the worker re-syncs them in batches of 200 right after the save, counting from the moment of the change. Changing a custom status's system state (for example open to closed) re-syncs its tickets the same way |
+| **Pauses SLA clocks** | Both clocks stop while the ticket is in this status (§3.2). Changing the flag also pauses or resumes the open tickets already in the status: the worker re-syncs them in batches of 200 right after the save, counting from the moment of the change |
 | **Counts as awaiting customer** | The ball is with the customer; time-based rules and reports read it |
 | Excluded from reports | Not editable. Seeded on Spam and Merged; it is why a close into one schedules no survey |
 

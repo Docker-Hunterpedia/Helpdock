@@ -571,6 +571,18 @@ image tag and a restart.
    docker compose logs -f api
    ```
 
+   **Note — inbound parse webhooks (#345).** The original 1.0.0 Caddyfiles block
+   these webhooks with a 404. Existing installs need the corrected
+   `docker/caddy/Caddyfile` (or `Caddyfile.cloudflare` when selected by `CADDYFILE`)
+   from the release containing this fix; changing the application image alone does
+   not update the bind-mounted configuration. If you maintain a custom Caddyfile,
+   add a `handle /internal/inbound-parse/*` that reverse-proxies to `api:3000`
+   before the `/internal/*` 404 on the API and admin hosts, preserving the existing
+   proxy headers. Keep every other internal path blocked, and keep all internal
+   paths blocked on brand help-center hosts. Update the selected file,
+   then `docker compose restart caddy` from `docker/`. Providers should use the
+   [API-host URL and shared secret](email.md#inbound-parse-webhooks).
+
 4. One api replica takes the migration lock and migrates while the others
    wait. The log says `Applied N migration(s)`, then the api reports healthy.
 

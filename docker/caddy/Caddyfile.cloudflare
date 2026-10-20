@@ -17,7 +17,7 @@
 #    every visitor and key every per-address limit (sign-in, widget, web form,
 #    rating page) on it, so one visitor could lock the rest out. With it, Caddy
 #    believes Cloudflare's `CF-Connecting-IP` header when, and only when, the
-#    peer is in these ranges, and `helpdock_upstream` forwards that one address
+#    peer is in these ranges, and `helpdock_proxy` forwards that one address
 #    as `X-Forwarded-For`. A request that reaches this server around Cloudflare
 #    is not from these ranges, so a `CF-Connecting-IP` it carries is ignored and
 #    its own address is used.
@@ -45,20 +45,31 @@
 	}
 }
 
+(helpdock_proxy) {
+	reverse_proxy api:3000 {
+		header_up X-Request-Id {http.request.uuid}
+		header_up X-Forwarded-Host {host}
+		# One address, the visitor's: `CF-Connecting-IP` from a Cloudflare
+		# peer, the peer itself from anyone else. The api believes this one
+		# hop, Caddy, and takes the address as `request.ip`.
+		header_up X-Forwarded-For {client_ip}
+	}
+}
+
+# Parse providers use the API hosts; brand hosts keep internal routes blocked.
+(helpdock_inbound_parse) {
+	handle /internal/inbound-parse/* {
+		import helpdock_proxy
+	}
+}
+
 (helpdock_upstream) {
 	handle /internal/* {
 		respond "Not found" 404
 	}
 
 	handle {
-		reverse_proxy api:3000 {
-			header_up X-Request-Id {http.request.uuid}
-			header_up X-Forwarded-Host {host}
-			# One address, the visitor's: `CF-Connecting-IP` from a Cloudflare
-			# peer, the peer itself from anyone else. The api believes this one
-			# hop, Caddy, and takes the address as `request.ip`.
-			header_up X-Forwarded-For {client_ip}
-		}
+		import helpdock_proxy
 	}
 }
 
@@ -67,6 +78,7 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	}
 
+	import helpdock_inbound_parse
 	import helpdock_upstream
 }
 

@@ -28,6 +28,16 @@ The first poll imports the folder's *unseen* messages, not its history. Every me
 
 Your mail provider posts each message to Helpdock. The recipient address picks the mailbox.
 
+Use `https://<API_HOST>` as the base URL for the endpoints below. Both bundled
+Caddy configurations also accept these webhooks on `ADMIN_HOST`, which serves
+the REST API too. With the bundled Caddy, brand help-center domains block all
+`/internal/*` paths; the API and admin hosts block every internal path except
+`/internal/inbound-parse/*`.
+
+For host-proxy and platform installs, see [External proxy](deploy.md#external-proxy):
+nginx and Traefik need the opt-in inbound-parse exception shown there; the
+platform templates ship no path-deny rules.
+
 | Provider | Endpoint | Configure |
 |---|---|---|
 | Postmark | `/internal/inbound-parse/postmark` | Inbound webhook URL. Turn on "Include raw email content" for the most faithful parse. |
@@ -36,7 +46,10 @@ Your mail provider posts each message to Helpdock. The recipient address picks t
 | Resend | `/internal/inbound-parse/resend` | Only payloads that include `html` or `text`. Resend's default `email.received` webhook carries no body and is answered `422`. |
 | Anything else | `/internal/inbound-parse/generic` | `POST` JSON: `{ "raw": "<RFC 5322 message>" }`, or `{ from, to, cc?, subject, text?, html?, messageId?, inReplyTo?, references?, headers?, attachments? }`. |
 
-Every request must carry the brand's **shared secret**, either as the `X-Helpdock-Inbound-Secret` header or as the password of HTTP Basic auth in the URL (`https://inbound:SECRET@support.example.com/internal/inbound-parse/postmark`). **Replace** on the Inbound parse card makes a new secret and shows it once; providers still using the old one are refused from that moment. A request with a wrong secret and one for an address that is no mailbox get the same `401`.
+Every request must carry the brand's **shared secret**, either as the `X-Helpdock-Inbound-Secret` header or as the password of HTTP Basic auth in the URL (`https://inbound:SECRET@api.example.com/internal/inbound-parse/postmark`). **Replace** on the Inbound parse card makes a new secret and shows it once; providers still using the old one are refused from that moment. A request with a wrong secret and one for an address that is no mailbox get the same `401`.
+
+For an existing 1.0.x install, apply the Caddy routing fix described in
+[Upgrading](operations.md#upgrading) before configuring a parse provider.
 
 Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one already received (same `Message-ID`), `ignored` for automated or blocked senders. Providers should not retry any `200`.
 

@@ -14,6 +14,7 @@ import type {
 import { MAX_TICKET_STATUSES_PER_BRAND, parseBrandSettings } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../../brands/ticketing-failure.js';
+import { enqueueSlaStatusResync } from '../../sla/sla-events.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -93,7 +94,9 @@ export class TicketingSettingsService {
     statusId: string,
     request: TicketStatusUpdateRequest,
   ): Promise<TicketStatus> {
-    const status = await this.#require(context.tx, statusId);
+    // Locked, so "did the flag change" compares with the committed value: two
+    // admins racing each see the other's result and the last one re-syncs.
+    const status = await this.#require(context.tx, statusId, { forUpdate: true });
     this.#refuse(statusEditRefusal(status, request));
 
     if (request.name !== undefined && request.name.toLowerCase() !== status.name.toLowerCase()) {
@@ -121,6 +124,12 @@ export class TicketingSettingsService {
     /* c8 ignore next 3 -- the read above proved the row is this brand's. */
     if (updated === undefined) {
       throw new NotFoundException('No such status');
+    }
+
+    // Tickets already in the status keep their stored clocks until each next
+    // syncs, so the worker re-syncs them (§3.2), a batch at a time.
+    if (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) {
+      await enqueueSlaStatusResync(context.tx, context.brandId, { statusId, at: context.now });
     }
 
     await this.#audit(context, 'ticket_status.updated', statusId, {
@@ -277,8 +286,12 @@ export class TicketingSettingsService {
     return settings;
   }
 
-  async #require(tx: DbTransaction, statusId: string): Promise<TicketStatusRow> {
-    const status = await this.#lifecycle.findStatus(tx, statusId);
+  async #require(
+    tx: DbTransaction,
+    statusId: string,
+    lock?: { readonly forUpdate: true },
+  ): Promise<TicketStatusRow> {
+    const status = await this.#lifecycle.findStatus(tx, statusId, lock);
     if (status === undefined) {
       // A status of another brand is invisible to this transaction, so "there
       // is no such id" and "it is not yours" are the same answer.

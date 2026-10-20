@@ -221,7 +221,7 @@ Elapsed time is counted only inside the business hours of the ticket's departmen
 
 ### 3.2 Pause and resume
 
-While the ticket is in a status with `pauses_sla`, clocks do not advance. On resume, `due_at` is recomputed as `now + remaining`, where `remaining = target − elapsed_in_business_hours`. Pauses are recorded so reports can show "time waiting on customer" separately.
+While the ticket is in a status with `pauses_sla`, clocks do not advance. On resume, `due_at` is recomputed as `now + remaining`, where `remaining = target − elapsed_in_business_hours`. Pauses are recorded so reports can show "time waiting on customer" separately. Changing a status's `pauses_sla` applies the same rule to the open tickets already in it, through the `sla.status_resync` outbox event in batches, counted from the time of the change.
 
 ### 3.3 Changes to priority, department, or policy
 

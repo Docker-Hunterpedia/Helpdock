@@ -4,6 +4,7 @@ import {
   createDb,
   type Db,
   type DbHandle,
+  type DbTransaction,
   departments,
   importExternalIds,
   importRuns,
@@ -58,14 +59,20 @@ import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { TicketingSettingsService } from '../tickets/lifecycle/ticketing-settings.service.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
 import { fireSlaTimer } from './escalation.js';
 import { SlaRepository } from './sla.repository.js';
 import { SlaService } from './sla.service.js';
-import { SLA_SCHEDULE_EVENT } from './sla-events.js';
+import { SLA_SCHEDULE_EVENT, SLA_STATUS_RESYNC_EVENT } from './sla-events.js';
 import { bullTimerQueue } from './sla-timers.js';
-import { createSlaScheduleHandler, type SlaWorkerDeps } from './sla-worker.js';
+import {
+  createSlaScheduleHandler,
+  createSlaStatusResyncHandler,
+  type SlaWorkerDeps,
+} from './sla-worker.js';
 
 /**
  * M3-01 and M3-02 against a real Postgres and a real Redis, over real
@@ -876,6 +883,218 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
           .status,
       ).toBe(200);
       expect(await nextDue()).toBeNull();
+    });
+
+    describe('status re-sync (#336)', () => {
+      const statusPath = (statusId: string) => `${brandPath()}/ticket-statuses/${statusId}`;
+      const patchStatus = (statusId: string, body: Record<string, unknown>) =>
+        call('PATCH', statusPath(statusId), ada, body);
+
+      const columns = (ticketId: string) =>
+        withSystem(runtime.db, seeded.brandId, async (tx) => {
+          const [row] = await tx
+            .select({
+              first: tickets.firstResponseDueAt,
+              resolution: tickets.resolutionDueAt,
+              next: tickets.slaNextDueAt,
+            })
+            .from(tickets)
+            .where(eq(tickets.id, ticketId));
+          return row;
+        });
+
+      const statusWithTickets = async (name: string, count: number) => {
+        const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+          name,
+          systemState: 'open',
+          pausesSla: false,
+          color: 'info',
+        });
+        expect(created.status).toBe(201);
+        const statusId = created.body.id;
+        const ids: string[] = [];
+        for (let index = 0; index < count; index += 1) {
+          const { ticket } = await createTicket();
+          expect(
+            (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId })).status,
+          ).toBe(200);
+          ids.push(ticket.id);
+        }
+        return { statusId, ids };
+      };
+
+      /** What the worker does with the `sla.status_resync` rows of one status, a batch of two at a time. */
+      const drainer = (statusId: string) => {
+        const handler = createSlaStatusResyncHandler({ ...slaDeps(), statusResyncBatch: 2 });
+        const handled = new Set<string>();
+        const at: Date[] = [];
+        const drain = async (): Promise<number> => {
+          for (;;) {
+            const rows = (
+              await withSystem(runtime.db, seeded.brandId, (tx) =>
+                tx
+                  .select()
+                  .from(outbox)
+                  .where(eq(outbox.event, SLA_STATUS_RESYNC_EVENT))
+                  .orderBy(asc(outbox.id)),
+              )
+            ).filter((row) => !handled.has(row.id) && row.payload.statusId === statusId);
+            const row = rows[0];
+            if (row === undefined) {
+              return handled.size;
+            }
+            handled.add(row.id);
+            at.push(new Date(String(row.payload.at)));
+            await withSystem(runtime.db, seeded.brandId, (tx) =>
+              handler({
+                outboxId: row.id,
+                brandId: row.brandId,
+                event: row.event,
+                payload: row.payload,
+                tx,
+                log: silentLogger,
+              }),
+            );
+          }
+        };
+        return { drain, at };
+      };
+
+      const expectPaused = async (ids: string[], paused: boolean) => {
+        for (const id of ids) {
+          const clock = await clockOf(id, 'resolution');
+          expect(clock.pausedAt === null).toBe(!paused);
+          expect((await columns(id))?.resolution ?? null).toEqual(clock.dueAt);
+          expect(clock.dueAt === null).toBe(paused);
+        }
+      };
+
+      beforeAll(async () => {
+        expect(
+          (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
+            .status,
+        ).toBe(201);
+      });
+
+      it('pauses and resumes the tickets already in the status, in batches, from the change time', async () => {
+        const { statusId, ids } = await statusWithTickets('On hold with vendor', 3);
+        const elsewhere = (await createTicket()).ticket.id;
+        const { drain, at } = drainer(statusId);
+        await expectPaused(ids, false);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(2);
+
+        await expectPaused(ids, true);
+        for (const id of ids) {
+          expect((await clockOf(id, 'resolution')).pausedAt).toEqual(at[0]);
+          expect(await columns(id)).toEqual({ first: null, resolution: null, next: null });
+        }
+        expect((await columns(elsewhere))?.resolution).not.toBeNull();
+
+        // A PATCH that leaves the flag as it is writes nothing.
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(2);
+
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect(await drain()).toBe(4);
+        await expectPaused(ids, false);
+        for (const id of ids) {
+          expect((await columns(id))?.next).not.toBeNull();
+        }
+      });
+
+      it('ends on the final flag when it flips twice before the worker runs', async () => {
+        const { statusId, ids } = await statusWithTickets('Flip flop', 2);
+        const { drain } = drainer(statusId);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect(await drain()).toBe(4);
+        await expectPaused(ids, false);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(10);
+        await expectPaused(ids, true);
+      });
+
+      it('re-syncs after a save that raced another admin, when the worker ran between their commits', async () => {
+        const { statusId, ids } = await statusWithTickets('Race', 2);
+        const { drain } = drainer(statusId);
+        const settings = new TicketingSettingsService(new TicketLifecycleRepository());
+        const save = (tx: DbTransaction, pausesSla: boolean) =>
+          settings.update(
+            {
+              tx,
+              brandId: seeded.brandId,
+              actor: { actorType: 'staff', actorId: ada.id, via: 'web' },
+              now: new Date(),
+            },
+            statusId,
+            { pausesSla },
+          );
+        const gate = () => {
+          let open!: () => void;
+          const opened = new Promise<void>((resolve) => {
+            open = resolve;
+          });
+          return { open, opened };
+        };
+        const aMayCommit = gate();
+        const bMayCommit = gate();
+        const aSaved = gate();
+        const bSaved = gate();
+
+        // A saves "pause" and holds its transaction open.
+        const a = withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await save(tx, true);
+          aSaved.open();
+          await aMayCommit.opened;
+        });
+        await aSaved.opened;
+        // B saves "resume" having started before A commits, and holds its own open.
+        const b = withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await save(tx, false);
+          bSaved.open();
+          await bMayCommit.opened;
+        });
+        await waitForLock(300);
+
+        aMayCommit.open();
+        await a;
+        await bSaved.opened;
+        // The worker handles A's event between A's commit and B's.
+        await drain();
+        await expectPaused(ids, true);
+
+        bMayCommit.open();
+        await b;
+        await drain();
+        await expectPaused(ids, false);
+      });
+
+      it('never rewinds a clock another sync already moved past the change time', async () => {
+        const { statusId, ids } = await statusWithTickets('Late batch', 1);
+        const id = ids[0] ?? '';
+        const { drain, at } = drainer(statusId);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        const checkpoint = new Date(Date.now() + 60 * MINUTE);
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(ticketSlaClocks)
+            .set({ checkpointAt: checkpoint })
+            .where(eq(ticketSlaClocks.ticketId, id)),
+        );
+        await drain();
+
+        expect(at[0]?.getTime()).toBeLessThan(checkpoint.getTime());
+        const clock = await clockOf(id, 'resolution');
+        expect(clock.pausedAt).toEqual(checkpoint);
+        expect(clock.checkpointAt).toEqual(checkpoint);
+      });
     });
 
     it('does not meet the response clock with an internal note', async () => {

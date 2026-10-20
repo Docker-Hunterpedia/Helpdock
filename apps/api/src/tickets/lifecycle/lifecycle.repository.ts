@@ -88,12 +88,13 @@ export class TicketLifecycleRepository {
       .orderBy(asc(ticketStatuses.sortOrder), asc(ticketStatuses.name));
   }
 
-  async findStatus(tx: DbTransaction, statusId: string): Promise<TicketStatusRow | undefined> {
-    const rows = await tx
-      .select()
-      .from(ticketStatuses)
-      .where(eq(ticketStatuses.id, statusId))
-      .limit(1);
+  async findStatus(
+    tx: DbTransaction,
+    statusId: string,
+    lock?: { readonly forUpdate: true },
+  ): Promise<TicketStatusRow | undefined> {
+    const query = tx.select().from(ticketStatuses).where(eq(ticketStatuses.id, statusId)).limit(1);
+    const rows = await (lock === undefined ? query : query.for('update'));
 
     return rows[0];
   }

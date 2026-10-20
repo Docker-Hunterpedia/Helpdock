@@ -19,6 +19,7 @@ import { z } from 'zod';
  * | Event | Written when | Consumed by |
  * |---|---|---|
  * | `sla.schedule` | any clock of these tickets changed | `sla-schedule.ts`: removes and re-adds their timers |
+ * | `sla.status_resync` | a status's `pauses_sla` changed | `sla-worker.ts`: syncs the clocks of the tickets in that status, a batch at a time |
  * | `sla.warning` | a step below 100 % ran | M3-07 notifications |
  * | `sla.breached` | a clock breached, by timer or by a change (§3.3) | M3-07 notifications, M3-03 rules |
  * | `ticket.escalated` | a step at or past 100 % ran, or a step set status Escalated | M3-07 notifications |
@@ -31,6 +32,23 @@ export const slaSchedulePayloadSchema = z.object({
   ticketIds: z.array(z.uuid()).min(1).max(500),
 });
 export type SlaSchedulePayload = z.infer<typeof slaSchedulePayloadSchema>;
+
+export const SLA_STATUS_RESYNC_EVENT = 'sla.status_resync';
+
+/**
+ * `at` is when the flag changed, so the pause or resume counts from then and
+ * not from whenever the worker got to the batch. `afterId` is the last ticket
+ * of the previous batch.
+ */
+export const slaStatusResyncPayloadSchema = z.object({
+  statusId: z.uuid(),
+  at: z.coerce.date(),
+  afterId: z.uuid().optional(),
+});
+export type SlaStatusResyncPayload = z.infer<typeof slaStatusResyncPayloadSchema>;
+
+/** Tickets one `sla.status_resync` row syncs before it writes its successor. */
+export const SLA_STATUS_RESYNC_BATCH = 200;
 
 /** How many ticket ids one `sla.schedule` row carries; a brand recompute writes several. */
 export const SLA_SCHEDULE_CHUNK = 500;
@@ -83,4 +101,19 @@ export const enqueueTicketEscalated = (
     brandId,
     event: SLA_EVENTS.escalated,
     payload: ticketEscalatedEventSchema.parse(payload),
+  });
+
+export const enqueueSlaStatusResync = (
+  tx: DbTransaction,
+  brandId: string,
+  payload: SlaStatusResyncPayload,
+): Promise<string> =>
+  enqueueOutbox(tx, {
+    brandId,
+    event: SLA_STATUS_RESYNC_EVENT,
+    payload: {
+      statusId: payload.statusId,
+      at: payload.at.toISOString(),
+      ...(payload.afterId === undefined ? {} : { afterId: payload.afterId }),
+    },
   });

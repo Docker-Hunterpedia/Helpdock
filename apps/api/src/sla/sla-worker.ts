@@ -15,7 +15,14 @@ import { withSystemJob } from '../tenant/system-job.js';
 import { fireSlaTimer } from './escalation.js';
 import type { SlaRepository } from './sla.repository.js';
 import type { SlaService } from './sla.service.js';
-import { SLA_SCHEDULE_EVENT, slaSchedulePayloadSchema } from './sla-events.js';
+import {
+  enqueueSlaStatusResync,
+  SLA_SCHEDULE_EVENT,
+  SLA_STATUS_RESYNC_BATCH,
+  SLA_STATUS_RESYNC_EVENT,
+  slaSchedulePayloadSchema,
+  slaStatusResyncPayloadSchema,
+} from './sla-events.js';
 import { applyTimers, planTimers, type SlaTimerQueue } from './sla-timers.js';
 
 /**
@@ -35,6 +42,8 @@ export interface SlaWorkerDeps {
   readonly assignment: AssignmentRepository;
   readonly timers: SlaTimerQueue;
   readonly now?: () => Date;
+  /** Tickets one `sla.status_resync` handles before it hands on; tests shrink it. */
+  readonly statusResyncBatch?: number;
 }
 
 /**
@@ -85,7 +94,28 @@ export const createSlaScheduleHandler =
   };
 
 /**
- * Registers `sla.schedule`. The events the engine writes — `sla.warning`,
+ * `sla.status_resync`: a status's `pauses_sla` changed, so the tickets already
+ * in it pause or resume (§3.2). One batch per event; a full batch writes the
+ * next event in the same transaction, so a brand with a status of thousands of
+ * tickets never holds one long transaction. Each ticket is synced from the
+ * status as it is now, so a flag flipped back before the event ran is harmless.
+ */
+export const createSlaStatusResyncHandler =
+  (deps: SlaWorkerDeps): OutboxEventHandler =>
+  async ({ brandId, payload, tx }) => {
+    const { statusId, at, afterId } = slaStatusResyncPayloadSchema.parse(payload);
+    const limit = deps.statusResyncBatch ?? SLA_STATUS_RESYNC_BATCH;
+    const ids = await deps.repository.openTicketIdsInStatus(tx, statusId, afterId, limit);
+
+    await deps.sla.syncMany(tx, brandId, ids, { at, notBeforeCheckpoint: true });
+    const last = ids.at(-1);
+    if (ids.length === limit && last !== undefined) {
+      await enqueueSlaStatusResync(tx, brandId, { statusId, at, afterId: last });
+    }
+  };
+
+/**
+ * Registers `sla.schedule` and `sla.status_resync`. The events the engine writes — `sla.warning`,
  * `sla.breached` and `ticket.escalated` — are consumed by M3-07's
  * notifications and M3-03's rules, which register their own subscribers.
  */
@@ -94,6 +124,7 @@ export const registerSlaEventHandlers = (
   dispatcher: Pick<OutboxDispatcher, 'register'> = outboxEvents,
 ): void => {
   dispatcher.register(SLA_SCHEDULE_EVENT, createSlaScheduleHandler(deps));
+  dispatcher.register(SLA_STATUS_RESYNC_EVENT, createSlaStatusResyncHandler(deps));
 };
 
 export interface SlaProcessorOptions {

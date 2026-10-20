@@ -148,6 +148,25 @@ export class HttpAuthApi implements AuthApi {
     return this.#requireSession(result);
   }
 
+  async passkeySignInOptions(): Promise<PasskeyStepUpOptions> {
+    return passkeyStepUpOptionsSchema.parse(
+      await this.#transport.request('POST', '/auth/passkey/options', {}),
+    );
+  }
+
+  async signInWithPasskey(answer: PasskeySecondFactorAnswer): Promise<Session> {
+    const result = this.#keepSession(
+      signInResponseSchema.parse(
+        await this.#transport.request('POST', '/auth/passkey/verify', {
+          ceremonyId: answer.ceremonyId,
+          response: answer.response,
+        }),
+      ),
+    );
+
+    return this.#requireSession(result);
+  }
+
   oauthStartUrl(provider: OauthProvider): string {
     return `${this.#transport.baseUrl}/auth/oauth/${provider}/start`;
   }

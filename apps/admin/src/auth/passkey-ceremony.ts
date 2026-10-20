@@ -6,10 +6,12 @@ import {
 } from '@helpdock/schemas';
 import {
   browserSupportsWebAuthn,
+  browserSupportsWebAuthnAutofill,
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
   startAuthentication,
   startRegistration,
+  WebAuthnAbortService,
   WebAuthnError,
 } from '@simplewebauthn/browser';
 
@@ -78,8 +80,23 @@ export const createPasskey = async (
   }
 };
 
+/** Whether the email field can offer saved passkeys as the person types (conditional mediation). */
+export const passkeyAutofillSupported = (): Promise<boolean> =>
+  passkeysSupported() ? browserSupportsWebAuthnAutofill() : Promise.resolve(false);
+
+/** Ends a ceremony that is still waiting on the browser, such as an autofill one a screen is leaving. */
+export const cancelPasskeyCeremony = (): void => {
+  WebAuthnAbortService.cancelCeremony();
+};
+
+/**
+ * With `autofill`, the browser keeps the request open and offers the person's
+ * passkeys in the email field's autofill list; it settles when one is chosen,
+ * and a later ceremony started on the same page cancels it.
+ */
 export const assertPasskey = async (
   options: Readonly<Record<string, unknown>>,
+  { autofill = false }: { readonly autofill?: boolean } = {},
 ): Promise<AuthenticationResponse> => {
   if (!passkeysSupported()) {
     throw new PasskeyCeremonyError('unsupported');
@@ -88,6 +105,7 @@ export const assertPasskey = async (
     return authenticationResponseSchema.parse(
       await startAuthentication({
         optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
+        ...(autofill ? { useBrowserAutofill: true } : {}),
       }),
     );
   } catch (error) {

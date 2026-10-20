@@ -545,11 +545,11 @@ Backlog or never:
   (`apps/api/src/auth/entra.ts`) serves this provider and the SSO OIDC preset:
   `xms_edov === true` and `acct === 0` only.
   protects you" line; and the board's sentence that a passkey "can sign you
-  in" is softened, because that is not true until M18-04 and the passwordless
-  screens (M18-06): the notice emails still say only that the passkey is saved
-  and can confirm changes on this page, and M18-04 restores the sign-in wording
-  there. The card's caption said the same until M18-03 made "a passkey counts as
-  your second factor" true, and now says so. Left for the other deliverables: the
+  in" was softened until it was true: the notice emails said only that the
+  passkey is saved and can confirm changes on this page. M18-04 made it true and
+  restored the board's wording in the emails and on the card's caption. The
+  caption said the same until M18-03 made "a passkey counts as your second
+  factor" true, and now says so. Left for the other deliverables: the
   Settings › Authentication card (M18-06).
 - [x] **M18-03** Passkey as a second factor ([#277](https://github.com/Docker-Hunterpedia/Helpdock/issues/277)).
   `POST /api/auth/passkey/second-factor/options` and `/verify` answer the
@@ -597,8 +597,7 @@ Backlog or never:
     there, and one is left to M18-06. The first passkey added from the
     Passkeys card shows the recovery codes it drew in the page's existing
     "Your new recovery codes" block rather than a new dialog.
-  - The security emails' "can now sign you in" wording waits for M18-04, as
-    planned.
+  - The security emails' "can now sign you in" wording was restored by M18-04.
   - **Alias direction.** The enrolment challenge is `second-factor-enrolment-required`
     everywhere in code, but the api still sends `totp-enrolment-required` on the
     wire for one release so a cached admin bundle works; readers accept both.
@@ -614,6 +613,50 @@ Backlog or never:
     phone only recovery codes remain. The removed path was the vulnerability and
     no screen offered it. An atomic "Replace authenticator" (current code or
     recovery code, plus the new code) is the follow-up issue.
+- [x] **M18-04** Passwordless sign-in ([#278](https://github.com/Docker-Hunterpedia/Helpdock/issues/278)).
+  `POST /api/auth/passkey/options` and `/verify`
+  (`AuthService.passkeySignInOptions`, `verifyPasskeySignIn`): a discoverable
+  credential, `userVerification: required`, no `allowCredentials`, so the options
+  are identical for every caller. The session is the one a password and a second
+  factor open (`openSession`, so the brand-membership check runs), with audit
+  `method: passkey, secondFactor: passkey-uv` and no second step. Every refusal
+  that could reveal an account (unknown credential, bad signature, no user
+  verification, another origin, regressed counter, replay, deactivated person,
+  no active brand, wrong user handle) answers `invalid-credentials` and keeps its
+  reason in the audit trail (`auth.sign_in.failed`, `meta.method: passkey`). An
+  unknown credential is checked against a throwaway key so it costs the same
+  signature check as a known one. Failures spend the per-IP sign-in bucket (a
+  success and the options give their slot back) and the options have a bucket
+  of their own (`passkey-signin-options`, 120 per 15 minutes per IP). Both routes
+  answer `sso-required` under enforcement before anything is spent. The counter
+  and `last_used_at` are written only after the session opened. Screen: the
+  passkey button, the `username webauthn` autofill on the email field (the page
+  starts conditional mediation on load and restarts it after a ceremony ends),
+  the waiting state with Cancel, the cancelled notice, the single refusal
+  message, the unsupported-browser caption and the paused warning of
+  `Admin/Login-Passkey`, en and ar. The security emails' and the Passkeys card's
+  "can sign you in" wording is restored. Differences and gaps:
+  - **Timing is evened out where it is cheap, not everywhere.** An unknown
+    credential does a signature check against a throwaway key; the deactivated
+    and no-brand paths still do one more database read than an unknown
+    credential. The difference is a few milliseconds and the answers are
+    byte-identical apart from the request id; no test asserts timing.
+  - **Autofill failures are silent.** The autofill request is one nobody asked
+    for, so an error from it (other than the api refusing an assertion) shows
+    nothing; the button is still there.
+  - **Admin "Cancel" returns the cancelled notice**, as the board's cancelled
+    state shows, and the autofill request starts again.
+  - The `Admin/Login-Passkey` board is listed under M18-06; its sign-in half is
+    built here because M18-04 is not usable without a way to start it. M18-06
+    keeps the rest (Settings › Authentication, Passkeys card dialogs).
+  - The `sign-in.png` screenshot baselines change (a new button and a hint
+    line); they come from the Screenshots workflow's artifact.
+  - A UV passkey sign-in does not read or clear the second-factor lock and
+    failure counter (DOMAIN-RULES §12.1 rule 4). The stored counter only grows
+    (`GREATEST`), shared by the second-factor and step-up paths.
+  - The autofill request is silent for everything that stops it before a passkey
+    is chosen, and is replaced with fresh options after four minutes, before the
+    five-minute ceremony lapses.
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom
@@ -878,7 +921,7 @@ and ar each.
 
 | Artboard | For | What |
 |---|---|---|
-| `Admin/Login-Passkey`, `-AR` | M18-06 | Amends `Admin/Login`: passkey button, autofill hint, states (cancelled, unknown, unsupported browser, RP changed); hidden under SSO enforcement (`Admin/Login-SSO`) |
+| `Admin/Login-Passkey`, `-AR` | M18-04 (sign-in half), M18-06 | Amends `Admin/Login`: passkey button, autofill hint, states (cancelled, unknown, unsupported browser, RP changed); hidden under SSO enforcement (`Admin/Login-SSO`) |
 | `Admin/Login-Providers`, `-AR` | M18-07, M18-08 | Google, Microsoft and GitHub buttons; the `oauth-link-required` message with its next step |
 | `Admin/SecondFactor`, `-AR` | M18-03 | Amends `Admin/TOTP`: "Use your passkey" first when the account has one, then authenticator code, then recovery code; shared attempt counter |
 | `Admin/Enrol2FA-Choose`, `-AR` | M18-03, M18-06 | Amends `Admin/Enrol2FA`: choose a passkey or an authenticator app; the passkey path ends on the existing recovery-codes step |

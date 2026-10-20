@@ -23,6 +23,11 @@ import { strings } from './strings.js';
 test.use({ reducedMotion: 'reduce' });
 
 const addVirtualAuthenticator = async (page: Page): Promise<void> => {
+  // Chromium's virtual authenticator answers a conditional request on its own, which a
+  // person's browser never does; the sign-in page would sign in before this spec types.
+  await page.addInitScript(() => {
+    PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+  });
   const session = await page.context().newCDPSession(page);
   await session.send('WebAuthn.enable');
   await session.send('WebAuthn.addVirtualAuthenticator', {

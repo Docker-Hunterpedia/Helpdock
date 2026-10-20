@@ -57,6 +57,14 @@ export interface AuthApi {
     answer: PasskeySecondFactorAnswer,
     options: { readonly trustDevice: boolean },
   ): Promise<Session>;
+  /**
+   * The options for signing in with a discoverable passkey (M18-04). They are
+   * the same for everyone and name no account, so a screen may fetch them the
+   * moment it loads, to start the browser's autofill prompt.
+   */
+  passkeySignInOptions(): Promise<PasskeyStepUpOptions>;
+  /** Signs in with what the authenticator signed: no password, no second step. */
+  signInWithPasskey(answer: PasskeySecondFactorAnswer): Promise<Session>;
   /** Where the browser goes to start the provider's consent flow. */
   oauthStartUrl(provider: OauthProvider): string;
   /** The provider accounts that sign in as this person, and whether they have a password. */

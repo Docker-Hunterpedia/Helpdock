@@ -11,6 +11,8 @@ const browser = vi.hoisted(() => {
   return {
     WebAuthnError,
     supported: true,
+    autofill: true,
+    cancelCeremony: vi.fn(),
     startRegistration: vi.fn(),
     startAuthentication: vi.fn(),
   };
@@ -19,13 +21,19 @@ const browser = vi.hoisted(() => {
 vi.mock('@simplewebauthn/browser', () => ({
   WebAuthnError: browser.WebAuthnError,
   browserSupportsWebAuthn: () => browser.supported,
+  browserSupportsWebAuthnAutofill: () => Promise.resolve(browser.autofill),
+  WebAuthnAbortService: { cancelCeremony: browser.cancelCeremony },
   startRegistration: browser.startRegistration,
   startAuthentication: browser.startAuthentication,
 }));
 
-const { assertPasskey, createPasskey, isPasskeyCeremonyError } = await import(
-  './passkey-ceremony.js'
-);
+const {
+  assertPasskey,
+  cancelPasskeyCeremony,
+  createPasskey,
+  isPasskeyCeremonyError,
+  passkeyAutofillSupported,
+} = await import('./passkey-ceremony.js');
 
 const created = {
   id: 'AQID',
@@ -47,6 +55,8 @@ const reasonOf = async (promise: Promise<unknown>): Promise<string> => {
 
 beforeEach(() => {
   browser.supported = true;
+  browser.autofill = true;
+  browser.cancelCeremony.mockReset();
   browser.startRegistration.mockReset();
   browser.startAuthentication.mockReset();
 });
@@ -123,5 +133,41 @@ describe('assertPasskey', () => {
     browser.startAuthentication.mockRejectedValue(new DOMException('no', 'NotAllowedError'));
 
     expect(await reasonOf(assertPasskey({}))).toBe('cancelled');
+  });
+
+  it('asks the browser for its autofill list only when told to', async () => {
+    browser.startAuthentication.mockRejectedValue(new DOMException('no', 'NotAllowedError'));
+
+    await reasonOf(assertPasskey({ challenge: 'x' }));
+    await reasonOf(assertPasskey({ challenge: 'y' }, { autofill: true }));
+
+    expect(browser.startAuthentication).toHaveBeenNthCalledWith(1, {
+      optionsJSON: { challenge: 'x' },
+    });
+    expect(browser.startAuthentication).toHaveBeenNthCalledWith(2, {
+      optionsJSON: { challenge: 'y' },
+      useBrowserAutofill: true,
+    });
+  });
+});
+
+describe('passkeyAutofillSupported', () => {
+  it('is true only where the browser can run a ceremony and offer an autofill list', async () => {
+    expect(await passkeyAutofillSupported()).toBe(true);
+
+    browser.autofill = false;
+    expect(await passkeyAutofillSupported()).toBe(false);
+
+    browser.autofill = true;
+    browser.supported = false;
+    expect(await passkeyAutofillSupported()).toBe(false);
+  });
+});
+
+describe('cancelPasskeyCeremony', () => {
+  it('ends the ceremony the browser is still waiting on', () => {
+    cancelPasskeyCeremony();
+
+    expect(browser.cancelCeremony).toHaveBeenCalledOnce();
   });
 });

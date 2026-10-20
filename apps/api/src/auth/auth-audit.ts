@@ -51,7 +51,14 @@ export type AuthAuditAction =
   | 'auth.passkey.removed'
   | 'auth.passkey.counter_regressed';
 
-export type SignInMethod = 'password' | 'magic-link' | 'oauth' | 'sso' | 'invite' | 'second-factor';
+export type SignInMethod =
+  | 'password'
+  | 'magic-link'
+  | 'oauth'
+  | 'sso'
+  | 'invite'
+  | 'second-factor'
+  | 'passkey';
 
 export interface AuthAuditEntry {
   readonly action: AuthAuditAction;

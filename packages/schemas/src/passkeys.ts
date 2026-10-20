@@ -196,6 +196,13 @@ export type PasskeySecondFactorAnswer = Pick<
   'ceremonyId' | 'response'
 >;
 
+/** Passwordless sign-in (M18-04): the assertion for the options the same page fetched. */
+export const passkeySignInVerifyRequestSchema = z.object({
+  ceremonyId: CEREMONY_ID,
+  response: authenticationResponseSchema,
+});
+export type PasskeySignInVerifyRequest = z.infer<typeof passkeySignInVerifyRequestSchema>;
+
 /** Enrolling a passkey before there is a session: the enrolment challenge stands in for it. */
 export const enrolmentPasskeyConfirmRequestSchema = z.object({
   challengeId: z.string().min(1),

@@ -64,6 +64,7 @@ import {
   PasskeyCeremonyOptionsDto,
   PasskeySecondFactorOptionsRequestDto,
   PasskeySecondFactorVerifyRequestDto,
+  PasskeySignInVerifyRequestDto,
   PasswordForgotRequestDto,
   PasswordResetRequestDto,
   RecoveryCodeRequestDto,
@@ -241,6 +242,37 @@ export class AuthController {
     if (trustedDeviceCookie !== null) {
       reply.setCookie(this.#trustCookie.name, trustedDeviceCookie, this.#trustCookie.attributes);
     }
+
+    return this.#answer({ kind: 'session', issued }, reply);
+  }
+
+  /**
+   * Passwordless sign-in with a discoverable passkey (M18-04). The options are
+   * the same for every caller; a refusal is `invalid-credentials` whatever the
+   * reason, and the same per-IP budget as the password form applies.
+   */
+  @Post('passkey/options')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(PasskeyCeremonyOptionsDto)
+  passkeySignInOptions(@Req() request: FastifyRequest): Promise<PasskeyStepUpOptions> {
+    return this.#auth.passkeySignInOptions({ ip: request.ip });
+  }
+
+  @Post('passkey/verify')
+  @Public()
+  async passkeySignInVerify(
+    @Body(new ZodValidationPipe(PasskeySignInVerifyRequestDto))
+    body: PasskeySignInVerifyRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<WireSignInResponse> {
+    const issued = await this.#auth.verifyPasskeySignIn({
+      ip: request.ip,
+      ceremonyId: body.ceremonyId,
+      response: body.response,
+      userAgent: request.headers['user-agent'],
+    });
 
     return this.#answer({ kind: 'session', issued }, reply);
   }

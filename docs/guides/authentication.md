@@ -19,6 +19,7 @@ invitations and a person's own security page.
 | **Password** | Argon2id with a pepper; blocked by SSO enforcement except emergency admins. |
 | **Sign-in link** | A single-use link by email, valid for `auth.magicLinkTtlMinutes` (10 by default). Opening it spends nothing; the click on its confirm screen does. |
 | **Google / Microsoft / GitHub** | OAuth. Shown only when the install has configured that provider. Microsoft is one organisation's work accounts, see [Microsoft](#microsoft). |
+| **Passkey** | A discoverable passkey on its own, with a PIN or biometric: no password and no second step. Shown only when the install offers passkeys and SSO is not enforced; see [Signing in with a passkey](#signing-in-with-a-passkey). |
 | **Staff SSO** | OIDC or SAML company sign-in; see [SSO setup](sso.md). |
 | **Password reset** | A single-use link by email, valid for 10 minutes. |
 
@@ -338,6 +339,54 @@ code does; after an SSO assertion that does not vouch for IdP MFA it is a valid
 second factor. Break-glass with a passkey is
 [ADR 0053](../decisions/0053-break-glass-with-a-passkey.md).
 
+### Signing in with a passkey
+
+A passkey can be the whole sign-in (M18-04, `Admin/Login-Passkey`). It is a
+discoverable credential asked for with user verification required, so one
+assertion is possession plus the PIN or biometric the authenticator checked:
+both factors, and no second step follows. A trusted-browser cookie plays no part,
+and a recovery code never opens this door.
+
+| Route | |
+|---|---|
+| `POST /api/auth/passkey/options` | No body. Answers `{ ceremonyId, options }` with `userVerification: "required"` and **no** `allowCredentials`: the options are the same for every caller and name no account |
+| `POST /api/auth/passkey/verify` | `{ ceremonyId, response }`; answers a session and sets the refresh cookie, exactly as a password followed by a code does |
+
+Every refusal that could say something about who holds an account answers `401
+invalid-credentials`: a credential nobody holds, a bad signature, an assertion
+without user verification, another origin, a counter that went backwards, a
+spent or unknown ceremony (a replay), a deactivated person, an account with no
+role in any brand, and a user handle that is not the credential owner's. The
+reason goes to the audit trail only, as `auth.sign_in.failed` with
+`meta.method: passkey` and `meta.reason` (`unknown-credential`, `bad-assertion`,
+`counter-regressed`, `ceremony-gone`, `unusable-account`, `no-brand-role`,
+`user-handle-mismatch`); a regression also writes `auth.passkey.counter_regressed`.
+An assertion for an unknown credential is checked against a throwaway key so it
+costs about what a known one does. The same brand-membership check as every
+other sign-in runs before a session opens, and a success records the use
+(`last_used_at`, the counter) and writes `auth.sign_in.succeeded` with
+`method: passkey, secondFactor: passkey-uv`.
+
+Failures draw on the **same per-IP budget** as the password form (100 per 15
+minutes): a failed assertion keeps its slot, a success gives it back, and
+`rate-limited` is the same answer for both. Fetching options evaluates no guess,
+so it gives its slot back too, and a bucket of its own (120 per 15 minutes per
+IP) only stops one source filling Redis with ceremonies.
+
+Under SSO enforcement both routes answer `403 sso-required` before anything is
+spent: a passkey is a local method, and without it a person deactivated in the
+identity provider could keep signing in. An install with `passkey: false` in
+`GET /api/auth/methods` (plain http, or SSO enforced) answers `passkeys-unavailable`
+or `sso-required`, and a paused install `passkeys-rp-changed`.
+
+On the sign-in page the email field carries `autocomplete="username webauthn"`
+and the page asks the browser for its autofill list on load (conditional
+mediation), so choosing a saved passkey there signs in directly; the button
+"Sign in with a passkey" runs the same ceremony in the browser's own prompt. A
+closed prompt is a neutral notice that counts for nothing; neither control is
+drawn under enforcement or when `passkey` is false, and a paused install shows a
+warning in place of the button.
+
 ### Trusting a browser
 
 "Trust this browser for 30 days" sets `hd_trust`, which is
@@ -354,10 +403,9 @@ Staff passkeys (WebAuthn) arrive in 1.1 with M18
 lays the foundation described here and M18-02 adds
 [registering and managing them](#adding-renaming-and-removing-passkeys); using
 one as a second factor ([A passkey as the second factor](#a-passkey-as-the-second-factor),
-M18-03) builds on it. Using one on its own (M18-04), break-glass (M18-05) and the
-sign-in screens (M18-06) are still to come: until they land a passkey answers the
-second step of a sign-in and confirms changes on the security page, and nothing
-else.
+M18-03) builds on it, and [signing in with one alone](#signing-in-with-a-passkey)
+(M18-04) needs nothing else. Break-glass (M18-05) and the rest of the passkey
+screens (M18-06) are still to come.
 
 ### Where passkeys work
 
@@ -669,6 +717,7 @@ ASVS 7.1.3, 7.2.1):
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
 | `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
 | `auth.passkey.added` / `.renamed` / `.removed` | A passkey was registered, renamed or removed from the person's session ([Adding, renaming and removing passkeys](#adding-renaming-and-removing-passkeys)) |
+| `auth.sign_in.failed` with `meta.method: passkey` | A passwordless sign-in refused; `meta.reason` names why, and the person was told only `invalid-credentials` (see [Signing in with a passkey](#signing-in-with-a-passkey)) |
 | `auth.passkey.counter_regressed` | A passkey presented a counter that did not grow, after its signature verified. Written by the system |
 
 The rows are written by the `auth` system principal in a transaction of their
@@ -1001,7 +1050,8 @@ whole budget at the end of one window and again at the start of the next.
 | Bucket | Limit |
 |---|---|
 | Sign-in password step, per address | 10 failures per 15 minutes |
-| Sign-in password and second-factor steps, per IP | 100 failures per 15 minutes |
+| Sign-in password, second-factor and passkey sign-in steps, per IP | 100 failures per 15 minutes |
+| Passkey sign-in options, per IP (`passkey-signin-options`) | 120 per 15 minutes |
 | SSO discovery, per IP (`sso-discovery`) | 20 per minute |
 | SSO starts, per IP (`sso-start`) | 20 per minute |
 | SSO OIDC callbacks, per IP (`sso-callback`) | 40 per minute |
@@ -1014,8 +1064,9 @@ whole budget at the end of one window and again at the start of the next.
 | Re-proving a credential from inside a session, per account | 5 per 15 minutes |
 
 The per-address bucket guards the password and is spent only by the password
-step. The per-IP bucket is spent by the password step and by every second-factor
-step (TOTP, recovery code, sign-in enrolment). A second-factor step never spends
+step. The per-IP bucket is spent by the password step, by a passwordless passkey
+sign-in, and by every second-factor step (TOTP, recovery code, sign-in
+enrolment). A second-factor step never spends
 or is blocked by the per-address bucket, so junk passwords sent for a known
 address cannot lock that person out of an SSO, magic-link or OAuth sign-in. Guesses
 at a code are bounded per account: an attempt is reserved atomically, before the
@@ -1027,7 +1078,8 @@ three-code allowance renews at a window boundary. A fourth reservation, or a wro
 fifteen minutes (`totp-locked`). A correct code spends the challenge in one
 atomic step that refuses if the lock landed first, so no session opens after the
 lock. Only someone holding a live challenge can spend the counter, and a
-completed sign-in clears it. In-flight verification reserves a slot atomically so parallel
+sign-in completed through a code, recovery code or passkey second factor clears
+it. A passwordless passkey sign-in neither reads nor clears it. In-flight verification reserves a slot atomically so parallel
 guesses cannot exceed the limit. A proved password that issues a TOTP or
 required-enrolment challenge atomically removes only its own reservation from
 both buckets, preserving earlier failures. Abandoning a challenge adds no

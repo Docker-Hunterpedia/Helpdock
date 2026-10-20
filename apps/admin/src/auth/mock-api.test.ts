@@ -407,3 +407,55 @@ describe('MockAuthApi passkey as the second factor (M18-03)', () => {
     expect(next.recoveryCodes).toBeUndefined();
   });
 });
+
+describe('MockAuthApi passkey sign-in (M18-04)', () => {
+  const answer = (ceremonyId: string) => ({
+    ceremonyId,
+    response: {
+      id: 'AQID',
+      rawId: 'AQID',
+      type: 'public-key' as const,
+      response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+      clientExtensionResults: {},
+    },
+  });
+
+  it('signs in with a held passkey for an issued ceremony, once', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    const { ceremonyId } = await api.passkeySignInOptions();
+
+    await expect(api.signInWithPasskey(answer(ceremonyId))).resolves.toMatchObject({
+      user: { email: MOCK_EMAIL },
+    });
+    await expect(api.signInWithPasskey(answer(ceremonyId))).rejects.toMatchObject({
+      code: 'invalid-credentials',
+    });
+  });
+
+  it('refuses a ceremony it never issued and an account with no passkey, in one voice', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    await expect(api.signInWithPasskey(answer('never-issued'))).rejects.toMatchObject({
+      code: 'invalid-credentials',
+    });
+
+    api.seedPasskeys({ count: 0 });
+    const { ceremonyId } = await api.passkeySignInOptions();
+    await expect(api.signInWithPasskey(answer(ceremonyId))).rejects.toMatchObject({
+      code: 'invalid-credentials',
+    });
+  });
+
+  it('is refused under SSO enforcement and while passkeys are paused', async () => {
+    const enforced = new MockAuthApi();
+    enforced.ssoEnforced = true;
+    await expect(enforced.passkeySignInOptions()).rejects.toMatchObject({ code: 'sso-required' });
+
+    const paused = new MockAuthApi();
+    paused.seedPasskeys({ count: 1, state: 'paused' });
+    await expect(paused.passkeySignInOptions()).rejects.toMatchObject({
+      code: 'passkeys-rp-changed',
+    });
+  });
+});

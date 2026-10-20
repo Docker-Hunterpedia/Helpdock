@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { Keyring, Settings } from '@helpdock/config';
 import { decryptSecret, encryptSecret } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
@@ -48,6 +49,7 @@ import {
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
   PASSKEY_CEREMONY_OPTIONS_RULE,
+  PASSKEY_SIGN_IN_OPTIONS_RULE,
   type RateLimiter,
   type SignInAttempt,
   STEP_UP_RULE,
@@ -493,6 +495,136 @@ export class AuthService {
       issued,
       trustedDeviceCookie: trustDevice ? await this.#parts.trustedDevices.trust(user.id) : null,
     };
+  }
+
+  // ------------------------------------------------------------------
+  // Passwordless passkey sign-in (M18-04)
+  // ------------------------------------------------------------------
+
+  /**
+   * Options for signing in with a discoverable passkey. They are the same for
+   * every caller and name nobody (no `allowCredentials`), so they reveal
+   * nothing about any account. Minting them evaluates no guess, so the slot
+   * they take from the shared sign-in budget is given back; a second, looser
+   * per-IP bucket stops a caller filling Redis with ceremonies.
+   */
+  async passkeySignInOptions({ ip }: { readonly ip: string }): Promise<PasskeyStepUpOptions> {
+    await this.#assertPasskeySignInAllowed();
+    if (!(await this.#parts.limiter.consume(PASSKEY_SIGN_IN_OPTIONS_RULE, ip))) {
+      throw new AuthFailure('rate-limited');
+    }
+    const attempt = await this.#assertSignInAllowed(undefined, ip);
+    try {
+      const { ceremonyId, options } = await this.#parts.webauthn.authenticationOptions({
+        purpose: 'passwordless',
+      });
+      return { ceremonyId, options: { ...options } };
+    } finally {
+      // Minting evaluates no guess, so the slot goes back whether or not it worked
+      // (`passkeys-unavailable` and `passkeys-rp-changed` are thrown from there).
+      await this.#parts.limiter.refundSignInIp(attempt);
+    }
+  }
+
+  /**
+   * Signs in with a passkey alone: possession plus the PIN or biometric the
+   * authenticator checked (user verification is required), which is why no
+   * second factor follows. Every refusal that could say something about who
+   * holds an account (an unknown credential, a bad signature, a regressed
+   * counter, a deactivated person, an account with no brand, a spent
+   * ceremony) answers `invalid-credentials`, and the reason goes to the audit
+   * trail only. The slot taken from the sign-in budget is kept on every
+   * failure, so guesses draw on the same per-IP budget as passwords.
+   *
+   * It neither reads nor clears the second-factor lock and failure counter
+   * (`totp-locked`): those bound guesses at a six-digit code, and an assertion
+   * with user verification is not a guess. A person whose code is locked can
+   * still sign in with their passkey, and doing so leaves the counter as it was.
+   */
+  async verifyPasskeySignIn({
+    ip,
+    ceremonyId,
+    response,
+    userAgent,
+  }: {
+    readonly ip: string;
+    readonly ceremonyId: string;
+    readonly response: AuthenticationResponse;
+    readonly userAgent: string | undefined;
+  }): Promise<IssuedSession> {
+    await this.#assertPasskeySignInAllowed();
+    const attempt = await this.#assertSignInAllowed(undefined, ip);
+
+    const refuse = async (
+      userId: string | null,
+      reason: string,
+      credential?: string,
+    ): Promise<never> => {
+      await this.#audit('auth.sign_in.failed', userId, 'system', {
+        method: 'passkey',
+        reason,
+      });
+      if (reason === 'counter-regressed') {
+        await this.#audit('auth.passkey.counter_regressed', userId, 'system', {
+          passkey: credential,
+        });
+      }
+      throw new AuthFailure('invalid-credentials');
+    };
+
+    let presented: string | undefined;
+    let check:
+      | AssertionCheck
+      | { readonly ok: false; readonly reason: string; readonly userId: string | null };
+    try {
+      check = await this.#parts.webauthn.verifyAuthentication({
+        purpose: 'passwordless',
+        ceremonyId,
+        response: toAuthenticationJson(response),
+        findCredential: async (credentialId) => {
+          const row = await this.#parts.passkeys.byCredentialId(credentialId);
+          presented = row?.id;
+          return row === undefined ? undefined : toStored(row);
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof AuthFailure) || error.auth.code !== 'challenge-expired') throw error;
+      check = { ok: false, reason: 'ceremony-gone', userId: null };
+    }
+    if (!check.ok) return refuse(check.userId, check.reason, presented);
+
+    const user = await this.#parts.staff.findById(check.credential.userId);
+    if (user === undefined || !this.#isUsable(user)) {
+      return refuse(check.credential.userId, 'unusable-account');
+    }
+    // Defence beyond the library: the flag is required there, and checked here
+    // because this one decides that no second factor follows.
+    if (!check.userVerified) return refuse(user.id, 'user-verification-missing');
+    if (!(await this.#handleMatches(user.id, response.response.userHandle))) {
+      return refuse(user.id, 'user-handle-mismatch');
+    }
+
+    let issued: IssuedSession;
+    try {
+      issued = await this.#openSession(user, userAgent, {
+        method: 'passkey',
+        secondFactor: 'passkey-uv',
+      });
+    } catch (error) {
+      // An account with no role in any brand answers like an unknown
+      // credential; the session service has audited the reason.
+      if (error instanceof AuthFailure && error.auth.code === 'no-account') {
+        throw new AuthFailure('invalid-credentials');
+      }
+      throw error;
+    }
+    await this.#parts.passkeys.markUsed(
+      check.credential.credentialId,
+      check.newSignCount,
+      check.backedUp,
+    );
+    await this.#parts.limiter.signInSucceeded(attempt);
+    return issued;
   }
 
   // ------------------------------------------------------------------
@@ -1809,6 +1941,23 @@ export class AuthService {
     if (firstFactorOf(found) !== 'sso' && (await this.#parts.ssoPolicy.enforced())) {
       throw new AuthFailure('sso-required');
     }
+  }
+
+  /** Passkey sign-in is a local method: refused under SSO enforcement, before anything is spent. */
+  async #assertPasskeySignInAllowed(): Promise<void> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+  }
+
+  /**
+   * A discoverable assertion carries the user handle it was made for. When it
+   * is present it must be this account's; an authenticator that omits it is
+   * accepted, because the credential row already names the account.
+   */
+  async #handleMatches(userId: string, presented: string | undefined): Promise<boolean> {
+    if (presented === undefined) return true;
+    const held = Buffer.from(await this.#parts.passkeys.userHandle(userId));
+    const given = Buffer.from(presented, 'base64url');
+    return held.length === given.length && timingSafeEqual(held, given);
   }
 
   async #spendCeremonyOptions(userId: string): Promise<void> {

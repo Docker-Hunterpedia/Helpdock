@@ -48,6 +48,8 @@ export interface CeremonyOverrides {
   readonly signCount?: number;
   /** What the client data says about framing; a same-origin page by default. */
   readonly crossOrigin?: boolean;
+  /** The user handle an assertion reports back (base64url); none by default, as some authenticators send none. */
+  readonly userHandle?: string;
   /**
    * The attestation statement a registration carries: `none` by default; a
    * `packed` self-attestation signed with the credential's key; or a `packed`
@@ -165,6 +167,7 @@ export class SoftwareAuthenticator {
         clientDataJSON: base64url(clientDataJSON),
         authenticatorData: base64url(authData),
         signature: base64url(signature),
+        ...(overrides.userHandle === undefined ? {} : { userHandle: overrides.userHandle }),
       },
       clientExtensionResults: {},
     };

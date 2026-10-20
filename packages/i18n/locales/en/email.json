@@ -65,7 +65,7 @@
       "subject": "A passkey was added to your account",
       "eyebrow": "Security · passkeys",
       "heading": "A passkey was added",
-      "body": "“{{passkey}}” was saved to your {{appName}} account.",
+      "body": "“{{passkey}}” can now sign you in to {{appName}}.",
       "warning": "If this wasn't you, remove it now and change your password.",
       "action": "Review your passkeys"
     },
@@ -73,7 +73,7 @@
       "subject": "A passkey was removed from your account",
       "eyebrow": "Security · passkeys",
       "heading": "A passkey was removed",
-      "body": "“{{passkey}}” was removed from your account.",
+      "body": "“{{passkey}}” can no longer sign you in.",
       "remainingBoth_one": "You still have {{count}} passkey and an authenticator app.",
       "remainingBoth_other": "You still have {{count}} passkeys and an authenticator app.",
       "remainingPasskeys_one": "You still have {{count}} passkey.",

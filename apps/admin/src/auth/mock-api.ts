@@ -384,6 +384,51 @@ export class MockAuthApi implements AuthApi {
     return this.#signIn();
   }
 
+  /** Names no account, so it answers before anyone is known, like the api's. */
+  async passkeySignInOptions(): Promise<PasskeyStepUpOptions> {
+    this.#requirePasskeySignIn();
+    const ceremonyId = randomChallenge();
+    this.#ceremonies.add(ceremonyId);
+    return {
+      ceremonyId,
+      options: {
+        rpId: globalThis.location?.hostname ?? 'localhost',
+        challenge: randomChallenge(),
+        timeout: 300_000,
+        userVerification: 'required',
+      },
+    };
+  }
+
+  /**
+   * Signs in with a passkey the fixture holds, for a ceremony it issued; one
+   * answer for an unknown credential, a spent ceremony and a missing account,
+   * as the api gives. A seeded passkey records no credential id and stands
+   * for whatever the browser's authenticator holds.
+   */
+  async signInWithPasskey(answer: PasskeySecondFactorAnswer): Promise<Session> {
+    this.#requirePasskeySignIn();
+    const known = this.#passkeys.some(
+      (entry) => entry.credentialId === null || entry.credentialId === answer.response.rawId,
+    );
+    if (!this.#ceremonies.delete(answer.ceremonyId) || !known) {
+      throw new AuthError('invalid-credentials');
+    }
+
+    return this.#signIn();
+  }
+
+  #requirePasskeySignIn(): void {
+    if (this.ssoEnforced) {
+      throw new AuthError('sso-required');
+    }
+    if (this.#passkeyState !== 'available') {
+      throw new AuthError(
+        this.#passkeyState === 'paused' ? 'passkeys-rp-changed' : 'passkeys-unavailable',
+      );
+    }
+  }
+
   oauthStartUrl(provider: OauthProvider): string {
     // Lands on the app's own callback route: there is no provider to talk to
     // until M0-05 registers the OAuth clients.

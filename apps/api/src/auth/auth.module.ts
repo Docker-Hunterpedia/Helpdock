@@ -25,6 +25,9 @@ import { StaffRepository } from './staff.repository.js';
 import { TotpChallengeStore } from './totp/challenge-store.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
 import { TotpStepStore } from './totp/used-steps.js';
+import { WebAuthnCeremonyStore } from './webauthn/ceremony-store.js';
+import { RpIdPinStore } from './webauthn/rp-id-pin.js';
+import { WebAuthnService } from './webauthn/webauthn.service.js';
 
 /**
  * M0-05. Everything under `/api/auth`, plus the pieces `bootstrap.ts` needs to
@@ -120,6 +123,11 @@ export const createAuthRuntime = ({
     limiter: new RateLimiter(redis),
     oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
     oauthIdentities: new OauthIdentityRepository({ db }),
+    webauthn: new WebAuthnService({
+      appUrl: env.APP_URL,
+      ceremonies: new WebAuthnCeremonyStore(redis),
+      pin: new RpIdPinStore({ db, settings }),
+    }),
     settings,
     keyring,
     mail: new OutboxAuthMail({ db, keyring, staff }),

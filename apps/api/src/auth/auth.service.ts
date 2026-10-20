@@ -45,6 +45,7 @@ import { hashRecoveryCodes, newRecoveryCodes, spendRecoveryCode } from './totp/r
 import { matchTotpStep, newTotpSecret, totpUri } from './totp/totp.js';
 import type { TrustedDeviceStore } from './totp/trusted-device.js';
 import type { TotpStepStore } from './totp/used-steps.js';
+import type { WebAuthnService } from './webauthn/webauthn.service.js';
 
 /**
  * Every way into this install, in one service.
@@ -139,6 +140,8 @@ export interface AuthServiceOptions {
   readonly oauth: OauthService;
   /** Which provider account is bound to which staff account (1.0.1). */
   readonly oauthIdentities: OauthIdentityRepository;
+  /** Passkeys (M18-01): the relying party, its pin and the ceremonies. */
+  readonly webauthn: WebAuthnService;
   readonly settings: Settings;
   readonly keyring: Keyring;
   /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
@@ -162,6 +165,7 @@ export class AuthService {
     for (const provider of OAUTH_PROVIDER_IDS) {
       oauth[provider] = !enforced && (await this.#parts.oauth.isEnabled(provider));
     }
+    const passkeys = (await this.#parts.webauthn.status()).state;
 
     return {
       sso: await this.#parts.ssoPolicy.connections(),
@@ -173,6 +177,10 @@ export class AuthService {
       // is configured.
       magicLink: !enforced,
       oauth: oauth as AuthMethods['oauth'],
+      // Passwordless passkey sign-in is a local method, refused under
+      // enforcement like the others (ADR 0050).
+      passkey: !enforced && passkeys === 'available',
+      passkeysPaused: !enforced && passkeys === 'paused',
     };
   }
 

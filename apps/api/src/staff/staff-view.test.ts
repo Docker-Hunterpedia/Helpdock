@@ -37,6 +37,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   deactivatedAt: null,
   signatureEn: null,
   signatureAr: null,
+  webauthnUserHandle: null,
   ...overrides,
 });
 

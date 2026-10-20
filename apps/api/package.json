@@ -58,6 +58,7 @@
     "@opentelemetry/instrumentation-ioredis": "0.70.0",
     "@opentelemetry/sdk-node": "0.222.0",
     "@peculiar/x509": "2.1.0",
+    "@simplewebauthn/server": "14.0.3",
     "@socket.io/redis-adapter": "8.3.0",
     "@xmldom/xmldom": "0.9.12",
     "argon2": "0.45.1",

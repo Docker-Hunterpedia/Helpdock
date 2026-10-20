@@ -452,6 +452,7 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_AUTH_REQUIRE2FA` | `auth.require2fa` | install | no | `false` | Require TOTP for every staff account on this install. |
 | `HD_AUTH_JWT_SIGNING_KEY` | `auth.jwtSigningKey` | install | yes | — | ES256 key pair the api signs access tokens with, as JSON. Generated at first boot and shared by every replica; never set by hand. Rotating it signs every session out (ARCHITECTURE §7). |
 | `HD_AUTH_MAGIC_LINK_TTL_MINUTES` | `auth.magicLinkTtlMinutes` | install | no | `10` | Lifetime of a single-use magic link, in minutes (DOMAIN-RULES §4.6). |
+| `HD_AUTH_WEBAUTHN_RP_ID` | `auth.webauthn.rpId` | install | no | — | Passkey relying party id: the host of APP_URL, written at the first passkey ceremony; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050). |
 | `HD_ROLES_VIEWER_ENABLED` | `roles.viewerEnabled` | install | no | `true` | Whether the optional read-only Viewer role can be assigned (REQUIREMENTS §2). |
 | `HD_CONTACTS_DEFAULT_CALLING_CODE` | `contacts.defaultCallingCode` | brand | no | — | Country calling code prefixed to phone numbers typed without one, for example 49. Empty refuses them instead (ADR 0008). |
 | `HD_CAPTCHA_PROVIDER` | `captcha.provider` | brand | no | `none` | CAPTCHA for visitor-facing forms. Off by default; Turnstile is the recommended provider (ADR 0003). |

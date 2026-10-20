@@ -545,6 +545,8 @@ describe.skipIf(!hasDocker)(
         ssoEnforced: true,
         magicLink: false,
         oauth: { google: false, github: false },
+        // A passkey alone is a local first factor, refused under enforcement (ADR 0050).
+        passkey: false,
       });
     });
 

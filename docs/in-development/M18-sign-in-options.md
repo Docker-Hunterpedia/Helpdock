@@ -7,7 +7,7 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M4 (CAPTCHA interface
 Effort: about 32.5 working days for one person, 5–7 weeks (see [Effort summary](#effort-summary))
 PRD: [Phase 5 · M18](../planning/PRD.md#m18-sign-in-options)
 Owner decisions: D-50 to D-55 in [decisions-1-x.md](../planning/decisions-1-x.md#m18-sign-in-options)
-ADRs (proposed): [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md), [0051](../decisions/0051-oauth-identities-bound-by-subject.md), [0052](../decisions/0052-built-in-proof-of-work-captcha.md), [0053](../decisions/0053-break-glass-with-a-passkey.md)
+ADRs: [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md) (accepted with M18-01), [0051](../decisions/0051-oauth-identities-bound-by-subject.md), [0052](../decisions/0052-built-in-proof-of-work-captcha.md), [0053](../decisions/0053-break-glass-with-a-passkey.md)
 
 Staff passkeys as a second factor and on their own, Google and GitHub sign-in bound by subject with Microsoft added, and a CAPTCHA that sends nothing to a third party.
 
@@ -462,6 +462,23 @@ Backlog or never:
 | M18-11 | **CAPTCHA and abuse hardening.** Verify Turnstile/hCaptcha `hostname` against the brand's widget origins or the web form host; Turnstile `action` per surface (`widget-first-message`, `web-form`); a per-IP bucket on sign-in-link and reset requests; a per-IP limit on help-center feedback POSTs; `rate_limit_refusals_total` labels | ASVS 11.1.4, 2.2.1 | 1.5 | — |
 | M18-12 | **Docs.** `authentication.md` (passkeys, OAuth binding, Microsoft, rate limits), `sso.md` (presets, break-glass), `staff-and-roles.md` (Security page, enrolment), a new `docs/guides/sign-in-providers.md` (Google, Microsoft, GitHub app setup, step by step), the CAPTCHA section of `channels.md`/`web-form.md`, the configuration reference, `.env.example`, the release note on GitHub re-linking and RP-ID pinning, ARCHITECTURE §1/§7, DOMAIN-RULES additions (below) | A §2 | 2.5 | all |
 | M18-13 | **Security pass.** Re-walk ASVS V2/V3 rows (below) in `asvs-l2.md`; run the `security-audit` skill on the diff; negative tests listed below green; threat-model notes in the milestone doc | M9-02 | 1.5 | all |
+
+### Progress
+
+- [x] **M18-01** WebAuthn foundation ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)).
+  Migration `0058_webauthn_credentials` (the table, with checks on the
+  credential id length and the algorithm, and the 32-byte
+  `users.webauthn_user_handle`); `auth.webauthn.rpId` pinned by one
+  insert-unless-present statement (`apps/api/src/auth/webauthn/rp-id-pin.ts`);
+  the ceremony store (`ceremony-store.ts`); `WebAuthnService` over
+  `@simplewebauthn/server` 14.0.3 (`webauthn.service.ts`); `passkey` and
+  `passkeysPaused` in `GET /api/auth/methods`; the auth codes
+  `passkeys-unavailable` and `passkeys-rp-changed`. A software authenticator
+  for tests (`apps/api/src/testing/software-authenticator.ts`) signs with
+  `node:crypto` P-256 keys. Not in M18-01: the Settings › Authentication
+  passkeys card reads `WebAuthnService.status()` (state, current and pinned RP
+  ID, pin date) and a credential count, wired with the screens in M18-06.
+- [ ] M18-02 to M18-13.
 
 ## Data model
 

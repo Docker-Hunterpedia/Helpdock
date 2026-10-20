@@ -58,6 +58,9 @@ export const exchangeKey = (codeHash: string): string => `auth:exchange:${codeHa
 /** An OAuth flow in progress: its PKCE verifier, keyed by the hash of its state. */
 export const oauthStateKey = (stateHash: string): string => `auth:oauth:${stateHash}`;
 
+/** A WebAuthn ceremony in progress (M18-01), keyed by the hash of its id. */
+export const webauthnCeremonyKey = (idHash: string): string => `auth:webauthn:${idHash}`;
+
 /** The brand a user last worked in, so a sign-in lands where they left off. */
 export const brandPreferenceKey = (userId: string): string => `auth:brand:${userId}`;
 

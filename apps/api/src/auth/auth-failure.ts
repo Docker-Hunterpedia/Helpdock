@@ -35,6 +35,8 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   unavailable: HttpStatus.TOO_MANY_REQUESTS,
   'no-account': HttpStatus.FORBIDDEN,
   'password-breached': HttpStatus.BAD_REQUEST,
+  'passkeys-unavailable': HttpStatus.FORBIDDEN,
+  'passkeys-rp-changed': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
@@ -58,6 +60,9 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   unavailable: 'Sign-in is unavailable right now',
   'no-account': 'No account on this install matches that identity',
   'password-breached': 'That password appears in a list of breached passwords; choose another',
+  'passkeys-unavailable': 'Passkeys need APP_URL to be https, or http://localhost',
+  'passkeys-rp-changed':
+    "Passkeys are paused: APP_URL's host is not the one this install's passkeys were made for",
 };
 
 export class AuthFailure extends HttpException {

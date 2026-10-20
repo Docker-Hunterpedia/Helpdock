@@ -1,6 +1,6 @@
 # 0050 Passkeys for staff over WebAuthn
 
-Status: proposed
+Status: accepted (M18-01)
 Date: 2026-10-20
 
 ## Context
@@ -22,16 +22,26 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
 ## Decision
 
 1. **Library:** `@simplewebauthn/server` 14.x on the api and
-   `@simplewebauthn/browser` 14.x in the admin bundle only, never in the widget
-   (14.0.3 and 14.0.0 on 2026-10-20; rechecked when the work starts).
-   `supportedAlgorithmIDs` is pinned to `[-8, -7, -257]` (EdDSA, ES256, RS256).
-   ARCHITECTURE §1's Auth row gains the library.
+   `@simplewebauthn/browser` 14.x in the admin bundle only, never in the widget.
+   The api pins server 14.0.3 (published 2026-09-25, rechecked on npm and
+   Context7 on 2026-10-20); the browser package arrives with the screens
+   (M18-06). `supportedAlgorithmIDs` is pinned to `[-8, -7, -257]` (EdDSA,
+   ES256, RS256) for both generating and verifying registrations: 14.0 puts
+   ML-DSA-44 first in its default list on runtimes that support it, and the
+   pinned list keeps that path closed. 14.0's only breaking change is a Node
+   22 floor; Helpdock runs Node 24. ARCHITECTURE §1's Auth row gains the
+   library.
 2. **RP ID per install, pinned.** The RP ID is the hostname of `APP_URL` and the
    one expected origin is `APP_URL`'s origin, never taken from `Host` or
-   `Origin` headers. It is stored in `auth.webauthn.rpId` at first use; if
-   `APP_URL`'s host later differs, passkey ceremonies are refused with
-   `passkeys-rp-changed`, a warning is shown, and the other methods keep
-   working. Passkeys need a secure context (https, or `http://localhost`).
+   `Origin` headers. It is stored in `auth.webauthn.rpId` at first use, by one
+   insert-unless-present statement, so replicas racing to pin agree on one
+   value; an `HD_AUTH_WEBAUTHN_RP_ID` pin is honoured and nothing is written.
+   If `APP_URL`'s host later differs, passkey ceremonies are refused with
+   `passkeys-rp-changed`, a ceremony begun under the old pin cannot finish,
+   a warning is shown, and the other methods keep working. Passkeys need a
+   secure context (https, or `http://localhost`) and a domain, not an IP
+   address; elsewhere `GET /api/auth/methods` reports `passkey: false` and a
+   ceremony answers `passkeys-unavailable`.
 3. **Attestation `none`.** No AAGUID allow-list and no metadata service; the
    AAGUID is stored for display only.
 4. **User verification per purpose.** As a second factor, user presence is

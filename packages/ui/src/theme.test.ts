@@ -31,6 +31,21 @@ describe('palette', () => {
 });
 
 describe('typography', () => {
+  it.each(['ltr', 'rtl'] as const)(
+    '#339 selects the UI face by direction and keeps mono',
+    (direction) => {
+      const theme = createHelpdockTheme({ mode: 'light', direction });
+      const family = tokens.typography.fontFamily[direction === 'rtl' ? 'arabic' : 'sans'];
+      expect(theme.typography.fontFamily).toBe(family);
+      expect(theme.typography.body2.fontFamily).toBe(family);
+      expect(theme.typography.mono.fontFamily).toBe(tokens.typography.fontFamily.mono);
+      expect(theme.components?.MuiCssBaseline?.styleOverrides).toMatchObject({
+        ':root': { '--hd-font-mono': tokens.typography.fontFamily.mono },
+        body: { fontSize: '14px', lineHeight: '20px' },
+      });
+    },
+  );
+
   it('maps the MUI variants onto the DESIGN §3.1 scale', () => {
     expect(light.typography.h1).toMatchObject({ fontSize: '24px', lineHeight: '32px' });
     expect(light.typography.h2).toMatchObject({ fontSize: '20px', lineHeight: '28px' });

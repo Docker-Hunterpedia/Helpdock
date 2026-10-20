@@ -1,4 +1,5 @@
 import { WEBHOOK_DELIVERY_ATTEMPTS, WEBHOOK_EVENTS, type WebhookOverview } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   ButtonBase,
@@ -100,7 +101,7 @@ function EndpointRow({
   const { locale } = usePreferences();
   const rate = successRate(webhook.last24h, locale);
   const caption = { fontSize: 12, color: 'text.secondary', display: 'block' } as const;
-  const mono = { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 } as const;
+  const mono = { ...monoFontStyle, fontSize: 13 } as const;
 
   const menu: MenuAction[] = [
     {
@@ -221,7 +222,7 @@ function LastDelivery({
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const caption = { fontSize: 12, color: 'text.secondary', display: 'block' } as const;
-  const mono = { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 } as const;
+  const mono = { ...monoFontStyle, fontSize: 13 } as const;
 
   if (lastDelivery === null) {
     return (

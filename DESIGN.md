@@ -95,6 +95,17 @@ Contrast, as measured by the test in `packages/ui` (light / dark): `text.primary
 
 The two sans faces are one family drawn together, so mixed EN/AR lines share x-height, weight and rhythm. Fonts are self-hosted as woff2 from `packages/ui/fonts` and subset per script. The widget loads its fonts from the Helpdock origin, never from a third party. Fallback stack: `ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`.
 
+The admin's `createHelpdockTheme` publishes `--hd-font-sans`, `--hd-font-arabic`
+and `--hd-font-mono` from the shared family tokens through `MuiCssBaseline`.
+Keep `<CssBaseline />` mounted, including with reduced motion. The theme selects
+the Arabic family for `direction: 'rtl'`; `AppProviders` rebuilds it when the
+language changes and sets the matching document `lang` and `dir`. Use the `mono`
+Typography variant for mono text, or the shared `monoFontStyle` for a family-only
+style on inputs, code and text with another scale size or weight. No literal
+fallback belongs at a call site. Emails and the script-free API docs page use
+`fontFallbacks` from `@helpdock/ui/resolve`, derived by dropping the webfont from
+the corresponding token stack.
+
 ### 3.1 Scale
 
 Line-heights are multiples of 4. Admin base is 14 px; widget and help center base is 16 px.
@@ -485,3 +496,4 @@ Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line hei
 | 2026-10-20 | 1.34. M14-08, `Admin/Ticket-Routing`: §6.3 adds RoutingTrail, "How it got here" in the DetailsPanel. Drawn at the nearest steps of §3–§5: the artboard's 14 px padding at 12, its 13 px heading and 13/18 step text at body-strong and body 14/20, and its 12 px step icons at 14. AI triage takes `sparkles`, the §5 AI icon, where the artboard drew a robot. No token, size or radius is added. |
 | 2026-10-20 | 1.35. 1.0.x fix #340, `Admin/Shell-SidebarCollapse`: Shell and SidebarRail specify always-visible overflow thumbs, space beside icons, row-aligned clipped-edge hairlines, explicit inset focus rings, keyboard scrolling and stable gutters through the width animation. Existing tokens only. |
 | 2026-10-20 | 1.36. M14-07, `Admin/Tickets-SortSla`: adds the Ticket Sort menu in §6.4 and SLA due in the view editor. Uses existing menu, button, caption and selection tokens; no new tokens. |
+| 2026-10-20 | 1.37. 1.0.x bug fix (#339): the admin publishes the shared font variables through CssBaseline and selects the Arabic face when its direction changes. One family-only mono style preserves existing scale sizes and weights; off-scale admin sizes move onto §3.1 (including count badges at 12 px). Emails and API docs share the token fallback stacks. |

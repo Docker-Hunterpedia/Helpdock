@@ -1,4 +1,5 @@
 import type { HcStructure, HcVisibility, ProposalDetail, ProposalSummary } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -391,7 +392,7 @@ function ProposalReview({ proposalId }: { readonly proposalId: string }): ReactN
           <SideSection title={t('helpCenter:proposals.source')}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Link component={RouterLink} to={ticketRoute(detail.ticket.id)}>
-                <Typography variant="mono" component="span" sx={{ fontSize: 13 }}>
+                <Typography variant="mono" component="span">
                   {detail.ticket.reference}
                 </Typography>{' '}
                 <bdi>{detail.ticketSubject}</bdi>
@@ -482,7 +483,7 @@ function ProposalReview({ proposalId }: { readonly proposalId: string }): ReactN
           <SideSection title={t('helpCenter:proposals.aiDraft')}>
             <Box
               component="dl"
-              sx={(theme) => ({
+              sx={{
                 display: 'grid',
                 gridTemplateColumns: 'max-content 1fr',
                 columnGap: 4,
@@ -491,8 +492,8 @@ function ProposalReview({ proposalId }: { readonly proposalId: string }): ReactN
                 fontSize: 12,
                 '& dt': { color: 'text.secondary' },
                 '& dd': { margin: 0 },
-                '& dd.mono': { fontFamily: theme.typography.mono.fontFamily },
-              })}
+                '& dd.mono': { ...monoFontStyle },
+              }}
             >
               {detail.call === null ? null : (
                 <>
@@ -632,7 +633,7 @@ function RejectDialog({
       aria-labelledby={titleId}
       slotProps={{ paper: { sx: { maxWidth: 480 } } }}
     >
-      <DialogTitle id={titleId} sx={{ fontSize: 18, fontWeight: 600 }}>
+      <DialogTitle id={titleId} variant="h3">
         {t('helpCenter:proposals.rejectTitle')}
       </DialogTitle>
       <DialogContent>

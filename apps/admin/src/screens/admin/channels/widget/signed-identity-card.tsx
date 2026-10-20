@@ -1,4 +1,5 @@
 import type { WidgetSettings, WidgetSignedIdentity } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Link as MuiLink, TextField, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { BookOpen, Copy, TriangleAlert } from 'lucide-react';
@@ -158,7 +159,7 @@ export function SignedIdentityCard({
                 fullWidth
                 value={revealed}
                 slotProps={{ htmlInput: { readOnly: true, dir: 'ltr', spellCheck: false } }}
-                sx={{ '& input': { fontFamily: 'var(--hd-font-mono, monospace)' } }}
+                sx={{ '& input': { ...monoFontStyle } }}
               />
               <Button
                 variant="outlined"

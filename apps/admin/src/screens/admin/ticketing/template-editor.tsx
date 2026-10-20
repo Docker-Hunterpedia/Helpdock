@@ -13,6 +13,7 @@ import {
   TICKET_SUBJECT_MAX,
   ticketPrioritySchema,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -226,7 +227,7 @@ export function TemplateEditor({
         <Typography
           component="p"
           dir="ltr"
-          sx={{ fontFamily: 'monospace', fontSize: 13, color: 'text.secondary' }}
+          sx={{ ...monoFontStyle, fontSize: 13, color: 'text.secondary' }}
         >
           {TEMPLATE_PLACEHOLDERS.map((placeholder) => `{{${placeholder}}}`).join(' · ')}
         </Typography>

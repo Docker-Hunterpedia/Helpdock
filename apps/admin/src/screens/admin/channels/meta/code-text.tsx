@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../../../../app/tokens.js';
@@ -24,7 +25,7 @@ export function CodeText({ text }: { readonly text: string }): ReactNode {
             component="code"
             dir="ltr"
             sx={{
-              fontFamily: 'var(--hd-font-mono, monospace)',
+              ...monoFontStyle,
               // The size of the words around it: code is mono, not a smaller size.
               fontSize: 'inherit',
               backgroundColor: tokens['bg.muted'],

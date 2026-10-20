@@ -1,5 +1,6 @@
 import type { AiModelList, AiProviderUpsert } from '@helpdock/schemas';
 import { aiOAuthCredentialsSchema } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -313,7 +314,7 @@ export function AiStep({
             setModel(event.target.value);
           }}
           inputProps={{ 'aria-label': t('wizard:ai.modelLabel') }}
-          sx={{ fontFamily: 'var(--hd-font-mono, monospace)' }}
+          sx={{ ...monoFontStyle }}
         >
           <MenuItem value="" disabled>
             {t('wizard:ai.modelPlaceholder')}

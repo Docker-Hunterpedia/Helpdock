@@ -94,7 +94,7 @@ export function MergeContactsDialog({
       aria-labelledby={titleId}
       slotProps={{ paper: { sx: { maxWidth: 520, borderRadius: '14px' } } }}
     >
-      <DialogTitle id={titleId} sx={{ fontSize: 18, fontWeight: 600 }}>
+      <DialogTitle id={titleId} variant="h3">
         {t('contacts:merge.title')}
         <Typography
           variant="body2"

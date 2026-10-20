@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, TextField, Typography } from '@mui/material';
 import { Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -54,7 +55,7 @@ export function EnvLockedField({
             sx: {
               backgroundColor: tokens['bg.canvas'],
               color: tokens['text.secondary'],
-              fontFamily: 'var(--hd-font-mono, monospace)',
+              ...monoFontStyle,
               fontSize: 13,
             },
           },

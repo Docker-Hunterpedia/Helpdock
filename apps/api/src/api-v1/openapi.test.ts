@@ -1,3 +1,4 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import 'reflect-metadata';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
@@ -102,6 +103,8 @@ describe('renderDocsPage', () => {
     expect(page).toContain('href="/api/docs/openapi.json"');
     expect(page).toContain('/api/v1/tickets/{ticketId}');
     expect(page).not.toContain('<script');
+    expect(page).toContain(`font-family:${fontFallbacks.sans}`);
+    expect(page).toContain(`font-family:${fontFallbacks.mono}`);
     expect(page.match(/<tr><td>/g)).toHaveLength(API_OPERATIONS.length);
   });
 });

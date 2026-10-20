@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Checkbox, FormControlLabel, Link, OutlinedInput } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
@@ -154,7 +155,7 @@ export function Totp(): ReactNode {
             sx={{
               height: 52,
               '& input': {
-                fontFamily: (theme) => theme.typography.mono.fontFamily,
+                ...monoFontStyle,
                 fontSize: 20,
                 textAlign: 'center',
                 letterSpacing: recoveryMode ? '0.08em' : '0.4em',

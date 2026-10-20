@@ -1,5 +1,6 @@
 import type { CustomFieldDef, CustomFieldTarget } from '@helpdock/schemas';
 import { customFieldTargetSchema } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -282,7 +283,7 @@ export function CustomFieldsTab(): ReactNode {
                             <Typography
                               component="code"
                               dir="ltr"
-                              sx={{ fontFamily: 'monospace', fontSize: 13 }}
+                              sx={{ ...monoFontStyle, fontSize: 13 }}
                             >
                               {field.key}
                             </Typography>

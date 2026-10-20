@@ -111,7 +111,7 @@ export function DraftArticleDialog({
       <Box component="form" noValidate onSubmit={submit}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, paddingInlineEnd: 3 }}>
           <Box sx={{ flex: 1 }}>
-            <DialogTitle id={titleId} sx={{ fontSize: 18, fontWeight: 600, paddingBlockEnd: 1 }}>
+            <DialogTitle id={titleId} variant="h3" sx={{ paddingBlockEnd: 1 }}>
               {t('tickets:assist.draft.title')}{' '}
               <Typography variant="mono" component="span" sx={{ fontSize: 16 }}>
                 {reference}

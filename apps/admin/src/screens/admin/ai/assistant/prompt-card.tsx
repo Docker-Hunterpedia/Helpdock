@@ -3,6 +3,7 @@ import {
   type BrandAiPromptUpdate,
   type BrandAiSettings,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
@@ -114,7 +115,7 @@ export function PromptCard({
               lang: language,
               dir: language === 'ar' ? 'rtl' : 'ltr',
               maxLength: AI_SYSTEM_PROMPT_MAX_LENGTH,
-              style: { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 },
+              style: { ...monoFontStyle, fontSize: 13 },
             },
           }}
         />

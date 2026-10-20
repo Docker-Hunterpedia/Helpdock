@@ -182,7 +182,7 @@ function BuilderForm({
           <Typography component="span" aria-hidden="true" sx={{ color: 'text.secondary' }}>
             /
           </Typography>
-          <Typography variant="h2" component="h2" sx={{ fontSize: 20 }}>
+          <Typography variant="h2" component="h2">
             {title}
           </Typography>
           <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>

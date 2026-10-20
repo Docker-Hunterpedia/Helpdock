@@ -134,7 +134,7 @@ export function SplitDialog({
     >
       <Box component="form" noValidate onSubmit={submit}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, paddingInlineEnd: 4 }}>
-          <DialogTitle id={titleId} sx={{ flex: 1, fontSize: 18, fontWeight: 600 }}>
+          <DialogTitle id={titleId} sx={{ flex: 1, fontSize: 20, fontWeight: 600 }}>
             {t('tickets:split.title')}
             <Typography
               variant="body2"

@@ -4,6 +4,7 @@ import {
   type WebhookDelivery,
   type WebhookOverview,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -220,7 +221,7 @@ function DeliveryRow({
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const time = clockSeconds(delivery.createdAt, locale);
-  const mono = { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 };
+  const mono = { ...monoFontStyle, fontSize: 13 };
 
   return (
     <TableRow
@@ -310,14 +311,7 @@ export function OutcomeLabel({ delivery }: { readonly delivery: WebhookDelivery 
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color, whiteSpace: 'nowrap' }}
     >
       <Icon size={14} aria-hidden="true" />
-      <Box
-        component="span"
-        sx={
-          showCode
-            ? { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 }
-            : { fontSize: 13 }
-        }
-      >
+      <Box component="span" sx={showCode ? { ...monoFontStyle, fontSize: 13 } : { fontSize: 13 }}>
         {showCode ? delivery.responseStatus : t(`developers:webhooks.outcome.${outcome}`)}
       </Box>
     </Box>
@@ -413,10 +407,7 @@ export function RetrySchedule(): ReactNode {
                 lineHeight: '16px',
               }}
             >
-              <Box
-                component="span"
-                sx={{ display: 'block', fontFamily: 'var(--hd-font-mono, monospace)' }}
-              >
+              <Box component="span" sx={{ display: 'block', ...monoFontStyle }}>
                 {attempt}
               </Box>
               <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>

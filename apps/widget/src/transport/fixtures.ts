@@ -1,4 +1,4 @@
-import { semantic } from '@helpdock/ui/tokens.json';
+import { semantic, typography } from '@helpdock/ui/tokens.json';
 import type { MockOptions } from './mock.js';
 import type {
   AgentSummary,
@@ -220,11 +220,7 @@ export function sampleConfig(locale: WidgetLocale, options: SampleOptions = {}):
       mode: options.scheme ?? 'light',
       tokens: { light: semantic.light, dark: semantic.dark },
       radius: { md: 6, lg: 10 },
-      font_family: {
-        sans: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
-        arabic: "'IBM Plex Sans Arabic', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
-        mono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-      },
+      font_family: { ...typography.fontFamily },
       fonts: [],
       launcher: { style: 'icon', label: null, position: 'inline-end' },
     },

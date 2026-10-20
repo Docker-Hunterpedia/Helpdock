@@ -1,3 +1,4 @@
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Popover, Typography } from '@mui/material';
 import { Layers, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
@@ -290,8 +291,8 @@ function SidebarToggle({
                   key={key}
                   component="kbd"
                   sx={{
-                    fontFamily: 'var(--hd-font-mono, monospace)',
-                    fontSize: 11,
+                    ...monoFontStyle,
+                    fontSize: 12,
                     paddingInline: '2px',
                     border: `1px solid ${tokens['border.strong']}`,
                     borderRadius: '4px',

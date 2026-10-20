@@ -93,6 +93,10 @@ leaving stale class names behind.
 
 `createHelpdockTheme` takes `{ mode, direction, brand? }`. `brand` is the output
 of `resolveBrandTheme`; leaving it out gives the stock Helpdock accent.
+`direction: 'rtl'` selects `tokens.typography.fontFamily.arabic` for UI text;
+`ltr` selects `sans`. Rebuild the theme when direction changes. CssBaseline
+publishes the three `--hd-font-*` variables and sets the admin body to 14/20,
+including when the admin composes its reduced-motion overrides.
 
 ### Button variants
 
@@ -118,6 +122,13 @@ repeat `h3` so nothing can render at a size outside the scale. `body1` is
 `body-lg` (16/24), `body2` is `body` (14/20), `caption` is `caption` (12/16) and
 `button` is `body-strong` with no upper-casing. Three variants are added:
 `display`, `bodyStrong` and `mono`, usable as `<Typography variant="mono">`.
+For inputs, native `style` props, or mono text using another scale size, spread
+`monoFontStyle` from `@helpdock/ui`; it sets only the family through
+`var(--hd-font-mono)` and preserves the caller's size and weight.
+
+Emails and pages without webfont loading use `fontFallbacks.sans` and
+`fontFallbacks.mono` from `@helpdock/ui/resolve`. These drop the first (webfont)
+entry from the corresponding token, keeping the DESIGN fallback stack.
 
 Other overrides follow DESIGN §6: `MuiOutlinedInput` 36 px, `MuiChip` 22 px,
 `MuiDialog` radius lg with elevation 3, `MuiTooltip` on `bg.inverse` after a

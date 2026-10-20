@@ -1,4 +1,5 @@
 import { type RecoveryCodes, type Session, totpCodeRequestSchema } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -194,7 +195,7 @@ export function TotpEnrolment(): ReactNode {
               listStyle: 'none',
               borderRadius: '8px',
               backgroundColor: tokens['bg.muted'],
-              fontFamily: 'var(--hd-font-mono, monospace)',
+              ...monoFontStyle,
             }}
           >
             {recoveryCodes.map((recoveryCode) => (
@@ -320,10 +321,7 @@ export function TotpEnrolment(): ReactNode {
                   backgroundColor: tokens['bg.muted'],
                 }}
               >
-                <Typography
-                  variant="body2"
-                  sx={{ fontFamily: 'var(--hd-font-mono, monospace)', wordBreak: 'break-all' }}
-                >
+                <Typography variant="body2" sx={{ ...monoFontStyle, wordBreak: 'break-all' }}>
                   <bdi>{secret}</bdi>
                 </Typography>
                 <Button
@@ -368,8 +366,8 @@ export function TotpEnrolment(): ReactNode {
             sx={{
               height: 44,
               '& input': {
-                fontFamily: 'var(--hd-font-mono, monospace)',
-                fontSize: 18,
+                ...monoFontStyle,
+                fontSize: 20,
                 letterSpacing: '0.18em',
                 textAlign: 'center',
               },

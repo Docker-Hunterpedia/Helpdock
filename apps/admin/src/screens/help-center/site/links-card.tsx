@@ -1,4 +1,5 @@
 import { HC_LINKS_MAX, type HcLink, type HcLinks } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, IconButton, TextField, Typography } from '@mui/material';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import {
@@ -244,7 +245,7 @@ function LinkTable({
                       spellCheck: false,
                     },
                   }}
-                  sx={{ '& input': { fontFamily: 'var(--hd-font-mono, monospace)', fontSize: 13 } }}
+                  sx={{ '& input': { ...monoFontStyle, fontSize: 13 } }}
                 />
               </Box>
               {canManage ? (

@@ -6,6 +6,7 @@ import {
   type HcLocale,
   type HcZeroResultSearch,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -44,7 +45,7 @@ import { useHelpCenter, useHelpCenterReport, useReaderLocale } from './use-help-
  * which opens a draft titled with the search.
  */
 
-const mono = { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 } as const;
+const mono = { ...monoFontStyle, fontSize: 12 } as const;
 const numeric = { ...mono, textAlign: 'end' } as const;
 
 type LocaleFilter = 'all' | HcLocale;

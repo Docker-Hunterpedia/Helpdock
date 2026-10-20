@@ -1,5 +1,6 @@
 import type { EmailMessage } from '@helpdock/channels';
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { escapeHtml } from '../auth/email-templates.js';
 
 /**
@@ -38,7 +39,7 @@ export const renderSmtpTestEmail = ({
     subject,
     text: [heading, '', body, '', signature].join('\n'),
     html: [
-      `<!doctype html><html lang="${locale}" dir="${dir(locale)}"><body style="margin:0;padding:24px;background:#f5f6f8;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#1b1f24">`,
+      `<!doctype html><html lang="${locale}" dir="${dir(locale)}"><body style="margin:0;padding:24px;background:#f5f6f8;font-family:${escapeHtml(fontFallbacks.sans)};color:#1b1f24">`,
       '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px">',
       `<tr><td><h1 style="margin:0 0 16px;font-size:20px;line-height:1.3">${escapeHtml(heading)}</h1>`,
       `<p style="margin:0 0 24px;font-size:15px;line-height:1.6">${escapeHtml(body)}</p>`,

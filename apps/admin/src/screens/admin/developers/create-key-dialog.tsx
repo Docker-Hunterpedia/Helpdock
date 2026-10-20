@@ -5,6 +5,7 @@ import {
   type ApiKeyCreated,
   type ApiScope,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -204,7 +205,7 @@ export function CreateKeyDialog({
                       hint: rateHint,
                       error: problems.rateLimit,
                     }),
-                    style: { fontFamily: 'var(--hd-font-mono, monospace)' },
+                    style: { ...monoFontStyle },
                   },
                 }}
                 sx={{ width: 120 }}

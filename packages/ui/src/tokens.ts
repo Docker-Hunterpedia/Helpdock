@@ -32,3 +32,12 @@ export {
   TEAL_STEPS,
   TYPE_STYLES,
 } from './tokens.schema.js';
+
+/** Family only: call sites keep their DESIGN scale size and weight. */
+export const monoFontStyle = { fontFamily: 'var(--hd-font-mono)' } as const;
+
+/** Mail clients and script-free pages cannot fetch the self-hosted webfonts. */
+export const fontFallbacks = {
+  sans: tokens.typography.fontFamily.sans.split(',').slice(1).join(',').trim(),
+  mono: tokens.typography.fontFamily.mono.split(',').slice(1).join(',').trim(),
+} as const;

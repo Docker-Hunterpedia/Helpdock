@@ -6,6 +6,7 @@ import {
   customFieldTypeSchema,
   isChoiceField,
 } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -203,7 +204,7 @@ export function CustomFieldEditor({
               maxLength: CUSTOM_FIELD_KEY_MAX,
               // A key is code, not prose, and it is printed in exports and rule
               // conditions; mono is what DESIGN §3 gives that.
-              style: { fontFamily: 'var(--hd-font-mono, monospace)' },
+              style: { ...monoFontStyle },
             },
           }}
         />

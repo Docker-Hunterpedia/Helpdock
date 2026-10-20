@@ -75,7 +75,7 @@ export function TimeCard({
           {t('tickets:time.heading')}
         </Typography>
         {entries === undefined ? null : (
-          <Typography variant="mono" sx={{ fontSize: 13 }}>
+          <Typography variant="mono">
             <bdi>{t('tickets:time.total', { duration: durationOf(entries.totalSeconds) })}</bdi>
           </Typography>
         )}
@@ -102,7 +102,7 @@ export function TimeCard({
               },
             )}
             variant="mono"
-            sx={{ flex: 1, fontSize: 18, lineHeight: '24px', fontWeight: 500 }}
+            sx={{ flex: 1, fontSize: 20, lineHeight: '24px', fontWeight: 500 }}
           >
             <bdi>{clock}</bdi>
           </Typography>
@@ -154,7 +154,7 @@ export function TimeCard({
                 borderBlockStart: `1px solid ${tokens['border.default']}`,
               }}
             >
-              <Typography variant="mono" sx={{ inlineSize: 56, flexShrink: 0, fontSize: 13 }}>
+              <Typography variant="mono" sx={{ inlineSize: 56, flexShrink: 0 }}>
                 <bdi>{durationOf(entry.seconds)}</bdi>
               </Typography>
               <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: 'text.secondary' }}>

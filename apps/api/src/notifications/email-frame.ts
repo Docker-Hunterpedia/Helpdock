@@ -1,4 +1,5 @@
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { escapeHtml } from '../auth/email-templates.js';
 
 /**
@@ -30,17 +31,13 @@ export const COLOR = {
   kicker: '#0A4A45',
 } as const;
 
-const SANS: Record<Locale, string> = {
-  en: "'IBM Plex Sans', system-ui, sans-serif",
-  ar: "'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif",
-};
-export const MONO = "'IBM Plex Mono', ui-monospace, monospace";
+export const MONO = fontFallbacks.mono;
 
 export const link = (appUrl: string, path: string): string => new URL(path, appUrl).toString();
 
 /** A ticket reference as the artboards draw it: monospaced and isolated. */
 export const referenceHtml = (reference: string): string =>
-  `<bdi style="font-family:${MONO}">${escapeHtml(reference)}</bdi>`;
+  `<bdi style="font-family:${escapeHtml(MONO)}">${escapeHtml(reference)}</bdi>`;
 
 /** Wraps every occurrence of the ticket reference in already escaped text. */
 export const withReference = (escaped: string, reference: string): string =>
@@ -94,7 +91,7 @@ export const renderFrame = ({
 }): string =>
   [
     `<!doctype html><html lang="${locale}" dir="${dir(locale)}"><body style="margin:0;padding:24px;background:${COLOR.page}">`,
-    `<table role="presentation" dir="${dir(locale)}" lang="${locale}" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;margin:0 auto;border-collapse:separate;background:${COLOR.surface};border:1px solid ${COLOR.border};border-radius:10px;font-family:${SANS[locale]};color:${COLOR.text}">`,
+    `<table role="presentation" dir="${dir(locale)}" lang="${locale}" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;margin:0 auto;border-collapse:separate;background:${COLOR.surface};border:1px solid ${COLOR.border};border-radius:10px;font-family:${escapeHtml(fontFallbacks.sans)};color:${COLOR.text}">`,
     '<tbody><tr><td style="padding:28px 32px 32px 32px;text-align:start">',
     `<div style="margin-bottom:24px"><span style="display:inline-block;width:28px;height:28px;border-radius:6px;background:${COLOR.primary};color:#FFFFFF;font-weight:600;font-size:14px;line-height:28px;text-align:center">H</span> <span style="font-weight:600;font-size:14px">${escapeHtml(brand)}</span></div>`,
     inner,

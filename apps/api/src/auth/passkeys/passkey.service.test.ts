@@ -442,7 +442,11 @@ describe('a passkey as the step-up', () => {
     const code = await codeOf(service.rename(session, id, 'Cloned', await proofFrom(holder)));
 
     expect(code).toBe('invalid-credentials');
-    expect(auth.events.map((event) => event.action)).toContain('auth.passkey.counter_regressed');
+    expect(auth.events).toContainEqual({
+      action: 'auth.passkey.counter_regressed',
+      actor: 'system',
+      meta: { passkey: rows.rows[0]?.id },
+    });
   });
 });
 

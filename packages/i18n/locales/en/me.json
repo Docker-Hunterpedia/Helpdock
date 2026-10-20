@@ -54,7 +54,7 @@
   },
   "passkeys": {
     "title": "Passkeys",
-    "caption": "Sign in with your fingerprint, face, device PIN or a security key, with nothing to type. A passkey also counts as your second factor.",
+    "caption": "Save a fingerprint, face, device PIN or security key as a passkey. It can confirm changes on this page.",
     "add": "Add a passkey",
     "synced": "Synced",
     "addedOn": "Added {{date}}",

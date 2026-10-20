@@ -383,6 +383,7 @@ export class PasskeyService {
     const { auth, webauthn, passkeys } = this.#parts;
     await auth.spendStepUpAttempt(userId);
 
+    let presented: string | undefined;
     const check = await webauthn.verifyAuthentication({
       purpose: 'step-up',
       binding: { userId, familyId },
@@ -390,6 +391,7 @@ export class PasskeyService {
       response: toAuthenticationJson(proof.response),
       findCredential: async (credentialId) => {
         const row = await passkeys.byCredentialId(credentialId, tx);
+        presented = row?.id;
         return row === undefined ? undefined : toStored(row);
       },
     });
@@ -399,7 +401,9 @@ export class PasskeyService {
         reason: `passkey-${check.reason}`,
       });
       if (check.reason === 'counter-regressed') {
-        await auth.recordCredentialEvent('auth.passkey.counter_regressed', userId, 'system');
+        await auth.recordCredentialEvent('auth.passkey.counter_regressed', userId, 'system', {
+          passkey: presented,
+        });
       }
       throw new AuthFailure('invalid-credentials');
     }

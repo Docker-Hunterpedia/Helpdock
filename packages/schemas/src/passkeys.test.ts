@@ -47,12 +47,20 @@ describe('passkeyNameSchema', () => {
     expect(passkeyNameSchema.safeParse('x'.repeat(64)).success).toBe(true);
   });
 
-  it.each(['', '   ', 'x'.repeat(65), 'tab\there', 'bell\u0007', 'nul\u0000'])(
-    'refuses %j',
-    (name) => {
-      expect(passkeyNameSchema.safeParse(name).success).toBe(false);
-    },
-  );
+  it.each([
+    '',
+    '   ',
+    'x'.repeat(65),
+    'tab\there',
+    'bell\u0007',
+    'nul\u0000',
+    'rtl\u202eoverride',
+    'iso\u2066late',
+    'zero\u200bwidth',
+    'bom\ufeffname',
+  ])('refuses %j', (name) => {
+    expect(passkeyNameSchema.safeParse(name).success).toBe(false);
+  });
 });
 
 describe('registrationResponseSchema', () => {

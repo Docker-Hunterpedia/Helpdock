@@ -97,8 +97,10 @@ export const passkeyNameSchema = z
   .trim()
   .min(1)
   .max(PASSKEY_NAME_MAX_LENGTH)
+  // Control characters, bidi overrides and isolates, and zero-width characters: a name is shown inside
+  // sentences and emails, where any of them could reorder or hide what the person reads.
   // biome-ignore lint/suspicious/noControlCharactersInRegex: refusing control characters is the point.
-  .regex(/^[^\u0000-\u001f\u007f]+$/);
+  .regex(/^[^\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]+$/);
 
 export const passkeyBeginRequestSchema = z.object({ proof: passkeyProofSchema });
 export type PasskeyBeginRequest = z.infer<typeof passkeyBeginRequestSchema>;
@@ -138,7 +140,7 @@ export const passkeySchema = z.object({
   id: z.uuid(),
   name: z.string(),
   createdAt: z.iso.datetime(),
-  /** The last assertion it made; null until it signs something (M18-03 onward). */
+  /** When it last confirmed a change on this page; null until it does. Sign-in uses arrive with M18-03/04. */
   lastUsedAt: z.iso.datetime().nullable(),
   /** Backed up by its platform (the "Synced" chip). Display only. */
   synced: z.boolean(),

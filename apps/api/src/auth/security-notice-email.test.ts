@@ -123,7 +123,7 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
 
       expect(en.subject).toBe('A passkey was added to your account');
       expect(en.text).toContain('A passkey was added');
-      expect(en.text).toContain('“MacBook Air · Touch ID” can now sign you in to Helpdock.');
+      expect(en.text).toContain('“MacBook Air · Touch ID” was saved to your Helpdock account.');
       expect(en.text).toContain('When: 21 Oct 2026, 09:14 (Asia/Riyadh)');
       expect(en.text).toContain('From: Chrome on macOS · 85.12.x.x');
       expect(en.text).toContain("If this wasn't you, remove it now and change your password.");
@@ -160,14 +160,14 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
       const en = notice({ change: 'passkeyRemoved', passkey: 'YubiKey 5C', ...rest });
 
       expect(en.subject).toBe('A passkey was removed from your account');
-      expect(en.text).toContain(`“YubiKey 5C” can no longer sign you in. ${sentence}`);
+      expect(en.text).toContain(`“YubiKey 5C” was removed from your account. ${sentence}`);
       expect(en.text).toContain(`Open your security page: ${SECURITY_PAGE}`);
     });
 
     it('adds no sentence about what remains when nothing does', () => {
       const en = notice({ change: 'passkeyRemoved', passkey: 'Key', remaining: '0', totp: '0' });
 
-      expect(en.text).toContain('“Key” can no longer sign you in.\n');
+      expect(en.text).toContain('“Key” was removed from your account.\n');
       expect(en.text).not.toContain('You still have');
     });
 

@@ -508,9 +508,8 @@ Backlog or never:
   (it changes no way in), so the card's footer says "we email you when one is
   added or removed" where the board says "adding, renaming or removing"; the
   list also carries `authenticatorApp` for the remove dialog's "what still
-  protects you" line; and the card's sentence "A passkey also counts as your
-  second factor" is the board's wording and becomes true with M18-03, which
-  lands before 1.1. Left for the other deliverables: recovery codes drawn with a
+  protects you" line; and the board's sentences that a passkey "counts as your second factor" and "can sign you in" are softened because they are not true until M18-03, which
+  lands before 1.1; until then the card's caption and the notice emails say only that the passkey is saved and can confirm changes on this page, and M18-03 restores the wording about second factor and sign-in. Left for the other deliverables: recovery codes drawn with a
   first passkey (M18-03), the enrolment chooser and the sign-in and
   second-factor screens (M18-03, M18-06), and the Settings › Authentication
   card (M18-06).

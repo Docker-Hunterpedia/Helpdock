@@ -17,6 +17,8 @@ const recorder = (status: number, body: unknown) => {
   return { calls, transport };
 };
 
+const HOSTS = ['shop.example.com', 'help.example.com'];
+
 describe('the CAPTCHA providers (ADR 0003)', () => {
   it('verifies a Turnstile token with the secret, the address and the idempotency key', async () => {
     const { calls, transport } = recorder(200, { success: true, hostname: 'shop.example.com' });
@@ -27,6 +29,7 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       token: 'tok',
       remoteIp: '203.0.113.9',
       idempotencyKey: 'client-1',
+      hostnames: ['shop.example.com'],
     });
 
     expect(verdict).toEqual({ success: true, hostname: 'shop.example.com' });
@@ -49,6 +52,7 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       secret: 's',
       token: 'tok',
       idempotencyKey: 'ignored',
+      hostnames: ['shop.example.com'],
     });
 
     expect(verdict).toEqual({ success: false, errorCodes: ['invalid-input-response'] });
@@ -63,28 +67,65 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       postForm: () => Promise.reject(new Error('reset')),
     });
 
-    expect(await provider(500, { success: true }).verify({ secret: 's', token: 't' })).toEqual({
+    expect(
+      await provider(500, { success: true }).verify({ secret: 's', token: 't', hostnames: HOSTS }),
+    ).toEqual({
       success: false,
       errorCodes: ['http-500'],
     });
-    expect(await provider(200, 'nope').verify({ secret: 's', token: 't' })).toEqual({
+    expect(
+      await provider(200, 'nope').verify({ secret: 's', token: 't', hostnames: HOSTS }),
+    ).toEqual({
       success: false,
       errorCodes: ['invalid-response'],
     });
-    expect(await provider(200, { success: 'yes' }).verify({ secret: 's', token: 't' })).toEqual({
+    expect(
+      await provider(200, { success: 'yes' }).verify({ secret: 's', token: 't', hostnames: HOSTS }),
+    ).toEqual({
       success: false,
       errorCodes: ['invalid-response'],
     });
-    expect(await unreachable.verify({ secret: 's', token: 't' })).toEqual({
+    expect(await unreachable.verify({ secret: 's', token: 't', hostnames: HOSTS })).toEqual({
       success: false,
       errorCodes: ['network-error'],
     });
   });
 
   it.each([
-    ['no secret', { secret: '', token: 't' }, 'missing-input-secret'],
-    ['a blank token', { secret: 's', token: ' ' }, 'missing-input-response'],
-    ['an oversized token', { secret: 's', token: 'x'.repeat(5000) }, 'invalid-input-response'],
+    ['solved on another site', { success: true, hostname: 'elsewhere.example.net' }],
+    ['that names no site', { success: true }],
+  ])('refuses a pass %s, since a site key works on any site', async (_label, body) => {
+    const { transport } = recorder(200, body);
+
+    expect(
+      await createCaptchaProvider('turnstile', transport).verify({
+        secret: 's',
+        token: 't',
+        hostnames: HOSTS,
+      }),
+    ).toEqual({ success: false, errorCodes: ['hostname-mismatch'] });
+  });
+
+  it('accepts a pass solved on any of the allowed hosts, whatever its case', async () => {
+    const { transport } = recorder(200, { success: true, hostname: 'Help.Example.com' });
+
+    expect(
+      await createCaptchaProvider('hcaptcha', transport).verify({
+        secret: 's',
+        token: 't',
+        hostnames: HOSTS,
+      }),
+    ).toEqual({ success: true, hostname: 'Help.Example.com' });
+  });
+
+  it.each([
+    ['no secret', { secret: '', token: 't', hostnames: HOSTS }, 'missing-input-secret'],
+    ['a blank token', { secret: 's', token: ' ', hostnames: HOSTS }, 'missing-input-response'],
+    [
+      'an oversized token',
+      { secret: 's', token: 'x'.repeat(5000), hostnames: HOSTS },
+      'invalid-input-response',
+    ],
   ] as const)('refuses %s without calling out', async (_label, input, code) => {
     const { calls, transport } = recorder(200, { success: true });
 

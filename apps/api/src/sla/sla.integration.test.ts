@@ -257,6 +257,22 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       ).map((row) => row.payload),
     );
 
+  /** Whether another transaction is queued on a `tickets … FOR UPDATE`, within ten seconds. */
+  const somebodyWaitsForATicketLock = async (): Promise<boolean> => {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const [observed] = await owner.db.execute(sql`
+        SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query ILIKE '%tickets%FOR UPDATE%') AS waiting
+      `);
+      if (observed?.waiting === true) {
+        return true;
+      }
+      await waitForLock(20);
+    }
+    return false;
+  };
+
   const slaDeps = (): SlaWorkerDeps => {
     const repository = new SlaRepository();
     return {
@@ -954,17 +970,10 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
         ),
       );
       try {
-        const deadline = Date.now() + 10000;
-        let waiting = false;
-        while (Date.now() < deadline && !waiting) {
-          const [observed] = await owner.db.execute(sql`
-            SELECT EXISTS (SELECT 1 FROM pg_stat_activity
-              WHERE wait_event_type = 'Lock' AND query ILIKE '%tickets%FOR UPDATE%') AS waiting
-          `);
-          waiting = observed?.waiting === true;
-          if (!waiting) await waitForLock(20);
-        }
-        expect(waiting, 'timer must reach the parent lock before the close commits').toBe(true);
+        expect(
+          await somebodyWaitsForATicketLock(),
+          'timer must reach the parent lock before the close commits',
+        ).toBe(true);
       } finally {
         release.resolve();
         await close;
@@ -977,6 +986,49 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       expect(
         (await outboxOf('ticket.escalated')).filter((event) => event.ticketId === ticket.id),
       ).toEqual([]);
+    });
+
+    it('lets a policy save wait for a timer that holds a ticket it recomputes (1.0.1 deadlock)', async () => {
+      // Seen in the 1.0 demo: the save checkpointed a ticket's clocks before
+      // locking the ticket, and a timer that had locked the ticket then waited
+      // on those clock rows while the save waited on the ticket. Ticket rows are
+      // locked before clock rows, so the save must queue behind the timer.
+      const { ticket } = await createTicket({ priority: 'medium' });
+      const clock = await clockOf(ticket.id, 'resolution');
+      const locked = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const timer = withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await new SlaRepository().lockTicket(tx, ticket.id);
+        locked.resolve();
+        await release.promise;
+        await tx
+          .update(ticketSlaClocks)
+          .set({ updatedAt: new Date() })
+          .where(eq(ticketSlaClocks.id, clock.id));
+      });
+      await locked.promise;
+      const save = call<SlaPolicy>('POST', `${brandPath()}/sla-policies`, ada, {
+        ...policyBody({
+          name: 'Billing, while a timer runs',
+          conditions: [{ field: 'department', operator: 'any', values: [billing] }],
+        }),
+        escalation: [],
+      });
+      try {
+        expect(
+          await somebodyWaitsForATicketLock(),
+          'the save must reach the ticket lock before the timer writes its clock',
+        ).toBe(true);
+      } finally {
+        release.resolve();
+      }
+
+      await expect(timer).resolves.toBeUndefined();
+      const saved = await save;
+      expect(saved.status).toBe(201);
+      expect(
+        (await call('DELETE', `${brandPath()}/sla-policies/${saved.body.id}`, ada)).status,
+      ).toBe(204);
     });
 
     it.each(['closed', 'deleted', 'merged', 'unactivated-import'] as const)(

@@ -42,7 +42,10 @@ export type AuthAuditAction =
   | 'auth.second_factor.enabled'
   | 'auth.second_factor.disabled'
   | 'auth.recovery_codes.regenerated'
-  | 'auth.recovery_code.used';
+  | 'auth.recovery_code.used'
+  | 'auth.oauth.linked'
+  | 'auth.oauth.unlinked'
+  | 'auth.oauth.link_refused';
 
 export type SignInMethod = 'password' | 'magic-link' | 'oauth' | 'sso' | 'invite' | 'second-factor';
 

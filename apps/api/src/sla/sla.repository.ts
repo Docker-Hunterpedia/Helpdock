@@ -28,7 +28,7 @@ import {
   type WeeklyHours,
   weeklyHoursSchema,
 } from '@helpdock/schemas';
-import { and, asc, count, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, exists, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Clock } from './clock.js';
 import type { MatchablePolicy } from './policy-match.js';
@@ -132,6 +132,18 @@ export interface TicketWithStatus {
   readonly ticket: TicketRow;
   readonly status: TicketStatusRow;
 }
+
+const openTicket = and(
+  ne(ticketStatuses.systemState, 'closed'),
+  isNull(tickets.deletedAt),
+  isNull(tickets.mergedIntoId),
+);
+
+const runningClock = and(
+  eq(ticketSlaClocks.isCurrent, true),
+  isNull(ticketSlaClocks.satisfiedAt),
+  isNull(ticketSlaClocks.stoppedAt),
+);
 
 export class SlaRepository {
   // ------------------------------------------------------------ calendars
@@ -375,13 +387,7 @@ export class SlaRepository {
       .select({ id: tickets.id })
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(
-        and(
-          ne(ticketStatuses.systemState, 'closed'),
-          isNull(tickets.deletedAt),
-          isNull(tickets.mergedIntoId),
-        ),
-      );
+      .where(openTicket);
     return rows.map((row) => row.id);
   }
 
@@ -390,14 +396,40 @@ export class SlaRepository {
     const rows = await tx
       .selectDistinct({ ticketId: ticketSlaClocks.ticketId })
       .from(ticketSlaClocks)
-      .where(
-        and(
-          eq(ticketSlaClocks.isCurrent, true),
-          isNull(ticketSlaClocks.satisfiedAt),
-          isNull(ticketSlaClocks.stoppedAt),
-        ),
-      );
+      .where(runningClock);
     return rows.map((row) => row.ticketId);
+  }
+
+  /**
+   * Locks every ticket {@link SlaService.recompute} visits, both the running
+   * and the open ones, in id order and before it touches a clock.
+   *
+   * Every other writer of clocks — a timer, a ticket change — locks the ticket
+   * first and its clock rows after. A recompute that checkpointed clock rows
+   * first and locked each ticket later deadlocked with a timer holding one of
+   * them (1.0.1). Taking them all up front, in one order, makes the recompute
+   * queue behind such a writer instead, and two recomputes queue behind each
+   * other. One statement, not a list of ids, so a large brand does not run
+   * into the protocol's bind-parameter limit.
+   */
+  async lockRecomputedTickets(tx: DbTransaction): Promise<void> {
+    await tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+      .where(
+        or(
+          openTicket,
+          exists(
+            tx
+              .select({ id: ticketSlaClocks.id })
+              .from(ticketSlaClocks)
+              .where(and(eq(ticketSlaClocks.ticketId, tickets.id), runningClock)),
+          ),
+        ),
+      )
+      .orderBy(asc(tickets.id))
+      .for('update', { of: tickets });
   }
 
   async countRunningTickets(tx: DbTransaction): Promise<number> {

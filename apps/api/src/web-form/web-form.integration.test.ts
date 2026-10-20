@@ -6,6 +6,7 @@ import type { Env } from '@helpdock/config';
 import {
   attachments,
   auditLog,
+  brandDomains,
   brands,
   contactDuplicateSuggestions,
   contactIdentities,
@@ -64,6 +65,12 @@ const CONTAINER_STARTUP_MS = 120_000;
 const APP_URL = 'https://desk.example.com';
 const HELP_HOST = 'help.example.com';
 const GOOD_TOKEN = 'a-token-the-provider-accepts';
+/** Tokens the provider accepts, and the host each says the challenge was solved on. */
+const SOLVED_ON: Readonly<Record<string, string>> = {
+  [GOOD_TOKEN]: new URL(APP_URL).hostname,
+  'solved-on-the-help-center': HELP_HOST,
+  'solved-elsewhere': 'elsewhere.example.net',
+};
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==',
@@ -260,8 +267,9 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
     const captchaTransport: CaptchaTransport = {
       postForm: async (url, form) => {
         verified.push(url);
-        const success = form.get('response') === GOOD_TOKEN && form.get('secret') === 'secret-key';
-        return { status: 200, body: JSON.stringify({ success }) };
+        const hostname = SOLVED_ON[form.get('response') ?? ''];
+        const success = hostname !== undefined && form.get('secret') === 'secret-key';
+        return { status: 200, body: JSON.stringify(success ? { success, hostname } : { success }) };
       },
     };
     app = await createApiApp({
@@ -691,6 +699,49 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
     expect(passed.status).toBe(200);
     expect(verified.length).toBe(2);
 
+    await saveForm({ captchaEnabled: false });
+    await saveCaptchaKeys('');
+  });
+
+  it('takes a CAPTCHA solved only on the form’s own hosts (1.0.1)', async () => {
+    // A site key is public: a token solved on any other site that uses it
+    // passes siteverify, and only the hostname it reports tells them apart.
+    await saveForm({ captchaEnabled: true });
+    await saveCaptchaKeys('site-key', 'secret-key');
+    const fields = {
+      email: 'hostname@example.com',
+      name: 'H',
+      message: 'Hi',
+      'custom:product': 'Desk',
+    };
+
+    const elsewhere = await post({ ...fields, 'cf-turnstile-response': 'solved-elsewhere' });
+    const unverifiedHost = await post({
+      ...fields,
+      'cf-turnstile-response': 'solved-on-the-help-center',
+    });
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx.insert(brandDomains).values({
+        brandId: seeded.brandId,
+        domain: HELP_HOST,
+        kind: 'helpcenter',
+        txtToken: 'hd-verify-test',
+        verifiedAt: new Date(),
+      }),
+    );
+    const verifiedHost = await post(
+      { ...fields, 'cf-turnstile-response': 'solved-on-the-help-center' },
+      { url: '/contact', host: HELP_HOST },
+    );
+
+    expect(elsewhere.status).toBe(422);
+    expect(elsewhere.html).toContain('The security check did not pass');
+    expect(unverifiedHost.status).toBe(422);
+    expect(verifiedHost.status).toBe(200);
+
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx.delete(brandDomains).where(eq(brandDomains.domain, HELP_HOST)),
+    );
     await saveForm({ captchaEnabled: false });
     await saveCaptchaKeys('');
   });

@@ -38,7 +38,7 @@ In order, before anything is written:
 1. A filled honeypot field is refused (400).
 2. The fields are checked. Anything missing, malformed or too long comes back as the form with what was typed, an error summary that takes focus and links to each field, and a message under each (422).
 3. **Per IP**: 10 submissions that pass the field check, per brand per 15 minutes (429).
-4. **CAPTCHA**, when on, verified server-side through the SSRF-safe client (422 on failure). It runs after the field check so a customer fixing a typo does not solve a second challenge.
+4. **CAPTCHA**, when on, verified server-side through the SSRF-safe client (422 on failure). It runs after the field check so a customer fixing a typo does not solve a second challenge. A site key is public and works on any site, so from 1.0.1 a pass also has to report one of the form's own hosts: `APP_URL`'s host or one of the brand's verified help center domains. A token solved anywhere else fails like a wrong one, and the api logs `web form CAPTCHA refused` with `hostname-mismatch`.
 5. **Per address**: 5 submissions per brand per typed email per hour (429).
 6. A sender on the brand's block list is refused (400).
 

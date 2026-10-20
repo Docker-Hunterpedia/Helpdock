@@ -7,7 +7,7 @@ import {
   users,
 } from '@helpdock/db';
 import type { ContactStats, ContactTimelineItem } from '@helpdock/schemas';
-import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type {
   ContactTimelineProvider,
   ContactTimelineResult,
@@ -34,6 +34,13 @@ import type {
 const TIMELINE_PAGE = 50;
 
 const openTicket = ne(ticketStatuses.systemState, 'closed');
+
+/**
+ * DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views", and the
+ * contact screens are views. Every read here carries it, as the ticket list's
+ * `liveTicketsOf` does; `helpdock_contact_ticket_count` applies it in SQL.
+ */
+const notDeleted = isNull(tickets.deletedAt);
 
 /**
  * `max(created_at)` inside a raw fragment is an *expression*, not a column, so
@@ -79,7 +86,7 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       })
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(inArray(tickets.contactId, [...contactIds]))
+      .where(and(inArray(tickets.contactId, [...contactIds]), notDeleted))
       .groupBy(tickets.contactId);
 
     const satisfaction = await this.#satisfaction(tx, contactIds);
@@ -115,7 +122,13 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       })
       .from(csatResponses)
       .innerJoin(tickets, eq(tickets.id, csatResponses.ticketId))
-      .where(and(inArray(tickets.contactId, [...contactIds]), isNotNull(csatResponses.rating)))
+      .where(
+        and(
+          inArray(tickets.contactId, [...contactIds]),
+          notDeleted,
+          isNotNull(csatResponses.rating),
+        ),
+      )
       .groupBy(tickets.contactId);
 
     return new Map(
@@ -144,7 +157,7 @@ export class DbTicketStatsProvider implements TicketStatsProvider {
       .selectDistinct({ contactId: tickets.contactId })
       .from(tickets)
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(and(inArray(tickets.contactId, [...candidates]), openTicket));
+      .where(and(inArray(tickets.contactId, [...candidates]), openTicket, notDeleted));
 
     return rows.flatMap((row) => (row.contactId === null ? [] : [row.contactId]));
   }
@@ -190,14 +203,14 @@ export class DbContactTimelineProvider implements ContactTimelineProvider {
       .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .innerJoin(departments, eq(departments.id, tickets.departmentId))
       .leftJoin(assignee, eq(assignee.id, tickets.assigneeId))
-      .where(eq(tickets.contactId, contactId))
+      .where(and(eq(tickets.contactId, contactId), notDeleted))
       .orderBy(desc(tickets.createdAt), desc(tickets.id))
       .limit(TIMELINE_PAGE);
 
     const [visible] = await tx
       .select({ total: sql<number>`count(*)::int` })
       .from(tickets)
-      .where(eq(tickets.contactId, contactId));
+      .where(and(eq(tickets.contactId, contactId), notDeleted));
 
     const [all] = await tx.execute<{ total: number }>(
       sql`SELECT helpdock_contact_ticket_count(${brandId}::uuid, ${contactId}::uuid)::int AS total`,

@@ -38,6 +38,8 @@
     "body_twoFactorEnabled": "Two-factor sign-in was turned on for {{email}}.",
     "body_twoFactorDisabled": "Two-factor sign-in was turned off for {{email}}. Signing in now needs only the password.",
     "body_recoveryCodes": "New recovery codes were made for {{email}}. The old ones no longer work.",
+    "body_oauthConnected": "A {{provider}} account was connected to {{email}}. It can now be used to sign in.",
+    "body_oauthDisconnected": "The {{provider}} account was disconnected from {{email}}. It can no longer be used to sign in.",
     "action": "Review your security page",
     "expiry": "If this was you, there is nothing more to do.",
     "ignore": "If it was not you, reset your password now and tell your administrator."

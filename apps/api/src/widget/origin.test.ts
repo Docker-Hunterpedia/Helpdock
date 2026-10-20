@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isOriginAllowed, originOf } from './origin.js';
+import { hostnamesOf, isOriginAllowed, originOf } from './origin.js';
 
 const ALLOWED = ['https://shop.example.com', 'http://localhost:5173'];
 
@@ -25,5 +25,11 @@ describe('isOriginAllowed', () => {
   it('refuses a request with no origin, and everything when the list is empty', () => {
     expect(isOriginAllowed(undefined, ALLOWED)).toBe(false);
     expect(isOriginAllowed('https://shop.example.com', [])).toBe(false);
+  });
+});
+
+describe('hostnamesOf', () => {
+  it('answers the host a CAPTCHA provider reports for each origin, without scheme or port', () => {
+    expect(hostnamesOf(ALLOWED)).toEqual(['shop.example.com', 'localhost']);
   });
 });

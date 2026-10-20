@@ -327,7 +327,7 @@ tenant transaction.
 | `POST /contacts` | `contact:write` | Creates one, with any identifiers given. 409 if one is taken. |
 | `GET /contacts/:contactId` | `contact:read` | The contact, its identifiers, account, notes, duplicate suggestions and stats. |
 | `PATCH /contacts/:contactId` | `contact:write` | Name, account, language, timezone, customer id. |
-| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, visibleCount, hiddenCount }`: the newest 50 tickets the caller may see, each with its status name and `statusId`; how many they may see in all; and how many are hidden from them. |
+| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, visibleCount, hiddenCount }`: the newest 50 tickets the caller may see, deleted ones left out, each with its status name and `statusId`; how many they may see in all; and how many are hidden from them. |
 | `POST /contacts/:contactId/identities` | `contact:write` | Adds one, normalised. |
 | `DELETE /contacts/:contactId/identities/:identityId` | `contact:write` | Removes one, never the last. |
 | `POST /contacts/:contactId/notes` | `contact:write` | Adds a staff-only note. |
@@ -386,11 +386,18 @@ M1-04 shipped first and its implementations answered "none yet". M1-02
 implements both in `apps/api/src/tickets/contact-providers.ts` and passes them
 to `ContactsModule.forRoot`; nothing in `contacts/` changed.
 
-Two things are worth knowing about the real ones:
+Three things are worth knowing about the real ones:
 
 - **Both read through the request's own transaction**, so the timeline and the
   counts are department-scoped like everything else: "an agent viewing a contact
   timeline sees only the tickets they are allowed to see" (§1.2).
+- **A deleted ticket is in none of it.** DOMAIN-RULES §2.2 hides a soft-deleted
+  ticket from all views, so the timeline's items, `visibleCount` and
+  `hiddenCount`, the contact list's open and total counts, its CSAT and the
+  "Has open tickets" filter all skip it (fixed in 1.0.1; 1.0.0 counted it).
+  Merged and spam tickets stay: they are still tickets a viewer can open, as
+  they are in the ticket list, and each is listed with its Merged or Spam
+  status.
 - **`hiddenCount` cannot come from a scoped read** — a row the policy hides is a
   row no scoped query can count. It comes from `helpdock_contact_ticket_count`,
   which turns `app.all_departments` on for the duration of one call and leaves

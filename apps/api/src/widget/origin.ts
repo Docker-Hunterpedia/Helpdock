@@ -27,6 +27,16 @@ export const originOf = (header: string | string[] | undefined): string | null =
   }
 };
 
+/**
+ * The hosts of the allowed origins: where the widget's CAPTCHA may have been
+ * solved, since the widget draws it in the page that embeds it (ADR 0003).
+ */
+export const hostnamesOf = (origins: readonly string[]): string[] =>
+  origins.flatMap((origin) => {
+    const url = URL.parse(origin);
+    return url === null ? [] : [url.hostname];
+  });
+
 export const isOriginAllowed = (
   header: string | string[] | undefined,
   allowed: readonly string[],

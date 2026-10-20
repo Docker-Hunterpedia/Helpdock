@@ -321,7 +321,11 @@ A start opens the conversation, with or without its first message:
   first one opened. Choose a new one for a new conversation.
 
 - Send `captchaToken` when `config.captcha` is not null. Without a valid token
-  the api answers `captcha_required`.
+  the api answers `captcha_required`. From 1.0.1 the token must also have been
+  solved on the host of one of the brand's allowed origins: the provider
+  reports where the challenge ran, and a pass from any other site is refused
+  in the same way. A native app that renders the challenge in a web view
+  must load it from one of those hosts.
 - `prechat` carries the pre-chat form's answers, or the contact form's, which
   asks the same fields. `prechat.custom` is keyed by ticket custom field keys.
   The api checks the values against the field definitions and keeps only the

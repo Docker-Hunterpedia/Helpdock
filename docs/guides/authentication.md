@@ -334,8 +334,9 @@ in the recipient's own language, right to left for Arabic.
 ### When a credential changes
 
 The account holder is told by email whenever their password is changed or
-reset, their second factor is turned on or off, or their recovery codes are
-redrawn (ASVS 2.2.3, 2.5.5) — a `securityChange` auth email naming which one,
+reset, their second factor is turned on or off, their recovery codes are
+redrawn, or a Google or GitHub account is connected to or disconnected from
+their account (ASVS 2.2.3, 2.5.5) — a `securityChange` auth email naming which one,
 with a link to their security page and what to do if it was not them. From
 inside a session the outbox row joins the request's transaction, so a change
 that rolls back sends nothing; a reset, which has none, goes the way the reset
@@ -351,12 +352,14 @@ ASVS 7.1.3, 7.2.1):
 | Action | When |
 |---|---|
 | `auth.sign_in.succeeded` | A session was opened. `meta` has the first factor (`password`, `magic-link`, `oauth`, `invite`) and the second (`totp`, `recovery-code`, `trusted-browser` or none) |
-| `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role`, or `invalid-link` for a sign-in link that was dead, used or never issued |
+| `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role`, `invalid-link` for a sign-in link that was dead, used or never issued, and for OAuth `link-required` or `identity-conflict` (see [Which account a provider signs in as](#which-account-a-provider-signs-in-as)) |
 | `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code; a code used twice |
 | `auth.account.locked` | A challenge spent its last attempt |
 | `auth.step_up.refused` | A security-page check refused: wrong password, or the rate limit |
 | `auth.refresh_token.reused` | A rotated refresh token came back; the family was revoked |
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
+| `auth.oauth.linked` / `.unlinked` | A Google or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
+| `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
 
 The rows are written by the `auth` system principal in a transaction of their
 own, so a refused attempt is recorded although the request fails, and carry the
@@ -392,10 +395,80 @@ Four things make the flow safe:
 - **A fixed redirect.** Built from `APP_URL` and never echoed from the request,
   so there is no open redirect to point at.
 
-Matching is by **verified address only** and no account is created: owning a
-Google address is not a reason to be staff here. An unrecognised address answers
-`no-account`. People are invited on [the staff
+No account is ever created: owning a Google address is not a reason to be
+staff here. People are invited on [the staff
 screen](staff-and-roles.md#inviting-somebody).
+
+### Which account a provider signs in as
+
+From 1.0.1 a provider account is **bound to a staff account by its stable
+subject** (Google's `sub`, GitHub's numeric user id) in `user_oauth_identities`
+([ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)). Before
+that, every sign-in matched the provider's verified address to an account,
+which let whoever held a stale or recycled address at the provider sign in as
+the person who holds it here.
+
+- **A bound provider account signs in as its account,** whatever address the
+  provider reports today. Each account has at most one identity per provider,
+  and each provider account belongs to at most one staff account.
+- **The address makes the first link only where the provider controls it:**
+  - **Google:** a verified address that is either a managed Workspace account
+    on its own domain (the `hd` claim equals the address's domain) or a
+    `@gmail.com` / `@googlemail.com` address. The first such sign-in binds the
+    Google account, is audited as `auth.oauth.linked` (`via: sign-in`) and
+    emails the holder.
+  - **GitHub: never.** GitHub keeps an address "verified" after its owner loses
+    the mailbox, so a GitHub account is linked only from inside a session (below).
+  - Anything else, a consumer Google account on a company address included,
+    answers **`oauth-link-required`**: "Sign in another way once, then connect
+    it from your security page." It answers the same whether or not anybody
+    here holds the address, so it confirms nobody.
+- **An authoritative address whose account is already bound** to another
+  account of that provider answers **`oauth-identity-conflict`** and changes
+  nothing: a recycled Workspace address does not move the account.
+- **Nothing else changes after the first factor.** The second factor, the
+  trusted-browser check and enrolment for those who must have one run exactly
+  as after a password. Deactivated accounts still cannot sign in.
+
+### Connecting and disconnecting a provider
+
+A signed-in person connects a provider account from their session:
+
+1. `POST /api/auth/oauth/<provider>/connect` with a step-up, either
+   `{ "currentPassword": "…" }` or `{ "code": "123456" }` (a live authenticator
+   code). It answers `{ "url": "…" }` and sets the `hd_oauth` cookie; the app
+   sends the browser to that URL.
+2. The provider sends the browser back to the usual callback, which binds
+   whichever provider account came back to the person who started the flow
+   (the flow's state carries their id), audits `auth.oauth.linked`
+   (`via: connect`), emails them, and redirects to `/me/security?connected=<provider>`.
+   A provider account bound to somebody else lands on `/oauth/callback` with
+   `oauth-identity-conflict`.
+
+`POST /api/auth/oauth/<provider>/disconnect` with the same step-up removes it,
+audits `auth.oauth.unlinked` and emails the holder. Both share the step-up rate
+limit of the other security-page checks. Connecting is refused with
+`sso-required` while single sign-on is enforced; disconnecting is not, since it
+only removes a way in. An account with neither a
+password nor an authenticator cannot pass the step-up; it sets a password
+through the reset flow first. Disconnecting never leaves an account without a
+way in, because the sign-in link is always there while SSO is not enforced.
+`GET /api/auth/oauth/identities` lists the caller's own.
+
+The **security page has no control for this yet**: it needs a design before it
+is built. Until it ships, the routes above are the way to connect. 1.0.1 adds
+the API, the sign-in screen's message for `oauth-link-required`, and the
+security notice.
+
+### Upgrading from 1.0
+
+- **Google:** people whose Workspace or Gmail address matches their account
+  sign in as before; that sign-in binds their Google account. People who signed
+  in with a consumer Google account on a company address get
+  `oauth-link-required` and connect it once from a session.
+- **GitHub:** everybody who signed in with GitHub gets `oauth-link-required`
+  once. They sign in with their password or a sign-in link, then connect GitHub
+  from their session.
 
 ### Configuring a provider
 
@@ -523,6 +596,9 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/password/reset` | `@Public()` | Token and a new password |
 | `GET /api/auth/oauth/:provider/start` | `@Public()` | Redirects to the provider |
 | `GET /api/auth/oauth/:provider/callback` | `@Public()` | Redirects back to the app |
+| `GET /api/auth/oauth/identities` | `@Authenticated()` | The caller's connected Google and GitHub accounts |
+| `POST /api/auth/oauth/:provider/connect` | `@Authenticated()` | Step-up, then the provider URL to connect one |
+| `POST /api/auth/oauth/:provider/disconnect` | `@Authenticated()` | Step-up, then removes it. 204 |
 | `POST /api/auth/refresh` | `@Public()` | The cookie is the credential |
 | `GET /api/auth/me` | `@Authenticated()` | The session: user, brands, current brand |
 | `POST /api/auth/sign-out` | `@Authenticated()` | This browser |

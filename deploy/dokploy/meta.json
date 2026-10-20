@@ -1,0 +1,13 @@
+{
+  "id": "helpdock",
+  "name": "Helpdock",
+  "version": "1.0.3",
+  "description": "Self-hosted customer support with ticketing, a help center, live chat and grounded AI, in English and Arabic. Requires an external S3-compatible bucket.",
+  "logo": "helpdock.svg",
+  "links": {
+    "github": "https://github.com/Docker-Hunterpedia/Helpdock",
+    "website": "https://helpdock.oday-bakkour.com",
+    "docs": "https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/deploy.md"
+  },
+  "tags": ["support", "helpdesk", "chat"]
+}

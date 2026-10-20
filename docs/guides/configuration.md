@@ -143,6 +143,8 @@ private ranges) believes a hop only when its address is listed: the shipped
 Compose stack sets `uniquelocal`, for its Caddy. `true` believes every hop, so
 a client can write its own address into `x-forwarded-for`: use it only when
 nothing but your own proxy can reach the api. Defaults to false.
+The external-proxy Compose override also sets uniquelocal for both roles.
+To narrow proxy trust, edit that override; see docs/guides/deploy.md.
 
 ### DATABASE_URL
 

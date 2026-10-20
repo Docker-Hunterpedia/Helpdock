@@ -1,6 +1,6 @@
-# 0044 Supported deploy targets: Compose through the installer, Coolify and cloud-init
+# 0044 Supported deploy targets: Compose and platform templates
 
-Status: proposed
+Status: accepted for #337 platform templates; remaining installer/cloud-init scope proposed
 Date: 2026-10-20
 
 ## Context
@@ -12,7 +12,7 @@ and Caddy's on-demand TLS for brand help-center domains. [M15 Self-host
 operations](../in-development/M15-self-host-operations.md) adds an installer and an
 external-proxy override, which change what each target costs.
 
-## Decision
+## Original decision (amended below)
 
 1. **Supported:** Docker Compose on any Linux VPS through the installer, with a
    cloud-init recipe (`deploy/cloud-init/helpdock.yaml`) that installs Docker from
@@ -34,8 +34,8 @@ external-proxy override, which change what each target costs.
 
 ## Consequences
 
-- Compose stays the only runtime the project tests; every supported path is Compose
-  underneath.
+- Compose stays the locally exercised reference runtime; managed-platform templates
+  have configuration checks and require live operator validation.
 - The backlog loses Vercel and Cloudflare for good, with the reason written down.
 - The external-proxy override becomes a supported configuration, with its
   custom-domain limitation documented.
@@ -47,3 +47,25 @@ external-proxy override, which change what each target costs.
   Railway.
 - **Keeping Vercel and Cloudflare in the backlog.** Keeps a promise the architecture
   cannot keep.
+
+## Amendment: owner request, 2026-10-20 (#337)
+
+Dokploy moves from community to **maintained**, in `deploy/dokploy/`. Render
+and DigitalOcean App Platform move from not listed to **template-supported**.
+Coolify stays supported, kept in-repo; upstream listing waits. Cloud-init and
+Railway's spike remain separate M15 work, outside #337.
+
+Platform templates use an external proxy, with no Caddy and no on-demand TLS.
+Operators add each verified brand help-center domain to their platform by hand.
+Cloudflare **Workers and Pages stay dropped**: the existing Node container,
+continuous BullMQ/IMAP workers and Socket.IO server cannot run there without a
+runtime redesign. Cloudflare **R2 is supported as S3-compatible storage**.
+
+Compose remains the locally exercised reference runtime. Managed platform
+support means maintained configuration and configuration checks, not proof of a
+live deployment on each platform. Platform restrictions and manual provisioning
+steps are recorded in [the deploy guide](../guides/deploy.md).
+
+The deployment contract tests add root **development-only** dependencies `yaml`
+(2.x) and `smol-toml` (1.x), to parse the actual platform formats rather than
+matching YAML/TOML with regular expressions. No runtime dependency changes.

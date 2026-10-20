@@ -1,11 +1,17 @@
 import {
+  accounts,
   csatResponses,
   type DbTransaction,
   hcArticles,
   hcArticleVersions,
   ticketMessages,
 } from '@helpdock/db';
-import type { WebhookEvent } from '@helpdock/schemas';
+import {
+  type AdditionalWebhookEvent,
+  additionalWebhookDataSchemas,
+  type WebhookEvent,
+  webhookSourcePayloadSchemas,
+} from '@helpdock/schemas';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { readV1Contact } from '../api-v1/v1-contact-view.js';
@@ -108,6 +114,48 @@ export const webhookDataFor = async (
   event: WebhookEvent,
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown> | undefined> => {
+  if (Object.hasOwn(webhookSourcePayloadSchemas, event)) {
+    const name = event as AdditionalWebhookEvent;
+    const ref = webhookSourcePayloadSchemas[name].parse(payload);
+    let data: Record<string, unknown> | undefined;
+    if ('ticketId' in ref && name !== 'message.created') {
+      const ticket = await ticketData(tx, ref.ticketId);
+      data = ticket === undefined ? undefined : { ...ref, ticket };
+    } else if ('messageId' in ref) {
+      const [message] = await tx
+        .select()
+        .from(ticketMessages)
+        .where(and(eq(ticketMessages.id, ref.messageId), eq(ticketMessages.ticketId, ref.ticketId)))
+        .limit(1);
+      if (
+        message !== undefined &&
+        message.kind !== 'system' &&
+        (await ticketData(tx, ref.ticketId)) !== undefined
+      ) {
+        data = { message: { ...toTicketMessage(message), public: message.kind !== 'note' } };
+      }
+    } else if ('contactId' in ref) {
+      const contact = await readV1Contact(tx, ref.contactId);
+      data = contact === undefined ? undefined : { ...ref, contact };
+    } else if ('accountId' in ref) {
+      const [account] = await tx
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, ref.accountId))
+        .limit(1);
+      data =
+        account === undefined
+          ? undefined
+          : {
+              account: {
+                ...account,
+                createdAt: account.createdAt.toISOString(),
+                updatedAt: account.updatedAt.toISOString(),
+              },
+            };
+    }
+    return data === undefined ? undefined : additionalWebhookDataSchemas[name].parse(data);
+  }
   switch (event) {
     case 'ticket.created':
     case 'ticket.updated':

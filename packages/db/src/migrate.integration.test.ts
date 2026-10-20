@@ -80,6 +80,7 @@ const MIGRATION_TAGS = [
   '0059_oauth_identity_use',
   '0060_notification_pacing',
   '0061_ticket_sla_next_due',
+  '0062_webhook_note_opt_in',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

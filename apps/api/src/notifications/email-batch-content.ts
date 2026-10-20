@@ -41,7 +41,7 @@ export interface BatchItem {
 /** Who did it: a person by name, or one of the automatic assigners. */
 export type ActorLabel =
   | { readonly name: string }
-  | { readonly automatic: 'rule' | 'round_robin' | 'skill_based' };
+  | { readonly automatic: Exclude<NotificationDetail['assignedBy'], 'person' | undefined> };
 
 export interface TicketEvent {
   readonly kind: NotificationKind;

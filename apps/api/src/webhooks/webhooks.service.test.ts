@@ -31,6 +31,7 @@ const webhookRow = (overrides: Partial<WebhookRow> = {}): WebhookRow => ({
   secret: 'v1.sealed',
   secretRotatedAt: null,
   enabled: true,
+  includeInternalNotes: false,
   consecutiveFailures: 0,
   disabledAt: null,
   disabledReason: null,
@@ -102,6 +103,47 @@ describe('toWebhook', () => {
 });
 
 describe('WebhooksService', () => {
+  it.each([false, true])(
+    'persists and returns the per-endpoint notes opt-in (%s)',
+    async (includeInternalNotes) => {
+      const insert = vi.fn(async (_tx: unknown, values: Partial<WebhookRow>) => webhookRow(values));
+      const update = vi.fn(async (_tx: unknown, _id: string, changes: Partial<WebhookRow>) =>
+        webhookRow(changes),
+      );
+      const api = service({ insert, update, find: vi.fn(async () => webhookRow()) });
+      const created = await api.create(staffActor, {
+        url: 'https://example.com/hooks',
+        events: ['message.created'],
+        includeInternalNotes,
+      });
+      expect(created.includeInternalNotes).toBe(includeInternalNotes);
+      const changed = await api.update(staffActor, WEBHOOK, {
+        includeInternalNotes: !includeInternalNotes,
+      });
+      expect(changed.includeInternalNotes).toBe(!includeInternalNotes);
+    },
+  );
+
+  it('audits the notes value on create and only its actual transitions on update', async () => {
+    let current = webhookRow();
+    const api = service({
+      insert: async () => current,
+      find: async () => current,
+      update: async (_tx: unknown, _id: string, changes: Partial<WebhookRow>) => {
+        current = webhookRow({ ...current, ...changes });
+        return current;
+      },
+    });
+    await api.create(staffActor, { url: current.url, events: ['message.created'] });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: false });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: true });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: { from: false, to: true } });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: true });
+    expect(audits.at(-1)?.meta).toEqual({ fields: [] });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: false });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: { from: true, to: false } });
+  });
+
   it('returns the signing secret once and stores it encrypted, auditing the key that asked', async () => {
     const insert = vi.fn(async (_tx: unknown, values: Partial<WebhookRow>) =>
       webhookRow({ ...values }),
@@ -405,3 +447,31 @@ describe('WebhooksService', () => {
     );
   });
 });
+
+it.each([false, true])(
+  'replay obeys the current notes opt-in (%s)',
+  async (includeInternalNotes) => {
+    const payload = {
+      event: 'message.created',
+      data: {
+        message: {
+          public: false,
+          authorType: 'staff',
+          bodyHtml: '<p>Private</p>',
+          bodyText: 'Private',
+        },
+      },
+    };
+    const insertDelivery = vi.fn(async (_tx: unknown, values: Partial<WebhookDeliveryRow>) =>
+      deliveryRow(values),
+    );
+    await service({
+      find: vi.fn(async () => webhookRow({ includeInternalNotes })),
+      delivery: vi.fn(async () => deliveryRow({ event: 'message.created', payload })),
+      insertDelivery,
+    }).replay(staffActor, WEBHOOK, DELIVERY);
+    const replay = insertDelivery.mock.calls[0]?.[1]?.payload;
+    expect(JSON.stringify(replay).includes('Private')).toBe(includeInternalNotes);
+    expect(replay).toMatchObject({ data: { message: { public: false, authorType: 'staff' } } });
+  },
+);

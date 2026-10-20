@@ -52,6 +52,7 @@ import type { TagsService } from '../ticketing/tags.service.js';
 import { paragraphsFrom } from '../ticketing/template-render.js';
 import type { TemplatesService } from '../ticketing/templates.service.js';
 import { replaceTicketTags, tagsOfTicket, tagsOfTickets } from '../ticketing/ticket-tags.js';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { InvalidCursorError } from './cursor.js';
 import { importedTicketSources, ticketWithSource } from './imported-ticket-sources.js';
 import type { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
@@ -571,6 +572,14 @@ export class TicketsService {
         });
       }
 
+      if (statusResult?.changed === true && options.bundle !== undefined) {
+        await enqueueWebhookEvent(tx, brandId, 'ticket.status_changed', {
+          ticketId,
+          departmentId: moved.departmentId,
+          previousStatusId: status.id,
+          statusId: statusResult.statusId,
+        });
+      }
       if (statusResult?.changed === true && options.bundle === undefined) {
         await writeTicketActivity(tx, {
           brandId,

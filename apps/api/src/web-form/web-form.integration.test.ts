@@ -519,6 +519,16 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
         .where(eq(contacts.id, ticket.contactId ?? '')),
     );
     expect(contact).toMatchObject({ name: 'Omar Khalil', locale: 'ar' });
+    const profileEvents = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select()
+        .from(outbox)
+        .where(
+          sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${contact?.id ?? ''}`,
+        ),
+    );
+    expect(profileEvents).toHaveLength(1);
+
     const identities = await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx
         .select()

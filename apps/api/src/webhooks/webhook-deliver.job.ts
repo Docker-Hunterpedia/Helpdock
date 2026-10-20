@@ -12,6 +12,7 @@ import {
 import type { Job } from 'bullmq';
 import { isBrandGone } from '../brands/brand-availability.js';
 import { withSystemJob } from '../tenant/system-job.js';
+import { redactWebhookNotes } from './webhook-note-redaction.js';
 import { type WebhookRequest, webhookRequest } from './webhook-request.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
 
@@ -166,9 +167,14 @@ export const createWebhookDeliverProcessor = ({
     // One clock reading for the signature and for `last_attempt_at`, so the
     // delivery log can show the signature this attempt carried.
     const sentAt = now();
+    const sentPayload = redactWebhookNotes(delivery.payload, webhook.includeInternalNotes);
     const outcome = await post(
       webhook.url,
-      webhookRequest(delivery, decryptSecret(webhook.secret, keyring), sentAt),
+      webhookRequest(
+        { ...delivery, payload: sentPayload },
+        decryptSecret(webhook.secret, keyring),
+        sentAt,
+      ),
     );
 
     // A replay inserts a fresh row, so the row's count is this job's own; it
@@ -180,7 +186,13 @@ export const createWebhookDeliverProcessor = ({
     const status = outcome.ok ? 'succeeded' : last ? 'failed' : 'pending';
 
     await withSystemJob(db, brandId, principal, async (tx) => {
-      await repository.recordAttempt(tx, deliveryId, { ...outcome, status, attempts, at: sentAt });
+      await repository.recordAttempt(tx, deliveryId, {
+        ...outcome,
+        status,
+        attempts,
+        at: sentAt,
+        ...(sentPayload === delivery.payload ? {} : { payload: sentPayload }),
+      });
       if (outcome.ok) {
         if (webhook.consecutiveFailures > 0) {
           await repository.update(tx, webhook.id, { consecutiveFailures: 0 });

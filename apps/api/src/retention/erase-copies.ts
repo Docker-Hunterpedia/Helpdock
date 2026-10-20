@@ -143,7 +143,7 @@ export const eraseAiRedactions = async (
 
 /**
  * The payloads webhooks were sent with, frozen into the delivery log: the
- * contact's own record, their tickets, and the survey on a ticket of theirs.
+ * contact's own record, their tickets, and messages and surveys on those tickets.
  * Deleted whole, pending ones too, because the payload cannot be emptied and a
  * delivery without one cannot be sent; the delivery job skips a row it cannot
  * find.
@@ -163,6 +163,13 @@ export const eraseWebhookPayloads = async (
         or(
           eq(payloadText('{data,contact,id}'), contactId),
           eq(payloadText('{data,ticket,contactId}'), contactId),
+          inArray(
+            payloadText('{data,message,ticketId}'),
+            tx
+              .select({ id: sql<string>`${tickets.id}::text` })
+              .from(tickets)
+              .where(theirTickets(brandId, contactId)),
+          ),
           inArray(
             payloadText('{data,survey,ticketId}'),
             tx

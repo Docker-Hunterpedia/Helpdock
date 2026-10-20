@@ -41,6 +41,7 @@ const webhookRow = (overrides: Partial<WebhookRow> = {}): WebhookRow => ({
   secret: encryptSecret(SECRET, keyring),
   secretRotatedAt: null,
   enabled: true,
+  includeInternalNotes: false,
   consecutiveFailures: 0,
   disabledAt: null,
   disabledReason: null,
@@ -265,4 +266,40 @@ describe('responseExcerpt', () => {
     expect(excerpt.startsWith('okx')).toBe(true);
     expect(excerpt.length).toBe(RESPONSE_EXCERPT_BYTES - 2);
   });
+});
+
+describe('M14-28 queued note disclosure', () => {
+  it.each([false, true])(
+    'signs the note body allowed by the current opt-in (%s)',
+    async (includeInternalNotes) => {
+      const payload = {
+        event: 'message.created',
+        data: {
+          message: {
+            public: false,
+            authorType: 'staff',
+            bodyText: 'Confidential note',
+            bodyHtml: '<p>Confidential note</p>',
+          },
+        },
+      };
+      const { process, fetch, attempts } = setup({
+        webhook: webhookRow({ includeInternalNotes }),
+        delivery: deliveryRow({ event: 'message.created', payload }),
+      });
+      await process(job());
+      const init = fetch.mock.calls[0]?.[1];
+      if (typeof init?.body !== 'string') throw new Error('No signed delivery body');
+      expect(init.body.includes('Confidential note')).toBe(includeInternalNotes);
+      expect(
+        verifyWebhookSignature({
+          secret: SECRET,
+          header: init.headers?.['x-helpdock-signature'] ?? '',
+          body: init.body,
+          nowSeconds: NOW.getTime() / 1000,
+        }),
+      ).toBe(true);
+      if (!includeInternalNotes) expect(attempts[0]?.payload).toEqual(JSON.parse(init.body));
+    },
+  );
 });

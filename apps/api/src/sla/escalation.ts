@@ -17,7 +17,11 @@ import { eq } from 'drizzle-orm';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { worksDepartment } from '../assignment/ticket-assignment.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
-import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
+import {
+  enqueueTicketAssigned,
+  enqueueTicketEvent,
+  TICKET_EVENTS,
+} from '../tickets/ticket-events.js';
 import { breach, hasFired, isCounting, markFired, timeOfPercent } from './clock.js';
 import type { SlaRepository } from './sla.repository.js';
 import type { SlaService } from './sla.service.js';
@@ -237,12 +241,24 @@ const runActions = async (
           userId: action.userId,
           departmentId: ticket.departmentId,
         });
-        if (eligible && action.userId !== ticket.assigneeId) {
+        const [current] = await tx
+          .select({ assigneeId: tickets.assigneeId })
+          .from(tickets)
+          .where(eq(tickets.id, ticket.id));
+        const previousAssigneeId = current?.assigneeId ?? null;
+        if (eligible && action.userId !== previousAssigneeId) {
           await tx
             .update(tickets)
             .set({ assigneeId: action.userId, updatedAt: new Date() })
             .where(eq(tickets.id, ticket.id));
-          await log({ assigneeId: ticket.assigneeId }, { assigneeId: action.userId });
+          await log({ assigneeId: previousAssigneeId }, { assigneeId: action.userId });
+          await enqueueTicketAssigned(tx, ticket.brandId, {
+            ticketId: ticket.id,
+            departmentId: ticket.departmentId,
+            assigneeId: action.userId,
+            assignedBy: 'sla',
+            actorId: null,
+          });
         }
         break;
       }

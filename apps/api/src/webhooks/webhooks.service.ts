@@ -23,6 +23,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { BrandActor } from '../context/brand-actor.js';
 import type { WebhookDestinationCheck } from './webhook-destination.js';
 import { WEBHOOK_DELIVERY_REQUESTED_EVENT } from './webhook-events.js';
+import { redactWebhookNotes } from './webhook-note-redaction.js';
 import { webhookRequest, webhookRequestBody } from './webhook-request.js';
 import { issueWebhookSecret } from './webhook-signature.js';
 import type { WebhooksRepository } from './webhooks.repository.js';
@@ -53,6 +54,7 @@ export const toWebhook = (row: WebhookRow): Webhook => ({
   description: row.description,
   events: knownEvents(row.events),
   enabled: row.enabled,
+  includeInternalNotes: row.includeInternalNotes,
   disabledReason: row.disabledReason === 'failures' ? 'failures' : null,
   consecutiveFailures: row.consecutiveFailures,
   secretRotatedAt: row.secretRotatedAt?.toISOString() ?? null,
@@ -153,10 +155,15 @@ export class WebhooksService {
       url: request.url,
       description: request.description ?? '',
       events: [...request.events],
+      includeInternalNotes: request.includeInternalNotes ?? false,
       secret: encryptSecret(secret, this.#keyring),
       createdBy: actor.principalType === 'staff' ? actor.principalId : null,
     });
-    await this.#audit(actor, 'webhook.created', row.id, { url: row.url, events: row.events });
+    await this.#audit(actor, 'webhook.created', row.id, {
+      url: row.url,
+      events: row.events,
+      includeInternalNotes: row.includeInternalNotes,
+    });
 
     return { ...toWebhook(row), secret };
   }
@@ -177,6 +184,9 @@ export class WebhooksService {
     const row = await this.#repository.update(actor.tx, webhookId, {
       ...(request.url === undefined ? {} : { url: request.url }),
       ...(request.description === undefined ? {} : { description: request.description }),
+      ...(request.includeInternalNotes === undefined
+        ? {}
+        : { includeInternalNotes: request.includeInternalNotes }),
       ...(request.events === undefined ? {} : { events: [...request.events] }),
       ...(request.enabled === undefined
         ? {}
@@ -188,7 +198,21 @@ export class WebhooksService {
     if (row === undefined) {
       throw new NotFoundException('No such webhook');
     }
-    await this.#audit(actor, 'webhook.updated', webhookId, { fields: Object.keys(request) });
+    await this.#audit(actor, 'webhook.updated', webhookId, {
+      fields: Object.keys(request).filter(
+        (field) =>
+          field !== 'includeInternalNotes' ||
+          current.includeInternalNotes !== row.includeInternalNotes,
+      ),
+      ...(current.includeInternalNotes === row.includeInternalNotes
+        ? {}
+        : {
+            includeInternalNotes: {
+              from: current.includeInternalNotes,
+              to: row.includeInternalNotes,
+            },
+          }),
+    });
 
     return toWebhook(row);
   }
@@ -318,7 +342,7 @@ export class WebhooksService {
       webhookId,
       eventId: original.eventId,
       event: original.event,
-      payload: original.payload,
+      payload: redactWebhookNotes(original.payload, webhook.includeInternalNotes),
       replayOf: original.id,
     });
     /* c8 ignore next 3 -- a replay row is outside the unique index, so it always inserts. */

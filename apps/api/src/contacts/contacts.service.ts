@@ -27,6 +27,7 @@ import { ERASED_CONTACT_NAME, erasedIdentityValue, erasureSummary } from './anon
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
 import type { ContactMergesRepository } from './contact-merges.repository.js';
+import { withContactProfileChange } from './contact-profile-change.js';
 import { byContact, duplicateView, identityView, noteView, summaryView } from './contact-view.js';
 import type { ContactsRepository } from './contacts.repository.js';
 import {
@@ -244,7 +245,7 @@ export class ContactsService {
     const contact = await this.#require(tx, matchedId);
     for (const claim of claims) {
       if ((await findByIdentity(tx, brandId, claim.kind, claim.value)) === undefined) {
-        await this.#attach(context, contact, claim);
+        await withContactProfileChange(tx, matchedId, () => this.#attach(context, contact, claim));
       }
     }
 
@@ -335,7 +336,7 @@ export class ContactsService {
       throw new ContactFailure('identity-invalid', 'empty');
     }
 
-    await this.#attach(context, contact, claim);
+    await withContactProfileChange(tx, contactId, () => this.#attach(context, contact, claim));
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,
@@ -367,7 +368,9 @@ export class ContactsService {
       throw new ContactFailure('last-identity');
     }
 
-    await this.#repository.deleteIdentity(tx, identityId);
+    await withContactProfileChange(tx, contactId, () =>
+      this.#repository.deleteIdentity(tx, identityId),
+    );
     await writeContactAudit(tx, {
       brandId,
       actorId: actor.userId,

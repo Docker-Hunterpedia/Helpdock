@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { WEBHOOK_EVENTS } from '@helpdock/schemas';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -126,4 +127,12 @@ describe('M14-07 public sort contract', () => {
     expect(sort?.schema.enum).toContain('slaDue');
     expect(sort?.schema.description).toContain('direction does not reverse SLA urgency');
   });
+});
+
+it('documents every subscribed webhook payload and the notes opt-in', () => {
+  const document = buildOpenApiDocument();
+  expect(Object.keys(document.webhooks).sort()).toEqual([...WEBHOOK_EVENTS].sort());
+  expect(document.webhooks['message.created']?.post.requestBody.required).toBe(true);
+  expect(JSON.stringify(document.webhooks['message.created'])).toContain('includeInternalNotes');
+  expect(JSON.stringify(document.paths['/api/v1/webhooks'])).toContain('includeInternalNotes');
 });

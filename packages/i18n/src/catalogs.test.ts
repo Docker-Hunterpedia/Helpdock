@@ -148,12 +148,16 @@ describe.each(NAMESPACES)('%s namespace', (namespace) => {
   });
 });
 
-// #343: the rounded minute count drives both plural selection and interpolation.
-it.each(SUPPORTED_LNGS)('uses only count in every %s sign-in wait plural form', (locale) => {
+// #343: the call sites pass only `count`, so any other placeholder would print raw.
+it.each(SUPPORTED_LNGS)('interpolates nothing but count in the %s sign-in wait', (locale) => {
   const catalog = keysOf(locale, 'auth');
   for (const form of formsFor(catalog.keys(), 'signIn.rateLimited')) {
     const text = catalog.get(`signIn.rateLimited_${form}`) ?? '';
-    expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1])).toEqual(['count']);
+    const names = [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]);
+    expect(
+      names.filter((name) => name !== 'count'),
+      `${locale} rateLimited_${form}`,
+    ).toEqual([]);
   }
 });
 

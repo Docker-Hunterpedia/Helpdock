@@ -10,14 +10,11 @@ async function renderKeyboard() {
   const apis = await signedInMockApis();
   const session = await apis.auth.me();
   if (session === null) throw new Error('signed-in fixture needs a session');
-  const shortcut = vi.fn();
+  const shortcut = vi.fn<() => void>();
+  const handlers = {} as Record<ShortcutId, () => void>;
+  for (const { id } of SHORTCUT_LIST) handlers[id] = shortcut;
   function Handlers() {
-    useShortcutHandlers(
-      Object.fromEntries(SHORTCUT_LIST.map(({ id }) => [id, shortcut])) as Record<
-        ShortcutId,
-        () => void
-      >,
-    );
+    useShortcutHandlers(handlers);
     return <textarea aria-label="Reply" data-shortcut-scope="composer" />;
   }
   const rendered = renderApp(

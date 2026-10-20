@@ -489,7 +489,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(await runtime.redis.zcard(addressKey)).toBe(1);
     });
 
-    it('charges at most three of many parallel wrong guesses on one challenge (#347)', async () => {
+    it('reserves at most three of many parallel guesses on one challenge (#347)', async () => {
       const store = new TotpChallengeStore(runtime.redis);
       const userId = uuidv7();
       const challengeId = await store.create({ userId, kind: 'second-factor' });
@@ -497,15 +497,97 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       if (found.status !== 'ok') throw new Error('expected an open challenge');
 
       const outcomes = await Promise.all(
-        Array.from({ length: 12 }, () => store.spendAttempt(challengeId, found.challenge)),
+        Array.from({ length: 12 }, () => store.reserveAttempt(challengeId, found.challenge)),
       );
 
-      expect(outcomes.filter((o) => o.status === 'remaining')).toHaveLength(2);
+      expect(outcomes.filter((o) => o.status === 'reserved')).toHaveLength(3);
       expect(outcomes.filter((o) => o.status === 'locked')).toHaveLength(1);
-      expect(outcomes.filter((o) => o.status === 'expired')).toHaveLength(9);
+      expect(outcomes.filter((o) => o.status === 'expired')).toHaveLength(8);
       expect(await store.isLocked(userId)).toBe(true);
       expect(await runtime.redis.ttl(totpLockKey(userId))).toBeGreaterThan(890);
       expect(await runtime.redis.get(totpChallengeKey(challengeId))).toBeNull();
+    });
+
+    /** Codes actually evaluated and found wrong, for the seeded account. */
+    const evaluatedWrong = async (action: string): Promise<number> => {
+      const rows = await withTenant(
+        runtime.db,
+        {
+          brandIds: [INSTALL_SCOPE_BRAND_ID],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'test',
+        },
+        (tx) => tx.select().from(auditLog).where(eq(auditLog.action, action)),
+      );
+      return rows.filter((row) => row.targetId === seeded.userId).length;
+    };
+
+    const challengeFor = async (): Promise<string> => {
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(first.json().kind).toBe('totp-required');
+      return first.json().challengeId as string;
+    };
+
+    it('evaluates at most three codes of a parallel burst, correct one included (#347)', async () => {
+      const goodCode = await totpCode();
+      const badCode = goodCode === '000000' ? '111111' : '000000';
+      const challengeId = await challengeFor();
+      const before = await evaluatedWrong('auth.second_factor.failed');
+
+      const responses = await Promise.all(
+        [...Array.from({ length: 9 }, () => badCode), goodCode].map((code) =>
+          post('/api/auth/totp', { challengeId, code, trustDevice: false }),
+        ),
+      );
+
+      const sessions = responses.filter((response) => response.statusCode === 201).length;
+      expect(sessions).toBeLessThanOrEqual(1);
+      expect(
+        (await evaluatedWrong('auth.second_factor.failed')) - before + sessions,
+      ).toBeLessThanOrEqual(3);
+      // Whatever the interleaving, the lock never lets a later code through.
+      const late = await post('/api/auth/totp', {
+        challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(late.statusCode).not.toBe(201);
+    });
+
+    it('evaluates at most three recovery codes of a parallel burst, correct one included (#347)', async () => {
+      const { PasswordHasher } = await import('./password.js');
+      const { normalizeRecoveryCode } = await import('./totp/recovery-codes.js');
+      const hasher = new PasswordHasher(Buffer.from(MASTER_KEY, 'base64'));
+      const good = 'RC-ABCD-EFGH';
+      const hashed = [await hasher.hash(normalizeRecoveryCode(good))];
+      await runtime.db
+        .update(users)
+        .set({ recoveryCodesHashed: hashed })
+        .where(eq(users.id, seeded.userId));
+      const challengeId = await challengeFor();
+      const before = await evaluatedWrong('auth.second_factor.failed');
+
+      const responses = await Promise.all(
+        [...Array.from({ length: 9 }, (_, i) => `RC-WRNG-000${i}`), good].map((code) =>
+          post('/api/auth/recovery-code', { challengeId, code }),
+        ),
+      );
+
+      const sessions = responses.filter((response) => response.statusCode === 201).length;
+      expect(sessions).toBeLessThanOrEqual(1);
+      expect(
+        (await evaluatedWrong('auth.second_factor.failed')) - before + sessions,
+      ).toBeLessThanOrEqual(3);
+      const late = await post('/api/auth/recovery-code', { challengeId, code: good });
+      expect(late.statusCode).not.toBe(201);
+      await runtime.db
+        .update(users)
+        .set({ recoveryCodesHashed: [] })
+        .where(eq(users.id, seeded.userId));
     });
 
     it('keeps TOTP guessing capped at three per challenge when the address budget is spent (#343)', async () => {

@@ -298,11 +298,12 @@ export class AuthService {
       ip,
     );
 
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     if ((await this.#checkCode(user, code, 'sign-in')) !== 'accepted') {
-      throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'totp-mismatch');
     }
 
-    await this.#parts.challenges.consume(challengeId);
+    await this.#consumeChallenge(challengeId, user.id);
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
@@ -334,18 +335,21 @@ export class AuthService {
     );
 
     if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
     if (match === null) {
       await this.#audit('auth.second_factor.failed', user.id, 'system', {
         factor: 'recovery-code',
       });
-      throw await this.#spendAttempt(challengeId, challenge, 'recovery-invalid');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'recovery-invalid');
     }
 
-    // Spent before the session exists: a crash between the two costs the person
+    // The challenge goes first, atomically: if a lock landed while the slow
+    // hash was running, no code is spent and no session opens. Then the code is
+    // spent before the session exists: a crash between the two costs the person
     // one recovery code, which is the right way round.
+    await this.#consumeChallenge(challengeId, user.id);
     await this.#parts.staff.replaceRecoveryCodes(user.id, match.remaining);
-    await this.#parts.challenges.consume(challengeId);
     this.#parts.logger.warn(
       { userId: user.id, remaining: match.remaining.length },
       'A recovery code was spent to sign in',
@@ -421,12 +425,13 @@ export class AuthService {
   }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
     const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
 
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
-      throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'totp-mismatch');
     }
 
+    await this.#consumeChallenge(challengeId, user.id);
     const { recoveryCodes } = await this.#enableSecondFactor(user);
-    await this.#parts.challenges.consume(challengeId);
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
@@ -1401,7 +1406,7 @@ export class AuthService {
    * sign-in with junk passwords. Guesses at the code are bounded per
    * account, not per address: each wrong value also counts on the user's own
    * counter, across challenges, and three of them set the 15-minute lock
-   * (TotpChallengeStore.spendAttempt). Only someone holding a live challenge,
+   * (TotpChallengeStore.reserveAttempt). Only someone holding a live challenge,
    * who has proved the first factor, can spend it. The returned attempt carries
    * the address solely so that a completed sign-in clears the address bucket;
    * the attempt was never added to it.
@@ -1448,12 +1453,38 @@ export class AuthService {
   }
 
   /**
-   * A wrong value costs one attempt whichever form it was typed into, so a lock
-   * cannot be dodged by switching to the recovery code field.
+   * Taken before any code is evaluated, whichever form it was typed into, so a
+   * lock cannot be dodged by switching to the recovery code field and a
+   * parallel burst cannot evaluate more guesses than the budget allows.
+   * Returns the attempts left once this one is counted.
    */
-  async #spendAttempt(
+  async #reserveAttempt(
     challengeId: string,
     found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+  ): Promise<number> {
+    /* c8 ignore next 3 -- `#requireChallenge` only ever hands over an `ok`. */
+    if (found.status !== 'ok') {
+      throw new AuthFailure('challenge-expired');
+    }
+
+    const outcome = await this.#parts.challenges.reserveAttempt(challengeId, found.challenge);
+    if (outcome.status === 'expired') throw new AuthFailure('challenge-expired');
+    if (outcome.status === 'locked') {
+      await this.#audit('auth.sign_in.failed', found.challenge.userId, 'system', {
+        method: found.challenge.firstFactor ?? 'unknown',
+        reason: 'locked',
+      });
+      throw new AuthFailure('totp-locked');
+    }
+
+    return outcome.attemptsLeft;
+  }
+
+  /** A reserved evaluation came back wrong; the last one locks the account. */
+  async #failAttempt(
+    challengeId: string,
+    found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+    attemptsLeft: number,
     code: 'totp-mismatch' | 'recovery-invalid',
   ): Promise<AuthFailure> {
     /* c8 ignore next 3 -- `#requireChallenge` only ever hands over an `ok`. */
@@ -1461,8 +1492,11 @@ export class AuthService {
       return new AuthFailure('challenge-expired');
     }
 
-    const outcome = await this.#parts.challenges.spendAttempt(challengeId, found.challenge);
-    if (outcome.status === 'expired') return new AuthFailure('challenge-expired');
+    const outcome = await this.#parts.challenges.failAttempt(
+      challengeId,
+      found.challenge,
+      attemptsLeft,
+    );
     if (outcome.status === 'locked') {
       this.#parts.logger.warn(
         { userId: found.challenge.userId },
@@ -1475,6 +1509,13 @@ export class AuthService {
     }
 
     return new AuthFailure(code, { attemptsLeft: outcome.attemptsLeft });
+  }
+
+  /** Spends the challenge for a correct code, refusing if it was locked or taken meanwhile. */
+  async #consumeChallenge(challengeId: string, userId: string): Promise<void> {
+    const result = await this.#parts.challenges.consume(challengeId, userId);
+    if (result === 'locked') throw new AuthFailure('totp-locked');
+    if (result === 'expired') throw new AuthFailure('challenge-expired');
   }
 
   /**

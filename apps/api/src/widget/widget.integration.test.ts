@@ -774,6 +774,14 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         await staff('PATCH', `/api/brands/${seeded.brandId}/ticketing/reply-behaviour`, ada, {
           reopenPolicy: { kind: 'within_days', days: 7 },
         });
+        // The close asked for a survey, which this suite's outbox drain has no
+        // handler for; it is not what this test is about.
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(outbox)
+            .set({ publishedAt: new Date() })
+            .where(eq(outbox.event, 'csat.requested')),
+        );
       }
 
       const continuedId = sent.body.conversation.id;

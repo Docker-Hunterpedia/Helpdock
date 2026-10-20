@@ -9,7 +9,7 @@ services:
       PORT: '3000'
       # Host -> Docker bridge peers are private addresses, not loopback.
       # Prefer the proxy's exact address/CIDR where the network is shared.
-      TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+      TRUST_PROXY: 'uniquelocal'
     deploy:
       replicas: 1
     healthcheck:
@@ -18,3 +18,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+  worker:
+    environment:
+      TRUST_PROXY: 'uniquelocal'

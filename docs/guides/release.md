@@ -171,6 +171,16 @@ the next patch ([security scanning](security-scanning.md)).
 
 ## After a release
 
+- After the image is published, pulled anonymously and signature-verified, open
+  a follow-up PR bumping **both roles** to that published tag in `render.yaml`,
+  `.do/app.yaml`, `deploy/dokploy/docker-compose.yml` and
+  `deploy/coolify/docker-compose.yml`. Update the pinned version in
+  `docs/guides/deploy.md` too. Run
+  `pnpm exec vitest run --project tooling scripts/deploy-templates.test.ts`;
+  it requires all platform image pins to agree. Do not tie this assertion to
+  `apps/api/package.json`: Changesets bumps it before the release image exists,
+  while templates must continue pointing at an already published image.
+
 - Check `docker pull ghcr.io/docker-hunterpedia/helpdock:<version>` from a
   machine that is not signed in.
 - Resolve that tag's digest and verify its Cosign signature as above.

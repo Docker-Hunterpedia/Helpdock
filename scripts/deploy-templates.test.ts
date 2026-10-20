@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
@@ -12,7 +12,8 @@ const read = (path: string): string => readFileSync(join(root, path), 'utf8');
 // Only fixtures, never a developer's .env or provider credentials.
 const fixture: Record<string, string> = {
   APP_URL: 'https://support.example.com',
-  APP_MASTER_KEY: Buffer.alloc(32, 1).toString('base64'),
+  APP_MASTER_KEY: Buffer.alloc(32, 251).toString('base64'),
+  METRICS_TOKEN: 'metrics-token-for-contract-test-only-337',
   HD_SETUP_TOKEN: 'setup-token-for-contract-test-only-337',
   POSTGRES_PASSWORD: 'ownerPassword337',
   HELPDOCK_APP_PASSWORD: 'appPassword337',
@@ -21,8 +22,6 @@ const fixture: Record<string, string> = {
   S3_BUCKET: 'helpdock',
   S3_ACCESS_KEY_ID: 'test-access',
   S3_SECRET_ACCESS_KEY: 'test-secret',
-  ADMIN_HOST: 'support.example.com',
-  API_HOST: 'api.example.com',
 };
 const required = Object.entries(envSchema.shape)
   .filter(([, schema]) => !schema.safeParse(undefined).success)
@@ -74,13 +73,33 @@ interface DoSpec {
   databases: { name: string; engine: string; production: boolean; cluster_name: string }[];
 }
 
-const compose = (file: string, env: Record<string, string> = fixture): Compose =>
-  JSON.parse(
-    execFileSync('docker', ['compose', '-f', join(root, file), 'config', '--format', 'json'], {
-      env: { ...process.env, ...env },
-      encoding: 'utf8',
-    }),
-  ) as Compose;
+const compose = (file: string, env: Record<string, string> = fixture): Compose => {
+  const dir = mkdtempSync(join(tmpdir(), 'helpdock-template-'));
+  try {
+    // Dokploy writes an unquoted .env: exercise Compose interpolation, too.
+    const envFile = join(dir, '.env');
+    writeFileSync(
+      envFile,
+      Object.entries(env)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n'),
+    );
+    const inherited = { ...process.env };
+    for (const key of Object.keys(env)) delete inherited[key];
+    return JSON.parse(
+      execFileSync(
+        'docker',
+        ['compose', '--env-file', envFile, '-f', join(root, file), 'config', '--format', 'json'],
+        {
+          env: inherited,
+          encoding: 'utf8',
+        },
+      ),
+    ) as Compose;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
 
 const assertEnvironment = (env: Record<string, string>, role: string): void => {
   expect(Object.keys(env)).toEqual(expect.arrayContaining(required));
@@ -101,6 +120,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
         join(dir, '.env'),
         Object.entries({
           ...fixture,
+          TRUST_PROXY: 'false',
           APP_ROLE: 'api',
           NODE_ENV: 'production',
           DATABASE_URL: 'postgres://helpdock_app:test@postgres/helpdock',
@@ -110,21 +130,32 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
           .map(([key, value]) => `${key}=${value}`)
           .join('\n'),
       );
+      const args = [
+        'compose',
+        '-f',
+        'docker-compose.yml',
+        '-f',
+        'docker-compose.external-proxy.yml',
+        'config',
+        '--format',
+        'json',
+      ];
+      const inherited = { ...process.env };
+      for (const key of Object.keys(fixture)) delete inherited[key];
+      delete inherited.TRUST_PROXY;
+      delete inherited.ADMIN_HOST;
+      delete inherited.API_HOST;
+      // Compose interpolates the base before removing Caddy, so these remain required.
+      expect(() =>
+        execFileSync('docker', args, { cwd: dir, env: inherited, stdio: 'pipe' }),
+      ).toThrow(/ADMIN_HOST/);
+      writeFileSync(join(dir, '.env'), '\nADMIN_HOST=support.example.com', { flag: 'a' });
+      expect(() =>
+        execFileSync('docker', args, { cwd: dir, env: inherited, stdio: 'pipe' }),
+      ).toThrow(/API_HOST/);
+      writeFileSync(join(dir, '.env'), '\nAPI_HOST=api.example.com', { flag: 'a' });
       const merged = JSON.parse(
-        execFileSync(
-          'docker',
-          [
-            'compose',
-            '-f',
-            'docker-compose.yml',
-            '-f',
-            'docker-compose.external-proxy.yml',
-            'config',
-            '--format',
-            'json',
-          ],
-          { cwd: dir, env: { ...process.env, ...fixture }, encoding: 'utf8' },
-        ),
+        execFileSync('docker', args, { cwd: dir, env: inherited, encoding: 'utf8' }),
       ) as Compose;
       expect(merged.services.caddy).toBeUndefined();
       expect(merged.services.api?.ports).toEqual([
@@ -136,6 +167,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       }
       for (const role of ['api', 'worker']) {
         assertEnvironment(merged.services[role]?.environment ?? {}, role);
+        expect(merged.services[role]?.environment?.TRUST_PROXY).toBe('uniquelocal');
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -154,7 +186,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       domain: 'support.example.com',
       'base64:32': fixture.APP_MASTER_KEY ?? '',
       'hash:32': 'a'.repeat(64),
-      'password:48': 'b'.repeat(48),
+      'password:48': 'Ab9!@#$%^&*'.repeat(5).slice(0, 48),
     };
     const substitute = (value: string, variables: Record<string, string>): string =>
       value.replace(/\$\{([^}]+)\}/g, (_, key: string) => {
@@ -164,6 +196,14 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
     const variables = Object.fromEntries(
       Object.entries(toml.variables).map(([key, value]) => [key, substitute(value, helpers)]),
     );
+    // Reject unsafe password helpers on every variable flowing into container env.
+    const assertSafe = (value: string): void => {
+      for (const [, key] of value.matchAll(/\$\{([^}]+)\}/g)) {
+        expect(key).not.toMatch(/^password:/);
+        if (key && toml.variables[key]) assertSafe(toml.variables[key]);
+      }
+    };
+    for (const value of Object.values(toml.config.env)) assertSafe(value);
     const generated = Object.fromEntries(
       Object.entries(toml.config.env).map(([key, value]) => [key, substitute(value, variables)]),
     );
@@ -181,6 +221,9 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       const service = model.services[role];
       expect(service?.ports).toBeUndefined();
       assertEnvironment(service?.environment ?? {}, role);
+      expect(service?.environment?.HD_SETUP_TOKEN).toBe(generated.HD_SETUP_TOKEN);
+      expect(service?.environment?.METRICS_TOKEN).toBe(generated.METRICS_TOKEN);
+      expect(service?.environment?.METRICS_TOKEN?.length).toBeGreaterThanOrEqual(16);
     }
     const metadata = JSON.parse(read('deploy/dokploy/meta.json')) as { logo: string };
     expect(read(`deploy/dokploy/${metadata.logo}`)).toContain('<svg');
@@ -191,6 +234,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       ...fixture,
       SERVICE_URL_API_3000: fixture.APP_URL ?? '',
       SERVICE_REALBASE64_32_MASTERKEY: fixture.APP_MASTER_KEY ?? '',
+      SERVICE_REALBASE64_32_METRICS: fixture.APP_MASTER_KEY ?? '',
       SERVICE_PASSWORD_64_SETUP: 's'.repeat(64),
       SERVICE_PASSWORD_64_POSTGRES: 'o'.repeat(64),
       SERVICE_PASSWORD_64_APP: 'a'.repeat(64),
@@ -198,6 +242,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
     for (const role of ['api', 'worker']) {
       assertEnvironment(model.services[role]?.environment ?? {}, role);
       expect(model.services[role]?.ports).toBeUndefined();
+      expect(model.services[role]?.environment?.METRICS_TOKEN?.length).toBeGreaterThanOrEqual(16);
     }
     expect(model.services.caddy).toBeUndefined();
     expect(model.services.api?.environment?.DATABASE_MIGRATION_URL).toContain(
@@ -239,6 +284,10 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       }
       expect(service?.image?.url).toMatch(/helpdock:\d+\.\d+\.\d+$/);
     }
+    expect(blueprint.services.find((entry) => entry.type === 'web')?.envVars).toContainEqual({
+      key: 'METRICS_TOKEN',
+      generateValue: true,
+    });
     expect(blueprint.services.find((entry) => entry.type === 'keyvalue')?.maxmemoryPolicy).toBe(
       'noeviction',
     );
@@ -247,9 +296,13 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
     );
   });
 
-  it('keeps the full DO import and reference template identical with shared required env', () => {
+  it('provides one DO import spec with shared required env and operator-supplied metrics secret', () => {
     const spec = parseYaml(read('.do/app.yaml')) as DoSpec;
-    expect((parseYaml(read('.do/deploy.template.yaml')) as { spec: DoSpec }).spec).toEqual(spec);
+    expect(existsSync(join(root, '.do/deploy.template.yaml'))).toBe(false);
+    expect(spec.envs.find((entry) => entry.key === 'METRICS_TOKEN')).toMatchObject({
+      value: '',
+      type: 'SECRET',
+    });
     for (const component of [...spec.services, ...spec.workers]) {
       const env = [...spec.envs, ...component.envs];
       expect(env.map((entry) => entry.key)).toEqual(expect.arrayContaining(required));
@@ -259,5 +312,30 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
     }
     expect(spec.databases.map((entry) => entry.engine).sort()).toEqual(['PG', 'VALKEY']);
     expect(spec.databases.every((db) => db.production && db.cluster_name.length > 0)).toBe(true);
+  });
+  it('pins all platform roles to the same explicit release', () => {
+    const blueprint = parseYaml(read('render.yaml')) as Blueprint;
+    const spec = parseYaml(read('.do/app.yaml')) as DoSpec;
+    const images = [
+      ...blueprint.services.filter((service) => service.image).map((service) => service.image?.url),
+      ...[...spec.services, ...spec.workers].map(
+        (component) => `ghcr.io/docker-hunterpedia/helpdock:${component.image.tag}`,
+      ),
+      ...['dokploy', 'coolify'].flatMap((platform) => {
+        const model = compose(`deploy/${platform}/docker-compose.yml`, {
+          ...fixture,
+          SERVICE_URL_API_3000: fixture.APP_URL ?? '',
+          SERVICE_REALBASE64_32_MASTERKEY: fixture.APP_MASTER_KEY ?? '',
+          SERVICE_REALBASE64_32_METRICS: fixture.APP_MASTER_KEY ?? '',
+          SERVICE_PASSWORD_64_SETUP: 's'.repeat(64),
+          SERVICE_PASSWORD_64_POSTGRES: 'o'.repeat(64),
+          SERVICE_PASSWORD_64_APP: 'a'.repeat(64),
+        });
+        return ['api', 'worker'].map((role) => model.services[role]?.image);
+      }),
+    ];
+    expect(images).toHaveLength(8);
+    expect(images[0]).toMatch(/^ghcr\.io\/docker-hunterpedia\/helpdock:\d+\.\d+\.\d+$/);
+    expect(new Set(images).size).toBe(1);
   });
 });

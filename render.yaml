@@ -9,7 +9,6 @@ services:
       url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
     plan: standard
     region: frankfurt
-    autoDeployTrigger: off
     healthCheckPath: /ready
     envVars:
       - key: APP_ROLE
@@ -61,7 +60,6 @@ services:
       url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
     plan: standard
     region: frankfurt
-    autoDeployTrigger: off
     envVars:
       - key: APP_ROLE
         value: worker

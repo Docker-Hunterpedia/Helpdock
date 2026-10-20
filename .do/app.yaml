@@ -65,6 +65,10 @@ envs:
     value: ''
     type: SECRET
     scope: RUN_TIME
+  - key: METRICS_TOKEN
+    value: ''
+    type: SECRET
+    scope: RUN_TIME
   - key: HD_SETUP_TOKEN
     value: ''
     type: SECRET

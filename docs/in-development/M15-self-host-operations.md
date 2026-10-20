@@ -324,7 +324,12 @@ override. M15-13 platform templates are implemented for Dokploy, Coolify, Render
 and DigitalOcean, pending review and live platform validation. Render needs a
 second database-URL setup step; DigitalOcean requires manual spec import because
 its button cannot deploy this topology. Cloud-init, upstream submissions and
-the Railway spike remain pending. See [deploy guide](../guides/deploy.md).
+the Railway spike remain pending. Review fixes add CSPRNG Dokploy setup/metrics
+secrets, metrics-token configuration across platforms, explicit private-peer
+trust for both external-proxy roles, and a post-publication template tag update
+checklist. The sole DigitalOcean spec is `.do/app.yaml`; edit a private copy.
+Platform templates leave domain-check public and rate-limited and metrics
+token-protected; they install no path-deny rules. See [deploy guide](../guides/deploy.md).
 
 | Target | Verdict | Why |
 |---|---|---|

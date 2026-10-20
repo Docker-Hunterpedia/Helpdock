@@ -54,10 +54,11 @@ For DigitalOcean Spaces, use the regional S3 API endpoint and region from your
 
 ## External proxy
 
-From `docker/`, keep the completed `.env` from the manual install. Change its
-`TRUST_PROXY=false` entry to `TRUST_PROXY=uniquelocal` (or the exact proxy
-peer/CIDR) before starting: an explicit `false` overrides the override
-file's fallback. Then run:
+From `docker/`, keep the completed `.env` from the manual install, including
+`ADMIN_HOST` and `API_HOST`. Both must still be set: Compose interpolates the
+base file before `!reset` removes Caddy. They do not configure the external
+proxy; configure its hostnames separately. The override sets `uniquelocal` for
+both api and worker, even when `.env` contains `TRUST_PROXY=false`. Then run:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.external-proxy.yml config
@@ -73,7 +74,8 @@ same application config schema.
 
 `TRUST_PROXY=uniquelocal` trusts Docker's private network addresses. A proxy on
 the host reaches the container through the Docker bridge, not as loopback.
-Prefer the proxy's exact peer IP/CIDR on shared networks. Never publish the api
+On shared networks, edit `TRUST_PROXY` in the override for both roles to the
+proxy's exact peer IP/CIDR. Never publish the api
 on `0.0.0.0` with broad proxy trust. A container proxy must join the api's private
 network and route to `api:3000`, rather than its own `127.0.0.1`.
 
@@ -131,25 +133,48 @@ and [WebSockets](https://doc.traefik.io/traefik/expose/overview/#exposing-websoc
 On managed edges, start with private-peer trust (`uniquelocal`), verify visitor
 addresses in the audit log, and explicitly add any documented extra proxy hops.
 Do not use `true` to fix an address mismatch: an appended client header can then
-forge the address used by rate limits. Restrict `/internal/*` and `/metrics` at
-the edge before public use. The domain-check route relies on this proxy block;
-these managed templates do not themselves install an edge firewall rule.
+forge the address used by rate limits.
+
+The host-proxy examples above return 404 for `/internal/*` and `/metrics`.
+If using inbound-parse email delivery, allow `/internal/inbound-parse/*` through
+that proxy; it verifies each mailbox brand's shared secret (header or Basic
+auth password). Do not block a provider route you need.
+
+The platform templates below ship no path-deny rules. Their residual exposure is:
+
+- `/metrics`: `MetricsGuard` requires a matching `METRICS_TOKEN` bearer token for
+  requests forwarded by a trusted proxy; unauthorized requests return 404.
+  Direct private-network scrapers can read it without a token. Dokploy, Coolify
+  and Render generate the token; DigitalOcean requires you to supply it. For
+  the host-proxy path, set it in `.env` only if you intend to allow a remote
+  scraper through your proxy. Verify forwarding headers and proxy trust before
+  public use so forwarded requests are recognized as proxied.
+- `/internal/domain-check`: public and limited to 60 requests per minute per IP.
+  It reveals whether a caller-supplied hostname is a verified help-center domain
+  (including whether Cloudflare serves its certificate). It exposes no ticket
+  data and cannot provision a certificate on these platforms.
+- `/internal/inbound-parse/*`: reachable for email providers, protected by the
+  mailbox brand's shared secret. Missing or wrong secrets are rejected.
 
 ## Dokploy
 
 `deploy/dokploy/` is a self-contained upstream template bundle: Compose,
 `template.toml`, `meta.json` and the existing Helpdock logo. Import the template
 using Dokploy's template import, review the generated values, then fill the five
-S3 fields in Environment before deploying. `base64:32` generates the master key;
-the setup token and two database passwords are generated separately. Database
-passwords use `hash:32` (random hexadecimal), so they are safe inside URLs;
-Dokploy's general `password` helper can contain URL delimiters.
+S3 fields in Environment before deploying. `base64:32` generates independent
+master-key, setup-token and metrics-token values from 32 random bytes. Standard base64 satisfies the setup-token schema
+and contains no `$` for Compose to interpolate in Dokploy's unquoted `.env`.
+Database passwords use `hash:32` (random hexadecimal), so they are safe inside URLs;
+Dokploy's general `password` helper uses `Math.random` and can contain URL
+delimiters and `$`; it is not used for container environment values.
 
 The template domain maps service `api`, port `3000`, through Dokploy's **Domains**
 configuration. Dokploy injects Traefik routing; do not add a Caddy service or host
 port mappings. Enable HTTPS for your final hostname and update `APP_URL` if you
 replace the generated domain. Preserve the generated secrets when importing
-again. Restrict the paths listed above in the proxy configuration. Official
+again. No denial labels are shipped; these files do not modify Dokploy's
+injected router rules. Domain-check remains
+public and metrics relies on its token guard, as described above. Official
 [template conventions](https://github.com/Dokploy/templates) and
 [Compose domains](https://docs.dokploy.com/docs/core/docker-compose/domains).
 Upstream submission is a separate maintainer action, after testing in Dokploy.
@@ -159,11 +184,13 @@ Upstream submission is a separate maintainer action, after testing in Dokploy.
 Create a **Docker Compose Empty** service and paste
 `deploy/coolify/docker-compose.yml`. Set the required S3 variables. The template
 uses `SERVICE_URL_API_3000` for the public URL, `SERVICE_REALBASE64_32_MASTERKEY`
-for the 32-byte master key and shared generated password variables for setup and
-Postgres. `SERVICE_BASE64` is **not** a base64-encoded byte sequence in Coolify and
+for the 32-byte master key, `SERVICE_REALBASE64_32_METRICS` for the metrics
+token, and shared generated password variables for setup and Postgres.
+`SERVICE_BASE64` is **not** a base64-encoded byte sequence in Coolify and
 is unsuitable for this key. Check that the api domain uses HTTPS and internal
-port 3000, then deploy. Add the proxy path restrictions above. Keep generated
-values on redeploy. The template stays in-repo; upstream listing waits.
+port 3000, then deploy. No denial labels are shipped alongside Coolify's
+generated routers; domain-check remains public and metrics uses its token guard.
+Keep generated values on redeploy. The template stays in-repo; upstream listing waits.
 See [Coolify Compose configuration](https://coolify.io/docs/applications/builds/docker-compose).
 
 ## Render
@@ -193,7 +220,9 @@ the owner connection in `DATABASE_URL`: Helpdock refuses it.
    runtime URL; `0038` runs `CREATE EXTENSION IF NOT EXISTS vector` (and `0008`
    enables `pg_trgm`). No separate extension startup command is needed. Start or
    redeploy the worker once `/ready` is 200. Both roles use the image entrypoint.
-4. Add path restrictions at your edge before public use, and finish setup below.
+4. Finish setup below. Render supplies no path-deny rule in this Blueprint:
+   domain-check remains public; metrics relies on the generated bearer token.
+   Inbound parsing remains shared-secret protected.
 
 Changes to `sync: false` inputs are not applied by subsequent Blueprint syncs;
 edit the service environment and keep worker references/values consistent.
@@ -201,6 +230,9 @@ A failed deployment saying permission denied for role or extension creation
 requires investigating the managed owner permissions; never relax runtime RLS
 or use owner credentials to bypass it. Live managed-role provisioning has not
 been verified by the local Compose tests.
+
+The image services omit `autoDeployTrigger`: it has no effect for prebuilt
+images, per the [Blueprint auto-deploy reference](https://render.com/docs/blueprint-spec#autodeploytrigger).
 
 Sources: [Blueprint reference](https://render.com/docs/blueprint-spec),
 [Postgres credentials](https://render.com/docs/postgresql-credentials),
@@ -213,31 +245,36 @@ Sources: [Blueprint reference](https://render.com/docs/blueprint-spec),
 **Manual spec import is required.** The documented Deploy to DigitalOcean button
 supports one service with an optional dev database, and cannot attach managed
 databases. Helpdock requires a worker and managed Valkey too. The website's
-DigitalOcean link therefore opens this guide. `.do/deploy.template.yaml` retains
-the complete spec under `spec:` for reference; it is not advertised as a working
-one-click button. Use `.do/app.yaml` for import.
+DigitalOcean link therefore opens this guide. `.do/app.yaml` is the sole import
+spec; there is no button template. Copy it to a private path outside this Git
+checkout before editing (for example, `cp .do/app.yaml ~/helpdock-app.yaml`).
+Keep that copy out of version control.
 
 1. Create managed PostgreSQL 17 and Valkey clusters in your chosen region.
    Create a `helpdock` database owned by `doadmin`. Retain Valkey's `noeviction`
    policy. Add the app as a trusted source for both databases.
-2. Replace both `cluster_name` placeholders in `.do/app.yaml` and set the matching
-   app region. The Postgres binding selects `doadmin` for migrations. Fill
+2. Replace both `cluster_name` placeholders in your private spec copy and set
+   the matching app region. The Postgres binding selects `doadmin` for migrations. Fill
    `DATABASE_URL` with the same database endpoint as `helpdock_app` and a new,
    percent-encoded password. Migrations create that role; do not provision it as
    a privileged default user in the dashboard. Use `sslmode=require` in both
    Postgres URLs, and `rediss://` for Valkey. Current Valkey connections use
    publicly trusted certificates; no TLS-verification bypass is needed.
-3. Fill `APP_MASTER_KEY`, `HD_SETUP_TOKEN`, and all S3 values. The app-level env
+3. In the private copy, fill `APP_MASTER_KEY`, `HD_SETUP_TOKEN`, `METRICS_TOKEN`
+   (at least 16 random characters), and all S3 values. Never write secrets into
+   the tracked `.do/app.yaml`. The app-level env
    values are shared by api and worker. `APP_URL` uses the platform's bindable
    public app URL. For Spaces or R2 use the storage configuration above.
 4. Import the app spec in App Platform, or use
-   `doctl apps create --spec .do/app.yaml`. This creates billable resources.
+   `doctl apps create --spec ~/helpdock-app.yaml`. This creates billable resources.
    Keep one api instance: Socket.IO's polling transport requires affinity when
    scaling, which these templates do not configure. HTTP and WebSockets share
    port 3000, with `/` routed to the api without a prefix rewrite. Restart the
    worker after the api's first successful migration if it started too early.
-5. Configure the edge path restrictions above and finish setup below. Test a
-   real browser's WebSocket upgrade before accepting traffic.
+5. Finish setup below and test a real browser's WebSocket upgrade before
+   accepting traffic. App Platform supplies no path-deny rule in this spec:
+   domain-check remains public, metrics requires the token you supplied, and
+   inbound parsing remains shared-secret protected.
 
 Sources: [button restrictions](https://docs.digitalocean.com/products/app-platform/how-to/add-deploy-do-button/),
 [app spec](https://docs.digitalocean.com/products/app-platform/reference/app-spec/),
@@ -264,7 +301,8 @@ For **each brand help-center hostname**, add DNS verification records in Helpdoc
 and add the hostname to the platform/proxy **by hand**, mapped to the api with
 its original Host intact. Wait for the platform certificate before verifying TLS
 in Helpdock. `/internal/domain-check` cannot provision a platform certificate.
-Keep that endpoint private. See [custom domains](install.md#custom-domains).
+The host-proxy examples keep that endpoint private; the platform templates
+leave it publicly rate-limited as described above. See [custom domains](install.md#custom-domains).
 
 ## Backups and upgrades
 

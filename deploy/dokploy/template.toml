@@ -1,7 +1,8 @@
 [variables]
 main_domain = "${domain}"
 master_key = "${base64:32}"
-setup_token = "${password:48}"
+metrics_token = "${base64:32}"
+setup_token = "${base64:32}"
 postgres_password = "${hash:32}"
 app_password = "${hash:32}"
 
@@ -13,6 +14,7 @@ host = "${main_domain}"
 [config.env]
 APP_URL = "https://${main_domain}"
 APP_MASTER_KEY = "${master_key}"
+METRICS_TOKEN = "${metrics_token}"
 HD_SETUP_TOKEN = "${setup_token}"
 POSTGRES_PASSWORD = "${postgres_password}"
 HELPDOCK_APP_PASSWORD = "${app_password}"

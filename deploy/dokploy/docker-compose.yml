@@ -9,9 +9,10 @@ x-helpdock: &helpdock
     APP_ROLE: api
     NODE_ENV: production
     APP_MASTER_KEY: ${APP_MASTER_KEY:?set APP_MASTER_KEY}
+    METRICS_TOKEN: ${METRICS_TOKEN:?set METRICS_TOKEN}
     HD_SETUP_TOKEN: ${HD_SETUP_TOKEN:?set HD_SETUP_TOKEN}
     PORT: '3000'
-    TRUST_PROXY: ${TRUST_PROXY:-uniquelocal}
+    TRUST_PROXY: 'uniquelocal'
     DATABASE_URL: postgres://helpdock_app:${HELPDOCK_APP_PASSWORD:?set HELPDOCK_APP_PASSWORD}@postgres:5432/helpdock
     DATABASE_MIGRATION_URL: postgres://helpdock_owner:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/helpdock
     REDIS_URL: redis://redis:6379

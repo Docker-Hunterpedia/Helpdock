@@ -23,6 +23,7 @@ import {
   type MetaPlatform,
 } from '@helpdock/schemas';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, sql } from 'drizzle-orm';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import { withAllBrands } from '../tenant/all-brands.js';
 import { contactNameFor, hasPlaceholderName, type MetaProfile } from './meta-profile.js';
 
@@ -316,10 +317,12 @@ export class MetaRepository {
       conversation.customerId,
     );
     if (contact !== undefined && hasPlaceholderName(contact.name, identity)) {
-      await tx
-        .update(contacts)
-        .set({ name, updatedAt: at })
-        .where(eq(contacts.id, conversation.contactId));
+      await withContactProfileChange(tx, conversation.contactId, async () => {
+        await tx
+          .update(contacts)
+          .set({ name, updatedAt: at })
+          .where(eq(contacts.id, conversation.contactId));
+      });
     }
   }
 

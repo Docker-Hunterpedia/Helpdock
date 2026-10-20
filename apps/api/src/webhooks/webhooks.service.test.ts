@@ -124,6 +124,26 @@ describe('WebhooksService', () => {
     },
   );
 
+  it('audits the notes value on create and only its actual transitions on update', async () => {
+    let current = webhookRow();
+    const api = service({
+      insert: async () => current,
+      find: async () => current,
+      update: async (_tx: unknown, _id: string, changes: Partial<WebhookRow>) => {
+        current = webhookRow({ ...current, ...changes });
+        return current;
+      },
+    });
+    await api.create(staffActor, { url: current.url, events: ['message.created'] });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: false });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: true });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: { from: false, to: true } });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: true });
+    expect(audits.at(-1)?.meta).toEqual({ fields: [] });
+    await api.update(staffActor, WEBHOOK, { includeInternalNotes: false });
+    expect(audits.at(-1)?.meta).toMatchObject({ includeInternalNotes: { from: true, to: false } });
+  });
+
   it('returns the signing secret once and stores it encrypted, auditing the key that asked', async () => {
     const insert = vi.fn(async (_tx: unknown, values: Partial<WebhookRow>) =>
       webhookRow({ ...values }),

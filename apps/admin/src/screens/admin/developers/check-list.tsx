@@ -60,24 +60,26 @@ export function CheckList<Value extends string>({
               sx={{ padding: 0, marginBlockStart: '2px' }}
             />
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography
-                component="label"
-                htmlFor={inputId}
-                dir="ltr"
-                sx={{
-                  fontFamily: 'var(--hd-font-mono, monospace)',
-                  fontSize: 13,
-                  lineHeight: '20px',
-                  alignSelf: 'flex-start',
-                }}
-              >
-                {option.value}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography
+                  component="label"
+                  htmlFor={inputId}
+                  dir="ltr"
+                  sx={{
+                    fontFamily: 'var(--hd-font-mono, monospace)',
+                    fontSize: 13,
+                    lineHeight: '20px',
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  {option.value}
+                </Typography>
                 {option.badge === undefined ? null : (
-                  <Box component="span" sx={{ marginInlineStart: 2 }}>
+                  <Box component="span">
                     <MonoTag prose>{option.badge}</MonoTag>
                   </Box>
                 )}
-              </Typography>
+              </Box>
               <Typography id={`${inputId}-hint`} variant="caption" sx={{ color: 'text.secondary' }}>
                 {option.hint}
               </Typography>

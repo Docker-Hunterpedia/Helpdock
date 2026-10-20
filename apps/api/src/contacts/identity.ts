@@ -17,6 +17,7 @@ import {
 import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { enqueueContactCreated } from './contact-events.js';
 import { ContactFailure } from './contact-failure.js';
+import { withContactProfileChange } from './contact-profile-change.js';
 
 /**
  * The seam every channel goes through to turn "an email arrived from
@@ -354,14 +355,16 @@ export const attachUnverifiedIdentity = async (
   const existing = await findByIdentity(tx, brandId, claim.kind, value);
 
   if (existing === undefined) {
-    return insertIdentity(tx, {
-      brandId,
-      contactId,
-      kind: claim.kind,
-      value,
-      verified: false,
-      source: claim.source,
-    });
+    return withContactProfileChange(tx, contactId, () =>
+      insertIdentity(tx, {
+        brandId,
+        contactId,
+        kind: claim.kind,
+        value,
+        verified: false,
+        source: claim.source,
+      }),
+    );
   }
   if (existing.contactId === contactId) {
     return existing;
@@ -436,42 +439,45 @@ export const attachVerifiedIdentity = async (
     throw new TypeError(`attachVerifiedIdentity takes proven identifiers, not ${claim.source}`);
   }
   const value = requireNormalised(claim.kind, claim.value);
-  const holder = await findByIdentity(tx, brandId, claim.kind, value);
-  const plan = planVerifiedAttach(holder, contactId);
+  return withContactProfileChange(tx, contactId, async () => {
+    const holder = await findByIdentity(tx, brandId, claim.kind, value);
+    const plan = planVerifiedAttach(holder, contactId);
 
-  if (holder === undefined) {
-    const identity = await insertIdentity(tx, {
+    if (holder === undefined) {
+      const identity = await insertIdentity(tx, {
+        brandId,
+        contactId,
+        kind: claim.kind,
+        value,
+        verified: true,
+        source: claim.source,
+      });
+      return { plan, identity, otherContactId: null };
+    }
+    if (plan === 'unchanged') {
+      return { plan, identity: holder, otherContactId: null };
+    }
+    if (plan === 'verify') {
+      return {
+        plan,
+        identity: await takeVerified(tx, holder.id, contactId, claim.source),
+        otherContactId: null,
+      };
+    }
+
+    await suggestDuplicate(tx, {
       brandId,
       contactId,
-      kind: claim.kind,
-      value,
-      verified: true,
-      source: claim.source,
+      otherContactId: holder.contactId,
+      reason: claim.kind,
     });
-    return { plan, identity, otherContactId: null };
-  }
-  if (plan === 'unchanged') {
-    return { plan, identity: holder, otherContactId: null };
-  }
-  if (plan === 'verify') {
     return {
       plan,
-      identity: await takeVerified(tx, holder.id, contactId, claim.source),
-      otherContactId: null,
+      identity:
+        plan === 'move' ? await takeVerified(tx, holder.id, contactId, claim.source) : holder,
+      otherContactId: holder.contactId,
     };
-  }
-
-  await suggestDuplicate(tx, {
-    brandId,
-    contactId,
-    otherContactId: holder.contactId,
-    reason: claim.kind,
   });
-  return {
-    plan,
-    identity: plan === 'move' ? await takeVerified(tx, holder.id, contactId, claim.source) : holder,
-    otherContactId: holder.contactId,
-  };
 };
 
 /**
@@ -485,19 +491,21 @@ export const removeIdentity = async (
   contactId: string,
   claim: Pick<IdentityClaim, 'kind' | 'value'>,
 ): Promise<boolean> => {
-  const removed = await tx
-    .delete(contactIdentities)
-    .where(
-      and(
-        eq(contactIdentities.brandId, brandId),
-        eq(contactIdentities.contactId, contactId),
-        eq(contactIdentities.kind, claim.kind),
-        eq(contactIdentities.value, requireNormalised(claim.kind, claim.value)),
-      ),
-    )
-    .returning({ id: contactIdentities.id });
+  return withContactProfileChange(tx, contactId, async () => {
+    const removed = await tx
+      .delete(contactIdentities)
+      .where(
+        and(
+          eq(contactIdentities.brandId, brandId),
+          eq(contactIdentities.contactId, contactId),
+          eq(contactIdentities.kind, claim.kind),
+          eq(contactIdentities.value, requireNormalised(claim.kind, claim.value)),
+        ),
+      )
+      .returning({ id: contactIdentities.id });
 
-  return removed.length > 0;
+    return removed.length > 0;
+  });
 };
 
 // --------------------------------------------------------------------------
@@ -593,17 +601,26 @@ const takeVerified = async (
   contactId: string,
   source: string,
 ): Promise<ContactIdentityRow> => {
-  const updated = await tx
-    .update(contactIdentities)
-    .set({ contactId, verified: true, verifiedAt: new Date(), source })
-    .where(eq(contactIdentities.id, identityId))
-    .returning();
+  const [previous] = await tx
+    .select({ contactId: contactIdentities.contactId })
+    .from(contactIdentities)
+    .where(eq(contactIdentities.id, identityId));
+  const change = async () => {
+    const updated = await tx
+      .update(contactIdentities)
+      .set({ contactId, verified: true, verifiedAt: new Date(), source })
+      .where(eq(contactIdentities.id, identityId))
+      .returning();
 
-  const identity = updated[0];
-  /* c8 ignore next 3 -- the row was read in this same transaction. */
-  if (identity === undefined) {
-    throw new Error('The contact identity vanished mid-transaction');
-  }
+    const identity = updated[0];
+    /* c8 ignore next 3 -- the row was read in this same transaction. */
+    if (identity === undefined) {
+      throw new Error('The contact identity vanished mid-transaction');
+    }
 
-  return identity;
+    return identity;
+  };
+  return previous !== undefined && previous.contactId !== contactId
+    ? withContactProfileChange(tx, previous.contactId, change)
+    : change();
 };

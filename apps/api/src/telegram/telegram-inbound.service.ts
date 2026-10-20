@@ -25,6 +25,7 @@ import { and, eq } from 'drizzle-orm';
 import type { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
 import type { InboundLog } from '../channels/inbound/inbound-email.service.js';
 import { isUniqueViolation } from '../channels/pg-errors.js';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import type { CsatTelegramTaps } from '../csat/telegram-csat.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { isSenderBlocked } from '../ticketing/sender-gate.js';
@@ -260,10 +261,12 @@ export class TelegramInboundService {
       }
       const { contact, chat } = await this.#chatContact(tx, bot, event.sender, now);
       await this.#options.repository.markLanguageChosen(tx, chat.id, now);
-      await tx
-        .update(contacts)
-        .set({ locale: event.locale, updatedAt: now })
-        .where(eq(contacts.id, contact.id));
+      await withContactProfileChange(tx, contact.id, async () => {
+        await tx
+          .update(contacts)
+          .set({ locale: event.locale, updatedAt: now })
+          .where(eq(contacts.id, contact.id));
+      });
       await enqueueTelegramNotice(tx, bot.brandId, {
         botId: bot.id,
         chatId: event.sender.chatId,

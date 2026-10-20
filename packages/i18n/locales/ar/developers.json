@@ -178,14 +178,14 @@
       "contact.created": "تُنشأ جهة اتصال جديدة",
       "csat.received": "يجيب عميل عن استبيان الرضا",
       "article.published": "يُنشر مقال في مركز المساعدة",
-      "ticket.assigned": "أُسندت تذكرة.",
-      "ticket.status_changed": "تغيّرت حالة تذكرة.",
-      "ticket.merged": "دُمجت تذكرة.",
-      "message.created": "أُنشئ رد علني أو ملاحظة داخلية.",
-      "contact.updated": "حُدّثت جهة اتصال.",
-      "contact.merged": "دُمجت جهة اتصال.",
-      "account.created": "أُنشئ حساب.",
-      "account.updated": "حُدّث حساب."
+      "ticket.assigned": "تُسند تذكرة",
+      "ticket.status_changed": "تتغيّر حالة تذكرة",
+      "ticket.merged": "تُدمج تذكرة",
+      "message.created": "تُضاف رسالة",
+      "contact.updated": "تتغيّر بيانات جهة اتصال",
+      "contact.merged": "تُدمج جهة اتصال",
+      "account.created": "تُضاف مؤسسة",
+      "account.updated": "تتغيّر بيانات مؤسسة"
     },
     "created": {
       "title": "أُضيفت النقطة",
@@ -315,6 +315,6 @@
     },
     "newEvent": "جديد",
     "includeInternalNotes": "تضمين الملاحظات الداخلية في message.created",
-    "notesHint": "عند إيقافه، تُرسل الملاحظات دون محتواها."
+    "notesHint": "عند إيقافه، تُرسل الملاحظات دون محتواها"
   }
 }

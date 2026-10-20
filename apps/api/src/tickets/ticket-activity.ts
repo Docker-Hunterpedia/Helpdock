@@ -129,7 +129,12 @@ export const writeTicketActivity = async (
     to: to ?? null,
     via: actor.via,
   });
-  if (action === 'ticket.status.changed' && from?.statusId !== to?.statusId) {
+  if (
+    action === 'ticket.status.changed' &&
+    typeof from?.statusId === 'string' &&
+    typeof to?.statusId === 'string' &&
+    from.statusId !== to.statusId
+  ) {
     await enqueueWebhookEvent(tx, brandId, 'ticket.status_changed', {
       ticketId,
       departmentId,

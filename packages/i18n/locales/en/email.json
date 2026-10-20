@@ -121,6 +121,7 @@
       "assigned": {
         "person": "{{actor}} assigned it to you.",
         "rule": "A workflow rule assigned it to you.",
+        "sla": "SLA escalation assigned it to you.",
         "round_robin": "Round-robin assigned it to you.",
         "skill_based": "Skill-based assignment gave it to you."
       },

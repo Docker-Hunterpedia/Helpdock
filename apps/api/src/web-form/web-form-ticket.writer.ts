@@ -13,6 +13,7 @@ import type { AssignmentRepository } from '../assignment/assignment.repository.j
 import { requestAutoAssign } from '../assignment/assignment-events.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import type { AttachmentSink } from '../channels/inbound/conversation-router.js';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import { findOrCreateContactByIdentity } from '../contacts/identity.js';
 import { enqueueEmailReceived } from '../email/email-events.js';
 import { recordHandoff } from '../help-center/feedback/handoff.js';
@@ -148,10 +149,12 @@ export class WebFormTicketWriter {
       submission.name === null ? {} : { name: submission.name },
     );
     if (created) {
-      await tx
-        .update(contacts)
-        .set({ locale: input.locale })
-        .where(and(eq(contacts.id, contact.id), isNull(contacts.locale)));
+      await withContactProfileChange(tx, contact.id, async () => {
+        await tx
+          .update(contacts)
+          .set({ locale: input.locale })
+          .where(and(eq(contacts.id, contact.id), isNull(contacts.locale)));
+      });
     }
 
     const status = await repository.findDefaultStatus(tx);

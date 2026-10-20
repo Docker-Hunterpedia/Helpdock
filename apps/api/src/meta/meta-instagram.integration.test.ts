@@ -548,6 +548,16 @@ describe.skipIf(!hasDocker)('Instagram (M10-05)', () => {
       expect(after).toMatchObject({ profileName: 'Omar Khalil', username: 'omar.k' });
       expect(after?.profileCheckedAt).not.toBeNull();
       expect(await contactNameOf(before?.contactId ?? '')).toBe('Omar Khalil');
+      const profileEvents = await withSystem(runtime.db, BRAND_A, (tx) =>
+        tx
+          .select()
+          .from(outbox)
+          .where(
+            sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${before?.contactId ?? ''}`,
+          ),
+      );
+      expect(profileEvents).toHaveLength(1);
+
       // One read, on the Instagram root, with the account's token and nothing else asked.
       const calls = profileCalls(igsid);
       expect(calls).toHaveLength(1);

@@ -511,7 +511,7 @@ export const additionalWebhookDataSchemas = {
   'ticket.assigned': z.object({
     ticket: ticketSchema,
     assigneeId: z.uuid(),
-    assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based']),
+    assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based', 'sla']),
     actorId: z.uuid().nullable(),
   }),
   'ticket.status_changed': z.object({

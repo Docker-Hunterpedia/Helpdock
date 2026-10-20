@@ -221,6 +221,7 @@ export function EndpointFormDialog({
 
           <Box
             component="fieldset"
+            aria-describedby={eventsError === undefined ? undefined : `${urlId}-events-error`}
             sx={{
               border: 0,
               padding: 0,
@@ -255,6 +256,7 @@ export function EndpointFormDialog({
             {eventsError === undefined ? null : (
               <Typography
                 role="alert"
+                id={`${urlId}-events-error`}
                 variant="caption"
                 sx={{ color: tokens['status.danger.text'] }}
               >
@@ -264,6 +266,8 @@ export function EndpointFormDialog({
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
+                  slotProps={{ input: { 'aria-describedby': `${urlId}-notes-hint` } }}
                   checked={includeInternalNotes}
                   onChange={(event) => setIncludeInternalNotes(event.target.checked)}
                 />
@@ -274,7 +278,7 @@ export function EndpointFormDialog({
                     {t('developers:webhooks.includeInternalNotes')}
                   </Typography>
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {t('developers:webhooks.notesHint')}
+                    <span id={`${urlId}-notes-hint`}>{t('developers:webhooks.notesHint')}</span>
                   </Typography>
                 </Box>
               }

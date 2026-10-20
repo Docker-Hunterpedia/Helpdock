@@ -37,9 +37,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
     'account.updated',
   ];
   for (const event of selected)
-    await dialog
-      .getByRole('checkbox', { name: `${event} ${t('developers:webhooks.newEvent')}`, exact: true })
-      .check();
+    await dialog.getByRole('checkbox', { name: event, exact: true }).check();
   const notes = dialog.getByRole('checkbox', {
     name: t('developers:webhooks.includeInternalNotes'),
     exact: false,
@@ -50,7 +48,6 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
   expect(accessibility.violations.map((violation) => violation.id)).toEqual([]);
-  await dialog.screenshot({ path: `/private/tmp/m14-webhook-picker-${locale}.png` });
   await dialog.getByRole('button', { name: t('developers:webhooks.add'), exact: true }).click();
   const reveal = page.getByRole('dialog', { name: t('developers:webhooks.created.title') });
   await expect(reveal).toBeVisible();
@@ -72,7 +69,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
   for (const event of selected)
     await expect(
       edit.getByRole('checkbox', {
-        name: `${event} ${t('developers:webhooks.newEvent')}`,
+        name: event,
         exact: true,
       }),
     ).toBeChecked();

@@ -164,7 +164,7 @@ export const ticketAssignedPayloadSchema = z.object({
   ticketId: z.uuid(),
   departmentId: z.uuid(),
   assigneeId: z.uuid(),
-  assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based']),
+  assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based', 'sla']),
   /** The person who chose, when a person did. */
   actorId: z.uuid().nullable(),
 });

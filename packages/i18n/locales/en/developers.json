@@ -178,14 +178,14 @@
       "contact.created": "A new contact is created",
       "csat.received": "A customer answers a satisfaction survey",
       "article.published": "A help center article is published",
-      "ticket.assigned": "A ticket was assigned.",
-      "ticket.status_changed": "A ticket changed status.",
-      "ticket.merged": "A ticket was merged.",
-      "message.created": "A public reply or internal note was created.",
-      "contact.updated": "A contact was updated.",
-      "contact.merged": "A contact was merged.",
-      "account.created": "An account was created.",
-      "account.updated": "An account was updated."
+      "ticket.assigned": "A ticket is assigned",
+      "ticket.status_changed": "A ticket changes status",
+      "ticket.merged": "A ticket is merged",
+      "message.created": "A message is created",
+      "contact.updated": "A contact profile changes",
+      "contact.merged": "A contact is merged",
+      "account.created": "An account is created",
+      "account.updated": "An account changes"
     },
     "created": {
       "title": "Endpoint added",
@@ -311,6 +311,6 @@
     },
     "newEvent": "new",
     "includeInternalNotes": "Include internal notes in message.created",
-    "notesHint": "Off: notes are sent without their body."
+    "notesHint": "Off: notes are sent without their body"
   }
 }

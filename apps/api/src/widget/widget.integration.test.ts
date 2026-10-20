@@ -70,6 +70,8 @@ import { SlaService } from '../sla/sla.service.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
+import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
 import {
@@ -425,6 +427,10 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
     // M8-03: every contact the suite makes writes `contact.created`.
     registerContactEventHandlers();
+    registerWebhookEventHandlers({
+      repository: new WebhooksRepository(),
+      queue: { add: async () => undefined },
+    });
     ignoreAuthEmailInThisSuite();
     const hours = new BusinessHoursService(
       new SlaRepository(),
@@ -864,6 +870,52 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
           visitor,
           payload: { identity: sign(payload, key) },
         });
+
+      it('publishes signed profile and locale changes once, including a newly attached email', async () => {
+        const visitor = await newVisitor();
+        const payload = {
+          user_id: 'profile-event-customer',
+          ts: Math.floor(Date.now() / 1000),
+          email: 'profile-event@example.test',
+        };
+        const identified = await identify(visitor, payload);
+        expect(identified.body.verified).toBe(true);
+        const [stored] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.select().from(widgetVisitors).where(eq(widgetVisitors.id, visitor.id)),
+        );
+        const events = () =>
+          withSystem(runtime.db, seeded.brandId, (tx) =>
+            tx
+              .select()
+              .from(outbox)
+              .where(
+                sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${stored?.verifiedContactId ?? ''}`,
+              ),
+          );
+        // External id and email are separate profile writes in the signed path.
+        const initial = await events();
+        expect(initial.length).toBeGreaterThanOrEqual(2);
+        await identify(visitor, payload);
+        expect(await events()).toHaveLength(initial.length);
+        await widget('POST', '/session', {
+          visitor,
+          payload: { identity: sign(payload, secret), locale: 'ar' },
+        });
+        const [contact] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select()
+            .from(contacts)
+            .where(eq(contacts.id, stored?.verifiedContactId ?? '')),
+        );
+        expect(contact?.locale).toBe('ar');
+        const afterLocale = await events();
+        expect(afterLocale).toHaveLength(initial.length + 1);
+        await widget('POST', '/session', {
+          visitor,
+          payload: { identity: sign(payload, secret), locale: 'ar' },
+        });
+        expect(await events()).toHaveLength(afterLocale.length);
+      });
 
       it('carries a verified visitor’s widget conversations to another device, and no other channel', async () => {
         const now = Math.floor(Date.now() / 1000);

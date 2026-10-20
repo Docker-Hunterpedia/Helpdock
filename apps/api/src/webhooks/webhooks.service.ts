@@ -159,7 +159,11 @@ export class WebhooksService {
       secret: encryptSecret(secret, this.#keyring),
       createdBy: actor.principalType === 'staff' ? actor.principalId : null,
     });
-    await this.#audit(actor, 'webhook.created', row.id, { url: row.url, events: row.events });
+    await this.#audit(actor, 'webhook.created', row.id, {
+      url: row.url,
+      events: row.events,
+      includeInternalNotes: row.includeInternalNotes,
+    });
 
     return { ...toWebhook(row), secret };
   }
@@ -194,7 +198,21 @@ export class WebhooksService {
     if (row === undefined) {
       throw new NotFoundException('No such webhook');
     }
-    await this.#audit(actor, 'webhook.updated', webhookId, { fields: Object.keys(request) });
+    await this.#audit(actor, 'webhook.updated', webhookId, {
+      fields: Object.keys(request).filter(
+        (field) =>
+          field !== 'includeInternalNotes' ||
+          current.includeInternalNotes !== row.includeInternalNotes,
+      ),
+      ...(current.includeInternalNotes === row.includeInternalNotes
+        ? {}
+        : {
+            includeInternalNotes: {
+              from: current.includeInternalNotes,
+              to: row.includeInternalNotes,
+            },
+          }),
+    });
 
     return toWebhook(row);
   }

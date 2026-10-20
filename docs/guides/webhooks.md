@@ -42,15 +42,17 @@ The secret is stored encrypted under `APP_MASTER_KEY`. Every change is in the au
 | `contact.created` | A contact is created: by an agent, the API, or a channel recognising somebody new | `contact` |
 | `csat.received` | A customer rates a closed conversation | `survey`: `id`, `ticketId`, `rating`, `comment`, `ratedAt` |
 | `article.published` | A help center article is published, in one language | `article`: `id`, `slug`, `locale`, `title`, `visibility`, `publishedAt` |
-| `ticket.assigned` | A person, rule or automatic routing assigns a ticket | `ticket`, `assigneeId`, `assignedBy` (`person`, `rule`, `round_robin`, `skill_based`), nullable `actorId` |
+| `ticket.assigned` | A person, rule, SLA escalation or automatic routing assigns a ticket | `ticket`, `assigneeId`, `assignedBy` (`person`, `rule`, `round_robin`, `skill_based`, `sla`), nullable `actorId` |
 | `ticket.status_changed` | A ticket transitions to another status, including close, reopen, spam and merge | `ticket`, `previousStatusId`, `statusId` |
 | `ticket.merged` | A secondary ticket is merged into a primary; emitted once for the secondary | `ticket` (secondary), `mergedIntoId`, `previousDepartmentId` |
 | `message.created` | A new public reply (including AI) or internal note is stored, including the first message | `message`: `id`, `ticketId`, `seq`, `kind`, `authorType`, nullable `authorId`, `channel`, `createdAt`, `public`, optional `bodyHtml`, `bodyText` |
-| `contact.updated` | The contact profile is edited or upserted | `contact` |
+| `contact.updated` | A receiver-visible contact field actually changes (see below) | `contact` |
 | `contact.merged` | A contact is merged into a survivor | `contact` (survivor), `mergedContactId` |
 | `account.created` | A customer company is created | `account`: `id`, `name`, nullable `domain`, `custom`, `createdAt`, `updatedAt` |
 | `account.updated` | A customer company is edited | Same `account` shape as `account.created` |
 
+
+`contact.updated` fireswhen name, externalId, locale, timezone or identities (kind, value, verified) change through profile edits/upserts, identity addition/removal or channel verification and transfer, signed widget identity updates, widget locale capture, Meta profile name fill, Telegram language selection or web form locale capture. Repeating the same values emits nothing; timestamps alone do not trigger it. Account membership, custom fields and internal notes are not in the v1 contact payload and changes to them emit nothing. Imports remain silent; merges emit `contact.merged`; erasure removes retained deliveries rather than publishing personal data.
 
 `ticket`, `ticket.replied.message` and `contact` have the shapes the API answers with (`/api/docs`). The smaller `message.created.message` shape is listed above; it has no attachment metadata, email headers or AI provenance. All event payloads are available in the OpenAPI document's `webhooks` section.
 

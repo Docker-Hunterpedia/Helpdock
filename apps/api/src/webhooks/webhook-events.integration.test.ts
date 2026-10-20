@@ -29,6 +29,11 @@ import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../boots
 import { AccountsService } from '../contacts/accounts.service.js';
 import { ContactMergeService } from '../contacts/contact-merge.service.js';
 import { ContactsService } from '../contacts/contacts.service.js';
+import {
+  attachUnverifiedIdentity,
+  attachVerifiedIdentity,
+  removeIdentity,
+} from '../contacts/identity.js';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -324,6 +329,90 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
 
     expect(await deliveriesOf(endpoint)).toEqual([]);
   });
+  it('skips message.created for a soft-deleted ticket', async () => {
+    const message = await seedTicket();
+    const endpoint = await endpointFor(['message.created']);
+    await withSystem(db(), seeded.brandId, (tx) =>
+      tx.update(tickets).set({ deletedAt: NOW }).where(eq(tickets.id, message.ticketId)),
+    );
+    await run('message.created', { ...message, departmentId });
+    expect(await deliveriesOf(endpoint)).toEqual([]);
+  });
+
+  it('emits contact.updated only when v1 profile data changes, including identities', async () => {
+    await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      const contact = await service.create(context, {
+        name: 'Profile comparison',
+        identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
+      });
+      const events = async () =>
+        (await tx.select().from(outbox).where(eq(outbox.event, 'contact.updated'))).filter(
+          (row) => row.payload.contactId === contact.id,
+        );
+      await service.update(context, contact.id, { name: contact.name, locale: contact.locale });
+      expect(await events()).toHaveLength(0);
+      const account = await app
+        .get(AccountsService)
+        .create(context, { name: 'Unpublished account membership' });
+      await service.update(context, contact.id, { accountId: account.id, custom: {} });
+      expect(await events()).toHaveLength(0);
+      await service.update(context, contact.id, { locale: 'ar' });
+      expect(await events()).toHaveLength(1);
+      const updated = await service.addIdentity(context, contact.id, {
+        kind: 'email',
+        value: `${uuidv7()}@example.test`,
+      });
+      expect(await events()).toHaveLength(2);
+      const added = updated.identities.find(
+        (row) => !contact.identities.some((old) => old.id === row.id),
+      );
+      if (added === undefined) throw new Error('Missing new identity');
+      await service.removeIdentity(context, contact.id, added.id);
+      expect(await events()).toHaveLength(3);
+      const claim = {
+        kind: 'email' as const,
+        value: `${uuidv7()}@example.test`,
+        source: 'widget.form' as const,
+      };
+      await attachUnverifiedIdentity(tx, seeded.brandId, contact.id, claim);
+      expect(await events()).toHaveLength(4);
+      await attachUnverifiedIdentity(tx, seeded.brandId, contact.id, claim);
+      expect(await events()).toHaveLength(4);
+      await attachVerifiedIdentity(tx, seeded.brandId, contact.id, {
+        ...claim,
+        source: 'email.inbound',
+      });
+      expect(await events()).toHaveLength(5);
+      await attachVerifiedIdentity(tx, seeded.brandId, contact.id, {
+        ...claim,
+        source: 'email.inbound',
+      });
+      expect(await events()).toHaveLength(5);
+      await removeIdentity(tx, seeded.brandId, contact.id, claim);
+      expect(await events()).toHaveLength(6);
+      await attachUnverifiedIdentity(tx, seeded.brandId, contact.id, claim);
+      const receiver = await service.create(context, {
+        name: 'Verified identity receiver',
+        identities: [],
+      });
+      await attachVerifiedIdentity(tx, seeded.brandId, receiver.id, {
+        ...claim,
+        source: 'email.inbound',
+      });
+      expect(await events()).toHaveLength(8);
+      const receiverEvents = (
+        await tx.select().from(outbox).where(eq(outbox.event, 'contact.updated'))
+      ).filter((row) => row.payload.contactId === receiver.id);
+      expect(receiverEvents).toHaveLength(1);
+    });
+  });
+
   const mutate = async (tx: DbTransaction, suffix: string) => {
     const principal = {
       type: 'staff' as const,

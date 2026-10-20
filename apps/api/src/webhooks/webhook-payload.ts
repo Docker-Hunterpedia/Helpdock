@@ -127,7 +127,11 @@ export const webhookDataFor = async (
         .from(ticketMessages)
         .where(and(eq(ticketMessages.id, ref.messageId), eq(ticketMessages.ticketId, ref.ticketId)))
         .limit(1);
-      if (message !== undefined && message.kind !== 'system') {
+      if (
+        message !== undefined &&
+        message.kind !== 'system' &&
+        (await ticketData(tx, ref.ticketId)) !== undefined
+      ) {
         data = { message: { ...toTicketMessage(message), public: message.kind !== 'note' } };
       }
     } else if ('contactId' in ref) {

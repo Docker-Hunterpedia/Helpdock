@@ -19,9 +19,18 @@
   },
   "oauth": {
     "google": "Google OAuth",
+    "microsoft": "Microsoft OAuth",
     "github": "GitHub OAuth",
     "clientId": "Client ID",
     "clientSecret": "Client secret",
+    "microsoftClientId": "Application (client) ID",
+    "microsoftClientSecret": "Client secret value",
+    "tenantId": "Directory (tenant) ID",
+    "tenantIdHint": "A GUID from Entra ID. \u201ccommon\u201d and \u201corganizations\u201d are refused. Only work accounts of this one organisation can sign in.",
+    "allowConsumers": "Also allow personal Microsoft accounts",
+    "allowConsumersHint": "Outlook.com and Hotmail accounts, through the consumers tenant. They can only be connected from the security page, never linked by address. Off unless you need it.",
+    "tenantIdInvalid": "Enter the directory ID as a GUID, like 00000000-0000-0000-0000-000000000000.",
+    "microsoftSecretHint": "Paste the secret's value, not its ID. Entra secrets expire after 24 months at most: put the date in your calendar.",
     "clientIdPlaceholder": "Iv1.…",
     "clientSecretPlaceholder": "Paste once",
     "replace": "Replace",
@@ -52,7 +61,7 @@
   "aside": {
     "redirectUrls": {
       "title": "Redirect URLs",
-      "body": "Register these with Google and GitHub:",
+      "body": "Register these with Google, Microsoft and GitHub:",
       "copy": "Copy the {{provider}} redirect URL",
       "copied": "Redirect URL copied.",
       "copyError": "Copy failed. Select the address and copy it."

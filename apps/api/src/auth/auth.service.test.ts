@@ -249,9 +249,42 @@ class FakeOauthIdentities {
     );
   }
 
+  ofUser(userId: string): Promise<{ provider: string; providerSubject: string }[]> {
+    return Promise.resolve(
+      this.links
+        .filter((link) => link.userId === userId)
+        .map((link) => ({ provider: link.provider, providerSubject: link.subject })),
+    );
+  }
+
   link(link: OauthLink): Promise<'linked'> {
     this.links.push(link);
     return Promise.resolve('linked');
+  }
+
+  /** The transaction's behaviour in memory: replace a stranded Microsoft row, or say why not. */
+  async replaceStrandedMicrosoft({
+    link,
+    acceptedTenants,
+    afterReplace,
+  }: {
+    link: OauthLink;
+    acceptedTenants: readonly string[];
+    afterReplace(tx: DbTransaction): Promise<void>;
+  }): Promise<'replaced' | 'none' | 'conflict'> {
+    const index = this.links.findIndex(
+      (existing) => existing.userId === link.userId && existing.provider === 'microsoft',
+    );
+    const existing = this.links[index];
+    if (existing === undefined) {
+      return 'none';
+    }
+    if (acceptedTenants.includes(existing.subject.split(':')[0] ?? '')) {
+      return 'conflict';
+    }
+    this.links.splice(index, 1, link);
+    await afterReplace({} as DbTransaction);
+    return 'replaced';
   }
 
   readonly used: string[] = [];
@@ -422,7 +455,7 @@ describe('methods', () => {
       ssoEnforced: false,
       password: true,
       magicLink: true,
-      oauth: { google: false, github: false },
+      oauth: { google: false, microsoft: false, github: false },
       passkey: true,
       passkeysPaused: false,
     });
@@ -441,7 +474,7 @@ describe('methods', () => {
     oauth.enabled = true;
 
     await expect(service.methods()).resolves.toMatchObject({
-      oauth: { google: true, github: true },
+      oauth: { google: true, microsoft: true, github: true },
     });
   });
 });
@@ -1279,6 +1312,168 @@ describe('OAuth', () => {
         userAgent: 'Firefox',
       }),
     ).rejects.toMatchObject({ auth: { code: 'no-account' } });
+  });
+
+  it('names a token from another Microsoft tenant, audits it, and says nothing of accounts', async () => {
+    staff.add(await newUser());
+    oauth.identity = new OauthError(
+      'The id token is from another Microsoft tenant',
+      'tenant-mismatch',
+    );
+
+    await expect(
+      service.completeOauth({
+        provider: 'microsoft',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      }),
+    ).rejects.toMatchObject({ auth: { code: 'oauth-tenant-mismatch' } });
+    expect(audit.entries).toContainEqual(
+      expect.objectContaining({
+        action: 'auth.sign_in.failed',
+        userId: null,
+        meta: { method: 'oauth', provider: 'microsoft', reason: 'tenant-mismatch' },
+      }),
+    );
+    expect(oauthIdentities.links).toEqual([]);
+  });
+
+  describe('Microsoft', () => {
+    const microsoftIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity =>
+      googleIdentity({
+        provider: 'microsoft',
+        subject: 'tenant:oid',
+        hostedDomain: undefined,
+        ...overrides,
+      });
+    const callback = () =>
+      service.completeOauth({
+        provider: 'microsoft',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      });
+
+    describe('a person whose only Microsoft identity is of a tenant the install stopped accepting', () => {
+      const OLD = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+      const NEW = '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+
+      const stranded = async () => {
+        const lina = staff.add(await newUser());
+        await settings.set('oauth.microsoft.tenantId', NEW, { updatedBy: 'test' });
+        oauthIdentities.links.push({
+          userId: lina.id,
+          provider: 'microsoft',
+          subject: `${OLD}:oid-1`,
+          email: lina.email,
+          via: 'sign-in',
+        });
+        return lina;
+      };
+
+      it('replaces it at a first link, with the connected email in the same transaction', async () => {
+        const lina = await stranded();
+        oauth.identity = microsoftIdentity({ subject: `${NEW}:oid-2` });
+        mail.sent.length = 0;
+
+        await callback();
+
+        expect(oauthIdentities.links).toEqual([
+          expect.objectContaining({ userId: lina.id, subject: `${NEW}:oid-2` }),
+        ]);
+        expect(mail.sent).toEqual([
+          expect.objectContaining({
+            brandId: expect.any(String),
+            values: expect.objectContaining({ change: 'oauthConnected', provider: 'Microsoft' }),
+          }),
+        ]);
+      });
+
+      it('replaces it when they connect from a session', async () => {
+        const lina = await stranded();
+        oauth.identity = microsoftIdentity({ subject: `${NEW}:oid-2`, authoritative: false });
+        oauth.linkUserId = lina.id;
+
+        await callback();
+
+        expect(oauthIdentities.links.map((link) => link.subject)).toEqual([`${NEW}:oid-2`]);
+      });
+
+      it('lets them start the connect flow instead of answering a conflict', async () => {
+        const lina = await stranded();
+        oauth.enabled = true;
+
+        await expect(
+          service.startOauthConnect({
+            userId: lina.id,
+            provider: 'microsoft',
+            proof: { currentPassword: PASSWORD },
+          }),
+        ).resolves.toMatchObject({ browserNonce: expect.any(String) });
+      });
+    });
+
+    it('still answers a conflict when the existing identity is of an accepted tenant', async () => {
+      const lina = staff.add(await newUser());
+      const tenant = '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+      await settings.set('oauth.microsoft.tenantId', tenant, { updatedBy: 'test' });
+      oauthIdentities.links.push({
+        userId: lina.id,
+        provider: 'microsoft',
+        subject: `${tenant}:oid-1`,
+        email: lina.email,
+        via: 'sign-in',
+      });
+      oauth.identity = microsoftIdentity({ subject: `${tenant}:oid-2` });
+
+      await expect(callback()).rejects.toMatchObject({ auth: { code: 'oauth-identity-conflict' } });
+      expect(oauthIdentities.links.map((link) => link.subject)).toEqual([`${tenant}:oid-1`]);
+    });
+
+    it('makes the first link when Microsoft vouches for the address, and names the provider in the notice', async () => {
+      staff.add(await newUser());
+      oauth.identity = microsoftIdentity();
+
+      await callback();
+
+      expect(oauthIdentities.links).toEqual([
+        expect.objectContaining({ provider: 'microsoft', subject: 'tenant:oid' }),
+      ]);
+      expect(mail.sent.at(-1)?.values).toMatchObject({ provider: 'Microsoft' });
+    });
+
+    it('asks a member Microsoft does not vouch for, or a guest, to connect from a session', async () => {
+      staff.add(await newUser());
+      oauth.identity = microsoftIdentity({ authoritative: false, verifiedEmails: [] });
+
+      await expect(callback()).rejects.toMatchObject({ auth: { code: 'oauth-link-required' } });
+      expect(oauthIdentities.links).toEqual([]);
+    });
+
+    it('signs a bound account in whatever address the token carries, and applies no Google domain list', async () => {
+      const lina = await newUser();
+      staff.add(lina);
+      oauthIdentities.links.push({
+        userId: lina.id,
+        provider: 'microsoft',
+        subject: 'tenant:oid',
+        email: 'lina@helpdock.com',
+        via: 'sign-in',
+      });
+      await settings.set('oauth.google.allowedDomains', ['acme.com'], { updatedBy: 'test' });
+      oauth.identity = microsoftIdentity({
+        email: 'renamed@elsewhere.test',
+        authoritative: false,
+        verifiedEmails: [],
+      });
+
+      await callback();
+
+      expect(oauthIdentities.used).toEqual(['tenant:oid']);
+    });
   });
 
   it('reports an unexpected failure as unavailable rather than as no account', async () => {

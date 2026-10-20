@@ -18,7 +18,7 @@ invitations and a person's own security page.
 |---|---|
 | **Password** | Argon2id with a pepper; blocked by SSO enforcement except emergency admins. |
 | **Sign-in link** | A single-use link by email, valid for `auth.magicLinkTtlMinutes` (10 by default). Opening it spends nothing; the click on its confirm screen does. |
-| **Google / GitHub** | OAuth. Shown only when the install has configured that provider. |
+| **Google / Microsoft / GitHub** | OAuth. Shown only when the install has configured that provider. Microsoft is one organisation's work accounts, see [Microsoft](#microsoft). |
 | **Staff SSO** | OIDC or SAML company sign-in; see [SSO setup](sso.md). |
 | **Password reset** | A single-use link by email, valid for 10 minutes. |
 
@@ -556,7 +556,7 @@ ASVS 7.1.3, 7.2.1):
 | `auth.step_up.refused` | A security-page check refused: wrong password, a wrong or replayed code, a passkey assertion that did not verify, or the rate limit |
 | `auth.refresh_token.reused` | A rotated refresh token came back; the family was revoked |
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
-| `auth.oauth.linked` / `.unlinked` | A Google or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
+| `auth.oauth.linked` / `.unlinked` | A Google, Microsoft or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
 | `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
 | `auth.passkey.added` / `.renamed` / `.removed` | A passkey was registered, renamed or removed from the person's session ([Adding, renaming and removing passkeys](#adding-renaming-and-removing-passkeys)) |
@@ -570,8 +570,9 @@ written is logged and does not stop the sign-in.
 
 ## OAuth
 
-Written against Google's and GitHub's endpoints directly with `jose` and
-`fetch`, not with passport. The strategies that would have carried it —
+Google and GitHub are written against the providers' endpoints directly with
+`jose` and `fetch`, not with passport; Microsoft goes through `openid-client`
+([below](#microsoft)). The strategies that would have carried it —
 `passport-github2` and `passport-google-oauth20` — were last published in 2022
 and 2023, neither implements PKCE, and both are Express-middleware shaped, which
 on Fastify means a shim around the part of the codebase that most needs to be
@@ -645,11 +646,14 @@ the person who holds it here.
   sign in here"), says nothing about whether an account exists, and is audited
   as `auth.sign_in.failed` (or `auth.oauth.link_refused` for a connect) with
   `reason: domain-not-allowed`. GitHub has no such list (D-53).
+- **Microsoft** links like Google, under the stricter rules in
+  [Microsoft](#microsoft).
 - **An invitation can be accepted with a provider** (M18-07). The invite
   screen offers the configured providers beside the password. The invitation
   token already proved the mailbox, so the provider account is bound when its
   verified address is the invited one: Google's verified address, or any
-  verified address on the GitHub account. Otherwise the person comes back to
+  verified address on the GitHub account, or Microsoft's `email` claim when
+  `xms_edov` says its domain is verified. Otherwise the person comes back to
   the invite screen, which names the address that answered; nothing is spent
   or created and they can try another account or choose a password. A match
   spends the invitation once, activates the account **with no password**, binds
@@ -717,6 +721,94 @@ callback screens that explain `oauth-link-required` and
 `oauth-domain-not-allowed`, and the security notice that names the provider
 account and when it changed.
 
+### Microsoft
+
+M18-08 adds Microsoft as a third built-in provider for **one organisation's
+work accounts** (Microsoft Entra ID). It is the only provider that goes through
+`openid-client` rather than hand-written calls, because it needs OpenID Connect
+discovery; discovery, the token request and the key set all go out through the
+SSRF-safe client with no redirect followed, and every endpoint discovery names
+must be on `login.microsoftonline.com` over HTTPS.
+
+One tenant per install. `oauth.microsoft.tenantId` is required and is a GUID;
+`common`, `organizations`, `consumers` and the personal-accounts tenant
+(`9188040d-6c67-4c5b-b112-36a304b66dad`) are refused as the tenant. That closes the
+"nOAuth" hole, where in a multi-tenant app the `email` claim is whatever a
+tenant admin typed. What the code checks on every callback:
+
+- **The issuer is exact:** `https://login.microsoftonline.com/<tenant>/v2.0`,
+  from discovery of that tenant, and the id token's `iss` must equal it.
+- **`tid` equals the tenant.** A token from any other directory answers
+  **`oauth-tenant-mismatch`** ("This Microsoft account can't sign in here"),
+  says nothing about accounts, and is audited as `auth.sign_in.failed` with
+  `reason: tenant-mismatch`.
+- **Personal accounts only if you allow them** (below): the one other tenant a
+  token may come from is the consumers tenant, with its own exact issuer.
+- **The usual:** the id token's signature, audience (your client id), expiry and
+  `nonce`, PKCE (S256), the single-use `state` and the `hd_oauth` browser
+  cookie. A replayed callback finds its state spent.
+- **The subject is `<tid>:<oid>`.** `oid` is stable for the account within the
+  tenant, unlike `sub`, which is different for every application, so it
+  survives an app re-registration.
+
+**The first link** (an address matching an account that has no Microsoft
+identity yet) needs Microsoft to vouch for the address: the token must carry the
+`email` claim with **`xms_edov` as the JSON boolean `true`** (the email's domain
+owner is verified) **and `acct` as the number `0`** (a member of the tenant,
+never a guest). Strings such as `"true"` or `"0"` do not count. Without either,
+or without the claim at all, the answer is `oauth-link-required`, as for GitHub:
+sign in another way once and connect Microsoft from the security page. A bound
+account signs in whatever the token says its address is, and the sign-in name
+(`preferred_username`) stands in for a missing `email` only for that, never for
+a link. This is the same rule the Entra ID OIDC preset uses for SSO.
+
+**Personal accounts** (`oauth.microsoft.allowConsumers`, off by default; the
+checkbox "Also allow personal Microsoft accounts", or
+`HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS`). Outlook.com and Hotmail accounts belong
+to the consumers tenant. With the setting on, the sign-in starts at Microsoft's
+`common` authority, and a token is accepted from the pinned tenant or from the
+consumers tenant, each with its own exact issuer; any other work tenant is
+`oauth-tenant-mismatch`. Their subject is `<tid>:<oid>` as before. A personal
+account **never links by address**, whatever claims it carries (it chose its own
+address): its holder signs in another way once, then uses **Connect Microsoft**
+on the security page, and after that the button signs them in. Switching the
+setting off strands the personal accounts that were connected (below).
+
+Turning personal accounts on **breaks B2B guests of your tenant**: at the
+`common` authority a guest authenticates in their home tenant, so their token
+names that tenant and the answer is `oauth-tenant-mismatch`. Guests could not
+first-link before either (a guest is never vouched for), but a guest who had
+connected Microsoft from a session stops being able to use it while the setting
+is on. Leave it off if guests need the button.
+
+**Changing the tenant** (or switching personal accounts off) strands the
+identities bound to a tenant the install no longer accepts. Nothing is deleted:
+a stranded row cannot sign anyone in (a token from the old tenant gets
+`oauth-tenant-mismatch`), so leaving it is safe, and deleting it would take a
+sign-in method away behind the last-way-in guard. Instead each person's stranded
+row is **replaced when they link Microsoft again**:
+
+- with the `email`, `xms_edov` and `acct` claims configured, a verified member of
+  the new tenant signs in with the button and is linked by address, replacing
+  the old row;
+- otherwise they sign in another way once (a sign-in link works for someone with
+  no password) and choose **Connect Microsoft** on the security page, which
+  replaces it.
+
+The replacement is one transaction: the new row, an audit row
+`auth.oauth.identity_replaced` (with the old and new tenant) and the usual
+"Microsoft was connected to your account" email through the outbox all commit
+together or not at all. Only a person whose existing identity is of a tenant
+that is still accepted gets `oauth-identity-conflict`. At boot the api logs one
+warning with how many stranded identities exist; it writes and emails nothing.
+Until someone reconnects, their security page still lists the Microsoft row
+(it does not yet say the tenant is no longer accepted).
+
+Add the optional claims `email`, `xms_edov` and `acct` to the app registration's
+ID token (Token configuration → Add optional claim) if you want first links by
+address. Without them everyone connects from the security page, which works
+the same.
+
 ### Upgrading from 1.0
 
 - **Google:** people whose Workspace or Gmail address matches their account
@@ -743,6 +835,9 @@ and cannot be changed in admin.
 |---|---|
 | `oauth.google.clientId` / `oauth.google.clientSecret` | From the Google Cloud console, an OAuth 2.0 Client ID of type "Web application". |
 | `oauth.google.allowedDomains` | **Allowed Workspace domains**: type a domain and press Enter for each. Lower-case host names, at most 20; `HD_OAUTH_GOOGLE_ALLOWED_DOMAINS` takes a JSON array such as `["example.com"]`. |
+| `oauth.microsoft.tenantId` | **Directory (tenant) ID**, a GUID from Entra ID → Overview. Required: the button is not drawn without it. `HD_OAUTH_MICROSOFT_TENANT_ID`. |
+| `oauth.microsoft.allowConsumers` | **Also allow personal Microsoft accounts**, off by default. Connect-only, never linked by address. `HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS`. |
+| `oauth.microsoft.clientId` / `oauth.microsoft.clientSecret` | From an Entra app registration (single tenant, platform Web, the redirect URL below; "accounts in any organizational directory and personal Microsoft accounts" if you turn on personal accounts). The secret is the secret's **value**, shown once when it is created; it expires after at most 24 months and Helpdock cannot see the date, so put it in your calendar. |
 | `oauth.github.clientId` / `oauth.github.clientSecret` | From GitHub → Settings → Developer settings → OAuth Apps. |
 
 The redirect URL to register with the provider is
@@ -750,6 +845,7 @@ The redirect URL to register with the provider is
 
 ```
 https://support.example.com/api/auth/oauth/google/callback
+https://support.example.com/api/auth/oauth/microsoft/callback
 https://support.example.com/api/auth/oauth/github/callback
 ```
 
@@ -872,6 +968,9 @@ is never editable.
 | `auth.webauthn.rpId` | empty | The passkey RP ID, written by the first passkey registration and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.google.allowedDomains` | `[]` | Workspace domains whose accounts may use Google sign-in. Empty allows any address Google vouches for |
+| `oauth.microsoft.tenantId` | empty | One Entra tenant GUID, in either case. Empty disables the button |
+| `oauth.microsoft.allowConsumers` | `false` | Also accept personal Microsoft accounts, connect-only |
+| `oauth.microsoft.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
 
 From `.env`: `APP_MASTER_KEY`, and the two session limits in
@@ -896,7 +995,7 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/password/reset` | `@Public()` | Token and a new password |
 | `GET /api/auth/oauth/:provider/start` | `@Public()` | Redirects to the provider |
 | `GET /api/auth/oauth/:provider/callback` | `@Public()` | Redirects back to the app |
-| `GET /api/auth/oauth/identities` | `@Authenticated()` | The caller's connected Google and GitHub accounts, and whether they have a password |
+| `GET /api/auth/oauth/identities` | `@Authenticated()` | The caller's connected Google, Microsoft and GitHub accounts, and whether they have a password |
 | `POST /api/auth/oauth/:provider/connect` | `@Authenticated()` | Step-up, then the provider URL to connect one |
 | `POST /api/auth/oauth/:provider/disconnect` | `@Authenticated()` | Step-up, then removes it. 204; 409 `oauth-last-sign-in` for the last way in |
 | `POST /api/auth/refresh` | `@Public()` | The cookie is the credential |
@@ -995,7 +1094,7 @@ alone does not disable the existing password, magic-link or OAuth methods.
 
 ## Required single sign-on
 
-When `sso.enforced` is on, local password, magic links, Google/GitHub OAuth and
+When `sso.enforced` is on, local password, magic links, Google/Microsoft/GitHub OAuth and
 password invitation acceptance refuse sign-in. Discovery matches enabled
 provider domains without looking up accounts. Existing sessions stay open.
 Configured break-glass install admins may use their password followed by fresh

@@ -15,7 +15,11 @@ import { BrandMark } from '../ui/brand-mark.tsx';
  * with the provider's address exists.
  */
 
-export const OAUTH_REFUSALS = ['oauth-link-required', 'oauth-domain-not-allowed'] as const;
+export const OAUTH_REFUSALS = [
+  'oauth-link-required',
+  'oauth-domain-not-allowed',
+  'oauth-tenant-mismatch',
+] as const;
 export type OauthRefusalCode = (typeof OAUTH_REFUSALS)[number];
 
 export const isOauthRefusal = (code: string | null): code is OauthRefusalCode =>

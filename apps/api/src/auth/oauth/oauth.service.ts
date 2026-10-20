@@ -1,16 +1,25 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Settings } from '@helpdock/config';
 import type { OauthProvider } from '@helpdock/schemas';
-import { localeSchema, oauthProviderSchema } from '@helpdock/schemas';
+import {
+  localeSchema,
+  MICROSOFT_CONSUMERS_TENANT_ID,
+  oauthProviderSchema,
+} from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import * as client from 'openid-client';
 import { z } from 'zod';
 import type { Logger } from '../../logging/logger.js';
+import { oidcTransport } from '../../sso/oidc-transport.js';
+import { entraVouchesForEmail } from '../entra.js';
 import { hashToken, oauthStateKey } from '../redis-keys.js';
 import { googleIsAuthoritative } from './oauth-linking.js';
 import {
   GITHUB_IDENTITY,
   GOOGLE_IDENTITY,
+  type HandWiredProvider,
+  MICROSOFT_IDENTITY,
   OAUTH_PROVIDERS,
   oauthRedirectUri,
 } from './providers.js';
@@ -36,6 +45,12 @@ import {
  * for — is `oauth-linking.ts`'s decision, and no account is ever created:
  * M0-05 signs people in, M0-06 invites them.
  *
+ * **Microsoft** (M18-08) takes the same state, browser nonce and PKCE through
+ * `openid-client`, with discovery, the token request and the key set all going
+ * out through the SSRF-safe client and no redirect followed. Its tokens are
+ * held to one tenant: the issuer is exactly `https://login.microsoftonline.com/
+ * <tenant>/v2.0`, `tid` is that tenant, and the subject is `<tid>:<oid>`.
+ *
  * A flow started from inside a session to connect a provider account carries
  * that account's id in its state, so the callback links rather than signs in.
  * One started from an invitation carries the invitation instead (M18-07): the
@@ -53,6 +68,8 @@ const stateRecordSchema = z.object({
   codeVerifier: z.string().min(1),
   browserNonceHash: z.string().min(1),
   createdAt: z.number().int(),
+  /** The OpenID Connect nonce Microsoft's id token must echo. Not used by the other two. */
+  nonce: z.string().min(1).optional(),
   /** Set when a signed-in person started the flow to connect this provider to their account. */
   linkUserId: z.uuid().optional(),
   /** Set when the flow accepts an invitation with this provider. */
@@ -73,6 +90,18 @@ const googleClaimsSchema = z.object({
   email_verified: z.union([z.boolean(), z.literal('true'), z.literal('false')]).optional(),
   /** Present only on a managed Workspace account: its domain. */
   hd: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const microsoftClaimsSchema = z.object({
+  iss: z.string(),
+  tid: z.string().min(1),
+  /** The object id: stable per account within a tenant, unlike the per-application `sub`. */
+  oid: z.guid(),
+  /** Present only when the operator added the optional `email` claim. */
+  email: z.email().optional(),
+  /** The sign-in name. Editable by the tenant's admins, so never what makes a first link. */
+  preferred_username: z.string().optional(),
   name: z.string().optional(),
 });
 
@@ -115,13 +144,37 @@ export interface OauthCompletion {
 export interface OauthCredentials {
   readonly clientId: string;
   readonly clientSecret: string;
+  /** Microsoft's directory id. Empty for the other providers, which have none. */
+  readonly tenantId: string;
+  /** Whether personal Microsoft accounts (the consumers tenant) are accepted too. */
+  readonly allowConsumers: boolean;
 }
+
+/** How long a discovered Microsoft configuration is reused: its keys rotate, and `openid-client` refetches on a `kid` it lacks. */
+const DISCOVERY_TTL_MS = 3_600_000;
+const MICROSOFT_HOST = new URL(MICROSOFT_IDENTITY.authority).host;
+
+/** Whether `openid-client` refused a token because its `iss` was not the expected issuer. */
+const isIssuerMismatch = (error: unknown): boolean => {
+  if (
+    !(error instanceof client.ClientError) ||
+    error.code !== 'OAUTH_JWT_CLAIM_COMPARISON_FAILED'
+  ) {
+    return false;
+  }
+  const detail = z.object({ cause: z.object({ claim: z.string() }) }).safeParse(error.cause);
+  return detail.success && detail.data.cause.claim === 'iss';
+};
 
 /** Thrown for anything the provider did that this install cannot act on. */
 export class OauthError extends Error {
-  constructor(message: string) {
+  /** Set when the screen can say more than "this did not work" without saying anything about accounts. */
+  readonly reason: 'tenant-mismatch' | undefined;
+
+  constructor(message: string, reason?: 'tenant-mismatch') {
     super(message);
     this.name = 'OauthError';
+    this.reason = reason;
   }
 }
 
@@ -186,29 +239,41 @@ export class OauthService {
   readonly #redis: Redis;
   readonly #logger: Logger;
   readonly #appUrl: string;
+  readonly #transport: client.CustomFetch;
   readonly #jwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+  #microsoft: { key: string; expires: number; configuration: client.Configuration } | undefined;
 
   constructor({
     settings,
     redis,
     logger,
     appUrl,
+    transport = oidcTransport([]),
   }: {
     readonly settings: Settings;
     readonly redis: Redis;
     readonly logger: Logger;
     readonly appUrl: string;
+    /** Every request Microsoft's flow makes. The SSRF-safe client unless a test supplies a stand-in. */
+    readonly transport?: client.CustomFetch;
   }) {
     this.#settings = settings;
     this.#redis = redis;
     this.#logger = logger;
     this.#appUrl = appUrl;
+    this.#transport = transport;
   }
 
-  /** A provider with no client id is off, and `GET /api/auth/methods` says so. */
+  /**
+   * A provider with no client id is off, and `GET /api/auth/methods` says so.
+   * Microsoft is also off without a tenant, where there is no issuer to trust,
+   * and without a secret, which its flow cannot start without.
+   */
   async isEnabled(provider: OauthProvider): Promise<boolean> {
-    const { clientId } = await this.#credentials(provider);
-    return clientId !== '';
+    const { clientId, clientSecret, tenantId } = await this.#credentials(provider);
+    return (
+      clientId !== '' && (provider !== 'microsoft' || (tenantId !== '' && clientSecret !== ''))
+    );
   }
 
   /**
@@ -223,14 +288,30 @@ export class OauthService {
     }: { readonly linkUserId?: string; readonly invite?: OauthInviteState } = {},
   ): Promise<{ url: string; browserNonce: string }> {
     const { clientId } = await this.#credentials(provider);
-    if (clientId === '') {
+    if (!(await this.isEnabled(provider))) {
       throw new OauthError(`${provider} sign-in is not configured on this install`);
     }
 
-    const config = OAUTH_PROVIDERS[provider];
     const state = base64url(randomBytes(STATE_BYTES));
     const codeVerifier = base64url(randomBytes(VERIFIER_BYTES));
     const browserNonce = base64url(randomBytes(STATE_BYTES));
+    const nonce = base64url(randomBytes(STATE_BYTES));
+    const challenge = challengeFor(codeVerifier);
+    // Discovery can fail, and a failed start must not leave a state behind.
+    const authorizationUrl =
+      provider === 'microsoft'
+        ? client
+            .buildAuthorizationUrl(await this.#microsoftConfiguration(), {
+              redirect_uri: oauthRedirectUri(this.#appUrl, provider),
+              response_type: 'code',
+              scope: MICROSOFT_IDENTITY.scope,
+              state,
+              nonce,
+              code_challenge: challenge,
+              code_challenge_method: 'S256',
+            })
+            .toString()
+        : this.#handWiredUrl(provider, { clientId, state, challenge });
 
     await this.#redis.set(
       oauthStateKey(hashToken(state)),
@@ -239,6 +320,7 @@ export class OauthService {
         codeVerifier,
         browserNonceHash: hashToken(browserNonce),
         createdAt: Math.floor(Date.now() / 1000),
+        ...(provider === 'microsoft' ? { nonce } : {}),
         ...(linkUserId === undefined ? {} : { linkUserId }),
         ...(invite === undefined ? {} : { invite }),
       }),
@@ -246,16 +328,24 @@ export class OauthService {
       OAUTH_STATE_TTL_SECONDS,
     );
 
+    return { url: authorizationUrl, browserNonce };
+  }
+
+  #handWiredUrl(
+    provider: HandWiredProvider,
+    { clientId, state, challenge }: { clientId: string; state: string; challenge: string },
+  ): string {
+    const config = OAUTH_PROVIDERS[provider];
     const url = new URL(config.authorizeUrl);
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', oauthRedirectUri(this.#appUrl, provider));
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', config.scope);
     url.searchParams.set('state', state);
-    url.searchParams.set('code_challenge', challengeFor(codeVerifier));
+    url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');
 
-    return { url: url.toString(), browserNonce };
+    return url.toString();
   }
 
   /**
@@ -289,8 +379,12 @@ export class OauthService {
     }
 
     const { clientId, clientSecret } = await this.#credentials(provider);
-    if (clientId === '' || clientSecret === '') {
+    if (!(await this.isEnabled(provider)) || clientSecret === '') {
       throw new OauthError(`${provider} sign-in is not configured on this install`);
+    }
+
+    if (provider === 'microsoft') {
+      return this.#completeMicrosoft(record.data, { code, state });
     }
 
     const tokens = tokenResponseSchema.parse(
@@ -326,6 +420,139 @@ export class OauthService {
       // and not an api fault, so it gets the same answer as the rest.
       throw new OauthError(`${provider} did not return an identity this install can use`);
     }
+  }
+
+  /**
+   * The code exchange, the id token's signature, `iss`, `aud`, `exp`, `nonce`
+   * and the PKCE verifier are `openid-client`'s. What it cannot know is this
+   * install's tenant, so `iss` and `tid` are checked here too, and the first
+   * link is allowed only when Microsoft vouches for the address.
+   */
+  async #completeMicrosoft(
+    record: z.infer<typeof stateRecordSchema>,
+    { code, state }: { readonly code: string; readonly state: string },
+  ): Promise<OauthCompletion> {
+    const { tenantId, allowConsumers } = await this.#credentials('microsoft');
+    if (record.nonce === undefined) {
+      throw new OauthError('The state carries no nonce for this provider');
+    }
+    try {
+      const configuration = await this.#microsoftConfiguration();
+      const callback = new URL(oauthRedirectUri(this.#appUrl, 'microsoft'));
+      callback.searchParams.set('code', code);
+      callback.searchParams.set('state', state);
+      const tokens = await client.authorizationCodeGrant(configuration, callback, {
+        pkceCodeVerifier: record.codeVerifier,
+        expectedState: state,
+        expectedNonce: record.nonce,
+        idTokenExpected: true,
+      });
+      const raw = tokens.claims() ?? {};
+      const claims = microsoftClaimsSchema.parse(raw);
+      const tid = claims.tid.toLowerCase();
+
+      // Exactly the pinned tenant, and the consumers tenant only when allowed,
+      // each with its own exact issuer: nothing else Microsoft issues for.
+      const accepted =
+        tid === tenantId || (allowConsumers && tid === MICROSOFT_CONSUMERS_TENANT_ID);
+      if (!accepted || claims.iss !== MICROSOFT_IDENTITY.issuerFor(tid)) {
+        throw new OauthError('The id token is from another Microsoft tenant', 'tenant-mismatch');
+      }
+
+      return {
+        identity: this.#microsoftIdentity(claims, raw, tid),
+        linkUserId: record.linkUserId,
+        invite: record.invite,
+      };
+    } catch (error) {
+      if (error instanceof OauthError) {
+        throw error;
+      }
+      if (isIssuerMismatch(error)) {
+        throw new OauthError('The id token is from another Microsoft tenant', 'tenant-mismatch');
+      }
+
+      // `openid-client`'s messages can carry the provider's body; none is kept.
+      throw new OauthError('microsoft did not return an identity this install can use');
+    }
+  }
+
+  #microsoftIdentity(
+    claims: z.infer<typeof microsoftClaimsSchema>,
+    raw: Record<string, unknown>,
+    tid: string,
+  ): OauthIdentity {
+    // `preferred_username` stands in for a missing `email` claim so a bound
+    // account can still sign in, but it is not evidence of the mailbox.
+    const email = claims.email ?? z.email().safeParse(claims.preferred_username).data;
+    if (email === undefined) {
+      throw new OauthError('This Microsoft account has no email address in its token');
+    }
+    // The one rule the SSO preset uses (`entra.ts`): a verified-domain member of
+    // the pinned tenant. A personal account is never vouched for, so it can
+    // only be connected from a session.
+    const authoritative =
+      claims.email !== undefined && entraVouchesForEmail(MICROSOFT_IDENTITY.issuerFor(tid), raw);
+
+    return {
+      provider: 'microsoft',
+      subject: `${tid}:${claims.oid.toLowerCase()}`,
+      email,
+      name: claims.name,
+      authoritative,
+      hostedDomain: undefined,
+      verifiedEmails: authoritative ? [email] : [],
+    };
+  }
+
+  /**
+   * Discovery of the install's tenant, cached for an hour and rebuilt when the
+   * tenant, client id or secret changes. Every endpoint it names must be on
+   * Microsoft's host over https: a discovery document is an input, and nothing
+   * in it may point the install's token request, or its secret, elsewhere.
+   */
+  async #microsoftConfiguration(): Promise<client.Configuration> {
+    const { clientId, clientSecret, tenantId, allowConsumers } =
+      await this.#credentials('microsoft');
+    const key = hashToken(JSON.stringify([tenantId, allowConsumers, clientId, clientSecret]));
+    if (this.#microsoft?.key === key && this.#microsoft.expires > Date.now()) {
+      return this.#microsoft.configuration;
+    }
+
+    // Personal accounts sign in at the `common` authority, which Microsoft
+    // documents with a templated issuer; the id token's own `tid` and `iss`
+    // are still held to the accepted tenants afterwards.
+    const issuer = MICROSOFT_IDENTITY.issuerFor(allowConsumers ? 'common' : tenantId);
+    const expectedMetadataIssuer = allowConsumers
+      ? MICROSOFT_IDENTITY.issuerFor('{tenantid}')
+      : issuer;
+    const configuration = await client.discovery(
+      new URL(issuer),
+      clientId,
+      undefined,
+      client.ClientSecretPost(clientSecret),
+      { [client.customFetch]: this.#transport, timeout: FETCH_TIMEOUT_MS / 1000 },
+    );
+
+    const metadata = configuration.serverMetadata();
+    const endpoints = [metadata.authorization_endpoint, metadata.token_endpoint, metadata.jwks_uri];
+    if (
+      metadata.issuer !== expectedMetadataIssuer ||
+      endpoints.some((endpoint) => !this.#isMicrosoftEndpoint(endpoint))
+    ) {
+      throw new OauthError('Microsoft discovery named an endpoint this install does not trust');
+    }
+
+    this.#microsoft = { key, expires: Date.now() + DISCOVERY_TTL_MS, configuration };
+    return configuration;
+  }
+
+  #isMicrosoftEndpoint(endpoint: string | undefined): boolean {
+    if (endpoint === undefined) {
+      return false;
+    }
+    const url = new URL(endpoint);
+    return url.protocol === 'https:' && url.host === MICROSOFT_HOST;
   }
 
   async #googleIdentity(idToken: string | undefined, clientId: string): Promise<OauthIdentity> {
@@ -403,18 +630,18 @@ export class OauthService {
   }
 
   async #credentials(provider: OauthProvider): Promise<OauthCredentials> {
-    const [clientId, clientSecret] = await Promise.all(
-      provider === 'google'
-        ? [
-            this.#settings.get('oauth.google.clientId'),
-            this.#settings.get('oauth.google.clientSecret'),
-          ]
-        : [
-            this.#settings.get('oauth.github.clientId'),
-            this.#settings.get('oauth.github.clientSecret'),
-          ],
-    );
+    const [clientId, clientSecret, tenantId, allowConsumers] = await Promise.all([
+      this.#settings.get(`oauth.${provider}.clientId`),
+      this.#settings.get(`oauth.${provider}.clientSecret`),
+      provider === 'microsoft' ? this.#settings.get('oauth.microsoft.tenantId') : '',
+      provider === 'microsoft' ? this.#settings.get('oauth.microsoft.allowConsumers') : false,
+    ]);
 
-    return { clientId: clientId.trim(), clientSecret: clientSecret.trim() };
+    return {
+      clientId: clientId.trim(),
+      clientSecret: clientSecret.trim(),
+      tenantId: tenantId.trim().toLowerCase(),
+      allowConsumers,
+    };
   }
 }

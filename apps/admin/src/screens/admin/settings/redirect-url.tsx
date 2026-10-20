@@ -16,7 +16,7 @@ export function RedirectUrl({
   provider,
   url,
 }: {
-  readonly provider: 'google' | 'github';
+  readonly provider: 'google' | 'microsoft' | 'github';
   readonly url: string;
 }): ReactNode {
   const t = useT();

@@ -1,5 +1,5 @@
 /**
- * Which staff account a Google or GitHub sign-in is (1.0.1, ADR 0051).
+ * Which staff account a Google, Microsoft or GitHub sign-in is (1.0.1, ADR 0051).
  *
  * The provider account is bound by its stable subject in
  * `user_oauth_identities`, and a bound subject signs in whatever address the

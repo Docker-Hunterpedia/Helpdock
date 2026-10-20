@@ -234,7 +234,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
         password: true,
         magicLink: true,
         // Neither provider has a client id in settings, so neither button is drawn.
-        oauth: { google: false, github: false },
+        oauth: { google: false, microsoft: false, github: false },
         // APP_URL is https, and nothing has pinned another host.
         passkey: true,
         passkeysPaused: false,

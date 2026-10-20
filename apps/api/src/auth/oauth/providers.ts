@@ -1,7 +1,7 @@
 import type { OauthProvider } from '@helpdock/schemas';
 
 /**
- * Google and GitHub, hand-wired.
+ * Google and GitHub, hand-wired; Microsoft, by discovery.
  *
  * **Why not passport.** ARCHITECTURE §1 lists passport, and M0-05 weighed it
  * against writing the two flows directly. The strategies that would carry it —
@@ -19,29 +19,33 @@ import type { OauthProvider } from '@helpdock/schemas';
  * is not in the path (DOMAIN-RULES §13 is about user-supplied URLs).
  */
 
+/** Google and GitHub. Microsoft's endpoints come from its discovery document instead. */
+export type HandWiredProvider = Exclude<OauthProvider, 'microsoft'>;
+
 export interface OauthProviderConfig {
-  readonly id: OauthProvider;
+  readonly id: HandWiredProvider;
   readonly authorizeUrl: string;
   readonly tokenUrl: string;
   readonly scope: string;
 }
 
-export const OAUTH_PROVIDERS: Readonly<Record<OauthProvider, OauthProviderConfig>> = Object.freeze({
-  google: {
-    id: 'google',
-    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    scope: 'openid email profile',
-  },
-  github: {
-    id: 'github',
-    authorizeUrl: 'https://github.com/login/oauth/authorize',
-    tokenUrl: 'https://github.com/login/oauth/access_token',
-    // `user:email` and nothing else: the only thing this install wants from
-    // GitHub is which verified address is signing in.
-    scope: 'read:user user:email',
-  },
-});
+export const OAUTH_PROVIDERS: Readonly<Record<HandWiredProvider, OauthProviderConfig>> =
+  Object.freeze({
+    google: {
+      id: 'google',
+      authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+      scope: 'openid email profile',
+    },
+    github: {
+      id: 'github',
+      authorizeUrl: 'https://github.com/login/oauth/authorize',
+      tokenUrl: 'https://github.com/login/oauth/access_token',
+      // `user:email` and nothing else: the only thing this install wants from
+      // GitHub is which verified address is signing in.
+      scope: 'read:user user:email',
+    },
+  });
 
 /**
  * How each provider says who is signing in. Separate constants rather than a
@@ -58,6 +62,19 @@ export const GOOGLE_IDENTITY = Object.freeze({
 export const GITHUB_IDENTITY = Object.freeze({
   emailsUrl: 'https://api.github.com/user/emails',
   userUrl: 'https://api.github.com/user',
+});
+
+/**
+ * Microsoft, through OpenID Connect discovery (`openid-client`, ADR 0051). The
+ * authority is the global cloud and one tenant GUID, so the issuer the install
+ * expects is exact: `iss` of every token must equal it. Sovereign clouds and
+ * the multi-tenant endpoints (`common`, `organizations`, `consumers`) are not
+ * supported.
+ */
+export const MICROSOFT_IDENTITY = Object.freeze({
+  authority: 'https://login.microsoftonline.com',
+  scope: 'openid email profile',
+  issuerFor: (tenantId: string): string => `https://login.microsoftonline.com/${tenantId}/v2.0`,
 });
 
 /** Where the provider sends the browser back. Fixed per install, never from a request. */

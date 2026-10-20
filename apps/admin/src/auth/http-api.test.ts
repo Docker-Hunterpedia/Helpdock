@@ -228,7 +228,11 @@ describe('HttpAuthApi', () => {
 
   it('carries the cookie on every request, which is what the refresh depends on', async () => {
     fetchMock.mockResolvedValueOnce(
-      json({ password: true, magicLink: true, oauth: { google: true, github: false } }),
+      json({
+        password: true,
+        magicLink: true,
+        oauth: { google: true, microsoft: false, github: false },
+      }),
     );
 
     await new HttpAuthApi().authMethods();

@@ -546,7 +546,7 @@ describe.skipIf(!hasDocker)(
       expect(methods).toMatchObject({
         ssoEnforced: true,
         magicLink: false,
-        oauth: { google: false, github: false },
+        oauth: { google: false, microsoft: false, github: false },
         // A passkey alone is a local first factor, refused under enforcement (ADR 0050).
         passkey: false,
       });

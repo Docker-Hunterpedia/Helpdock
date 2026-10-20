@@ -699,6 +699,7 @@ describe.skipIf(!hasDocker)('the api', () => {
             clientSecret: 'google-secret',
             allowedDomains: [' Support.Example.com '],
           },
+          microsoft: { clientId: '', tenantId: '' },
           github: { clientId: 'github-client', clientSecret: 'github-secret' },
         },
       });
@@ -758,6 +759,7 @@ describe.skipIf(!hasDocker)('the api', () => {
           requireTwoFactor: true,
           magicLinkValidityMinutes: 25,
           google: { clientId: 'google-client', allowedDomains: ['@gmail.com'] },
+          microsoft: { clientId: '', tenantId: '' },
           github: { clientId: 'github-client' },
         },
       });

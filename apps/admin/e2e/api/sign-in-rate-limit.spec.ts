@@ -22,7 +22,7 @@ for (const [seconds, minutes] of [
             magicLink: true,
             sso: [],
             ssoEnforced: false,
-            oauth: { google: false, github: false },
+            oauth: { google: false, microsoft: false, github: false },
             passkey: false,
             passkeysPaused: false,
           },

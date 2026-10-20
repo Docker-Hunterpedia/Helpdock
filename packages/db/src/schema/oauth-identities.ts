@@ -2,13 +2,13 @@ import { pgEnum, pgTable, timestamp, unique, uuid, varchar } from 'drizzle-orm/p
 import { uuidv7 } from '../uuid.js';
 import { users } from './users.js';
 
-export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'github']);
+export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'microsoft', 'github']);
 
 /** How a provider account came to be bound (M18-07): for the person's list and the audit trail. */
 export const oauthLinkedViaEnum = pgEnum('oauth_linked_via', ['sign-in', 'connect', 'invite']);
 
 /**
- * Which Google or GitHub account signs in as which staff account (1.0.1,
+ * Which Google, Microsoft or GitHub account signs in as which staff account (1.0.1,
  * ADR 0051).
  *
  * Install-scoped, like `user_sso_identities`: sign-in reads it before any brand
@@ -31,7 +31,7 @@ export const userOauthIdentities = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     provider: oauthProviderEnum('provider').notNull(),
-    /** Google's `sub`; GitHub's numeric user id, as text. Stable for the life of the provider account. */
+    /** Google's `sub`; GitHub's numeric user id, as text; Microsoft's `<tid>:<oid>`. Stable for the life of the provider account. */
     providerSubject: varchar('provider_subject', { length: 255 }).notNull(),
     emailAtLink: varchar('email_at_link', { length: 320 }).notNull(),
     linkedVia: oauthLinkedViaEnum('linked_via'),

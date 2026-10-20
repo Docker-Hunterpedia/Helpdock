@@ -57,6 +57,135 @@ describe('SettingsPage', () => {
     expect(screen.queryByDisplayValue('github-secret')).not.toBeInTheDocument();
   });
 
+  describe('the Microsoft card', () => {
+    const TENANT = '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+    const microsoftCard = () => {
+      const card = screen.getByText('Microsoft OAuth').closest('div')?.parentElement;
+      expect(card).not.toBeNull();
+      return within(card as HTMLElement);
+    };
+
+    it('shows its redirect URL and saves the tenant, client id and a write-only secret', async () => {
+      const api = new MockSettingsApi();
+      const save = vi.spyOn(api, 'saveAuthentication');
+      const { user } = renderApp(<SettingsPage />, { settingsApi: api });
+      await screen.findByRole('heading', { name: 'Sign-in methods' });
+      expect(
+        screen.getByText('http://localhost:5273/api/auth/oauth/microsoft/callback'),
+      ).toBeVisible();
+
+      const fields = microsoftCard();
+      await user.type(fields.getByLabelText('Directory (tenant) ID'), ` ${TENANT} `);
+      await user.type(fields.getByLabelText('Application (client) ID'), 'ms-app-id');
+      await user.type(fields.getByLabelText('Client secret value'), 'ms-secret');
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => {
+        expect(save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            microsoft: {
+              clientId: 'ms-app-id',
+              tenantId: TENANT,
+              allowConsumers: false,
+              clientSecret: 'ms-secret',
+            },
+          }),
+        );
+      });
+      expect(await screen.findByText('Authentication settings saved')).toBeVisible();
+      expect(screen.queryByDisplayValue('ms-secret')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Directory (tenant) ID')).toHaveValue(TENANT);
+    });
+
+    it.each([
+      ['common'],
+      ['organizations'],
+      ['not-a-guid'],
+      ['9188040d-6c67-4c5b-b112-36a304b66dad'],
+    ])('keeps %s, which is not one work directory, in the browser', async (tenant) => {
+      const api = new MockSettingsApi();
+      const save = vi.spyOn(api, 'saveAuthentication');
+      const { user } = renderApp(<SettingsPage />, { settingsApi: api });
+      await screen.findByRole('heading', { name: 'Sign-in methods' });
+
+      const field = microsoftCard().getByLabelText('Directory (tenant) ID');
+      await user.type(field, tenant);
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      expect(
+        await screen.findByText(
+          'Enter the directory ID as a GUID, like 00000000-0000-0000-0000-000000000000.',
+        ),
+      ).toBeVisible();
+      expect(field).toHaveAccessibleDescription(/Enter the directory ID as a GUID/);
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('keeps personal accounts off until ticked, saves the choice, and shows a pinned one as read-only', async () => {
+      const api = new MockSettingsApi();
+      const save = vi.spyOn(api, 'saveAuthentication');
+      const { user } = renderApp(<SettingsPage />, { settingsApi: api });
+      await screen.findByRole('heading', { name: 'Sign-in methods' });
+
+      const box = microsoftCard().getByRole('checkbox', {
+        name: /Also allow personal Microsoft accounts/,
+      });
+      expect(box).not.toBeChecked();
+      await user.click(box);
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => {
+        expect(save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            microsoft: expect.objectContaining({ allowConsumers: true }),
+          }),
+        );
+      });
+    });
+
+    it('does not send a personal-accounts choice the environment pins', async () => {
+      const api = new MockSettingsApi();
+      vi.spyOn(api, 'authentication').mockResolvedValue({
+        ...MOCK_AUTHENTICATION_SETTINGS,
+        microsoft: {
+          ...MOCK_AUTHENTICATION_SETTINGS.microsoft,
+          allowConsumers: true,
+          allowConsumersLocked: true,
+        },
+      });
+      renderApp(<SettingsPage />, { settingsApi: api });
+      await screen.findByRole('heading', { name: 'Sign-in methods' });
+
+      const box = microsoftCard().getByRole('checkbox', {
+        name: /Also allow personal Microsoft accounts/,
+      });
+      expect(box).toBeChecked();
+      expect(box).toBeDisabled();
+      expect(screen.getByText(/HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS/)).toBeVisible();
+    });
+
+    it('shows a tenant and secret pinned by the environment as read-only', async () => {
+      const api = new MockSettingsApi();
+      vi.spyOn(api, 'authentication').mockResolvedValue({
+        ...MOCK_AUTHENTICATION_SETTINGS,
+        microsoft: {
+          ...MOCK_AUTHENTICATION_SETTINGS.microsoft,
+          tenantId: TENANT,
+          tenantIdLocked: true,
+          clientSecretConfigured: true,
+          clientSecretLocked: true,
+        },
+      });
+      renderApp(<SettingsPage />, { settingsApi: api });
+
+      const tenant = await screen.findByLabelText('Directory (tenant) ID');
+      expect(tenant).toHaveAttribute('readonly');
+      expect(tenant).toHaveAccessibleDescription(/HD_OAUTH_MICROSOFT_TENANT_ID/);
+      expect(screen.getByLabelText('Client secret value')).toHaveAttribute('readonly');
+      expect(screen.getByText(/HD_OAUTH_MICROSOFT_CLIENT_SECRET/)).toBeVisible();
+    });
+  });
+
   it('keeps an invalid magic-link lifetime in the browser', async () => {
     const api = new MockSettingsApi();
     const save = vi.spyOn(api, 'saveAuthentication');

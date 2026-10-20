@@ -19,9 +19,18 @@
   },
   "oauth": {
     "google": "مصادقة Google",
+    "microsoft": "مصادقة Microsoft",
     "github": "مصادقة GitHub",
     "clientId": "معرّف العميل",
     "clientSecret": "سر العميل",
+    "microsoftClientId": "معرّف التطبيق (العميل)",
+    "microsoftClientSecret": "قيمة سر العميل",
+    "tenantId": "معرّف الدليل (المستأجر)",
+    "tenantIdHint": "معرّف GUID من Entra ID. تُرفض القيمتان common وorganizations. يمكن لحسابات العمل في هذه المؤسسة وحدها تسجيل الدخول.",
+    "allowConsumers": "السماح أيضًا بحسابات Microsoft الشخصية",
+    "allowConsumersHint": "حسابات Outlook.com وHotmail عبر مستأجر المستهلكين. لا يمكن إلا ربطها من صفحة الأمان، ولا تُربط أبدًا بحسب العنوان. معطّل ما لم تحتجه.",
+    "tenantIdInvalid": "أدخل معرّف الدليل بصيغة GUID، مثل 00000000-0000-0000-0000-000000000000.",
+    "microsoftSecretHint": "الصق قيمة السر لا معرّفه. تنتهي صلاحية أسرار Entra بعد 24 شهرًا على الأكثر: دوّن التاريخ في تقويمك.",
     "clientIdPlaceholder": "Iv1.…",
     "clientSecretPlaceholder": "يُلصق مرة واحدة",
     "replace": "استبدال",
@@ -52,7 +61,7 @@
   "aside": {
     "redirectUrls": {
       "title": "روابط إعادة التوجيه",
-      "body": "سجّل هذه الروابط لدى Google وGitHub:",
+      "body": "سجّل هذه الروابط لدى Google وMicrosoft وGitHub:",
       "copy": "نسخ رابط إعادة التوجيه لـ {{provider}}",
       "copied": "تم نسخ رابط إعادة التوجيه.",
       "copyError": "تعذّر النسخ. حدّد العنوان وانسخه."

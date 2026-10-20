@@ -81,6 +81,25 @@ it('says a Google account outside the allowed domains cannot sign in here', asyn
   expect(screen.queryByRole('list')).not.toBeInTheDocument();
 });
 
+it('says a Microsoft account from another tenant cannot sign in here, without steps', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-tenant-mismatch&provider=microsoft'] },
+  );
+
+  expect(
+    await screen.findByRole('heading', {
+      level: 1,
+      name: "This Microsoft account can't sign in here",
+    }),
+  ).toBeVisible();
+  expect(screen.getByText(/different organisation than the one this install trusts/)).toBeVisible();
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/sign-in');
+});
+
 it('falls back to the sentence when the callback names no provider', async () => {
   renderApp(
     <Routes>

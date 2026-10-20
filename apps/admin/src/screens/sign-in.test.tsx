@@ -1,5 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
 import { MOCK_EMAIL, MOCK_PASSWORD, MockAuthApi } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
@@ -44,6 +44,38 @@ describe('SignIn', () => {
 
     expect(await screen.findByLabelText('Email')).toHaveAttribute('dir', 'ltr');
     expect(screen.getByLabelText('Password')).toHaveAttribute('dir', 'ltr');
+  });
+
+  it('draws only the configured providers, in the order Google, Microsoft, GitHub', async () => {
+    const authApi = new MockAuthApi();
+    const methods = await authApi.authMethods();
+    vi.spyOn(authApi, 'authMethods').mockResolvedValue({
+      ...methods,
+      oauth: { google: true, microsoft: true, github: true },
+    });
+    renderApp(<AppRoutes />, { authApi, initialEntries: ['/sign-in'] });
+
+    const buttons = await screen.findAllByRole('link', { name: /^(Google|Microsoft|GitHub)$/ });
+
+    expect(buttons.map((button) => button.textContent)).toEqual(['Google', 'Microsoft', 'GitHub']);
+    expect(buttons.every((button) => button.querySelector('svg[aria-hidden="true"]'))).toBe(true);
+    expect(buttons[0]?.parentElement).toHaveStyle({
+      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    });
+  });
+
+  it('leaves Microsoft out when the install has not configured it', async () => {
+    const authApi = new MockAuthApi();
+    const methods = await authApi.authMethods();
+    vi.spyOn(authApi, 'authMethods').mockResolvedValue({
+      ...methods,
+      oauth: { google: true, microsoft: false, github: true },
+    });
+    renderApp(<AppRoutes />, { authApi, initialEntries: ['/sign-in'] });
+
+    await screen.findByRole('link', { name: 'Google' });
+
+    expect(screen.queryByRole('link', { name: 'Microsoft' })).not.toBeInTheDocument();
   });
 
   it('refuses a malformed address before asking the api', async () => {

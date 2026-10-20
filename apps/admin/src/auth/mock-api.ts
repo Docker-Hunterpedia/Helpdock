@@ -207,7 +207,7 @@ export class MockAuthApi implements AuthApi {
       ssoEnforced: this.ssoEnforced,
       password: true,
       magicLink: true,
-      oauth: { google: true, github: true },
+      oauth: { google: true, microsoft: true, github: true },
       passkey: false,
       passkeysPaused: false,
     };

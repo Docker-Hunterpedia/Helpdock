@@ -13,7 +13,11 @@ import type {
   Session,
   TotpEnrolment,
 } from '@helpdock/schemas';
-import { isLastSignInMethod, OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS } from '@helpdock/schemas';
+import {
+  isLastSignInMethod,
+  MICROSOFT_CONSUMERS_TENANT_ID,
+  OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS,
+} from '@helpdock/schemas';
 import type { Logger } from '../logging/logger.js';
 import type { SsoIdentityService } from '../sso/identity.service.js';
 import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
@@ -125,6 +129,7 @@ export interface OauthInviteAcceptor {
 /** How a provider is named in a security notice: a product name, the same in every language. */
 const PROVIDER_NAMES: Readonly<Record<OauthProvider, string>> = {
   google: 'Google',
+  microsoft: 'Microsoft',
   github: 'GitHub',
 };
 
@@ -812,6 +817,14 @@ export class AuthService {
       completion = await this.#parts.oauth.complete({ provider, code, state, browserNonce });
     } catch (error) {
       this.#parts.logger.warn({ err: error, provider }, 'An OAuth callback could not be completed');
+      if (error instanceof OauthError && error.reason === 'tenant-mismatch') {
+        await this.#audit('auth.sign_in.failed', null, 'system', {
+          method: 'oauth',
+          provider,
+          reason: 'tenant-mismatch',
+        });
+        throw new AuthFailure('oauth-tenant-mismatch');
+      }
       throw new AuthFailure(error instanceof OauthError ? 'no-account' : 'unavailable');
     }
 
@@ -942,7 +955,7 @@ export class AuthService {
   }): Promise<{ url: string; browserNonce: string }> {
     if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     await this.#requireStepUp(userId, proof, tx);
-    if (await this.#parts.oauthIdentities.hasProvider(userId, provider, tx)) {
+    if (await this.#hasLiveIdentity(userId, provider, tx)) {
       throw new AuthFailure('oauth-identity-conflict');
     }
     try {
@@ -1046,11 +1059,93 @@ export class AuthService {
     }
     return {
       userId: matched.id,
-      hasProviderIdentity: await this.#parts.oauthIdentities.hasProvider(
-        matched.id,
-        identity.provider,
-      ),
+      hasProviderIdentity: await this.#hasLiveIdentity(matched.id, identity.provider),
     };
+  }
+
+  /**
+   * Whether the person has a provider account that can still sign in. A
+   * Microsoft identity bound to a tenant the install no longer accepts cannot,
+   * and does not block a new link: it is replaced when the new one is made.
+   */
+  async #hasLiveIdentity(
+    userId: string,
+    provider: OauthProvider,
+    tx?: DbTransaction,
+  ): Promise<boolean> {
+    const rows = await this.#parts.oauthIdentities.ofUser(userId, tx);
+    const own = rows.filter((row) => row.provider === provider);
+    if (provider !== 'microsoft' || own.length === 0) {
+      return own.length > 0;
+    }
+    const accepted = await this.#acceptedMicrosoftTenants();
+    return own.some((row) => accepted.includes(row.providerSubject.split(':')[0] ?? ''));
+  }
+
+  /** The pinned tenant, and the consumers tenant while personal accounts are allowed. */
+  async #acceptedMicrosoftTenants(): Promise<string[]> {
+    const [tenantId, allowConsumers] = await Promise.all([
+      this.#parts.settings.get('oauth.microsoft.tenantId'),
+      this.#parts.settings.get('oauth.microsoft.allowConsumers'),
+    ]);
+    return tenantId === ''
+      ? []
+      : [tenantId, ...(allowConsumers ? [MICROSOFT_CONSUMERS_TENANT_ID] : [])];
+  }
+
+  /**
+   * Replaces a stranded Microsoft identity (a tenant the install stopped
+   * accepting) in one transaction with the audit row and the "connected" email.
+   * True when it did; false when the person has none, so the caller links as
+   * usual. A still-accepted one stays a conflict.
+   */
+  async #replaceStrandedMicrosoft(
+    userId: string,
+    identity: OauthIdentity,
+    via: OauthLinkedVia,
+  ): Promise<boolean> {
+    if (identity.provider !== 'microsoft') {
+      return false;
+    }
+    const [brandId] = (await this.#parts.staff.membershipsOf(userId))
+      .map((membership) => membership.brandId)
+      .sort();
+    if (brandId === undefined) {
+      return false;
+    }
+
+    const outcome = await this.#parts.oauthIdentities.replaceStrandedMicrosoft({
+      link: {
+        userId,
+        provider: 'microsoft',
+        subject: identity.subject,
+        email: identity.email,
+        via,
+      },
+      acceptedTenants: await this.#acceptedMicrosoftTenants(),
+      brandId,
+      afterReplace: (tx) =>
+        this.#parts.mail.queue(
+          tx,
+          brandId,
+          this.#securityChangeRequest(userId, 'oauthConnected', {
+            provider: PROVIDER_NAMES.microsoft,
+            account: identity.email,
+          }),
+        ),
+    });
+    if (outcome === 'conflict') {
+      await this.#audit('auth.oauth.link_refused', userId, 'system', {
+        provider: 'microsoft',
+        via,
+      });
+      throw new AuthFailure('oauth-identity-conflict');
+    }
+    if (outcome === 'replaced') {
+      this.#parts.logger.info({ userId, via }, 'Replaced a stranded Microsoft sign-in account');
+    }
+
+    return outcome === 'replaced';
   }
 
   /** The callback half of {@link startOauthConnect}. */
@@ -1096,6 +1191,9 @@ export class AuthService {
     tx?: DbTransaction,
   ): Promise<void> {
     const { provider } = identity;
+    if (tx === undefined && (await this.#replaceStrandedMicrosoft(userId, identity, via))) {
+      return;
+    }
     const linked = await this.#parts.oauthIdentities.link(
       { userId, provider, subject: identity.subject, email: identity.email, via },
       tx,
@@ -1690,18 +1788,26 @@ export class AuthService {
    * works in. A reset has no transaction to join and goes the way the reset
    * link itself went.
    */
+  #securityChangeRequest(
+    userId: string,
+    change: SecurityChange,
+    values: Readonly<Record<string, string>> = {},
+  ): AuthEmailRequest {
+    return {
+      kind: 'securityChange',
+      userId,
+      url: new URL('/me/security', this.#parts.appUrl).toString(),
+      values: { ...values, change, occurredAt: new Date().toISOString() },
+    };
+  }
+
   async #notifySecurityChange(
     userId: string,
     change: SecurityChange,
     tx?: DbTransaction,
     values: Readonly<Record<string, string>> = {},
   ): Promise<void> {
-    const request: AuthEmailRequest = {
-      kind: 'securityChange',
-      userId,
-      url: new URL('/me/security', this.#parts.appUrl).toString(),
-      values: { ...values, change, occurredAt: new Date().toISOString() },
-    };
+    const request = this.#securityChangeRequest(userId, change, values);
 
     const [brandId] =
       tx === undefined

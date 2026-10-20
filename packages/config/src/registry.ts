@@ -1,4 +1,9 @@
-import { MAX_GOOGLE_ALLOWED_DOMAINS, WORKSPACE_DOMAIN_PATTERN } from '@helpdock/schemas';
+import {
+  MAX_GOOGLE_ALLOWED_DOMAINS,
+  MICROSOFT_CONSUMERS_TENANT_ID,
+  MICROSOFT_TENANT_ID_PATTERN,
+  WORKSPACE_DOMAIN_PATTERN,
+} from '@helpdock/schemas';
 import { z } from 'zod';
 import { aiProvidersSchema } from './ai-providers.js';
 
@@ -148,6 +153,48 @@ export const SETTING_DEFINITIONS = [
     scope: 'install',
     description:
       'Google Workspace domains (the hd claim) whose accounts may use Google sign-in, as a JSON array. Empty allows any address Google vouches for; a list also refuses @gmail.com (ADR 0051).',
+  }),
+  defineSetting({
+    key: 'oauth.microsoft.tenantId',
+    // One Entra tenant per install: a GUID, or empty while the provider is off.
+    schema: z
+      .string()
+      // An operator may paste the GUID as Entra shows it, in either case.
+      .toLowerCase()
+      .regex(MICROSOFT_TENANT_ID_PATTERN)
+      .refine((id) => id !== MICROSOFT_CONSUMERS_TENANT_ID)
+      .or(z.literal('')),
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Microsoft Entra directory (tenant) id whose work accounts may use Microsoft sign-in, as a GUID. common, organizations and the personal-accounts tenant are refused (ADR 0051).',
+  }),
+  defineSetting({
+    key: 'oauth.microsoft.allowConsumers',
+    schema: z.boolean(),
+    default: false,
+    secret: false,
+    scope: 'install',
+    description:
+      'Also let personal Microsoft accounts (Outlook.com, Hotmail) sign in, through the consumers tenant. They can only be connected from the security page, never linked by address. Off unless you need it (ADR 0051).',
+  }),
+  defineSetting({
+    key: 'oauth.microsoft.clientId',
+    schema: TEXT,
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Microsoft Entra application (client) id for staff sign-in. Empty, or an empty tenant id, disables the button.',
+  }),
+  defineSetting({
+    key: 'oauth.microsoft.clientSecret',
+    schema: TEXT,
+    default: '',
+    secret: true,
+    scope: 'install',
+    description: 'Microsoft Entra client secret value.',
   }),
   defineSetting({
     key: 'oauth.github.clientId',

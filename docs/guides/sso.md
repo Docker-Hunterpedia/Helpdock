@@ -88,7 +88,7 @@ connection is disabled. SSO refresh families expire within 12 hours even if
 
 Enforcement requires an enabled connection and one to three active install
 admins with passwords and enabled TOTP for emergency access. Existing sessions remain open. At the
-next sign-in, password, magic links, Google/GitHub OAuth and password invitation
+next sign-in, password, magic links, Google/Microsoft/GitHub OAuth and password invitation
 acceptance are blocked. The explicit break-glass form permits only configured
 admins using **password and fresh TOTP**; recovery codes and trusted browsers
 cannot bypass this requirement. Discovery matches domains, never account existence.

@@ -23,7 +23,7 @@ import { isOauthRefusal, OauthRefusal } from './oauth-refusal.tsx';
  * | `code` | A one-time code to exchange for the session. The access token never travels in a URL (DOMAIN-RULES §4.6). |
  * | `challenge` | The second factor still has to be answered, so this hands over to the code screen. |
  * | `enrol` | The install requires 2FA and this account has none yet. |
- * | `error` | Nothing worked; say so and offer the way back. An OAuth refusal with something to explain (`oauth-link-required`, `oauth-domain-not-allowed`) gets the `Admin/Login-Providers` card instead. |
+ * | `error` | Nothing worked; say so and offer the way back. An OAuth refusal with something to explain (`oauth-link-required`, `oauth-domain-not-allowed`, `oauth-tenant-mismatch`) gets the `Admin/Login-Providers` card instead. |
  *
  * One screen for both routes because the four cases are identical either way;
  * the provider's name is only ever used to word the caption.

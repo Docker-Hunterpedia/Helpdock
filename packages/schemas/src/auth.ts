@@ -220,7 +220,7 @@ export type OauthStepUpRequest = z.infer<typeof oauthStepUpRequestSchema>;
 // Responses
 // --------------------------------------------------------------------------
 
-const oauthProviders = ['google', 'github'] as const;
+const oauthProviders = ['google', 'microsoft', 'github'] as const;
 export const oauthProviderSchema = z.enum(oauthProviders);
 export type OauthProvider = z.infer<typeof oauthProviderSchema>;
 export const OAUTH_PROVIDERS: readonly OauthProvider[] = oauthProviders;
@@ -375,6 +375,8 @@ const authErrorCodes = [
   'oauth-last-sign-in',
   /** A Google account outside `oauth.google.allowedDomains` (M18-07). Says nothing about accounts. */
   'oauth-domain-not-allowed',
+  /** A Microsoft account outside the one tenant this install trusts (M18-08). Says nothing about accounts. */
+  'oauth-tenant-mismatch',
   /** An invitation accepted with a provider after the invitation was spent or withdrawn (M18-07). */
   'invite-expired',
   'rate-limited',

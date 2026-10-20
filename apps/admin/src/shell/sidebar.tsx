@@ -12,6 +12,7 @@ import { CountBadge } from './count-badge.tsx';
 import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { NotificationBell } from './notification-bell.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
+import { useSidebarScroll } from './sidebar-scroll.js';
 import { UserMenu } from './user-menu.tsx';
 
 export const SIDEBAR_WIDTH = 220;
@@ -331,6 +332,7 @@ export function Sidebar({
   const sidebarId = useId();
   const counts = session.navCounts ?? {};
   const collapsed = collapse?.collapsed === true;
+  const { navRef, contentRef, edges } = useSidebarScroll();
   // Chrome only: the api refuses the request whatever the sidebar draws.
   // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
   // is install-wide and is offered to an install admin alone.
@@ -365,6 +367,7 @@ export function Sidebar({
           flexDirection: collapsed ? 'column' : 'row',
           alignItems: 'center',
           gap: 1,
+          flexShrink: 0,
         }}
       >
         <Box sx={{ flex: collapsed ? 'none' : 1, minWidth: 0 }}>
@@ -376,82 +379,158 @@ export function Sidebar({
       {/* Scrolls on its own: a brand's views (M1-05) can make the groups taller
           than the window, and the Admin group must stay reachable under them. */}
       <Box
-        component="nav"
-        aria-label={t('admin:nav.label')}
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', alignSelf: 'stretch' }}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          alignSelf: 'stretch',
+          marginInlineStart: -2,
+          marginInlineEnd: collapsed ? -2 : -3,
+          position: 'relative',
+          '&::before, &::after': {
+            content: '""',
+            position: 'absolute',
+            insetInlineStart: collapsed ? `${(RAIL_WIDTH - 1 - 36) / 2}px` : '8px',
+            width: collapsed ? 36 : SIDEBAR_WIDTH - 1 - 24,
+            height: '1px',
+            backgroundColor: tokens['border.default'],
+            pointerEvents: 'none',
+            zIndex: 1,
+          },
+          '&::before': { insetBlockStart: 0, opacity: edges.top ? 1 : 0 },
+          '&::after': { insetBlockEnd: 0, opacity: edges.bottom ? 1 : 0 },
+        }}
       >
-        {collapsed ? (
+        <Box
+          ref={navRef}
+          component="nav"
+          aria-label={t('admin:nav.label')}
+          data-scroll-top={edges.top}
+          data-scroll-bottom={edges.bottom}
+          onFocus={(event) => {
+            if (event.currentTarget.contains(event.target)) {
+              event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+          }}
+          sx={{
+            height: '100%',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarGutter: 'stable',
+            scrollPaddingBlock: '4px',
+            // Standard scrollbar properties override WebKit's width and button rules.
+            '@supports not selector(::-webkit-scrollbar)': {
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${tokens['border.strong']} transparent`,
+            },
+            '& a:focus-visible, & button:focus-visible': {
+              outline: collapsed ? `2px solid ${tokens['border.focus']}` : undefined,
+              outlineOffset: collapsed ? '-2px' : undefined,
+            },
+            '&::-webkit-scrollbar': { width: '4px', height: 0 },
+            '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: tokens['border.strong'],
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-button': { display: 'none', width: 0, height: 0 },
+            // Stable gutters keep the icons still while scrollbars are hidden during width changes.
+            animation: `${collapsed ? 'rail-scroll' : 'column-scroll'} 200ms step-end`,
+            '@keyframes rail-scroll': { from: { overflowY: 'hidden' }, to: { overflowY: 'auto' } },
+            '@keyframes column-scroll': {
+              from: { overflowY: 'hidden' },
+              to: { overflowY: 'auto' },
+            },
+            '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+          }}
+        >
           <Box
-            component="ul"
+            ref={contentRef}
             sx={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 1,
+              paddingBlock: 1,
+              width: collapsed ? 36 : SIDEBAR_WIDTH - 1 - 8,
+              maxWidth: '100%',
+              // Use the full rail's centre, independent of the reserved scrollbar gutter.
+              marginInlineStart: collapsed ? `${(RAIL_WIDTH - 1 - 36) / 2}px` : 0,
+              paddingInlineStart: collapsed ? 0 : 2,
+              paddingInlineEnd: collapsed ? 0 : 2,
             }}
           >
-            {primaryNav.map((item) => (
-              <Box component="li" key={item.key}>
-                <RailLink item={item} count={counts[item.key]} />
-              </Box>
-            ))}
-            <RailDivider />
-            <Box component="li">
-              <RailViews />
-            </Box>
-            <RailDivider />
-            {adminNav.map((item) => (
-              <Box component="li" key={item.key}>
-                <RailLink item={item} count={counts[item.key]} />
-              </Box>
-            ))}
-          </Box>
-        ) : (
-          <>
-            <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {primaryNav.map((item) => (
-                <Box component="li" key={item.key}>
-                  <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+            {collapsed ? (
+              <Box
+                component="ul"
+                sx={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                {primaryNav.map((item) => (
+                  <Box component="li" key={item.key}>
+                    <RailLink item={item} count={counts[item.key]} />
+                  </Box>
+                ))}
+                <RailDivider />
+                <Box component="li">
+                  <RailViews />
                 </Box>
-              ))}
-            </Box>
+                <RailDivider />
+                {adminNav.map((item) => (
+                  <Box component="li" key={item.key}>
+                    <RailLink item={item} count={counts[item.key]} />
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <>
+                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {primaryNav.map((item) => (
+                    <Box component="li" key={item.key}>
+                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                    </Box>
+                  ))}
+                </Box>
 
-            {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
+                {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
                 it is a set of ways into the destination above it (M1-15). */}
-            <TicketViewsNav onNavigate={onNavigate} />
+                <TicketViewsNav onNavigate={onNavigate} />
 
-            <Typography
-              component="p"
-              variant="caption"
-              sx={{
-                color: 'text.secondary',
-                paddingInline: 3,
-                marginBlock: '16px 4px',
-                fontSize: 11,
-                // DESIGN §3.2: uppercase section labels are regular case in Arabic.
-                textTransform: locale === 'ar' ? 'none' : 'uppercase',
-                letterSpacing: locale === 'ar' ? 0 : '0.06em',
-              }}
-            >
-              {t('admin:nav.adminGroup')}
-            </Typography>
+                <Typography
+                  component="p"
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    paddingInline: 3,
+                    marginBlock: '16px 4px',
+                    fontSize: 11,
+                    // DESIGN §3.2: uppercase section labels are regular case in Arabic.
+                    textTransform: locale === 'ar' ? 'none' : 'uppercase',
+                    letterSpacing: locale === 'ar' ? 0 : '0.06em',
+                  }}
+                >
+                  {t('admin:nav.adminGroup')}
+                </Typography>
 
-            <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {adminNav.map((item) => (
-                <Box component="li" key={item.key}>
-                  <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {adminNav.map((item) => (
+                    <Box component="li" key={item.key}>
+                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                    </Box>
+                  ))}
                 </Box>
-              ))}
-            </Box>
-          </>
-        )}
+              </>
+            )}
+          </Box>
+        </Box>
       </Box>
 
       <Box
         sx={{
+          flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
           alignItems: collapsed ? 'center' : 'stretch',

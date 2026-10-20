@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { rememberInviteReturn } from '../auth/invite-return.js';
 import { MockAuthApi } from '../auth/mock-api.js';
 import {
   MOCK_BREACHED_PASSWORD,
@@ -161,6 +162,34 @@ describe('accepting with a provider (Admin/AcceptInvite-Providers)', () => {
 
     expect(screen.getByLabelText('Your name')).toHaveValue('Karim Aziz');
     expect(screen.getByLabelText('Choose a password')).toBeVisible();
+  });
+});
+
+describe('coming back from the provider', () => {
+  const comeBack = (fragment: string) => {
+    rememberInviteReturn({ path: `/invite/${MOCK_INVITE_TOKEN}`, name: 'Karim Aziz' });
+    const staffApi = new MockStaffApi();
+    return renderApp(<AppRoutes />, {
+      authApi: new MockAuthApi(staffApi),
+      staffApi,
+      initialEntries: [`/oauth/callback?error=oauth-invite-mismatch&provider=github#${fragment}`],
+    });
+  };
+
+  it('names the address that answered when the fragment carries one', async () => {
+    comeBack('account=nour%40elsewhere.test');
+
+    expect(await screen.findByText(/That GitHub account is .*nour@elsewhere\.test/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Choose a password instead' })).toBeVisible();
+  });
+
+  it('says it without an address when the fragment carries something else', async () => {
+    comeBack('account=%3Cscript%3E');
+
+    expect(
+      await screen.findByText(/That GitHub account is not for .*karim@helpdock\.com/),
+    ).toBeVisible();
+    expect(screen.queryByText(/script/)).not.toBeInTheDocument();
   });
 });
 

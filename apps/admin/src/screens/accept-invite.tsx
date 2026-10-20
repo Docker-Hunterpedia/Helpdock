@@ -41,7 +41,13 @@ import { isolate } from './tickets/format.js';
 
 /** What `/oauth/callback` hands back when the provider account was not the invited one. */
 const returnStateSchema = z.object({
-  mismatch: z.object({ provider: oauthProviderSchema, account: z.string() }).optional(),
+  mismatch: z
+    .object({
+      provider: oauthProviderSchema,
+      // From the callback's fragment, which anybody can write: an address or nothing.
+      account: z.email().optional().catch(undefined),
+    })
+    .optional(),
   name: z.string().optional(),
 });
 
@@ -209,11 +215,16 @@ export function AcceptInvite(): ReactNode {
         {!methods.data?.ssoEnforced && mismatch !== undefined ? (
           <>
             <AlertBanner tone="danger">
-              {t('auth:invite.providers.mismatch', {
-                provider: t(PROVIDER_NAME_KEYS[mismatch.provider]),
-                account: isolate(mismatch.account),
-                email: isolate(invite.data.email),
-              })}
+              {mismatch.account === undefined
+                ? t('auth:invite.providers.mismatchUnnamed', {
+                    provider: t(PROVIDER_NAME_KEYS[mismatch.provider]),
+                    email: isolate(invite.data.email),
+                  })
+                : t('auth:invite.providers.mismatch', {
+                    provider: t(PROVIDER_NAME_KEYS[mismatch.provider]),
+                    account: isolate(mismatch.account),
+                    email: isolate(invite.data.email),
+                  })}
             </AlertBanner>
             <InviteProviderButtons
               providers={providers}

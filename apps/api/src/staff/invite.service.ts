@@ -163,11 +163,21 @@ export class InviteService implements OauthInviteAcceptor {
     const payload = this.#asProviderInvite(
       await this.#parts.tokens.consumeInviteByHash(invite.tokenHash),
     );
-    await this.#activate(
-      payload,
-      { name: invite.name, locale: invite.locale, passwordHash: null },
-      (tx) => this.#parts.auth.linkInvitedIdentity(tx, payload.userId, identity),
-    );
+    try {
+      await this.#activate(
+        payload,
+        { name: invite.name, locale: invite.locale, passwordHash: null },
+        (tx) => this.#parts.auth.linkInvitedIdentity(tx, payload.userId, identity),
+      );
+    } catch (error) {
+      // Withdrawn between the email and this callback. The answer is a
+      // redirect, where only an auth code can say so.
+      if (error instanceof GoneException) {
+        throw new AuthFailure('invite-expired');
+      }
+      throw error;
+    }
+    await this.#parts.auth.recordInvitedLink(payload.userId, identity.provider);
 
     return this.#parts.auth.signInAfterInvite(payload.userId, userAgent);
   }

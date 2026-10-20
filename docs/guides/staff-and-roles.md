@@ -175,6 +175,10 @@ account). It then becomes their way in, with no password, and the second-factor
 step follows as above. Another address brings them back to the screen with the
 address that answered and the choice of another account or a password; nothing
 is spent ([authentication](authentication.md#which-account-a-provider-signs-in-as)).
+The invitation is spent the moment a matching provider account answers. If the
+acceptance then fails — the invitation was revoked in between, or the provider
+account was bound to somebody else in the same instant — the link is used up and
+an Admin or Team Leader has to **resend** it (below).
 
 An expired, revoked or already-accepted link answers `410` and the screen says
 so. All three read the same from outside, so a stale link cannot be used to find

@@ -553,6 +553,64 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
       expect(await identitiesOf(rana.id)).toEqual([{ provider: 'google', subject: 'g-rana' }]);
     });
 
+    it('refuses a provider account bound to somebody else before the invitation is spent', async () => {
+      const holder = await addAgent('holder@acme.test');
+      const google = await googleAs({ sub: 'g-taken', email: holder.email, hd: 'acme.test' });
+      await buttonSignIn('google', google);
+      const invited = await addInvited('invited@acme.test');
+      const taken = await googleAs({ sub: 'g-taken', email: 'invited@acme.test', hd: 'acme.test' });
+      const flow = await acceptWith('google', invited.token, taken);
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, taken));
+
+      expect(landed.searchParams.get('error')).toBe('oauth-identity-conflict');
+      expect(await userRow(invited.id)).toMatchObject({ status: 'invited' });
+      expect((await get(`/api/auth/invites/${invited.token}`)).statusCode).toBe(200);
+      expect(await authRowsOf(holder.id)).toContainEqual({
+        action: 'auth.sign_in.failed',
+        actorType: 'system',
+        meta: { method: 'invite', provider: 'google', reason: 'identity-conflict' },
+      });
+    });
+
+    it('applies the allowed Workspace domains, and spends nothing', async () => {
+      const ali = await addInvited('ali@acme.test');
+      await runtime.settings.set('oauth.google.allowedDomains', ['listed.test'], {
+        updatedBy: 'test',
+      });
+      try {
+        const google = await googleAs({ sub: 'g-ali', email: 'ali@acme.test', hd: 'acme.test' });
+        const flow = await acceptWith('google', ali.token, google);
+
+        const landed = landing(await callback('google', flow.url, flow.nonce, google));
+
+        expect(landed.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+        expect(await userRow(ali.id)).toMatchObject({ status: 'invited' });
+        expect((await get(`/api/auth/invites/${ali.token}`)).statusCode).toBe(200);
+      } finally {
+        await runtime.settings.set('oauth.google.allowedDomains', [], { updatedBy: 'test' });
+      }
+    });
+
+    it('says the invitation expired when it was withdrawn in the round trip, and leaves no link', async () => {
+      const hadi = await addInvited('hadi@acme.test');
+      const google = await googleAs({ sub: 'g-hadi', email: 'hadi@acme.test', hd: 'acme.test' });
+      const flow = await acceptWith('google', hadi.token, google);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(userBrandRoles).where(eq(userBrandRoles.userId, hadi.id)),
+      );
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, google));
+
+      expect(landed.searchParams.get('error')).toBe('invite-expired');
+      expect(await userRow(hadi.id)).toMatchObject({ status: 'invited' });
+      expect(await identitiesOf(hadi.id)).toEqual([]);
+      // The link audit is written after the acceptance commits, so a rollback leaves none.
+      expect((await authRowsOf(hadi.id)).map((row) => row.action)).not.toContain(
+        'auth.oauth.linked',
+      );
+    });
+
     it('refuses to start for a link that is not a live invitation', async () => {
       const response = await post('/api/auth/invites/not-a-real-token/oauth/google', {
         name: 'Nour',

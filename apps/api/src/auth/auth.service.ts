@@ -809,16 +809,24 @@ export class AuthService {
 
   /**
    * Binds the provider account an invitation was accepted with, in the
-   * acceptance's own transaction: the invitation token already proved the
-   * mailbox, so no step-up is asked (DOMAIN-RULES §12, "sets password or OAuth
-   * link").
+   * acceptance's own transaction, with its security email in the same
+   * transaction's outbox: the invitation token already proved the mailbox, so
+   * no step-up is asked (DOMAIN-RULES §12, "sets password or OAuth link"). The
+   * audit row is written by {@link recordInvitedLink} once that transaction
+   * has committed, because the trail writes in a transaction of its own and a
+   * rolled-back acceptance must leave no `auth.oauth.linked` behind.
    */
   async linkInvitedIdentity(
     tx: DbTransaction,
     userId: string,
     identity: OauthIdentity,
   ): Promise<void> {
-    await this.#linkOauth(userId, identity, 'invite', tx);
+    await this.#bindIdentity(userId, identity, 'invite', tx);
+  }
+
+  /** The audit half of {@link linkInvitedIdentity}, after the acceptance committed. */
+  async recordInvitedLink(userId: string, provider: OauthProvider): Promise<void> {
+    await this.#auditLinked(userId, provider, 'invite');
   }
 
   /**
@@ -840,7 +848,13 @@ export class AuthService {
       });
       throw new AuthFailure('oauth-domain-not-allowed');
     }
-    if ((await this.#parts.oauthIdentities.userFor(provider, identity.subject)) !== undefined) {
+    const boundTo = await this.#parts.oauthIdentities.userFor(provider, identity.subject);
+    if (boundTo !== undefined) {
+      await this.#audit('auth.sign_in.failed', boundTo, 'system', {
+        method: 'invite',
+        provider,
+        reason: 'identity-conflict',
+      });
       throw new AuthFailure('oauth-identity-conflict');
     }
     if (this.#inviteAcceptor === undefined) {
@@ -1028,7 +1042,13 @@ export class AuthService {
    * Binds the provider account, audits it, and tells the account holder: a new
    * way into their account is a change they must hear about (ASVS 2.5.5).
    */
-  async #linkOauth(
+  async #linkOauth(userId: string, identity: OauthIdentity, via: OauthLinkedVia): Promise<void> {
+    await this.#bindIdentity(userId, identity, via);
+    await this.#auditLinked(userId, identity.provider, via);
+  }
+
+  /** The link itself and the holder's email, in `tx` when the caller has one. */
+  async #bindIdentity(
     userId: string,
     identity: OauthIdentity,
     via: OauthLinkedVia,
@@ -1045,13 +1065,16 @@ export class AuthService {
     }
 
     this.#parts.logger.info({ userId, provider, via }, 'Connected a sign-in provider account');
-    await this.#audit('auth.oauth.linked', userId, via === 'sign-in' ? 'system' : 'staff', {
-      provider,
-      via,
-    });
     await this.#notifySecurityChange(userId, 'oauthConnected', tx, {
       provider: PROVIDER_NAMES[provider],
       account: identity.email,
+    });
+  }
+
+  #auditLinked(userId: string, provider: OauthProvider, via: OauthLinkedVia): Promise<void> {
+    return this.#audit('auth.oauth.linked', userId, via === 'sign-in' ? 'system' : 'staff', {
+      provider,
+      via,
     });
   }
 

@@ -4,6 +4,7 @@ import {
   openContact,
   openContacts,
   openTicket,
+  openTicketing,
   openTickets,
   signIn,
   submitPassword,
@@ -113,6 +114,45 @@ test.describe('reference screens @screenshot', () => {
     await page.getByText(t('tickets:details.hiddenTickets', { count: 2 })).waitFor();
 
     await expect(page).toHaveScreenshot('ticket-view.png');
+  });
+
+  test('automation rules', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
+    await page.getByRole('list', { name: t('rules:list.rules.caption') }).waitFor();
+    await page.getByRole('list', { name: t('rules:log.listLabel') }).waitFor();
+
+    await expect(page).toHaveScreenshot('automation-rules.png', { fullPage: true });
+  });
+
+  test('ticketing business hours', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signIn(page, locale);
+    await openTicketing(page, locale);
+    await page.getByRole('tab', { name: t('ticketing:tabs.businessHours') }).click();
+    await page
+      .getByRole('heading', { level: 2, name: t('ticketing:businessHours.heading') })
+      .waitFor();
+    await page
+      .getByRole('combobox', { name: t('ticketing:businessHours.timezone.label') })
+      .waitFor();
+
+    await expect(page).toHaveScreenshot('ticketing-business-hours.png', { fullPage: true });
+  });
+
+  test('ticketing SLAs', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signIn(page, locale);
+    await openTicketing(page, locale);
+    await page.getByRole('tab', { name: t('ticketing:tabs.slas') }).click();
+    await page.getByRole('list', { name: t('ticketing:slas.list.heading') }).waitFor();
+    await page.getByRole('form', { name: t('ticketing:slas.editor.form') }).waitFor();
+
+    await expect(page).toHaveScreenshot('ticketing-slas.png', { fullPage: true });
   });
 
   test('one contact', async ({ page, appLocale: locale }) => {

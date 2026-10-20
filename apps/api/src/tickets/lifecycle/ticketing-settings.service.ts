@@ -94,7 +94,9 @@ export class TicketingSettingsService {
     statusId: string,
     request: TicketStatusUpdateRequest,
   ): Promise<TicketStatus> {
-    const status = await this.#require(context.tx, statusId);
+    // Locked, so "did the flag change" compares with the committed value: two
+    // admins racing each see the other's result and the last one re-syncs.
+    const status = await this.#require(context.tx, statusId, { forUpdate: true });
     this.#refuse(statusEditRefusal(status, request));
 
     if (request.name !== undefined && request.name.toLowerCase() !== status.name.toLowerCase()) {
@@ -125,8 +127,13 @@ export class TicketingSettingsService {
     }
 
     // Tickets already in the status keep their stored clocks until each next
-    // syncs, so the worker re-syncs them (§3.2), a batch at a time.
-    if (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) {
+    // syncs, so the worker re-syncs them (§3.2), a batch at a time. Both the
+    // pause flag and the system state (closing resolves, reopening restarts)
+    // decide what the clocks do.
+    const clocksDepend =
+      (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) ||
+      (request.systemState !== undefined && request.systemState !== status.systemState);
+    if (clocksDepend) {
       await enqueueSlaStatusResync(context.tx, context.brandId, { statusId, at: context.now });
     }
 
@@ -284,8 +291,12 @@ export class TicketingSettingsService {
     return settings;
   }
 
-  async #require(tx: DbTransaction, statusId: string): Promise<TicketStatusRow> {
-    const status = await this.#lifecycle.findStatus(tx, statusId);
+  async #require(
+    tx: DbTransaction,
+    statusId: string,
+    lock?: { readonly forUpdate: true },
+  ): Promise<TicketStatusRow> {
+    const status = await this.#lifecycle.findStatus(tx, statusId, lock);
     if (status === undefined) {
       // A status of another brand is invisible to this transaction, so "there
       // is no such id" and "it is not yours" are the same answer.

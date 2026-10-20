@@ -52,6 +52,11 @@ export interface SlaSync {
   readonly at: Date;
   /** Set when the change moved the ticket, so what ran before counts under the old hours. */
   readonly previousDepartmentId?: string | undefined;
+  /**
+   * `at` is when something happened earlier, not now (a queued batch). A clock
+   * already checkpointed past it is not rewound, so time is not counted twice.
+   */
+  readonly notBeforeCheckpoint?: boolean;
 }
 
 /** The actor on the activity rows the engine writes: nobody pressed a button. */
@@ -80,6 +85,19 @@ export class SlaService {
   async sync(tx: DbTransaction, change: SlaSync): Promise<void> {
     const brand = await this.#brand(tx, change.brandId);
     await this.#syncOne(tx, brand, change);
+  }
+
+  /** {@link sync} for many tickets, reading the brand's policies and calendars once. */
+  async syncMany(
+    tx: DbTransaction,
+    brandId: string,
+    ticketIds: readonly string[],
+    change: Pick<SlaSync, 'at' | 'notBeforeCheckpoint'>,
+  ): Promise<void> {
+    const brand = await this.#brand(tx, brandId);
+    for (const ticketId of ticketIds) {
+      await this.#syncOne(tx, brand, { ...change, brandId, ticketId });
+    }
   }
 
   /** An explicit admin action starts imported work from this moment, never from its historical creation date. */
@@ -275,6 +293,9 @@ export class SlaService {
       return;
 
     const before = await this.#repository.currentClocks(tx, change.ticketId);
+    const at = change.notBeforeCheckpoint
+      ? new Date(Math.max(change.at.getTime(), ...before.map((c) => c.checkpointAt.getTime())))
+      : change.at;
     const facts = await this.#facts(tx, found.ticket, found.status, before, change);
     const policy = this.#applied(brand, found.ticket);
     const after = reconcileClocks({
@@ -283,7 +304,7 @@ export class SlaService {
       facts,
       policy,
       calendarFor: brand.calendarFor,
-      at: change.at,
+      at,
     });
     const closed = found.status.systemState === 'closed' || facts.merged || facts.deleted;
 

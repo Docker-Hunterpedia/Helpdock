@@ -81,15 +81,20 @@ describe('createSlaStatusResyncHandler', () => {
     const handler = createSlaStatusResyncHandler({
       statusResyncBatch,
       repository: {
-        openTicketIdsInStatus: async (_tx: unknown, _status: string, after?: string) => {
+        liveTicketIdsInStatus: async (_tx: unknown, _status: string, after?: string) => {
           asked.push(after);
           return found;
         },
       },
       sla: {
-        sync: async (_tx: unknown, change: { ticketId: string; at: Date }) => {
-          expect(change.at).toEqual(at);
-          synced.push(change.ticketId);
+        syncMany: async (
+          _tx: unknown,
+          _brand: string,
+          ticketIds: string[],
+          change: { at: Date; notBeforeCheckpoint?: boolean },
+        ) => {
+          expect(change).toEqual({ at, notBeforeCheckpoint: true });
+          synced.push(...ticketIds);
         },
       },
     } as unknown as SlaWorkerDeps);

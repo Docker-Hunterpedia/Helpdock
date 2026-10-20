@@ -392,10 +392,12 @@ export class SlaRepository {
   }
 
   /**
-   * One batch of the open tickets in a status, in id order after `afterId`:
-   * what a change to the status's `pauses_sla` has to re-sync.
+   * One batch of the live tickets (not deleted, not merged) in a status, in id
+   * order after `afterId`: what a change to the status's `pauses_sla` or
+   * system state has to re-sync. Closed ones are included, because the change
+   * may be the one that closes the status.
    */
-  async openTicketIdsInStatus(
+  async liveTicketIdsInStatus(
     tx: DbTransaction,
     statusId: string,
     afterId: string | undefined,
@@ -404,10 +406,10 @@ export class SlaRepository {
     const rows = await tx
       .select({ id: tickets.id })
       .from(tickets)
-      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .where(
         and(
-          openTicket,
+          isNull(tickets.deletedAt),
+          isNull(tickets.mergedIntoId),
           eq(tickets.statusId, statusId),
           afterId === undefined ? undefined : gt(tickets.id, afterId),
         ),

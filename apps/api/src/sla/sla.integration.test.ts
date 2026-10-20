@@ -882,28 +882,11 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       expect(await nextDue()).toBeNull();
     });
 
-    it('re-syncs the tickets already in a status when its pauses-SLA flag changes (#336)', async () => {
-      expect(
-        (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
-          .status,
-      ).toBe(201);
-      const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
-        name: 'On hold with vendor',
-        systemState: 'open',
-        pausesSla: false,
-        color: 'info',
-      });
-      expect(created.status).toBe(201);
-      const statusId = created.body.id;
-      const inStatus: string[] = [];
-      for (let index = 0; index < 3; index += 1) {
-        const { ticket } = await createTicket();
-        expect(
-          (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId })).status,
-        ).toBe(200);
-        inStatus.push(ticket.id);
-      }
-      const elsewhere = (await createTicket()).ticket.id;
+    describe('status re-sync (#336)', () => {
+      const statusPath = (statusId: string) => `${brandPath()}/ticket-statuses/${statusId}`;
+      const patchStatus = (statusId: string, body: Record<string, unknown>) =>
+        call('PATCH', statusPath(statusId), ada, body);
+
       const columns = (ticketId: string) =>
         withSystem(runtime.db, seeded.brandId, async (tx) => {
           const [row] = await tx
@@ -916,77 +899,174 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
             .where(eq(tickets.id, ticketId));
           return row;
         });
-      // What the worker does with the `sla.status_resync` rows, one batch of two at a time.
-      const handler = createSlaStatusResyncHandler({ ...slaDeps(), statusResyncBatch: 2 });
-      const handled = new Set<string>();
-      const drain = async () => {
-        for (;;) {
-          const rows = (
+
+      const statusWithTickets = async (name: string, count: number) => {
+        const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+          name,
+          systemState: 'open',
+          pausesSla: false,
+          color: 'info',
+        });
+        expect(created.status).toBe(201);
+        const statusId = created.body.id;
+        const ids: string[] = [];
+        for (let index = 0; index < count; index += 1) {
+          const { ticket } = await createTicket();
+          expect(
+            (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId })).status,
+          ).toBe(200);
+          ids.push(ticket.id);
+        }
+        return { statusId, ids };
+      };
+
+      /** What the worker does with the `sla.status_resync` rows of one status, a batch of two at a time. */
+      const drainer = (statusId: string) => {
+        const handler = createSlaStatusResyncHandler({ ...slaDeps(), statusResyncBatch: 2 });
+        const handled = new Set<string>();
+        const at: Date[] = [];
+        const drain = async (): Promise<number> => {
+          for (;;) {
+            const rows = (
+              await withSystem(runtime.db, seeded.brandId, (tx) =>
+                tx
+                  .select()
+                  .from(outbox)
+                  .where(eq(outbox.event, SLA_STATUS_RESYNC_EVENT))
+                  .orderBy(asc(outbox.id)),
+              )
+            ).filter((row) => !handled.has(row.id) && row.payload.statusId === statusId);
+            const row = rows[0];
+            if (row === undefined) {
+              return handled.size;
+            }
+            handled.add(row.id);
+            at.push(new Date(String(row.payload.at)));
             await withSystem(runtime.db, seeded.brandId, (tx) =>
-              tx
-                .select()
-                .from(outbox)
-                .where(eq(outbox.event, SLA_STATUS_RESYNC_EVENT))
-                .orderBy(asc(outbox.id)),
-            )
-          ).filter((row) => !handled.has(row.id) && row.payload.statusId === statusId);
-          const row = rows[0];
-          if (row === undefined) {
-            return handled.size;
+              handler({
+                outboxId: row.id,
+                brandId: row.brandId,
+                event: row.event,
+                payload: row.payload,
+                tx,
+                log: silentLogger,
+              }),
+            );
           }
-          handled.add(row.id);
-          await withSystem(runtime.db, seeded.brandId, (tx) =>
-            handler({
-              outboxId: row.id,
-              brandId: row.brandId,
-              event: row.event,
-              payload: row.payload,
-              tx,
-              log: silentLogger,
-            }),
-          );
+        };
+        return { drain, at };
+      };
+
+      const expectPaused = async (ids: string[], paused: boolean) => {
+        for (const id of ids) {
+          const clock = await clockOf(id, 'resolution');
+          expect(clock.pausedAt === null).toBe(!paused);
+          expect((await columns(id))?.resolution ?? null).toEqual(clock.dueAt);
+          expect(clock.dueAt === null).toBe(paused);
         }
       };
 
-      for (const id of inStatus) {
-        expect((await columns(id))?.resolution).not.toBeNull();
-      }
-
-      const pause = await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
-        pausesSla: true,
+      beforeAll(async () => {
+        expect(
+          (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
+            .status,
+        ).toBe(201);
       });
-      expect(pause.status).toBe(200);
-      expect(await drain()).toBe(2);
 
-      for (const id of inStatus) {
-        expect((await clockOf(id, 'resolution')).pausedAt).not.toBeNull();
-        expect(await columns(id)).toEqual({ first: null, resolution: null, next: null });
-      }
-      expect((await columns(elsewhere))?.resolution).not.toBeNull();
+      it('pauses and resumes the tickets already in the status, in batches, from the change time', async () => {
+        const { statusId, ids } = await statusWithTickets('On hold with vendor', 3);
+        const elsewhere = (await createTicket()).ticket.id;
+        const { drain, at } = drainer(statusId);
+        await expectPaused(ids, false);
 
-      // A PATCH that leaves the flag as it is writes nothing.
-      expect(
-        (
-          await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
-            pausesSla: true,
-          })
-        ).status,
-      ).toBe(200);
-      expect(await drain()).toBe(2);
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(2);
 
-      const resume = await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
-        pausesSla: false,
+        await expectPaused(ids, true);
+        for (const id of ids) {
+          expect((await clockOf(id, 'resolution')).pausedAt).toEqual(at[0]);
+          expect(await columns(id)).toEqual({ first: null, resolution: null, next: null });
+        }
+        expect((await columns(elsewhere))?.resolution).not.toBeNull();
+
+        // A PATCH that leaves the flag as it is writes nothing.
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(2);
+
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect(await drain()).toBe(4);
+        await expectPaused(ids, false);
+        for (const id of ids) {
+          expect((await columns(id))?.next).not.toBeNull();
+        }
       });
-      expect(resume.status).toBe(200);
-      expect(await drain()).toBe(4);
 
-      for (const id of inStatus) {
+      it('ends on the final flag when it flips twice before the worker runs', async () => {
+        const { statusId, ids } = await statusWithTickets('Flip flop', 2);
+        const { drain } = drainer(statusId);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect(await drain()).toBe(4);
+        await expectPaused(ids, false);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: false })).status).toBe(200);
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        expect(await drain()).toBe(10);
+        await expectPaused(ids, true);
+      });
+
+      it('ends on the committed flag when two admins save at once', async () => {
+        const { statusId, ids } = await statusWithTickets('Race', 2);
+        const { drain } = drainer(statusId);
+
+        const [first, second] = await Promise.all([
+          patchStatus(statusId, { pausesSla: true }),
+          patchStatus(statusId, { pausesSla: false }),
+        ]);
+        expect([first.status, second.status]).toEqual([200, 200]);
+        const list = await call<TicketStatusList>('GET', `${brandPath()}/ticket-statuses`, ada);
+        const final = list.body.statuses.find((status) => status.id === statusId)?.pausesSla;
+
+        await drain();
+        await expectPaused(ids, final === true);
+      });
+
+      it('never rewinds a clock another sync already moved past the change time', async () => {
+        const { statusId, ids } = await statusWithTickets('Late batch', 1);
+        const id = ids[0] ?? '';
+        const { drain, at } = drainer(statusId);
+
+        expect((await patchStatus(statusId, { pausesSla: true })).status).toBe(200);
+        const checkpoint = new Date(Date.now() + 60 * MINUTE);
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(ticketSlaClocks)
+            .set({ checkpointAt: checkpoint })
+            .where(eq(ticketSlaClocks.ticketId, id)),
+        );
+        await drain();
+
+        expect(at[0]?.getTime()).toBeLessThan(checkpoint.getTime());
         const clock = await clockOf(id, 'resolution');
-        expect(clock.pausedAt).toBeNull();
-        const stored = await columns(id);
-        expect(stored?.resolution).toEqual(clock.dueAt);
-        expect(stored?.next).not.toBeNull();
-      }
+        expect(clock.pausedAt).toEqual(checkpoint);
+        expect(clock.checkpointAt).toEqual(checkpoint);
+      });
+
+      it('closes the clocks of the tickets in a status whose system state becomes closed', async () => {
+        const { statusId, ids } = await statusWithTickets('Soon done', 2);
+        const { drain } = drainer(statusId);
+
+        expect((await patchStatus(statusId, { systemState: 'closed' })).status).toBe(200);
+        expect(await drain()).toBe(2);
+
+        for (const id of ids) {
+          const clock = await clockOf(id, 'resolution');
+          expect(clock.satisfiedAt).not.toBeNull();
+          expect((await columns(id))?.resolution).toBeNull();
+        }
+      });
     });
 
     it('does not meet the response clock with an internal note', async () => {

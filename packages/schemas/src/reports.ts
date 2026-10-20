@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { localeSchema } from './brand.js';
 import { CSAT_RATING_MAX, CSAT_RATING_MIN } from './csat.js';
-import { ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
+import { ticketChannelSchema, ticketPrioritySchema, ticketSystemStateSchema } from './ticket.js';
 
 /**
  * Reports (M8-04, REQUIREMENTS §4.8): what `GET /api/brands/:brandId/reports`
@@ -9,9 +9,10 @@ import { ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
  *
  * Days are the brand's local calendar days, inclusive at both ends, because
  * "yesterday" means the brand's yesterday to the people reading the report.
- * Every number comes from the rollups `stats.rollup` writes, except tickets by
- * status, which is a current state rather than something that happened on a
- * day, and is read from the tickets themselves.
+ * Every number comes from the rollups `stats.rollup` writes, except what
+ * describes a current state rather than something that happened on a day —
+ * tickets by status and by tag, and the backlog by status — which is read
+ * from the tickets themselves.
  */
 
 /** The longest range one request may ask for: a year and a leap day. */
@@ -51,6 +52,7 @@ export type ReportQuery = z.infer<typeof reportQuerySchema>;
 export const REPORT_EXPORTS = [
   'volume',
   'volume_by_status',
+  'volume_by_tag',
   'response_times',
   'sla',
   'backlog',
@@ -149,6 +151,40 @@ export const reportSummarySchema = z.object({
         name: z.string(),
         systemState: z.enum(['open', 'on_hold', 'escalated', 'closed']),
         tickets: count,
+      }),
+    ),
+    /**
+     * Tickets created in the range per tag they carry now (M14-29), most
+     * first, cut at {@link REPORT_LIST_ROWS}. A ticket with two tags counts
+     * under each; one with none is in no row. The CSV has every tag.
+     */
+    byTag: z.array(
+      z.object({
+        tagId: z.uuid(),
+        name: z.string(),
+        nameAr: z.string().nullable(),
+        tickets: count,
+      }),
+    ),
+  }),
+  /**
+   * The tickets open now (any status but a closed one), by status, each with
+   * how many nobody is assigned (M14-29). Not bounded by the range: it is the
+   * queue as it stands, under the department, channel and agent filters.
+   */
+  backlogByStatus: z.object({
+    open: count,
+    unassigned: count,
+    /** Unassigned over open, null when nothing is open. */
+    unassignedShare: share,
+    byStatus: z.array(
+      z.object({
+        statusId: z.uuid(),
+        name: z.string(),
+        nameAr: z.string().nullable(),
+        systemState: ticketSystemStateSchema.exclude(['closed']),
+        open: count,
+        unassigned: count,
       }),
     ),
   }),

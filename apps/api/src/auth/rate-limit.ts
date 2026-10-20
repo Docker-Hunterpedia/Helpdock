@@ -46,6 +46,19 @@ export const EMAIL_DISPATCH_RULE: RateLimitRule = {
 };
 
 /**
+ * Per IP, for the sign-in link and password reset requests (M18-11). The
+ * per-address rule above stops one inbox being flooded; this stops one source
+ * walking many addresses. Its own bucket, so a burst of link requests does not
+ * spend the office's sign-in budget, and looser than that one for the same
+ * reason: many people behind one address forget a password on the same day.
+ */
+export const EMAIL_DISPATCH_IP_RULE: RateLimitRule = {
+  bucket: 'email-dispatch-ip',
+  limit: 30,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Per account, for the routes that re-prove a credential from inside a session:
  * the current password, and a live authenticator code before the second factor
  * is weakened.

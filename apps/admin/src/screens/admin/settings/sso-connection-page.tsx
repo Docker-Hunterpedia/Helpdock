@@ -34,6 +34,8 @@ import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
 import { SSO_ROLE_LABELS, SsoAccessControls } from './sso-access-controls.tsx';
 import { type SsoMappingDraft, SsoMappings } from './sso-mappings.tsx';
+import { SsoPresetPicker } from './sso-preset-picker.tsx';
+import { hasIssuerPlaceholder, type SsoPresetId } from './sso-presets.ts';
 import { OidcFields, SamlFields } from './sso-protocol-fields.tsx';
 import { SsoPublicValue } from './sso-public-value.tsx';
 
@@ -118,6 +120,7 @@ function ConnectionForm({
   const [secret, setSecret] = useState<string | null>(connection?.secretConfigured ? null : '');
   const [domains, setDomains] = useState(draft.emailDomains.join(', '));
   const [invalid, setInvalid] = useState(false);
+  const [preset, setPreset] = useState<SsoPresetId>('custom');
   const [deleting, setDeleting] = useState(false);
   const [popupBlocked, setPopupBlocked] = useState(false);
   const initial = connection ? ssoConnectionCreateSchema.parse(connection) : emptyConnection();
@@ -171,8 +174,9 @@ function ConnectionForm({
       ...(secret ? { clientSecret: secret } : {}),
     });
     const parsedMappings = ssoMappingsSchema.safeParse({ mappings });
-    setInvalid(!parsed.success || !parsedMappings.success);
-    if (parsed.success && parsedMappings.success) save.mutate(parsed.data);
+    const valid = parsed.success && parsedMappings.success && !hasIssuerPlaceholder(draft);
+    setInvalid(!valid);
+    if (valid) save.mutate(parsed.data);
   };
   const startTest = () => {
     const popup = window.open('about:blank', '_blank');
@@ -189,11 +193,13 @@ function ConnectionForm({
   const setConfig = (config: SsoConnectionInput['config']) => setDraft({ ...draft, config });
   const protocol = draft.config.protocol;
   const linked = (connection?.peopleCount ?? 0) > 0;
+  const presetHint = (field: 'issuerHint' | 'groupsHint' | 'domainsHint') =>
+    preset === 'custom' ? undefined : t(`sso:presets.${preset}.${field}`);
   const input = (
     label: string,
     value: string,
     onChange: (value: string) => void,
-    options: { multiline?: boolean; disabled?: boolean } = {},
+    options: { multiline?: boolean; disabled?: boolean; helperText?: string | undefined } = {},
   ) => (
     <TextField
       label={label}
@@ -202,6 +208,7 @@ function ConnectionForm({
       fullWidth
       multiline={options.multiline ?? false}
       disabled={options.disabled ?? false}
+      helperText={options.helperText}
       slotProps={{ htmlInput: { dir: 'ltr' } }}
     />
   );
@@ -251,6 +258,7 @@ function ConnectionForm({
               aria-label={t('sso:protocol')}
               onChange={(_event, selected: 'oidc' | 'saml' | null) => {
                 if (!selected || selected === protocol) return;
+                setPreset('custom');
                 setConfig(
                   selected === 'oidc'
                     ? emptyConnection().config
@@ -276,6 +284,16 @@ function ConnectionForm({
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               slotProps={{ htmlInput: { maxLength: 80 } }}
             />
+            {draft.config.protocol === 'oidc' && id === 'new' ? (
+              <SsoPresetPicker
+                draft={draft}
+                preset={preset}
+                onChange={(next, applied) => {
+                  setPreset(next);
+                  setDraft(applied);
+                }}
+              />
+            ) : null}
             {draft.config.protocol === 'oidc' ? (
               <OidcFields
                 config={draft.config}
@@ -284,12 +302,17 @@ function ConnectionForm({
                 secret={secret}
                 secretConfigured={connection?.secretConfigured ?? false}
                 onSecretChange={setSecret}
+                issuerHint={presetHint('issuerHint')}
+                issuerInvalid={invalid && hasIssuerPlaceholder(draft)}
               />
             ) : (
               <SamlFields config={draft.config} onChange={setConfig} linked={linked} />
             )}
-            {input(t('sso:groups'), draft.groupAttribute ?? '', (groupAttribute) =>
-              setDraft({ ...draft, groupAttribute: groupAttribute || null }),
+            {input(
+              t('sso:groups'),
+              draft.groupAttribute ?? '',
+              (groupAttribute) => setDraft({ ...draft, groupAttribute: groupAttribute || null }),
+              { helperText: presetHint('groupsHint') },
             )}
           </SectionCard>
           <SectionCard id="sso-access" heading={t('sso:access')} caption={t('sso:domainsHint')}>
@@ -304,7 +327,7 @@ function ConnectionForm({
               helperText={
                 domainsTaken
                   ? t('sso:refusals.sso-email-domain-taken', { domains: domainsTaken.join(', ') })
-                  : undefined
+                  : presetHint('domainsHint')
               }
               slotProps={{ htmlInput: { dir: 'ltr' } }}
             />

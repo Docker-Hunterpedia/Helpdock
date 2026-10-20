@@ -24,11 +24,16 @@ const HOST = 'help.example.com';
 
 interface Setup extends MemorySiteOptions {
   hits?: SearchHit[];
+  /** What the per-IP feedback budget answers. */
+  feedbackAllowed?: boolean;
 }
 
 const setup = (options: Setup = {}) => {
   const memory = memorySiteContent(options);
   const tree = vi.spyOn(memory.content, 'tree');
+  const feedbackBudget = vi.fn((_brandId: string, _ip: string) =>
+    Promise.resolve(options.feedbackAllowed ?? true),
+  );
   const feedback = {
     recordView: vi.fn(() => Promise.resolve()),
     recordVote: vi.fn(() => Promise.resolve()),
@@ -86,9 +91,10 @@ const setup = (options: Setup = {}) => {
     appUrl: 'https://desk.example.com',
     imageSources: ['https://bucket.s3.example.com'],
     visitorSecret: 'secret',
+    feedbackBudget,
     log: { warn: vi.fn() },
   });
-  return { site, memory, tree, feedback, search };
+  return { site, memory, tree, feedback, search, feedbackBudget };
 };
 
 const request = (path: string, extra: Partial<SiteRequest> = {}): SiteRequest => ({
@@ -438,6 +444,21 @@ describe('HelpCenterSite forms and staff', () => {
     expect(feedback.recordView).toHaveBeenCalledWith(
       expect.objectContaining({ searchId: 'search-1' }),
     );
+  });
+
+  it('refuses a vote past the per-IP budget without recording it (M18-11)', async () => {
+    const { site, feedback, feedbackBudget } = setup({ feedbackAllowed: false });
+    const response = await site.handle(
+      request(`${BASE}/_hd/feedback`, {
+        method: 'POST',
+        ip: '203.0.113.9',
+        body: { article: articleId(1), locale: 'en', slug: 'refund-timelines', helpful: 'yes' },
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(feedbackBudget).toHaveBeenCalledWith(HC_BRAND, '203.0.113.9');
+    expect(feedback.recordVote).not.toHaveBeenCalled();
   });
 
   it('thanks staff for a vote without counting it', async () => {

@@ -876,6 +876,20 @@ the share that is unassigned), both under the reader's department scope and
 both from the existing `stats.rollup` data plus one rollup column per tag.
 Artboard `Admin/Reports` (amended).
 
+**Status: done** ([#316](https://github.com/Docker-Hunterpedia/Helpdock/issues/316)).
+- [x] `volume.byTag` (top 20) and `backlogByStatus` in `reportSummarySchema`,
+  and the `volume_by_tag` CSV (`tag_id,tag,tag_ar,created`, every tag).
+- [x] The two ChartCards on Reports, drawn from `Admin/M14-Amendments`; the
+  share-of-whole rows take a 144 px label for brand-written names (DESIGN 1.31).
+- [x] `reports.md`.
+- Both are read from the tickets on each request, as the existing By status
+  breakdown is, rather than from a new rollup column per tag: a ticket's tags
+  and status are its current state, which a daily rollup would only snapshot
+  an hour late, and "open now" cannot come from a rollup at all. No migration,
+  and the department scope is row-level security on `tickets` and
+  `ticket_tags`. Backlog by status has no CSV, as the board draws none; its
+  Table carries every figure.
+
 ## Data model
 
 One migration, numbered with the next free number at implementation time

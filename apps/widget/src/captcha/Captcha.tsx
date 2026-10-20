@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Translate } from '../i18n/translator.js';
 import type { CaptchaConfig } from '../transport/types.js';
+import { useWidgetState } from '../ui/context.js';
 import { Icon } from '../ui/icons.js';
 
 /**
@@ -70,6 +71,7 @@ export default function Captcha({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>('checking');
+  const brandId = useWidgetState().config?.brand.id ?? '';
 
   useEffect(() => {
     let live = true;
@@ -80,6 +82,11 @@ export default function Captcha({
         }
         api.render(host.current, {
           sitekey: config.site_key,
+          // The surface and brand the api checks Turnstile's answer against
+          // (M18-11); hCaptcha has neither and is sent neither.
+          ...(config.provider === 'turnstile'
+            ? { action: 'widget-first-message', cData: brandId }
+            : {}),
           callback: (token: string) => {
             setStatus('verified');
             onToken(token);
@@ -99,7 +106,7 @@ export default function Captcha({
     return () => {
       live = false;
     };
-  }, [config.provider, config.site_key, onToken]);
+  }, [config.provider, config.site_key, brandId, onToken]);
 
   return (
     <fieldset class="hd-captcha">

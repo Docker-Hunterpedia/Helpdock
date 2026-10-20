@@ -239,3 +239,33 @@ hand an already-linked account to another identity. The rules are now:
   A save confirms only the certificates the administrator submitted: one that
   omits a certificate the metadata lists is refused with
   `sso-metadata-confirm-certificates`.
+
+### 2026-10-20 — M18-09 Entra ID email verification
+
+- **Entra's `xms_edov` can stand in for `email_verified`, for members of one
+  tenant only.** Entra ID never sends `email_verified`, so under the rule above
+  an Entra OIDC connection could link or create nobody. For OIDC,
+  `SsoAssertion.emailVerified` is now also true when every one of these holds:
+  the configured email claim is `email`; the connection's issuer is exactly
+  `https://login.microsoftonline.com/<tenant GUID>/v2.0` (global cloud only;
+  government and China cloud issuers fail closed), which leaves out `common`,
+  `organizations`, `consumers` and the personal-account tenant
+  `9188040d-6c67-4c5b-b112-36a304b66dad`; the ID token's `iss` is that issuer
+  and its `tid` is that GUID; `acct` is `0`, a member of the tenant; and
+  `xms_edov` is the boolean `true`. Nothing else counts: a string, a missing
+  claim, a guest (`acct` 1) or any other issuer leaves the address unverified.
+  `xms_edov` says the domain is verified by the tenant that holds the account.
+  For a guest that is the guest's home tenant or a personal Microsoft, Google
+  or one-time-passcode account, so guests are excluded and the pinned tenant
+  vouches. One residue stays with the operator: a B2B user turned member (for
+  example by cross-tenant synchronisation) has `acct` 0 while its `xms_edov`
+  speaks for its home tenant, so the connection's email domains must list only
+  domains verified in the pinned tenant, as the guide says. Guests cannot make a first link through an Entra OIDC
+  connection; Helpdock has no manual SSO link. Recorded in DOMAIN-RULES §12.
+  The Entra preset tells admins to add the `email`, `xms_edov` and `acct`
+  optional claims. An existing Entra OIDC connection whose tokens already carry
+  them starts linking by email, and creating accounts when JIT is on, at the
+  next sign-in after the upgrade.
+- **The OIDC issuer refuses `{` and `}`.** The Entra preset's `{tenant-id}`
+  template parses as a URL, so the connection schema refuses braces in the
+  issuer as well as the form.

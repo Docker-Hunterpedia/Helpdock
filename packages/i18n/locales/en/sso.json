@@ -102,5 +102,27 @@
   "refusals": {
     "sso-email-domain-taken": "{{domains}} already belongs to another enabled connection. Each email domain signs in through one enabled connection only.",
     "sso-metadata-confirm-certificates": "The provider metadata lists a signing certificate that is not saved here. Verify it with your identity provider, add it under Signing certificates, then save."
+  },
+  "presets": {
+    "label": "Start from",
+    "hint": "A preset fills in the fields below. You can still change any of them.",
+    "guide": "Setup guide",
+    "custom": {
+      "name": "Custom OpenID Connect"
+    },
+    "google-workspace": {
+      "name": "Google Workspace (OIDC)",
+      "banner": "Google Workspace: create the OAuth client in the Google Cloud project of your Workspace, with the consent screen set to Internal.",
+      "issuerHint": "Google uses this one issuer for every Workspace.",
+      "groupsHint": "Leave empty. Google sends no groups in the ID token, so use default access or give roles by hand.",
+      "domainsHint": "Enter your Workspace domain, for example example.com. Only addresses there can link to this connection."
+    },
+    "entra-id": {
+      "name": "Microsoft Entra ID (OIDC)",
+      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI. Under Token configuration, add the optional claims email, xms_edov and acct, and the groups claim.",
+      "issuerHint": "Replace {tenant-id} with your Directory (tenant) ID.",
+      "groupsHint": "Add the groups claim in Token configuration. Values are group object IDs.",
+      "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."
+    }
   }
 }

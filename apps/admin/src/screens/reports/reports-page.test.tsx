@@ -71,6 +71,8 @@ describe('ReportsPage (M8-04)', () => {
       'SLA compliance',
       'Backlog trend',
       'Customer satisfaction',
+      'Volume by tag',
+      'Backlog by status',
       'Agent workload',
       'Busiest hours',
       'Help center top searches',
@@ -238,6 +240,91 @@ describe('ReportsPage (M8-04)', () => {
     await waitFor(() => {
       expect(within(agents).queryByRole('cell', { name: 'Unassigned' })).not.toBeInTheDocument();
     });
+    const backlog = screen.getByRole('region', { name: 'Backlog by status' });
+    expect(within(backlog).queryByText(/are unassigned/)).not.toBeInTheDocument();
+    expect(
+      within(backlog).getByRole('img', {
+        name: 'Open tickets now by status: Open 64, Awaiting customer 38, On hold 9, Snoozed 7.',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('ranks the tags of the tickets created in the period, and exports every tag as CSV', async () => {
+    const exportCsv = vi.fn(fakeReportsApi().exportCsv);
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:report'), revokeObjectURL: vi.fn() }),
+    );
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { user } = await renderReports(fakeReportsApi({ exportCsv }));
+    const tags = await screen.findByRole('region', { name: 'Volume by tag' });
+
+    expect(
+      within(tags).getByRole('img', {
+        name: 'Tickets created per tag: refund 182, shipping 140, login 96, vip 41.',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(tags).getByText(
+        'Tickets created in the period, by the tags they carry now · top 20 tags',
+      ),
+    ).toBeVisible();
+
+    await user.click(within(tags).getByRole('button', { name: 'Export CSV · Volume by tag' }));
+
+    await waitFor(() => {
+      expect(exportCsv.mock.calls[0]?.[1]).toBe('volume_by_tag');
+    });
+  });
+
+  it('counts the open tickets by status with the unassigned ones, and has no CSV of its own', async () => {
+    const { user } = await renderReports();
+    const backlog = await screen.findByRole('region', { name: 'Backlog by status' });
+
+    expect(
+      within(backlog).getByRole('img', {
+        name: 'Open tickets now by status: Open 64 · 12 unassigned, Awaiting customer 38 · 0 unassigned, On hold 9 · 2 unassigned, Snoozed 7 · 0 unassigned.',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(backlog).getByText('14 of 118 open tickets are unassigned (11.9 %).'),
+    ).toBeVisible();
+    expect(within(backlog).queryByRole('button', { name: /Export CSV/ })).not.toBeInTheDocument();
+
+    await user.click(within(backlog).getByRole('button', { name: 'Table · Backlog by status' }));
+
+    const table = within(backlog).getByRole('table', { name: 'Backlog by status' });
+    expect(
+      within(table)
+        .getAllByRole('row')
+        .map((row) => row.textContent),
+    ).toEqual([
+      'StatusOpenUnassigned',
+      'Open6412',
+      'Awaiting customer380',
+      'On hold92',
+      'Snoozed70',
+    ]);
+  });
+
+  it('says so when no ticket carries a tag and none is open', async () => {
+    await renderReports(
+      fakeReportsApi({
+        summary: async (_brand, query) => {
+          const summary = reportSummary(query);
+          return {
+            ...summary,
+            volume: { ...summary.volume, byTag: [] },
+            backlogByStatus: { open: 0, unassigned: 0, unassignedShare: null, byStatus: [] },
+          };
+        },
+      }),
+    );
+
+    const tags = await screen.findByRole('region', { name: 'Volume by tag' });
+    expect(within(tags).getByText('No ticket created in this period carries a tag.')).toBeVisible();
+    const backlog = screen.getByRole('region', { name: 'Backlog by status' });
+    expect(within(backlog).getByText('No ticket is open.')).toBeVisible();
   });
 
   it('exports a card as CSV with the filters in force', async () => {

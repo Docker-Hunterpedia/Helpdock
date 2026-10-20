@@ -1,4 +1,5 @@
 import {
+  REPORT_LIST_ROWS,
   type ReportExport,
   type ReportSummary,
   type SlaOutcome,
@@ -516,6 +517,136 @@ export function CsatCard(props: CardProps): ReactNode {
             rating: t('reports:csat.stars', { count: row.rating }),
             responses: formatCount(row.responses),
             share: formatShare(row.share),
+          }))}
+        />
+      }
+    />
+  );
+}
+
+/** A tag's or a status's name in `locale`: the Arabic one when the brand wrote one. */
+const localName = (
+  row: { readonly name: string; readonly nameAr: string | null },
+  locale: string,
+): string => (locale === 'ar' && row.nameAr !== null ? row.nameAr : row.name);
+
+export function VolumeByTagCard(props: CardProps): ReactNode {
+  const t = useT();
+  const { locale } = usePreferences();
+  const { byTag } = props.summary.volume;
+  const title = t('reports:tags.title');
+  const most = Math.max(1, ...byTag.map((row) => row.tickets));
+  const rows: ShareRow[] = byTag.map((row) => ({
+    key: row.tagId,
+    label: localName(row, locale),
+    share: row.tickets / most,
+    value: formatCount(row.tickets),
+  }));
+
+  return (
+    <ChartCard
+      title={title}
+      caption={t('reports:tags.caption', { count: REPORT_LIST_ROWS })}
+      {...exportProps(props, 'volume_by_tag')}
+      chart={
+        rows.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {t('reports:tags.empty')}
+          </Typography>
+        ) : (
+          <ShareRows
+            wideLabel
+            label={t('reports:tags.chartLabel', {
+              figures: rows.map((row) => `${row.label} ${row.value}`).join(', '),
+            })}
+            rows={rows}
+          />
+        )
+      }
+      table={
+        <DataTable
+          label={title}
+          empty={t('reports:tags.empty')}
+          columns={[
+            { key: 'tag', label: t('reports:columns.tag') },
+            { key: 'created', label: t('reports:columns.created'), numeric: true },
+          ]}
+          rows={rows.map((row) => ({ id: row.key, tag: row.label, created: row.value }))}
+        />
+      }
+    />
+  );
+}
+
+export function BacklogByStatusCard(props: CardProps): ReactNode {
+  const t = useT();
+  const { locale } = usePreferences();
+  const { backlogByStatus: backlog, filters } = props.summary;
+  const title = t('reports:backlogStatus.title');
+  // One agent's report has no unassigned tickets to speak of, as Agent workload leaves its row out.
+  const showUnassigned = filters.agentId === null;
+  const rows: ShareRow[] = backlog.byStatus.map((row, index) => ({
+    key: row.statusId,
+    label: localName(row, locale),
+    share: row.open / Math.max(1, backlog.open),
+    value: formatCount(row.open),
+    ...(showUnassigned
+      ? { of: t('reports:backlogStatus.unassigned', { count: row.unassigned }) }
+      : {}),
+    colour: seriesColour(index),
+  }));
+  const share = backlog.unassignedShare === null ? '—' : formatShare(backlog.unassignedShare);
+
+  return (
+    <ChartCard
+      title={title}
+      caption={t('reports:backlogStatus.caption')}
+      chart={
+        rows.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {t('reports:backlogStatus.empty')}
+          </Typography>
+        ) : (
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            <ShareRows
+              wideLabel
+              label={t('reports:backlogStatus.chartLabel', {
+                figures: rows
+                  .map(
+                    (row) => `${row.label} ${row.value}${row.of === undefined ? '' : ` ${row.of}`}`,
+                  )
+                  .join(', '),
+              })}
+              rows={rows}
+            />
+            {showUnassigned ? (
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+                {t('reports:backlogStatus.sentence', {
+                  unassigned: formatCount(backlog.unassigned),
+                  open: formatCount(backlog.open),
+                  share,
+                })}
+              </Typography>
+            ) : null}
+          </Box>
+        )
+      }
+      table={
+        <DataTable
+          label={title}
+          empty={t('reports:backlogStatus.empty')}
+          columns={[
+            { key: 'status', label: t('reports:columns.status') },
+            { key: 'open', label: t('reports:columns.open'), numeric: true },
+            ...(showUnassigned
+              ? [{ key: 'unassigned', label: t('reports:columns.unassigned'), numeric: true }]
+              : []),
+          ]}
+          rows={backlog.byStatus.map((row) => ({
+            id: row.statusId,
+            status: localName(row, locale),
+            open: formatCount(row.open),
+            unassigned: formatCount(row.unassigned),
           }))}
         />
       }

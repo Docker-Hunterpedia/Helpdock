@@ -406,14 +406,17 @@ export interface ShareRow {
 
 /**
  * DESIGN §6.3's share-of-whole rows: a 72 px label, a 12 px bar and a 96 px
- * value, the group one image whose label carries every figure.
+ * value, the group one image whose label carries every figure. `wideLabel`
+ * gives the label 144 px, for names a brand writes (tags, statuses).
  */
 export function ShareRows({
   label,
   rows,
+  wideLabel = false,
 }: {
   readonly label: string;
   readonly rows: readonly ShareRow[];
+  readonly wideLabel?: boolean;
 }): ReactNode {
   const semantic = useSemanticTokens();
 
@@ -425,7 +428,7 @@ export function ShareRows({
           aria-hidden="true"
           sx={{
             display: 'grid',
-            gridTemplateColumns: '72px minmax(0, 1fr) minmax(96px, auto)',
+            gridTemplateColumns: `${wideLabel ? 144 : 72}px minmax(0, 1fr) minmax(96px, auto)`,
             alignItems: 'center',
             gap: 3,
           }}

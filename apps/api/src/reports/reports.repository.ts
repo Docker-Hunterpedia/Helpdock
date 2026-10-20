@@ -56,19 +56,26 @@ const dailyWhere = (
 };
 
 /**
- * Tickets created in the range that count in reports, under the query's
- * filters: the same tickets the rollups count (`rollup.repository.ts`), for
- * the reads that describe a current state rather than something that
- * happened on a day.
+ * Tickets `t` (in status `s`) that count in reports, under the query's
+ * department, channel and agent filters: the same tickets the rollups count
+ * (`rollup.repository.ts`), for the reads that describe a current state
+ * rather than something that happened on a day.
  */
-const createdTicketsWhere = ({ brandId, query, timezone }: ReportScope): SQL => sql`
+const countedTicketsWhere = ({ brandId, query }: ReportScope): SQL => sql`
   t.brand_id = ${brandId}
-  AND t.created_at >= (${query.from}::date)::timestamp AT TIME ZONE ${timezone}
-  AND t.created_at < ((${query.to}::date) + 1)::timestamp AT TIME ZONE ${timezone}
   AND t.deleted_at IS NULL AND t.merged_into_id IS NULL AND NOT s.excluded_from_reports
   ${query.departmentId === undefined ? sql`` : sql`AND t.department_id = ${query.departmentId}`}
   ${query.channel === undefined ? sql`` : sql`AND t.channel = ${query.channel}`}
   ${query.agentId === undefined ? sql`` : sql`AND t.assignee_id = ${query.agentId}`}`;
+
+/** {@link countedTicketsWhere}, created in the range's local days. */
+const createdTicketsWhere = (scope: ReportScope): SQL => {
+  const { query, timezone } = scope;
+  return sql`
+  ${countedTicketsWhere(scope)}
+  AND t.created_at >= (${query.from}::date)::timestamp AT TIME ZONE ${timezone}
+  AND t.created_at < ((${query.to}::date) + 1)::timestamp AT TIME ZONE ${timezone}`;
+};
 
 export interface DayRow {
   readonly day: string;
@@ -104,6 +111,22 @@ export interface StatusRow {
   readonly name: string;
   readonly systemState: 'open' | 'on_hold' | 'escalated' | 'closed';
   readonly tickets: number;
+}
+
+export interface TagRow {
+  readonly tagId: string;
+  readonly name: string;
+  readonly nameAr: string | null;
+  readonly tickets: number;
+}
+
+export interface OpenStatusRow {
+  readonly statusId: string;
+  readonly name: string;
+  readonly nameAr: string | null;
+  readonly systemState: 'open' | 'on_hold' | 'escalated';
+  readonly open: number;
+  readonly unassigned: number;
 }
 
 export interface DaySliceRow<K extends string> {
@@ -401,6 +424,67 @@ export class ReportsRepository {
       ORDER BY 1, s.sort_order, s.name`);
 
     return rows.map((row) => ({ day: row.day, key: row.status_id, created: num(row.tickets) }));
+  }
+
+  /**
+   * Tickets created in the range per tag they carry now, every tag that has
+   * one, in no particular order (`rankTags` orders and cuts them). Read from
+   * the tickets like {@link byStatus}: a tag is a current state of a ticket.
+   * `ticket_tags` is department-scoped, so row-level security keeps a
+   * reader's count to their departments' tickets twice over.
+   */
+  async byTag(tx: DbTransaction, scope: ReportScope): Promise<TagRow[]> {
+    const rows = await tx.execute<{
+      tag_id: string;
+      name: string;
+      name_ar: string | null;
+      tickets: Numeric;
+    }>(sql`
+      SELECT g.id AS tag_id, g.name, g.name_ar, count(*) AS tickets
+      FROM tickets t
+      JOIN ticket_statuses s ON s.id = t.status_id
+      JOIN ticket_tags tt ON tt.ticket_id = t.id
+      JOIN tags g ON g.id = tt.tag_id
+      WHERE ${createdTicketsWhere(scope)}
+      GROUP BY g.id, g.name, g.name_ar`);
+
+    return rows.map((row) => ({
+      tagId: row.tag_id,
+      name: row.name,
+      nameAr: row.name_ar,
+      tickets: num(row.tickets),
+    }));
+  }
+
+  /**
+   * The tickets open now — in any status whose system state is not `closed` —
+   * per status, with how many have no assignee. Not bounded by the range.
+   */
+  async openByStatus(tx: DbTransaction, scope: ReportScope): Promise<OpenStatusRow[]> {
+    const rows = await tx.execute<{
+      status_id: string;
+      name: string;
+      name_ar: string | null;
+      system_state: OpenStatusRow['systemState'];
+      open: Numeric;
+      unassigned: Numeric;
+    }>(sql`
+      SELECT s.id AS status_id, s.name, s.name_ar, s.system_state::text AS system_state,
+        count(*) AS open, count(*) FILTER (WHERE t.assignee_id IS NULL) AS unassigned
+      FROM tickets t
+      JOIN ticket_statuses s ON s.id = t.status_id
+      WHERE ${countedTicketsWhere(scope)} AND s.system_state <> 'closed'
+      GROUP BY s.id, s.name, s.name_ar, s.system_state, s.sort_order
+      ORDER BY s.sort_order, s.name`);
+
+    return rows.map((row) => ({
+      statusId: row.status_id,
+      name: row.name,
+      nameAr: row.name_ar,
+      systemState: row.system_state,
+      open: num(row.open),
+      unassigned: num(row.unassigned),
+    }));
   }
 
   /**

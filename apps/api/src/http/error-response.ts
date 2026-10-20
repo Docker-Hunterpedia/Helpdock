@@ -60,7 +60,7 @@ export interface MappedError {
   readonly code: ErrorCode;
   readonly message: string;
   readonly fields?: readonly FieldError[];
-  /** Only on a sign-in failure; see `auth/auth-failure.ts`. */
+  /** Only on an auth failure, sign-in or step-up; see `auth/auth-failure.ts`. */
   readonly auth?: AuthErrorBody;
   /** Only on a refused staff action; see `staff/staff-failure.ts`. */
   readonly staff?: StaffRefusal;

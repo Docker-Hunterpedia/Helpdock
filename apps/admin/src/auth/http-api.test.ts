@@ -41,6 +41,10 @@ const authFailure = (code: string, status = 401, attemptsLeft?: number): Respons
     status,
   );
 
+/** The auth guard's answer to an expired token: no `error.auth`, so a refresh can cure it. */
+const tokenRefused = (): Response =>
+  json({ error: { code: 'unauthenticated', message: 'no', requestId: 'r1' } }, 401);
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
@@ -102,7 +106,7 @@ describe('HttpAuthApi', () => {
       .mockResolvedValueOnce(
         json({ kind: 'session', session, accessToken: 'stale', expiresInSeconds: 600 }),
       )
-      .mockResolvedValueOnce(authFailure('invalid-credentials'))
+      .mockResolvedValueOnce(tokenRefused())
       .mockResolvedValueOnce(json({ session, accessToken: 'fresh', expiresInSeconds: 600 }))
       .mockResolvedValueOnce(json(session));
     const api = new HttpAuthApi();
@@ -125,7 +129,7 @@ describe('HttpAuthApi', () => {
       .mockResolvedValueOnce(
         json({ kind: 'session', session, accessToken: 'stale', expiresInSeconds: 600 }),
       )
-      .mockResolvedValueOnce(authFailure('invalid-credentials'))
+      .mockResolvedValueOnce(tokenRefused())
       .mockResolvedValueOnce(authFailure('challenge-expired'));
     const api = new HttpAuthApi();
 

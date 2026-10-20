@@ -119,7 +119,13 @@ The access token lives in a field on the http adapter and nowhere else — not i
 `localStorage`, not in `sessionStorage`, not in a cookie a script can read. A
 reload starts with no token and calls `POST /api/auth/refresh`, which is what
 the `httpOnly` cookie is for. A 401 on any request is retried once, after a
-refresh, and only when a token was actually sent.
+refresh, and only when a token was actually sent and the 401 refused that
+token. The api tells the two kinds of 401 apart in the body: the guard's
+answer to a missing or expired token has no `error.auth`, while a refused
+credential — a sign-in, or the current password or code a step-up on the
+security page asks for — always carries one (`invalid-credentials`,
+`totp-mismatch` and so on). The admin passes the second kind straight to the
+screen, so one wrong password costs one step-up attempt, not two.
 
 ## Passwords
 

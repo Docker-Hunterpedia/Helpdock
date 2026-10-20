@@ -240,6 +240,31 @@ describe('HttpAuthApi', () => {
     ).resolves.toBeUndefined();
   });
 
+  describe('sign-in providers on the security page (1.0.2)', () => {
+    it('sends the step-up to connect and hands back where the browser goes', async () => {
+      fetchMock.mockResolvedValueOnce(
+        json({ url: 'https://github.com/login/oauth/authorize?x=1' }),
+      );
+
+      const url = await new HttpAuthApi().connectOauth('github', { currentPassword: 'pw' });
+
+      expect(url).toBe('https://github.com/login/oauth/authorize?x=1');
+      expect(calls()[0]?.url).toMatch(/\/auth\/oauth\/github\/connect$/);
+      expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({ currentPassword: 'pw' });
+    });
+
+    it('turns a refused disconnect into the code the card names', async () => {
+      fetchMock.mockResolvedValueOnce(authFailure('oauth-last-sign-in', 409));
+
+      const refused = await new HttpAuthApi()
+        .disconnectOauth('google', { code: '123456' })
+        .catch((error: unknown) => error as AuthError);
+
+      expect(refused?.code).toBe('oauth-last-sign-in');
+      expect(calls()[0]?.url).toMatch(/\/auth\/oauth\/google\/disconnect$/);
+    });
+  });
+
   describe('accessToken, which the socket handshake carries (M0-13)', () => {
     it('refreshes when this tab holds none, so a socket after a reload gets one', async () => {
       fetchMock.mockResolvedValueOnce(

@@ -181,6 +181,7 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | `Admin/Shell-SidebarCollapse` | 1.0.2, owner request (DESIGN §6.5) | [Admin-Shell-SidebarCollapse.png](screens/m9/Admin-Shell-SidebarCollapse.png) | [AdminShellSidebarCollapse.dc.html](artboards/AdminShellSidebarCollapse.dc.html) |
 | `Admin/SignIn-MagicLink-AR` | M9-01 (F6) | [Admin-SignIn-MagicLink-AR.png](screens/m9/Admin-SignIn-MagicLink-AR.png) | [AdminMagicLinkAR.dc.html](artboards/AdminMagicLinkAR.dc.html) |
 | `Admin/Ticket-ContactHistory` | M1-04 follow-up (#237) | [Admin-Ticket-ContactHistory.png](screens/m9/Admin-Ticket-ContactHistory.png) | [AdminTicketContactHistory.dc.html](artboards/AdminTicketContactHistory.dc.html) |
+| `Admin/Me-SignInProviders` | 1.0.2, OAuth binding follow-up (ADR 0051) | [Admin-Me-SignInProviders.png](screens/m9/Admin-Me-SignInProviders.png) | [AdminMeSignInProviders.dc.html](artboards/AdminMeSignInProviders.dc.html) |
 
 ### M10 Meta channels
 
@@ -598,6 +599,10 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Admin/Ticket-ContactHistory`
 
 ![Admin/Ticket-ContactHistory](screens/m9/Admin-Ticket-ContactHistory.png)
+
+#### `Admin/Me-SignInProviders`
+
+![Admin/Me-SignInProviders](screens/m9/Admin-Me-SignInProviders.png)
 
 ### M10 Meta channels
 

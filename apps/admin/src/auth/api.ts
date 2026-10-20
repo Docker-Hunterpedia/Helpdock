@@ -3,7 +3,9 @@ import type {
   AuthMethods,
   InviteAcceptRequest,
   MagicLinkPreview,
+  OauthIdentityList,
   OauthProvider,
+  OauthStepUpRequest,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -39,6 +41,16 @@ export interface AuthApi {
   useRecoveryCode(challengeId: string, code: string): Promise<Session>;
   /** Where the browser goes to start the provider's consent flow. */
   oauthStartUrl(provider: OauthProvider): string;
+  /** The provider accounts that sign in as this person, and whether they have a password. */
+  oauthIdentities(): Promise<OauthIdentityList>;
+  /**
+   * Behind a step-up, where the browser goes to connect `provider`. The
+   * provider sends it back to `/me/security?connected=<provider>`, or to the
+   * callback screen with the failure.
+   */
+  connectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<string>;
+  /** Behind the same step-up. Refused with `oauth-last-sign-in` for the last way in. */
+  disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void>;
   /** Turns the one-time code a redirect carried into a session. */
   exchange(code: string): Promise<Session>;
   /** Always resolves, whether or not the address belongs to an account. */

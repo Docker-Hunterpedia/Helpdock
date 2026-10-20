@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { MOCK_TOTP_CODE, type MockAuthApi } from '../auth/mock-api.js';
 import { MOCK_CURRENT_PASSWORD, MOCK_ENROLMENT_CODE } from '../staff/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
@@ -177,5 +178,85 @@ describe('the sessions card', () => {
     await user.click(await screen.findByRole('button', { name: 'Sign out everywhere' }));
 
     expect(await screen.findByRole('heading', { name: 'Sign in', level: 1 })).toBeInTheDocument();
+  });
+});
+
+describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
+  const renderWith = async (prepare: (auth: MockAuthApi) => Promise<void> = async () => {}) => {
+    const apis = await signedInMockApis();
+    const auth = apis.auth as MockAuthApi;
+    await prepare(auth);
+    const rendered = renderApp(<AppRoutes />, {
+      authApi: auth,
+      staffApi: apis.staff,
+      initialEntries: ['/me/security'],
+    });
+    await screen.findByRole('heading', { name: 'Active sessions', level: 2 });
+
+    return { ...rendered, auth };
+  };
+
+  it('explains the 1.0.1 change while nothing is linked, and connects after a step-up', async () => {
+    const { user } = await renderWith();
+    const card = await screen.findByRole('region', { name: 'Sign-in providers' });
+
+    expect(within(card).getByRole('status')).toHaveTextContent(/Since 1\.0\.1/);
+    await user.click(within(card).getByRole('button', { name: 'Connect GitHub' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Password or 6-digit code'), MOCK_TOTP_CODE);
+    await user.click(within(dialog).getByRole('button', { name: 'Continue to GitHub' }));
+
+    expect(
+      await screen.findByText('GitHub is connected. You can sign in with it now.'),
+    ).toBeInTheDocument();
+    expect(
+      await within(card).findByRole('button', { name: 'Disconnect GitHub' }),
+    ).toBeInTheDocument();
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('says so in the field when the password is wrong', async () => {
+    const { user } = await renderWith();
+
+    await user.click(await screen.findByRole('button', { name: 'Connect Google' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Password or 6-digit code'), 'not the password');
+    await user.click(within(dialog).getByRole('button', { name: 'Continue to Google' }));
+
+    expect(
+      await within(dialog).findByText('That password or code did not match.'),
+    ).toBeInTheDocument();
+  });
+
+  it('will not disconnect the last way in of an account with no password', async () => {
+    await renderWith(async (auth) => {
+      await auth.connectOauth('google', { currentPassword: MOCK_CURRENT_PASSWORD });
+      auth.passwordSet = false;
+    });
+
+    const disconnect = await screen.findByRole('button', { name: 'Disconnect Google' });
+
+    expect(disconnect).toBeDisabled();
+    expect(disconnect).toHaveAccessibleDescription(/This is your only way to sign in/);
+  });
+
+  it('is not drawn when the install has no provider configured', async () => {
+    let asked: ReturnType<typeof vi.spyOn> | undefined;
+    await renderWith(async (auth) => {
+      const methods = await auth.authMethods();
+      asked = vi.spyOn(auth, 'authMethods').mockResolvedValue({
+        ...methods,
+        oauth: { google: false, github: false },
+      });
+    });
+
+    // Both answers are in before the card is judged absent.
+    await waitFor(() => {
+      expect(asked).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await asked?.mock.results[0]?.value;
+    });
+    expect(screen.queryByRole('heading', { name: 'Sign-in providers' })).not.toBeInTheDocument();
   });
 });

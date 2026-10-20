@@ -154,4 +154,27 @@ describe('MockAuthApi', () => {
   it('points the provider buttons at the app callback', () => {
     expect(new MockAuthApi().oauthStartUrl('github')).toBe('/oauth/callback?provider=github');
   });
+
+  it('connects a provider behind a step-up and lands back on the security page', async () => {
+    const api = new MockAuthApi();
+
+    await expect(api.connectOauth('github', { currentPassword: 'wrong' })).rejects.toMatchObject({
+      code: 'invalid-credentials',
+    });
+    const landing = await api.connectOauth('github', { code: MOCK_TOTP_CODE });
+
+    expect(landing).toBe('/me/security?connected=github');
+    expect((await api.oauthIdentities()).identities.map((row) => row.provider)).toEqual(['github']);
+  });
+
+  it('keeps the last way in of an account with no password', async () => {
+    const api = new MockAuthApi();
+    await api.connectOauth('google', { currentPassword: MOCK_PASSWORD });
+    api.passwordSet = false;
+
+    await expect(api.disconnectOauth('google', { code: MOCK_TOTP_CODE })).rejects.toMatchObject({
+      code: 'oauth-last-sign-in',
+    });
+    expect((await api.oauthIdentities()).identities).toHaveLength(1);
+  });
 });

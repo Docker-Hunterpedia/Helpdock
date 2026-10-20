@@ -34,6 +34,7 @@ import {
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
   type WidgetAvailability,
+  type WidgetCaptchaChallenge,
   type WidgetConfig,
   type WidgetConversation,
   type WidgetConversationList,
@@ -169,6 +170,21 @@ const captchaTransport: CaptchaTransport = {
       ),
     };
   },
+};
+
+/** The visitor's browser: the ALTCHA solution of a built-in challenge (ADR 0052). */
+const solvePow = (work: WidgetCaptchaChallenge): string => {
+  let number = 0;
+  // 200,000 is `medium`'s whole range: past it, the challenge has no solution.
+  while (
+    number <= 200_000 &&
+    createHash('sha256')
+      .update(`${work.salt}${String(number)}`)
+      .digest('hex') !== work.challenge
+  ) {
+    number += 1;
+  }
+  return Buffer.from(JSON.stringify({ ...work, number })).toString('base64');
 };
 
 describe.skipIf(!hasDocker)('the chat widget', () => {
@@ -1233,6 +1249,52 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       const passed = await start(visitor, { captchaToken: 'pass' });
       expect(passed.status).toBe(201);
       expect(captchaCalls.at(-1)?.get('secret')).toBe('0x4AAAAAAA-secret');
+
+      await staff('PUT', `/api/brands/${seeded.brandId}/widget/access`, ada, {
+        allowedOrigins: [SHOP],
+        captchaEnabled: false,
+        captchaProvider: 'turnstile',
+        captchaSiteKey: '0x4AAAAAAA',
+      });
+    });
+
+    it('asks for the built-in check, takes a solution once, and calls nobody (ADR 0052)', async () => {
+      const calledOut = captchaCalls.length;
+      const noChallenge = await widget('GET', '/captcha/challenge');
+      expect(noChallenge.status).toBe(404);
+
+      await staff('PUT', `/api/brands/${seeded.brandId}/widget/access`, ada, {
+        allowedOrigins: [SHOP],
+        captchaEnabled: true,
+        captchaProvider: 'pow',
+        captchaSiteKey: '',
+        captchaDifficulty: 'low',
+      });
+      const config = await widget<WidgetConfig>('GET', '/config');
+      expect(config.body.captcha).toEqual({ provider: 'pow', siteKey: '' });
+      const elsewhere = await widget('GET', '/captcha/challenge', { origin: 'https://evil.test' });
+      expect(elsewhere.status).toBe(403);
+
+      const work = await widget<WidgetCaptchaChallenge>('GET', '/captcha/challenge');
+      expect(work.status).toBe(200);
+      expect(work.body).toMatchObject({ algorithm: 'SHA-256', maxnumber: 50_000 });
+      const token = solvePow(work.body);
+
+      const first = await newVisitor({}, '198.51.100.31');
+      const second = await newVisitor({}, '198.51.100.32');
+      const third = await newVisitor({}, '198.51.100.33');
+      expect((await start(first, { captchaToken: 'not a solution' })).status).toBe(403);
+      // Two visitors race one solution: exactly one of them gets a conversation.
+      const raced = await Promise.all([
+        start(first, { captchaToken: token }),
+        start(second, { captchaToken: token }),
+      ]);
+      expect(raced.map(({ status }) => status).sort()).toEqual([201, 403]);
+      expect((await start(third, { captchaToken: token })).status).toBe(403);
+      // A fresh solution passes.
+      const again = await widget<WidgetCaptchaChallenge>('GET', '/captcha/challenge');
+      expect((await start(third, { captchaToken: solvePow(again.body) })).status).toBe(201);
+      expect(captchaCalls.length).toBe(calledOut);
 
       await staff('PUT', `/api/brands/${seeded.brandId}/widget/access`, ada, {
         allowedOrigins: [SHOP],

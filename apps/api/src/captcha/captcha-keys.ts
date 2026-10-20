@@ -3,15 +3,17 @@ import {
   type CaptchaSurface,
   type CaptchaTransport,
   createCaptchaProvider,
+  type SiteverifyProviderName,
 } from '@helpdock/channels';
 import { decryptSecret, type Keyring } from '@helpdock/config';
 import type { Db, DbTransaction } from '@helpdock/db';
 import { safeFetch } from '@helpdock/net';
-import type { CaptchaProvider } from '@helpdock/schemas';
+import type { CaptchaDifficulty } from '@helpdock/schemas';
 import { z } from 'zod';
 import { withSystemJob } from '../tenant/system-job.js';
 import { resolveCaptcha } from '../widget/resolved-settings.js';
 import { WidgetSettingsRepository } from '../widget/widget-settings.repository.js';
+import type { PowCaptcha } from './pow-captcha.js';
 
 /**
  * A brand's CAPTCHA keys (ADR 0003), read-only, for the two visitor-facing
@@ -21,16 +23,21 @@ import { WidgetSettingsRepository } from '../widget/widget-settings.repository.j
  *
  * The secret is decrypted only to be handed to the provider's siteverify
  * call; it is never logged and never leaves the process otherwise.
+ *
+ * The built-in `pow` (ADR 0052) has no keys: it is ready as soon as it is
+ * chosen, with the brand's difficulty.
  */
 
-export interface BrandCaptchaKeys {
-  readonly provider: CaptchaProvider;
-  readonly siteKey: string;
-  readonly secret: string;
-}
+export type BrandCaptchaKeys =
+  | { readonly provider: 'pow'; readonly difficulty: CaptchaDifficulty }
+  | {
+      readonly provider: SiteverifyProviderName;
+      readonly siteKey: string;
+      readonly secret: string;
+    };
 
 export interface CaptchaKeysReader {
-  /** The brand's keys, or null while either half is missing. */
+  /** What the brand's check needs, or null while a third-party provider lacks either key. */
   forBrand(brandId: string, tx?: DbTransaction): Promise<BrandCaptchaKeys | null>;
 }
 
@@ -51,6 +58,9 @@ export class DbCaptchaKeys implements CaptchaKeysReader {
         ? await withSystemJob(this.#db, brandId, 'captcha-keys', read)
         : await read(tx),
     );
+    if (stored.provider === 'pow') {
+      return { provider: 'pow', difficulty: stored.difficulty };
+    }
     if (stored.secret === null || stored.siteKey === '') {
       return null;
     }
@@ -101,12 +111,19 @@ export interface CaptchaRefusalLog {
 /** "Is this token good for this brand?", in one call for the widget and the form. */
 export class CaptchaVerifier {
   readonly #keys: CaptchaKeysReader;
-  readonly #adapter: (provider: CaptchaProvider) => CaptchaAdapter;
+  readonly #adapter: (provider: SiteverifyProviderName) => CaptchaAdapter;
+  readonly #pow: PowCaptcha;
   readonly #log: CaptchaRefusalLog;
 
-  constructor(keys: CaptchaKeysReader, transport: CaptchaTransport, log: CaptchaRefusalLog) {
+  constructor(
+    keys: CaptchaKeysReader,
+    transport: CaptchaTransport,
+    pow: PowCaptcha,
+    log: CaptchaRefusalLog,
+  ) {
     this.#keys = keys;
     this.#adapter = (provider) => createCaptchaProvider(provider, transport);
+    this.#pow = pow;
     this.#log = log;
   }
 
@@ -116,7 +133,10 @@ export class CaptchaVerifier {
     readonly remoteIp: string | null;
     /** Where the challenge may have been solved; see `CaptchaVerifyInput.hostnames`. */
     readonly hostnames: readonly string[];
-    /** The surface asking; with `brandId`, what a Turnstile pass must answer back. */
+    /**
+     * The surface asking: a Turnstile pass must answer it back with `brandId`,
+     * and a `pow` solution is good only for the surface it was issued for.
+     */
     readonly surface: CaptchaSurface;
     readonly tx?: DbTransaction;
   }): Promise<CaptchaCheck> {
@@ -130,16 +150,20 @@ export class CaptchaVerifier {
 
     // A provider that cannot be reached answers a refusal (ADR 0003: fail
     // closed), so this never passes on an error.
-    const verdict = await this.#adapter(keys.provider).verify({
-      secret: keys.secret,
-      token: input.token,
-      remoteIp: input.remoteIp,
-      hostnames: input.hostnames,
-      binding: { surface: input.surface, brandId: input.brandId },
-    });
+    const verdict =
+      keys.provider === 'pow'
+        ? await this.#pow.spend(input.brandId, input.token, input.surface)
+        : await this.#adapter(keys.provider).verify({
+            secret: keys.secret,
+            token: input.token,
+            remoteIp: input.remoteIp,
+            hostnames: input.hostnames,
+            binding: { surface: input.surface, brandId: input.brandId },
+          });
     if (!verdict.success) {
-      // `action-mismatch`, `cdata-mismatch` and `hostname-mismatch` are
-      // otherwise indistinguishable from a wrong token to whoever operates this.
+      // `action-mismatch`, `cdata-mismatch`, `hostname-mismatch` and a spent
+      // built-in solution are otherwise indistinguishable from a wrong token
+      // to whoever operates this.
       this.#log.warn(
         { brandId: input.brandId, surface: input.surface, errorCodes: verdict.errorCodes },
         'CAPTCHA refused',

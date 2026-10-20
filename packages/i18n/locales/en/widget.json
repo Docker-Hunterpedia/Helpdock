@@ -120,7 +120,14 @@
     "checking": "Checking your browser…",
     "verified": "Verified. You can continue.",
     "failed": "The security check could not load. Reload the page and try again.",
-    "rejected": "The security check failed. Try it again."
+    "rejected": "The security check failed. Try it again.",
+    "pow": {
+      "checking": "Checking your connection…",
+      "verified": "Verified",
+      "failed": "We couldn't check your connection.",
+      "retry": "Try again",
+      "builtIn": "Built-in"
+    }
   },
   "ended": {
     "title": "This conversation has ended",

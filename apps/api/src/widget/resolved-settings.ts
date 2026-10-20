@@ -1,6 +1,8 @@
 import type { WidgetSettingsRow } from '@helpdock/db';
 import {
+  type CaptchaDifficulty,
   type CaptchaProvider,
+  captchaDifficultySchema,
   captchaProviderSchema,
   WIDGET_SETTINGS_DEFAULTS,
   type WidgetAppearance,
@@ -76,8 +78,14 @@ const jsonString = (stored: string | undefined): string | undefined => {
 };
 
 export interface ResolvedCaptcha {
-  /** Turnstile unless the brand chose hCaptcha (ADR 0003). */
+  /**
+   * The built-in `pow` for a brand that never saved one (D-51, ADR 0052).
+   * A brand that saved its access card before 1.1 has a provider row, so it
+   * keeps what it had; a row that no longer parses reads as 1.0's default,
+   * Turnstile (ADR 0003).
+   */
   readonly provider: CaptchaProvider;
+  readonly difficulty: CaptchaDifficulty;
   readonly siteKey: string;
   /** The encrypted envelope, or null when none is saved. */
   readonly secret: string | null;
@@ -87,10 +95,16 @@ export interface ResolvedCaptcha {
 
 export const resolveCaptcha = (stored: StoredCaptcha): ResolvedCaptcha => {
   const provider = captchaProviderSchema.safeParse(jsonString(stored.provider));
+  const difficulty = captchaDifficultySchema.safeParse(jsonString(stored.difficulty));
   const secret = stored.secret === undefined || stored.secret === '' ? null : stored.secret;
 
   return {
-    provider: provider.success ? provider.data : 'turnstile',
+    provider: provider.success
+      ? provider.data
+      : stored.provider === undefined
+        ? 'pow'
+        : 'turnstile',
+    difficulty: difficulty.success ? difficulty.data : 'low',
     siteKey: jsonString(stored.siteKey) ?? '',
     secret,
     secretSetAt: secret === null ? null : stored.secretSetAt,

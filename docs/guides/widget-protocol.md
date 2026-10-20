@@ -66,6 +66,36 @@ the visitor credential and the throttles, not from the origin check.
 headers `authorization`, `content-type` and `if-none-match`, and never allow
 credentials. The widget uses no cookies.
 
+## The built-in check
+
+`GET /captcha/challenge` needs no visitor, only an allowed origin. For a brand
+that turned the check on with the built-in provider (`config.captcha.provider`
+`pow`, ADR 0052), it answers a new challenge every time, never cached:
+
+```json
+{
+  "algorithm": "SHA-256",
+  "challenge": "<64 hex>",
+  "maxnumber": 50000,
+  "salt": "<24 hex>?expires=<unix seconds>&surface=widget-first-message",
+  "signature": "<64 hex>"
+}
+```
+
+Any other brand answers `not_found`. The client finds the `number` from 0 to
+`maxnumber` for which the SHA-256 of `salt` followed by the number, in hex, is
+`challenge`, and sends the base64 of
+`{"algorithm","challenge","number","salt","signature"}` as `captchaToken`. That
+is the ALTCHA protocol, so the ALTCHA widget can answer it too.
+
+- A solution is spent once, for this brand and this surface, until the
+  `expires` in its salt (15 minutes). A second use is `captcha_required`.
+- `maxnumber` is 50,000 at the brand's `low` difficulty and 200,000 at
+  `medium`; the client tries half of it on average.
+- Nothing is sent to a third party, and no provider script is loaded. The
+  widget solves it with WebCrypto in its lazy CAPTCHA chunk and fetches new
+  work a minute before the old expires.
+
 ## Errors
 
 A refusal uses the api's usual error body. `error.widget.reason` names the rule
@@ -216,7 +246,7 @@ everything the first paint needs:
 | `contactForm` | the contact form's fields beyond name, email and message: the pre-chat's custom fields |
 | `showAgentIdentity`, `whenUnavailable`, `transcriptEnabled` | the conversation card's switches |
 | `contentPolicy` | what the composer may send; the api enforces the same policy on upload |
-| `captcha` | the provider and site key, or `null` |
+| `captcha` | the provider and site key, or `null`. `pow`, the built-in check, has an empty site key (see [The built-in check](#the-built-in-check)) |
 | `signedIdentity` | whether the brand accepts a signed identity |
 | `availability` | as below |
 | `popularArticles` | up to five of the brand's public articles in `locale`, most viewed over 30 days first, then the newest (see [Help center](#help-center)) |
@@ -343,6 +373,8 @@ A start opens the conversation, with or without its first message:
   The api checks the values against the field definitions and keeps only the
   fields the brand asks for (`config.prechat.fields`). An email given here is
   unverified (DOMAIN-RULES §4.1).
+- With `config.captcha.provider` `pow`, `captchaToken` is the built-in
+  check's solution: see [The built-in check](#the-built-in-check).
 - The api validates a retry's `clientId` before it verifies the CAPTCHA, so a
   retried start does not need a fresh token.
 - `articleId` (optional) names the help center article the visitor pressed

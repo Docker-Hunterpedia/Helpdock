@@ -98,6 +98,7 @@ describe('the schemas the registry declares', () => {
   });
 
   it('accepts only the CAPTCHA providers that have an adapter', () => {
+    expect(settingsSchema['captcha.provider'].safeParse('pow').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('turnstile').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('hcaptcha').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('none').success).toBe(true);

@@ -225,12 +225,21 @@ export const SETTING_DEFINITIONS = [
   }),
   defineSetting({
     key: 'captcha.provider',
-    schema: z.enum(['turnstile', 'hcaptcha', 'none']),
+    schema: z.enum(['pow', 'turnstile', 'hcaptcha', 'none']),
     default: 'none',
     secret: false,
     scope: 'brand',
     description:
-      'CAPTCHA for visitor-facing forms. Off by default; Turnstile is the recommended provider (ADR 0003).',
+      'CAPTCHA for visitor-facing forms. Off by default; a brand that turns it on starts with the built-in proof-of-work check, `pow`, which sends nothing to a third party (ADR 0052). Turnstile is the stronger bot detection (ADR 0003).',
+  }),
+  defineSetting({
+    key: 'captcha.difficulty',
+    schema: z.enum(['low', 'medium']),
+    default: 'low',
+    secret: false,
+    scope: 'brand',
+    description:
+      'How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052).',
   }),
   defineSetting({
     key: 'captcha.siteKey',

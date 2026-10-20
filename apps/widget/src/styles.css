@@ -463,6 +463,66 @@ button:disabled {
   color: var(--hd-status-danger-text);
 }
 
+/* The built-in check's strip (ADR 0052, Widget/PreChat-Verify) */
+.hd-pow {
+  padding-block: 8px;
+}
+
+/* As tall as Try again, so the strip keeps its height from state to state. */
+.hd-pow-row {
+  min-block-size: 36px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--hd-text-primary);
+}
+
+.hd-pow-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--hd-text-secondary);
+}
+
+.hd-pow-checking .hd-pow-icon {
+  animation: hd-spin 1s linear infinite;
+}
+
+.hd-pow-verified .hd-pow-icon {
+  color: var(--hd-status-success-text);
+}
+
+.hd-pow-failed {
+  border-color: var(--hd-status-danger);
+}
+
+.hd-pow-failed .hd-pow-icon {
+  color: var(--hd-status-danger-text);
+}
+
+.hd-pow-text {
+  flex-grow: 1;
+}
+
+.hd-pow-caption {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--hd-text-secondary);
+}
+
+.hd-pow-retry {
+  block-size: 36px;
+  padding-inline: 12px;
+  font-size: 14px;
+}
+
+@keyframes hd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Banners and alerts */
 .hd-banner,
 .hd-presence {
@@ -1318,7 +1378,8 @@ button:disabled {
   }
 
   .hd-window,
-  .hd-typing-dots span {
+  .hd-typing-dots span,
+  .hd-pow-checking .hd-pow-icon {
     animation: none;
   }
 }

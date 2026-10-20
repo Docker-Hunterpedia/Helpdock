@@ -17,6 +17,7 @@ import type {
   WidgetArticle as WireArticle,
   WidgetAttachment as WireAttachment,
   WidgetAvailability as WireAvailability,
+  WidgetCaptchaChallenge as WireCaptchaChallenge,
   WidgetConfig as WireConfig,
   WidgetConversation as WireConversation,
   WidgetConversationHours as WireHours,
@@ -531,6 +532,10 @@ export function createRemoteTransport(options: RemoteTransportOptions): WidgetTr
       availability = config.availability;
 
       return toConfig(config);
+    },
+
+    captchaChallenge() {
+      return http.get<WireCaptchaChallenge>('/captcha/challenge');
     },
 
     async startSession(identity) {

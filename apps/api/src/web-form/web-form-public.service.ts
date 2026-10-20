@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CaptchaRenderConfig, CaptchaTransport } from '@helpdock/channels';
+import type { CaptchaTransport } from '@helpdock/channels';
 import { createCaptchaProvider } from '@helpdock/channels';
 import { type Db, type DbTransaction, systemContext, withTenant } from '@helpdock/db';
 import { createI18n, type Locale, SUPPORTED_LNGS } from '@helpdock/i18n';
@@ -12,15 +12,18 @@ import {
 import { z } from 'zod';
 import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 import type { BrandCaptchaKeys, CaptchaKeysReader } from '../captcha/captcha-keys.js';
+import type { PowCaptcha } from '../captcha/pow-captcha.js';
 import type { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
 import { isUniqueViolation } from '../channels/pg-errors.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import { isSenderBlocked } from '../ticketing/sender-gate.js';
 import { resolveFields } from './layout.js';
 import {
+  type FormCaptcha,
   HONEYPOT_FIELD,
   type PageAttachments,
   type PageField,
+  POW_FIELD,
   SUBMISSION_FIELD,
 } from './page/render.js';
 import {
@@ -72,7 +75,7 @@ export interface LoadedForm {
   readonly state: 'open' | 'closed' | 'unavailable';
   readonly fields: readonly (PageField & ShownField)[];
   readonly attachments: PageAttachments | null;
-  readonly captcha: CaptchaRenderConfig | null;
+  readonly captcha: FormCaptcha | null;
   readonly thankYou: string;
   readonly departmentId: string | null;
   readonly policy: ContentPolicy;
@@ -105,6 +108,8 @@ export interface WebFormPublicServiceOptions {
   readonly writer: WebFormTicketWriter;
   readonly captchaKeys: CaptchaKeysReader;
   readonly captchaTransport: CaptchaTransport;
+  /** The built-in check (ADR 0052): issues the page's challenge and spends its solution. */
+  readonly pow: Pick<PowCaptcha, 'issue' | 'spend'>;
   /** `APP_URL`'s hostname, where `/contact/<brandId>` is served. */
   readonly appHost: string;
   readonly limiter: RateLimiter;
@@ -317,14 +322,7 @@ export class WebFormPublicService {
           };
         }),
       attachments: attachmentsFor(policy, locale),
-      captcha:
-        captchaOn && keys !== null
-          ? createCaptchaProvider(keys.provider, this.#options.captchaTransport).renderConfig(
-              keys.siteKey,
-              locale,
-              { surface: 'web-form', brandId },
-            )
-          : null,
+      captcha: captchaOn && keys !== null ? this.#formCaptcha(brandId, keys, locale) : null,
       thankYou: row?.thankYou[locale] ?? defaultThankYou(locale),
       departmentId: row?.departmentId ?? null,
       policy,
@@ -335,23 +333,44 @@ export class WebFormPublicService {
     };
   }
 
+  #formCaptcha(brandId: string, keys: BrandCaptchaKeys, locale: Locale): FormCaptcha {
+    return keys.provider === 'pow'
+      ? {
+          provider: 'pow',
+          challenge: this.#options.pow.issue(brandId, keys.difficulty, 'web-form'),
+        }
+      : createCaptchaProvider(keys.provider, this.#options.captchaTransport).renderConfig(
+          keys.siteKey,
+          locale,
+          { surface: 'web-form', brandId },
+        );
+  }
+
   async #captchaPasses(
     form: LoadedForm,
     post: WebFormPost,
     submissionId: string,
   ): Promise<boolean> {
-    if (form.captcha === null || form.keys === null) {
+    const { captcha, keys } = form;
+    if (captcha === null || keys === null) {
       return true;
     }
-    const provider = createCaptchaProvider(form.keys.provider, this.#options.captchaTransport);
-    const verdict = await provider.verify({
-      secret: form.keys.secret,
-      token: post.fields.get(form.captcha.responseField)?.[0] ?? '',
-      remoteIp: post.ip,
-      idempotencyKey: submissionId,
-      hostnames: form.captchaHostnames,
-      binding: { surface: 'web-form', brandId: form.brand.id },
-    });
+    // Both come from the same keys, so they name the same provider.
+    const verdict =
+      keys.provider === 'pow' || captcha.provider === 'pow'
+        ? await this.#options.pow.spend(
+            form.brand.id,
+            post.fields.get(POW_FIELD)?.[0] ?? '',
+            'web-form',
+          )
+        : await createCaptchaProvider(keys.provider, this.#options.captchaTransport).verify({
+            secret: keys.secret,
+            token: post.fields.get(captcha.responseField)?.[0] ?? '',
+            remoteIp: post.ip,
+            idempotencyKey: submissionId,
+            hostnames: form.captchaHostnames,
+            binding: { surface: 'web-form', brandId: form.brand.id },
+          });
     if (!verdict.success) {
       this.#options.log.warn(
         { brandId: form.brand.id, errorCodes: verdict.errorCodes },

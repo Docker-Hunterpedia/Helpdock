@@ -53,10 +53,11 @@ describe('resolveWidgetSettings', () => {
 });
 
 describe('resolveCaptcha', () => {
-  it('reads the JSON-encoded settings rows, Turnstile unless told otherwise', () => {
+  it('reads the JSON-encoded settings rows; an unreadable provider is 1.0’s Turnstile', () => {
     expect(
       resolveCaptcha({
         provider: '"hcaptcha"',
+        difficulty: '"medium"',
         siteKey: '"site"',
         secret: 'v1.k.sealed',
         secretSetAt: new Date('2026-09-14T09:00:00.000Z'),
@@ -64,6 +65,7 @@ describe('resolveCaptcha', () => {
       }),
     ).toMatchObject({
       provider: 'hcaptcha',
+      difficulty: 'medium',
       siteKey: 'site',
       secret: 'v1.k.sealed',
       secretSetBy: 'user',
@@ -72,6 +74,7 @@ describe('resolveCaptcha', () => {
     expect(
       resolveCaptcha({
         provider: 'not json',
+        difficulty: undefined,
         siteKey: undefined,
         secret: '',
         secretSetAt: new Date(),
@@ -79,10 +82,24 @@ describe('resolveCaptcha', () => {
       }),
     ).toEqual({
       provider: 'turnstile',
+      difficulty: 'low',
       siteKey: '',
       secret: null,
       secretSetAt: null,
       secretSetBy: null,
     });
+  });
+
+  it('starts a brand that never saved a provider on the built-in check (D-51)', () => {
+    expect(
+      resolveCaptcha({
+        provider: undefined,
+        difficulty: undefined,
+        siteKey: undefined,
+        secret: undefined,
+        secretSetAt: null,
+        secretSetBy: null,
+      }),
+    ).toMatchObject({ provider: 'pow', difficulty: 'low' });
   });
 });

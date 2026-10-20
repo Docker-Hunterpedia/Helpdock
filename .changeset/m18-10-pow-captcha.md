@@ -1,0 +1,5 @@
+---
+"@helpdock/api": minor
+---
+
+**A built-in bot check that sends nothing to anyone (M18-10, ADR 0052).** Channels › Widget › bot check gains a third provider, **Built-in (no third party)**: a proof-of-work challenge the visitor's browser solves in the background, with no puzzle, no script from another host and no CSP host added. It works for the widget's first message and the hosted web form, with a difficulty of Low (the default, about half a second on a mid-range phone) or Medium. A challenge is signed per brand under a key derived from `APP_MASTER_KEY`, is good for one surface for 15 minutes, and is spent once. The widget fetches challenges from `GET /api/widget/:brandId/captcha/challenge`; the web form carries one in the page and fetches another from `…/challenge` on Try again. A brand that never chose a provider now starts on the built-in check when it turns the check on (D-51); a brand that saved Turnstile or hCaptcha keeps it. New brand setting `captcha.difficulty` (`HD_CAPTCHA_DIFFICULTY`).

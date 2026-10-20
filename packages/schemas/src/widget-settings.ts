@@ -160,8 +160,13 @@ export const widgetOriginSchema = z
     return url.origin;
   });
 
-export const captchaProviderSchema = z.enum(['turnstile', 'hcaptcha']);
+/** `pow` is the built-in proof-of-work check (ADR 0052), which needs no keys. */
+export const captchaProviderSchema = z.enum(['pow', 'turnstile', 'hcaptcha']);
 export type CaptchaProvider = z.infer<typeof captchaProviderSchema>;
+
+/** How much work `pow` asks of the visitor's browser (ADR 0052). */
+export const captchaDifficultySchema = z.enum(['low', 'medium']);
+export type CaptchaDifficulty = z.infer<typeof captchaDifficultySchema>;
 
 /**
  * "Where the widget may run" (Admins only). The CAPTCHA keys are the brand's,
@@ -172,6 +177,7 @@ export const widgetAccessSchema = z.object({
   captchaEnabled: z.boolean(),
   captchaProvider: captchaProviderSchema,
   captchaSiteKey: z.string().trim().max(255),
+  captchaDifficulty: captchaDifficultySchema.default('low'),
 });
 export type WidgetAccess = z.infer<typeof widgetAccessSchema>;
 

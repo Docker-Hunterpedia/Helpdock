@@ -26,7 +26,13 @@
     "types": "{{list}}."
   },
   "captcha": {
-    "label": "Security check"
+    "label": "Security check",
+    "checking": "Checking your connection…",
+    "verified": "Verified",
+    "failed": "We couldn't check your connection.",
+    "retry": "Try again",
+    "builtIn": "Built-in",
+    "needsScript": "This form needs JavaScript to send."
   },
   "submit": "Send message",
   "summary_one": "1 field needs attention",

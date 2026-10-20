@@ -10,6 +10,14 @@ import {
 import type { LoadedForm, SubmitResult } from './web-form-public.service.js';
 
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
+const CHALLENGE = {
+  algorithm: 'SHA-256',
+  challenge: 'c'.repeat(64),
+  maxnumber: 50_000,
+  salt: 'abc?expires=1&surface=web-form',
+  signature: 's'.repeat(64),
+} as const;
+const POW_CAPTCHA = { provider: 'pow', challenge: CHALLENGE } as const;
 const OTHER = '0192c3f0-1a2b-7c3d-8e4f-0000000000a2';
 
 const form = (overrides: Partial<LoadedForm> = {}): LoadedForm => ({
@@ -196,7 +204,43 @@ describe('WebFormPage', () => {
   });
 });
 
+describe('WebFormPage.challenge (ADR 0052)', () => {
+  it('answers a new built-in challenge for an open form that asks for one', async () => {
+    const { page, load } = pageWith({ loaded: form({ captcha: POW_CAPTCHA }) });
+
+    await expect(page.challenge({ host: 'desk.example.com', brandId: BRAND })).resolves.toEqual(
+      CHALLENGE,
+    );
+    expect(load).toHaveBeenCalledWith(BRAND, undefined);
+  });
+
+  it.each([
+    ['a form with no check', form()],
+    ['a closed form', form({ captcha: POW_CAPTCHA, state: 'closed' })],
+  ])('answers nothing for %s', async (_label, loaded) => {
+    const { page } = pageWith({ loaded });
+
+    await expect(page.challenge({ host: 'desk.example.com', brandId: BRAND })).resolves.toBeNull();
+  });
+
+  it('serves no other brand’s challenge on a help center host', async () => {
+    const { page, load } = pageWith({ loaded: form({ captcha: POW_CAPTCHA }), hostBrand: OTHER });
+
+    await expect(page.challenge({ host: 'help.other.test', brandId: BRAND })).resolves.toBeNull();
+    expect(load).not.toHaveBeenCalled();
+  });
+});
+
 describe('pageContentSecurityPolicy', () => {
+  it('allows the built-in check’s inline script and its own fetch, and no other host', () => {
+    const policy = pageContentSecurityPolicy('abc', POW_CAPTCHA);
+
+    expect(policy).toContain("script-src 'nonce-abc';");
+    expect(policy).toContain("connect-src 'self'");
+    expect(policy).not.toContain('frame-src');
+    expect(policy).not.toContain('https://');
+  });
+
   it('adds the provider’s sources only while a challenge is drawn', () => {
     const policy = pageContentSecurityPolicy('abc', {
       provider: 'hcaptcha',

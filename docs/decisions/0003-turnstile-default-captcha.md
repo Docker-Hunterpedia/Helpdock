@@ -1,6 +1,6 @@
 # 0003 Use Cloudflare Turnstile as the default CAPTCHA, hCaptcha as the alternative
 
-Status: accepted
+Status: accepted; the default provider amended by [0052](0052-built-in-proof-of-work-captcha.md)
 Date: 2026-09-18
 
 ## Context

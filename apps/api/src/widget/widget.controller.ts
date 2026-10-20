@@ -3,6 +3,7 @@ import type {
   AttachmentPresignResponse,
   WidgetAttachment,
   WidgetAvailability,
+  WidgetCaptchaChallenge,
   WidgetConfig,
   WidgetConversation,
   WidgetConversationList,
@@ -34,6 +35,7 @@ import {
   WidgetAttachmentParamDto,
   WidgetAvailabilityDto,
   WidgetBrandParamDto,
+  WidgetCaptchaChallengeDto,
   WidgetConfigDto,
   WidgetConfigQueryDto,
   WidgetConversationDto,
@@ -137,6 +139,19 @@ export class WidgetController {
     @Req() request: FastifyRequest,
   ): Promise<WidgetAvailability> {
     return this.#config.availability(brandId, factsOf(request));
+  }
+
+  /** ADR 0052: the built-in check's challenge, a new one each time. Never cached. */
+  @Get('captcha/challenge')
+  @Public()
+  @ZodSerializerDto(WidgetCaptchaChallengeDto)
+  captchaChallenge(
+    @Param(new ZodValidationPipe(WidgetBrandParamDto)) { brandId }: WidgetBrandParamDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<WidgetCaptchaChallenge> {
+    void reply.header('cache-control', 'no-store');
+    return this.#config.challenge(brandId, factsOf(request));
   }
 
   @Post('session')

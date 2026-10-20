@@ -235,8 +235,10 @@ export class MockChannelsApi implements ChannelsApi {
       access: {
         allowedOrigins: ['https://www.helpdock.com', 'https://shop.helpdock.sa'],
         captchaEnabled: false,
-        captchaProvider: 'turnstile',
+        // A brand that never chose one starts on the built-in check (D-51).
+        captchaProvider: 'pow',
         captchaSiteKey: '',
+        captchaDifficulty: 'low',
         captchaSecret: null,
       },
       signedIdentity: {

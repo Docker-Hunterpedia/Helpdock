@@ -12,8 +12,14 @@ import { z } from 'zod';
  * which a test replaces with a recorder.
  */
 
-export const CAPTCHA_PROVIDERS = ['turnstile', 'hcaptcha'] as const;
+export const CAPTCHA_PROVIDERS = ['pow', 'turnstile', 'hcaptcha'] as const;
 export type CaptchaProviderName = (typeof CAPTCHA_PROVIDERS)[number];
+
+/**
+ * The providers verified by a siteverify call to a third party. `pow` is
+ * verified in process instead (`captcha-pow.ts`, ADR 0052).
+ */
+export type SiteverifyProviderName = Exclude<CaptchaProviderName, 'pow'>;
 
 /**
  * The surface a challenge is solved for (M18-11). Turnstile carries it as the
@@ -65,7 +71,7 @@ export type CaptchaVerdict =
  * itself and reads only `provider` and `siteKey`.
  */
 export interface CaptchaRenderConfig {
-  readonly provider: CaptchaProviderName;
+  readonly provider: SiteverifyProviderName;
   readonly siteKey: string;
   /** Rendered as `data-action` and `data-cdata`; null for a provider without them. */
   readonly action: CaptchaSurface | null;
@@ -84,7 +90,7 @@ export interface CaptchaRenderConfig {
 }
 
 export interface CaptchaProvider {
-  readonly name: CaptchaProviderName;
+  readonly name: SiteverifyProviderName;
   /** What a client needs to render the challenge. The site key is public. */
   renderConfig(siteKey: string, locale: string, binding: CaptchaBinding): CaptchaRenderConfig;
   verify(input: CaptchaVerifyInput): Promise<CaptchaVerdict>;
@@ -180,7 +186,7 @@ const refuseEarly = ({ secret, token }: CaptchaVerifyInput): CaptchaVerdict | nu
 };
 
 const renderConfigFor = (
-  name: CaptchaProviderName,
+  name: SiteverifyProviderName,
   siteKey: string,
   locale: string,
   binding: CaptchaBinding,
@@ -218,7 +224,7 @@ const renderConfigFor = (
       };
 
 const createProvider = (
-  name: CaptchaProviderName,
+  name: SiteverifyProviderName,
   url: string,
   transport: CaptchaTransport,
 ): CaptchaProvider => ({
@@ -251,7 +257,7 @@ const createProvider = (
 });
 
 export const createCaptchaProvider = (
-  name: CaptchaProviderName,
+  name: SiteverifyProviderName,
   transport: CaptchaTransport,
 ): CaptchaProvider =>
   createProvider(

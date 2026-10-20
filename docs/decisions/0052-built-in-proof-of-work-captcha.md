@@ -32,15 +32,23 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
 2. **No new dependency**: about 80 lines of `node:crypto`. The payload is
    ALTCHA-protocol-compatible, so an operator could swap in the ALTCHA widget
    later.
-3. **Difficulty** is a setting, `low` (default, about 0.5–1 s on a 2020
-   mid-range Android) or `medium`.
+3. **Difficulty** is a setting, `captcha.difficulty`: `low` (default,
+   `maxnumber` 50,000, about 0.5–1 s on a 2020 mid-range Android) or `medium`
+   (200,000).
 4. **Hostname check** for Turnstile and hCaptcha: the verdict's `hostname` must
    be one of the brand's widget origins or the web form host; Turnstile tokens
    carry an `action` per surface.
-5. **Default provider:** proposed to become `pow` when an admin turns CAPTCHA
-   on for a new brand, with Turnstile as the "stronger bot detection" choice;
-   existing brands keep their provider. This changes ADR 0003's default and
-   waits for the owner (D-51).
+5. **Default provider:** `pow` when an admin turns CAPTCHA on for a brand that
+   never chose a provider, with Turnstile as the "stronger bot detection"
+   choice; a brand that saved its access card before keeps its provider. This
+   changes ADR 0003's default (owner decision D-51, 2026-10-20).
+6. **Binding.** Each brand signs under its own key (HKDF info
+   `helpdock:captcha:pow:<brandId>`), and the salt carries the surface
+   (`widget-first-message` or `web-form`) next to `expires`, so a solution is
+   good for one brand, one surface and fifteen minutes. The widget fetches
+   challenges from `GET /api/widget/:brandId/captcha/challenge`; the web form
+   carries one in the page and fetches another from `…/challenge` for "Try
+   again".
 
 ## Consequences
 

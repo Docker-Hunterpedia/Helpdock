@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Translate } from '../i18n/translator.js';
 import type { CaptchaConfig } from '../transport/types.js';
-import { useWidgetState } from '../ui/context.js';
+import { useWidget, useWidgetState } from '../ui/context.js';
 import { Icon } from '../ui/icons.js';
+import { refreshAfter, solvePow } from './pow.js';
 
 /**
  * The CAPTCHA box above Start chat and Send message (ADR 0003). The provider
@@ -13,7 +14,9 @@ interface ProviderApi {
   render(element: HTMLElement, options: Record<string, unknown>): string | number;
 }
 
-const SCRIPTS: Record<CaptchaConfig['provider'], { url: string; global: string }> = {
+type ProviderName = Exclude<CaptchaConfig['provider'], 'pow'>;
+
+const SCRIPTS: Record<ProviderName, { url: string; global: string }> = {
   turnstile: {
     url: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
     global: 'turnstile',
@@ -24,7 +27,7 @@ const SCRIPTS: Record<CaptchaConfig['provider'], { url: string; global: string }
 const LOAD_TIMEOUT_MS = 15_000;
 const loading = new Map<string, Promise<ProviderApi>>();
 
-function loadProvider(provider: CaptchaConfig['provider']): Promise<ProviderApi> {
+function loadProvider(provider: ProviderName): Promise<ProviderApi> {
   const { url, global } = SCRIPTS[provider];
   const lookup = () => (window as unknown as Record<string, ProviderApi | undefined>)[global];
 
@@ -60,15 +63,93 @@ function loadProvider(provider: CaptchaConfig['provider']): Promise<ProviderApi>
 
 type Status = 'checking' | 'verified' | 'failed';
 
-export default function Captcha({
-  config,
-  onToken,
-  t,
-}: {
+interface CaptchaProps {
   config: CaptchaConfig;
   onToken: (token: string | null) => void;
   t: Translate;
-}) {
+}
+
+export default function Captcha({ config, onToken, t }: CaptchaProps) {
+  return config.provider === 'pow' ? (
+    <PowCheck onToken={onToken} t={t} />
+  ) : (
+    <ProviderCheck config={{ ...config, provider: config.provider }} onToken={onToken} t={t} />
+  );
+}
+
+/**
+ * The built-in check (ADR 0052, artboard `Widget/PreChat-Verify`): no puzzle
+ * and nothing to click. It starts when the form opens, so it is usually done
+ * before the visitor finishes typing, and fetches new work a minute before the
+ * old work lapses. A failure never blames the visitor and offers Try again.
+ */
+function PowCheck({ onToken, t }: Omit<CaptchaProps, 'config'>) {
+  const { controller } = useWidget();
+  const [status, setStatus] = useState<Status>('checking');
+  const [round, setRound] = useState(0);
+
+  // `round` is the trigger for new work: Try again, and a challenge about to lapse.
+  useEffect(() => {
+    let live = true;
+    let refresh: ReturnType<typeof setTimeout> | undefined;
+    setStatus('checking');
+    onToken(null);
+    controller.transport
+      .captchaChallenge()
+      .then(async (work) => {
+        const token = await solvePow(work);
+        if (!live) {
+          return;
+        }
+        setStatus('verified');
+        onToken(token);
+        const after = refreshAfter(work);
+        if (after !== null) {
+          refresh = setTimeout(() => setRound((value) => value + 1), after);
+        }
+      })
+      .catch(() => live && setStatus('failed'));
+    return () => {
+      live = false;
+      clearTimeout(refresh);
+    };
+  }, [controller, onToken, round]);
+
+  return (
+    <fieldset class={`hd-captcha hd-pow hd-pow-${status}`}>
+      <legend class="hd-visually-hidden">{t('captcha.group')}</legend>
+      <div class="hd-pow-row">
+        <span class="hd-pow-icon">
+          <Icon
+            name={status === 'verified' ? 'shieldCheck' : status === 'failed' ? 'alert' : 'loader'}
+            size={20}
+          />
+        </span>
+        <span class="hd-pow-text" role={status === 'failed' ? 'alert' : 'status'}>
+          {t(`captcha.pow.${status}`)}
+        </span>
+        {status === 'failed' ? (
+          <button
+            type="button"
+            class="hd-button hd-button-secondary hd-pow-retry"
+            onClick={() => setRound((value) => value + 1)}
+          >
+            <Icon name="retry" size={16} />
+            {t('captcha.pow.retry')}
+          </button>
+        ) : (
+          <span class="hd-pow-caption">{t('captcha.pow.builtIn')}</span>
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
+function ProviderCheck({
+  config,
+  onToken,
+  t,
+}: CaptchaProps & { config: CaptchaConfig & { provider: ProviderName } }) {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>('checking');
   const brandId = useWidgetState().config?.brand.id ?? '';

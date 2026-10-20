@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { CaptchaRenderConfig } from '@helpdock/channels';
+import type { CaptchaRenderConfig, PowChallenge } from '@helpdock/channels';
 import type { Locale } from '@helpdock/i18n';
 import { webFormPageParamSchema } from '@helpdock/schemas';
 import {
+  type FormCaptcha,
   LANG_FIELD,
   type PageState,
   type PageView,
@@ -82,29 +83,34 @@ const STATUS_FOR_REFUSAL = {
 } as const;
 
 /**
+ * The built-in check needs no other host: its script is inline under the
+ * nonce, and "Try again" fetches the form's own `…/challenge`.
+ */
+const POW_CSP: CaptchaRenderConfig['csp'] = {
+  scriptSrc: [],
+  frameSrc: [],
+  styleSrc: [],
+  connectSrc: ["'self'"],
+};
+
+/**
  * The page's policy: nothing but its own nonce'd style and fonts, a form that
  * posts to itself, and — only while a brand has CAPTCHA on — the provider's
  * script and frame (ADR 0003: "added only when that brand has CAPTCHA
- * enabled").
+ * enabled"), or the built-in check's inline script (ADR 0052).
  */
-export const pageContentSecurityPolicy = (
-  nonce: string,
-  captcha: CaptchaRenderConfig | null,
-): string => {
+export const pageContentSecurityPolicy = (nonce: string, captcha: FormCaptcha | null): string => {
+  const csp = captcha === null ? null : captcha.provider === 'pow' ? POW_CSP : captcha.csp;
   const extra = (sources: readonly string[] | undefined): string =>
     sources === undefined || sources.length === 0 ? '' : ` ${sources.join(' ')}`;
   const directives = [
     "default-src 'none'",
-    `style-src 'self' 'nonce-${nonce}'${extra(captcha?.csp.styleSrc)}`,
+    `style-src 'self' 'nonce-${nonce}'${extra(csp?.styleSrc)}`,
     "font-src 'self'",
     "img-src 'self' data:",
-    captcha === null
-      ? "script-src 'none'"
-      : `script-src 'nonce-${nonce}'${extra(captcha.csp.scriptSrc)}`,
-    ...(captcha === null ? [] : [`frame-src${extra(captcha.csp.frameSrc)}`]),
-    ...(captcha === null || captcha.csp.connectSrc.length === 0
-      ? []
-      : [`connect-src${extra(captcha.csp.connectSrc)}`]),
+    csp === null ? "script-src 'none'" : `script-src 'nonce-${nonce}'${extra(csp.scriptSrc)}`,
+    ...(csp === null || csp.frameSrc.length === 0 ? [] : [`frame-src${extra(csp.frameSrc)}`]),
+    ...(csp === null || csp.connectSrc.length === 0 ? [] : [`connect-src${extra(csp.connectSrc)}`]),
     "form-action 'self'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
@@ -117,6 +123,21 @@ export class WebFormPage {
 
   constructor(deps: WebFormPageDependencies) {
     this.#deps = deps;
+  }
+
+  /**
+   * A new built-in challenge for the form's "Try again" (ADR 0052), or null
+   * when this host and path serve no open form that asks for one.
+   */
+  async challenge(request: {
+    readonly host: string | undefined;
+    readonly brandId?: string | undefined;
+  }): Promise<PowChallenge | null> {
+    const brandId = this.#brandFor(request.brandId, await this.#deps.resolveHost(request.host));
+    const form = brandId === null ? null : await this.#deps.forms.load(brandId, undefined);
+    return form?.state === 'open' && form.captcha?.provider === 'pow'
+      ? form.captcha.challenge
+      : null;
   }
 
   async handle(request: WebFormPageRequest): Promise<WebFormPageResponse> {

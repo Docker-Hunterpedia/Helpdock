@@ -17,6 +17,8 @@ export function PreChat() {
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const onToken = useCallback((value: string | null) => setToken(value), []);
+  // A refused token is spent: a new box asks for a new one.
+  const [captchaRound, setCaptchaRound] = useState(0);
   const Captcha = useLazy(loadCaptcha, Boolean(config?.captcha));
 
   if (!config) {
@@ -60,6 +62,10 @@ export function PreChat() {
       });
       controller.send(message);
     } catch (error) {
+      if (error instanceof TransportError && error.code === 'captcha_failed') {
+        setToken(null);
+        setCaptchaRound((round) => round + 1);
+      }
       setFormError(
         error instanceof TransportError && error.code === 'rate_limited'
           ? t('prechat.rateLimited')
@@ -120,7 +126,7 @@ export function PreChat() {
         error={errors.message ?? null}
       />
       {config.captcha && Captcha ? (
-        <Captcha config={config.captcha} onToken={onToken} t={t} />
+        <Captcha key={captchaRound} config={config.captcha} onToken={onToken} t={t} />
       ) : null}
       {formError ? (
         <p class="hd-alert hd-alert-danger" role="alert">

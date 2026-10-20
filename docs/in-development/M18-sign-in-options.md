@@ -887,3 +887,11 @@ screens.
   (30 per 15 minutes per IP and brand on "Was this helpful?", answered 429),
   and the full list of `rate_limit_refusals_total` bucket labels in the
   operations guide.
+- **M18-10 Proof-of-work CAPTCHA provider** (#284): in review. `pow` in
+  `CAPTCHA_PROVIDERS` and `captcha.provider`; `captcha.difficulty` (`low`
+  50,000 / `medium` 200,000); a per-brand HKDF key, the surface and expiry in
+  the salt, single spend by `SET NX`; `GET /api/widget/:brandId/captcha/challenge`
+  and `/contact[/<brandId>]/challenge`; the solver in the widget's lazy CAPTCHA
+  chunk and inline in the web form; D-51 as a default for brands with no saved
+  provider; ADR 0052 updated; artboards `Widget/PreChat-Verify`,
+  `HelpCenter/WebForm-Verify`, `Admin/Channels-Widget-BotProtection`.

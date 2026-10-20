@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { createI18n } from '@helpdock/i18n';
 import { test as base, expect, type Page } from '@playwright/test';
-import { CLOSED_BRAND, OPEN_BRAND, REFERENCE } from './fixtures.ts';
+import { BROKEN_POW_BRAND, CLOSED_BRAND, OPEN_BRAND, POW_BRAND, REFERENCE } from './fixtures.ts';
 
 /**
  * The hosted web form (M4-09, artboards `WebFormEN` and `WebFormAR`) in a real
@@ -123,4 +123,54 @@ test('says the form is closed when the brand turned it off', async ({ page, page
   expect(response?.status()).toBe(404);
   await expect(page.getByRole('heading', { name: t('closed.heading') })).toBeVisible();
   expect(await violations(page)).toEqual([]);
+});
+
+const fillAndSend = async (page: Page, t: ReturnType<typeof strings>): Promise<void> => {
+  await page.getByLabel(t('fields.name')).fill('Omar Khalil');
+  await page.getByLabel(t('fields.email')).fill('omar.k@example.com');
+  await page.getByLabel(t('fields.subject')).fill('Refund for order 8841');
+  await page.getByLabel(t('fields.message')).fill('Refund for order 8841 not received.');
+  await page.getByRole('button', { name: t('submit') }).click();
+};
+
+test.describe('the built-in check (ADR 0052, HelpCenter/WebForm-Verify)', () => {
+  test('checks in the background, then sends with the solution', async ({ page, pageLocale }) => {
+    const t = strings(pageLocale);
+    const outside: string[] = [];
+    page.on('request', (request) => {
+      if (!request.url().startsWith('http://127.0.0.1')) outside.push(request.url());
+    });
+    await open(page, pageLocale, POW_BRAND);
+
+    const check = page.getByRole('status', { name: t('captcha.label') });
+    await expect(check).toContainText(t('captcha.verified'));
+    await expect(check).toContainText(t('captcha.builtIn'));
+    await expect(page.getByRole('button', { name: t('submit') })).toBeEnabled();
+    expect(await violations(page)).toEqual([]);
+
+    await fillAndSend(page, t);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(REFERENCE);
+    // Nothing is fetched from a third party.
+    expect(outside).toEqual([]);
+  });
+
+  test('says when the check failed, keeps Send off, and passes on Try again', async ({
+    page,
+    pageLocale,
+  }) => {
+    const t = strings(pageLocale);
+    await open(page, pageLocale, BROKEN_POW_BRAND);
+
+    const failed = page.getByRole('alert', { name: t('captcha.label') });
+    await expect(failed).toContainText(t('captcha.failed'), { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: t('submit') })).toBeDisabled();
+    expect(await violations(page)).toEqual([]);
+
+    await failed.getByRole('button', { name: t('captcha.retry') }).click();
+    await expect(page.getByRole('status', { name: t('captcha.label') })).toContainText(
+      t('captcha.verified'),
+    );
+    await fillAndSend(page, t);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(REFERENCE);
+  });
 });

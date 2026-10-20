@@ -34,6 +34,7 @@ export function ShortcutSheet({
   permits,
   onSingleKeysChange,
   onClose,
+  onExited,
 }: {
   readonly open: boolean;
   readonly singleKeys: boolean;
@@ -45,6 +46,8 @@ export function ShortcutSheet({
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
   onSingleKeysChange(on: boolean): void;
   onClose(): void;
+  /** The close transition has ended and focus has been given back. */
+  onExited?(): void;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
@@ -69,6 +72,7 @@ export function ShortcutSheet({
       aria-labelledby={titleId}
       maxWidth={false}
       slotProps={{
+        transition: { onExited },
         paper: {
           sx: {
             width: 860,

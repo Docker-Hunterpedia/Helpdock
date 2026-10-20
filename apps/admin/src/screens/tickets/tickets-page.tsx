@@ -319,7 +319,7 @@ export function TicketsPage(): ReactNode {
       selectedId={ticketId}
       now={now}
       search={search}
-      emptyKind={emptyKindOf(view, search, filters)}
+      emptyKind={emptyKindOf(view, search, filters, resolved.changed)}
       typed={typed}
       filters={filters}
       statuses={directory.statuses}

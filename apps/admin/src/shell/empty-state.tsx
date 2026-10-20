@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useSemanticTokens } from '../app/tokens.js';
 
 /**
- * DESIGN §6.3: a 24 px icon in the muted neutral, an h3 and one sentence, and
+ * DESIGN §6.3: a 20 px icon in `text.secondary` on a 40 px `bg.muted` circle, an h3 and one sentence, and
  * at most one action. Never an illustration, and no action while there is
  * nothing to act on — "Try again" on a read that failed is such an action;
  * "there is nothing here yet" is not.
@@ -40,7 +40,21 @@ export function EmptyState({
         backgroundColor: tokens['bg.surface'],
       }}
     >
-      <Icon size={24} aria-hidden="true" color={tokens['text.disabled']} />
+      <Box
+        component="span"
+        sx={{
+          inlineSize: 40,
+          blockSize: 40,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: tokens['bg.muted'],
+          color: tokens['text.secondary'],
+        }}
+      >
+        <Icon size={20} aria-hidden="true" />
+      </Box>
       <Typography variant="h3" component="h2">
         {heading}
       </Typography>

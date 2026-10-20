@@ -322,7 +322,7 @@ export function TicketList({
             heading={t(EMPTY_COPY[emptyKind].heading, { term: search })}
             body={t(EMPTY_COPY[emptyKind].body)}
             action={emptyAction}
-            hints={<ShortcutHints ids={EMPTY_HINTS} />}
+            hints={<ShortcutHints ids={EMPTY_HINTS} fallbackFocus={() => searchInput.current} />}
           />
         ) : (
           <>

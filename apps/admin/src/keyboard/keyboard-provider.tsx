@@ -34,11 +34,20 @@ import { ShortcutSheet } from './shortcut-sheet.tsx';
 
 export type ShortcutHandler = () => void;
 
+export interface OpenSheetOptions {
+  /**
+   * Where focus goes when the sheet has closed and the control that opened it
+   * is gone — a hint that vanishes when the switch in the sheet turns the
+   * single-key shortcuts off. Used only if the control that had focus when the sheet opened is gone.
+   */
+  readonly fallbackFocus?: () => HTMLElement | null;
+}
+
 interface KeyboardContextValue {
   register(id: ShortcutId, run: ShortcutHandler): () => void;
   readonly singleKeys: boolean;
   setSingleKeys(on: boolean): void;
-  openSheet(): void;
+  openSheet(options?: OpenSheetOptions): void;
   permits(permission: ShortcutPermission | undefined): boolean;
 }
 
@@ -134,6 +143,10 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
   const handlers = useRef(new Map<ShortcutId, ShortcutHandler[]>());
   const [pending, setPending] = useState<PendingSequence | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const fallbackFocus = useRef<{
+    readonly fallback: () => HTMLElement | null;
+    readonly opener: Element | null;
+  }>(undefined);
   const { singleKeys, saving, setSingleKeys } = useSingleKeySwitch();
   const permits = usePermits();
 
@@ -228,7 +241,11 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
       register,
       singleKeys,
       setSingleKeys,
-      openSheet: () => {
+      openSheet: (options) => {
+        fallbackFocus.current =
+          options?.fallbackFocus === undefined
+            ? undefined
+            : { fallback: options.fallbackFocus, opener: document.activeElement };
         setSheetOpen(true);
       },
       permits,
@@ -247,6 +264,14 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
         onSingleKeysChange={setSingleKeys}
         onClose={() => {
           setSheetOpen(false);
+        }}
+        onExited={() => {
+          const target = fallbackFocus.current?.fallback();
+          const opener = fallbackFocus.current?.opener;
+          fallbackFocus.current = undefined;
+          if (target && opener?.isConnected !== true) {
+            target.focus();
+          }
         }}
       />
       <SequenceChip pending={pending} permits={permits} />
@@ -305,7 +330,7 @@ export function useShortcutHandlers<Id extends ShortcutId>(
  */
 export function useKeyboard(): {
   readonly singleKeys: boolean;
-  readonly openSheet: () => void;
+  readonly openSheet: (options?: OpenSheetOptions) => void;
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
 } {
   const context = useContext(KeyboardContext);

@@ -237,6 +237,22 @@ describe('intents and links', () => {
   });
 });
 
+describe('emptyKindOf with changed filters', () => {
+  it.each(['my_open', 'unassigned', 'overdue', 'escalated', 'department_open'] as const)(
+    'says the filters exclude everything on %s once they were changed',
+    (builtIn) => {
+      const changedFilters = { ...EMPTY_FILTERS, priority: ['low' as const] };
+      expect(emptyKindOf(view({ id: builtIn, builtIn }), '', changedFilters, true)).toBe(
+        'filtered',
+      );
+    },
+  );
+
+  it('still lets a search win over changed filters', () => {
+    expect(emptyKindOf(shared, 'x', EMPTY_FILTERS, true)).toBe('search');
+  });
+});
+
 describe('emptyKindOf', () => {
   const filtered = { ...EMPTY_FILTERS, priority: ['urgent' as const] };
 

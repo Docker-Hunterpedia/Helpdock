@@ -1,6 +1,7 @@
 import { Box, ButtonBase } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../app/i18n.js';
+import { useSemanticTokens } from '../app/tokens.js';
 import { KeyCombo } from './key-combo.tsx';
 import { useKeyboard } from './keyboard-provider.tsx';
 import { type ShortcutId, shortcutById, shortcutLabel } from './registry.js';
@@ -15,8 +16,16 @@ import { type ShortcutId, shortcutById, shortcutLabel } from './registry.js';
  * `general.shortcuts` hint is a button, because the key it names is one of
  * those the switch turns off and the sheet must stay reachable.
  */
-export function ShortcutHints({ ids }: { readonly ids: readonly ShortcutId[] }): ReactNode {
+export function ShortcutHints({
+  ids,
+  fallbackFocus,
+}: {
+  readonly ids: readonly ShortcutId[];
+  /** Where focus goes if the sheet's switch removes the hints while it is open. */
+  readonly fallbackFocus?: () => HTMLElement | null;
+}): ReactNode {
   const t = useT();
+  const tokens = useSemanticTokens();
   const { singleKeys, permits, openSheet } = useKeyboard();
 
   const shown = ids
@@ -58,8 +67,19 @@ export function ShortcutHints({ ids }: { readonly ids: readonly ShortcutId[] }):
           <li key={shortcut.id}>
             {shortcut.id === 'general.shortcuts' ? (
               <ButtonBase
-                onClick={openSheet}
-                sx={{ font: 'inherit', color: 'inherit', borderRadius: '4px' }}
+                onClick={() => {
+                  openSheet(fallbackFocus === undefined ? undefined : { fallbackFocus });
+                }}
+                sx={{
+                  font: 'inherit',
+                  color: 'inherit',
+                  borderRadius: '4px',
+                  // The theme's focus ring (DESIGN §10), which it gives Button but not ButtonBase.
+                  '&:focus-visible': {
+                    outline: `2px solid ${tokens['border.focus']}`,
+                    outlineOffset: '2px',
+                  },
+                }}
               >
                 {content}
               </ButtonBase>

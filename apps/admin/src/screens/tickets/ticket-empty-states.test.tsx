@@ -31,10 +31,21 @@ const wideViewport = (): void => {
   }));
 };
 
-const renderEmpty = async (entry: string, { singleKeys = true }: { singleKeys?: boolean } = {}) => {
+const renderEmpty = async (
+  entry: string,
+  { singleKeys = true, viewer = false }: { singleKeys?: boolean; viewer?: boolean } = {},
+) => {
   const apis = await signedInMockApis();
   if (apis.auth instanceof MockAuthApi) {
     apis.auth.saveSingleKeyShortcuts(singleKeys);
+  }
+  if (viewer) {
+    const session = await apis.auth.me();
+    vi.spyOn(apis.auth, 'me').mockResolvedValue(
+      session === null
+        ? null
+        : { ...session, user: { ...session.user, role: 'viewer', installAdmin: false } },
+    );
   }
   vi.spyOn(apis.tickets, 'list').mockResolvedValue({ tickets: [], nextCursor: null });
   const rendered = renderApp(<AppRoutes />, {
@@ -132,5 +143,43 @@ describe('the empty states of the ticket views', () => {
     await user.click(screen.getByRole('button', { name: 'Edit filters' }));
 
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Urgent' })).toBeVisible());
+  });
+
+  it('leaves out the New ticket hint for a role that cannot write', async () => {
+    await renderEmpty(`/tickets?view=${MOCK_VIEW_MY_OPEN}`, { viewer: true });
+    await screen.findByRole('heading', { name: 'Nothing waiting on you' });
+
+    expect(
+      within(hints())
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['gthenuUnassigned', '?All shortcuts']);
+  });
+
+  it('gives focus back to "All shortcuts" when the sheet closes', async () => {
+    const { user } = await renderEmpty(`/tickets?view=${MOCK_VIEW_MY_OPEN}`);
+    await screen.findByRole('heading', { name: 'Nothing waiting on you' });
+    const button = within(hints()).getByRole('button', { name: /All shortcuts/ });
+
+    await user.click(button);
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(button).toHaveFocus());
+  });
+
+  it('moves focus to the search box when the sheet turned the hints off', async () => {
+    const { user } = await renderEmpty(`/tickets?view=${MOCK_VIEW_MY_OPEN}`);
+    await screen.findByRole('heading', { name: 'Nothing waiting on you' });
+
+    await user.click(within(hints()).getByRole('button', { name: /All shortcuts/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    await user.click(within(sheet).getByRole('switch', { name: 'Single-key shortcuts' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: 'Keyboard hints' })).not.toBeInTheDocument(),
+    );
+    await user.click(within(sheet).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.getByRole('searchbox', { name: /Search/ })).toHaveFocus());
   });
 });

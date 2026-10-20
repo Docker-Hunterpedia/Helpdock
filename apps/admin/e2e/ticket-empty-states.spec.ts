@@ -39,6 +39,29 @@ test.describe('empty ticket views', () => {
     ).toBeHidden();
   });
 
+  test('"All shortcuts" shows a focus ring on keyboard focus', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale);
+    await page
+      .getByRole('searchbox', { name: t('tickets:list.searchLabel') })
+      .fill('nothing at all');
+
+    const button = page
+      .getByRole('list', { name: t('tickets:keyboard.hintsLabel') })
+      .getByRole('button', { name: t('tickets:keyboard.shortcut.general.shortcuts') });
+    await button.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+
+    await expect(button).toBeFocused();
+    await expect(button).toHaveCSS('outline-style', 'solid');
+    await expect(button).toHaveCSS('outline-width', '2px');
+  });
+
   test('"All shortcuts" opens the sheet', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

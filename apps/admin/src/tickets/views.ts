@@ -336,6 +336,8 @@ export type EmptyKind = 'search' | 'myOpen' | 'unassigned' | 'overdue' | 'filter
 
 /**
  * A search wins over everything, since it is what the person just did. Then
+ * a view whose filters the URL replaced (`changed`), which is the person's own
+ * filter set whatever the view is. Then
  * the three built-in views that each have their own words; then a saved view
  * (or the whole desk) with filters on, whose filters are what exclude every
  * ticket; and "Nothing in this view" for the rest.
@@ -344,9 +346,14 @@ export const emptyKindOf = (
   view: TicketView | null,
   search: string,
   filters: WorkspaceFilters,
+  changed = false,
 ): EmptyKind => {
   if (search !== '') {
     return 'search';
+  }
+  // The URL's filters replaced the view's: what is empty is the new set, not the view.
+  if (changed) {
+    return 'filtered';
   }
   switch (view?.builtIn) {
     case 'my_open':

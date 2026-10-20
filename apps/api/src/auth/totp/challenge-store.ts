@@ -61,7 +61,8 @@ export type AttemptOutcome =
  * Reserves one evaluation of a code before the code is looked at, so the number
  * of guesses ever evaluated is bounded by the limit even under a parallel
  * burst. Two budgets are charged together: the challenge's own (KEYS[1]) and the
- * account's (KEYS[3]), which survives the challenge; without the second,
+ * account's (KEYS[3]), which survives the challenge and whose expiry slides
+ * from the last reservation, so any 15 minutes hold at most three; without the second,
  * someone holding the first factor could start a fresh challenge for every two
  * wrong codes and never reach the lock.
  *
@@ -86,7 +87,7 @@ if redis.call('EXISTS', KEYS[2]) == 1 then
 end
 local attempts = challenge.attempts + 1
 local failures = redis.call('INCR', KEYS[3])
-if failures == 1 then redis.call('EXPIRE', KEYS[3], lock) end
+redis.call('EXPIRE', KEYS[3], lock)
 if attempts > limit or failures > limit then
   redis.call('DEL', KEYS[1], KEYS[3])
   redis.call('SET', KEYS[2], '1', 'EX', lock)

@@ -119,7 +119,7 @@ export const authRedisStub = (): RedisStub =>
       const lock = Number(lockText);
       const attempts = challenge.attempts + 1;
       const failures = await stub.incr(failuresKey);
-      if (failures === 1) await stub.expire(failuresKey, lock);
+      await stub.expire(failuresKey, lock);
       if (attempts > limit || failures > limit) {
         await stub.del(challengeKey, failuresKey);
         await stub.set(lockKey, '1', 'EX', lock);

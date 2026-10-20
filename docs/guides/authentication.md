@@ -739,7 +739,8 @@ at a code are bounded per account: an attempt is reserved atomically, before the
 authenticator or recovery code is checked, on the challenge (three attempts) and
 on a per-user counter that outlives the challenge, so starting a new challenge
 does not buy new tries and a parallel burst cannot get more than three codes
-checked. A fourth reservation, or a wrong third code, locks the account for
+checked. The counter's fifteen minutes slide from the last reservation, so no
+three-code allowance renews at a window boundary. A fourth reservation, or a wrong third code, locks the account for
 fifteen minutes (`totp-locked`). A correct code spends the challenge in one
 atomic step that refuses if the lock landed first, so no session opens after the
 lock. Only someone holding a live challenge can spend the counter, and a

@@ -1,5 +1,5 @@
 import { uuidv7 } from '@helpdock/db';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { authRedis } from '../../testing/auth-redis.js';
 import type { RedisStub } from '../../testing/redis-stub.js';
 import { totpChallengeKey, totpFailuresKey, totpLockKey } from '../redis-keys.js';
@@ -157,6 +157,26 @@ describe('reserveAttempt and failAttempt', () => {
     ]);
     await expect(store.isLocked(USER_ID)).resolves.toBe(true);
     await expect(stub.get(totpFailuresKey(USER_ID))).resolves.toBeNull();
+  });
+
+  it('slides the counter window from the last failure, so spaced failures still accumulate', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      const first = await open();
+      await wrongCode(first.id, first.challenge);
+      vi.setSystemTime(1_000_000 + (TOTP_LOCK_SECONDS - 60) * 1000);
+      const second = await open();
+      await wrongCode(second.id, second.challenge);
+      expect(stub.ttlOf(totpFailuresKey(USER_ID))).toBe(TOTP_LOCK_SECONDS);
+
+      // The first failure is now older than the window; the counter still stands.
+      vi.setSystemTime(1_000_000 + (TOTP_LOCK_SECONDS + 30) * 1000);
+      const third = await open();
+      await expect(wrongCode(third.id, third.challenge)).resolves.toEqual({ status: 'locked' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refuses a reservation on a locked account and removes its challenge', async () => {

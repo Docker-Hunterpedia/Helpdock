@@ -12,7 +12,7 @@ scale.add(tokens.typography.baseSize.admin);
 // function calls or arithmetic, or parse arbitrary nested JS/CSS expressions.
 function withoutComments(source: string): string {
   return source.replace(
-    /(['"`])(?:\\.|(?!\1)[\s\S])*?\1|\/(?![/*])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+\/[dgimsuvy]*|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+    /(['"`])(?:\\.|(?!\1)[^\\])*?\1|\/(?![/*])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n[])+\/[dgimsuvy]*|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
     (match) => (/^\/(?:\*|\/)/.test(match) ? '' : match),
   );
 }
@@ -20,7 +20,7 @@ function withoutComments(source: string): string {
 function invalidFamilies(source: string): string[] {
   const declarations = withoutComments(source);
   const copiedStacks = Array.from(
-    declarations.matchAll(/(['"`])((?:\\.|(?!\1)[\s\S])*?)\1/g),
+    declarations.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g),
     (match) => match[2] ?? '',
   ).filter(
     (value) =>
@@ -38,7 +38,7 @@ function invalidFamilies(source: string): string[] {
       (match) => match[2] ?? '',
     ),
     ...Array.from(
-      declarations.matchAll(/\bfont-family\s*:\s*((?:\$\{[^}]+\}|[^;}\n])+)/g),
+      declarations.matchAll(/\bfont-family\s*:\s*((?:\$\{[^}]+\}|\$(?!\{)|[^;}\n$])+)/g),
       (match) => (match[1] ?? '').split(/["']>/)[0] ?? '',
     ),
     ...Array.from(
@@ -86,6 +86,19 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 describe('font contract (#339)', () => {
+  it.each(['', '/'])(
+    'handles long repeated character classes with terminator %j quickly',
+    (end) => {
+      const source = `/${'[]'.repeat(20_000)}${end}`;
+      const started = performance.now();
+      const result = withoutComments(source);
+      const elapsed = performance.now() - started;
+
+      expect(result).toBe(source);
+      expect(elapsed).toBeLessThan(1_000);
+    },
+  );
+
   it.each([
     "fontFamily: 'Arial'",
     "fontFamily: 'monospace'",

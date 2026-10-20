@@ -1,6 +1,6 @@
 import { strings } from '../strings.js';
 import { expect, test } from './admin-session.js';
-import { SKIP_ENV } from './install.js';
+import { resetStepUpBudget, SKIP_ENV } from './install.js';
 
 /**
  * `/me/security` against the real api, for what the mock suite cannot see:
@@ -18,6 +18,8 @@ test.skip(
 const t = strings('en');
 
 test.describe('the security page against the real api', () => {
+  test.beforeEach(resetStepUpBudget);
+
   test('sends a wrong current password once, without refreshing the session', async ({ page }) => {
     await page.goto('/me/security');
     await page.getByRole('heading', { name: t('me:account.title'), level: 1 }).waitFor();

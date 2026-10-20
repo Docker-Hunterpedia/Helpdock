@@ -77,6 +77,7 @@ export const SAML_CONTROL_KEY_ENV = 'HD_E2E_SAML_CONTROL_KEY';
 export const SAML_CERTIFICATE_ENV = 'HD_E2E_SAML_CERTIFICATE';
 export const SSO_CONNECTION_ENV = 'HD_E2E_SSO_CONNECTION_ID';
 export const SKIP_ENV = 'HD_E2E_API_UNAVAILABLE';
+export const REDIS_CONTAINER_ENV = 'HD_E2E_REDIS_CONTAINER';
 /**
  * The seeded api's environment, as JSON, so a spec can start a replica of it
  * against the same Postgres and Redis ({@link startApiReplica}).
@@ -334,6 +335,7 @@ export const startInstall = async (): Promise<RunningInstall> => {
   process.env[TOTP_SECRET_ENV] = seeded.totpSecret;
   process.env[INVITE_TOKEN_ENV] = seeded.inviteToken;
   process.env[API_ENV_ENV] = JSON.stringify(env);
+  process.env[REDIS_CONTAINER_ENV] = redis.getId();
 
   return { stop: () => stopEverything('SIGTERM') };
 };
@@ -386,4 +388,27 @@ export const startApiReplica = async (port: number): Promise<ApiReplica> => {
   }
 
   return { origin, kill };
+};
+
+const CLEAR_STEP_UP_SCRIPT =
+  "for _, key in ipairs(redis.call('KEYS', 'auth:rate:step-up:*')) do redis.call('DEL', key) end";
+
+/**
+ * Gives the seeded account its step-up budget back (five proofs per quarter
+ * hour). Every spec that re-proves a credential signs in as that one account,
+ * so together they would spend a budget that each is entitled to alone.
+ */
+export const resetStepUpBudget = async (): Promise<void> => {
+  const container = process.env[REDIS_CONTAINER_ENV];
+  if (container === undefined) throw new Error('The install did not publish its Redis container.');
+  await promisify(execFile)('docker', [
+    'exec',
+    container,
+    'redis-cli',
+    '-n',
+    '0',
+    'EVAL',
+    CLEAR_STEP_UP_SCRIPT,
+    '0',
+  ]);
 };

@@ -97,11 +97,16 @@ describe.skipIf(!hasDocker)('reports', () => {
   let app: ApiApp;
   let number = 0;
   /** The seeded tickets the tag and backlog tests point at. */
-  const seeded: Record<'t1' | 't2' | 't3' | 'spam' | 't7' | 'brandB', string> = {
+  const seeded: Record<
+    't1' | 't2' | 't3' | 'spam' | 'merged' | 'deleted' | 't7' | 'brandB',
+    string
+  > = {
     t1: '',
     t2: '',
     t3: '',
     spam: '',
+    merged: '',
+    deleted: '',
     t7: '',
     brandB: '',
   };
@@ -351,7 +356,7 @@ describe.skipIf(!hasDocker)('reports', () => {
       createdAt: at(1, '10:00'),
       closedAt: at(1, '10:05'),
     });
-    await seedTicket({
+    seeded.merged = await seedTicket({
       departmentId: BILLING,
       channel: 'email',
       priority: 'medium',
@@ -359,7 +364,7 @@ describe.skipIf(!hasDocker)('reports', () => {
       createdAt: at(1, '11:00'),
       mergedIntoId: t3,
     });
-    await seedTicket({
+    seeded.deleted = await seedTicket({
       departmentId: BILLING,
       channel: 'email',
       priority: 'medium',
@@ -760,6 +765,8 @@ describe.skipIf(!hasDocker)('reports', () => {
         { ticketId: seeded.t3, tagId: REFUND, departmentId: BILLING },
         { ticketId: seeded.t7, tagId: VIP, departmentId: BILLING },
         { ticketId: seeded.spam, tagId: REFUND, departmentId: SUPPORT },
+        { ticketId: seeded.merged, tagId: REFUND, departmentId: BILLING },
+        { ticketId: seeded.deleted, tagId: VIP, departmentId: BILLING },
         { ticketId: waiting, tagId: REFUND, departmentId: BILLING },
       ]);
       await tagTickets(BRAND_B, [
@@ -777,9 +784,9 @@ describe.skipIf(!hasDocker)('reports', () => {
     it('counts the tickets created in the range per tag, a ticket under each of its tags', async () => {
       const summary = await report();
 
-      // T1, T2 and T3 carry refund; T1 and T7 carry =vip. The spam ticket and
-      // today's ticket carry refund too and count in neither; a tag on no
-      // ticket has no row.
+      // T1, T2 and T3 carry refund; T1 and T7 carry =vip. The spam, merged and
+      // deleted tickets and today's ticket carry one too and count in neither;
+      // a tag on no ticket has no row.
       expect(tagCounts(summary)).toEqual([
         ['refund', 3],
         ['=vip', 2],

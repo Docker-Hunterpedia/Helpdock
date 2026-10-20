@@ -585,7 +585,7 @@ export function BacklogByStatusCard(props: CardProps): ReactNode {
   const title = t('reports:backlogStatus.title');
   // One agent's report has no unassigned tickets to speak of, as Agent workload leaves its row out.
   const showUnassigned = filters.agentId === null;
-  const rows: ShareRow[] = backlog.byStatus.map((row, index) => ({
+  const rows: ShareRow[] = backlog.byStatus.map((row) => ({
     key: row.statusId,
     label: localName(row, locale),
     share: row.open / Math.max(1, backlog.open),
@@ -593,7 +593,6 @@ export function BacklogByStatusCard(props: CardProps): ReactNode {
     ...(showUnassigned
       ? { of: t('reports:backlogStatus.unassigned', { count: row.unassigned }) }
       : {}),
-    colour: seriesColour(index),
   }));
   const share = backlog.unassignedShare === null ? '—' : formatShare(backlog.unassignedShare);
 

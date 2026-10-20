@@ -71,7 +71,7 @@ assignee's.
 |---|---|---|
 | Volume | Tickets created and resolved, by day, channel and priority, and created per day and channel or priority (the stacked columns) | Created on creation; resolved on `closed_at` |
 | By status | Tickets created in the range, by the status they are in now, in total and per day of creation | A current state, read from the tickets themselves |
-| Volume by tag | Tickets created in the range, per tag they carry now; a ticket with two tags counts under each, one with none in no row. The 20 most used, ties by name; the CSV has every tag | A current state, read from the tickets themselves |
+| Volume by tag | Tickets created in the range, per tag they carry now; a ticket with two tags counts under each, one with none in no row. The 20 most used, ties by name; the CSV has every tag. Only tickets that still exist count: a ticket deleted, or removed by retention, drops out of it while it stays in Ticket volume's rollups, so for an old range the two cards can differ | A current state, read from the tickets themselves |
 | Backlog by status | Tickets open now — in a status whose system state is not closed (so Snoozed, once M14-02 adds it, counts) — per status, with how many have no assignee, and the unassigned share of the total | Now, whatever the date range; under the department, channel and agent filters. One agent's report leaves the unassigned figures out |
 | First response time | Median and p90 | On the day of the response |
 | Resolution time | Median and p90 | On the day of the resolution |

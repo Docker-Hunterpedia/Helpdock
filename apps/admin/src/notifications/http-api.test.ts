@@ -1,4 +1,7 @@
-import { NOTIFICATION_PREFERENCE_DEFAULTS } from '@helpdock/schemas';
+import {
+  NOTIFICATION_PREFERENCE_DEFAULTS,
+  type NotificationPreferencesView,
+} from '@helpdock/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpTransport } from '../auth/http-transport.js';
 import { HttpNotificationsApi } from './http-api.js';
@@ -13,11 +16,17 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const noContent = (): Response => new Response(null, { status: 204 });
 
-const view = {
+const view: NotificationPreferencesView = {
   preferences: NOTIFICATION_PREFERENCE_DEFAULTS,
   email: 'lina@helpdock.com',
   locale: 'en',
   push: { configured: false, publicKey: null, subscriptions: [] },
+  emailDelivery: {
+    schedule: 'immediate',
+    digestHour: 8,
+    pausedUntil: null,
+    unsubscribedAt: null,
+  },
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;

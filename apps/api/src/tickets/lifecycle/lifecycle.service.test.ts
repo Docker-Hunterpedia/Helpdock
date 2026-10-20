@@ -56,14 +56,14 @@ const status = (
     ...overrides,
   }) as TicketStatusRow;
 
-const OPEN = status('open', 'open');
-const AWAITING = status('awaiting', 'on_hold', {
+const OPEN = status('0199f4b2-0000-7000-8000-0000000000a1', 'open');
+const AWAITING = status('0199f4b2-0000-7000-8000-0000000000a2', 'on_hold', {
   awaitingCustomer: true,
   pausesSla: true,
   isDefault: false,
 });
-const CLOSED = status('closed', 'closed', { isDefault: false });
-const SPAM = status('spam', 'closed', {
+const CLOSED = status('0199f4b2-0000-7000-8000-0000000000a3', 'closed', { isDefault: false });
+const SPAM = status('0199f4b2-0000-7000-8000-0000000000a4', 'closed', {
   isDefault: false,
   excludedFromReports: true,
   isSpam: true,
@@ -462,7 +462,7 @@ describe('marking as spam (§2.2 row 7, M1-11)', () => {
     expect(hooks.onResolved).toHaveBeenCalledTimes(1);
     expect(hooks.onClosedForCsat).not.toHaveBeenCalled();
     // Never `ticket.closed`, which a survey or an auto-responder would act on.
-    expect(events(recorder)).toEqual(['ticket.spam']);
+    expect(events(recorder)).toEqual(['ticket.status_changed', 'ticket.spam']);
   });
 
   it('keeps closed_at on a ticket that was already closed, and fires no close hook', async () => {

@@ -145,10 +145,12 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
       delete inherited.TRUST_PROXY;
       delete inherited.ADMIN_HOST;
       delete inherited.API_HOST;
-      // Compose interpolates the base before removing Caddy, so these remain required.
+      // Check each missing host independently: Compose's interpolation order is unspecified.
+      inherited.API_HOST = 'api.example.com';
       expect(() =>
         execFileSync('docker', args, { cwd: dir, env: inherited, stdio: 'pipe' }),
       ).toThrow(/ADMIN_HOST/);
+      delete inherited.API_HOST;
       writeFileSync(join(dir, '.env'), '\nADMIN_HOST=support.example.com', { flag: 'a' });
       expect(() =>
         execFileSync('docker', args, { cwd: dir, env: inherited, stdio: 'pipe' }),

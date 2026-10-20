@@ -325,7 +325,12 @@ describe.skipIf(!hasDocker)('spam and the sender block list', () => {
         'ticket.marked_spam',
       ]);
       // `ticket.spam`, never `ticket.closed`: a survey must not hear a close.
-      expect(await outboxEventsFor(ticket.id)).toEqual(['ticket.created', 'ticket.spam']);
+      expect(await outboxEventsFor(ticket.id)).toEqual([
+        'message.created',
+        'ticket.created',
+        'ticket.status_changed',
+        'ticket.spam',
+      ]);
 
       const row = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx.select().from(blockedSenders).where(eq(blockedSenders.value, sender)),
@@ -424,7 +429,12 @@ describe.skipIf(!hasDocker)('spam and the sender block list', () => {
 
       await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, sam, { statusId: spam?.id });
 
-      expect(await outboxEventsFor(ticket.id)).toEqual(['ticket.created', 'ticket.spam']);
+      expect(await outboxEventsFor(ticket.id)).toEqual([
+        'message.created',
+        'ticket.created',
+        'ticket.status_changed',
+        'ticket.spam',
+      ]);
     });
   });
 
@@ -480,8 +490,11 @@ describe.skipIf(!hasDocker)('spam and the sender block list', () => {
       expect(restored.body.status).toMatchObject({ isDefault: true, isSpam: false });
       expect(restored.body.closedAt).toBeNull();
       expect(await outboxEventsFor(ticket.id)).toEqual([
+        'message.created',
         'ticket.created',
+        'ticket.status_changed',
         'ticket.spam',
+        'ticket.status_changed',
         'ticket.reopened',
       ]);
     });

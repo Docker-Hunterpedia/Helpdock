@@ -65,7 +65,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { noCsatDelivery } from '../testing/csat-doubles.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign-in.js';
-import { registerTicketEventHandlers } from './ticket-events.js';
+import { registerTicketOutboxForTest } from '../testing/ticket-outbox.js';
 import type { SearchMode } from './ticket-query.js';
 import { TicketRepository } from './tickets.repository.js';
 
@@ -288,7 +288,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
     // The worker's half, in this process: the handlers a worker registers at
     // start-up, publishing on a connection of its own exactly as it would.
     worker = new Redis(redisContainer.getConnectionUrl());
-    registerTicketEventHandlers(new RedisRealtimeBroadcast(worker));
+    registerTicketOutboxForTest(new RedisRealtimeBroadcast(worker));
     // M8-03: every contact the suite makes writes `contact.created`.
     registerContactEventHandlers();
     ignoreAuthEmailInThisSuite();

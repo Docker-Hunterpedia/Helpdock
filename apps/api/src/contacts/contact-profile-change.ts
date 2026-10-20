@@ -3,6 +3,7 @@ import { contacts, type DbTransaction } from '@helpdock/db';
 import { inArray } from 'drizzle-orm';
 import { readV1Contact } from '../api-v1/v1-contact-view.js';
 import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
+import { wasContactCreatedIn } from './contact-events.js';
 
 /** Compare receiver-visible fields, excluding the timestamp maintained by writes. */
 export const withContactProfileChange = async <T>(
@@ -26,7 +27,7 @@ export const withContactProfileChange = async <T>(
   if (row !== undefined && before !== undefined && after !== undefined) {
     const { updatedAt: _beforeTime, ...previous } = before;
     const { updatedAt: _afterTime, ...current } = after;
-    if (!isDeepStrictEqual(previous, current)) {
+    if (!isDeepStrictEqual(previous, current) && !wasContactCreatedIn(tx, contactId)) {
       await enqueueWebhookEvent(tx, row.brandId, 'contact.updated', {
         contactId,
         departmentId: null,

@@ -2,6 +2,7 @@ import type { MetaEvent, MetaIgnoredReason, MetaRoute } from '@helpdock/channels
 import type { Db, DbTransaction, MetaAccount as MetaAccountRow } from '@helpdock/db';
 import type { MetaPlatform } from '@helpdock/schemas';
 import { failureFields, isUniqueViolation } from '../channels/pg-errors.js';
+import { shareCreatedContacts } from '../contacts/contact-events.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import type { AccountLocator, MetaRepository } from './meta.repository.js';
 import { metaMessageSeen, metaSenderBlocked } from './meta-inbound-gate.js';
@@ -181,9 +182,14 @@ export class MetaInboundService {
     }
 
     try {
-      return await tx.transaction((savepoint) =>
-        this.#options.handlers[account.platform].handle({ ...context, tx: savepoint }, event),
-      );
+      return await tx.transaction((savepoint) => {
+        // A contact one event created is still new to the next event of the batch.
+        shareCreatedContacts(tx, savepoint);
+        return this.#options.handlers[account.platform].handle(
+          { ...context, tx: savepoint },
+          event,
+        );
+      });
     } catch (error) {
       // Two deliveries of one batch raced past the check above, and the other
       // one's insert won. Only a message that is now there is a duplicate: a

@@ -11,6 +11,7 @@ import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { IdentityContentionError } from '../contacts/identity.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
 import { SetupFailure } from '../install/setup-failure.js';
@@ -93,6 +94,19 @@ describe('mapError', () => {
   it('does the same for a thrown non-error', () => {
     expect(mapError('boom').status).toBe(500);
     expect(mapError(undefined).message).toBe('The request could not be completed');
+  });
+});
+
+describe('a write that keeps losing its race for a contact', () => {
+  it('is a retryable 503 with a stable code, not a 500', () => {
+    const mapped = mapError(new IdentityContentionError());
+
+    expect(mapped).toMatchObject({
+      status: 503,
+      code: 'unavailable',
+      retryAfter: 1,
+      unexpected: false,
+    });
   });
 });
 

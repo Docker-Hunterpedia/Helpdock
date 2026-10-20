@@ -1,4 +1,6 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
+import { escapeHtml } from '../auth/email-templates.js';
 import { type BatchEmailInput, renderBatchEmail } from './batch-email.js';
 import { type BatchItem, groupBatch } from './email-batch-content.js';
 
@@ -121,7 +123,7 @@ describe('renderBatchEmail (M14-10, artboard Email/NotificationBatch)', () => {
     expect(email.html).toContain('lang="ar" dir="rtl"');
     expect(email.text).toContain('تحتاجك الآن');
     expect(email.html).toContain(
-      '<bdi style="font-family:\'IBM Plex Mono\', ui-monospace, monospace">HD-1038</bdi>',
+      `<bdi style="font-family:${escapeHtml(fontFallbacks.mono)}">HD-1038</bdi>`,
     );
   });
 

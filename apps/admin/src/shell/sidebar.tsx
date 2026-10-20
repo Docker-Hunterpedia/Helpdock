@@ -507,7 +507,7 @@ export function Sidebar({
                     color: 'text.secondary',
                     paddingInline: 3,
                     marginBlock: '16px 4px',
-                    fontSize: 11,
+                    fontSize: 12,
                     // DESIGN §3.2: uppercase section labels are regular case in Arabic.
                     textTransform: locale === 'ar' ? 'none' : 'uppercase',
                     letterSpacing: locale === 'ar' ? 0 : '0.06em',

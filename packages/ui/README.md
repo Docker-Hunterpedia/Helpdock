@@ -18,6 +18,8 @@ import {
   tokens,
   tokensCssBundle,
   contrastRatio,
+  fontFallbacks,
+  monoFontStyle,
 } from '@helpdock/ui';
 ```
 
@@ -129,8 +131,9 @@ For inputs, native `style` props, or mono text using another scale size, spread
 `var(--hd-font-mono)` and preserves the caller's size and weight.
 
 Emails and pages without webfont loading use `fontFallbacks.sans` and
-`fontFallbacks.mono` from `@helpdock/ui/resolve`. These drop the first (webfont)
-entry from the corresponding token, keeping the DESIGN fallback stack.
+`fontFallbacks.mono` from `@helpdock/ui/resolve` (also exported by `@helpdock/ui`). These drop the first (webfont)
+entry from the corresponding token, keeping the DESIGN fallback stack. Staff notification batches and security notices
+use the same fallbacks as customer and authentication emails.
 
 Other overrides follow DESIGN §6: `MuiOutlinedInput` 36 px, `MuiChip` 22 px,
 `MuiDialog` radius lg with elevation 3, `MuiTooltip` on `bg.inverse` after a

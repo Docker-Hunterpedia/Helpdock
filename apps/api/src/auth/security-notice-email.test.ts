@@ -1,4 +1,6 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
 import { describe, expect, it } from 'vitest';
+import { escapeHtml } from './email-templates.js';
 import { renderSecurityNoticeEmail, SECURITY_CHANGES } from './security-notice-email.js';
 
 const SECURITY_PAGE = 'https://support.example.com/me/security';
@@ -28,6 +30,9 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
     expect(`${en.subject}${en.text}`).not.toMatch(/securityChange|\{\{|oauthC|body_/);
     expect(`${ar.subject}${ar.text}`).not.toMatch(/securityChange|\{\{|oauthC|body_/);
     expect(ar.html).toContain('dir="rtl"');
+    for (const email of [en, ar]) {
+      expect(email.html).toContain(`font-family:${escapeHtml(fontFallbacks.sans)}`);
+    }
     expect(ar.text).not.toBe(en.text);
   });
 

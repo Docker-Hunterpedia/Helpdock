@@ -10,6 +10,12 @@
 [Quick start](#quick-start) · [Features](#features) · [Documentation](#documentation) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
 
 <p align="center">
+  <a href="https://x.com/Oday_Hunter/status/2112356690876051954"><img src="docs/assets/helpdock-1-0-video.png" alt="Watch the Helpdock 1.0 release video (69 seconds)" width="720"></a>
+  <br>
+  <sub><a href="https://x.com/Oday_Hunter/status/2112356690876051954">Watch the 1.0 release video</a> (69 s) · <a href="https://oday-bakkour.com/blog/helpdock-1-0-open-source-help-desk">Read the 1.0 announcement</a></sub>
+</p>
+
+<p align="center">
   <img src="apps/admin/e2e/__screenshots__/en/ticket-view.png" alt="The Helpdock ticket workspace: the ticket list, an email ticket with its SLA badge and reply composer, and the contact card with the contact's previous tickets" width="900">
 </p>
 

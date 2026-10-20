@@ -4,7 +4,14 @@ Helpdock handles customer conversations, contact data and third-party credential
 
 ## Supported versions
 
-Helpdock is pre-release. Once 1.0 ships, the latest minor release receives security fixes.
+Helpdock 1.0.0 was released on 2026-10-20. The latest minor release line receives security fixes, published as patch releases; older lines do not.
+
+| Version | Security fixes |
+|---|---|
+| 1.0.x | Yes |
+| Before 1.0.0 | No |
+
+Upgrade to the newest patch of the latest minor release to receive fixes. [Upgrading](docs/guides/operations.md#upgrading) explains how, and every release image's signature can be verified as the [release guide](docs/guides/release.md#verify-the-image-signature) describes.
 
 ## Reporting a vulnerability
 
@@ -32,4 +39,4 @@ Out of scope: vulnerabilities in third-party services you connect (LLM providers
 
 ## Baseline
 
-v1 targets OWASP ASVS Level 2. Dependencies are monitored with Renovate and `pnpm audit` in CI.
+1.0 was walked against OWASP ASVS 4.0.3 Level 2, requirement by requirement ([record](docs/completed/asvs-l2.md)). Dependencies are monitored with Renovate and `pnpm audit` in CI.

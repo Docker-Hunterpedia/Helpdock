@@ -1,0 +1,17 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show what you built with Helpdock: an install, an integration on the REST API or webhooks, a theme within [DESIGN.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/DESIGN.md)'s brand limits, a deploy recipe. Crop or blur any customer data in screenshots.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you made
+      description: What it is, what it does, and a link if it is public.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How it works
+      description: Optional. The Helpdock features or APIs it uses, and anything others could reuse.

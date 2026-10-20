@@ -1,0 +1,113 @@
+name: Bug report
+description: Something in Helpdock does not work as the docs say it should.
+title: "Bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **A security problem is not a bug report:** report it privately, as [SECURITY.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md) describes, and do not open a public issue. For a question about setting Helpdock up, ask in [Q&A](https://github.com/Docker-Hunterpedia/Helpdock/discussions/categories/q-a).
+
+        Please search [the open issues](https://github.com/Docker-Hunterpedia/Helpdock/issues) first, and check the [changelog](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md) for known limits.
+  - type: input
+    id: version
+    attributes:
+      label: Version or image tag
+      description: The `HELPDOCK_VERSION` you run, or the release shown in the header of Admin → System (for example `helpdock 1.0.0 · a2cf2b3`). For a checkout of the code, the commit.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      description: How this install runs.
+      options:
+        - Docker Compose, as shipped (with its Caddy)
+        - Docker Compose behind Cloudflare or my own reverse proxy
+        - A development checkout (pnpm dev)
+        - Something else (say what in the steps)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      multiple: true
+      options:
+        - Admin app
+        - Chat widget
+        - Help center
+        - Web form or CSAT page
+        - REST API or webhooks
+        - Email channel
+        - Telegram
+        - WhatsApp, Messenger or Instagram
+        - AI
+        - SSO or sign-in
+        - Importers
+        - Install, upgrade or backups
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      description: Only when the problem is on a screen. Include the versions.
+      placeholder: Firefox 144 on Windows 11
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      description: The language the screen, email or message was in.
+      options:
+        - English (en)
+        - Arabic (ar)
+        - Both
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem, from a known starting point.
+      placeholder: |
+        1. Sign in as an Agent
+        2. Open a ticket from the email channel
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected to happen, with a link to the guide that says so if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead. Screenshots help; crop or blur any customer data first.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The relevant lines from `docker compose logs api worker`, or the browser console. **Redact secrets and customer data before you paste:** `APP_MASTER_KEY`, passwords, `DATABASE_URL`, API keys, tokens and webhook secrets, and customers' names, email addresses, phone numbers and message text. This issue is public.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the open and closed issues and found no report of this.
+          required: true
+        - label: I removed secrets and customer data from everything above.
+          required: true
+        - label: This is not a security vulnerability (those go to the private reporting form).
+          required: true

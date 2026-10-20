@@ -238,7 +238,7 @@
       "aiProviders": "llm, openai, model, api key, embeddings",
       "aiKnowledge": "sources, documents, sync, training data",
       "aiAssistant": "ai agent, auto reply, bot, copilot",
-      "developersApiKeys": "api, token, integration, rest",
+      "developersApi": "api, token, integration, rest",
       "developersWebhooks": "events, callbacks, http notifications",
       "staff": "agents, team members, roles, permissions, invite, users",
       "system": "health, version, queues, storage, migrations, status",

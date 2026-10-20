@@ -243,7 +243,7 @@ export const PAGES: readonly PageEntry[] = [
   }),
 
   tabPage(
-    'developersApiKeys',
+    'developersApi',
     'developers',
     developersRoute('api-keys'),
     'developers:tabs.apiKeys',

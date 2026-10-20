@@ -12,7 +12,14 @@ const badgeText = (count: number): string => (count > 99 ? '99+' : String(count)
  * top inline-end corner of its 32 or 36 px button, mono 12. It is `aria-hidden`:
  * the button's own name carries the full count.
  */
-export function CountBadge({ count }: { readonly count: number }): ReactNode {
+export function CountBadge({
+  count,
+  offset = 0,
+}: {
+  readonly count: number;
+  /** Pixel offset from the block-start and inline-end edges. */
+  readonly offset?: number;
+}): ReactNode {
   const tokens = useSemanticTokens();
 
   return (
@@ -21,8 +28,8 @@ export function CountBadge({ count }: { readonly count: number }): ReactNode {
       aria-hidden="true"
       sx={{
         position: 'absolute',
-        insetBlockStart: 0,
-        insetInlineEnd: 0,
+        insetBlockStart: offset,
+        insetInlineEnd: offset,
         minWidth: 18,
         height: 18,
         paddingInline: 1,

@@ -64,6 +64,53 @@ describe('saved views in the workspace', () => {
     vi.unstubAllGlobals();
   });
 
+  it('shows the full active count on the filter icon', async () => {
+    await renderTickets();
+    const filter = await screen.findByRole('button', { name: 'Filter (4)' });
+    const badge = within(filter).getByText('4');
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(badge).toHaveStyle({ insetBlockStart: '-6px', insetInlineEnd: '-6px' });
+  });
+
+  it.each(['Sort', 'Filter (4)'])(
+    '#353: dismisses the %s tooltip through menu opening and focus restoration',
+    async (label) => {
+      const { user } = await renderTickets();
+      const button = screen.getByRole('button', { name: label });
+      await user.hover(button);
+      expect(await screen.findByRole('tooltip', { name: label })).toBeVisible();
+      await user.click(button);
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+      await user.unhover(button);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(button).toHaveFocus());
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      await user.tab();
+      await user.tab({ shift: true });
+      expect(button).toHaveFocus();
+      expect(await screen.findByRole('tooltip', { name: label })).toBeVisible();
+      await user.tab();
+      await waitFor(() =>
+        expect(screen.queryByRole('tooltip', { name: label })).not.toBeInTheDocument(),
+      );
+    },
+  );
+
+  it.each([
+    ['1', 'Imported'],
+    ['0', 'Created in Helpdock'],
+  ])('shows and removes a source-only filter (%s)', async (source, label) => {
+    const { user } = await renderTickets(`/tickets?view=all&imported=${source}`);
+    const filter = await screen.findByRole('button', { name: 'Filter (1)' });
+    expect(within(filter).getByText('1')).toHaveAttribute('aria-hidden', 'true');
+    await user.click(screen.getByRole('button', { name: `Remove Source: ${label}` }));
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeVisible();
+    expect(filter.querySelector('span[aria-hidden="true"]')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: `Remove Source: ${label}` }),
+    ).not.toBeInTheDocument();
+  });
+
   it('lists shared views, then the reader\'s own under "Mine"', async () => {
     await renderTickets();
 

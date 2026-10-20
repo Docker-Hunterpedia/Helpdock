@@ -16,7 +16,7 @@ export function MonoTag({
   readonly children: ReactNode;
   /** A revoked key's scopes: the same tag, its text receding. */
   readonly muted?: boolean;
-  /** Words rather than an identifier ("All 7 events"): the reader's font and direction. */
+  /** Words rather than an identifier ("All events"): the reader's font and direction. */
   readonly prose?: boolean;
 }): ReactNode {
   const tokens = useSemanticTokens();

@@ -133,6 +133,17 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
         });
       }
 
+      if (filters.imported !== undefined) {
+        parts.push({
+          key: 'imported',
+          label: t('tickets:summary.chip', {
+            field: t('tickets:filters.source'),
+            value: t(filters.imported ? 'tickets:filters.imported' : 'tickets:filters.native'),
+          }),
+          without: { ...filters, imported: undefined },
+        });
+      }
+
       return parts;
     },
 

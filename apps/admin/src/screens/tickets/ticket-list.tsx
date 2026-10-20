@@ -5,10 +5,12 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
+import { CountBadge } from '../../shell/count-badge.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
+import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
 import { SortMenu } from './sort-menu.tsx';
 import { TicketRow } from './ticket-row.tsx';
 import { TicketListSkeleton } from './ticket-skeletons.tsx';
@@ -104,6 +106,8 @@ export function TicketList({
   const searchKeys = useAriaKeyShortcuts('general.search');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const active = activeFilterCount(filters);
+  const filterLabel =
+    active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
   const summary = useFilterSummary({ statuses, departments, tags, staff });
   const chips = summary.chips(filters);
 
@@ -137,29 +141,30 @@ export function TicketList({
         <Box
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3 }}
         >
-          <Typography variant="h3" component="h1">
+          <Typography variant="h3" component="h1" noWrap sx={{ minWidth: 0 }}>
             {heading}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
             <SortMenu filters={filters} onChange={onFiltersChange} />
-            <Button
-              ref={filterButton}
-              variant="outlined"
-              size="small"
-              startIcon={<ListFilter size={14} aria-hidden="true" />}
-              aria-expanded={filtersOpen}
-              aria-haspopup="dialog"
-              onClick={() => {
-                setFiltersOpen(true);
-              }}
-            >
-              {active === 0
-                ? t('tickets:list.filter')
-                : t('tickets:list.filterActive', { count: active })}
-            </Button>
+            <MenuTriggerTooltip title={filterLabel} menuOpen={filtersOpen}>
+              <Button
+                ref={filterButton}
+                variant="outlined"
+                size="small"
+                aria-label={filterLabel}
+                sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0, overflow: 'visible' }}
+                aria-expanded={filtersOpen}
+                aria-haspopup="dialog"
+                onClick={() => setFiltersOpen(true)}
+              >
+                <ListFilter size={14} aria-hidden="true" />
+                {active > 0 ? <CountBadge count={active} offset={-6} /> : null}
+              </Button>
+            </MenuTriggerTooltip>
             <Button
               variant="contained"
               size="small"
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
               aria-keyshortcuts={newTicketKeys}
               onClick={onNewTicket}
             >

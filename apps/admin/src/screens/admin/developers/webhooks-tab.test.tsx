@@ -1,3 +1,4 @@
+import { WEBHOOK_EVENTS } from '@helpdock/schemas';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
@@ -83,7 +84,7 @@ describe('Developers › Webhooks', () => {
     expect(within(acme).getByText(/attempt 3\/8 · /)).toBeVisible();
     expect(
       within(endpointRow('https://hooks.zapier.com/hooks/catch/18392/abx')).getByText(
-        'All 7 events',
+        `All ${WEBHOOK_EVENTS.length} events`,
       ),
     ).toBeVisible();
   });

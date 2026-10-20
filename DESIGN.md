@@ -293,7 +293,18 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 ### 6.4 Overlays and feedback
 
 - **Ticket Sort menu** (`Admin/Tickets-SortSla`, M14-07): outlined small
-  `ArrowDownUp` button before Filter in the list header. The 300 px menu offers
+  `ArrowDownUp` icon-only button before the matching `ListFilter` button in the
+  360 px list header (#353). Both are square sm 28 with localized tooltips and
+  accessible names; Filter includes the active count in its name and tooltip
+  and the aria-hidden CountBadge from the NotificationBell (§6.2).
+  These tooltips are non-interactive, close on menu opening or blur, and do
+  not reopen when a menu restores focus; a fresh keyboard focus shows them again.
+  `Admin/Tickets-SortSla` and `Admin/Tickets-Narrow` were redrawn under #353
+  (`AdminTicketsSortSla.dc.html` and `AdminTicketsNarrow.dc.html`), replacing
+  text Sort and Filter buttons so New ticket fits at 360 px. The Filter badge
+  sits at block-start −6 px and inline-end −6 px, leaving the funnel visible;
+  the button and header allow its overhang. New ticket is text-only, with no
+  plus icon; the title stays on one line. The 300 px menu offers
   Last updated, Created newest/oldest, Priority and SLA due. Each choice is a
   keyboard-accessible radio menu item; the selected row uses the existing menu
   selection treatment and a `Check`. SLA due has the caption "Breached first,
@@ -506,3 +517,4 @@ Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line hei
 | 2026-10-20 | 1.37. M14-28, `Admin/M14-Amendments`: grouped webhook event picker, neutral new-event tags and notes opt-in using existing components and tokens (§6.5). Accessibility checklist: labelled fieldsets and checkboxes, keyboard controls, inline error announcement, dialog focus, LTR identifiers in RTL, and en/ar axe checks. |
 | 2026-10-20 | 1.38. M14-01, `Admin/ShortcutSheet`: §6.2 adds Kbd and §6.4 ShortcutSheet and SequenceChip. Drawn at the nearest steps of §3–§4: the artboard's 11 px mono caps at 12/16 with 4 px inline padding (it has 5), the sheet's 28 px column gap at 24, the disabled rows' 45 % at the Switch's 50 %, the chip's 6 × 10 px padding at 4 × 12, and its 13 px text at the Toast's 13. "Next / previous" is two rows, one per shortcut, because the sheet draws one registry entry per row. The sheet is also reachable from the account menu ("Keyboard shortcuts", with the `?` cap while `?` works): with single-key shortcuts off, `?` is off too, and the switch would otherwise be out of reach until M14-12's Profile tab. No token, size or radius is added. |
 | 2026-10-20 | 1.39. 1.0.x bug fix (#339): the admin publishes the shared font variables through CssBaseline and selects the Arabic face when its direction changes. One family-only mono style preserves existing scale sizes and weights; off-scale admin sizes move onto §3.1 (including count badges at 12 px). Customer and staff emails and API docs share the token fallback stacks. Dialog titles use h3; the TimeCard clock uses mono 20/28. Content marked Arabic selects the Arabic face within the English UI. |
+| 2026-10-20 | 1.40. Fix #353, M14-07: `Admin/Tickets-SortSla` and `Admin/Tickets-Narrow` were redrawn in `AdminTicketsSortSla.dc.html` and `AdminTicketsNarrow.dc.html`, replacing text Sort and Filter with icon-only controls so New ticket fits at 360 px. Filter uses the NotificationBell count badge with a −6 px block-start/inline-end offset and visible overhang to keep the funnel clear. Controls retain tooltips and accessible names; New ticket is text-only, with no plus icon. Existing tokens only. |

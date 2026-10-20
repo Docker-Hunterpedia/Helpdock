@@ -436,6 +436,23 @@ M14-23.
 
 ### M14-07 Sort by SLA due
 
+Regression fix #353: the 360 px ticket-list header uses outlined square sm
+Sort and Filter buttons with localized tooltips and accessible names (including
+the active filter count), plus the NotificationBell count badge. Source filters
+get removable chips in both languages. `Admin/Tickets-SortSla` and
+`Admin/Tickets-Narrow` were redrawn under #353 (`AdminTicketsSortSla.dc.html`
+and `AdminTicketsNarrow.dc.html`), replacing text Sort and Filter buttons so
+New ticket fits at 360 px. Filter's badge uses a −6 px block-start and inline-end
+offset with visible overhang, leaving the funnel clear. New ticket is text-only,
+with no plus icon; the view title stays on one line. The `Admin/Tickets-SortSla`
+menu and ordering are unchanged. The webhook endpoint test also derives its all-events count from `WEBHOOK_EVENTS.length`
+after M14-28 expanded the event picker.
+
+PR #354 follow-up: Sort and Filter tooltips are non-interactive and close when
+the menu opens or the trigger loses focus. Menu-restored focus does not reopen
+them over the changed-filters actions; leaving and returning by keyboard shows
+them again. Regression checks cover both triggers and the en/ar header flow.
+
 `sort=slaDue`: the nearest due time of the ticket's running, unpaused,
 unsatisfied clocks, breached ones first by how long ago, then soonest due, then
 tickets without a clock. A stored generated column `tickets.sla_next_due_at`

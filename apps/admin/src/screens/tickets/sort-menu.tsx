@@ -4,6 +4,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import type { WorkspaceFilters } from '../../tickets/views.js';
 import { SORT_CHOICES, sortChoice, withSortChoice } from '../admin/ticketing/view-draft.js';
+import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
 
 const MENU_LABELS = {
   'updatedAt:desc': 'tickets:sort.menu.updatedAt',
@@ -27,18 +28,21 @@ export function SortMenu({
 
   return (
     <>
-      <Button
-        id={id}
-        variant="outlined"
-        size="small"
-        startIcon={<ArrowDownUp size={14} aria-hidden="true" />}
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        aria-controls={anchor === null ? undefined : `${id}-menu`}
-        onClick={(event) => setAnchor(event.currentTarget)}
-      >
-        {t('tickets:sort.action')}
-      </Button>
+      <MenuTriggerTooltip title={t('tickets:sort.action')} menuOpen={anchor !== null}>
+        <Button
+          id={id}
+          variant="outlined"
+          size="small"
+          aria-label={t('tickets:sort.action')}
+          sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0 }}
+          aria-haspopup="menu"
+          aria-expanded={anchor !== null}
+          aria-controls={anchor === null ? undefined : `${id}-menu`}
+          onClick={(event) => setAnchor(event.currentTarget)}
+        >
+          <ArrowDownUp size={14} aria-hidden="true" />
+        </Button>
+      </MenuTriggerTooltip>
       <Menu
         id={`${id}-menu`}
         anchorEl={anchor}

@@ -694,7 +694,11 @@ describe.skipIf(!hasDocker)('the api', () => {
         payload: {
           requireTwoFactor: true,
           magicLinkValidityMinutes: 25,
-          google: { clientId: 'google-client', clientSecret: 'google-secret' },
+          google: {
+            clientId: 'google-client',
+            clientSecret: 'google-secret',
+            allowedDomains: [' Support.Example.com '],
+          },
           github: { clientId: 'github-client', clientSecret: 'github-secret' },
         },
       });
@@ -707,6 +711,8 @@ describe.skipIf(!hasDocker)('the api', () => {
           clientId: 'google-client',
           clientSecretConfigured: true,
           enabled: true,
+          allowedDomains: ['support.example.com'],
+          allowedDomainsLocked: false,
         },
         github: {
           clientId: 'github-client',
@@ -739,9 +745,23 @@ describe.skipIf(!hasDocker)('the api', () => {
             'oauth.google.clientSecret',
             'oauth.github.clientId',
             'oauth.github.clientSecret',
+            'oauth.google.allowedDomains',
           ]),
         },
       });
+
+      const notADomain = await app.inject({
+        method: 'PUT',
+        url: '/api/install/settings/authentication',
+        headers: asInstallAdmin(),
+        payload: {
+          requireTwoFactor: true,
+          magicLinkValidityMinutes: 25,
+          google: { clientId: 'google-client', allowedDomains: ['@gmail.com'] },
+          github: { clientId: 'github-client' },
+        },
+      });
+      expect(notADomain.statusCode).toBe(400);
     });
 
     it('refuses authentication settings to a brand admin', async () => {

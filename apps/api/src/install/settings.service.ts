@@ -15,8 +15,17 @@ type EditableAuthenticationKey =
   | 'auth.magicLinkTtlMinutes'
   | 'oauth.google.clientId'
   | 'oauth.google.clientSecret'
+  | 'oauth.google.allowedDomains'
   | 'oauth.github.clientId'
   | 'oauth.github.clientSecret';
+
+type SettingValue = boolean | number | string | readonly string[];
+
+/** A list compares by its members in order; everything else by value. */
+const sameValue = (a: SettingValue | undefined, b: SettingValue): boolean =>
+  Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((item, index) => item === b[index])
+    : a === b;
 
 /** The M0-02 Authentication view of the install-wide Settings screen. */
 export class InstallSettingsService {
@@ -29,19 +38,25 @@ export class InstallSettingsService {
   }
 
   async authentication(): Promise<InstallAuthenticationSettings> {
-    const [requireTwoFactor, magicLinkValidityMinutes, google, github] = await Promise.all([
-      this.#settings.get('auth.require2fa'),
-      this.#settings.get('auth.magicLinkTtlMinutes'),
-      this.#oauth('google'),
-      this.#oauth('github'),
-    ]);
+    const [requireTwoFactor, magicLinkValidityMinutes, google, allowedDomains, github] =
+      await Promise.all([
+        this.#settings.get('auth.require2fa'),
+        this.#settings.get('auth.magicLinkTtlMinutes'),
+        this.#oauth('google'),
+        this.#settings.get('oauth.google.allowedDomains'),
+        this.#oauth('github'),
+      ]);
 
     return {
       requireTwoFactor,
       requireTwoFactorLocked: this.#settings.isLockedByEnv('auth.require2fa'),
       magicLinkValidityMinutes,
       magicLinkValidityLocked: this.#settings.isLockedByEnv('auth.magicLinkTtlMinutes'),
-      google,
+      google: {
+        ...google,
+        allowedDomains: [...allowedDomains],
+        allowedDomainsLocked: this.#settings.isLockedByEnv('oauth.google.allowedDomains'),
+      },
       github,
       redirectUrls: {
         google: oauthRedirectUri(this.#appUrl, 'google'),
@@ -60,7 +75,7 @@ export class InstallSettingsService {
     }
     const actorId = principalIdOf(principal);
     const before = await this.authentication();
-    const changes: Array<readonly [EditableAuthenticationKey, boolean | number | string]> = [
+    const changes: Array<readonly [EditableAuthenticationKey, SettingValue]> = [
       ['auth.require2fa', body.requireTwoFactor],
       ['auth.magicLinkTtlMinutes', body.magicLinkValidityMinutes],
       ['oauth.google.clientId', body.google.clientId],
@@ -71,14 +86,18 @@ export class InstallSettingsService {
       ...(body.github.clientSecret === undefined
         ? []
         : ([['oauth.github.clientSecret', body.github.clientSecret]] as const)),
+      ...(body.google.allowedDomains === undefined
+        ? []
+        : ([['oauth.google.allowedDomains', body.google.allowedDomains]] as const)),
     ];
-    const current = new Map<EditableAuthenticationKey, boolean | number | string>([
+    const current = new Map<EditableAuthenticationKey, SettingValue>([
       ['auth.require2fa', before.requireTwoFactor],
       ['auth.magicLinkTtlMinutes', before.magicLinkValidityMinutes],
       ['oauth.google.clientId', before.google.clientId],
       ['oauth.github.clientId', before.github.clientId],
+      ['oauth.google.allowedDomains', before.google.allowedDomains],
     ]);
-    const changed = changes.filter(([key, value]) => current.get(key) !== value);
+    const changed = changes.filter(([key, value]) => !sameValue(current.get(key), value));
 
     for (const [key] of changed) {
       if (this.#settings.isLockedByEnv(key)) {
@@ -132,7 +151,7 @@ export class InstallSettingsService {
     };
   }
 
-  #set(key: EditableAuthenticationKey, value: boolean | number | string, actorId: string) {
+  #set(key: EditableAuthenticationKey, value: SettingValue, actorId: string) {
     // The pair is narrowed by the private caller from this closed key set. Each
     // value has already crossed the request schema and is checked again by the
     // setting registry before it is stored.

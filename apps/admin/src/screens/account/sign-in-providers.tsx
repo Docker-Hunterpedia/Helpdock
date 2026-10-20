@@ -8,12 +8,14 @@ import {
 } from '@helpdock/schemas';
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Info } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { isAuthError } from '../../auth/api.js';
+import { PROVIDER_NAME_KEYS } from '../../auth/provider-names.js';
 import { useAuthApi } from '../../auth/session.tsx';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../ui/confirm-dialog.tsx';
@@ -24,18 +26,17 @@ import { Pill } from '../tickets/badges.tsx';
 import { AccountCard } from './account-card.tsx';
 
 /**
- * Sign-in providers on `/me/security` (1.0.2, artboard `Admin/Me-SignInProviders`):
- * one row per provider the install has configured, with its link state and a
- * Connect or Disconnect that asks for the password or a live code first
- * (ADR 0051). Connecting goes to the provider, which sends the browser back
- * here with `?connected=<provider>`, or to the callback screen with the
- * failure. With no provider configured the card is not drawn.
+ * Sign-in methods on `/me/security` (M18-07, artboard
+ * `Admin/Profile-Security-SignInMethods`, which supersedes the 1.0.2
+ * `Admin/Me-SignInProviders`): one row per provider the install has
+ * configured, with its link state and a Connect or Disconnect that asks for the
+ * password or a live code first (ADR 0051). Connecting goes to the provider,
+ * which sends the browser back here with `?connected=<provider>`, or to the
+ * callback screens of `Admin/Login-Providers` with the refusal. When a
+ * provider is the account's only way in, its Disconnect is disabled and a note
+ * under the list says what to add first. With no provider configured the card
+ * is not drawn.
  */
-
-const PROVIDER_NAME_KEYS = {
-  google: 'auth:signIn.google',
-  github: 'auth:signIn.github',
-} as const satisfies Record<OauthProvider, string>;
 
 type StepUp = { readonly action: 'connect' | 'disconnect'; readonly provider: OauthProvider };
 
@@ -54,6 +55,7 @@ export function SignInProvidersCard(): ReactNode {
   const methods = useQuery({ queryKey: ['auth', 'methods'], queryFn: () => api.authMethods() });
   const identities = useQuery({ queryKey: IDENTITIES_KEY, queryFn: () => api.oauthIdentities() });
   const [stepUp, setStepUp] = useState<StepUp | null>(null);
+  const lastWayInId = useId();
 
   useConnectedToast();
 
@@ -62,6 +64,7 @@ export function SignInProvidersCard(): ReactNode {
     return null;
   }
   const list = identities.data;
+  const onlyWayIn = configured.find((provider) => isLastSignInMethod(list, provider));
 
   return (
     <AccountCard title={t('me:signInProviders.title')} caption={t('me:signInProviders.caption')}>
@@ -74,12 +77,23 @@ export function SignInProvidersCard(): ReactNode {
             key={provider}
             provider={provider}
             list={list}
+            lastWayInId={lastWayInId}
             onAction={(action) => {
               setStepUp({ action, provider });
             }}
           />
         ))}
       </Box>
+      {onlyWayIn === undefined ? null : (
+        <Typography
+          id={lastWayInId}
+          variant="caption"
+          sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 2 }}
+        >
+          <Info size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+          {t('me:signInProviders.lastWayIn', { provider: t(PROVIDER_NAME_KEYS[onlyWayIn]) })}
+        </Typography>
+      )}
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {t('me:signInProviders.footer')}
       </Typography>
@@ -129,16 +143,18 @@ function useConnectedToast(): void {
 function ProviderRow({
   provider,
   list,
+  lastWayInId,
   onAction,
 }: {
   readonly provider: OauthProvider;
   readonly list: OauthIdentityList;
+  /** The note under the list that says why a Disconnect is disabled. */
+  readonly lastWayInId: string;
   onAction(action: StepUp['action']): void;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const { locale } = usePreferences();
-  const lastWayInId = useId();
   const name = t(PROVIDER_NAME_KEYS[provider]);
   const linked = list.identities.find((identity) => identity.provider === provider);
   const lastWayIn = isLastSignInMethod(list, provider);
@@ -189,19 +205,20 @@ function ProviderRow({
             t('me:signInProviders.notConnected', { provider: name })
           ) : (
             <>
-              <bdi>{linked.email}</bdi>
+              <bdi dir="ltr">{linked.email}</bdi>
               {' · '}
               {t('me:signInProviders.connectedOn', {
                 date: formatDay(linked.connectedAt, locale),
               })}
+              {' · '}
+              {linked.lastUsedAt === null
+                ? t('me:signInProviders.neverUsed')
+                : t('me:signInProviders.lastUsed', {
+                    date: formatDay(linked.lastUsedAt, locale),
+                  })}
             </>
           )}
         </Typography>
-        {lastWayIn ? (
-          <Typography id={lastWayInId} variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('me:signInProviders.lastWayIn')}
-          </Typography>
-        ) : null}
       </Box>
       {linked === undefined ? (
         <Button
@@ -297,7 +314,7 @@ function StepUpDialog({
         tone: 'danger',
         message:
           isAuthError(failure) && failure.code === 'oauth-last-sign-in'
-            ? t('me:signInProviders.lastWayIn')
+            ? t('me:signInProviders.lastWayIn', { provider: name })
             : isAuthError(failure) && failure.code === 'oauth-identity-conflict'
               ? t('auth:oauth.errors.oauth-identity-conflict')
               : t('me:security.failed'),
@@ -315,11 +332,7 @@ function StepUpDialog({
           ? t('me:signInProviders.stepUpDisconnect', { provider: name })
           : t('me:signInProviders.stepUpConnect', { provider: name })
       }
-      confirmLabel={
-        stepUp?.action === 'disconnect'
-          ? t('me:signInProviders.disconnect', { provider: name })
-          : t('me:signInProviders.continueTo', { provider: name })
-      }
+      confirmLabel={t('me:signInProviders.continue')}
       onClose={close}
       onConfirm={() => {
         if (stepUp === null) {

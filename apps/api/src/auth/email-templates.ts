@@ -3,9 +3,10 @@ import { createI18n, dir, type Locale } from '@helpdock/i18n';
 
 /**
  * Every message the api puts in a person's inbox about their own account: the
- * sign-in link and the password reset of M0-05, the staff invite of M0-06, and
- * the notice that a credential changed (M9, ASVS 2.2.3). They are rendered from the `email` catalogs in `@helpdock/i18n`. No
- * sentence is written here: catalogs hold every string a person reads, in `en`
+ * sign-in link and the password reset of M0-05 and the staff invite of M0-06.
+ * The notice that a credential changed has its own layout
+ * (`security-notice-email.ts`). They are rendered from the `email` catalogs in
+ * `@helpdock/i18n`. No sentence is written here: catalogs hold every string a person reads, in `en`
  * and `ar`, and this file only decides the shape around them (packages/i18n
  * README).
  *
@@ -82,33 +83,8 @@ const layout = ({
   return { text, html };
 };
 
-export type AuthEmailKind = 'magicLink' | 'passwordReset' | 'invite' | 'securityChange';
-
-/** Which credential a `securityChange` notice is about; each has its own sentence. */
-export const SECURITY_CHANGES = [
-  'password',
-  'passwordReset',
-  'twoFactorEnabled',
-  'twoFactorDisabled',
-  'recoveryCodes',
-  'oauthConnected',
-  'oauthDisconnected',
-] as const;
-export type SecurityChange = (typeof SECURITY_CHANGES)[number];
-
-const isSecurityChange = (value: string | undefined): value is SecurityChange =>
-  (SECURITY_CHANGES as readonly (string | undefined)[]).includes(value);
-
-/** The body's key: one sentence per kind, and one per change for the security notice. */
-const bodyKey = (kind: AuthEmailKind, values: Readonly<Record<string, string>>) => {
-  if (kind !== 'securityChange') {
-    return `${kind}.body` as const;
-  }
-  if (!isSecurityChange(values.change)) {
-    throw new TypeError(`A securityChange email needs a known change, not ${values.change}`);
-  }
-  return `securityChange.body_${values.change}` as const;
-};
+/** The link emails. A `securityChange` notice has its own shape (`security-notice-email.ts`). */
+export type AuthEmailKind = 'magicLink' | 'passwordReset' | 'invite';
 
 export interface RenderAuthEmailInput {
   readonly kind: AuthEmailKind;
@@ -126,7 +102,6 @@ export interface RenderAuthEmailInput {
   /**
    * Extra interpolation for the kinds whose sentences name more than the
    * recipient — the invite says who invited them, to which brand, as what.
-   * The security notice's `change` picks which sentence its body is.
    */
   readonly values?: Readonly<Record<string, string>>;
 }
@@ -149,7 +124,7 @@ export const renderAuthEmail = ({
   const copy: TemplateCopy = {
     subject: t(`${kind}.subject`, common),
     heading: t(`${kind}.heading`, common),
-    body: t(bodyKey(kind, values), common),
+    body: t(`${kind}.body`, common),
     action: t(`${kind}.action`),
     expiry: t(`${kind}.expiry`, expiresIn === undefined ? common : { ...common, count: expiresIn }),
     ignore: t(`${kind}.ignore`),

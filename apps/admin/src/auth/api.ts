@@ -2,6 +2,7 @@ import type {
   AuthErrorCode,
   AuthMethods,
   InviteAcceptRequest,
+  InviteProviderStartRequest,
   MagicLinkPreview,
   OauthIdentityList,
   OauthProvider,
@@ -74,6 +75,15 @@ export interface AuthApi {
   previewInvite(token: string): Promise<PublicInvite>;
   /** Spends it, creates the account, and signs the person in. */
   acceptInvite(token: string, request: InviteAcceptRequest): Promise<SignInResult>;
+  /**
+   * Starts accepting it with a provider instead of a password (M18-07) and
+   * answers where to send the browser. Spends nothing: the callback does.
+   */
+  startInviteOauth(
+    token: string,
+    provider: OauthProvider,
+    request: InviteProviderStartRequest,
+  ): Promise<string>;
   /** The current session, or `null` when nobody is signed in. */
   me(): Promise<Session | null>;
   /**

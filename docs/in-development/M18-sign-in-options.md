@@ -12,11 +12,13 @@ ADRs: [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md) (accepted wi
 Staff passkeys as a second factor and on their own, Google and GitHub sign-in bound by subject with Microsoft added, and a CAPTCHA that sends nothing to a third party.
 
 **Note on M18-07.** The subject binding of OAuth identities (M18-07,
-[ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)) is being
-implemented ahead of this milestone as a 1.0.1 security fix in a separate pull
-request. M18-07 keeps whatever that fix leaves (connect and disconnect from the
-security page, the Google domain allow-list, the Microsoft provider) and is
-reconciled with it when the fix merges.
+[ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)) shipped
+ahead of this milestone: 1.0.1 (#249) brought `user_oauth_identities`
+(migration `0056`), the first-link rules per provider, `oauth-link-required`,
+the connect and disconnect API with step-up, the `auth.oauth.*` audit and the
+`securityChange` email; 1.0.2 (#269) brought the security page's card and the
+`oauth-last-sign-in` refusal. M18-07 itself (#281) adds what was left,
+binding at invitation acceptance included: see [Task status](#task-status).
 
 ---
 
@@ -519,6 +521,12 @@ Backlog or never:
   The break-glass copy stays as it is until M18-05 (see its row).
 - [ ] The other deliverables.
 
+## Task status
+
+| Id | Status | Notes |
+|---|---|---|
+| M18-07 | in review (#281, PR #321) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in, connect and invitation, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input refusing gmail.com); the `Admin/Login-Providers` callback screens; the card renamed Sign-in methods with "last used" per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout; binding at invitation acceptance (`Admin/AcceptInvite-Providers`, `oauth-invite-mismatch`, `invite-expired`); migration `0059_oauth_identity_use` (`linked_via`, `last_used_at`). Not built, by design: the `issuer` column (ADR 0051, "No issuer column": one issuer per provider per install). Left to other deliverables: passkey step-up and passkey-as-first-factor (M18-02/M18-06), Microsoft (M18-08). |
+
 ## Data model
 
 One migration, numbered with the next free number at implementation time
@@ -549,12 +557,12 @@ user_oauth_identities                             -- install scope, GLOBAL_TABLE
   id               uuid pk (uuidv7)
   user_id          uuid not null references users(id) on delete cascade
   provider         oauth_provider not null        -- google | github | microsoft
-  issuer           text not null                  -- https://accounts.google.com | https://github.com | https://login.microsoftonline.com/<tid>/v2.0
+  -- issuer: not built; one issuer per provider per install (ADR 0051, "No issuer column")
   subject          text not null                  -- sub | GitHub numeric id | Entra oid+tid (see note)
   email_at_link    text not null                  -- for display and audit, never for matching
-  linked_via       text not null                  -- session | invite | first-sign-in
+  linked_via       oauth_linked_via null          -- sign-in | connect | invite (0059; null for 1.0.x links)
   created_at, last_used_at
-  unique (issuer, subject)
+  unique (provider, provider_subject)              -- as shipped in 0056
   unique (user_id, provider)                      -- one identity per provider per account (as #219)
 ```
 

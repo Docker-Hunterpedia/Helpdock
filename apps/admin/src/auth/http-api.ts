@@ -1,6 +1,7 @@
 import type {
   AuthMethods,
   InviteAcceptRequest,
+  InviteProviderStartRequest,
   MagicLinkPreview,
   OauthIdentityList,
   OauthProvider,
@@ -203,6 +204,21 @@ export class HttpAuthApi implements AuthApi {
     );
 
     return this.#keepSession(response);
+  }
+
+  async startInviteOauth(
+    token: string,
+    provider: OauthProvider,
+    request: InviteProviderStartRequest,
+  ): Promise<string> {
+    const { url } = oauthConnectStartSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `/auth/invites/${encodeURIComponent(token)}/oauth/${provider}`,
+        request,
+      ),
+    );
+    return url;
   }
 
   // ------------------------------------------------------------------

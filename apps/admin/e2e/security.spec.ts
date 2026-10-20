@@ -133,9 +133,7 @@ test.describe('the security page', () => {
     await card.getByRole('button', { name: t('me:signInProviders.connect', { provider }) }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill(MOCK_ENROLMENT_CODE);
-    await dialog
-      .getByRole('button', { name: t('me:signInProviders.continueTo', { provider }) })
-      .click();
+    await dialog.getByRole('button', { name: t('me:signInProviders.continue') }).click();
 
     await expect(
       page.getByText(t('me:signInProviders.connectedToast', { provider })),
@@ -147,9 +145,7 @@ test.describe('the security page', () => {
       .getByRole('button', { name: t('me:signInProviders.disconnect', { provider }) })
       .click();
     await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill(MOCK_CURRENT_PASSWORD);
-    await dialog
-      .getByRole('button', { name: t('me:signInProviders.disconnect', { provider }) })
-      .click();
+    await dialog.getByRole('button', { name: t('me:signInProviders.continue') }).click();
 
     await expect(
       page.getByText(t('me:signInProviders.disconnectedToast', { provider })),
@@ -171,9 +167,7 @@ test.describe('the security page', () => {
     await page.getByRole('button', { name: t('me:signInProviders.connect', { provider }) }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel(t('me:signInProviders.proofLabel')).fill('not the password');
-    await dialog
-      .getByRole('button', { name: t('me:signInProviders.continueTo', { provider }) })
-      .click();
+    await dialog.getByRole('button', { name: t('me:signInProviders.continue') }).click();
 
     await expect(dialog.getByText(t('me:signInProviders.proofWrong'))).toBeVisible();
   });

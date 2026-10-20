@@ -76,4 +76,27 @@ test.describe('install settings', () => {
       }),
     ).toBeVisible();
   });
+
+  test('limits Google sign-in to the Workspace domains it lists', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSettings(page, locale);
+    const domains = page.getByLabel(t('settings:oauth.allowedDomains'));
+
+    await domains.fill('lina@gmail.com');
+    await domains.press('Enter');
+    await expect(page.getByText(t('settings:oauth.allowedDomainsInvalid'))).toBeVisible();
+
+    await domains.fill('Helpdock.com');
+    await domains.press('Enter');
+    await expect(page.getByRole('button', { name: 'helpdock.com' })).toBeVisible();
+    await page.getByRole('button', { name: t('common:actions.save') }).click();
+
+    await expect(page.getByText(t('settings:saved'))).toBeVisible();
+    await expect(page.getByRole('button', { name: 'helpdock.com' })).toBeVisible();
+    await expect(page.getByText(t('settings:oauth.allowedDomainsInvalid'))).toBeHidden();
+  });
 });

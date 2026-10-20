@@ -31,6 +31,7 @@ import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { SecretField } from '../../../ui/secret-field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
+import { AllowedDomainsField } from './allowed-domains-field.tsx';
 import { RedirectUrl } from './redirect-url.tsx';
 import { SsoTab } from './sso-tab.tsx';
 
@@ -97,6 +98,9 @@ function AuthenticationSettingsForm({
   );
   const [googleClientId, setGoogleClientId] = useState(settings.google.clientId);
   const [githubClientId, setGithubClientId] = useState(settings.github.clientId);
+  const [allowedDomains, setAllowedDomains] = useState<readonly string[]>(
+    settings.google.allowedDomains,
+  );
   const [googleSecret, setGoogleSecret] = useState<string | null>(
     settings.google.clientSecretConfigured ? null : '',
   );
@@ -121,6 +125,7 @@ function AuthenticationSettingsForm({
     setMagicLinkValidity(String(settings.magicLinkValidityMinutes));
     setGoogleClientId(settings.google.clientId);
     setGithubClientId(settings.github.clientId);
+    setAllowedDomains(settings.google.allowedDomains);
     setGoogleSecret(settings.google.clientSecretConfigured ? null : '');
     setGithubSecret(settings.github.clientSecretConfigured ? null : '');
     setMagicLinkError(undefined);
@@ -141,6 +146,7 @@ function AuthenticationSettingsForm({
       google: {
         clientId: googleClientId.trim(),
         ...(googleSecret === null || googleSecret === '' ? {} : { clientSecret: googleSecret }),
+        ...(settings.google.allowedDomainsLocked ? {} : { allowedDomains: [...allowedDomains] }),
       },
       github: {
         clientId: githubClientId.trim(),
@@ -154,6 +160,7 @@ function AuthenticationSettingsForm({
     magicLinkValidity !== String(settings.magicLinkValidityMinutes) ||
     googleClientId !== settings.google.clientId ||
     githubClientId !== settings.github.clientId ||
+    allowedDomains.join(' ') !== settings.google.allowedDomains.join(' ') ||
     (googleSecret !== null && googleSecret !== '') ||
     (githubSecret !== null && githubSecret !== '');
 
@@ -259,7 +266,19 @@ function AuthenticationSettingsForm({
           secret={googleSecret}
           onClientIdChange={setGoogleClientId}
           onSecretChange={setGoogleSecret}
-        />
+        >
+          <AllowedDomainsField
+            id={`${id}-google-domains`}
+            domains={allowedDomains}
+            locked={settings.google.allowedDomainsLocked}
+            lockHint={t('settings:lock.hint', {
+              envKey: 'HD_OAUTH_GOOGLE_ALLOWED_DOMAINS',
+              envFile: '.env',
+            })}
+            lockBadge={<EnvironmentLock />}
+            onChange={setAllowedDomains}
+          />
+        </OAuthProviderFields>
         <OAuthProviderFields
           id={`${id}-github`}
           provider="github"
@@ -302,10 +321,13 @@ function OAuthProviderFields({
   secret,
   onClientIdChange,
   onSecretChange,
+  children,
 }: {
   readonly id: string;
   readonly provider: 'google' | 'github';
-  readonly settings: InstallAuthenticationSettings['google'];
+  readonly settings: InstallAuthenticationSettings['github'];
+  /** Fields only this provider has, under its credentials. */
+  readonly children?: ReactNode;
   readonly clientId: string;
   readonly secret: string | null;
   onClientIdChange(value: string): void;
@@ -409,6 +431,7 @@ function OAuthProviderFields({
           />
         )}
       </Box>
+      {children}
     </Box>
   );
 }

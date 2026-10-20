@@ -11,20 +11,25 @@ import { uuidv7 } from '@helpdock/db';
 import argon2 from 'argon2';
 import { generateKeyPair } from 'jose';
 import { generate } from 'otplib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SsoIdentityService } from '../sso/identity.service.js';
 import { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import { authRedis } from '../testing/auth-redis.js';
 import { MemoryRpIdPin } from '../testing/memory-rp-id-pin.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
-import { AuthService } from './auth.service.js';
+import { AuthService, type OauthInviteAcceptor } from './auth.service.js';
 import type { AuthAuditEntry, AuthAuditTrail } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import type { AuthFailure } from './auth-failure.js';
 import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
-import type { OauthCompletion, OauthIdentity, OauthService } from './oauth/oauth.service.js';
+import type {
+  OauthCompletion,
+  OauthIdentity,
+  OauthInviteState,
+  OauthService,
+} from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
 import type { OauthIdentityRepository, OauthLink } from './oauth/oauth-identity.repository.js';
 import { derivePepper, PasswordHasher } from './password.js';
@@ -194,12 +199,19 @@ class RecordingAudit implements AuthAuditTrail {
 class FakeOauthService {
   enabled = false;
   identity: OauthIdentity | Error = new OauthError('nope');
+  /** Set to finish a connect flow that this account started, instead of a sign-in. */
+  linkUserId: string | undefined;
+  /** Set to finish a flow started from an invitation. */
+  invite: OauthInviteState | undefined;
+  /** What each `start` was asked to carry in its state. */
+  readonly started: unknown[] = [];
 
   isEnabled(): Promise<boolean> {
     return Promise.resolve(this.enabled);
   }
 
-  start(): Promise<{ url: string; browserNonce: string }> {
+  start(_provider: string, carried: unknown = {}): Promise<{ url: string; browserNonce: string }> {
+    this.started.push(carried);
     if (!this.enabled) {
       throw new OauthError('not configured');
     }
@@ -213,7 +225,11 @@ class FakeOauthService {
     if (this.identity instanceof Error) {
       return Promise.reject(this.identity);
     }
-    return Promise.resolve({ identity: this.identity, linkUserId: undefined });
+    return Promise.resolve({
+      identity: this.identity,
+      linkUserId: this.linkUserId,
+      invite: this.invite,
+    });
   }
 }
 
@@ -237,6 +253,13 @@ class FakeOauthIdentities {
     this.links.push(link);
     return Promise.resolve('linked');
   }
+
+  readonly used: string[] = [];
+
+  markUsed(_provider: string, subject: string): Promise<void> {
+    this.used.push(subject);
+    return Promise.resolve();
+  }
 }
 
 const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity => ({
@@ -245,6 +268,8 @@ const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity =
   email: 'lina@helpdock.com',
   name: 'Lina',
   authoritative: true,
+  hostedDomain: 'helpdock.com',
+  verifiedEmails: ['lina@helpdock.com'],
   ...overrides,
 });
 
@@ -1012,10 +1037,38 @@ describe('OAuth', () => {
       }),
     ).resolves.toMatchObject({ kind: 'session' });
     expect(oauthIdentities.links).toEqual([
-      { userId: lina.id, provider: 'google', subject: '1049', email: 'lina@helpdock.com' },
+      {
+        userId: lina.id,
+        provider: 'google',
+        subject: '1049',
+        email: 'lina@helpdock.com',
+        via: 'sign-in',
+      },
     ]);
     expect(audit.actions()).toContain('auth.oauth.linked');
     expect(mail.sent.map((sent) => sent.values?.change)).toContain('oauthConnected');
+  });
+
+  it('records the sign-in on a bound provider account, for the security page', async () => {
+    const lina = staff.add(await newUser());
+    oauthIdentities.links.push({
+      userId: lina.id,
+      provider: 'google',
+      subject: '1049',
+      email: lina.email,
+      via: 'connect',
+    });
+    oauth.identity = googleIdentity();
+
+    await service.completeOauth({
+      provider: 'google',
+      code: 'c',
+      state: 's',
+      browserNonce: 'n',
+      userAgent: 'Firefox',
+    });
+
+    expect(oauthIdentities.used).toEqual(['1049']);
   });
 
   it('asks a provider that does not vouch for the address to be connected from a session', async () => {
@@ -1049,6 +1102,89 @@ describe('OAuth', () => {
     expect(staff.users.size).toBe(0);
   });
 
+  describe('the allowed Workspace domains (oauth.google.allowedDomains)', () => {
+    const callback = () =>
+      service.completeOauth({
+        provider: 'google',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      });
+
+    it('signs in a Workspace account on a listed domain', async () => {
+      staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity();
+
+      await expect(callback()).resolves.toMatchObject({ kind: 'session' });
+    });
+
+    it('refuses a Gmail account once domains are listed, and audits why', async () => {
+      staff.add(await newUser({ email: 'lina@gmail.com' }));
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({ email: 'lina@gmail.com', hostedDomain: undefined });
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(oauthIdentities.links).toEqual([]);
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({
+          action: 'auth.sign_in.failed',
+          userId: null,
+          meta: { method: 'oauth', provider: 'google', reason: 'domain-not-allowed' },
+        }),
+      );
+    });
+
+    it('turns away an account bound before the domain was dropped from the list', async () => {
+      const lina = staff.add(await newUser());
+      oauthIdentities.links.push({
+        userId: lina.id,
+        provider: 'google',
+        subject: '1049',
+        email: lina.email,
+        via: 'sign-in',
+      });
+      await settings.set('oauth.google.allowedDomains', ['acme.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity();
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({ action: 'auth.sign_in.failed', userId: lina.id }),
+      );
+    });
+
+    it('refuses to connect an account from another domain to a session', async () => {
+      const lina = staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({ hostedDomain: 'other.com', email: 'lina@other.com' });
+      oauth.linkUserId = lina.id;
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(oauthIdentities.links).toEqual([]);
+      expect(audit.actions()).toEqual(['auth.oauth.link_refused']);
+    });
+
+    it('leaves GitHub alone', async () => {
+      const lina = staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({
+        provider: 'github',
+        subject: '7',
+        hostedDomain: undefined,
+      });
+      oauth.linkUserId = lina.id;
+
+      await expect(callback()).resolves.toEqual({ kind: 'connected' });
+    });
+  });
+
   it('turns a provider failure into a sign-in failure, not a 500', async () => {
     oauth.identity = new OauthError('the state does not belong to this provider');
 
@@ -1075,6 +1211,142 @@ describe('OAuth', () => {
         userAgent: 'Firefox',
       }),
     ).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+  });
+});
+
+describe('accepting an invitation with a provider (M18-07)', () => {
+  const INVITE: OauthInviteState = { tokenHash: 'hash-of-the-token', name: 'Nour', locale: 'en' };
+  const callback = () =>
+    service.completeOauth({
+      provider: 'google',
+      code: 'c',
+      state: 's',
+      browserNonce: 'n',
+      userAgent: 'Firefox',
+    });
+  const acceptor = () => {
+    const accept = vi.fn<OauthInviteAcceptor['acceptWithProvider']>(() =>
+      Promise.resolve({ kind: 'invite-mismatch', account: 'whoever@example.com' }),
+    );
+    service.acceptInvitesWith({ acceptWithProvider: accept });
+    return accept;
+  };
+
+  beforeEach(() => {
+    oauth.identity = googleIdentity();
+    oauth.invite = INVITE;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('answers unavailable while nothing accepts invitations', async () => {
+    await expect(callback()).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+  });
+
+  it('hands the provider answer and the invitation to the staff module', async () => {
+    const accept = acceptor();
+
+    await expect(callback()).resolves.toEqual({
+      kind: 'invite-mismatch',
+      account: 'whoever@example.com',
+    });
+    expect(accept).toHaveBeenCalledWith({
+      invite: INVITE,
+      identity: googleIdentity(),
+      userAgent: 'Firefox',
+    });
+  });
+
+  it('refuses a Google account outside the allowed domains before the invitation is read', async () => {
+    const accept = acceptor();
+    await settings.set('oauth.google.allowedDomains', ['acme.com'], { updatedBy: 'test' });
+
+    await expect(callback()).rejects.toMatchObject({
+      auth: { code: 'oauth-domain-not-allowed' },
+    });
+    expect(accept).not.toHaveBeenCalled();
+    expect(audit.entries).toContainEqual(
+      expect.objectContaining({
+        action: 'auth.sign_in.failed',
+        meta: { method: 'invite', provider: 'google', reason: 'domain-not-allowed' },
+      }),
+    );
+  });
+
+  it('refuses a provider account bound to somebody else before anything is spent', async () => {
+    const accept = acceptor();
+    const owner = staff.add(await newUser());
+    oauthIdentities.links.push({
+      userId: owner.id,
+      provider: 'google',
+      subject: '1049',
+      email: owner.email,
+      via: 'connect',
+    });
+
+    await expect(callback()).rejects.toMatchObject({
+      auth: { code: 'oauth-identity-conflict' },
+    });
+    expect(accept).not.toHaveBeenCalled();
+    expect(audit.entries).toContainEqual(
+      expect.objectContaining({
+        action: 'auth.sign_in.failed',
+        userId: owner.id,
+        meta: { method: 'invite', provider: 'google', reason: 'identity-conflict' },
+      }),
+    );
+  });
+
+  it('starts the round trip with the invitation in its state, and not under SSO enforcement', async () => {
+    oauth.enabled = true;
+
+    await expect(service.startInviteOauth('google', INVITE)).resolves.toMatchObject({
+      browserNonce: 'nonce-1',
+    });
+    expect(oauth.started).toEqual([{ invite: INVITE }]);
+
+    vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+    await expect(service.startInviteOauth('google', INVITE)).rejects.toMatchObject({
+      auth: { code: 'sso-required' },
+    });
+    expect(oauth.started).toHaveLength(1);
+  });
+
+  it('reports a provider that is not configured as unavailable', async () => {
+    await expect(service.startInviteOauth('github', INVITE)).rejects.toMatchObject({
+      auth: { code: 'unavailable' },
+    });
+  });
+
+  it('binds and emails in the acceptance transaction, and audits only once asked after it', async () => {
+    const nour = staff.add(await newUser({ email: 'nour@helpdock.com' }));
+    const tx = {} as DbTransaction;
+
+    await service.linkInvitedIdentity(tx, nour.id, googleIdentity({ email: nour.email }));
+
+    expect(oauthIdentities.links).toEqual([
+      { userId: nour.id, provider: 'google', subject: '1049', email: nour.email, via: 'invite' },
+    ]);
+    expect(mail.sent).toEqual([
+      expect.objectContaining({
+        brandId: BRAND_ID,
+        values: expect.objectContaining({ change: 'oauthConnected' }),
+      }),
+    ]);
+    expect(audit.actions()).toEqual([]);
+
+    await service.recordInvitedLink(nour.id, 'google');
+
+    expect(audit.entries).toEqual([
+      expect.objectContaining({
+        action: 'auth.oauth.linked',
+        userId: nour.id,
+        actor: 'staff',
+        meta: { provider: 'google', via: 'invite' },
+      }),
+    ]);
   });
 });
 
@@ -1396,7 +1668,7 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
         userId: user.id,
         brandId: BRAND_ID,
         url: `${APP_URL}/me/security`,
-        values: { change: 'password' },
+        values: { change: 'password', occurredAt: expect.any(String) },
       }),
     ]);
   });
@@ -1414,7 +1686,7 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
       expect.objectContaining({
         userId: user.id,
         brandId: null,
-        values: { change: 'passwordReset' },
+        values: { change: 'passwordReset', occurredAt: expect.any(String) },
       }),
     ]);
   });

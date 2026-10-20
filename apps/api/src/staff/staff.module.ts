@@ -115,8 +115,21 @@ export class StaffModule {
             tokens: EmailTokenStore,
             auth: AuthService,
             limiter: RateLimiter,
-          ): InviteService =>
-            new InviteService({ db, staff, invites, tokens, auth, limiter, logger }),
+          ): InviteService => {
+            const service = new InviteService({
+              db,
+              staff,
+              invites,
+              tokens,
+              auth,
+              limiter,
+              logger,
+            });
+            // The OAuth callback lives with AuthService, which cannot depend on
+            // this module; accepting an invitation there is handed back here.
+            auth.acceptInvitesWith(service);
+            return service;
+          },
         },
         {
           provide: AccountService,

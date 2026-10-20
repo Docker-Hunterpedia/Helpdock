@@ -4,6 +4,9 @@ import { users } from './users.js';
 
 export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'github']);
 
+/** How a provider account came to be bound (M18-07): for the person's list and the audit trail. */
+export const oauthLinkedViaEnum = pgEnum('oauth_linked_via', ['sign-in', 'connect', 'invite']);
+
 /**
  * Which Google or GitHub account signs in as which staff account (1.0.1,
  * ADR 0051).
@@ -14,6 +17,11 @@ export const oauthProviderEnum = pgEnum('oauth_provider', ['google', 'github']);
  * used once, to make the first link, and only where the provider controls it.
  * `email_at_link` records what it was, for the audit trail and the person's
  * own list of sign-in methods.
+ *
+ * `last_used_at` is the last sign-in through it (M18-07). The security page
+ * shows it beside each provider, so a provider account someone else linked and
+ * uses stands out to its holder. Rows bound before it existed read null until
+ * their next sign-in, as do their `linked_via`.
  */
 export const userOauthIdentities = pgTable(
   'user_oauth_identities',
@@ -26,7 +34,9 @@ export const userOauthIdentities = pgTable(
     /** Google's `sub`; GitHub's numeric user id, as text. Stable for the life of the provider account. */
     providerSubject: varchar('provider_subject', { length: 255 }).notNull(),
     emailAtLink: varchar('email_at_link', { length: 320 }).notNull(),
+    linkedVia: oauthLinkedViaEnum('linked_via'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   },
   (table) => [
     unique('oauth_identity_subject_key').on(table.provider, table.providerSubject),

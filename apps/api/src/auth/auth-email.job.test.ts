@@ -215,6 +215,45 @@ describe('the auth.email job', () => {
     ).rejects.toThrow('connection refused');
   });
 
+  it('tells a security notice in the routing brand’s time zone', async () => {
+    const sent: EmailMessage[] = [];
+    const reads = [[user()], [{ timezone: 'Asia/Riyadh' }]];
+    const tx = {
+      select: () => ({
+        from: () => ({ where: () => ({ limit: () => Promise.resolve(reads.shift() ?? []) }) }),
+      }),
+    } as unknown as DbTransaction;
+    const handler = createAuthEmailHandler({
+      senders: {
+        systemSender: () =>
+          Promise.resolve({
+            send: (message: EmailMessage) => {
+              sent.push(message);
+              return Promise.resolve();
+            },
+          }),
+      },
+      keyring,
+    });
+
+    await handler({
+      payload: {
+        brandId: BRAND,
+        sourceOutboxId: OUTBOX,
+        kind: 'securityChange',
+        userId: USER,
+        urlEncrypted: encryptSecret('https://support.example.com/me/security', keyring),
+        values: { change: 'password', occurredAt: '2026-10-21T06:14:00.000Z' },
+      },
+      brandId: BRAND,
+      tx,
+      job: {} as Job,
+      log: recordingLog().log,
+    });
+
+    expect(sent[0]?.text).toContain('When: 21 Oct 2026, 09:14 (Asia/Riyadh)');
+  });
+
   it('is the processor for the auth.email job name only', async () => {
     const processor = createAuthEmailProcessor(
       { senders: { systemSender: () => Promise.resolve(null) }, keyring },

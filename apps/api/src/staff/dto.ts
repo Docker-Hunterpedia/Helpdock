@@ -1,6 +1,8 @@
 import {
   brandStaffParamSchema,
   inviteAcceptRequestSchema,
+  inviteProviderParamSchema,
+  inviteProviderStartRequestSchema,
   inviteTokenParamSchema,
   passwordChangeRequestSchema,
   profileSchema,
@@ -40,6 +42,8 @@ export class BrandStaffParamDto extends createZodDto(brandStaffParamSchema) {}
 export class PublicInviteDto extends createZodDto(publicInviteSchema) {}
 export class InviteAcceptRequestDto extends createZodDto(inviteAcceptRequestSchema) {}
 export class InviteTokenParamDto extends createZodDto(inviteTokenParamSchema) {}
+export class InviteProviderStartRequestDto extends createZodDto(inviteProviderStartRequestSchema) {}
+export class InviteProviderParamDto extends createZodDto(inviteProviderParamSchema) {}
 
 export class ProfileDto extends createZodDto(profileSchema) {}
 export class ProfileUpdateRequestDto extends createZodDto(profileUpdateRequestSchema) {}

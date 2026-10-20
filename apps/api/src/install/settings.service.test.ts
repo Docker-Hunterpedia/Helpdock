@@ -107,6 +107,47 @@ describe('InstallSettingsService', () => {
     expect(JSON.stringify(audits)).not.toContain('github-secret');
   });
 
+  it('saves the allowed Workspace domains, and leaves an equal list unaudited', async () => {
+    const settings = settingsWith();
+    const service = new InstallSettingsService(settings, { APP_URL });
+    const save = (allowedDomains: string[] | undefined) =>
+      inInstallRequest(() =>
+        service.saveAuthentication({
+          requireTwoFactor: false,
+          magicLinkValidityMinutes: 10,
+          google: {
+            clientId: '',
+            ...(allowedDomains === undefined ? {} : { allowedDomains }),
+          },
+          github: { clientId: '' },
+        }),
+      );
+
+    const first = await save(['helpdock.com', 'helpdock.sa']);
+    expect(first.result.google).toMatchObject({
+      allowedDomains: ['helpdock.com', 'helpdock.sa'],
+      allowedDomainsLocked: false,
+    });
+    expect(first.audits[0]?.meta).toEqual({ keys: ['oauth.google.allowedDomains'] });
+
+    expect((await save(['helpdock.com', 'helpdock.sa'])).audits).toEqual([]);
+    expect((await save(undefined)).result.google.allowedDomains).toEqual([
+      'helpdock.com',
+      'helpdock.sa',
+    ]);
+  });
+
+  it('reads the allowed domains pinned by HD_OAUTH_GOOGLE_ALLOWED_DOMAINS as locked', async () => {
+    const service = new InstallSettingsService(
+      settingsWith({ HD_OAUTH_GOOGLE_ALLOWED_DOMAINS: '["helpdock.com"]' }),
+      { APP_URL },
+    );
+
+    await expect(service.authentication()).resolves.toMatchObject({
+      google: { allowedDomains: ['helpdock.com'], allowedDomainsLocked: true },
+    });
+  });
+
   it('refuses an attempted change to an environment-pinned setting', async () => {
     const service = new InstallSettingsService(
       settingsWith({ HD_AUTH_MAGIC_LINK_TTL_MINUTES: '20' }),

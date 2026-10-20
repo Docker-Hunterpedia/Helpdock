@@ -1,3 +1,4 @@
+import { MAX_GOOGLE_ALLOWED_DOMAINS, WORKSPACE_DOMAIN_PATTERN } from '@helpdock/schemas';
 import { z } from 'zod';
 import { aiProvidersSchema } from './ai-providers.js';
 
@@ -133,6 +134,16 @@ export const SETTING_DEFINITIONS = [
     secret: true,
     scope: 'install',
     description: 'Google OAuth client secret.',
+  }),
+  defineSetting({
+    key: 'oauth.google.allowedDomains',
+    // Lower-case host names, as Google writes the `hd` claim.
+    schema: z.array(z.string().regex(WORKSPACE_DOMAIN_PATTERN)).max(MAX_GOOGLE_ALLOWED_DOMAINS),
+    default: [],
+    secret: false,
+    scope: 'install',
+    description:
+      'Google Workspace domains (the hd claim) whose accounts may use Google sign-in, as a JSON array. Empty allows any address Google vouches for; a list also refuses @gmail.com (ADR 0051).',
   }),
   defineSetting({
     key: 'oauth.github.clientId',

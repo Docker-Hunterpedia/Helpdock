@@ -1,13 +1,23 @@
 import { brands, type Db, type DbTransaction, withTenant } from '@helpdock/db';
+import type { Locale } from '@helpdock/i18n';
 import type {
   EmailTokenPayload,
   InviteAcceptRequest,
+  InviteProviderStartRequest,
   InviteTokenPayload,
+  OauthProvider,
   PublicInvite,
 } from '@helpdock/schemas';
 import { GoneException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import type { AuthService, SignInOutcome } from '../auth/auth.service.js';
+import type {
+  AuthService,
+  OauthCallbackOutcome,
+  OauthInviteAcceptance,
+  OauthInviteAcceptor,
+  SignInOutcome,
+} from '../auth/auth.service.js';
+import { AuthFailure } from '../auth/auth-failure.js';
 import type { EmailTokenStore } from '../auth/email-token.store.js';
 import { INVITE_LOOKUP_RULE, type RateLimiter } from '../auth/rate-limit.js';
 import { toClientRole } from '../auth/session-view.js';
@@ -53,7 +63,7 @@ export interface InviteServiceOptions {
   readonly logger: Logger;
 }
 
-export class InviteService {
+export class InviteService implements OauthInviteAcceptor {
   readonly #parts: InviteServiceOptions;
 
   constructor(options: InviteServiceOptions) {
@@ -99,6 +109,93 @@ export class InviteService {
     const passwordHash = await this.#parts.auth.hashPassword(request.password);
     const payload = this.#asInvite(await this.#parts.tokens.consume(token, 'invite'));
 
+    await this.#activate(payload, { name: request.name, locale: request.locale, passwordHash });
+
+    return this.#parts.auth.signInAfterInvite(payload.userId, userAgent);
+  }
+
+  /**
+   * Starts accepting the invitation with a provider (M18-07, `Admin/AcceptInvite-Providers`).
+   * Like {@link preview} it does not spend the token: the provider may answer
+   * with an account that is not the invited address's, and the person must
+   * still be able to choose a password.
+   */
+  async startWithProvider(
+    token: string,
+    provider: OauthProvider,
+    request: InviteProviderStartRequest,
+    ip: string,
+  ): Promise<{ url: string; browserNonce: string }> {
+    await this.#assertAllowed(ip);
+
+    const preview = this.#asInvite(await this.#parts.tokens.read(token, 'invite'));
+    await this.#parts.auth.assertLocalSignInAllowed(preview.email, 'invite');
+
+    return this.#parts.auth.startInviteOauth(provider, {
+      tokenHash: this.#parts.tokens.hashOf(token),
+      name: request.name,
+      locale: request.locale,
+    });
+  }
+
+  /**
+   * The provider's answer. The invitation token proved the mailbox, so the
+   * provider account must be that mailbox's: Google's verified address, or any
+   * verified address of a GitHub account, equal to the invited one. Otherwise
+   * nothing is spent or created and the invite screen says why. A match spends
+   * the invitation, makes an account with no password, and binds the provider
+   * account to it in the same transaction.
+   */
+  async acceptWithProvider({
+    invite,
+    identity,
+    userAgent,
+  }: OauthInviteAcceptance): Promise<OauthCallbackOutcome> {
+    const preview = this.#asProviderInvite(
+      await this.#parts.tokens.readInviteByHash(invite.tokenHash),
+    );
+    await this.#parts.auth.assertLocalSignInAllowed(preview.email, 'invite');
+    const invited = preview.email.toLowerCase();
+    if (!identity.verifiedEmails.some((address) => address.toLowerCase() === invited)) {
+      return { kind: 'invite-mismatch', account: identity.email };
+    }
+
+    const payload = this.#asProviderInvite(
+      await this.#parts.tokens.consumeInviteByHash(invite.tokenHash),
+    );
+    try {
+      await this.#activate(
+        payload,
+        { name: invite.name, locale: invite.locale, passwordHash: null },
+        (tx) => this.#parts.auth.linkInvitedIdentity(tx, payload.userId, identity),
+      );
+    } catch (error) {
+      // Withdrawn between the email and this callback. The answer is a
+      // redirect, where only an auth code can say so.
+      if (error instanceof GoneException) {
+        throw new AuthFailure('invite-expired');
+      }
+      throw error;
+    }
+    await this.#parts.auth.recordInvitedLink(payload.userId, identity.provider);
+
+    return this.#parts.auth.signInAfterInvite(payload.userId, userAgent);
+  }
+
+  /**
+   * Turns the invited account into an active one, in the invitation's brand,
+   * and runs `alsoInTransaction` (binding a provider account) in the same
+   * transaction, so a refusal there leaves the account invited.
+   */
+  async #activate(
+    payload: InviteTokenPayload,
+    profile: {
+      readonly name: string;
+      readonly locale: Locale;
+      readonly passwordHash: string | null;
+    },
+    alsoInTransaction?: (tx: DbTransaction) => Promise<void>,
+  ): Promise<void> {
     await this.#inBrand(payload.brandId, async (tx) => {
       const user = await this.#parts.staff.findUser(tx, payload.userId);
       // A membership that is gone means the invitation was revoked between the
@@ -112,11 +209,8 @@ export class InviteService {
         throw new GoneException('That invitation is no longer valid');
       }
 
-      await this.#parts.staff.activate(tx, payload.userId, {
-        name: request.name,
-        locale: request.locale,
-        passwordHash,
-      });
+      await this.#parts.staff.activate(tx, payload.userId, profile);
+      await alsoInTransaction?.(tx);
 
       await writeStaffAudit(tx, {
         brandId: payload.brandId,
@@ -132,8 +226,6 @@ export class InviteService {
       { userId: payload.userId, brandId: payload.brandId },
       'A staff invitation was accepted',
     );
-
-    return this.#parts.auth.signInAfterInvite(payload.userId, userAgent);
   }
 
   // ------------------------------------------------------------------
@@ -151,6 +243,17 @@ export class InviteService {
       throw new GoneException('That invitation is no longer valid');
     }
 
+    return payload;
+  }
+
+  /**
+   * The provider path answers on a redirect, where a 410 body would never be
+   * read: the callback screen needs an auth code to say the same thing.
+   */
+  #asProviderInvite(payload: EmailTokenPayload | null): InviteTokenPayload {
+    if (payload === null || payload.purpose !== 'invite') {
+      throw new AuthFailure('invite-expired');
+    }
     return payload;
   }
 

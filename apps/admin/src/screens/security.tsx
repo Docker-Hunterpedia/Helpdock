@@ -1,14 +1,13 @@
 import type { Locale } from '@helpdock/i18n';
 import { SUPPORTED_LNGS } from '@helpdock/i18n';
 import { PASSWORD_MIN_LENGTH, totpCodeRequestSchema } from '@helpdock/schemas';
-import { Box, Button, Chip, MenuItem, Paper, TextField, Typography } from '@mui/material';
+import { Box, Button, Chip, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { ROUTES } from '../app/route-paths.js';
-import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
@@ -16,15 +15,18 @@ import { formatDayTime } from '../ui/format.js';
 import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
+import { AccountCard } from './account/account-card.tsx';
+import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
 /**
  * `/me/security`: a person's own account, the first tab of Your account.
  *
  * It reuses the `Admin/Settings` artboard's layout — a page header, then one
  * bordered card per area with its own title, caption and fields — rather than
- * inventing a shape for four unrelated things. Nothing here is new to DESIGN
- * §6: it is `Paper` on `bg.surface`, the `Field` label rules of §6.1, and the
- * confirmation dialog of §6.4.
+ * inventing a shape for five unrelated things (`account/account-card.tsx`).
+ * Nothing here is new to DESIGN §6: it is `Paper` on `bg.surface`, the `Field`
+ * label rules of §6.1, and the confirmation dialog of §6.4. The sign-in
+ * providers card is `Admin/Me-SignInProviders` (1.0.2).
  *
  * The three actions that weaken a credential each ask for one: a password
  * change asks for the current password, and turning the second factor off or
@@ -33,44 +35,6 @@ import { useToast } from '../ui/toasts.tsx';
  */
 
 type Confirming = 'disable' | 'regenerate' | null;
-
-function Card({
-  title,
-  caption,
-  children,
-}: {
-  readonly title: string;
-  readonly caption: string;
-  readonly children: ReactNode;
-}): ReactNode {
-  const tokens = useSemanticTokens();
-
-  return (
-    <Paper
-      elevation={0}
-      component="section"
-      sx={{
-        padding: 6,
-        borderRadius: '10px',
-        border: `1px solid ${tokens['border.default']}`,
-        backgroundColor: tokens['bg.surface'],
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 5,
-      }}
-    >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography variant="h3" component="h2">
-          {title}
-        </Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          {caption}
-        </Typography>
-      </Box>
-      {children}
-    </Paper>
-  );
-}
 
 export function SecurityScreen(): ReactNode {
   const t = useT();
@@ -225,7 +189,7 @@ export function SecurityScreen(): ReactNode {
   return (
     <>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 720 }}>
-        <Card title={t('me:details.title')} caption={t('me:details.caption')}>
+        <AccountCard title={t('me:details.title')} caption={t('me:details.caption')}>
           <Box
             component="form"
             onSubmit={(event) => {
@@ -276,9 +240,9 @@ export function SecurityScreen(): ReactNode {
               </Button>
             </Box>
           </Box>
-        </Card>
+        </AccountCard>
 
-        <Card title={t('me:password.title')} caption={t('me:password.caption')}>
+        <AccountCard title={t('me:password.title')} caption={t('me:password.caption')}>
           <Box
             component="form"
             onSubmit={submitPassword}
@@ -316,9 +280,9 @@ export function SecurityScreen(): ReactNode {
               </Button>
             </Box>
           </Box>
-        </Card>
+        </AccountCard>
 
-        <Card
+        <AccountCard
           title={t('me:twoFactor.title')}
           caption={
             profile.data?.twoFactorRequired === true
@@ -418,9 +382,11 @@ export function SecurityScreen(): ReactNode {
               </Box>
             </Box>
           )}
-        </Card>
+        </AccountCard>
 
-        <Card title={t('me:sessions.title')} caption={t('me:sessions.caption')}>
+        <SignInProvidersCard />
+
+        <AccountCard title={t('me:sessions.title')} caption={t('me:sessions.caption')}>
           <Box
             component="ul"
             aria-label={t('me:sessions.listLabel')}
@@ -490,7 +456,7 @@ export function SecurityScreen(): ReactNode {
               {t('me:sessions.signOutEverywhere')}
             </Button>
           </Box>
-        </Card>
+        </AccountCard>
       </Box>
 
       <ConfirmDialog

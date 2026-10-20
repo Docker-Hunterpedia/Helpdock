@@ -44,7 +44,7 @@ import { PRIORITY_TONE, slaState, statusName } from './format.js';
 type Tone = StatusColor | 'neutral';
 
 /** A tinted pill: tint background, text in the hue's readable pair. */
-function Pill({
+export function Pill({
   tone,
   children,
   solid = false,

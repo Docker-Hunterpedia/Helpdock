@@ -2,7 +2,10 @@ import type {
   AuthMethods,
   InviteAcceptRequest,
   MagicLinkPreview,
+  OauthIdentity,
+  OauthIdentityList,
   OauthProvider,
+  OauthStepUpRequest,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -10,6 +13,7 @@ import type {
   SignInResult,
   TotpEnrolment,
 } from '@helpdock/schemas';
+import { isLastSignInMethod } from '@helpdock/schemas';
 import {
   assertNotMockBreached,
   MOCK_ENROLMENT_CODE,
@@ -102,6 +106,10 @@ export class MockAuthApi implements AuthApi {
   #magicLinkSpent = false;
   /** What a real install would store as a trusted-device cookie. */
   #trustedDevice = false;
+  /** Nothing linked, as on an install just upgraded to 1.0.1. */
+  #identities: OauthIdentity[] = [];
+  /** Off for the account whose only way in is a provider. */
+  passwordSet = true;
 
   constructor(staff?: MockStaffApi) {
     this.#staff = staff;
@@ -223,6 +231,32 @@ export class MockAuthApi implements AuthApi {
     // Lands on the app's own callback route: there is no provider to talk to
     // until M0-05 registers the OAuth clients.
     return `/oauth/callback?provider=${provider}`;
+  }
+
+  async oauthIdentities(): Promise<OauthIdentityList> {
+    return { identities: [...this.#identities], passwordSet: this.passwordSet };
+  }
+
+  /**
+   * Links at once and answers the page the real callback redirects to, since
+   * there is no provider for the browser to visit in between.
+   */
+  async connectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<string> {
+    this.#assertStepUp(proof);
+    if (this.#identities.some((identity) => identity.provider === provider)) {
+      throw new AuthError('oauth-identity-conflict');
+    }
+    this.#identities.push({ provider, email: MOCK_EMAIL, connectedAt: new Date().toISOString() });
+
+    return `/me/security?connected=${provider}`;
+  }
+
+  async disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void> {
+    if (isLastSignInMethod(await this.oauthIdentities(), provider)) {
+      throw new AuthError('oauth-last-sign-in');
+    }
+    this.#assertStepUp(proof);
+    this.#identities = this.#identities.filter((identity) => identity.provider !== provider);
   }
 
   /**
@@ -358,5 +392,18 @@ export class MockAuthApi implements AuthApi {
     }
 
     return new AuthError(code, { attemptsLeft: challenge.attemptsLeft });
+  }
+
+  /** The api's step-up: the current password, or a live authenticator code. */
+  #assertStepUp(proof: OauthStepUpRequest): void {
+    if (proof.code !== undefined) {
+      if (proof.code !== MOCK_TOTP_CODE) {
+        throw new AuthError('totp-mismatch');
+      }
+      return;
+    }
+    if (!this.passwordSet || proof.currentPassword !== MOCK_PASSWORD) {
+      throw new AuthError('invalid-credentials');
+    }
   }
 }

@@ -3,6 +3,7 @@ import {
   authErrorSchema,
   authMethodsSchema,
   emailTokenPayloadSchema,
+  isLastSignInMethod,
   magicLinkTokenParamSchema,
   magicLinkTokenRequestSchema,
   oauthCallbackQuerySchema,
@@ -246,5 +247,40 @@ describe('the path and query schemas the auth routes name', () => {
       code: 'c',
       state: 's',
     });
+  });
+});
+
+describe('isLastSignInMethod', () => {
+  const linked = (provider: 'google' | 'github') => ({
+    provider,
+    email: 'lina@helpdock.com',
+    connectedAt: '2026-10-20T09:00:00.000Z',
+  });
+
+  it.each([
+    {
+      case: 'no password and only this provider',
+      passwordSet: false,
+      providers: ['github'],
+      last: true,
+    },
+    { case: 'a password beside it', passwordSet: true, providers: ['github'], last: false },
+    {
+      case: 'another provider beside it',
+      passwordSet: false,
+      providers: ['github', 'google'],
+      last: false,
+    },
+    {
+      case: 'only another provider linked',
+      passwordSet: false,
+      providers: ['google'],
+      last: false,
+    },
+    { case: 'nothing linked', passwordSet: false, providers: [], last: false },
+  ] as const)('says $last for GitHub with $case', ({ passwordSet, providers, last }) => {
+    expect(isLastSignInMethod({ passwordSet, identities: providers.map(linked) }, 'github')).toBe(
+      last,
+    );
   });
 });

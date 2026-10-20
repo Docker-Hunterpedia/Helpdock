@@ -2,7 +2,9 @@ import type {
   AuthMethods,
   InviteAcceptRequest,
   MagicLinkPreview,
+  OauthIdentityList,
   OauthProvider,
+  OauthStepUpRequest,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -14,6 +16,8 @@ import {
   authSessionResponseSchema,
   enrolmentCompleteResponseSchema,
   magicLinkPreviewSchema,
+  oauthConnectStartSchema,
+  oauthIdentityListSchema,
   publicInviteSchema,
   recoveryCodesSchema,
   sessionSchema,
@@ -104,6 +108,24 @@ export class HttpAuthApi implements AuthApi {
 
   oauthStartUrl(provider: OauthProvider): string {
     return `${this.#transport.baseUrl}/auth/oauth/${provider}/start`;
+  }
+
+  async oauthIdentities(): Promise<OauthIdentityList> {
+    return oauthIdentityListSchema.parse(
+      await this.#transport.request('GET', '/auth/oauth/identities'),
+    );
+  }
+
+  /** The api also sets the cookie that ties the provider's callback to this browser. */
+  async connectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<string> {
+    const { url } = oauthConnectStartSchema.parse(
+      await this.#transport.request('POST', `/auth/oauth/${provider}/connect`, proof),
+    );
+    return url;
+  }
+
+  async disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void> {
+    await this.#transport.request('POST', `/auth/oauth/${provider}/disconnect`, proof);
   }
 
   async exchange(code: string): Promise<Session> {

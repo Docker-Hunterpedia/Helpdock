@@ -229,8 +229,21 @@ export const oauthIdentitySchema = z.object({
 });
 export type OauthIdentity = z.infer<typeof oauthIdentitySchema>;
 
-export const oauthIdentityListSchema = z.object({ identities: z.array(oauthIdentitySchema) });
+export const oauthIdentityListSchema = z.object({
+  identities: z.array(oauthIdentitySchema),
+  /** Whether the caller has a password, so the security page can say which provider is their last way in. */
+  passwordSet: z.boolean(),
+});
 export type OauthIdentityList = z.infer<typeof oauthIdentityListSchema>;
+
+/**
+ * Whether disconnecting `provider` would leave the account with no way to
+ * sign in: no password and no other provider account (1.0.2). The api refuses
+ * that disconnect with `oauth-last-sign-in`, and the security page disables
+ * its button, from this one rule.
+ */
+export const isLastSignInMethod = (list: OauthIdentityList, provider: OauthProvider): boolean =>
+  !list.passwordSet && list.identities.length === 1 && list.identities[0]?.provider === provider;
 
 /**
  * Which ways in this install offers, so the sign-in screen hides a provider
@@ -338,6 +351,8 @@ const authErrorCodes = [
   'oauth-link-required',
   /** The provider account is linked to another person, or this person already has one of that provider. */
   'oauth-identity-conflict',
+  /** Disconnecting this provider account would leave no password and no other provider (1.0.2). */
+  'oauth-last-sign-in',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

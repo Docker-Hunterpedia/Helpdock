@@ -389,6 +389,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         identities: [
           { provider: 'github', email: 'dina-old@acme.test', connectedAt: expect.any(String) },
         ],
+        passwordSet: true,
       });
 
       const disconnected = await post(
@@ -417,6 +418,25 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         expect.stringContaining('A GitHub account was connected to dina@acme.test.'),
         expect.stringContaining('The GitHub account was disconnected from dina@acme.test.'),
       ]);
+    });
+
+    it('refuses to disconnect the last way in of an account with no password', async () => {
+      const yara = await addAgent('yara@acme.test');
+      const token = await passwordSignIn(yara.email);
+      await connect('github', token, fakeGithubFetch({ id: 5150, email: yara.email }));
+      await runtime.db.update(users).set({ passwordHash: null }).where(eq(users.id, yara.id));
+
+      const listed = await get('/api/auth/oauth/identities', token);
+      const refused = await post('/api/auth/oauth/github/disconnect', { code: '123456' }, token);
+
+      expect(listed.json()).toMatchObject({ passwordSet: false });
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({ error: { auth: { code: 'oauth-last-sign-in' } } });
+      expect(await identitiesOf(yara.id)).toEqual([{ provider: 'github', subject: '5150' }]);
+      // Refused before the step-up, so no attempt was spent on it.
+      expect((await authRowsOf(yara.id)).map((row) => row.action)).not.toContain(
+        'auth.step_up.refused',
+      );
     });
 
     it('refuses to connect a provider account that is bound to somebody else', async () => {
@@ -462,7 +482,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
       );
       const anonymous = await get('/api/auth/oauth/identities');
 
-      expect(listed.json()).toEqual({ identities: [] });
+      expect(listed.json()).toEqual({ identities: [], passwordSet: true });
       expect(removed.statusCode).toBe(204);
       expect(await identitiesOf(amal.id)).toEqual([{ provider: 'github', subject: '1001' }]);
       expect(anonymous.statusCode).toBe(401);

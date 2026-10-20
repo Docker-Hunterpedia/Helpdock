@@ -18,7 +18,11 @@ const recorder = (status: number, body: unknown) => {
 };
 
 const HOSTS = ['shop.example.com', 'help.example.com'];
-const ASK = { hostnames: HOSTS, action: 'web-form' } as const;
+const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
+const OTHER_BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b2';
+const ASK = { hostnames: HOSTS, binding: { surface: 'web-form', brandId: BRAND } } as const;
+/** What Turnstile answers for a pass on the form of {@link BRAND}. */
+const FORM_PASS = { success: true, action: 'web-form', cdata: BRAND } as const;
 
 describe('the CAPTCHA providers (ADR 0003)', () => {
   it('verifies a Turnstile token with the secret, the address and the idempotency key', async () => {
@@ -26,6 +30,7 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       success: true,
       hostname: 'shop.example.com',
       action: 'widget-first-message',
+      cdata: BRAND,
     });
     const turnstile = createCaptchaProvider('turnstile', transport);
 
@@ -35,7 +40,7 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       remoteIp: '203.0.113.9',
       idempotencyKey: 'client-1',
       hostnames: ['shop.example.com'],
-      action: 'widget-first-message',
+      binding: { surface: 'widget-first-message', brandId: BRAND },
     });
 
     expect(verdict).toEqual({ success: true, hostname: 'shop.example.com' });
@@ -59,7 +64,7 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
       token: 'tok',
       idempotencyKey: 'ignored',
       hostnames: ['shop.example.com'],
-      action: 'web-form',
+      binding: { surface: 'web-form', brandId: BRAND },
     });
 
     expect(verdict).toEqual({ success: false, errorCodes: ['invalid-input-response'] });
@@ -97,11 +102,8 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
   });
 
   it.each([
-    [
-      'solved on another site',
-      { success: true, hostname: 'elsewhere.example.net', action: 'web-form' },
-    ],
-    ['that names no site', { success: true, action: 'web-form' }],
+    ['solved on another site', { ...FORM_PASS, hostname: 'elsewhere.example.net' }],
+    ['that names no site', FORM_PASS],
   ])('refuses a pass %s, since a site key works on any site', async (_label, body) => {
     const { transport } = recorder(200, body);
 
@@ -115,8 +117,8 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
   });
 
   it.each([
-    ['for the other surface', { action: 'widget-first-message' }],
-    ['that names no surface', {}],
+    ['for the other surface', { action: 'widget-first-message', cdata: BRAND }],
+    ['that names no surface', { cdata: BRAND }],
   ])('refuses a Turnstile pass %s (M18-11)', async (_label, action) => {
     const { transport } = recorder(200, { success: true, hostname: 'shop.example.com', ...action });
 
@@ -127,6 +129,38 @@ describe('the CAPTCHA providers (ADR 0003)', () => {
         ...ASK,
       }),
     ).toEqual({ success: false, errorCodes: ['action-mismatch'] });
+  });
+
+  it.each([
+    ['for another brand sharing the site key', { cdata: OTHER_BRAND }],
+    ['that names no brand', {}],
+  ])('refuses a Turnstile pass %s (M18-11)', async (_label, cdata) => {
+    const { transport } = recorder(200, {
+      success: true,
+      hostname: 'shop.example.com',
+      action: 'web-form',
+      ...cdata,
+    });
+
+    expect(
+      await createCaptchaProvider('turnstile', transport).verify({
+        secret: 's',
+        token: 't',
+        ...ASK,
+      }),
+    ).toEqual({ success: false, errorCodes: ['cdata-mismatch'] });
+  });
+
+  it('binds an hCaptcha pass by host alone, since hCaptcha has no action or cData', async () => {
+    const { transport } = recorder(200, { success: true, hostname: 'shop.example.com' });
+
+    expect(
+      await createCaptchaProvider('hcaptcha', transport).verify({
+        secret: 's',
+        token: 't',
+        ...ASK,
+      }),
+    ).toEqual({ success: true, hostname: 'shop.example.com' });
   });
 
   it('accepts a pass solved on any of the allowed hosts, whatever its case', async () => {
@@ -165,13 +199,14 @@ describe('the challenge a page draws', () => {
     const config = createCaptchaProvider('turnstile', recorder(200, {}).transport).renderConfig(
       'site',
       'ar',
-      'web-form',
+      { surface: 'web-form', brandId: BRAND },
     );
 
     expect(config).toMatchObject({
       provider: 'turnstile',
       siteKey: 'site',
       action: 'web-form',
+      cdata: BRAND,
       widgetClass: 'cf-turnstile',
       responseField: 'cf-turnstile-response',
       csp: { scriptSrc: ['https://challenges.cloudflare.com'] },
@@ -182,11 +217,12 @@ describe('the challenge a page draws', () => {
     const config = createCaptchaProvider('hcaptcha', recorder(200, {}).transport).renderConfig(
       'site',
       'ar',
-      'web-form',
+      { surface: 'web-form', brandId: BRAND },
     );
 
     expect(config.scriptUrl).toContain('hl=ar');
     expect(config.action).toBeNull();
+    expect(config.cdata).toBeNull();
     expect(config.responseField).toBe('h-captcha-response');
   });
 });

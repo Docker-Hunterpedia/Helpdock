@@ -879,7 +879,9 @@ screens.
 
 - **M18-11 CAPTCHA and abuse hardening** (#285): in review. The hostname check
   had landed in 1.0.1; this adds the Turnstile `action` per surface
-  (`widget-first-message`, `web-form`, refused as `action-mismatch`), the
+  (`widget-first-message`, `web-form`, refused as `action-mismatch`) and the
+  brand as `cData` (`cdata-mismatch`; hCaptcha has neither, so its tokens stay
+  bound by host only), a `CaptchaSurface` type M18-10 reuses, the
   `email-dispatch-ip` bucket (30 per 15 minutes per IP on sign-in link and
   reset requests, apart from the sign-in budget), the `hc-feedback-ip` bucket
   (30 per 15 minutes per IP and brand on "Was this helpful?", answered 429),

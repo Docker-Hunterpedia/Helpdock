@@ -51,3 +51,16 @@ A site key is public, so a token solved on any site that embeds it used to pass 
 - **Web form:** `APP_URL`'s host and each of the brand's verified help center domains. The page sets `frame-ancestors 'none'`, so it is the only place the challenge can run.
 
 Cloudflare's dummy test secret keys always report `example.com`, so they no longer pass on a real install. Test with a real site key whose Cloudflare hostname list includes the site.
+
+## Amendment (2026-10-20, 1.1, M18-11): action and cData are checked
+
+The hostname check proves where a Turnstile challenge ran, not what it was
+for. Two brands may share a site key, and the widget and the web form share
+one. From 1.1 each surface renders Turnstile with its own `action`
+(`widget-first-message`, `web-form`) and the brand's id as `cData`. The api
+refuses a siteverify pass whose `action` or `cdata` differs, missing
+included, as `action-mismatch` or `cdata-mismatch`. hCaptcha has no
+equivalent fields, so an hCaptcha token stays bound by hostname only, and the
+operations and widget-protocol guides say so. Custom clients that render
+Turnstile themselves must pass both values (an upgrade note in the 1.1
+release).

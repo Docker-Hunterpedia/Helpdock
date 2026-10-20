@@ -322,7 +322,7 @@ export class WebFormPublicService {
           ? createCaptchaProvider(keys.provider, this.#options.captchaTransport).renderConfig(
               keys.siteKey,
               locale,
-              'web-form',
+              { surface: 'web-form', brandId },
             )
           : null,
       thankYou: row?.thankYou[locale] ?? defaultThankYou(locale),
@@ -350,7 +350,7 @@ export class WebFormPublicService {
       remoteIp: post.ip,
       idempotencyKey: submissionId,
       hostnames: form.captchaHostnames,
-      action: 'web-form',
+      binding: { surface: 'web-form', brandId: form.brand.id },
     });
     if (!verdict.success) {
       this.#options.log.warn(

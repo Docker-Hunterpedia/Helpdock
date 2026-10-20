@@ -135,6 +135,7 @@ describe('renderWebFormPage', () => {
           provider: 'turnstile',
           siteKey: 'site-key',
           action: 'web-form',
+          cdata: 'brand-1',
           scriptUrl: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
           widgetClass: 'cf-turnstile',
           responseField: 'cf-turnstile-response',
@@ -144,7 +145,7 @@ describe('renderWebFormPage', () => {
     );
 
     expect(html).toContain(
-      '<div class="cf-turnstile" data-sitekey="site-key" data-action="web-form" data-language="en">',
+      '<div class="cf-turnstile" data-sitekey="site-key" data-action="web-form" data-cdata="brand-1" data-language="en">',
     );
     expect(html).toContain(
       '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce="n0nce">',

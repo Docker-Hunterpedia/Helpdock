@@ -16,11 +16,19 @@ export const CAPTCHA_PROVIDERS = ['turnstile', 'hcaptcha'] as const;
 export type CaptchaProviderName = (typeof CAPTCHA_PROVIDERS)[number];
 
 /**
- * The surface a challenge is solved for. Turnstile carries it as the widget's
- * `action` and answers it back from siteverify, so a token minted for one
- * surface is refused on the other (M18-11). hCaptcha has no such field.
+ * The surface a challenge is solved for (M18-11). Turnstile carries it as the
+ * widget's `action`, and the brand as its `cData`, and answers both back from
+ * siteverify, so a token minted for one surface or one brand is refused on
+ * another even when two brands share a site key. hCaptcha has neither field:
+ * its tokens are bound by hostname only.
  */
-export type CaptchaAction = 'widget-first-message' | 'web-form';
+export type CaptchaSurface = 'widget-first-message' | 'web-form';
+
+/** Who a challenge is for: what Turnstile is told to render and must answer back. */
+export interface CaptchaBinding {
+  readonly surface: CaptchaSurface;
+  readonly brandId: string;
+}
 
 export interface CaptchaTransport {
   /** A form-encoded POST; answers the status and the body as text. */
@@ -40,8 +48,11 @@ export interface CaptchaVerifyInput {
    * for no host — is refused as `hostname-mismatch`.
    */
   readonly hostnames: readonly string[];
-  /** The surface asking. A Turnstile pass for another action is `action-mismatch`. */
-  readonly action: CaptchaAction;
+  /**
+   * The surface and brand asking. A Turnstile pass for another action is
+   * `action-mismatch`, and for another brand's `cData` `cdata-mismatch`.
+   */
+  readonly binding: CaptchaBinding;
 }
 
 export type CaptchaVerdict =
@@ -56,8 +67,9 @@ export type CaptchaVerdict =
 export interface CaptchaRenderConfig {
   readonly provider: CaptchaProviderName;
   readonly siteKey: string;
-  /** Rendered as `data-action`; null for a provider without actions. */
-  readonly action: CaptchaAction | null;
+  /** Rendered as `data-action` and `data-cdata`; null for a provider without them. */
+  readonly action: CaptchaSurface | null;
+  readonly cdata: string | null;
   /** Loaded `async defer`; the provider renders into every element with {@link widgetClass}. */
   readonly scriptUrl: string;
   readonly widgetClass: string;
@@ -74,7 +86,7 @@ export interface CaptchaRenderConfig {
 export interface CaptchaProvider {
   readonly name: CaptchaProviderName;
   /** What a client needs to render the challenge. The site key is public. */
-  renderConfig(siteKey: string, locale: string, action: CaptchaAction): CaptchaRenderConfig;
+  renderConfig(siteKey: string, locale: string, binding: CaptchaBinding): CaptchaRenderConfig;
   verify(input: CaptchaVerifyInput): Promise<CaptchaVerdict>;
 }
 
@@ -91,11 +103,17 @@ const siteverifyResponseSchema = z.object({
   success: z.boolean(),
   hostname: z.string().optional(),
   action: z.string().optional(),
+  cdata: z.string().optional(),
   'error-codes': z.array(z.string()).optional(),
 });
 
 type SiteverifyAnswer =
-  | { readonly success: true; readonly hostname: string | null; readonly action: string | null }
+  | {
+      readonly success: true;
+      readonly hostname: string | null;
+      readonly action: string | null;
+      readonly cdata: string | null;
+    }
   | Extract<CaptchaVerdict, { success: false }>;
 
 const parseVerdict = (status: number, body: string): SiteverifyAnswer => {
@@ -116,7 +134,12 @@ const parseVerdict = (status: number, body: string): SiteverifyAnswer => {
   }
 
   return parsed.data.success
-    ? { success: true, hostname: parsed.data.hostname ?? null, action: parsed.data.action ?? null }
+    ? {
+        success: true,
+        hostname: parsed.data.hostname ?? null,
+        action: parsed.data.action ?? null,
+        cdata: parsed.data.cdata ?? null,
+      }
     : { success: false, errorCodes: parsed.data['error-codes'] ?? [] };
 };
 
@@ -124,7 +147,7 @@ const parseVerdict = (status: number, body: string): SiteverifyAnswer => {
 const solvedHere = (
   name: CaptchaProviderName,
   answer: SiteverifyAnswer,
-  { hostnames, action }: CaptchaVerifyInput,
+  { hostnames, binding }: CaptchaVerifyInput,
 ): CaptchaVerdict => {
   if (!answer.success) {
     return answer;
@@ -133,8 +156,11 @@ const solvedHere = (
   if (!hostnames.some((host) => host.toLowerCase() === solvedOn)) {
     return { success: false, errorCodes: ['hostname-mismatch'] };
   }
-  if (name === 'turnstile' && answer.action !== action) {
+  if (name === 'turnstile' && answer.action !== binding.surface) {
     return { success: false, errorCodes: ['action-mismatch'] };
+  }
+  if (name === 'turnstile' && answer.cdata !== binding.brandId) {
+    return { success: false, errorCodes: ['cdata-mismatch'] };
   }
   return { success: true, hostname: answer.hostname };
 };
@@ -157,13 +183,14 @@ const renderConfigFor = (
   name: CaptchaProviderName,
   siteKey: string,
   locale: string,
-  action: CaptchaAction,
+  binding: CaptchaBinding,
 ): CaptchaRenderConfig =>
   name === 'turnstile'
     ? {
         provider: name,
         siteKey,
-        action,
+        action: binding.surface,
+        cdata: binding.brandId,
         scriptUrl: `${TURNSTILE_ORIGIN}/turnstile/v0/api.js`,
         widgetClass: 'cf-turnstile',
         responseField: 'cf-turnstile-response',
@@ -178,6 +205,7 @@ const renderConfigFor = (
         provider: name,
         siteKey,
         action: null,
+        cdata: null,
         scriptUrl: `https://js.hcaptcha.com/1/api.js?hl=${encodeURIComponent(locale)}`,
         widgetClass: 'h-captcha',
         responseField: 'h-captcha-response',
@@ -195,7 +223,7 @@ const createProvider = (
   transport: CaptchaTransport,
 ): CaptchaProvider => ({
   name,
-  renderConfig: (siteKey, locale, action) => renderConfigFor(name, siteKey, locale, action),
+  renderConfig: (siteKey, locale, binding) => renderConfigFor(name, siteKey, locale, binding),
   verify: async (input) => {
     const refused = refuseEarly(input);
     if (refused !== null) {

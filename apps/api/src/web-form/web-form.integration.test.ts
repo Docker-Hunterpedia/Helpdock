@@ -65,13 +65,23 @@ const CONTAINER_STARTUP_MS = 120_000;
 const APP_URL = 'https://desk.example.com';
 const HELP_HOST = 'help.example.com';
 const GOOD_TOKEN = 'a-token-the-provider-accepts';
-/** Tokens the provider accepts, and the host and surface each says it was solved on and for. */
-const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string }>> = {
-  [GOOD_TOKEN]: { hostname: new URL(APP_URL).hostname, action: 'web-form' },
-  'solved-on-the-help-center': { hostname: HELP_HOST, action: 'web-form' },
-  'solved-elsewhere': { hostname: 'elsewhere.example.net', action: 'web-form' },
-  'solved-for-the-widget': { hostname: new URL(APP_URL).hostname, action: 'widget-first-message' },
-};
+/** Tokens the provider accepts, and the host, surface and brand each says it was solved on and for. */
+const ANOTHER_BRAND = '0192c3f0-1a2b-7c3d-8e4f-00000000ffff';
+const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string; brand?: 'another' }>> =
+  {
+    [GOOD_TOKEN]: { hostname: new URL(APP_URL).hostname, action: 'web-form' },
+    'solved-on-the-help-center': { hostname: HELP_HOST, action: 'web-form' },
+    'solved-elsewhere': { hostname: 'elsewhere.example.net', action: 'web-form' },
+    'solved-for-the-widget': {
+      hostname: new URL(APP_URL).hostname,
+      action: 'widget-first-message',
+    },
+    'solved-for-another-brand': {
+      hostname: new URL(APP_URL).hostname,
+      action: 'web-form',
+      brand: 'another',
+    },
+  };
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==',
@@ -272,7 +282,16 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
         const success = solved !== undefined && form.get('secret') === 'secret-key';
         return {
           status: 200,
-          body: JSON.stringify(success ? { success, ...solved } : { success }),
+          body: JSON.stringify(
+            success
+              ? {
+                  success,
+                  hostname: solved.hostname,
+                  action: solved.action,
+                  cdata: solved.brand === 'another' ? ANOTHER_BRAND : seeded.brandId,
+                }
+              : { success },
+          ),
         };
       },
     };
@@ -746,6 +765,12 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
       'cf-turnstile-response': 'solved-for-the-widget',
     });
     expect(forTheWidget.status).toBe(422);
+    // Two brands may share a site key: the form renders its brand as cData.
+    const forAnotherBrand = await post({
+      ...fields,
+      'cf-turnstile-response': 'solved-for-another-brand',
+    });
+    expect(forAnotherBrand.status).toBe(422);
     expect(unverifiedHost.status).toBe(422);
     expect(verifiedHost.status).toBe(200);
 

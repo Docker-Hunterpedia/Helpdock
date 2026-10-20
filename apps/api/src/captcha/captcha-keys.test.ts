@@ -11,16 +11,19 @@ vi.mock('@helpdock/net', async (original) => ({
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
 const KEYS: BrandCaptchaKeys = { provider: 'turnstile', siteKey: 'site', secret: 's3cret' };
 
-const verifierWith = (keys: BrandCaptchaKeys | null, transport: CaptchaTransport) =>
-  new CaptchaVerifier({ forBrand: async () => keys }, transport);
+const verifierWith = (
+  keys: BrandCaptchaKeys | null,
+  transport: CaptchaTransport,
+  log = { warn: vi.fn() },
+) => new CaptchaVerifier({ forBrand: async () => keys }, transport, log);
 
 const HOSTS = ['support.example.com'];
-const ACTION = 'widget-first-message';
+const SURFACE = 'widget-first-message';
 
 const answering = (success: boolean): CaptchaTransport => ({
   postForm: vi.fn(async () => ({
     status: 200,
-    body: JSON.stringify({ success, hostname: HOSTS[0], action: ACTION }),
+    body: JSON.stringify({ success, hostname: HOSTS[0], action: SURFACE, cdata: BRAND }),
   })),
 });
 
@@ -34,7 +37,7 @@ describe('CaptchaVerifier', () => {
         token: 'tok',
         remoteIp: null,
         hostnames: HOSTS,
-        action: ACTION,
+        surface: SURFACE,
       }),
     ).toBe('passed');
     expect(vi.mocked(transport.postForm).mock.calls[0]?.[1].get('secret')).toBe('s3cret');
@@ -50,7 +53,7 @@ describe('CaptchaVerifier', () => {
         token: undefined,
         remoteIp: null,
         hostnames: HOSTS,
-        action: ACTION,
+        surface: SURFACE,
       }),
     ).toBe('failed');
     expect(transport.postForm).not.toHaveBeenCalled();
@@ -60,9 +63,39 @@ describe('CaptchaVerifier', () => {
         token: 'tok',
         remoteIp: null,
         hostnames: HOSTS,
-        action: ACTION,
+        surface: SURFACE,
       }),
     ).toBe('failed');
+  });
+
+  it('logs why a pass was refused, without the token or the secret (M18-11)', async () => {
+    const log = { warn: vi.fn() };
+    const transport: CaptchaTransport = {
+      postForm: vi.fn(async () => ({
+        status: 200,
+        body: JSON.stringify({
+          success: true,
+          hostname: HOSTS[0],
+          action: 'web-form',
+          cdata: BRAND,
+        }),
+      })),
+    };
+
+    expect(
+      await verifierWith(KEYS, transport, log).verify({
+        brandId: BRAND,
+        token: 'the-token',
+        remoteIp: null,
+        hostnames: HOSTS,
+        surface: SURFACE,
+      }),
+    ).toBe('failed');
+    expect(log.warn).toHaveBeenCalledWith(
+      { brandId: BRAND, surface: SURFACE, errorCodes: ['action-mismatch'] },
+      'CAPTCHA refused',
+    );
+    expect(JSON.stringify(log.warn.mock.calls)).not.toMatch(/the-token|s3cret/);
   });
 
   it('fails closed when the provider cannot be reached', async () => {
@@ -76,7 +109,7 @@ describe('CaptchaVerifier', () => {
         token: 'tok',
         remoteIp: null,
         hostnames: HOSTS,
-        action: ACTION,
+        surface: SURFACE,
       }),
     ).toBe('failed');
   });
@@ -88,7 +121,7 @@ describe('CaptchaVerifier', () => {
         token: 'tok',
         remoteIp: null,
         hostnames: HOSTS,
-        action: ACTION,
+        surface: SURFACE,
       }),
     ).toBe('not_configured');
   });

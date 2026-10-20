@@ -132,15 +132,25 @@ interface Visitor {
 /**
  * The siteverify double: `pass` passes as solved on the shop for the widget,
  * `pass-elsewhere` as solved on a site that is not the brand's,
- * `pass-for-the-form` as solved on the shop for the web form, and anything
- * else fails.
+ * `pass-for-the-form` as solved on the shop for the web form,
+ * `pass-for-another-brand` as solved on the shop's widget for another brand
+ * with the same site key, and anything else fails.
  */
 const captchaCalls: URLSearchParams[] = [];
-const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string }>> = {
-  pass: { hostname: 'shop.example.com', action: 'widget-first-message' },
-  'pass-elsewhere': { hostname: 'elsewhere.example.net', action: 'widget-first-message' },
-  'pass-for-the-form': { hostname: 'shop.example.com', action: 'web-form' },
-};
+const ANOTHER_BRAND = '0192c3f0-1a2b-7c3d-8e4f-00000000ffff';
+/** The seeded brand, once there is one: the `cData` its own widget renders. */
+let ownBrandId = '';
+const SOLVED_ON: Readonly<Record<string, { hostname: string; action: string; brand?: 'another' }>> =
+  {
+    pass: { hostname: 'shop.example.com', action: 'widget-first-message' },
+    'pass-elsewhere': { hostname: 'elsewhere.example.net', action: 'widget-first-message' },
+    'pass-for-the-form': { hostname: 'shop.example.com', action: 'web-form' },
+    'pass-for-another-brand': {
+      hostname: 'shop.example.com',
+      action: 'widget-first-message',
+      brand: 'another',
+    },
+  };
 const captchaTransport: CaptchaTransport = {
   postForm: async (_url, form) => {
     captchaCalls.push(form);
@@ -150,7 +160,12 @@ const captchaTransport: CaptchaTransport = {
       body: JSON.stringify(
         solved === undefined
           ? { success: false, 'error-codes': ['invalid-input-response'] }
-          : { success: true, ...solved },
+          : {
+              success: true,
+              hostname: solved.hostname,
+              action: solved.action,
+              cdata: solved.brand === 'another' ? ANOTHER_BRAND : ownBrandId,
+            },
       ),
     };
   },
@@ -402,6 +417,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
+    ownBrandId = seeded.brandId;
     ada = { id: seeded.userId, email: seeded.email, token: '' };
     tia = await addPerson(runtime.db, 'tia');
     await withSystem(runtime.db, seeded.brandId, (tx) =>
@@ -1204,6 +1220,11 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       // M18-11: a Turnstile token carries the surface it was minted for.
       const solvedForTheForm = await start(visitor, { captchaToken: 'pass-for-the-form' });
       expect(solvedForTheForm.status).toBe(403);
+      // ... and the brand: two brands may share a site key, so each widget sends its own cData.
+      const solvedForAnotherBrand = await start(visitor, {
+        captchaToken: 'pass-for-another-brand',
+      });
+      expect(solvedForAnotherBrand.status).toBe(403);
       const before = await withSystem(runtime.db, seeded.brandId, (tx) =>
         tx.select().from(tickets).where(eq(tickets.visitorId, visitor.id)),
       );

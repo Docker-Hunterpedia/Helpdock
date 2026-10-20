@@ -202,6 +202,7 @@ describe('pageContentSecurityPolicy', () => {
       provider: 'hcaptcha',
       siteKey: 's',
       action: null,
+      cdata: null,
       scriptUrl: 'https://js.hcaptcha.com/1/api.js',
       widgetClass: 'h-captcha',
       responseField: 'h-captcha-response',

@@ -66,7 +66,7 @@ const primary = (
   ...(roles === undefined ? {} : { roles }),
 });
 
-const setting = (
+const adminTab = (
   id: string,
   area: NavKey,
   path: string,
@@ -146,58 +146,58 @@ export const PAGES: readonly PageEntry[] = [
     installAdminOnly: true,
   },
 
-  setting('brandGeneral', 'brand', brandRoute('general'), 'brand:tabs.general'),
-  setting('brandDomains', 'brand', brandRoute('domains'), 'brand:tabs.domains'),
-  setting('brandImport', 'brand', brandRoute('import'), 'brand:tabs.import'),
-  setting('brandDanger', 'brand', brandRoute('danger'), 'brand:tabs.danger'),
+  adminTab('brandGeneral', 'brand', brandRoute('general'), 'brand:tabs.general'),
+  adminTab('brandDomains', 'brand', brandRoute('domains'), 'brand:tabs.domains'),
+  adminTab('brandImport', 'brand', brandRoute('import'), 'brand:tabs.import'),
+  adminTab('brandDanger', 'brand', brandRoute('danger'), 'brand:tabs.danger'),
 
-  setting(
+  adminTab(
     'ticketingDepartments',
     'ticketing',
     ticketingRoute('departments'),
     'ticketing:tabs.departments',
   ),
-  setting('ticketingStatuses', 'ticketing', ticketingRoute('statuses'), 'ticketing:tabs.statuses'),
-  setting(
+  adminTab('ticketingStatuses', 'ticketing', ticketingRoute('statuses'), 'ticketing:tabs.statuses'),
+  adminTab(
     'ticketingPriorities',
     'ticketing',
     ticketingRoute('priorities'),
     'ticketing:tabs.priorities',
   ),
-  setting('ticketingTags', 'ticketing', ticketingRoute('tags'), 'ticketing:tabs.tags'),
-  setting(
+  adminTab('ticketingTags', 'ticketing', ticketingRoute('tags'), 'ticketing:tabs.tags'),
+  adminTab(
     'ticketingCustomFields',
     'ticketing',
     ticketingRoute('custom-fields'),
     'ticketing:tabs.customFields',
   ),
-  setting(
+  adminTab(
     'ticketingTemplates',
     'ticketing',
     ticketingRoute('templates'),
     'ticketing:tabs.templates',
   ),
-  setting('ticketingViews', 'ticketing', ticketingRoute('views'), 'ticketing:tabs.views'),
-  setting(
+  adminTab('ticketingViews', 'ticketing', ticketingRoute('views'), 'ticketing:tabs.views'),
+  adminTab(
     'ticketingAssignment',
     'ticketing',
     ticketingRoute('assignment'),
     'ticketing:tabs.assignment',
   ),
-  setting('ticketingSpam', 'ticketing', ticketingRoute('spam'), 'ticketing:tabs.spam'),
-  setting('ticketingFeedback', 'ticketing', ticketingRoute('feedback'), 'ticketing:tabs.feedback'),
-  setting(
+  adminTab('ticketingSpam', 'ticketing', ticketingRoute('spam'), 'ticketing:tabs.spam'),
+  adminTab('ticketingFeedback', 'ticketing', ticketingRoute('feedback'), 'ticketing:tabs.feedback'),
+  adminTab(
     'ticketingBusinessHours',
     'ticketing',
     ticketingRoute('business-hours'),
     'ticketing:tabs.businessHours',
   ),
-  setting('ticketingSlas', 'ticketing', ticketingRoute('slas'), 'ticketing:tabs.slas'),
+  adminTab('ticketingSlas', 'ticketing', ticketingRoute('slas'), 'ticketing:tabs.slas'),
 
-  setting('automationRules', 'automation', automationRoute('rules'), 'rules:tabs.rules', {
+  adminTab('automationRules', 'automation', automationRoute('rules'), 'rules:tabs.rules', {
     roles: ['admin', 'teamLeader'],
   }),
-  setting(
+  adminTab(
     'automationTimeBased',
     'automation',
     automationRoute('time-based'),
@@ -206,49 +206,49 @@ export const PAGES: readonly PageEntry[] = [
       roles: ['admin', 'teamLeader'],
     },
   ),
-  setting('automationRouting', 'automation', automationRoute('routing'), 'rules:tabs.routing', {
+  adminTab('automationRouting', 'automation', automationRoute('routing'), 'rules:tabs.routing', {
     roles: ['admin', 'teamLeader'],
   }),
-  setting('automationMacros', 'automation', automationRoute('macros'), 'rules:tabs.macros', {
+  adminTab('automationMacros', 'automation', automationRoute('macros'), 'rules:tabs.macros', {
     roles: ['admin', 'teamLeader', 'agent'],
   }),
 
-  setting('channelsMailboxes', 'channels', channelsRoute('mailboxes'), 'channels:tabs.mailboxes', {
+  adminTab('channelsMailboxes', 'channels', channelsRoute('mailboxes'), 'channels:tabs.mailboxes', {
     roles: ['admin'],
   }),
-  setting('channelsOutgoing', 'channels', channelsRoute('outgoing'), 'channels:tabs.outgoing', {
+  adminTab('channelsOutgoing', 'channels', channelsRoute('outgoing'), 'channels:tabs.outgoing', {
     roles: ['admin'],
   }),
-  setting('channelsWidget', 'channels', channelsRoute('widget'), 'channels:tabs.widget', {
+  adminTab('channelsWidget', 'channels', channelsRoute('widget'), 'channels:tabs.widget', {
     roles: ['admin', 'teamLeader'],
   }),
-  setting('channelsWebForm', 'channels', channelsRoute('web-form'), 'channels:tabs.webForm', {
+  adminTab('channelsWebForm', 'channels', channelsRoute('web-form'), 'channels:tabs.webForm', {
     roles: ['admin'],
   }),
-  setting('channelsTelegram', 'channels', channelsRoute('telegram'), 'channels:tabs.telegram', {
+  adminTab('channelsTelegram', 'channels', channelsRoute('telegram'), 'channels:tabs.telegram', {
     roles: ['admin'],
   }),
-  setting('channelsMeta', 'channels', channelsRoute('meta'), 'channels:tabs.meta', {
+  adminTab('channelsMeta', 'channels', channelsRoute('meta'), 'channels:tabs.meta', {
     roles: ['admin'],
   }),
 
-  setting('aiProviders', 'ai', aiRoute('providers'), 'aiSettings:tabs.providers', {
+  adminTab('aiProviders', 'ai', aiRoute('providers'), 'aiSettings:tabs.providers', {
     installAdminOnly: true,
   }),
-  setting('aiKnowledge', 'ai', aiRoute('knowledge'), 'aiSettings:tabs.knowledge', {
+  adminTab('aiKnowledge', 'ai', aiRoute('knowledge'), 'aiSettings:tabs.knowledge', {
     roles: ['admin', 'teamLeader'],
   }),
-  setting('aiAssistant', 'ai', aiRoute('assistant'), 'aiSettings:tabs.assistant', {
+  adminTab('aiAssistant', 'ai', aiRoute('assistant'), 'aiSettings:tabs.assistant', {
     roles: ['admin', 'teamLeader'],
   }),
 
-  setting(
+  adminTab(
     'developersApiKeys',
     'developers',
     developersRoute('api-keys'),
     'developers:tabs.apiKeys',
   ),
-  setting(
+  adminTab(
     'developersWebhooks',
     'developers',
     developersRoute('webhooks'),

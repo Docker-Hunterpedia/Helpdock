@@ -1,5 +1,5 @@
-import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
@@ -163,6 +163,87 @@ describe('the agents', () => {
     expect(await screen.findByText('Sami Aziz updated')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Sami Aziz in rotation' })).not.toBeChecked();
   });
+
+  // #350: the controlled checkbox must flip before the save finishes.
+  it.each([
+    { name: 'Sami Aziz', checked: false },
+    { name: 'Lina Haddad', checked: true },
+  ])('changes $name rotation while the save is pending', async ({ name, checked }) => {
+    const { user, ticketing } = await renderAssignment();
+    const gate = Promise.withResolvers<void>();
+    const update = ticketing.updateAssignmentAgent.bind(ticketing);
+    vi.spyOn(ticketing, 'updateAssignmentAgent').mockImplementation(async (...args) => {
+      await gate.promise;
+      return update(...args);
+    });
+    const checkbox = screen.getByRole('checkbox', { name: `${name} in rotation` });
+
+    await user.click(checkbox);
+
+    expect(checkbox).toHaveProperty('checked', checked);
+    expect(checkbox).toBeDisabled();
+    expect(screen.queryByText(`${name} updated`)).not.toBeInTheDocument();
+
+    await act(async () => gate.resolve());
+    expect(await screen.findByText(`${name} updated`)).toBeInTheDocument();
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    expect(checkbox).toHaveProperty('checked', checked);
+  });
+
+  it('restores rotation and reports a refusal when the pending save fails', async () => {
+    const { user, ticketing } = await renderAssignment();
+    const save = Promise.withResolvers<never>();
+    vi.spyOn(ticketing, 'updateAssignmentAgent').mockReturnValue(save.promise);
+    const refetch = Promise.withResolvers<void>();
+    const readAgents = ticketing.assignmentAgents.bind(ticketing);
+    vi.spyOn(ticketing, 'assignmentAgents').mockImplementation(async (...args) => {
+      await refetch.promise;
+      return readAgents(...args);
+    });
+    const checkbox = screen.getByRole('checkbox', { name: 'Sami Aziz in rotation' });
+
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox).toBeDisabled();
+
+    await act(async () => save.reject(new TicketingError('out-of-scope')));
+
+    expect(await screen.findByText('You do not lead that department.')).toBeInTheDocument();
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+    await act(async () => refetch.resolve());
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    expect(screen.queryByText('Sami Aziz updated')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: 'Sami Aziz', action: 'add', skill: 'VIP', initiallyPresent: false },
+    { name: 'Yara Salem', action: 'remove', skill: 'Refund', initiallyPresent: true },
+  ])(
+    'optimistically $action a skill for $name and restores it on failure',
+    async ({ name, action, skill, initiallyPresent }) => {
+      const { user, ticketing } = await renderAssignment();
+      const save = Promise.withResolvers<never>();
+      vi.spyOn(ticketing, 'updateAssignmentAgent').mockReturnValue(save.promise);
+      const row = within(rowFor(name));
+
+      if (action === 'add') {
+        await user.click(screen.getByRole('button', { name: `Add skill for ${name}` }));
+        await user.click(await screen.findByRole('menuitem', { name: skill }));
+      } else {
+        await user.click(screen.getByRole('button', { name: `Remove ${skill} from ${name}` }));
+      }
+      expect(row.queryByText(skill) !== null).toBe(!initiallyPresent);
+
+      await act(async () => save.reject(new TicketingError('out-of-scope')));
+
+      expect(await screen.findByText('You do not lead that department.')).toBeInTheDocument();
+      expect(row.queryByText(skill) !== null).toBe(initiallyPresent);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: `Add skill for ${name}` })).toBeEnabled(),
+      );
+    },
+  );
 
   it('adds a skill from the brand tags and removes one', async () => {
     const { user } = await renderAssignment();

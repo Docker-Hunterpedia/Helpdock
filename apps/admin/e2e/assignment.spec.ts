@@ -113,7 +113,9 @@ test.describe('the Assignment tab', () => {
     const sami = page.getByRole('checkbox', {
       name: t('ticketing:assignment.agents.inRotationFor', { name: 'Sami Aziz' }),
     });
-    await sami.uncheck();
+    // Query observers notify React asynchronously, even for an optimistic cache write.
+    await sami.click();
+    await expect(sami).not.toBeChecked();
     await expect(page.getByRole('status').first()).toContainText(
       t('ticketing:toast.agentUpdated', { name: 'Sami Aziz' }),
     );

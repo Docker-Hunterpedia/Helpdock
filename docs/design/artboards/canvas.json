@@ -1199,6 +1199,14 @@
    "w": 240,
    "x": 0,
    "y": 70240
+  },
+  "m10": {
+   "kind": "title1",
+   "maxW": 6000,
+   "text": "M10 Meta channels — WhatsApp, Messenger and Instagram",
+   "w": 240,
+   "x": 0,
+   "y": 49836
   }
  },
  "order": [

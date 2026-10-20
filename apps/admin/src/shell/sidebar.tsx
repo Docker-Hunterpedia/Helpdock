@@ -215,6 +215,10 @@ function RailViews(): ReactNode {
  * 32 px row with its label and the ⌘\ hint; collapsed, a 36 px icon with the
  * label in a Tooltip. The icon is mirrored in Arabic, where the rail sits on
  * the right.
+ *
+ * The row prints `collapseShort`: in Arabic the full name does not fit beside
+ * the Ctrl key caps. The accessible name stays the full one, which contains
+ * the visible words (WCAG 2.5.3).
  */
 function SidebarToggle({
   collapse,
@@ -277,7 +281,7 @@ function SidebarToggle({
                 textOverflow: 'ellipsis',
               }}
             >
-              {label}
+              {t('admin:nav.collapseShort')}
             </Box>
             <Box component="span" aria-hidden="true" sx={{ display: 'inline-flex', gap: '2px' }}>
               {[modifier, '\\'].map((key) => (

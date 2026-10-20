@@ -17,6 +17,7 @@
     "ai": "AI",
     "developers": "Developers",
     "collapse": "Collapse sidebar",
+    "collapseShort": "Collapse sidebar",
     "expand": "Expand sidebar",
     "withCount": "{{label}} · {{count}}",
     "ctrlKey": "Ctrl"

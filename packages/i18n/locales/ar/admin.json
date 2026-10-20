@@ -17,6 +17,7 @@
     "ai": "الذكاء الاصطناعي",
     "developers": "المطوّرون",
     "collapse": "طي الشريط الجانبي",
+    "collapseShort": "طي الشريط",
     "expand": "توسيع الشريط الجانبي",
     "withCount": "{{label}} · {{count}}",
     "ctrlKey": "Ctrl"

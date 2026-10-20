@@ -14,12 +14,15 @@ export function EmptyState({
   heading,
   body,
   action,
+  hints,
 }: {
   readonly icon: LucideIcon;
   readonly heading: string;
   readonly body: string;
   /** One primary or secondary button. Left out when there is nothing to do. */
   readonly action?: ReactNode | undefined;
+  /** A line under the action, such as the keyboard hints of an inbox view (M14-06). */
+  readonly hints?: ReactNode | undefined;
 }): ReactNode {
   const tokens = useSemanticTokens();
 
@@ -45,6 +48,7 @@ export function EmptyState({
         {body}
       </Typography>
       {action}
+      {hints}
     </Box>
   );
 }

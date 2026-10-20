@@ -108,7 +108,7 @@ describe('the ticket list', () => {
     const { user } = await renderTickets('/tickets?view=all');
     await user.type(screen.getByRole('searchbox', { name: 'Search tickets' }), 'zzzz');
 
-    expect(await screen.findByText('No matches')).toBeVisible();
+    expect(await screen.findByText('No tickets match “zzzz”')).toBeVisible();
   });
 
   it('narrows the list from the filter popover, and counts what is on', async () => {

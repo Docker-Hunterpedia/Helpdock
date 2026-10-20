@@ -424,6 +424,19 @@ text matching does.
 
 ### M14-06 Inbox empty states with keyboard hints
 
+**Status: built, in review** (issue #293). `Kbd` already landed with M14-01
+(`apps/admin/src/ui/kbd.tsx`; `KeyCombo` draws a registry shortcut with it), so
+this deliverable adds `ShortcutHints`
+(`apps/admin/src/keyboard/shortcut-hints.tsx`: a list of hints read from the
+registry, hidden while single-key shortcuts are off, per shortcut hidden when
+the person lacks its permission, with "All shortcuts" a button that opens the
+sheet) and a `hints` slot on `EmptyState`. Which words the list says is
+`emptyKindOf` in `apps/admin/src/tickets/views.ts`: search, My open,
+Unassigned, Overdue, a saved view or the desk with filters on (action *Edit
+filters*), else "Nothing in this view" (Escalated and the department views,
+whose filters are the view itself). The Snoozed words wait for M14-02, which
+adds the view. Guide: [Keyboard shortcuts](../guides/keyboard-shortcuts.md).
+
 Each built-in view gets its own empty state (DESIGN §6.3 EmptyState: icon, h3,
 one sentence, one action) with one line of hints under it: "`c` New ticket ·
 `g` `u` Unassigned · `?` All shortcuts". My open: "Nothing waiting on you".

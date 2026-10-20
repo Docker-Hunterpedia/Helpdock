@@ -328,3 +328,38 @@ export const viewSearch = (viewId: string, intent?: WorkspaceIntent): string => 
 /** Which sidebar row is current: the one the URL names, or the one the desk opens on. */
 export const selectedViewId = (views: readonly TicketView[], params: URLSearchParams): string =>
   params.get('view') ?? defaultView(views)?.id ?? ALL_VIEW;
+
+// ------------------------------------------------------------ empty states
+
+/** Which words an empty list says (M14-06, `Admin/Tickets-Empty`). */
+export type EmptyKind = 'search' | 'myOpen' | 'unassigned' | 'overdue' | 'filtered' | 'plain';
+
+/**
+ * A search wins over everything, since it is what the person just did. Then
+ * the three built-in views that each have their own words; then a saved view
+ * (or the whole desk) with filters on, whose filters are what exclude every
+ * ticket; and "Nothing in this view" for the rest.
+ */
+export const emptyKindOf = (
+  view: TicketView | null,
+  search: string,
+  filters: WorkspaceFilters,
+): EmptyKind => {
+  if (search !== '') {
+    return 'search';
+  }
+  switch (view?.builtIn) {
+    case 'my_open':
+      return 'myOpen';
+    case 'unassigned':
+      return 'unassigned';
+    case 'overdue':
+      return 'overdue';
+    case 'escalated':
+    case 'department_open':
+      // Their filters are what the view is, not something that excludes tickets.
+      return 'plain';
+    default:
+      return activeFilterCount(filters) > 0 ? 'filtered' : 'plain';
+  }
+};

@@ -6,6 +6,7 @@ import {
   CUSTOM,
   defaultView,
   EMPTY_FILTERS,
+  emptyKindOf,
   filtersFromParams,
   filtersOfView,
   intentOf,
@@ -233,5 +234,39 @@ describe('intents and links', () => {
     expect(selectedViewId([first], new URLSearchParams('view=other'))).toBe('other');
     expect(selectedViewId([first], new URLSearchParams())).toBe('first');
     expect(selectedViewId([], new URLSearchParams())).toBe('all');
+  });
+});
+
+describe('emptyKindOf', () => {
+  const filtered = { ...EMPTY_FILTERS, priority: ['urgent' as const] };
+
+  it.each([
+    ['my_open', 'myOpen'],
+    ['unassigned', 'unassigned'],
+    ['overdue', 'overdue'],
+  ] as const)('gives the built-in %s view its own words', (builtIn, kind) => {
+    expect(emptyKindOf(view({ id: builtIn, builtIn }), '', filtered)).toBe(kind);
+  });
+
+  it('lets a search win over the view, built-in or not', () => {
+    expect(emptyKindOf(view({ id: 'a', builtIn: 'my_open' }), 'invoice', filtered)).toBe('search');
+    expect(emptyKindOf(null, 'invoice', EMPTY_FILTERS)).toBe('search');
+  });
+
+  it('says the filters exclude everything when another view or the desk has some on', () => {
+    expect(emptyKindOf(shared, '', filtered)).toBe('filtered');
+    expect(emptyKindOf(null, '', filtered)).toBe('filtered');
+  });
+
+  it.each(['escalated', 'department_open'] as const)(
+    'keeps the plain words for %s, whose filters are the view itself',
+    (builtIn) => {
+      expect(emptyKindOf(view({ id: builtIn, builtIn }), '', filtered)).toBe('plain');
+    },
+  );
+
+  it('falls back to "nothing in this view" with no filters on', () => {
+    expect(emptyKindOf(shared, '', EMPTY_FILTERS)).toBe('plain');
+    expect(emptyKindOf(null, '', EMPTY_FILTERS)).toBe('plain');
   });
 });

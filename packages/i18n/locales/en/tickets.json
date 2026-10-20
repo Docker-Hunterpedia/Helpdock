@@ -55,8 +55,18 @@
     "noSelectionBody": "Choose a ticket on the left to read it, or create one.",
     "listHeading": "Nothing in this view",
     "listBody": "No ticket matches it yet.",
-    "searchHeading": "No matches",
-    "searchBody": "No ticket matches what you typed."
+    "searchHeading": "No tickets match “{{term}}”",
+    "searchBody": "Try fewer words, or search every view.",
+    "clearSearch": "Clear search",
+    "myOpenHeading": "Nothing waiting on you",
+    "myOpenBody": "New tickets assigned to you show up here.",
+    "unassignedHeading": "Every ticket has an owner",
+    "unassignedBody": "New tickets without an assignee land here first.",
+    "overdueHeading": "Nothing is past its SLA",
+    "overdueBody": "Tickets that miss a response or resolution target show up here.",
+    "filteredHeading": "No tickets match this view",
+    "filteredBody": "Its filters exclude every ticket right now.",
+    "editFilters": "Edit filters"
   },
   "error": {
     "ticketHeading": "This ticket is not available",
@@ -333,6 +343,7 @@
     "hint": "Off: only shortcuts with ⌘ or Ctrl work. Saved to your account.",
     "singleKey": "Single-key shortcuts",
     "offSuffix": " (off)",
+    "hintsLabel": "Keyboard hints",
     "then": "then",
     "close": "Close",
     "saveFailed": "The shortcut setting was not saved. Try again.",

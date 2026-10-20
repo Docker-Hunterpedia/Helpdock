@@ -10,7 +10,14 @@ scale.add(tokens.typography.baseSize.admin);
 // Scan declarations, including inline CSS in server-rendered HTML. An inherited
 // face is fine; a CSS variable must never hide a literal fallback (#339).
 function invalidFamilies(source: string): string[] {
+  // Also catch a copied stack hidden in a local constant or mock config,
+  // rather than only the declaration that later interpolates it.
+  const copiedStacks = Array.from(
+    source.matchAll(/(['"])((?:\\.|(?!\1)[^\n])*)\1/g),
+    (match) => match[2] ?? '',
+  ).filter((value) => /IBM Plex|\b(?:monospace|sans-serif|serif|system-ui)\b/.test(value));
   const values = [
+    ...copiedStacks,
     ...Array.from(
       source.matchAll(/\bfontFamily\s*(?::|=)\s*(['"])(.*?)\1/g),
       (match) => match[2] ?? '',
@@ -20,7 +27,7 @@ function invalidFamilies(source: string): string[] {
       (match) => (match[1] ?? '').split(/["']>/)[0] ?? '',
     ),
   ];
-  return values.filter((value) => {
+  return [...new Set(values)].filter((value) => {
     const family = value.trim();
     return (
       !/^(?:inherit|initial|unset|var\(--hd-font-[a-z-]+\))$/.test(family) &&
@@ -56,6 +63,8 @@ describe('font contract (#339)', () => {
     'font-family: sans-serif;',
     'fontFamily="Arial"',
     'font-family: "Some New Font";',
+    'const MONO = "\'IBM Plex Mono\', ui-monospace, monospace";',
+    'const SANS = "system-ui, sans-serif";',
   ])('rejects literal family declaration %s', (source) => {
     expect(invalidFamilies(source)).toHaveLength(1);
   });

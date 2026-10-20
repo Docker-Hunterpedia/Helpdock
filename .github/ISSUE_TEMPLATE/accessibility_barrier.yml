@@ -1,0 +1,78 @@
+name: Accessibility barrier
+description: Something in Helpdock stops you, or someone you support, from using it with a keyboard, a screen reader, zoom or another assistive technology.
+title: "Accessibility: "
+labels: ["accessibility", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting this. Accessibility barriers are treated as bugs. What Helpdock commits to, and what is already known, is in [ACCESSIBILITY.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/ACCESSIBILITY.md).
+
+        If the report would expose something private, such as your own health information or a customer's data, use the private route in [ACCESSIBILITY.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/ACCESSIBILITY.md#report-a-barrier) instead of this public form.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - Chat widget
+        - Help center
+        - Web form or CSAT page
+        - Admin app
+        - Emails
+        - Documentation
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Page or screen
+      description: The screen, the page address with any customer data removed, or the steps to get there.
+      placeholder: Help center article page, "Was this helpful?"
+    validations:
+      required: true
+  - type: input
+    id: assistive-tech
+    attributes:
+      label: Assistive technology
+      description: Name and version, or "none" for keyboard-only use, zoom or a contrast setting.
+      placeholder: NVDA 2026.2, keyboard only, 200 % zoom, Windows contrast theme
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      description: Include the versions.
+      placeholder: Firefox 144 on Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language and direction
+      options:
+        - English, left to right
+        - Arabic, right to left
+        - Both
+        - Mixed text (for example an English title on an Arabic page)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Helpdock version
+      description: The `HELPDOCK_VERSION` of the install, if you know it.
+      placeholder: 1.0.0
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What blocks you
+      description: What you tried to do, what happened, and what you expected. Include what the screen reader said, word for word, if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Optional, if they are not already clear above.

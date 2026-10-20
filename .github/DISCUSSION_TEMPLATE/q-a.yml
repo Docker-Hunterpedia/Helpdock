@@ -1,0 +1,26 @@
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask anything about installing, configuring or using Helpdock. Helpdock is maintained by volunteers and has no paid support; answers come from the community and the maintainer when they can ([SUPPORT.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SUPPORT.md)).
+
+        The [guides](https://github.com/Docker-Hunterpedia/Helpdock/tree/main/docs/guides) answer many questions already. **Do not post a security vulnerability here:** report it privately, as [SECURITY.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md) describes.
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you are trying to do, and where you are stuck.
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: The guide you followed, the commands you ran and what they printed. Remove secrets (`APP_MASTER_KEY`, passwords, API keys, tokens) and customer data first.
+  - type: input
+    id: version
+    attributes:
+      label: Helpdock version
+      description: The `HELPDOCK_VERSION` you run, if it matters.
+      placeholder: 1.0.0

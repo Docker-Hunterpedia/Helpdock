@@ -1,0 +1,50 @@
+name: Translation
+description: A wrong, missing or awkward translation, or a request for a new language.
+title: "Translation: "
+labels: ["translation", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Helpdock ships in English and Arabic. The strings live in [`packages/i18n/locales/`](https://github.com/Docker-Hunterpedia/Helpdock/tree/main/packages/i18n/locales), one folder per language, and a fix today is a pull request to those catalogs ([CONTRIBUTING.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md)).
+
+        Translation through **Hosted Weblate** is planned for 1.x ([decision D-47](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/decisions-1-x.md#m17-apps-and-languages), [M17](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/in-development/M17-apps-and-languages.md)); it is not open yet. A request for a new language is recorded here until then.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change
+      options:
+        - A wrong or unclear translation
+        - A string that is not translated
+        - Text cut off, or laid out wrongly in right to left
+        - A new language
+    validations:
+      required: true
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      description: The language the problem is in, or the language you would like added.
+      placeholder: Arabic (ar)
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      multiple: true
+      options:
+        - Chat widget
+        - Help center
+        - Admin app
+        - Emails
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Where and what
+      description: The screen and the current text; the catalog file and key if you know them (for example `packages/i18n/locales/ar/tickets.json`, `sla.paused`); and your suggested wording. For a new language, whether you can help translate and review it.
+    validations:
+      required: true

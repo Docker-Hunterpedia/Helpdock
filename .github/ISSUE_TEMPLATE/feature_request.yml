@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a change to what Helpdock does.
+title: "Feature: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Helpdock's scope is planned in the open. Before you write, please check:
+
+        - **The 1.x plan:** [Phase 5 of the PRD](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#phase-5--1x) lists the milestones planned after 1.0 (M12 to M20) and their deliverables, and [the 1.x decisions](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/decisions-1-x.md) record what the owner has already decided. If your idea is a deliverable there, comment on its issue instead.
+        - **The backlog:** an item on the [post-1.0 backlog](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#5-post-10-backlog-v11) is not scheduled, and needs its own PRD section before anyone builds it. A request for one is welcome; it helps decide what gets planned next.
+        - **Non-goals:** the [non-goals for 1.x](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#non-goals-for-1x) will not be accepted, as [CONTRIBUTING.md](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md#before-you-start) explains.
+
+        An idea that is still taking shape fits better in [Ideas](https://github.com/Docker-Hunterpedia/Helpdock/discussions/categories/ideas).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, who it affects (agents, admins, customers, operators), and why Helpdock makes it hard today. Describe the need before the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposal
+      description: What you would like Helpdock to do. Screens, API shapes and examples are welcome.
+    validations:
+      required: true
+  - type: input
+    id: deliverable
+    attributes:
+      label: Related milestone or deliverable
+      description: A milestone or deliverable id from the PRD (for example `M14` or `M14-01`), a backlog item, or "none" if nothing there covers it.
+      placeholder: M14-01, or none
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: Anything you tried or considered, including what you do today without it.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the open and closed issues and the PRD, and this is not already planned or declined.
+          required: true
+        - label: This is not one of the PRD's non-goals for 1.x.
+          required: true

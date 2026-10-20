@@ -21,6 +21,16 @@ connection when changing identity authority.
 | SAML entity ID and metadata URL | Service provider details; shared across the install |
 | SAML signing/encryption certificates | The public SP metadata XML |
 
+A new OpenID Connect connection has a **Start from** select: Custom OpenID
+Connect, Google Workspace (OIDC) or Microsoft Entra ID (OIDC). A preset fills
+the issuer (or its template), the email, name and groups claims, and hints for
+the email domains, and links to its section below. Change any field afterwards;
+the preset stays chosen and does not overwrite the edit. Picking another preset
+replaces only those preset fields, never the label, client ID, secret, scopes,
+domains or access rules. The preset is a form shortcut only: nothing about it is
+saved, and the connection behaves as any OIDC connection. There are no SAML
+presets, and GitHub is not an OIDC provider, so it stays a sign-in button.
+
 The first save gives a new connection its callback URL. Enable it after the IdP
 has registered that exact URL. A SAML metadata URL is optional: supply entity ID,
 SSO URL and trusted PEM certificates explicitly. A metadata refresh may drop a
@@ -33,7 +43,9 @@ allowed domain. Each domain belongs to at most one enabled connection: saving,
 creating or enabling a connection that lists a domain another enabled connection
 already lists is refused, and the form names the domain. Disable the old
 connection first when moving a domain to a new provider. OIDC additionally
-requires signed `email_verified: true` on the standard `email` claim; SAML
+requires signed `email_verified: true` on the standard `email` claim, or, for a
+single Entra ID tenant, a signed `xms_edov: true` from a member of that tenant (see
+[Microsoft Entra ID (OIDC preset)](#microsoft-entra-id-oidc-preset)); SAML
 trusts the configured IdP's signed email attribute. Only use domains the IdP
 administrator controls, with verified or centrally managed email attributes.
 A provider that lets people choose an unverified coworker's email is unsafe for
@@ -95,6 +107,105 @@ tested; save it first. Direct public `test=1` requests are refused.
 Then perform a normal sign-in with a test person. Confirm mappings and local/IdP
 MFA before enabling enforcement. Keep the emergency admin's password and
 accessible authenticator available, and verify its fresh-TOTP sign-in separately.
+
+## Google Workspace (OIDC preset)
+
+Official documentation checked **2026-10-20**:
+[OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
+
+The preset sets the issuer to `https://accounts.google.com`, the email claim to
+`email`, the name claim to `name` and leaves the groups claim empty.
+
+1. In the Google Cloud console, use a project that belongs to your Workspace
+   organisation. Under **Google Auth Platform → Audience**, set the user type to
+   **Internal**. This is a security requirement, not only a convenience (see
+   below); it also spares the app Google's verification.
+2. Under **Clients**, create an OAuth client of type **Web application**. Add
+   the connection's redirect URI (shown after the first save) as an authorised
+   redirect URI, exactly.
+3. In Helpdock, choose **Start from → Google Workspace (OIDC)**, then paste the
+   client ID and client secret. Keep the scopes `openid email profile`.
+4. Under **Email domains**, enter your Workspace domain, for example
+   `example.com`. Only addresses in these domains can link.
+5. Save, enable, and run **Test connection**.
+
+Google signs `email_verified` for the `email` claim, so first sign-in links by
+email as described above. Google puts no groups in the ID token: leave the
+groups claim empty and give access with **Grant default access**, or invite
+people and set their roles on Staff. Use Entra ID or a SAML app when roles must
+follow groups.
+
+**Why Internal is required.** Helpdock checks no `hd` claim for SSO and sends no
+`hd` parameter. Under the External user type any Google account can sign in,
+including a personal Google account that uses an address in your Workspace
+domain (for example one created on that address before the domain joined
+Workspace). Google signs `email_verified` for it, so it could make the first
+link to, or be created as, that address. Internal limits sign-in to accounts
+your organisation manages.
+
+## Microsoft Entra ID (OIDC preset)
+
+Official documentation checked **2026-10-20**:
+[optional claims](https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims-reference),
+[group claims and limits](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-fed-group-claims).
+
+The preset sets the issuer to
+`https://login.microsoftonline.com/{tenant-id}/v2.0`, the email claim to
+`email`, the name claim to `name` and the groups claim to `groups`. The form
+refuses to save while the issuer still contains `{tenant-id}`.
+
+1. In the Microsoft Entra admin center, open **App registrations → New
+   registration**. Choose **Accounts in this organizational directory only**
+   (single tenant) and add a **Web** redirect URI: the connection's redirect URI.
+2. Under **Certificates & secrets**, add a client secret. Note its expiry (24
+   months at most) in your calendar: Helpdock cannot see it.
+3. Under **Token configuration**, choose **Add optional claim → ID** and add
+   `email`, `xms_edov` and `acct`, then **Add groups claim**. Prefer **Groups assigned to the application**, so a
+   member of many groups stays under the 200-group limit; Helpdock refuses an
+   overage rather than treat it as no groups.
+4. In Helpdock, choose **Start from → Microsoft Entra ID (OIDC)**, replace
+   `{tenant-id}` with the **Directory (tenant) ID** from the app's overview, and
+   paste the **Application (client) ID** and the secret value.
+5. Under **Email domains**, enter only domains verified in **this** tenant
+   (**Domain names** in the admin center), never a partner's. Helpdock trusts
+   `xms_edov` only from members (`acct` 0), but a B2B user made a member, for
+   example by cross-tenant synchronisation, also has `acct` 0 while its
+   `xms_edov` speaks for its home tenant. Listing only this tenant's domains
+   keeps such addresses out. Map group **object IDs**, not display names, in
+   the role mappings.
+6. Under **Enterprise applications**, set **Assignment required** and assign
+   only the intended staff or groups. An assigned guest still cannot make a
+   first link or get an account through this connection (see below), and
+   Helpdock has no way to link an SSO identity by hand; give guests a local
+   account instead, which works only while SSO is not enforced. Save, enable,
+   and run **Test connection**.
+
+**Email verification.** Entra ID tokens carry no `email_verified`. Instead,
+`xms_edov: true` says the domain of the `email` is verified by the tenant that
+holds the account. For a guest that is the guest's home tenant, or a personal
+Microsoft, Google or one-time-passcode account, not yours. So Helpdock accepts
+it in place of `email_verified` only for a member of the connection's tenant,
+when all of these hold; otherwise the first sign-in is refused with
+`sso-email-unverified`:
+
+- the email claim is `email`;
+- the connection's issuer is exactly
+  `https://login.microsoftonline.com/<tenant GUID>/v2.0`, never `common`,
+  `organizations`, `consumers` or the personal-account tenant. Only the global
+  cloud qualifies: government and China cloud issuers fail closed;
+- the token's `iss` is that issuer and its `tid` is that tenant GUID;
+- `acct` is `0`, a member of the tenant (a guest is `1`);
+- `xms_edov` is the boolean `true`.
+
+Then the pinned tenant is the one vouching for the address. Without the
+`xms_edov` and `acct` optional claims nobody new can link or be created; people
+already linked still sign in.
+
+**Upgrading with an existing Entra OIDC connection.** If its tokens already
+carry `xms_edov` and `acct`, it starts linking by email, and creating accounts
+when **Create accounts on first sign-in** is on, at the next sign-in after the
+upgrade. Before upgrading, review its **Email domains**, its account-creation
+setting and **Assignment required** in Entra.
 
 ## Okta (OIDC)
 
@@ -182,7 +293,7 @@ immediate revocation is required.
 
 | Error | Check |
 |---|---|
-| `sso-email-unverified` | Allowed domain; for OIDC, the standard `email` claim with `email_verified: true` |
+| `sso-email-unverified` | Allowed domain; for OIDC, the standard `email` claim with `email_verified: true`, or for Entra ID the `xms_edov` optional claim |
 | `sso-identity-conflict` | The account is already linked to another subject or connection; sign in through that identity |
 | `sso-no-access` | Active brands, group values/order, default access, departments and conflicting provider ownership |
 | `sso-connection-disabled` | Connection enabled; restart any pending MFA flow |

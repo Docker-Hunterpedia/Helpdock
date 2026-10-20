@@ -95,6 +95,56 @@ describe('SSO administration', () => {
     expect(domains).toHaveAttribute('aria-invalid', 'false');
   });
 
+  it('fills a preset once, keeps edits made afterwards and saves no preset', async () => {
+    const sso = new MockSsoApi();
+    const { user } = renderApp(<SsoConnectionPage />, { ssoApi: sso });
+    await user.click(await screen.findByRole('combobox', { name: 'Start from' }));
+    await user.click(screen.getByRole('option', { name: 'Google Workspace (OIDC)' }));
+    const issuer = screen.getByLabelText('Issuer URL');
+    expect(issuer).toHaveValue('https://accounts.google.com');
+    expect(screen.getByRole('link', { name: 'Setup guide' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('sso.md#google-workspace-oidc-preset'),
+    );
+    await user.clear(issuer);
+    await user.type(issuer, 'https://accounts.google.com/custom');
+    await user.type(screen.getByLabelText('Groups claim / attribute'), 'departments');
+    expect(screen.getByRole('combobox', { name: 'Start from' })).toHaveTextContent(
+      'Google Workspace (OIDC)',
+    );
+    expect(issuer).toHaveValue('https://accounts.google.com/custom');
+    await user.type(screen.getByLabelText('Button label'), 'Workspace');
+    await user.type(screen.getByLabelText('Client ID'), 'helpdock');
+    await user.type(screen.getByLabelText('Email domains'), 'example.com');
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    await waitFor(async () => expect((await sso.connections()).connections).toHaveLength(1));
+    const [saved] = (await sso.connections()).connections;
+    expect(saved).toMatchObject({
+      groupAttribute: 'departments',
+      config: { issuer: 'https://accounts.google.com/custom', emailClaim: 'email' },
+    });
+    expect(JSON.stringify(saved)).not.toContain('google-workspace');
+  });
+
+  it('refuses to save the Entra ID issuer while it still holds the tenant template', async () => {
+    const sso = new MockSsoApi();
+    const { user } = renderApp(<SsoConnectionPage />, { ssoApi: sso });
+    await user.click(await screen.findByRole('combobox', { name: 'Start from' }));
+    await user.click(screen.getByRole('option', { name: 'Microsoft Entra ID (OIDC)' }));
+    const issuer = screen.getByLabelText('Issuer URL');
+    expect(issuer).toHaveValue('https://login.microsoftonline.com/{tenant-id}/v2.0');
+    expect(screen.getByLabelText('Groups claim / attribute')).toHaveValue('groups');
+    await user.type(screen.getByLabelText('Button label'), 'Entra');
+    await user.type(screen.getByLabelText('Client ID'), 'helpdock');
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    expect(await screen.findByText('Check the connection fields and mappings.')).toBeVisible();
+    expect(issuer).toHaveAttribute('aria-invalid', 'true');
+    expect(issuer).toHaveAccessibleDescription(
+      'Replace {tenant-id} with your Directory (tenant) ID.',
+    );
+    expect((await sso.connections()).connections).toEqual([]);
+  });
+
   it('keeps invalid connection values in the form without creating a provider', async () => {
     const sso = new MockSsoApi();
     const { user } = renderApp(<SsoConnectionPage />, { ssoApi: sso });

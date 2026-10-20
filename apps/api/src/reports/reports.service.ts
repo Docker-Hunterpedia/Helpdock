@@ -10,7 +10,15 @@ import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { AiUsageSource } from './ai-usage.js';
 import { exportLines } from './report-exports.js';
-import { agentSummary, csatSummary, fillDays, openedRate, slaOutcome } from './report-math.js';
+import {
+  agentSummary,
+  backlogByStatus,
+  csatSummary,
+  fillDays,
+  openedRate,
+  rankTags,
+  slaOutcome,
+} from './report-math.js';
 import { type ReportScope, ReportsRepository } from './reports.repository.js';
 
 /**
@@ -59,6 +67,7 @@ export class ReportsService {
           ...row,
         })),
         byStatus: await repository.byStatus(tx, scope),
+        byTag: rankTags(await repository.byTag(tx, scope), REPORT_LIST_ROWS),
         byDayAndChannel: (await repository.byDayAndChannel(tx, scope)).map(
           ({ day, key, created }) => ({ day, channel: key, created }),
         ),
@@ -69,6 +78,7 @@ export class ReportsService {
           ({ day, key, created }) => ({ day, statusId: key, tickets: created }),
         ),
       },
+      backlogByStatus: backlogByStatus(await repository.openByStatus(tx, scope)),
       firstResponse: await repository.durations(tx, scope, 'first_response_ms'),
       resolution: await repository.durations(tx, scope, 'resolution_ms'),
       sla: {

@@ -54,8 +54,9 @@ export class OidcFailure extends Error {
 }
 
 /**
- * A single-tenant Entra ID v2.0 issuer. The tenant must be a GUID: `common`,
- * `organizations` and `consumers` accept accounts from any tenant.
+ * A single-tenant Entra ID v2.0 issuer in the global cloud. The tenant must be
+ * a GUID: `common`, `organizations` and `consumers` accept accounts from any
+ * tenant. Government and China cloud hosts never match, so they fail closed.
  */
 const ENTRA_TENANT_ISSUER =
   /^https:\/\/login\.microsoftonline\.com\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/v2\.0$/;
@@ -63,9 +64,11 @@ const ENTRA_TENANT_ISSUER =
 const MICROSOFT_CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
 
 /**
- * Entra ID never sends `email_verified`. Its `xms_edov` says the address's
- * domain is verified by the tenant that holds the account, which counts only
- * from the one tenant the connection names (M18-09).
+ * Entra ID never sends `email_verified`. Its `xms_edov` says the domain of the
+ * address is verified by the tenant that holds the account. For a guest that is
+ * the guest's home tenant, or a personal Microsoft, Google or one-time-passcode
+ * account, so it counts only for a member (`acct === 0`) of the one tenant the
+ * connection names: then that tenant is the one vouching (M18-09).
  */
 function entraVouchesForEmail(issuer: string, claims: Record<string, unknown>): boolean {
   const tenant = ENTRA_TENANT_ISSUER.exec(issuer)?.[1];
@@ -74,6 +77,7 @@ function entraVouchesForEmail(issuer: string, claims: Record<string, unknown>): 
     tenant !== MICROSOFT_CONSUMER_TENANT &&
     claims.iss === issuer &&
     claims.tid === tenant &&
+    claims.acct === 0 &&
     claims.xms_edov === true
   );
 }

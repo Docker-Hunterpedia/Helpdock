@@ -20,7 +20,8 @@ describe('SSO configuration boundaries', () => {
     '',
     'not-a-url',
     'https://idp.example.com/#secret',
-  ])('refuses an unsafe identity endpoint %s', (issuer) => {
+    'https://login.microsoftonline.com/{tenant-id}/v2.0',
+  ])('refuses an unsafe or unfinished identity endpoint %s', (issuer) => {
     expect(
       ssoConnectionCreateSchema.safeParse({ ...oidc, config: { ...oidc.config, issuer } }).success,
     ).toBe(false);

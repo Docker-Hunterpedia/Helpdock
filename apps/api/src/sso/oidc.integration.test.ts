@@ -166,6 +166,7 @@ describe.skipIf(!hasDocker)('M11-02 OIDC through Postgres, Redis and a local IdP
       sub: 'staff-2',
       email_verified: undefined,
       tid: '0b6f6c1e-2f3c-4f63-9a7f-1d2c3b4a5e6f',
+      acct: 0,
       xms_edov: true,
     };
     const { assertion } = await complete(attempt);

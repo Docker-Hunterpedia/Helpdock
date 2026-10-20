@@ -84,6 +84,7 @@ describe('Entra ID email verification by xms_edov (M18-09)', () => {
       sub: 'entra-subject',
       iss: issuer,
       tid: tenant,
+      acct: 0,
       email: 'ada@example.com',
       xms_edov: true,
       name: 'Ada',
@@ -92,7 +93,7 @@ describe('Entra ID email verification by xms_edov (M18-09)', () => {
   };
   const consumer = 'https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0';
 
-  it('vouches for the email claim when a GUID-tenant issuer, its tid and xms_edov agree', () => {
+  it('vouches for the email of a tenant member when issuer, tid, acct 0 and xms_edov agree', () => {
     expect(oidcAssertion(entra)).toMatchObject({ email: 'ada@example.com', emailVerified: true });
   });
 
@@ -100,6 +101,9 @@ describe('Entra ID email verification by xms_edov (M18-09)', () => {
     ['xms_edov is missing', { claims: { ...entra.claims, xms_edov: undefined } }],
     ['xms_edov is false', { claims: { ...entra.claims, xms_edov: false } }],
     ['xms_edov is a string', { claims: { ...entra.claims, xms_edov: 'true' } }],
+    ['acct is missing', { claims: { ...entra.claims, acct: undefined } }],
+    ['the account is a guest (acct 1)', { claims: { ...entra.claims, acct: 1 } }],
+    ['acct is a string', { claims: { ...entra.claims, acct: '0' } }],
     ['the token names another tenant', { claims: { ...entra.claims, tid: uuidv7() } }],
     [
       'the token has another issuer',
@@ -127,6 +131,13 @@ describe('Entra ID email verification by xms_edov (M18-09)', () => {
       },
     ],
     ['the issuer is not Entra', { issuer: 'https://idp.example.com' }],
+    [
+      'the issuer is a national cloud',
+      {
+        issuer: `https://login.microsoftonline.us/${tenant}/v2.0`,
+        claims: { ...entra.claims, iss: `https://login.microsoftonline.us/${tenant}/v2.0` },
+      },
+    ],
     [
       'the email comes from another claim',
       { emailClaim: 'upn', claims: { ...entra.claims, upn: 'ada@example.com' } },

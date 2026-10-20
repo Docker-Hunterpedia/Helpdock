@@ -25,7 +25,11 @@ export const ssoAccessSchema = z
 export const ssoConnectionConfigSchema = z.discriminatedUnion('protocol', [
   z.object({
     protocol: z.literal('oidc'),
-    issuer: endpoint,
+    // A preset's `{tenant-id}` template is a URL the parser accepts but no provider serves.
+    issuer: endpoint.refine(
+      (issuer) => !/[{}]/.test(issuer),
+      'Replace the template placeholder in the issuer',
+    ),
     clientId: z.string().trim().min(1).max(300),
     scopes: z
       .array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]+$/))

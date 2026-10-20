@@ -119,7 +119,7 @@
     },
     "entra-id": {
       "name": "Microsoft Entra ID (OIDC)",
-      "banner": "Microsoft Entra ID: سجّل تطبيقاً لمستأجر واحد بعنوان إعادة توجيه من نوع Web يشير إلى عنوان إعادة التوجيه لهذا الاتصال. من Token configuration أضف المطالبتين الاختياريتين email وxms_edov، ومطالبة groups.",
+      "banner": "Microsoft Entra ID: سجّل تطبيقاً لمستأجر واحد بعنوان إعادة توجيه من نوع Web يشير إلى عنوان إعادة التوجيه لهذا الاتصال. من Token configuration أضف المطالبات الاختيارية email وxms_edov وacct، ومطالبة groups.",
       "issuerHint": "استبدل {tenant-id} بمعرّف الدليل (المستأجر).",
       "groupsHint": "أضف مطالبة groups من Token configuration. القيم هي معرّفات كائنات المجموعات.",
       "domainsHint": "أدخل النطاقات الموثّقة في مستأجر Entra، مثل example.com."

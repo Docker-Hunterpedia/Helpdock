@@ -119,7 +119,7 @@
     },
     "entra-id": {
       "name": "Microsoft Entra ID (OIDC)",
-      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI. Under Token configuration, add the optional claims email and xms_edov, and the groups claim.",
+      "banner": "Microsoft Entra ID: register a single-tenant app with a Web redirect to this connection’s redirect URI. Under Token configuration, add the optional claims email, xms_edov and acct, and the groups claim.",
       "issuerHint": "Replace {tenant-id} with your Directory (tenant) ID.",
       "groupsHint": "Add the groups claim in Token configuration. Values are group object IDs.",
       "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."

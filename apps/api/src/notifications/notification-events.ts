@@ -1,9 +1,9 @@
 import type { DbTransaction } from '@helpdock/db';
 import {
   enqueueOutbox,
-  type NotifyEmailPayload,
+  type NotifyEmailSchedulePayload,
   type NotifyPushPayload,
-  notifyEmailJob,
+  notifyEmailScheduleJobId,
   notifyPushJob,
   type OutboxEventContext,
   type OutboxEventHandler,
@@ -40,8 +40,8 @@ import { channelsFor, eligibleRecipients, mentionedStaff, type StaffFacts } from
  * ```
  * domain change  →  outbox: ticket.assigned, sla.breached, …      (its own transaction)
  * worker         →  notifications rows + outbox: notification.created (one per row)
- * worker         →  socket frame, and notify.email / notify.push jobs (after that commits)
- * worker         →  one email, one push per browser                (idempotent jobs)
+ * worker         →  socket frame, and notify.email_schedule / notify.push jobs (after that commits)
+ * worker         →  a paced email batch (M14-10), one push per browser (idempotent jobs)
  * ```
  *
  * The middle hop is why nothing here can send twice or send about a row that
@@ -62,6 +62,7 @@ import { channelsFor, eligibleRecipients, mentionedStaff, type StaffFacts } from
 
 export const NOTIFICATION_EVENTS = {
   created: 'notification.created',
+  read: 'notification.read',
   pushTest: 'notification.push_test',
 } as const;
 
@@ -373,6 +374,7 @@ export const createFanOutHandler =
           inApp: channels.inApp,
           email: channels.email,
           push: channels.push,
+          emailState: channels.email ? ('pending' as const) : null,
         },
       ];
     });
@@ -405,7 +407,7 @@ const staffAuthor = (
 
 /** Adds a job to the `notify` queue. The worker passes BullMQ; tests pass a recorder. */
 export interface NotifyQueue {
-  addEmail(jobId: string, payload: NotifyEmailPayload): Promise<void>;
+  addEmailSchedule(jobId: string, payload: NotifyEmailSchedulePayload): Promise<void>;
   addPush(jobId: string, payload: NotifyPushPayload): Promise<void>;
 }
 
@@ -413,16 +415,15 @@ export interface DeliveryDeps {
   readonly repository: NotificationsRepository;
   readonly broadcast: RealtimeBroadcast;
   readonly queue: NotifyQueue;
+  readonly now?: () => Date;
 }
 
 /** BullMQ refuses a custom id with a colon in it, so the parts are joined with dots. */
-export const emailJobId = (notificationId: string): string =>
-  `${notifyEmailJob.name}.${notificationId}`;
 export const pushJobId = (subscriptionId: string, key: string): string =>
   `${notifyPushJob.name}.${subscriptionId}.${key}`;
 
 export const createNotificationCreatedHandler =
-  ({ repository, broadcast, queue }: DeliveryDeps): OutboxEventHandler =>
+  ({ repository, broadcast, queue, now = () => new Date() }: DeliveryDeps): OutboxEventHandler =>
   async ({ tx, brandId, payload }: OutboxEventContext): Promise<void> => {
     const { notificationId } = notificationCreatedPayloadSchema.parse(payload);
     const notification = await repository.delivery(tx, notificationId);
@@ -440,10 +441,15 @@ export const createNotificationCreatedHandler =
     }
 
     if (notification.email) {
-      await queue.addEmail(emailJobId(notificationId), { brandId, notificationId });
+      const schedule = { brandId, notificationId };
+      await queue.addEmailSchedule(notifyEmailScheduleJobId(schedule), schedule);
     }
 
-    if (notification.push) {
+    // Pause holds push as well as email (DOMAIN-RULES §20); the bell stays.
+    if (
+      notification.push &&
+      !(notification.pausedUntil !== null && notification.pausedUntil > now())
+    ) {
       for (const subscription of await repository.subscriptionsOf(tx, notification.userId)) {
         await queue.addPush(pushJobId(subscription.id, notificationId), {
           brandId,
@@ -471,6 +477,21 @@ export const createPushTestHandler =
     });
   };
 
+/** Refreshes read state without announcing a new notification or scheduling email/push. */
+export const createNotificationReadHandler =
+  ({ broadcast }: Pick<DeliveryDeps, 'broadcast'>): OutboxEventHandler =>
+  async ({ brandId, payload }) => {
+    const { userId, notificationId } = z
+      .object({ userId: z.uuid(), notificationId: z.uuid() })
+      .parse(payload);
+    await broadcast.emit({
+      rooms: [userRoom(userId)],
+      event: REALTIME_EVENTS.notificationRead,
+      data: { brandId, notificationId },
+      seq: null,
+    });
+  };
+
 /**
  * Called by the worker's start-up, after the tickets module has registered its
  * own handlers, so on the events both handle the socket frame goes first.
@@ -486,6 +507,7 @@ export const registerNotificationHandlers = (deps: FanOutDeps & DeliveryDeps): v
     registerEventHandler(event, fanOut, NOTIFICATIONS_SUBSCRIBER);
   }
 
+  registerEventHandler(NOTIFICATION_EVENTS.read, createNotificationReadHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.created, createNotificationCreatedHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.pushTest, createPushTestHandler(deps));
 };

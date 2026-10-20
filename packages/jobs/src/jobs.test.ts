@@ -45,7 +45,14 @@ import {
   metaProfileFetchJob,
   metaSendJob,
   metaSendPayloadSchema,
-  notifyEmailJob,
+  NOTIFY_DIGEST_CRON,
+  notifyDigestTickJob,
+  notifyDigestTickJobId,
+  notifyEmailBatchJob,
+  notifyEmailBatchJobId,
+  notifyEmailRebuildJob,
+  notifyEmailScheduleJob,
+  notifyEmailScheduleJobId,
   notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
   outboxEventJob,
@@ -431,17 +438,45 @@ describe('the rules jobs (M3-03, M3-04)', () => {
   });
 });
 
-describe('the notify jobs (M3-07)', () => {
+describe('the notify jobs (M3-07, M14-10)', () => {
   const notificationId = '01924f00-0000-7000-8000-0000000000b1';
   const subscriptionId = '01924f00-0000-7000-8000-0000000000c1';
 
-  it('sends one email per notification however often the job runs', () => {
-    const payload = parseJobPayload(notifyEmailJob, { brandId, notificationId });
+  it('sends one email per batch however often the job runs (M14-10)', () => {
+    const batchId = '01924f00-0000-7000-8000-0000000000d1';
+    const payload = parseJobPayload(notifyEmailBatchJob, { brandId, batchId });
 
-    expect(idempotencyKeyFor(notifyEmailJob, payload, 'a')).toBe(
-      idempotencyKeyFor(notifyEmailJob, payload, 'b'),
+    expect(idempotencyKeyFor(notifyEmailBatchJob, payload, 'a')).toBe(
+      idempotencyKeyFor(notifyEmailBatchJob, payload, 'b'),
     );
-    expect(idempotencyKeyFor(notifyEmailJob, payload, 'a')).toBe(`notify.email:${notificationId}`);
+    expect(idempotencyKeyFor(notifyEmailBatchJob, payload, 'a')).toBe(
+      `notify.email_batch:${batchId}`,
+    );
+    expect(notifyEmailBatchJobId(batchId)).toBe(`notify.batch.${batchId}`);
+  });
+
+  it('keys the schedule job by its notification, with no receipt of its own', () => {
+    const payload = parseJobPayload(notifyEmailScheduleJob, { brandId, notificationId });
+
+    expect(notifyEmailScheduleJobId(payload)).toBe(`notify.email_schedule.${notificationId}`);
+    expect(notifyEmailScheduleJob.idempotencyKey).toBeUndefined();
+  });
+
+  it('ticks digests at the top of every hour, one job per brand and hour', () => {
+    const hour = '2026-10-20T08:00:00.000Z';
+
+    expect(notifyDigestTickJob.schedule).toEqual({ cron: NOTIFY_DIGEST_CRON });
+    expect(NOTIFY_DIGEST_CRON).toBe('0 * * * *');
+    expect(notifyDigestTickJobId({ brandId, hour })).toBe(
+      `notify.digest.tick.${brandId}.${Date.parse(hour)}`,
+    );
+    expect(parseJobPayload(notifyDigestTickJob, {})).toEqual({});
+    expect(() => parseJobPayload(notifyDigestTickJob, { brandId })).toThrow(PayloadValidationError);
+  });
+
+  it('rebuilds hourly, as sla.rebuild does', () => {
+    expect(notifyEmailRebuildJob.schedule).toEqual({ everyMs: 3_600_000 });
+    expect(JOB_DEFINITIONS).not.toHaveProperty('notify.email');
   });
 
   it('keys a push by browser and notification, so each browser hears once', () => {

@@ -160,19 +160,95 @@
       "open": "Open {{reference}}",
       "reply": "Reply in Helpdock"
     },
-    "why": {
-      "assigned": "You get this email because assignment emails are on for you.",
-      "replied": "You get this email because reply emails are on for you.",
-      "mentioned": "You get this email because mention emails are on for you.",
-      "sla_warning": "You get this email because SLA warning emails are on for you.",
-      "sla_breached": "You get this email because SLA breach emails are on for you.",
-      "escalated": "You get this email because escalation emails are on for you."
-    },
-    "settings": "Change notification settings",
     "sentTo": "Helpdock · sent to {{email}}",
     "push": {
       "testTitle": "Helpdock test notification",
       "testBody": "Browser push works on this browser."
+    }
+  },
+  "notificationBatch": {
+    "subject": {
+      "batch_one": "[{{brand}}] {{count}} update since {{time}}",
+      "batch_other": "[{{brand}}] {{count}} updates since {{time}}",
+      "hourly_one": "[{{brand}}] Your hourly digest: {{count}} update",
+      "hourly_other": "[{{brand}}] Your hourly digest: {{count}} updates",
+      "daily": "[{{brand}}] Your daily digest for {{date}}"
+    },
+    "kicker": {
+      "batch": "{{brand}} · since {{time}}",
+      "hourly": "Hourly digest · {{brand}}",
+      "daily": "Daily digest · {{brand}}"
+    },
+    "count": {
+      "assigned_one": "{{count}} assigned",
+      "assigned_other": "{{count}} assigned",
+      "replied_one": "{{count}} reply",
+      "replied_other": "{{count}} replies",
+      "mentioned_one": "{{count}} mention",
+      "mentioned_other": "{{count}} mentions",
+      "sla_warning_one": "{{count}} SLA warning",
+      "sla_warning_other": "{{count}} SLA warnings",
+      "sla_breached_one": "{{count}} breach",
+      "sla_breached_other": "{{count}} breaches",
+      "escalated_one": "{{count}} escalation",
+      "escalated_other": "{{count}} escalations"
+    },
+    "heading": {
+      "digest_one": "{{count}} thing since {{since}}",
+      "digest_other": "{{count}} things since {{since}}"
+    },
+    "intro": {
+      "line": "{{needYou}}, {{updates}}. {{dropped}}",
+      "needYou_one": "{{count}} needs you now",
+      "needYou_other": "{{count}} need you now",
+      "updates_one": "{{count}} is an update",
+      "updates_other": "{{count}} are updates",
+      "dropped": "Opened tickets have dropped out."
+    },
+    "section": {
+      "needsYouNow": "Needs you now",
+      "tickets": "Tickets"
+    },
+    "event": {
+      "assigned": {
+        "person": "{{actor}} assigned it to you",
+        "rule": "A rule assigned it to you",
+        "round_robin": "Round-robin assigned it to you",
+        "skill_based": "Skill-based assignment gave it to you"
+      },
+      "replied_one": "{{contact}} replied",
+      "replied_other": "{{contact}} replied {{count}} times",
+      "mentioned_one": "{{actor}} mentioned you in a note",
+      "mentioned_other": "{{actor}} mentioned you in {{count}} notes",
+      "sla_warning": "{{percent}} % of the {{clock}} target used",
+      "sla_breached": "Missed its {{clock}} target",
+      "escalated_one": "Escalated to you or your team",
+      "escalated_other": "Escalated {{count}} times"
+    },
+    "bulk": {
+      "assigned_one": "{{actor}} assigned you {{count}} ticket",
+      "assigned_other": "{{actor}} assigned you {{count}} tickets",
+      "references": "One bulk change: {{references}}"
+    },
+    "rollup": {
+      "assigned_one": "{{count}} ticket assigned to you",
+      "assigned_other": "{{count}} tickets assigned to you",
+      "replied_one": "Replies on {{count}} ticket",
+      "replied_other": "Replies on {{count}} tickets",
+      "sla_warning_one": "SLA warnings on {{count}} ticket",
+      "sla_warning_other": "SLA warnings on {{count}} tickets",
+      "by": "by {{actors}}"
+    },
+    "actor": {
+      "rule": "a rule",
+      "round_robin": "round-robin",
+      "skill_based": "skill-based assignment",
+      "someone": "Someone"
+    },
+    "action": "Open your notifications",
+    "footer": {
+      "why": "You get these because of your notification settings.",
+      "change": "Change them"
     }
   },
   "transcript": {

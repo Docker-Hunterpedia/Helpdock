@@ -284,7 +284,7 @@ describe.skipIf(!hasDocker)('time tracking and CSAT', () => {
       repository: new NotificationsRepository(),
       broadcast: new RedisRealtimeBroadcast(worker),
       pushConfigured: async () => false,
-      queue: { addEmail: async () => undefined, addPush: async () => undefined },
+      queue: { addEmailSchedule: async () => undefined, addPush: async () => undefined },
     });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });

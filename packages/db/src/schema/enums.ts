@@ -389,6 +389,46 @@ export const notificationKindEnum = pgEnum('notification_kind', [
   'escalated',
 ]);
 
+/**
+ * M14-10. Where one notification's email is (DOMAIN-RULES §20). Null on a row
+ * made without email, and on rows from before M14-10. A `skipped_*` row is
+ * never sent later; `withdrawn` is reserved for M14-03 (an undone bulk change).
+ */
+export const notificationEmailStateEnum = pgEnum('notification_email_state', [
+  'pending',
+  'sent',
+  'skipped_read',
+  'skipped_paused',
+  'skipped_off',
+  'skipped_scope',
+  'skipped_failed',
+  'skipped_unconfigured',
+  'withdrawn',
+]);
+
+/** M14-10. A person's email schedule: Right away (paced), hourly, daily, or none. */
+export const notificationEmailScheduleEnum = pgEnum('notification_email_schedule', [
+  'immediate',
+  'hourly',
+  'daily',
+  'off',
+]);
+
+/** M14-10. What made a batch: Right away pacing, or a digest tick. */
+export const notificationEmailBatchKindEnum = pgEnum('notification_email_batch_kind', [
+  'immediate',
+  'hourly',
+  'daily',
+]);
+
+/** M14-10. `empty` is a batch whose every row failed the send-time re-check. */
+export const notificationEmailBatchStatusEnum = pgEnum('notification_email_batch_status', [
+  'pending',
+  'sent',
+  'empty',
+  'failed',
+]);
+
 /** M5-01. Where one language of an article is in its life (REQUIREMENTS §4.5). */
 export const hcArticleStatusEnum = pgEnum('hc_article_status', [
   'draft',

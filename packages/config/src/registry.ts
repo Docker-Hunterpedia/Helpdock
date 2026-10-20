@@ -53,6 +53,10 @@ const PORT = z.int().min(1).max(65_535);
 const TEXT = z.string();
 /** pgvector indexes cover at most 2,000 dimensions (ADR 0005); 0 means "not configured yet". */
 const EMBEDDING_DIMS = z.int().min(0).max(2_000);
+/** A pacing interval: at least a minute, at most a day. */
+const MINUTES = z.int().min(1).max(1_440);
+/** A pacing cap: at least one email, so a cap can never stop email altogether. */
+const COUNT = z.int().min(1).max(1_000);
 
 /**
  * Every non-bootstrap setting M0 needs. Later milestones append to this list;
@@ -483,6 +487,71 @@ export const SETTING_DEFINITIONS = [
     scope: 'install',
     description:
       'The token Meta sends with its callback-URL handshake. Generated on first read when empty; paste the same value into the Meta dashboard.',
+  }),
+  // M14-10 (ADR 0037, DOMAIN-RULES §20). How Right away notification email is
+  // paced. Install settings: a self-hosted desk sets its own, and every person
+  // in every brand is paced the same way.
+  defineSetting({
+    key: 'notify.email.firstWaitMinutes',
+    schema: MINUTES,
+    default: 2,
+    secret: false,
+    scope: 'install',
+    description:
+      'Right away email: minutes from the first notification to its email, gathering what arrives meanwhile.',
+  }),
+  defineSetting({
+    key: 'notify.email.backoffMinutes',
+    schema: z.array(MINUTES).min(1).max(10),
+    default: [10, 20, 40, 60],
+    secret: false,
+    scope: 'install',
+    description:
+      'Right away email: minutes between emails while more keeps arriving, one step per email; the last step repeats. A JSON array.',
+  }),
+  defineSetting({
+    key: 'notify.email.quietResetMinutes',
+    schema: MINUTES,
+    default: 120,
+    secret: false,
+    scope: 'install',
+    description:
+      'Right away email: after this many minutes with nothing new, the next email waits the first wait again.',
+  }),
+  defineSetting({
+    key: 'notify.email.urgentIntervalMinutes',
+    schema: MINUTES,
+    default: 5,
+    secret: false,
+    scope: 'install',
+    description:
+      'Right away email: a mention, SLA breach or escalation may cut the wait, but no more often than every this many minutes.',
+  }),
+  defineSetting({
+    key: 'notify.email.urgentPerDay',
+    schema: COUNT,
+    default: 8,
+    secret: false,
+    scope: 'install',
+    description: 'Right away email: how many times a day an urgent notification may cut the wait.',
+  }),
+  defineSetting({
+    key: 'notify.email.perHour',
+    schema: COUNT,
+    default: 6,
+    secret: false,
+    scope: 'install',
+    description:
+      'Most notification emails one person gets from one brand in an hour, digests included.',
+  }),
+  defineSetting({
+    key: 'notify.email.perDay',
+    schema: COUNT,
+    default: 40,
+    secret: false,
+    scope: 'install',
+    description:
+      'Most notification emails one person gets from one brand in a day, digests included.',
   }),
 ] as const;
 

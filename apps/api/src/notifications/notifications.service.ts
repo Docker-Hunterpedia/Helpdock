@@ -3,10 +3,11 @@ import { enqueueOutbox } from '@helpdock/jobs';
 import {
   excerptOf,
   NOTIFICATION_PAGE_SIZE,
+  NOTIFICATION_PAUSE_MAX_DAYS,
   NOTIFICATION_WINDOW_DAYS,
   type NotificationList,
   type NotificationListQuery,
-  type NotificationPreferences,
+  type NotificationPreferencesUpdate,
   type NotificationPreferencesView,
   type NotificationView,
   notificationDetailSchema,
@@ -15,7 +16,7 @@ import {
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
 } from '@helpdock/schemas';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { NOTIFICATION_EVENTS } from './notification-events.js';
 import type {
   NotificationsRepository,
@@ -123,11 +124,12 @@ export class NotificationsService {
   // ------------------------------------------------------------ preferences
 
   async preferences(tx: DbTransaction, userId: string): Promise<NotificationPreferencesView> {
-    const [stored, account, publicKey, subscriptions] = await Promise.all([
+    const [stored, account, publicKey, subscriptions, emailDelivery] = await Promise.all([
       this.#repository.storedPreferences(tx, userId),
       this.#repository.account(tx, userId),
       this.#push.vapidPublicKey(),
       this.#repository.subscriptionsOf(tx, userId),
+      this.#repository.emailDelivery(tx, userId),
     ]);
     /* c8 ignore next 3 -- the guard has already proved the account exists. */
     if (account === undefined) {
@@ -143,17 +145,42 @@ export class NotificationsService {
         publicKey,
         subscriptions: subscriptions.map(toSubscriptionView),
       },
+      emailDelivery,
     };
   }
 
+  /**
+   * Saves whichever parts the update names. A pause must end in the future and
+   * within a year; `pausedUntil: null` resumes (DOMAIN-RULES §20).
+   */
   async updatePreferences(
     tx: DbTransaction,
     userId: string,
-    preferences: NotificationPreferences,
+    update: NotificationPreferencesUpdate,
   ): Promise<NotificationPreferencesView> {
-    await this.#repository.savePreferences(tx, userId, preferences);
+    const pausedUntil =
+      update.pausedUntil === undefined || update.pausedUntil === null
+        ? update.pausedUntil
+        : this.#pauseEnd(update.pausedUntil);
+    await this.#repository.savePreferences(tx, userId, update.preferences, {
+      emailSchedule: update.emailSchedule,
+      digestHour: update.digestHour,
+      pausedUntil,
+    });
 
     return this.preferences(tx, userId);
+  }
+
+  #pauseEnd(value: string): Date {
+    const end = new Date(value);
+    const now = this.#now().getTime();
+    if (end.getTime() <= now || end.getTime() > now + NOTIFICATION_PAUSE_MAX_DAYS * DAY_MS) {
+      throw new BadRequestException(
+        `A pause must end in the future and within ${NOTIFICATION_PAUSE_MAX_DAYS} days`,
+      );
+    }
+
+    return end;
   }
 
   async addSubscription(

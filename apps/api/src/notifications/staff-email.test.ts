@@ -42,6 +42,18 @@ describe('renderStaffNotificationEmail', () => {
     expect(email.html).toContain('#B3261E');
   });
 
+  it('ends with the footer every notification email shares (M14-10)', () => {
+    const email = renderStaffNotificationEmail(input());
+
+    expect(email.text).toContain(
+      'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',
+    );
+    expect(email.text).toContain('Helpdock · sent to lina@helpdock.test');
+    expect(renderStaffNotificationEmail(input({ locale: 'ar' })).text).toContain(
+      'تصلك هذه الرسائل بسبب إعدادات إشعاراتك.',
+    );
+  });
+
   it("quotes a workflow rule's message on the escalation it sends", () => {
     const email = renderStaffNotificationEmail(
       input({

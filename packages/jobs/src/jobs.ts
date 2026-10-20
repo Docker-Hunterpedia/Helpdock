@@ -555,30 +555,131 @@ export const rulesTimeBasedScheduleJob = defineJob({
   schedule: { cron: RULES_TIME_BASED_CRON },
 });
 
-export const notifyEmailPayloadSchema = z.object({
+export const notifyEmailSchedulePayloadSchema = z.object({
   brandId: z.uuid(),
   notificationId: z.uuid(),
 });
-export type NotifyEmailPayload = z.infer<typeof notifyEmailPayloadSchema>;
+export type NotifyEmailSchedulePayload = z.infer<typeof notifyEmailSchedulePayloadSchema>;
 
 /**
- * M3-07: one staff notification email, from the install's system sender.
- * Added by the `notification.created` handler after the notification row has
- * committed, with a job id derived from the row, so a redelivered event adds
- * nothing (DOMAIN-RULES §6). Keyed by the notification: one email per
- * notification however often the job runs.
+ * M14-10: decide what happens to one notification's email (DOMAIN-RULES §20).
+ * Added by the `notification.created` handler for a row made with email on.
+ * It finds or opens the person's pending batch under the pacing lock and
+ * places its {@link notifyEmailBatchJob}, or leaves the row for the digest
+ * tick, or marks it skipped. No receipt: the row's `email_state` and batch are
+ * the natural key, and a redelivery only places the same batch again.
+ * Replaces 1.0's `notify.email`, one email per notification.
  */
-export const notifyEmailJob = defineJob({
-  name: 'notify.email',
+export const notifyEmailScheduleJob = defineJob({
+  name: 'notify.email_schedule',
   queue: QUEUE_NAMES.notify,
-  schema: notifyEmailPayloadSchema,
+  schema: notifyEmailSchedulePayloadSchema,
   options: {
     attempts: 5,
     backoff: { type: 'exponential', delay: 5_000 },
-    removeOnComplete: { age: 86_400, count: 1_000 },
-    removeOnFail: false,
+    removeOnComplete: true,
+    removeOnFail: { age: 7 * 86_400 },
   },
-  idempotencyKey: (payload) => `notify.email:${payload.notificationId}`,
+});
+
+export const notifyEmailScheduleJobId = ({ notificationId }: NotifyEmailSchedulePayload): string =>
+  `${notifyEmailScheduleJob.name}.${notificationId}`;
+
+export const notifyEmailBatchPayloadSchema = z.object({
+  brandId: z.uuid(),
+  batchId: z.uuid(),
+});
+export type NotifyEmailBatchPayload = z.infer<typeof notifyEmailBatchPayloadSchema>;
+
+/**
+ * M14-10: send one batch — a paced Right away email or a digest — after the
+ * send-time re-check of every row in it. Delayed until the batch's
+ * `scheduled_for`; a job that wakes early, finds a cap reached or its
+ * recipient online moves itself and runs again. Keyed by the batch: one email
+ * however often it runs, and its `Message-ID` is derived from the same id.
+ */
+export const notifyEmailBatchJob = defineJob({
+  name: 'notify.email_batch',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyEmailBatchPayloadSchema,
+  options: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 10_000 },
+    // Removed when done, so `notify.email_rebuild` can always add the id again.
+    removeOnComplete: true,
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `notify.email_batch:${payload.batchId}`,
+});
+
+/** `notify.batch.<batchId>` of the plan: one job per batch, spelled with dots for BullMQ. */
+export const notifyEmailBatchJobId = (batchId: string): string => `notify.batch.${batchId}`;
+
+export const notifyDigestTickPayloadSchema = z
+  .object({
+    /** Absent on the cron tick, which adds one job per brand; present on those. */
+    brandId: z.uuid().optional(),
+    /** The top of the hour the tick stands for, so a late run still asks about its own hour. */
+    hour: z.iso.datetime().optional(),
+  })
+  .refine((payload) => (payload.brandId === undefined) === (payload.hour === undefined), {
+    message: 'must name both brandId and hour, or neither',
+  });
+export type NotifyDigestTickPayload = z.infer<typeof notifyDigestTickPayloadSchema>;
+
+/** At the top of every hour. */
+export const NOTIFY_DIGEST_CRON = '0 * * * *';
+
+/**
+ * M14-10: the hourly digest tick. Without a brand it fans out one job per
+ * brand (DOMAIN-RULES §1.4); with one it opens a digest batch for every
+ * person of the brand whose hourly digest, or whose daily digest hour in
+ * their time zone, has come, and places its {@link notifyEmailBatchJob}.
+ */
+export const notifyDigestTickJob = defineJob({
+  name: 'notify.digest.tick',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyDigestTickPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  schedule: { cron: NOTIFY_DIGEST_CRON },
+});
+
+export const notifyDigestTickJobId = ({
+  brandId,
+  hour,
+}: {
+  readonly brandId: string;
+  readonly hour: string;
+}): string => `${notifyDigestTickJob.name}.${brandId}.${Date.parse(hour)}`;
+
+export const notifyEmailRebuildPayloadSchema = z.object({
+  /** Absent on the boot and hourly ticks, which add one job per brand; present on those. */
+  brandId: z.uuid().optional(),
+});
+export type NotifyEmailRebuildPayload = z.infer<typeof notifyEmailRebuildPayloadSchema>;
+
+/**
+ * M14-10 (DOMAIN-RULES §10, §20): on worker boot and hourly, place the batch
+ * job of every pending batch again and schedule every pending row that has
+ * none, so losing Redis loses no notification email. Fans out per brand as
+ * `sla.rebuild` does.
+ */
+export const notifyEmailRebuildJob = defineJob({
+  name: 'notify.email_rebuild',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyEmailRebuildPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 10_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  schedule: { everyMs: 3_600_000 },
 });
 
 export const notifyPushPayloadSchema = z
@@ -1586,7 +1687,10 @@ export const JOB_DEFINITIONS = Object.freeze({
   [rulesEvaluateJob.name]: rulesEvaluateJob,
   [rulesTimeBasedJob.name]: rulesTimeBasedJob,
   [rulesTimeBasedScheduleJob.name]: rulesTimeBasedScheduleJob,
-  [notifyEmailJob.name]: notifyEmailJob,
+  [notifyEmailScheduleJob.name]: notifyEmailScheduleJob,
+  [notifyEmailBatchJob.name]: notifyEmailBatchJob,
+  [notifyDigestTickJob.name]: notifyDigestTickJob,
+  [notifyEmailRebuildJob.name]: notifyEmailRebuildJob,
   [notifyPushJob.name]: notifyPushJob,
   [authEmailJob.name]: authEmailJob,
   [domainVerifyJob.name]: domainVerifyJob,

@@ -547,6 +547,20 @@ describe('SocketRealtimeClient', () => {
       expect(created).toEqual([{ brandId: BRAND, notificationId: TICKET }]);
     });
 
+    it('delivers read frames separately from new notifications and rejects malformed reads', async () => {
+      const client = await connected();
+      const read: unknown[] = [];
+      const created: unknown[] = [];
+      client.subscribe({
+        notificationRead: (frame) => read.push(frame),
+        notificationCreated: (frame) => created.push(frame),
+      });
+      sockets[0]?.fire('notification:read', envelope({ brandId: BRAND, notificationId: TICKET }));
+      sockets[0]?.fire('notification:read', envelope({ brandId: 'nope' }));
+      expect(read).toEqual([{ brandId: BRAND, notificationId: TICKET }]);
+      expect(created).toEqual([]);
+    });
+
     it('drops a frame that does not match its schema rather than passing it on', async () => {
       const client = await connected();
       client.joinRoom(ticketRoom(TICKET));

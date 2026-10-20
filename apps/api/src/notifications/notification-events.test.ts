@@ -1,5 +1,9 @@
 import type { DbTransaction } from '@helpdock/db';
-import { type NotifyEmailPayload, type NotifyPushPayload, silentLogger } from '@helpdock/jobs';
+import {
+  type NotifyEmailSchedulePayload,
+  type NotifyPushPayload,
+  silentLogger,
+} from '@helpdock/jobs';
 import {
   NOTIFICATION_PREFERENCE_DEFAULTS,
   type NotificationPreferences,
@@ -15,8 +19,8 @@ import {
   CONSUMED_EVENTS,
   createFanOutHandler,
   createNotificationCreatedHandler,
+  createNotificationReadHandler,
   createPushTestHandler,
-  emailJobId,
   NOTIFICATION_EVENTS,
   planFor,
   pushJobId,
@@ -222,6 +226,7 @@ describe('the fan-out handler', () => {
         inApp: true,
         email: true,
         push: false,
+        emailState: 'pending',
       },
     ]);
     expect(outbox).toEqual([
@@ -437,6 +442,7 @@ const delivered = (overrides: Partial<DeliveryFacts> = {}): DeliveryFacts => ({
   email: true,
   push: true,
   createdAt: new Date('2026-09-27T10:00:00Z'),
+  pausedUntil: null,
   ...overrides,
 });
 
@@ -450,18 +456,21 @@ const subscription: SubscriptionRow = {
   createdAt: new Date(),
 };
 
+const NOW = new Date('2026-09-27T10:00:05Z');
+
 const deliver = async (fake: Fake) => {
   const frames: RealtimeBroadcastInput[] = [];
-  const emails: [string, NotifyEmailPayload][] = [];
+  const emails: [string, NotifyEmailSchedulePayload][] = [];
   const pushes: [string, NotifyPushPayload][] = [];
 
   await createNotificationCreatedHandler({
     repository: fake.repository,
     broadcast: { emit: async (input) => void frames.push(input) },
     queue: {
-      addEmail: async (jobId, payload) => void emails.push([jobId, payload]),
+      addEmailSchedule: async (jobId, payload) => void emails.push([jobId, payload]),
       addPush: async (jobId, payload) => void pushes.push([jobId, payload]),
     },
+    now: () => NOW,
   })({
     outboxId: OUTBOX,
     brandId: BRAND,
@@ -475,7 +484,7 @@ const deliver = async (fake: Fake) => {
 };
 
 describe('the notification.created handler', () => {
-  it('rings the bell in the recipient room, and queues one email and one push per browser', async () => {
+  it('rings the bell in the recipient room, schedules its email and queues one push per browser', async () => {
     const { frames, emails, pushes } = await deliver(
       fakeRepository({ delivery: delivered(), subscriptions: [subscription] }),
     );
@@ -489,7 +498,7 @@ describe('the notification.created handler', () => {
       },
     ]);
     expect(emails).toEqual([
-      [emailJobId(NOTIFICATION), { brandId: BRAND, notificationId: NOTIFICATION }],
+      [`notify.email_schedule.${NOTIFICATION}`, { brandId: BRAND, notificationId: NOTIFICATION }],
     ]);
     expect(pushes).toEqual([
       [
@@ -497,8 +506,30 @@ describe('the notification.created handler', () => {
         { brandId: BRAND, subscriptionId: SUBSCRIPTION, notificationId: NOTIFICATION },
       ],
     ]);
-    // BullMQ refuses a custom job id with a colon in it.
-    expect(emailJobId(NOTIFICATION)).not.toContain(':');
+  });
+
+  it('pushes nothing while the recipient is paused, and still schedules the email for the pacer to drop', async () => {
+    const { frames, emails, pushes } = await deliver(
+      fakeRepository({
+        delivery: delivered({ pausedUntil: new Date(NOW.getTime() + 60_000) }),
+        subscriptions: [subscription],
+      }),
+    );
+
+    expect(frames).toHaveLength(1);
+    expect(emails).toHaveLength(1);
+    expect(pushes).toEqual([]);
+  });
+
+  it('pushes again once the pause has ended', async () => {
+    const { pushes } = await deliver(
+      fakeRepository({
+        delivery: delivered({ pausedUntil: new Date(NOW.getTime() - 1) }),
+        subscriptions: [subscription],
+      }),
+    );
+
+    expect(pushes).toHaveLength(1);
   });
 
   it('uses only the channels the row was made with', async () => {
@@ -528,7 +559,7 @@ describe('the push test handler', () => {
     await createPushTestHandler({
       repository: fakeRepository({ subscriptions: [subscription] }).repository,
       queue: {
-        addEmail: async () => undefined,
+        addEmailSchedule: async () => undefined,
         addPush: async (jobId, payload) => void pushes.push([jobId, payload]),
       },
     })({
@@ -554,5 +585,29 @@ describe('the push test handler', () => {
 
   it('pushes nothing to a browser that has changed hands since', async () => {
     expect(await press(LINA)).toEqual([]);
+  });
+});
+
+describe('ticket-read bell invalidation', () => {
+  it('refreshes the recipient bell on the dedicated read frame', async () => {
+    const frames: RealtimeBroadcastInput[] = [];
+    await createNotificationReadHandler({
+      broadcast: { emit: async (frame) => void frames.push(frame) },
+    })({
+      outboxId: OUTBOX,
+      brandId: BRAND,
+      event: NOTIFICATION_EVENTS.read,
+      payload: { userId: OMAR, notificationId: NOTIFICATION },
+      tx: {} as DbTransaction,
+      log: silentLogger,
+    });
+    expect(frames).toEqual([
+      {
+        rooms: [userRoom(OMAR)],
+        event: REALTIME_EVENTS.notificationRead,
+        data: { brandId: BRAND, notificationId: NOTIFICATION },
+        seq: null,
+      },
+    ]);
   });
 });

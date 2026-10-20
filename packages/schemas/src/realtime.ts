@@ -111,6 +111,7 @@ export const REALTIME_EVENTS = {
   ticketMessage: 'ticket:message',
   attachmentChanged: 'attachment:changed',
   notificationCreated: 'notification:created',
+  notificationRead: 'notification:read',
   /** M4-04. A widget visitor is typing in, or has read up to a `seq` of, a conversation. */
   visitorTyping: 'ticket:visitor_typing',
   visitorRead: 'ticket:visitor_read',
@@ -259,6 +260,13 @@ export const notificationCreatedSchema = z.object({
 });
 export type NotificationCreated = z.infer<typeof notificationCreatedSchema>;
 
+/** A read-state change refreshes the bell without announcing a new notification or playing a sound. */
+export const notificationReadSchema = z.object({
+  brandId: z.uuid(),
+  notificationId: z.uuid(),
+});
+export type NotificationRead = z.infer<typeof notificationReadSchema>;
+
 /**
  * M4-04. The visitor on a widget conversation is typing, or stopped. Ephemeral
  * (§7): never stored, never replayed, and a client drops it on its own after
@@ -287,6 +295,7 @@ export const REALTIME_EVENT_PAYLOADS = {
   [REALTIME_EVENTS.attachmentChanged]: attachmentChangedSchema,
   [REALTIME_EVENTS.ticketViewing]: ticketViewingSchema,
   [REALTIME_EVENTS.notificationCreated]: notificationCreatedSchema,
+  [REALTIME_EVENTS.notificationRead]: notificationReadSchema,
   [REALTIME_EVENTS.visitorTyping]: visitorTypingSchema,
   [REALTIME_EVENTS.visitorRead]: visitorReadSchema,
 } as const;
@@ -326,6 +335,7 @@ export const ticketChangedEnvelopeSchema = realtimeEnvelopeSchema(ticketChangedS
 export const ticketMessageEnvelopeSchema = realtimeEnvelopeSchema(ticketMessageEventSchema);
 export const ticketViewingEnvelopeSchema = realtimeEnvelopeSchema(ticketViewingSchema);
 export const notificationCreatedEnvelopeSchema = realtimeEnvelopeSchema(notificationCreatedSchema);
+export const notificationReadEnvelopeSchema = realtimeEnvelopeSchema(notificationReadSchema);
 
 // ------------------------------------------------------------------ acks
 

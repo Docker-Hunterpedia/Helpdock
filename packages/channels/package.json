@@ -24,6 +24,7 @@
   "dependencies": {
     "@helpdock/net": "workspace:*",
     "@helpdock/schemas": "workspace:*",
+    "@helpdock/ui": "workspace:*",
     "grammy": "1.46.0",
     "imapflow": "2.0.7",
     "mailparser": "3.9.28",

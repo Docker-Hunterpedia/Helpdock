@@ -96,7 +96,9 @@ of `resolveBrandTheme`; leaving it out gives the stock Helpdock accent.
 `direction: 'rtl'` selects `tokens.typography.fontFamily.arabic` for UI text;
 `ltr` selects `sans`. Rebuild the theme when direction changes. CssBaseline
 publishes the three `--hd-font-*` variables and sets the admin body to 14/20,
-including when the admin composes its reduced-motion overrides.
+including when the admin composes its reduced-motion overrides. Content marked
+`lang="ar"` selects the Arabic face in an English UI too. `dir="auto"` alone
+does not supply a language; raw customer message bodies have no language field.
 
 ### Button variants
 

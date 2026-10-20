@@ -102,7 +102,7 @@ export function TimeCard({
               },
             )}
             variant="mono"
-            sx={{ flex: 1, fontSize: 20, lineHeight: '24px', fontWeight: 500 }}
+            sx={{ flex: 1, fontSize: 20, lineHeight: '28px', fontWeight: 500 }}
           >
             <bdi>{clock}</bdi>
           </Typography>

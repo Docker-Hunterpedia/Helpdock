@@ -389,6 +389,8 @@ export function createHelpdockTheme({ mode, direction, brand }: CreateHelpdockTh
           ),
           // CssBaseline otherwise uses body1 (the content size), not the admin base.
           body: typeStyle('body'),
+          // Match explicit language markers; inherited :lang(ar) would reset mono descendants.
+          ':lang(ar)[lang]': { fontFamily: 'var(--hd-font-arabic)' },
         },
       },
     },

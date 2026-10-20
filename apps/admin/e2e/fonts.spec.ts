@@ -79,3 +79,22 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     });
   });
 }
+
+// Explicit content language must select Arabic even under the English theme.
+test('uses the Arabic face for the article language option (#339)', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTicket(page, locale, 'HD-1030');
+  await page.getByRole('button', { name: t('tickets:assist.button') }).click();
+  await page
+    .getByRole('menuitem', { name: new RegExp(t('tickets:assist.menu.draftArticle')) })
+    .click();
+  const dialog = page.getByRole('dialog', { name: new RegExp(t('tickets:assist.draft.title')) });
+  await dialog.getByRole('combobox', { name: t('tickets:assist.draft.language') }).click();
+  const arabic = page.locator('[role="option"][lang="ar"]');
+  await expect(arabic).toBeVisible();
+  await expect(arabic).toHaveCSS('font-family', /IBM Plex Sans Arabic/);
+});

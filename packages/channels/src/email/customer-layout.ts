@@ -1,3 +1,5 @@
+import { fontFallbacks } from '@helpdock/ui/resolve';
+
 /**
  * The customer email of artboard `EmailCustomer` (M2-05, M2-06): one 600 px
  * column, table-based HTML with inline styles, and a plain-text part with the
@@ -59,10 +61,6 @@ const COLOURS = {
   muted: '#7D7669',
 } as const;
 
-const FONT = "'IBM Plex Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif";
-const FONT_AR = "'IBM Plex Sans Arabic','IBM Plex Sans',ui-sans-serif,system-ui,sans-serif";
-const MONO = "'IBM Plex Mono',ui-monospace,monospace";
-
 export const escapeHtml = (value: string): string =>
   value
     .replaceAll('&', '&amp;')
@@ -110,7 +108,7 @@ export const renderCustomerEmail = (
 ): { html: string; text: string } => {
   const accent =
     layout.accent !== undefined && HEX.test(layout.accent) ? layout.accent : DEFAULT_ACCENT;
-  const font = layout.dir === 'rtl' ? FONT_AR : FONT;
+  const font = fontFallbacks.sans;
   const lines = signatureLines(layout.signature);
   const initial = escapeHtml(Array.from(layout.brandName.trim())[0]?.toUpperCase() ?? 'H');
   const brandName = escapeHtml(layout.brandName);
@@ -156,7 +154,7 @@ export const renderCustomerEmail = (
       'padding:24px 32px;font-size:16px;line-height:24px',
     ),
     row(
-      `<div style="padding:12px 16px;border-radius:6px;background:${COLOURS.subtle};font-size:13px;line-height:20px;color:${COLOURS.body}"><span style="font-weight:500">${escapeHtml(reference.label)}</span> <bdi style="font-family:${MONO}">${escapeHtml(reference.token)}</bdi> · ${escapeHtml(reference.subject)}<br><span style="color:${COLOURS.secondary}">${escapeHtml(reference.hint)}</span></div>`,
+      `<div style="padding:12px 16px;border-radius:6px;background:${COLOURS.subtle};font-size:13px;line-height:20px;color:${COLOURS.body}"><span style="font-weight:500">${escapeHtml(reference.label)}</span> <bdi style="font-family:${fontFallbacks.mono}">${escapeHtml(reference.token)}</bdi> · ${escapeHtml(reference.subject)}<br><span style="color:${COLOURS.secondary}">${escapeHtml(reference.hint)}</span></div>`,
       'padding:0 32px',
     ),
     row(

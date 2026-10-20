@@ -103,7 +103,7 @@ export function MergeDialog({
     >
       <Box component="form" noValidate onSubmit={submit}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 3, paddingInlineEnd: 4 }}>
-          <DialogTitle id={titleId} sx={{ flex: 1, fontSize: 20, fontWeight: 600 }}>
+          <DialogTitle id={titleId} variant="h3" sx={{ flex: 1 }}>
             {t('tickets:merge.title')}
             <Typography
               variant="body2"

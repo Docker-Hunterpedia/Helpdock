@@ -40,7 +40,12 @@ describe('typography', () => {
       expect(theme.typography.body2.fontFamily).toBe(family);
       expect(theme.typography.mono.fontFamily).toBe(tokens.typography.fontFamily.mono);
       expect(theme.components?.MuiCssBaseline?.styleOverrides).toMatchObject({
-        ':root': { '--hd-font-mono': tokens.typography.fontFamily.mono },
+        ':root': {
+          '--hd-font-sans': tokens.typography.fontFamily.sans,
+          '--hd-font-arabic': tokens.typography.fontFamily.arabic,
+          '--hd-font-mono': tokens.typography.fontFamily.mono,
+        },
+        ':lang(ar)[lang]': { fontFamily: 'var(--hd-font-arabic)' },
         body: { fontSize: '14px', lineHeight: '20px' },
       });
     },

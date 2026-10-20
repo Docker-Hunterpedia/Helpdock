@@ -399,7 +399,11 @@ export function TotpEnrolment(): ReactNode {
         </Typography>
 
         {enrolment.isError ? (
-          <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
+          <AlertBanner tone="danger">
+            {isAuthError(enrolment.error) && enrolment.error.code === 'totp-already-enabled'
+              ? t('auth:enrolment.alreadyOn')
+              : t('auth:unavailable')}
+          </AlertBanner>
         ) : null}
 
         {uri === '' ? (

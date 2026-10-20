@@ -879,8 +879,8 @@ describe.skipIf(!hasDocker)('a passkey as the second factor', () => {
 
       const enrol = await call('POST', '/api/auth/totp/enrol', undefined, token);
 
-      expect(enrol.statusCode).toBe(429);
-      expect(authOf(enrol).code).toBe('unavailable');
+      expect(enrol.statusCode).toBe(409);
+      expect(authOf(enrol).code).toBe('totp-already-enabled');
       expect(await totpOf(admin.id)).toMatchObject({
         totpEnabled: true,
         totpSecretEncrypted: before,

@@ -462,6 +462,8 @@ const authErrorCodes = [
   'passkey-limit',
   /** This authenticator is already registered for the account (M18-02). */
   'passkey-duplicate',
+  /** An authenticator app is already on; staging a new secret would replace it with no proof (M18-03). */
+  'totp-already-enabled',
   /** A passkey assertion that did not verify, as a second factor or when enrolling (M18-03). Carries `attemptsLeft`. */
   'passkey-invalid',
 ] as const;

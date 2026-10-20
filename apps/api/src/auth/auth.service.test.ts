@@ -2879,7 +2879,9 @@ describe('a passkey as the second factor (M18-03)', () => {
       staff.add(user, 'admin');
       const before = staff.users.get(user.id)?.totpSecretEncrypted;
 
-      await expect(codeOf(service.enrolTotp(user.id))).resolves.toEqual({ code: 'unavailable' });
+      await expect(codeOf(service.enrolTotp(user.id))).resolves.toEqual({
+        code: 'totp-already-enabled',
+      });
 
       expect(staff.users.get(user.id)).toMatchObject({
         totpEnabled: true,
@@ -2926,6 +2928,15 @@ describe('a passkey as the second factor (M18-03)', () => {
 
       expect(issued.session.user.email).toBe('lina@helpdock.com');
       expect(audit.entries.at(-1)?.meta).toMatchObject({ method: 'sso', secondFactor: 'passkey' });
+    });
+
+    it('does not offer the passkey after a local first factor, which verify would refuse', async () => {
+      const local = await start({ totp: true });
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+
+      await expect(signIn({ email: local.user.email })).resolves.toMatchObject({
+        factors: { totp: true, passkey: false },
+      });
     });
 
     it('refuses a local first factor before it mints a ceremony or costs an attempt', async () => {

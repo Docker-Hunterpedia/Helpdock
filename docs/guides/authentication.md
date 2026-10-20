@@ -246,9 +246,19 @@ in the browser as SVG, because the `otpauth://` URI is a credential and asking a
 server to draw it would put it in a second place. [Staff and
 roles](staff-and-roles.md#two-factor-enrolment) walks through it.
 
-`POST /api/auth/totp/enrol` never replaces an authenticator that is on (`unavailable`):
-changing one is not a step-up the plan defines, so the way is to turn it off with a
-live code and enrol again.
+`POST /api/auth/totp/enrol` never replaces an authenticator that is on: it answers
+`409 totp-already-enabled`. Changing one is not a step-up the plan defines, so the
+way is to turn it off with a live code and enrol again.
+
+**Known gap: replacing the app of an account that must have a second factor.**
+For such an account (an Admin, an install admin, `auth.require2fa`) whose only
+factor is the app, turning it off is refused and so is enrolling over it, so the
+app cannot be rotated in place. The workaround is to add a passkey, turn the app
+off with a live code, then enrol the new app. With a lost phone only the recovery
+codes remain. The path that was removed was the vulnerability itself (a bare
+session could switch the required app off with no proof), and no screen ever
+offered it. An atomic "Replace authenticator" (current code or recovery code, plus
+the new code) is tracked in the follow-up issue.
 
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed

@@ -505,7 +505,7 @@ export class AuthService {
    * lock themselves out by scanning a code that did not save.
    */
   async enrolTotp(userId: string, tx?: Queryable): Promise<TotpEnrolment> {
-    return this.#stageSecret(await this.#requireUser(userId, tx), 'unavailable', tx);
+    return this.#stageSecret(await this.#requireUser(userId, tx), 'totp-already-enabled', tx);
   }
 
   /** Enables the second factor and hands over the recovery codes, once. */
@@ -1673,7 +1673,7 @@ export class AuthService {
           ...(ssoConnectionId === undefined ? {} : { ssoConnectionId }),
         }),
         email: user.email,
-        factors: await this.#factorsOf(user, passkeyCount),
+        factors: await this.#factorsOf(user, passkeyCount, method),
       };
     }
 
@@ -1738,11 +1738,18 @@ export class AuthService {
   }
 
   /** What a second-factor screen may offer this account right now. */
-  async #factorsOf(user: StaffUser, passkeyCount: number): Promise<SecondFactorOptions> {
+  async #factorsOf(
+    user: StaffUser,
+    passkeyCount: number,
+    method: SignInMethod,
+  ): Promise<SecondFactorOptions> {
     // A passkey the install cannot use at the moment (its address moved) is
     // hidden only where an authenticator app can stand in for it.
     const usable = !user.totpEnabled || (await this.#parts.webauthn.status()).state === 'available';
-    return { totp: user.totpEnabled, passkey: passkeyCount > 0 && usable };
+    // Offer only what verify accepts: under SSO enforcement a local first factor
+    // (break-glass) takes a code, never a passkey (ADR 0053 opens it later).
+    const allowed = method === 'sso' || !(await this.#parts.ssoPolicy.enforced());
+    return { totp: user.totpEnabled, passkey: passkeyCount > 0 && usable && allowed };
   }
 
   /**
@@ -1813,7 +1820,7 @@ export class AuthService {
   /** Stages a fresh secret, for both ways into enrolment. */
   async #stageSecret(
     user: StaffUser,
-    refusal: 'unavailable' | 'challenge-expired',
+    refusal: 'totp-already-enabled' | 'challenge-expired',
     tx?: Queryable,
   ): Promise<TotpEnrolment> {
     const secret = newTotpSecret();

@@ -606,8 +606,14 @@ Backlog or never:
   - **Changing an enabled authenticator** needs a step-up the plan does not
     define, so it is refused: `POST /api/auth/totp/enrol` and the sign-in
     enrolment never stage over an app that is on (turn it off with a live code,
-    then enrol again). An enrolment challenge is honoured only while the account
-    has no second factor.
+    then enrol again), answering `409 totp-already-enabled`. An enrolment
+    challenge is honoured only while the account has no second factor.
+  - **Open item: rotating the app of a required account.** An Admin whose only
+    factor is the app can neither turn it off nor enrol over it. Workaround: add
+    a passkey, turn the app off with a code, enrol the new app; with a lost
+    phone only recovery codes remain. The removed path was the vulnerability and
+    no screen offered it. An atomic "Replace authenticator" (current code or
+    recovery code, plus the new code) is the follow-up issue.
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom

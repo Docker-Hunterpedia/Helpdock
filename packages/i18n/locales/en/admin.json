@@ -95,6 +95,7 @@
       "assigned": {
         "person": "Assigned to you by {{actor}}",
         "rule": "Assigned to you by a rule",
+        "sla": "Assigned to you by SLA escalation",
         "round_robin": "Assigned to you by round-robin",
         "skill_based": "Assigned to you by skill"
       },

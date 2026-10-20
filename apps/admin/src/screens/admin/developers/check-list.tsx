@@ -1,6 +1,7 @@
 import { Box, Checkbox, Typography } from '@mui/material';
 import { type ReactNode, useId } from 'react';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { MonoTag } from './mono-tag.tsx';
 
 /**
  * A fieldset of checkboxes, each a mono identifier over a caption: the scopes
@@ -15,7 +16,11 @@ export function CheckList<Value extends string>({
   onChange,
 }: {
   readonly legend: string;
-  readonly options: readonly { readonly value: Value; readonly hint: string }[];
+  readonly options: readonly {
+    readonly value: Value;
+    readonly hint: string;
+    readonly badge?: string | undefined;
+  }[];
   readonly selected: readonly Value[];
   readonly error?: string | undefined;
   onChange(next: readonly Value[]): void;
@@ -55,19 +60,26 @@ export function CheckList<Value extends string>({
               sx={{ padding: 0, marginBlockStart: '2px' }}
             />
             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography
-                component="label"
-                htmlFor={inputId}
-                dir="ltr"
-                sx={{
-                  fontFamily: 'var(--hd-font-mono, monospace)',
-                  fontSize: 13,
-                  lineHeight: '20px',
-                  alignSelf: 'flex-start',
-                }}
-              >
-                {option.value}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography
+                  component="label"
+                  htmlFor={inputId}
+                  dir="ltr"
+                  sx={{
+                    fontFamily: 'var(--hd-font-mono, monospace)',
+                    fontSize: 13,
+                    lineHeight: '20px',
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  {option.value}
+                </Typography>
+                {option.badge === undefined ? null : (
+                  <Box component="span">
+                    <MonoTag prose>{option.badge}</MonoTag>
+                  </Box>
+                )}
+              </Box>
               <Typography id={`${inputId}-hint`} variant="caption" sx={{ color: 'text.secondary' }}>
                 {option.hint}
               </Typography>

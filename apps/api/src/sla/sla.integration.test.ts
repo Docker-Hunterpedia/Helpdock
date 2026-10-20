@@ -1323,6 +1323,45 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       });
     });
 
+    it('publishes SLA reassignment and delivers its assignment notification', async () => {
+      const saved = await call<SlaPolicy>('PUT', `${brandPath()}/sla-policies/${policy.id}`, ada, {
+        ...policyBody(),
+        escalation: [{ atPercent: 100, actions: [{ type: 'reassign', userId: sam.id }] }],
+      });
+      expect(saved.status).toBe(200);
+      const { ticket } = await createTicket();
+      const clock = await clockOf(ticket.id, 'first_response');
+      const payload = {
+        brandId: seeded.brandId,
+        ticketId: ticket.id,
+        clock: 'first_response' as const,
+        stepPercent: 100,
+      };
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        fireSlaTimer(tx, slaDeps(), payload, new Date((clock.dueAt?.getTime() ?? 0) + MINUTE)),
+      );
+      const assigned = await dispatchRows(ticket.id, ['ticket.assigned']);
+      expect(assigned.map((row) => row.payload)).toEqual([
+        expect.objectContaining({ assigneeId: sam.id, assignedBy: 'sla', actorId: null }),
+      ]);
+      const notices = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(notifications).where(eq(notifications.ticketId, ticket.id)),
+      );
+      expect(notices).toEqual([
+        expect.objectContaining({
+          userId: sam.id,
+          kind: 'assigned',
+          detail: { assignedBy: 'sla' },
+        }),
+      ]);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        fireSlaTimer(tx, slaDeps(), payload, new Date((clock.dueAt?.getTime() ?? 0) + 2 * MINUTE)),
+      );
+      expect(
+        (await outboxOf('ticket.assigned')).filter((row) => row.ticketId === ticket.id),
+      ).toHaveLength(1);
+    });
+
     it('breaches the first response, escalates to the person the step names, and tells them', async () => {
       const saved = await call<SlaPolicy>('PUT', `${brandPath()}/sla-policies/${policy.id}`, ada, {
         ...policyBody(),

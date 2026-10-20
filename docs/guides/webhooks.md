@@ -20,8 +20,8 @@ Both take the same requests, except the two the page alone uses:
 
 | Request | What it does |
 |---|---|
-| `POST …/webhooks` | `{ "url", "events": [...], "description"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`). An API key that lacks the read scope of an event (`tickets:read`, `contacts:read` or `articles:read`, see [the API guide](api.md#scopes)) answers `403` with `webhook-event-scope`; so do `PATCH`, `rotate-secret` and `replay` on an endpoint whose events exceed the key's scopes |
-| `PATCH …/webhooks/{webhookId}` | Change the URL, events or description; `{ "enabled": true }` switches an endpoint back on |
+| `POST …/webhooks` | `{ "url", "events": [...], "description"?, "includeInternalNotes"? }`. The answer carries `secret` — **the only time it is shown**. A refused URL answers `400` with `error.webhooks.reason` (`webhook-destination-blocked`, with `address`, or `webhook-https-required`). An API key that lacks the read scope of an event (`tickets:read`, `contacts:read` or `articles:read`, see [the API guide](api.md#scopes)) answers `403` with `webhook-event-scope`; so do `PATCH`, `rotate-secret` and `replay` on an endpoint whose events exceed the key's scopes |
+| `PATCH …/webhooks/{webhookId}` | Change the URL, events, description or `includeInternalNotes`; `{ "enabled": true }` switches an endpoint back on |
 | `DELETE …/webhooks/{webhookId}` | Removes the endpoint and its delivery log |
 | `POST …/webhooks/{webhookId}/rotate-secret` | A new secret, shown once; deliveries from now on are signed with it |
 | `GET …/webhooks/{webhookId}/deliveries` | The delivery log, newest first |
@@ -42,8 +42,23 @@ The secret is stored encrypted under `APP_MASTER_KEY`. Every change is in the au
 | `contact.created` | A contact is created: by an agent, the API, or a channel recognising somebody new | `contact` |
 | `csat.received` | A customer rates a closed conversation | `survey`: `id`, `ticketId`, `rating`, `comment`, `ratedAt` |
 | `article.published` | A help center article is published, in one language | `article`: `id`, `slug`, `locale`, `title`, `visibility`, `publishedAt` |
+| `ticket.assigned` | A person, rule, SLA escalation or automatic routing assigns a ticket | `ticket`, `assigneeId`, `assignedBy` (`person`, `rule`, `round_robin`, `skill_based`, `sla`), nullable `actorId` |
+| `ticket.status_changed` | A ticket transitions to another status, including close, reopen, spam and merge | `ticket`, `previousStatusId`, `statusId` |
+| `ticket.merged` | A secondary ticket is merged into a primary; emitted once for the secondary | `ticket` (secondary), `mergedIntoId`, `previousDepartmentId` |
+| `message.created` | A new public reply (including AI) or internal note is stored, including the first message | `message`: `id`, `ticketId`, `seq`, `kind`, `authorType`, nullable `authorId`, `channel`, `createdAt`, `public`, optional `bodyHtml`, `bodyText` |
+| `contact.updated` | A receiver-visible contact field actually changes (see below) | `contact` |
+| `contact.merged` | A contact is merged into a survivor | `contact` (survivor), `mergedContactId` |
+| `account.created` | A customer company is created | `account`: `id`, `name`, nullable `domain`, `custom`, `createdAt`, `updatedAt` |
+| `account.updated` | A customer company is edited | Same `account` shape as `account.created` |
 
-`ticket`, `message` and `contact` have the shapes the API answers with (`/api/docs`).
+
+`contact.updated` fires when name, externalId, locale, timezone or identities (kind, value, verified) change through profile edits/upserts, identity addition/removal or channel verification and transfer, signed widget identity updates, widget locale capture, Meta profile name fill, Telegram language selection or web form locale capture. Undoing a contact merge emits `contact.updated` for the survivor when its identities change and for the restored contact; it does not emit `contact.created`. Repeating the same values emits nothing; timestamps alone do not trigger it. Account membership, custom fields and internal notes are not in the v1 contact payload and changes to them emit nothing. Imports remain silent; merges emit `contact.merged`; erasure removes retained deliveries rather than publishing personal data.
+
+`ticket`, `ticket.replied.message` and `contact` have the shapes the API answers with (`/api/docs`). The smaller `message.created.message` shape is listed above; it has no attachment metadata, email headers or AI provenance. All event payloads are available in the OpenAPI document's `webhooks` section.
+
+The eight events introduced in **1.1 (M14-28)** carry `departmentId` beside `brandId` in the envelope. Ticket and message events carry the department at the change; contacts and accounts are brand-scoped and carry `null`. Transition, assignment and merge references come from the change's transaction; resource views are read when the outbox subscriber creates the delivery. Each change and its outbox event commit or roll back together. Historical imports and copied split messages do not emit `message.created`; system thread announcements do not either. No configuration-object events are published.
+
+The event picker groups Tickets, Messages, Contacts and accounts, and Other events (CSAT and articles). New 1.1 events have a neutral “new” tag. **Include internal notes in message.created** is an explicit per-endpoint opt-in, off by default. Set `includeInternalNotes: true` on create or update to include note bodies; `false` revokes it. A note still arrives with `public: false` and `authorType`, but **both `bodyHtml` and `bodyText` are absent** when off. Public replies have `public: true` and retain both bodies. `ticket.replied` continues to exclude internal notes. Enabling this flag does not restore bodies already omitted from frozen deliveries.
 
 **`ping`** is not an event an endpoint subscribes to: it is what "Send test event" sends, to that endpoint alone, whatever its events. Its `data` is `webhook`: the endpoint's `id` and `url`. A receiver should answer it `2xx` and otherwise ignore it.
 
@@ -69,7 +84,7 @@ X-Helpdock-Signature: t=1790000000,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a
 }
 ```
 
-`id` is the event's. It is the same on every retry and on a replay, so **dedupe on it**: a delivery is at least once. The body is frozen when the event happens; a retry sends the same bytes.
+`id` is the event's. It is the same on every retry and on a replay, so **dedupe on it**: a delivery is at least once. The body is frozen when the outbox subscriber creates the delivery. Retries preserve it, except that revoking the notes opt-in removes note bodies from queued sends and replays.
 
 ## Verifying the signature
 

@@ -220,6 +220,7 @@ Embeddings: separate configurable OpenAI-compatible endpoint (OpenAI, Voyage, lo
 
 ### 4.12 Outbound webhooks
 - Events: `ticket.created`, `ticket.updated`, `ticket.replied`, `ticket.closed`, `contact.created`, `csat.received`, `article.published`.
+- 1.1 (M14-28) adds `ticket.assigned`, `ticket.status_changed`, `ticket.merged`, `message.created`, `contact.updated`, `contact.merged`, `account.created` and `account.updated`. Per-endpoint `includeInternalNotes` defaults off; notes are delivered without either body unless opted in. Ticket/message events carry the department; contact/account events are brand-scoped. No configuration-object events.
 - HMAC-SHA256 signature header, retries with backoff, delivery log, replay.
 
 ### 4.13 Internationalization

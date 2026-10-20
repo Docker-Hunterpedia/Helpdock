@@ -16,7 +16,7 @@ import { and, arrayContains, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm
  */
 
 export type NewWebhook = Pick<WebhookRow, 'brandId' | 'url' | 'description' | 'events' | 'secret'> &
-  Partial<Pick<WebhookRow, 'createdBy'>>;
+  Partial<Pick<WebhookRow, 'createdBy' | 'includeInternalNotes'>>;
 
 export type WebhookChanges = Partial<
   Pick<
@@ -25,6 +25,7 @@ export type WebhookChanges = Partial<
     | 'description'
     | 'events'
     | 'enabled'
+    | 'includeInternalNotes'
     | 'secret'
     | 'secretRotatedAt'
     | 'consecutiveFailures'
@@ -44,6 +45,7 @@ export interface NewDelivery {
 
 /** What one attempt left behind. */
 export interface AttemptRecord {
+  readonly payload?: Record<string, unknown>;
   readonly status: WebhookDeliveryRow['status'];
   readonly attempts: number;
   readonly responseStatus: number | null;
@@ -221,6 +223,7 @@ export class WebhooksRepository {
     await tx
       .update(webhookDeliveries)
       .set({
+        ...(record.payload === undefined ? {} : { payload: record.payload }),
         status: record.status,
         attempts: record.attempts,
         responseStatus: record.responseStatus,

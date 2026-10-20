@@ -1004,6 +1004,17 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
           .where(eq(telegramChats.chatId, String(chat))),
       );
       expect(chatRow?.languageChosenAt).toBeInstanceOf(Date);
+      const profileEvents = () =>
+        withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select()
+            .from(outbox)
+            .where(
+              sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${chatRow?.contactId ?? ''}`,
+            ),
+        );
+      expect(await profileEvents()).toHaveLength(1);
+
       expect(telegram.calls.slice(before).map((entry) => [entry.method, entry.body])).toEqual([
         ['answerCallbackQuery', { callback_query_id: 'cq-ar' }],
         ['editMessageText', { chat_id: String(chat), message_id: 7, text: 'اللغة: العربية' }],
@@ -1015,6 +1026,8 @@ describe.skipIf(!hasDocker)('the Telegram channel', () => {
           },
         ],
       ]);
+      await pressLanguage(chat, 'ar', 7, 'cq-ar-repeat');
+      expect(await profileEvents()).toHaveLength(1);
     });
 
     it('welcomes with the bot’s own text for the language chosen', async () => {

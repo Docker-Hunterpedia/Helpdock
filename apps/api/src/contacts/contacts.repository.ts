@@ -32,6 +32,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import { withContactProfileChange } from './contact-profile-change.js';
 
 /**
  * Every read and write the contacts module makes, through the transaction the
@@ -322,13 +323,15 @@ export class ContactsRepository {
       readonly externalId?: string | null;
     },
   ): Promise<ContactRow | undefined> {
-    const updated = await tx
-      .update(contacts)
-      .set(changes)
-      .where(eq(contacts.id, contactId))
-      .returning();
+    return withContactProfileChange(tx, contactId, async () => {
+      const updated = await tx
+        .update(contacts)
+        .set(changes)
+        .where(eq(contacts.id, contactId))
+        .returning();
 
-    return updated[0];
+      return updated[0];
+    });
   }
 
   // ------------------------------------------------------------------

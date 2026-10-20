@@ -178,7 +178,7 @@ export const notificationDetailSchema = z.object({
   /** `sla_warning` and `escalated`: the step that fired, as a percentage of the target. */
   stepPercent: z.int().nonnegative().optional(),
   /** `assigned`: who chose the assignee. */
-  assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based']).optional(),
+  assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based', 'sla']).optional(),
   /** `escalated` by a workflow rule's "notify" action (M3-03): the rule. */
   ruleId: z.uuid().optional(),
   /** Its message, when the rule has one of its own. */

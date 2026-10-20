@@ -10,6 +10,7 @@ import type {
 import { CONTACT_PAGE_SIZE } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
+import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { writeContactAudit } from './audit.js';
 import { ContactFailure } from './contact-failure.js';
 import { accountView, byContact, summaryView } from './contact-view.js';
@@ -97,6 +98,10 @@ export class AccountsService {
       meta: { hasDomain: domain !== null },
     });
 
+    await enqueueWebhookEvent(tx, brandId, 'account.created', {
+      accountId: account.id,
+      departmentId: null,
+    });
     return accountView(account, 0);
   }
 
@@ -141,6 +146,7 @@ export class AccountsService {
       meta: { fields: Object.keys(changes) },
     });
 
+    await enqueueWebhookEvent(tx, brandId, 'account.updated', { accountId, departmentId: null });
     const counts = await this.#repository.contactCounts(tx, [accountId]);
 
     return accountView(updated, counts.get(accountId) ?? 0);

@@ -1,6 +1,7 @@
 import {
   API_SCOPES,
   type ApiScope,
+  additionalWebhookDataSchemas,
   errorResponseSchema,
   IDEMPOTENCY_KEY_HEADER,
   idempotencyKeySchema,
@@ -29,6 +30,7 @@ import {
   v1WebhookDeliveryParamSchema,
   v1WebhookParamSchema,
   webhookCreateRequestSchema,
+  webhookDataSchemas,
   webhookDeliveryListSchema,
   webhookDeliveryQuerySchema,
   webhookDeliverySchema,
@@ -399,6 +401,44 @@ export const buildOpenApiDocument = () => {
     },
     tags: [{ name: 'Tickets' }, { name: 'Contacts' }, { name: 'Articles' }, { name: 'Webhooks' }],
     paths,
+    webhooks: Object.fromEntries(
+      Object.entries(webhookDataSchemas).map(([event, dataSchema]) => [
+        event,
+        {
+          post: {
+            summary: event,
+            description:
+              'Signed outbound POST. M14-28 events carry departmentId (null for brand-scoped contacts/accounts). message.created omits note bodies unless the endpoint opts in with includeInternalNotes.',
+            requestBody: {
+              required: true,
+              content: json(
+                jsonSchema(
+                  z.object({
+                    id: z.uuid(),
+                    event: z.literal(event),
+                    createdAt: z.iso.datetime(),
+                    brandId: z.uuid(),
+                    ...(event in additionalWebhookDataSchemas
+                      ? {
+                          departmentId:
+                            event.startsWith('contact.') || event.startsWith('account.')
+                              ? z.null()
+                              : z.uuid(),
+                        }
+                      : {}),
+                    data: dataSchema,
+                  }),
+                  'output',
+                ),
+              ),
+            },
+            responses: {
+              '200': { description: 'Any 2xx acknowledges delivery; other responses are retried.' },
+            },
+          },
+        },
+      ]),
+    ),
     components: {
       securitySchemes: {
         apiKey: {

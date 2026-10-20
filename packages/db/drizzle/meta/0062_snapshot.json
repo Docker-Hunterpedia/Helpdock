@@ -1,5 +1,5 @@
 {
-  "id": "640b2468-0bad-4fae-a2a2-5fa1ded5e51a",
+  "id": "d09cb1b3-52db-4f89-9a4e-a5ced6475adf",
   "prevId": "96ba23f0-03ac-4ac4-bd16-24b64cab3638",
   "version": "7",
   "dialect": "postgresql",
@@ -14622,13 +14622,6 @@
           "type": "bytea",
           "primaryKey": false,
           "notNull": false
-        },
-        "single_key_shortcuts": {
-          "name": "single_key_shortcuts",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         }
       },
       "indexes": {
@@ -15305,6 +15298,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "include_internal_notes": {
+          "name": "include_internal_notes",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "enabled": {
           "name": "enabled",

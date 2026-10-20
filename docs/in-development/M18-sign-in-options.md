@@ -455,7 +455,7 @@ Backlog or never:
 | M18-02 | **Register and manage passkeys.** `GET/POST/PATCH/DELETE /api/me/passkeys` (begin/finish, rename, remove) with step-up (password, TOTP or existing passkey; 5-per-15-min budget), at most 10 per account, `excludeCredentials`, last-factor refusal, audit `auth.passkey.added/.renamed/.removed`, `securityChange` email (en/ar) | ASVS 2.2.3, 2.5.5, 3.7.1 | 2.5 | M18-01 |
 | M18-03 | **Passkey as a second factor.** The challenge answers `POST /api/auth/passkey/second-factor/{options,verify}` beside TOTP and recovery codes, sharing the three-attempt budget and lock; the enrolment challenge accepts a passkey (`second-factor-enrolment-required`, old code aliased); `isSecondFactorRequired` / "has a factor" = TOTP OR passkey; recovery codes issued with the first factor of either kind; redraw by TOTP or passkey; admin "reset second factor" removes passkeys too | ASVS 4.3.1, 2.5.7, 2.6.1 | 3 | M18-01, M18-02 |
 | M18-04 | **Passwordless sign-in.** `POST /api/auth/passkey/{options,verify}`: discoverable, UV required, no `allowCredentials`, same refusal (`invalid-credentials`) for unknown credential, bad signature, deactivated or no-brand account; per-IP budget shared with sign-in; counter check; `last_used_at`; audit `method: passkey, secondFactor: passkey-uv`; refused under SSO enforcement (`sso-required`) | ASVS 2.2.1, 3.2.1; D §1.6 | 2.5 | M18-01, M18-03 |
-| M18-05 | **SSO and break-glass integration.** The break-glass form accepts password plus fresh TOTP **or** passkey (UV) (pending the owner, D-50); the enforcement precondition becomes TOTP or passkey; pending challenges recheck enforcement; ADR 0053 (amends ADR 0026). TODO: change the Settings › Single sign-on break-glass copy (`sso:enforcementHint`, `sso:breakGlassHint`, `sso:ineligible`) to "an authenticator app or a passkey" in this deliverable, not before (`Admin/Settings-SSO-M18`) | ADR 0026 (10), ADR 0053 | 1.5 | M18-03, M18-04 |
+| M18-05 | **SSO and break-glass integration.** The break-glass form accepts password plus fresh TOTP **or** passkey (UV) (D-50, accepted); the enforcement precondition becomes TOTP or passkey; pending challenges recheck enforcement; ADR 0053 (amends ADR 0026). The Settings › Single sign-on break-glass copy (`sso:enforcementHint`, `sso:breakGlassHint`, `sso:ineligible`) says "an authenticator app or a passkey" (`Admin/Settings-SSO-M18`) | ADR 0026 (10), ADR 0053 | 1.5 | M18-03, M18-04 |
 | M18-06 | **Admin passkey screens.** Sign-in: a "Sign in with a passkey" button and conditional mediation on the email field (`autocomplete="username webauthn"`), with cancelled, unsupported and RP-changed states. Second-factor screen: a passkey option. Enrolment chooser. Security › Passkeys card with add, rename and remove dialogs and a step-up dialog. Settings › Authentication: passkeys status and RP ID. `@simplewebauthn/browser` 14.0.0 in the admin bundle only. Lucide `KeyRound`. en/ar | DESIGN §6, §10 | 4 | M18-02 to M18-05 |
 | M18-07 | **OAuth identities bound by subject.** `user_oauth_identities` (install scope); first-link-only rules per provider (Google `hd`/gmail, GitHub never by email); `oauth-link-required`; connect and disconnect from Security › Sign-in methods with step-up and email; binding at invitation acceptance; `oauth.google.allowedDomains`; migration behaviour for 1.0 users; audit `auth.oauth.linked/.unlinked`; ADR 0051. The binding itself lands early as a 1.0.1 security fix; this deliverable keeps what that fix leaves | #219 rules; D §12; ADR 0051 | 3.5 | — |
 | M18-08 | **Microsoft sign-in.** A third built-in provider via `openid-client` 6.x + `safeFetch`; `oauth.microsoft.{tenantId,clientId,clientSecret}` (secret write-only, `HD_*` pinnable); an exact issuer, a `tid` check, `xms_edov` for first link; provider mark (DESIGN §5 amendment); a stand-in IdP for tests | A §7; D §13 | 2.5 | M18-07 |
@@ -590,8 +590,8 @@ Backlog or never:
     passkey as a second factor. A reset action is a feature of its own and is
     not built here.
   - **Under SSO enforcement** a passkey second factor and a passkey enrolment
-    answer `sso-required`, as a recovery code does: the break-glass door takes a
-    code until M18-05 (ADR 0053) opens it to a passkey.
+    answer `sso-required`, as a recovery code does (M18-05 opened the
+    break-glass door to a passkey: see its entry).
   - **Redrawing with a passkey has an API and no screen.** The Security page's
     redraw button still asks for a code; no artboard shows a passkey option
     there, and one is left to M18-06. The first passkey added from the
@@ -690,13 +690,47 @@ Backlog or never:
   link. The connection schema also refuses `{`/`}` in an OIDC issuer. ADR 0026
   and DOMAIN-RULES §12 record it.
 
-  The break-glass copy stays as it is until M18-05 (see its row).
+- [x] **M18-05** SSO and break-glass integration ([#279](https://github.com/Docker-Hunterpedia/Helpdock/issues/279)).
+  `apps/api/src/sso/break-glass.ts` is the one place that says what enforcement
+  allows: `enforcementAllows(firstFactor, secondFactor)` (after an SSO
+  assertion: an app code, a passkey or none; after a password: an app code or a
+  passkey; nothing else, and no other first factor), `isBreakGlassEligible`
+  (an active install admin with a password and an app or a passkey) and
+  `passkeyCounts`. `SsoSignInPolicy.assertLocal`, the settings validation and
+  the Settings picker's `eligible` flag all use the eligibility rule, and
+  `allows`/`assertAllowed` back every second-factor path: app code, recovery
+  code, trusted browser, session opening, `factors` on the challenge, and the
+  passkey options, verify and enrolment. A break-glass passkey ceremony uses the
+  existing `break-glass` purpose, so user verification is required; a ceremony
+  minted before enforcement came on is refused when it is checked. A pending
+  challenge rechecks the list and the factor when it completes. The copy on
+  Settings › Single sign-on (`sso:enforcementHint`, `sso:breakGlassHint`,
+  `sso:ineligible`) now says an authenticator app or a passkey, per
+  `Admin/Settings-SSO-M18`. Tests: `break-glass.test.ts` (the table over every
+  first and second factor, eligibility), `auth.service.test.ts` (offer, user
+  verification, stale ceremony, recovery code), `break-glass.integration.test.ts`
+  (enforcement on and off x break-glass, listed, ordinary and unlisted admin x
+  app code, passkey, passkey without user verification, passwordless passkey,
+  recovery code, trusted browser, magic link and pending challenges, over HTTP
+  on real Postgres and Redis), `sso.integration.test.ts` (settings validation
+  and the picker flag) and `sso.spec.ts` in `en` and `ar`. Gaps:
+  - The SSO-first column is covered by the table and the unit scenarios, and
+    by the existing identity integration tests, not by a new round trip against
+    an IdP. A recovery code after an SSO assertion stays refused under
+    enforcement, as in 1.0.
+  - A break-glass admin who holds only a passkey cannot sign in while passkeys
+    are paused after an `APP_URL` change; the SSO guide says to keep an app on
+    the account too, or to unset `HD_SSO_ENFORCED`.
+  - There is no real-api Playwright spec for break-glass: the second-factor
+    screen is unchanged and server-driven, and a spec would need an SSO
+    connection and enforcement set up against the real api.
 - [ ] The other deliverables.
 
 ## Task status
 
 | Id | Status | Notes |
 |---|---|---|
+| M18-05 | in review (#279) | Done: see the Progress entry. ADR 0053 is implemented; D-50 was accepted on 2026-10-20. |
 | M18-08 | in review (#282) | Done: see the Progress entry. Tests: `oauth-microsoft.service.test.ts` (wrong `tid`, wrong issuer, wrong audience and nonce, guest, no `xms_edov`, replayed state, other browser, other provider's state, discovery that lies), `oauth-microsoft.integration.test.ts` (the same over HTTP against Postgres and Redis, with binding, connect, invitation, a tenant change that strands the old identities and their lazy replacement (first link, connect, rollback, Microsoft-only), and personal accounts on and off), `microsoftIsAuthoritative`, the settings service and schemas, the admin card, sign-in, refusal and invitation screens, Playwright in `en` and `ar`. Screenshot baselines of Settings are regenerated by the Screenshots workflow. |
 | M18-03 | in review (#277) | Done: see Progress. Not built: a screen for redrawing the recovery codes with a passkey (API only), and the admin "reset second factor" action, which does not exist in 1.0. |
 | M18-07 | in review (#281, PR #321) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in, connect and invitation, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input refusing gmail.com); the `Admin/Login-Providers` callback screens; the card renamed Sign-in methods with "last used" per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout; binding at invitation acceptance (`Admin/AcceptInvite-Providers`, `oauth-invite-mismatch`, `invite-expired`); migration `0059_oauth_identity_use` (`linked_via`, `last_used_at`). Not built, by design: the `issuer` column (ADR 0051, "No issuer column": one issuer per provider per install). Left to other deliverables: passkey step-up and passkey-as-first-factor (M18-02/M18-06), Microsoft (M18-08). |
@@ -1082,9 +1116,9 @@ DESIGN.md changes in the same PRs:
       factor.
 - [ ] After a password, a passkey answers the second factor. A recovery code
       still works. Three failures lock as before.
-- [ ] With SSO enforced, passkey sign-in is refused for ordinary staff. The
+- [x] With SSO enforced, passkey sign-in is refused for ordinary staff. The
       break-glass admin signs in with password plus TOTP, and with password plus
-      passkey if D-50 is accepted.
+      a user-verified passkey (D-50, accepted).
 - [ ] A ceremony cannot be replayed or used for another purpose. One account
       cannot read or change another's passkeys or identities. Both new tables
       are in `GLOBAL_TABLES`.

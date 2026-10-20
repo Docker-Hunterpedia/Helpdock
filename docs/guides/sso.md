@@ -87,11 +87,22 @@ connection is disabled. SSO refresh families expire within 12 hours even if
 `AUTH_SESSION_MAX_HOURS` is longer; access tokens cannot outlive that ceiling.
 
 Enforcement requires an enabled connection and one to three active install
-admins with passwords and enabled TOTP for emergency access. Existing sessions remain open. At the
-next sign-in, password, magic links, Google/Microsoft/GitHub OAuth and password invitation
+admins with a password and an authenticator app **or** a passkey for emergency
+access. Existing sessions remain open. At the
+next sign-in, password, magic links, Google/Microsoft/GitHub OAuth, passwordless
+passkey sign-in and password invitation
 acceptance are blocked. The explicit break-glass form permits only configured
-admins using **password and fresh TOTP**; recovery codes and trusted browsers
-cannot bypass this requirement. Discovery matches domains, never account existence.
+admins using **a password, then a fresh authenticator code or a fresh passkey
+assertion with user verification** (a PIN or a biometric on the key); recovery
+codes, trusted browsers and passwordless passkey sign-in cannot bypass this
+requirement ([ADR 0053](../decisions/0053-break-glass-with-a-passkey.md)). A
+security key with no PIN or biometric set cannot give user verification and is
+refused for break-glass. A break-glass admin who holds only a passkey is locked out if the install's
+address (`APP_URL`) changes and pauses passkeys, so keep an authenticator app on
+the account too, or unset `HD_SSO_ENFORCED` from the environment to recover.
+Someone who signed in through SSO may still use a passkey as a second factor.
+The Settings picker lists an install admin as ineligible until they have a
+password and an app or a passkey. Discovery matches domains, never account existence.
 Settings pinned by `HD_SSO_ENFORCED` or `HD_SSO_BREAK_GLASS_USER_IDS` are read-only.
 See the generated [configuration reference](configuration.md).
 

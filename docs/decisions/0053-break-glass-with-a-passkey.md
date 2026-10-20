@@ -26,8 +26,13 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    excluded from break-glass, as recovery codes and trusted browsers are today.
 4. A pending second-factor challenge re-checks enforcement before it completes.
 
-Waits for the owner's confirmation (D-50); until then break-glass stays as ADR
-0026 describes it.
+The owner confirmed this as D-50 on 2026-10-20. It is implemented by M18-05:
+one table, `enforcementAllows` in `apps/api/src/sso/break-glass.ts`, answers
+what each first factor may finish with under enforcement, and every local path
+(second-factor verify, recovery code, passkey options and verify, trusted
+browser, session opening) asks it. A break-glass passkey ceremony has its own
+purpose (`break-glass`), which requires user verification; the other second
+factors keep user presence only.
 
 ## Consequences
 
@@ -35,6 +40,8 @@ Waits for the owner's confirmation (D-50); until then break-glass stays as ADR
   beside, an authenticator app.
 - The break-glass form and the SSO settings copy change ("password and
   authenticator or passkey").
+- A break-glass admin who holds only a passkey cannot sign in while passkeys are
+  paused after an `APP_URL` change; the guide advises keeping an app as well.
 - Passwordless sign-in remains refused for everyone under enforcement, so a
   person deactivated in the IdP cannot keep signing in with a passkey.
 

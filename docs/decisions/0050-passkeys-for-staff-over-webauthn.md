@@ -65,8 +65,9 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    `auth.require2fa`) is met by either. One set of recovery codes is drawn at the
    first second factor of either kind. Password reset keeps passkeys. Admin
    "reset second factor" removes them. Under SSO enforcement passwordless
-   passkey sign-in is a local method and is refused; break-glass with a passkey
-   is [ADR 0053](0053-break-glass-with-a-passkey.md).
+   passkey sign-in is a local method and is refused; a passkey second factor is
+   accepted after a break-glass password or an SSO assertion
+   ([ADR 0053](0053-break-glass-with-a-passkey.md)).
 7. **Ceremony state** lives in Redis (`GETDEL`, 5 minutes, 256-bit id, 32-byte
    challenge), bound to one purpose and, where there is one, one user and one
    session family.

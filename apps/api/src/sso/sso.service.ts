@@ -25,6 +25,7 @@ import type { Redis } from 'ioredis';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
+import { isBreakGlassEligible, passkeyCounts } from './break-glass.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
 import { addsCertificates, fetchSamlMetadata, samlCertificate } from './saml-metadata.js';
 import { loadSpKeys, SSO_CONFIG_LOCK } from './sp-keys.js';
@@ -234,6 +235,10 @@ export class SsoService {
       .select()
       .from(users)
       .where(and(eq(users.installAdmin, true), eq(users.status, 'active')));
+    const held = await passkeyCounts(
+      this.options.db,
+      adminRows.map((user) => user.id),
+    );
     return {
       sp: {
         entityId: new URL('/api/auth/sso/saml/metadata', this.options.env.APP_URL).toString(),
@@ -244,8 +249,7 @@ export class SsoService {
         id: user.id,
         name: user.name,
         email: user.email,
-        eligible:
-          user.totpEnabled && user.totpSecretEncrypted !== null && user.passwordHash !== null,
+        eligible: isBreakGlassEligible(user, held.get(user.id) ?? 0),
       })),
     };
   }
@@ -424,23 +428,12 @@ export class SsoService {
 
   private async validateBreakGlass(ids: string[]): Promise<void> {
     const tx = getTx();
-    const eligible =
-      ids.length === 0
-        ? []
-        : await tx
-            .select()
-            .from(users)
-            .where(
-              and(
-                inArray(users.id, ids),
-                eq(users.installAdmin, true),
-                eq(users.totpEnabled, true),
-                eq(users.status, 'active'),
-              ),
-            );
+    const found =
+      ids.length === 0 ? [] : await tx.select().from(users).where(inArray(users.id, ids));
+    const held = await passkeyCounts(tx, ids);
     if (
-      eligible.length !== ids.length ||
-      eligible.some((user) => user.passwordHash === null || user.totpSecretEncrypted === null)
+      found.length !== ids.length ||
+      found.some((user) => !isBreakGlassEligible(user, held.get(user.id) ?? 0))
     ) {
       throw new BadRequestException('sso-invalid-break-glass');
     }

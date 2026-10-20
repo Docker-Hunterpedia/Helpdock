@@ -281,7 +281,7 @@ Redrawing them needs a live authenticator code (`POST /api/me/recovery-codes/reg
 with `{ passkey: { ceremonyId, response } }`, answering the ceremony from
 `POST /api/me/passkeys/step-up/options`). Both spend the step-up budget. A recovery
 code answers a second-factor challenge only: it never opens a passwordless
-sign-in, and it is not a break-glass credential.
+sign-in, and it is not a break-glass credential, even with a passkey on the account.
 
 Ten, shaped `RC-4KQ2-9XMT`, in an alphabet with no character that can be
 confused with another on paper. Each works once. They are stored as argon2
@@ -333,11 +333,15 @@ reason goes to the audit trail as `auth.second_factor.failed` with `meta.factor`
 `secondFactor: passkey`, and records the use (`last_used_at`, the counter).
 
 "Trust this browser" applies to whichever factor succeeded. Under SSO
-enforcement a passkey second factor after a local first factor answers `403
-sso-required` (from `options` too, so no ceremony is minted for it), as a recovery
-code does; after an SSO assertion that does not vouch for IdP MFA it is a valid
-second factor. Break-glass with a passkey is
-[ADR 0053](../decisions/0053-break-glass-with-a-passkey.md).
+enforcement a passkey second factor is accepted in two cases only: after an SSO
+assertion that does not vouch for IdP MFA, and after the password of a configured
+break-glass install admin ([ADR 0053](../decisions/0053-break-glass-with-a-passkey.md)).
+For break-glass the ceremony has its own purpose and requires user verification,
+so a key that proves presence only is refused as `passkey-invalid` and costs an
+attempt. After any other local first factor it answers `403 sso-required` (from
+`options` too, so no ceremony is minted for it), as a recovery code does. A
+ceremony minted before enforcement came on is refused when it is checked, and the
+person asks again.
 
 ### Signing in with a passkey
 
@@ -404,7 +408,8 @@ lays the foundation described here and M18-02 adds
 [registering and managing them](#adding-renaming-and-removing-passkeys); using
 one as a second factor ([A passkey as the second factor](#a-passkey-as-the-second-factor),
 M18-03) builds on it, and [signing in with one alone](#signing-in-with-a-passkey)
-(M18-04) needs nothing else. Break-glass (M18-05) and the rest of the passkey
+(M18-04) needs nothing else. [Break-glass with a passkey](sso.md#roles-mfa-and-enforcement)
+(M18-05, ADR 0053) is described with SSO enforcement. The rest of the passkey
 screens (M18-06) are still to come.
 
 ### Where passkeys work
@@ -1258,8 +1263,9 @@ alone does not disable the existing password, magic-link or OAuth methods.
 When `sso.enforced` is on, local password, magic links, Google/Microsoft/GitHub OAuth and
 password invitation acceptance refuse sign-in. Discovery matches enabled
 provider domains without looking up accounts. Existing sessions stay open.
-Configured break-glass install admins may use their password followed by fresh
-TOTP; trusted browsers and recovery codes do not qualify. Enforcement and
+Configured break-glass install admins may use their password followed by a fresh
+authenticator code or a user-verified passkey; trusted browsers, recovery codes
+and passwordless passkey sign-in do not qualify. Enforcement and
 connection status are rechecked for pending challenges. Completing SSO accepts
 an invitation only after its required factors and keeps manual membership grants.
 See [SSO policy and setup](sso.md#roles-mfa-and-enforcement).

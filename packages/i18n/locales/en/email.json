@@ -58,6 +58,37 @@
       "body": "The {{provider}} account {{account}} is no longer connected. You can connect it again from the same page.",
       "warning": "If this wasn't you, sign in and check your security page now.",
       "action": "Review sign-in methods"
+    },
+    "from": "From",
+    "fromDevice": "{{browser}} on {{os}}",
+    "passkeyAdded": {
+      "subject": "A passkey was added to your account",
+      "eyebrow": "Security · passkeys",
+      "heading": "A passkey was added",
+      "body": "“{{passkey}}” can now sign you in to {{appName}}.",
+      "warning": "If this wasn't you, remove it now and change your password.",
+      "action": "Review your passkeys"
+    },
+    "passkeyRemoved": {
+      "subject": "A passkey was removed from your account",
+      "eyebrow": "Security · passkeys",
+      "heading": "A passkey was removed",
+      "body": "“{{passkey}}” can no longer sign you in.",
+      "remainingBoth_one": "You still have {{count}} passkey and an authenticator app.",
+      "remainingBoth_other": "You still have {{count}} passkeys and an authenticator app.",
+      "remainingPasskeys_one": "You still have {{count}} passkey.",
+      "remainingPasskeys_other": "You still have {{count}} passkeys.",
+      "remainingTotp": "You still have an authenticator app.",
+      "warning": "If this wasn't you, sign in and check your security page now.",
+      "action": "Open your security page"
+    },
+    "passwordResetPasskeys": {
+      "subject": "Your password was reset",
+      "eyebrow": "Security · password",
+      "heading": "Your password was reset",
+      "body_one": "Every session and trusted browser was signed out. Your {{count}} passkey was kept: a password reset only proves you can read this mailbox, so it never removes it. Check it on your security page and remove it if you don't recognise it.",
+      "body_other": "Every session and trusted browser was signed out. Your {{count}} passkeys were kept: a password reset only proves you can read this mailbox, so it never removes them. Check them on your security page and remove any you don't recognise.",
+      "action": "Review your passkeys"
     }
   },
   "smtpTest": {

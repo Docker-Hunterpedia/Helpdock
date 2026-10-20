@@ -270,6 +270,7 @@ a second place.
 | Your details | Name and interface language. The sign-in address is read-only; an administrator changes it. |
 | Password | Current password, then a new one of at least twelve characters. Changing it signs out **every other** browser and forgets every browser this account trusted. |
 | Two-factor | Status, how many recovery codes are left, and — unless the account must have one (an Admin, an install admin, or `auth.require2fa` on) — turning it off. Turning it off and redrawing the codes each ask for a live authenticator code, because a session proves somebody signed in, not that the person at the keyboard now is the account holder. |
+| Passkeys | Since 1.1, and only where `APP_URL` allows passkeys: each passkey with when it was added and last used and a "Synced" chip when its platform backs it up, with **Add a passkey**, **Rename** and **Remove**. Each asks for the passkey itself, the password or a live code first, and Add and Remove email the account holder. Removing the last one is refused for an account that must have a second factor and has no authenticator app, and an account can hold ten ([authentication › Adding, renaming and removing passkeys](authentication.md#adding-renaming-and-removing-passkeys)). |
 | Sign-in methods | Since 1.0.2 (called "Sign-in providers" until 1.1), and only when the install has Google or GitHub configured: each provider, connected or not, with Connect and Disconnect behind the password or a live code. Disconnecting the account's last way in is refused ([authentication › Connecting and disconnecting a provider](authentication.md#connecting-and-disconnecting-a-provider)). |
 | Active sessions | Every browser this account is signed in on, with the current one marked. Sign one out, or sign out everywhere. |
 
@@ -304,6 +305,8 @@ breached-list check.
 | `POST /api/me/recovery-codes/regenerate` | `@Authenticated()` | A live code |
 | `GET /api/me/sessions` | `@Authenticated()` | |
 | `DELETE /api/me/sessions/:family` | `@Authenticated()` | |
+| `GET /api/me/passkeys` | `@Authenticated()` | The caller's passkeys |
+| `POST /api/me/passkeys/step-up/options`, `POST /api/me/passkeys/begin`, `POST /api/me/passkeys/finish`, `PATCH /api/me/passkeys/:id`, `DELETE /api/me/passkeys/:id` | `@Authenticated()` | Register, rename and remove, each behind a proof (password, live code or passkey). See [authentication](authentication.md#adding-renaming-and-removing-passkeys) |
 
 A refused staff action answers the usual error body with one extra field:
 

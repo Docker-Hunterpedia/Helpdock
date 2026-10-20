@@ -178,3 +178,109 @@ describe('MockAuthApi', () => {
     expect((await api.oauthIdentities()).identities).toHaveLength(1);
   });
 });
+
+describe('MockAuthApi passkeys (M18-02)', () => {
+  const response = (id: string) => ({
+    id,
+    rawId: id,
+    type: 'public-key' as const,
+    response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+    clientExtensionResults: {},
+  });
+
+  const add = async (api: MockAuthApi, name: string, id = name) => {
+    const { ceremonyId } = await api.beginPasskey({ currentPassword: MOCK_PASSWORD });
+    return api.finishPasskey({ ceremonyId, response: response(id), name });
+  };
+
+  it('adds behind a proof and lists the result', async () => {
+    const api = new MockAuthApi();
+
+    await add(api, 'Laptop');
+
+    expect((await api.passkeys()).passkeys.map((entry) => entry.name)).toEqual(['Laptop']);
+  });
+
+  it('spends a ceremony once', async () => {
+    const api = new MockAuthApi();
+    const { ceremonyId } = await api.beginPasskey({ currentPassword: MOCK_PASSWORD });
+    await api.finishPasskey({ ceremonyId, response: response('a'), name: 'One' });
+
+    await expect(
+      api.finishPasskey({ ceremonyId, response: response('b'), name: 'Two' }),
+    ).rejects.toMatchObject({ code: 'challenge-expired' });
+  });
+
+  it('refuses a wrong proof, and locks after five', async () => {
+    const api = new MockAuthApi();
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(api.beginPasskey({ currentPassword: 'wrong' })).rejects.toMatchObject({
+        code: 'invalid-credentials',
+      });
+    }
+
+    await expect(api.beginPasskey({ currentPassword: MOCK_PASSWORD })).rejects.toMatchObject({
+      code: 'totp-locked',
+    });
+  });
+
+  it('refuses the eleventh passkey', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 10 });
+
+    await expect(api.beginPasskey({ currentPassword: MOCK_PASSWORD })).rejects.toMatchObject({
+      code: 'passkey-limit',
+    });
+  });
+
+  it('refuses to remove the only second factor of an account that needs one', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1, onlyFactor: true });
+    const [only] = (await api.passkeys()).passkeys;
+
+    await expect(
+      api.removePasskey(only?.id ?? '', { currentPassword: MOCK_PASSWORD }),
+    ).rejects.toMatchObject({ code: 'second-factor-required' });
+    expect((await api.passkeys()).removalBlocked).toBe(true);
+  });
+
+  it('renames and removes, and answers an unknown id as missing', async () => {
+    const api = new MockAuthApi();
+    const added = await add(api, 'Old');
+
+    const renamed = await api.renamePasskey(added.id, 'New', { code: MOCK_TOTP_CODE });
+    await api.removePasskey(added.id, { code: MOCK_TOTP_CODE });
+
+    expect(renamed.name).toBe('New');
+    expect((await api.passkeys()).passkeys).toEqual([]);
+    await expect(api.removePasskey(added.id, { code: MOCK_TOTP_CODE })).rejects.toMatchObject({
+      code: 'no-account',
+    });
+  });
+
+  it('offers the step-up only for passkeys an authenticator made, and accepts it once', async () => {
+    const api = new MockAuthApi();
+    await expect(api.passkeyStepUpOptions()).rejects.toMatchObject({ code: 'invalid-credentials' });
+    const added = await add(api, 'Laptop', 'AQID');
+    const { ceremonyId, options } = await api.passkeyStepUpOptions();
+    const proof = {
+      passkey: {
+        ceremonyId,
+        response: {
+          id: 'AQID',
+          rawId: 'AQID',
+          type: 'public-key' as const,
+          response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+          clientExtensionResults: {},
+        },
+      },
+    };
+
+    expect(options).toMatchObject({ allowCredentials: [{ id: 'AQID' }] });
+    await api.renamePasskey(added.id, 'Renamed', proof);
+    await expect(api.renamePasskey(added.id, 'Again', proof)).rejects.toMatchObject({
+      code: 'challenge-expired',
+    });
+  });
+});

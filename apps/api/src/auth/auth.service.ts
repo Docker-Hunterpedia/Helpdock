@@ -28,6 +28,7 @@ import type { OauthIdentity, OauthInviteState, OauthService } from './oauth/oaut
 import { OauthError } from './oauth/oauth.service.js';
 import type { OauthIdentityRepository, OauthLinkedVia } from './oauth/oauth-identity.repository.js';
 import { decideOauthSignIn, googleDomainAllowed } from './oauth/oauth-linking.js';
+import type { PasskeyRepository } from './passkeys/passkey.repository.js';
 import type { PasswordHasher } from './password.js';
 import {
   EMAIL_DISPATCH_IP_RULE,
@@ -165,6 +166,8 @@ export interface AuthServiceOptions {
   readonly oauthIdentities: OauthIdentityRepository;
   /** Passkeys (M18-01): the relying party, its pin and the ceremonies. */
   readonly webauthn: WebAuthnService;
+  /** The passkeys an account holds, for the count a password-reset notice names (M18-02). */
+  readonly passkeys: Pick<PasskeyRepository, 'count'>;
   readonly settings: Settings;
   readonly keyring: Keyring;
   /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
@@ -759,7 +762,16 @@ export class AuthService {
 
     this.#parts.logger.info({ userId: user.id }, 'Password reset; every session was revoked');
     await this.#audit('auth.password.reset', user.id, 'staff');
-    await this.#notifySecurityChange(user.id, 'passwordReset');
+    // A reset proves the mailbox, not the person, so it never removes a
+    // passkey (DOMAIN-RULES §12.1); the notice says how many remain, so the
+    // holder can remove any they do not recognise.
+    const passkeys = await this.#parts.passkeys.count(user.id);
+    await this.#notifySecurityChange(
+      user.id,
+      'passwordReset',
+      undefined,
+      passkeys > 0 ? { passkeys: String(passkeys) } : {},
+    );
   }
 
   // ------------------------------------------------------------------
@@ -1558,6 +1570,48 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  // ------------------------------------------------------------------
+  // What PasskeyService borrows
+  //
+  // A passkey change is one more credential change, so it spends the same
+  // step-up budget, writes the same audit trail and sends the same notice
+  // as a password or a provider account. These hand those over rather than
+  // copying them.
+  // ------------------------------------------------------------------
+
+  /** The signed-in account, or `no-account` when it is gone or deactivated. */
+  activeAccount(userId: string, tx?: Queryable): Promise<StaffUser> {
+    return this.#requireUser(userId, tx);
+  }
+
+  /** The current password or a live code, one of them, from the shared step-up budget. */
+  confirmWithSecret(userId: string, proof: OauthStepUpRequest, tx?: Queryable): Promise<StaffUser> {
+    return this.#requireStepUp(userId, proof, tx);
+  }
+
+  /** One attempt from the same budget, for a proof that is not a secret to compare. */
+  spendStepUpAttempt(userId: string): Promise<void> {
+    return this.#spendStepUp(userId);
+  }
+
+  recordCredentialEvent(
+    action: AuthAuditAction,
+    userId: string,
+    actor: 'staff' | 'system',
+    meta?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
+    return this.#audit(action, userId, actor, meta);
+  }
+
+  notifyCredentialChange(
+    userId: string,
+    change: SecurityChange,
+    tx: DbTransaction,
+    values: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    return this.#notifySecurityChange(userId, change, tx, values);
   }
 
   /** Whichever of the two a person offered: the current password, or a live code. */

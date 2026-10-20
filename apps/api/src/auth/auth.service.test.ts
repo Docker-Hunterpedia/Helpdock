@@ -284,6 +284,10 @@ let service: AuthService;
 let hasher: PasswordHasher;
 let sessions: SessionService;
 let rpIdPin: MemoryRpIdPin;
+let passkeyCounts: Map<string, number>;
+const passkeyCount = {
+  count: (userId: string): Promise<number> => Promise.resolve(passkeyCounts.get(userId) ?? 0),
+};
 
 const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> => ({
   id: uuidv7(),
@@ -342,6 +346,7 @@ beforeEach(async () => {
   audit = new RecordingAudit();
   hasher = new PasswordHasher(MASTER_KEY);
   rpIdPin = new MemoryRpIdPin();
+  passkeyCounts = new Map();
 
   settings = createSettings({
     env: {},
@@ -400,6 +405,7 @@ beforeEach(async () => {
       ceremonies: new WebAuthnCeremonyStore(created.redis),
       pin: rpIdPin,
     }),
+    passkeys: passkeyCount,
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
     mail,
@@ -1772,6 +1778,23 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
         userId: user.id,
         brandId: null,
         values: { change: 'passwordReset', occurredAt: expect.any(String) },
+      }),
+    ]);
+  });
+
+  it('names the passkeys a reset kept, because a reset proves the mailbox and removes none', async () => {
+    const user = staff.add(await newUser());
+    passkeyCounts.set(user.id, 2);
+    await service.requestPasswordReset({ email: user.email, ip: '203.0.113.5' });
+
+    await service.resetPassword({
+      token: resetTokenIn(mail.sent[0]?.url ?? ''),
+      password: 'a whole new password',
+    });
+
+    expect(changeNotices()).toEqual([
+      expect.objectContaining({
+        values: { change: 'passwordReset', passkeys: '2', occurredAt: expect.any(String) },
       }),
     ]);
   });

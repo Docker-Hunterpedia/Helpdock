@@ -328,19 +328,23 @@ export const widgetConfigSchema = z.object({
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
 
 /**
- * `GET /api/widget/:brandId/captcha/challenge`: the built-in check's work
- * (ADR 0052), in the ALTCHA challenge shape. The widget finds the `number` for
- * which `SHA-256(salt + number)` is `challenge` and sends the base64 JSON of
- * `{ algorithm, challenge, number, salt, signature }` as `captchaToken`.
+ * `GET /api/widget/:brandId/captcha/challenge` and the web form's
+ * `…/challenge`: the built-in check's work (ADR 0052), in the ALTCHA challenge
+ * shape. The client finds the `number` for which `SHA-256(salt + number)` is
+ * `challenge` and sends the base64 JSON of
+ * `{ algorithm, challenge, number, salt, signature }` as its token.
+ * `expiresIn` is the seconds it stays good, counted from when the answer
+ * arrived, so a client with a wrong clock still refreshes in time.
  */
-export const widgetCaptchaChallengeSchema = z.object({
+export const captchaChallengeSchema = z.object({
   algorithm: z.literal('SHA-256'),
   challenge: z.string(),
   maxnumber: z.number().int(),
   salt: z.string(),
   signature: z.string(),
+  expiresIn: z.number().int().positive(),
 });
-export type WidgetCaptchaChallenge = z.infer<typeof widgetCaptchaChallengeSchema>;
+export type CaptchaChallenge = z.infer<typeof captchaChallengeSchema>;
 
 // --------------------------------------------------------------- session
 

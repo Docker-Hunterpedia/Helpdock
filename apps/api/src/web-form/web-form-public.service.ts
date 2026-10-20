@@ -62,6 +62,17 @@ export const WEB_FORM_IP_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
+/**
+ * Per brand and address, on the built-in check's "Try again" (ADR 0052): a
+ * challenge is cheap to sign, but each one is a form read, and a page that
+ * asks thirty times in fifteen minutes is not a person.
+ */
+export const WEB_FORM_CHALLENGE_IP_RULE: RateLimitRule = {
+  bucket: 'webform-challenge-ip',
+  limit: 30,
+  windowSeconds: 15 * 60,
+};
+
 /** Per brand and typed email: one person writing many tickets in an hour is a loop or a flood. */
 export const WEB_FORM_ADDRESS_RULE: RateLimitRule = {
   bucket: 'webform-address',
@@ -195,6 +206,10 @@ export class WebFormPublicService {
   async load(brandId: string, lang: string | undefined): Promise<LoadedForm | null> {
     const keys = await this.#options.captchaKeys.forBrand(brandId);
     return this.#inBrand(brandId, (tx) => this.#read(tx, brandId, lang, keys));
+  }
+
+  allowChallenge(brandId: string, ip: string): Promise<boolean> {
+    return this.#options.limiter.consume(WEB_FORM_CHALLENGE_IP_RULE, `${brandId}:${ip}`);
   }
 
   async submit(form: LoadedForm, post: WebFormPost): Promise<SubmitResult> {

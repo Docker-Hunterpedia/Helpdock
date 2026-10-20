@@ -26,7 +26,7 @@ export function ContactForm() {
   const [sent, setSent] = useState<{ ref: string; email: string } | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const onToken = useCallback((value: string | null) => setToken(value), []);
-  // A refused token is spent: a new box asks for a new one.
+  // A token is single-use: a new box after a failed send asks for a new one.
   const [captchaRound, setCaptchaRound] = useState(0);
   const picker = useRef<HTMLInputElement>(null);
   const another = useRef<HTMLButtonElement>(null);
@@ -119,7 +119,8 @@ export function ContactForm() {
       setSent({ ref: result.ticket_ref, email: email.trim() });
       requestAnimationFrame(() => another.current?.focus());
     } catch (error) {
-      if (error instanceof TransportError && error.code === 'captcha_failed') {
+      // The api may have spent the token before the failure: ask for a new one.
+      if (token) {
         setToken(null);
         setCaptchaRound((round) => round + 1);
       }

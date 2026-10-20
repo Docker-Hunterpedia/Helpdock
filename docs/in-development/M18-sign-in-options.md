@@ -821,6 +821,11 @@ DESIGN.md changes in the same PRs:
 7. (D-01) **Release vehicle:** does M18 ship in 1.1 or 1.2? The OAuth binding
    change (M18-07) alters behaviour for existing users and wants a minor version
    with a release note. Proposed: 1.1, with the binding itself in 1.0.1.
+8. **Known gap, found in M18-10:** the `HD_CAPTCHA_*` environment pins in
+   the configuration reference do not reach the widget or the web form, which
+   read the brand's `captcha.*` rows directly. `captcha.difficulty` is
+   therefore not registered as a setting, and has no `HD_` pin, until that is
+   fixed.
 
 ## Build order
 

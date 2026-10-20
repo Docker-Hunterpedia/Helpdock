@@ -13,9 +13,12 @@ import type { CaptchaSurface } from './captcha.js';
  * signature }`. That is the ALTCHA protocol, so an operator could swap in the
  * ALTCHA widget later.
  *
- * `salt` carries `?expires=<unix seconds>&surface=<surface>`. Changing either
+ * `salt` carries `?expires=<unix seconds>&surface=<surface>&`. Changing either
  * changes `SHA-256(salt + n)`, so they are covered by the signature without a
- * second MAC. Single use is not decided here: the caller spends `challenge`
+ * second MAC. The trailing `&` closes the salt: without it, digits moved
+ * from the front of `number` onto the end of the salt would hash the same
+ * and be read as part of the last parameter, so a salt that does not end in
+ * `&` is refused. Single use is not decided here: the caller spends `challenge`
  * once in Redis, for as long as {@link PowVerdict} says it stays valid.
  *
  * Cost, not detection: it raises the price of a naive flood, never of a
@@ -43,6 +46,12 @@ export interface PowChallenge {
   readonly maxnumber: number;
   readonly salt: string;
   readonly signature: string;
+  /**
+   * Seconds it stays good from now. Not part of the ALTCHA shape: a client
+   * times its refresh from this rather than from `expires`, which is read
+   * against a clock that may be wrong.
+   */
+  readonly expiresIn: number;
 }
 
 export type PowVerdict =
@@ -60,11 +69,14 @@ const MAX_TOKEN_LENGTH = 2048;
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 
+/** What every salt this module issues ends with; see the module comment. */
+const SALT_END = '&';
+
 const solutionSchema = z.object({
   algorithm: z.literal('SHA-256'),
   challenge: z.string().regex(HEX_64),
   number: z.number().int().min(0).max(POW_MAX_NUMBER.medium),
-  salt: z.string().max(256),
+  salt: z.string().max(256).endsWith(SALT_END),
   signature: z.string().regex(HEX_64),
 });
 
@@ -89,7 +101,7 @@ export const createPowChallenge = ({
 }): PowChallenge => {
   const maxnumber = POW_MAX_NUMBER[difficulty];
   const expires = Math.floor(now / 1000) + POW_TTL_SECONDS;
-  const salt = `${randomBytes(12).toString('hex')}?expires=${String(expires)}&surface=${surface}`;
+  const salt = `${randomBytes(12).toString('hex')}?expires=${String(expires)}&surface=${surface}${SALT_END}`;
   const challenge = sha256Hex(`${salt}${String(randomInt(0, maxnumber + 1))}`);
   return {
     algorithm: 'SHA-256',
@@ -97,6 +109,7 @@ export const createPowChallenge = ({
     maxnumber,
     salt,
     signature: signatureOf(key, challenge),
+    expiresIn: POW_TTL_SECONDS,
   };
 };
 

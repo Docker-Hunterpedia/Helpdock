@@ -154,6 +154,24 @@ test.describe('the built-in check (ADR 0052, HelpCenter/WebForm-Verify)', () => 
     expect(outside).toEqual([]);
   });
 
+  test('checks without WebCrypto, as on a form served over http://', async ({
+    page,
+    pageLocale,
+  }) => {
+    const t = strings(pageLocale);
+    await page.addInitScript(() => {
+      Object.defineProperty(window.crypto, 'subtle', { get: () => undefined });
+    });
+    await open(page, pageLocale, POW_BRAND);
+
+    await expect(page.getByRole('status', { name: t('captcha.label') })).toContainText(
+      t('captcha.verified'),
+      { timeout: 15_000 },
+    );
+    await fillAndSend(page, t);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(REFERENCE);
+  });
+
   test('says when the check failed, keeps Send off, and passes on Try again', async ({
     page,
     pageLocale,

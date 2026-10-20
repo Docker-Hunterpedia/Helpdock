@@ -77,8 +77,9 @@ that turned the check on with the built-in provider (`config.captcha.provider`
   "algorithm": "SHA-256",
   "challenge": "<64 hex>",
   "maxnumber": 50000,
-  "salt": "<24 hex>?expires=<unix seconds>&surface=widget-first-message",
-  "signature": "<64 hex>"
+  "salt": "<24 hex>?expires=<unix seconds>&surface=widget-first-message&",
+  "signature": "<64 hex>",
+  "expiresIn": 900
 }
 ```
 
@@ -90,11 +91,19 @@ is the ALTCHA protocol, so the ALTCHA widget can answer it too.
 
 - A solution is spent once, for this brand and this surface, until the
   `expires` in its salt (15 minutes). A second use is `captcha_required`.
+- Time a refresh from `expiresIn`, the seconds left when the answer arrived,
+  not from `expires`: a visitor's clock may be off by minutes. The salt always
+  ends in `&`, and a solution whose salt does not is refused.
 - `maxnumber` is 50,000 at the brand's `low` difficulty and 200,000 at
   `medium`; the client tries half of it on average.
 - Nothing is sent to a third party, and no provider script is loaded. The
   widget solves it with WebCrypto in its lazy CAPTCHA chunk and fetches new
-  work a minute before the old expires.
+  work a minute before the old expires (never sooner than a minute after it
+  arrived).
+- It also works on a page served over plain `http://`, where browsers offer no
+  `crypto.subtle`: the widget, and the web form, fall back to a SHA-256 written
+  in JavaScript. That is several times slower, so `low` takes a few seconds
+  there rather than about one. Serve the site over HTTPS.
 
 ## Errors
 

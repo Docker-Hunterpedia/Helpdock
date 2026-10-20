@@ -44,7 +44,7 @@ describe('the proof-of-work challenge (ADR 0052)', () => {
     expect(issued).toMatchObject({ algorithm: 'SHA-256', maxnumber: POW_MAX_NUMBER.low });
     expect(issued.salt).toMatch(
       new RegExp(
-        `^[0-9a-f]{24}\\?expires=${String(NOW / 1000 + POW_TTL_SECONDS)}&surface=web-form$`,
+        `^[0-9a-f]{24}\\?expires=${String(NOW / 1000 + POW_TTL_SECONDS)}&surface=web-form&$`,
       ),
     );
     expect(
@@ -76,6 +76,28 @@ describe('the proof-of-work challenge (ADR 0052)', () => {
         ...change,
       }),
     ).toEqual({ success: false, errorCodes: [code] });
+  });
+
+  it('refuses digits moved from the number onto the end of the salt', () => {
+    // The same bytes hash the same, so only the closed salt tells these apart:
+    // `…&surface=web-form&` + `4217` against `…&surface=web-form&4` + `217`.
+    let work = issued;
+    while (String(solve(work)).length < 2 || String(solve(work))[1] === '0') {
+      work = createPowChallenge({ key: KEY, difficulty: 'low', surface: 'web-form', now: NOW });
+    }
+    const digits = String(solve(work));
+    const spliced = tokenOf(work, {
+      salt: `${work.salt}${digits.slice(0, 1)}`,
+      number: Number(digits.slice(1)),
+    });
+
+    expect(
+      verifyPowSolution({ key: KEY, token: tokenOf(work), surface: 'web-form', now: NOW }).success,
+    ).toBe(true);
+    expect(verifyPowSolution({ key: KEY, token: spliced, surface: 'web-form', now: NOW })).toEqual({
+      success: false,
+      errorCodes: ['invalid-input-response'],
+    });
   });
 
   it.each([

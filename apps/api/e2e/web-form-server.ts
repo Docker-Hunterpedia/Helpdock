@@ -124,6 +124,7 @@ const page = new WebFormPage({
   resolveHost: async () => null,
   log: { error: (fields, message) => process.stderr.write(`${message} ${String(fields.err)}\n`) },
   forms: {
+    allowChallenge: async () => true,
     // A "Try again" asks without a language; the broken brand's next challenge is a good one.
     load: async (brandId, lang) => loadForm(brandId, lang, lang === undefined) as never,
     submit: async (form, post) => {
@@ -182,8 +183,8 @@ const handle = async (request: FastifyRequest, reply: FastifyReply, withBody: bo
 
 server.get('/contact/:brandId/challenge', async (request, reply) => {
   const { brandId } = request.params as { brandId: string };
-  const challenge = await page.challenge({ host: undefined, brandId });
-  return challenge === null ? reply.code(404).send() : reply.send(challenge);
+  const answer = await page.challenge({ host: undefined, brandId, ip: request.ip });
+  return answer.status === 200 ? reply.send(answer.challenge) : reply.code(answer.status).send();
 });
 server.get('/contact/:brandId', (request, reply) => handle(request, reply, false));
 server.post('/contact/:brandId', (request, reply) => handle(request, reply, true));

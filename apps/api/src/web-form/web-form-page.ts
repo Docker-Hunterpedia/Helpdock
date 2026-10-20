@@ -43,7 +43,14 @@ export const WEB_FORM_BODY_LIMIT = 30 * 1024 * 1024;
 export interface WebFormForms {
   load(brandId: string, lang: string | undefined): Promise<LoadedForm | null>;
   submit(form: LoadedForm, post: WebFormPost): Promise<SubmitResult>;
+  /** The per-IP budget on new built-in challenges: true when one more is allowed, and counts it. */
+  allowChallenge(brandId: string, ip: string): Promise<boolean>;
 }
+
+/** What `…/challenge` answers. */
+export type ChallengeAnswer =
+  | { readonly status: 200; readonly challenge: PowChallenge }
+  | { readonly status: 404 | 429 };
 
 export interface WebFormPageDependencies {
   readonly forms: WebFormForms;
@@ -132,12 +139,20 @@ export class WebFormPage {
   async challenge(request: {
     readonly host: string | undefined;
     readonly brandId?: string | undefined;
-  }): Promise<PowChallenge | null> {
+    readonly ip: string;
+  }): Promise<ChallengeAnswer> {
     const brandId = this.#brandFor(request.brandId, await this.#deps.resolveHost(request.host));
-    const form = brandId === null ? null : await this.#deps.forms.load(brandId, undefined);
+    if (brandId === null) {
+      return { status: 404 };
+    }
+    // Before the reads a load makes, so a flood of Try again costs a counter.
+    if (!(await this.#deps.forms.allowChallenge(brandId, request.ip))) {
+      return { status: 429 };
+    }
+    const form = await this.#deps.forms.load(brandId, undefined);
     return form?.state === 'open' && form.captcha?.provider === 'pow'
-      ? form.captcha.challenge
-      : null;
+      ? { status: 200, challenge: form.captcha.challenge }
+      : { status: 404 };
   }
 
   async handle(request: WebFormPageRequest): Promise<WebFormPageResponse> {

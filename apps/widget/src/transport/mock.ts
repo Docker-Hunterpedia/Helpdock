@@ -1,3 +1,4 @@
+import { sha256 } from '../captcha/sha256.js';
 import {
   type AgentSummary,
   type AiFeedback,
@@ -108,15 +109,13 @@ export class MockTransport implements WidgetTransport {
       throw new TransportError('network');
     }
     const maxnumber = 1_000;
-    const salt = `mock-${String(this.calls.length)}?expires=${String(Math.floor(Date.now() / 1000) + 900)}`;
-    const digest = await crypto.subtle.digest(
-      'SHA-256',
+    const salt = `mock-${String(this.calls.length)}?expires=${String(Math.floor(Date.now() / 1000) + 900)}&`;
+    // The plain digest, so the harness also plays a page without `crypto.subtle`.
+    const digest = sha256(
       new TextEncoder().encode(`${salt}${String(Math.floor(Math.random() * maxnumber))}`),
     );
-    const challenge = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, '0'),
-    ).join('');
-    return { algorithm: 'SHA-256', challenge, maxnumber, salt, signature: 'mock' };
+    const challenge = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { algorithm: 'SHA-256', challenge, maxnumber, salt, signature: 'mock', expiresIn: 900 };
   }
 
   async startSession(identity: SignedIdentity | null) {

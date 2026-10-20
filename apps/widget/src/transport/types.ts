@@ -135,6 +135,8 @@ export interface CaptchaChallenge {
   readonly maxnumber: number;
   readonly salt: string;
   readonly signature: string;
+  /** Seconds it stays good, from when it arrived. */
+  readonly expiresIn: number;
 }
 
 /** `GET /widget/:brand/config?locale=` — public, cached, ETag (A §12). */

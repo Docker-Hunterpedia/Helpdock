@@ -90,27 +90,32 @@ function PowCheck({ onToken, t }: Omit<CaptchaProps, 'config'>) {
 
   // `round` is the trigger for new work: Try again, and a challenge about to lapse.
   useEffect(() => {
-    let live = true;
+    // Closing the form, Try again or a refresh abandons the solve in flight.
+    const solving = new AbortController();
     let refresh: ReturnType<typeof setTimeout> | undefined;
     setStatus('checking');
     onToken(null);
     controller.transport
       .captchaChallenge()
       .then(async (work) => {
-        const token = await solvePow(work);
-        if (!live) {
-          return;
-        }
+        // Timed from its arrival, not from the salt's `expires`: the device
+        // clock may be off, but the time between two of its readings is not.
+        const arrived = Date.now();
+        const token = await solvePow(work, solving.signal);
         setStatus('verified');
         onToken(token);
-        const after = refreshAfter(work);
-        if (after !== null) {
-          refresh = setTimeout(() => setRound((value) => value + 1), after);
-        }
+        refresh = setTimeout(
+          () => setRound((value) => value + 1),
+          refreshAfter(work) - (Date.now() - arrived),
+        );
       })
-      .catch(() => live && setStatus('failed'));
+      .catch(() => {
+        if (!solving.signal.aborted) {
+          setStatus('failed');
+        }
+      });
     return () => {
-      live = false;
+      solving.abort();
       clearTimeout(refresh);
     };
   }, [controller, onToken, round]);

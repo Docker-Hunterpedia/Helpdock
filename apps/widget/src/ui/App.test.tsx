@@ -303,6 +303,24 @@ describe('the built-in check before the first message (ADR 0052, Widget/PreChat-
     });
   });
 
+  it('asks for new work after a start that failed, since the api may have spent the token', async () => {
+    const { mock } = await renderWidget({ preChat: true, captcha: 'pow' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open support chat' }));
+    const start = (await screen.findByRole('button', { name: 'Start chat' })) as HTMLButtonElement;
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+
+    type('Name', 'Omar');
+    type('Email', 'omar@example.com');
+    type('How can we help?', 'Help');
+    act(() => mock.dropConnection());
+    fireEvent.click(start);
+
+    await waitFor(() =>
+      expect(mock.calls.filter((call) => call.method === 'captchaChallenge')).toHaveLength(2),
+    );
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+  });
+
   it('says when the check could not run, keeps Start chat off, and tries again', async () => {
     const { mock } = await renderWidget({ preChat: true, captcha: 'pow' });
     mock.failNextChallenges(1);

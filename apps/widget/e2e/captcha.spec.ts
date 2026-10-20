@@ -51,6 +51,18 @@ for (const locale of LOCALES) {
       expect(outside).toEqual([]);
     });
 
+    test('checks without WebCrypto, as on a page served over http://', async ({ page }) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(window.crypto, 'subtle', { get: () => undefined });
+      });
+      await openWidget(page, locale, 'prechat=1&captcha=pow');
+      const check = widgetWindow(page, locale).getByRole('group', { name: t('captcha.group') });
+
+      await expect(check.getByRole('status')).toHaveText(t('captcha.pow.verified'), {
+        timeout: 15_000,
+      });
+    });
+
     test('says when the check failed, keeps Start chat off, and passes on Try again', async ({
       page,
     }) => {

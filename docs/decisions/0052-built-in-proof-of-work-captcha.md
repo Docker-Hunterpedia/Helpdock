@@ -41,14 +41,26 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
 5. **Default provider:** `pow` when an admin turns CAPTCHA on for a brand that
    never chose a provider, with Turnstile as the "stronger bot detection"
    choice; a brand that saved its access card before keeps its provider. This
-   changes ADR 0003's default (owner decision D-51, 2026-10-20).
+   changes ADR 0003's default (owner decision D-51, 2026-10-20). There is no
+   migration. The one brand this changes without a choice is a 1.0 brand that
+   turned the check on but never saved a provider: its check had no keys, so
+   it was "unavailable" and the web form took nothing. Under `pow` it works.
+   Accepted by the owner as a deviation from "existing brands keep theirs".
 6. **Binding.** Each brand signs under its own key (HKDF info
    `helpdock:captcha:pow:<brandId>`), and the salt carries the surface
    (`widget-first-message` or `web-form`) next to `expires`, so a solution is
-   good for one brand, one surface and fifteen minutes. The widget fetches
+   good for one brand, one surface and fifteen minutes. The salt ends in `&`
+   and a solution whose salt does not is refused, so digits cannot be moved
+   from `number` onto the salt's last parameter. The widget fetches
    challenges from `GET /api/widget/:brandId/captcha/challenge`; the web form
    carries one in the page and fetches another from `…/challenge` for "Try
-   again".
+   again" (30 per 15 minutes per IP and brand, `webform-challenge-ip`). The
+   answer carries `expiresIn`, and clients time their refresh from it rather
+   than from `expires`, which a wrong device clock misreads.
+7. **Insecure contexts.** Browsers expose `crypto.subtle` only on HTTPS pages.
+   On an `http://` page the widget and the web form fall back to a SHA-256
+   written in JavaScript (a few hundred bytes in the lazy chunk and in the
+   page): the check still works, several times slower.
 
 ## Consequences
 

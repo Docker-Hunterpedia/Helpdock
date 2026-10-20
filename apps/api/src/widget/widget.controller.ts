@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import type {
   AttachmentPresignResponse,
+  CaptchaChallenge,
   WidgetAttachment,
   WidgetAvailability,
-  WidgetCaptchaChallenge,
   WidgetConfig,
   WidgetConversation,
   WidgetConversationList,
@@ -31,11 +31,11 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { Public } from '../auth/route-declaration.js';
 import {
+  CaptchaChallengeDto,
   WidgetAttachmentDto,
   WidgetAttachmentParamDto,
   WidgetAvailabilityDto,
   WidgetBrandParamDto,
-  WidgetCaptchaChallengeDto,
   WidgetConfigDto,
   WidgetConfigQueryDto,
   WidgetConversationDto,
@@ -144,12 +144,12 @@ export class WidgetController {
   /** ADR 0052: the built-in check's challenge, a new one each time. Never cached. */
   @Get('captcha/challenge')
   @Public()
-  @ZodSerializerDto(WidgetCaptchaChallengeDto)
+  @ZodSerializerDto(CaptchaChallengeDto)
   captchaChallenge(
     @Param(new ZodValidationPipe(WidgetBrandParamDto)) { brandId }: WidgetBrandParamDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<WidgetCaptchaChallenge> {
+  ): Promise<CaptchaChallenge> {
     void reply.header('cache-control', 'no-store');
     return this.#config.challenge(brandId, factsOf(request));
   }

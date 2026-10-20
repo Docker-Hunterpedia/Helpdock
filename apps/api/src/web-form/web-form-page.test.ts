@@ -14,8 +14,9 @@ const CHALLENGE = {
   algorithm: 'SHA-256',
   challenge: 'c'.repeat(64),
   maxnumber: 50_000,
-  salt: 'abc?expires=1&surface=web-form',
+  salt: 'abc?expires=1&surface=web-form&',
   signature: 's'.repeat(64),
+  expiresIn: 900,
 } as const;
 const POW_CAPTCHA = { provider: 'pow', challenge: CHALLENGE } as const;
 const OTHER = '0192c3f0-1a2b-7c3d-8e4f-0000000000a2';
@@ -49,16 +50,18 @@ const pageWith = ({
   loaded = form(),
   result = { kind: 'created', reference: 'HD-7' } as SubmitResult,
   hostBrand = null as string | null,
+  challengeAllowed = true,
 } = {}) => {
   const load = vi.fn(async () => loaded);
   const submit = vi.fn(async () => result);
+  const allowChallenge = vi.fn(async () => challengeAllowed);
   const log = { error: vi.fn() };
   const page = new WebFormPage({
-    forms: { load, submit },
+    forms: { load, submit, allowChallenge },
     resolveHost: async () => hostBrand,
     log,
   });
-  return { page, load, submit, log };
+  return { page, load, submit, log, allowChallenge };
 };
 
 const request = (overrides: Partial<WebFormPageRequest> = {}): WebFormPageRequest => ({
@@ -205,28 +208,41 @@ describe('WebFormPage', () => {
 });
 
 describe('WebFormPage.challenge (ADR 0052)', () => {
-  it('answers a new built-in challenge for an open form that asks for one', async () => {
-    const { page, load } = pageWith({ loaded: form({ captcha: POW_CAPTCHA }) });
+  const ask = { host: 'desk.example.com', brandId: BRAND, ip: '203.0.113.1' };
 
-    await expect(page.challenge({ host: 'desk.example.com', brandId: BRAND })).resolves.toEqual(
-      CHALLENGE,
-    );
+  it('answers a new built-in challenge for an open form that asks for one', async () => {
+    const { page, load, allowChallenge } = pageWith({ loaded: form({ captcha: POW_CAPTCHA }) });
+
+    await expect(page.challenge(ask)).resolves.toEqual({ status: 200, challenge: CHALLENGE });
     expect(load).toHaveBeenCalledWith(BRAND, undefined);
+    expect(allowChallenge).toHaveBeenCalledWith(BRAND, '203.0.113.1');
   });
 
   it.each([
     ['a form with no check', form()],
     ['a closed form', form({ captcha: POW_CAPTCHA, state: 'closed' })],
-  ])('answers nothing for %s', async (_label, loaded) => {
+  ])('answers 404 for %s', async (_label, loaded) => {
     const { page } = pageWith({ loaded });
 
-    await expect(page.challenge({ host: 'desk.example.com', brandId: BRAND })).resolves.toBeNull();
+    await expect(page.challenge(ask)).resolves.toEqual({ status: 404 });
+  });
+
+  it('answers 429 past the per-IP budget, before reading the form', async () => {
+    const { page, load } = pageWith({
+      loaded: form({ captcha: POW_CAPTCHA }),
+      challengeAllowed: false,
+    });
+
+    await expect(page.challenge(ask)).resolves.toEqual({ status: 429 });
+    expect(load).not.toHaveBeenCalled();
   });
 
   it('serves no other brand’s challenge on a help center host', async () => {
     const { page, load } = pageWith({ loaded: form({ captcha: POW_CAPTCHA }), hostBrand: OTHER });
 
-    await expect(page.challenge({ host: 'help.other.test', brandId: BRAND })).resolves.toBeNull();
+    await expect(page.challenge({ ...ask, host: 'help.other.test' })).resolves.toEqual({
+      status: 404,
+    });
     expect(load).not.toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@ import type {
   WidgetArticle as WireArticle,
   WidgetAttachment as WireAttachment,
   WidgetAvailability as WireAvailability,
-  WidgetCaptchaChallenge as WireCaptchaChallenge,
+  CaptchaChallenge as WireCaptchaChallenge,
   WidgetConfig as WireConfig,
   WidgetConversation as WireConversation,
   WidgetConversationHours as WireHours,

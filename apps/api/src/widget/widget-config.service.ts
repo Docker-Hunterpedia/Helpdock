@@ -1,7 +1,7 @@
 import { brandDomains, customFieldDefs, type DbTransaction } from '@helpdock/db';
 import type {
+  CaptchaChallenge,
   WidgetAvailability,
-  WidgetCaptchaChallenge,
   WidgetConfig,
   WidgetLocale,
   WidgetPrechatFieldView,
@@ -130,7 +130,7 @@ export class WidgetConfigService {
    * brand that turned the check on with `pow`, from an allowed origin. Each
    * call is a new challenge, so "Try again" and an expiring one both ask here.
    */
-  challenge(brandId: string, facts: WidgetRequestFacts): Promise<WidgetCaptchaChallenge> {
+  challenge(brandId: string, facts: WidgetRequestFacts): Promise<CaptchaChallenge> {
     return this.#gate.brand(brandId, facts, async ({ tx, settings }) => {
       const keys = settings.captchaEnabled ? await this.#captcha.forBrand(brandId, tx) : null;
       if (keys?.provider !== 'pow') {

@@ -26,6 +26,7 @@ import {
 } from '@helpdock/db';
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
 import {
+  type CaptchaChallenge,
   canonicalIdentityJson,
   defaultWeeklyHours,
   SOCKET_IO_PATH,
@@ -34,7 +35,6 @@ import {
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
   type WidgetAvailability,
-  type WidgetCaptchaChallenge,
   type WidgetConfig,
   type WidgetConversation,
   type WidgetConversationList,
@@ -173,7 +173,7 @@ const captchaTransport: CaptchaTransport = {
 };
 
 /** The visitor's browser: the ALTCHA solution of a built-in challenge (ADR 0052). */
-const solvePow = (work: WidgetCaptchaChallenge): string => {
+const solvePow = (work: CaptchaChallenge): string => {
   let number = 0;
   // 200,000 is `medium`'s whole range: past it, the challenge has no solution.
   while (
@@ -1275,7 +1275,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       const elsewhere = await widget('GET', '/captcha/challenge', { origin: 'https://evil.test' });
       expect(elsewhere.status).toBe(403);
 
-      const work = await widget<WidgetCaptchaChallenge>('GET', '/captcha/challenge');
+      const work = await widget<CaptchaChallenge>('GET', '/captcha/challenge');
       expect(work.status).toBe(200);
       expect(work.body).toMatchObject({ algorithm: 'SHA-256', maxnumber: 50_000 });
       const token = solvePow(work.body);
@@ -1292,7 +1292,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       expect(raced.map(({ status }) => status).sort()).toEqual([201, 403]);
       expect((await start(third, { captchaToken: token })).status).toBe(403);
       // A fresh solution passes.
-      const again = await widget<WidgetCaptchaChallenge>('GET', '/captcha/challenge');
+      const again = await widget<CaptchaChallenge>('GET', '/captcha/challenge');
       expect((await start(third, { captchaToken: solvePow(again.body) })).status).toBe(201);
       expect(captchaCalls.length).toBe(calledOut);
 

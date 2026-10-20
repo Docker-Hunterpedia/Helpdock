@@ -157,8 +157,9 @@ describe('renderWebFormPage', () => {
       algorithm: 'SHA-256',
       challenge: 'c'.repeat(64),
       maxnumber: 50_000,
-      salt: 'abc?expires=1&surface=web-form',
+      salt: 'abc?expires=1&surface=web-form&',
       signature: 's'.repeat(64),
+      expiresIn: 900,
     } as const;
     const html = renderWebFormPage(view({ ...FORM, captcha: { provider: 'pow', challenge } }));
 

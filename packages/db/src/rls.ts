@@ -295,6 +295,10 @@ export const GLOBAL_TABLES: readonly { readonly name: string; readonly reason: s
     name: 'user_oauth_identities',
     reason: 'Google and GitHub sign-in links read before any brand is known (ADR 0051)',
   },
+  {
+    name: 'webauthn_credentials',
+    reason: 'staff passkeys, looked up by credential id before any brand is known (ADR 0050)',
+  },
   { name: 'users', reason: 'sign-in happens before any brand is known' },
   { name: 'brands', reason: 'the tenant itself, managed by audited install-admin paths' },
   { name: 'job_receipts', reason: 'claimed by a worker before it opens a brand transaction' },

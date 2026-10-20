@@ -1,6 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { boolean, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
+import { bytea } from './bytea.js';
 import { localeEnum, userStatusEnum } from './enums.js';
 
 /**
@@ -42,12 +52,22 @@ export const users = pgTable(
      */
     signatureEn: text('signature_en'),
     signatureAr: text('signature_ar'),
+    /**
+     * M18-01. The WebAuthn user handle: 32 random bytes, drawn when the first
+     * passkey is registered. Not the account id, because a UUIDv7 carries the
+     * time the account was made and the handle is stored on every authenticator.
+     */
+    webauthnUserHandle: bytea('webauthn_user_handle').unique('users_webauthn_user_handle_key'),
   },
   (table) => [
     // Addresses are compared case-insensitively. A unique index on `lower(email)`
     // does that without the `citext` extension, which keeps the install to the
     // extensions ARCHITECTURE §1 already asks for (pgvector, pg_trgm).
     uniqueIndex('users_email_lower_key').using('btree', sql`lower(${table.email})`),
+    check(
+      'users_webauthn_user_handle_length_check',
+      sql`octet_length(${table.webauthnUserHandle}) = 32`,
+    ),
   ],
 );
 

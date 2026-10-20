@@ -118,6 +118,7 @@ describe('the schema', () => {
       'users',
       'views',
       'web_form_settings',
+      'webauthn_credentials',
       'webhook_deliveries',
       'webhooks',
       'widget_settings',

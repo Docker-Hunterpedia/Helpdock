@@ -456,6 +456,12 @@ Per brand, set by Admin (defaults in bold):
 
 Presence (`online`, `away`, `offline`) is derived from `/staff` socket connections and an explicit toggle. Auto-unassign on offline (R §4.1) runs after 15 minutes offline, configurable per department, and never during business hours closed periods.
 
+### 12.1 Staff authentication factors
+
+The rules arrive with the M18 deliverables that implement them ([plan](../in-development/M18-sign-in-options.md#domain-rules-to-add-or-change-proposed)).
+
+1. **Passkey origin** (M18-01, [ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). The RP ID is `APP_URL`'s host and the one expected origin is `APP_URL`'s origin, never a request header. The RP ID is pinned in `auth.webauthn.rpId` by the first successful registration, and by nothing else; while `APP_URL`'s host differs from the pin, every passkey ceremony is refused (`passkeys-rp-changed`) and the other methods keep working. Passkeys exist only on https, or `http://localhost`, and on a host name rather than an IP address. A ceremony is spent when it is checked, success or failure, lives five minutes, and is bound to one purpose (`register`, `second-factor`, `passwordless`, `step-up`, `break-glass`); every purpose but `passwordless` is bound to one user, and a registration to one session family too. An attestation statement other than `none` or a `packed` self-attestation is refused, as is client data made inside a frame. User verification is required for `passwordless` and `break-glass` and preferred otherwise. A signature counter is compared only once either side is non-zero, and only after the signature verifies.
+
 ---
 
 ## 13. Outbound network safety
@@ -507,4 +513,5 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-09-27 | §3.4: the timer key is spelled with dots, as BullMQ requires (M3-02). |
 | 2026-10-11 | The Meta channels (M10, [ADR 0025](../decisions/0025-meta-channels-through-one-graph-adapter.md)): §2.5 and the new §2.6 reply-window rule; §4.4's three scoped ids and the first verified phone, a WhatsApp `wa_id`; the new §4.7 identities and §4.8 message kinds; §6's keys; §11's delivery logs and erasure; §13's Graph client. |
 | 2026-10-18 | §7: imported tickets join the widget queue only when their customer continues them live (M11-17). |
+| 2026-10-20 | The new §12.1 Staff authentication factors, with its first rule, passkey origin (M18-01, [ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). |
 | 2026-10-20 | §12: the SSO first-link rule, with Entra ID's `xms_edov` from members of the one tenant a connection names (M18-09, ADR 0026). |

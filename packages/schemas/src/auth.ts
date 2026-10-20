@@ -256,6 +256,16 @@ export const authMethodsSchema = z.object({
   password: z.boolean(),
   magicLink: z.boolean(),
   oauth: z.record(oauthProviderSchema, z.boolean()),
+  /**
+   * M18-01. Whether the screen offers passkeys: `APP_URL` is https (or
+   * `http://localhost`), passkeys are not paused, and SSO is not enforced.
+   */
+  passkey: z.boolean().default(false),
+  /**
+   * M18-01. `APP_URL`'s host is not the one this install's passkeys were made
+   * for, so they are paused; the screen says so where the button would be.
+   */
+  passkeysPaused: z.boolean().default(false),
 });
 export type AuthMethods = z.infer<typeof authMethodsSchema>;
 
@@ -362,6 +372,10 @@ const authErrorCodes = [
   'unavailable',
   /** A new password that is on the bundled list of breached passwords (ASVS 2.1.7). */
   'password-breached',
+  /** `APP_URL` is plain http on a host other than localhost, or an IP address: browsers refuse WebAuthn there (M18-01). */
+  'passkeys-unavailable',
+  /** `APP_URL`'s host is no longer the RP ID the install's passkeys were made for; they are paused (M18-01). */
+  'passkeys-rp-changed',
 ] as const;
 export const authErrorCodeSchema = z.enum(authErrorCodes);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;

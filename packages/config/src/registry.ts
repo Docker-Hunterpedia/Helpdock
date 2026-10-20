@@ -208,6 +208,20 @@ export const SETTING_DEFINITIONS = [
     description: 'Lifetime of a single-use magic link, in minutes (DOMAIN-RULES §4.6).',
   }),
   defineSetting({
+    key: 'auth.webauthn.rpId',
+    // A lower-case host name as `new URL(APP_URL).hostname` spells it, or empty
+    // while no passkey ceremony has run yet.
+    schema: z
+      .string()
+      .max(253)
+      .regex(/^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*)?$/),
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Passkey relying party id: the host of APP_URL, written by the first successful passkey registration; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050).',
+  }),
+  defineSetting({
     key: 'roles.viewerEnabled',
     schema: z.boolean(),
     default: true,

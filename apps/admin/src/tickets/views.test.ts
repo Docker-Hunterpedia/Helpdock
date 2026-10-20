@@ -284,6 +284,9 @@ describe('emptyKindOf', () => {
   it('falls back to "nothing in this view" with no filters on', () => {
     expect(emptyKindOf(shared, '', EMPTY_FILTERS)).toBe('plain');
     expect(emptyKindOf(null, '', EMPTY_FILTERS)).toBe('plain');
+  });
+});
+
 describe('snoozed (M14-02)', () => {
   it.each(['only', 'include'] as const)(
     'keeps the %s choice across URLs, saved views and the list query',

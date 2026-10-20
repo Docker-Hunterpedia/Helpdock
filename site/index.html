@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helpdock: open-source, self-hosted customer support</title>
+<meta name="description" content="Helpdock is an open-source, self-hosted help desk: ticketing, a help center, a live chat widget and AI that answers only from your knowledge. One Docker deploy serves many brands, in English and Arabic. AGPL-3.0.">
+<link rel="canonical" href="https://helpdock.oday-bakkour.com/">
+<link rel="alternate" hreflang="en" href="https://helpdock.oday-bakkour.com/">
+<link rel="alternate" hreflang="ar" href="https://helpdock.oday-bakkour.com/ar/">
+<link rel="alternate" hreflang="x-default" href="https://helpdock.oday-bakkour.com/">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5F0">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15171B">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Helpdock">
+<meta property="og:url" content="https://helpdock.oday-bakkour.com/">
+<meta property="og:title" content="Helpdock: open-source, self-hosted customer support">
+<meta property="og:description" content="Ticketing, a help center, a live chat widget and grounded AI, in one deploy that serves many brands. English and Arabic. AGPL-3.0.">
+<meta property="og:image" content="https://helpdock.oday-bakkour.com/assets/img/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Helpdock: open-source, self-hosted customer support, beside a screenshot of the ticket workspace">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ar_AR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@Oday_Hunter">
+<meta name="twitter:title" content="Helpdock: open-source, self-hosted customer support">
+<meta name="twitter:description" content="Ticketing, a help center, a live chat widget and grounded AI, in one deploy that serves many brands. English and Arabic. AGPL-3.0.">
+<meta name="twitter:image" content="https://helpdock.oday-bakkour.com/assets/img/og.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Helpdock",
+  "url": "https://helpdock.oday-bakkour.com/",
+  "description": "Open-source, self-hosted customer support: ticketing, a help center, a live chat widget and grounded AI, in one deploy that serves many brands, in English and Arabic.",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Linux (Docker Compose)",
+  "softwareVersion": "1.0.1",
+  "datePublished": "2026-10-20",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "isAccessibleForFree": true,
+  "inLanguage": ["en", "ar"],
+  "image": "https://helpdock.oday-bakkour.com/assets/img/og.png",
+  "screenshot": "https://helpdock.oday-bakkour.com/assets/img/ticket-view-en.webp",
+  "downloadUrl": "https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1",
+  "releaseNotes": "https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md",
+  "sameAs": "https://github.com/Docker-Hunterpedia/Helpdock",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Oday Bakkour", "url": "https://oday-bakkour.com/" }
+}
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="./" aria-label="Helpdock home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
+      Helpdock
+    </a>
+    <nav class="nav" aria-label="Main">
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#ai">AI</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">Docs</a></li>
+        <li><a href="https://github.com/Docker-Hunterpedia/Helpdock">GitHub</a></li>
+      </ul>
+    </nav>
+    <div class="header-actions">
+      <a class="lang-link" href="ar/" hreflang="ar" lang="ar">العربية</a>
+      <a class="btn btn-primary btn-sm" href="#install">Install</a>
+      <details class="menu">
+        <summary aria-label="Menu"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#menu"/></svg></summary>
+        <nav class="menu-panel" aria-label="Main">
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#ai">AI</a></li>
+            <li><a href="#security">Security</a></li>
+            <li><a href="#install">Install</a></li>
+            <li><a href="#roadmap">Roadmap</a></li>
+            <li><a href="#faq">FAQ</a></li>
+            <li><a href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">Docs</a></li>
+            <li><a href="https://github.com/Docker-Hunterpedia/Helpdock">GitHub</a></li>
+          </ul>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container">
+      <div class="hero-copy">
+        <a class="news" href="https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1"><span class="news-tag">New</span>Helpdock 1.0.1 is out<svg class="icon news-chev" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+        <h1 class="hero-title" id="hero-title">Your whole help desk. One&nbsp;deploy.</h1>
+        <p class="lead">Ticketing, a help center, live chat and AI that answers only from your knowledge. Open source. Self-hosted. In English and Arabic.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#install">Install with Docker</a>
+          <a class="more" href="https://x.com/Oday_Hunter/status/2112356690876051954">Watch the release video<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+        </div>
+        <p class="fineprint-row"><span>Free under AGPL-3.0</span><span aria-hidden="true">·</span><span>Docker Compose</span><span aria-hidden="true">·</span><span>One install, every brand</span></p>
+      </div>
+
+      <figure class="showcase">
+        <fieldset class="seg">
+          <legend class="visually-hidden">Screenshot language</legend>
+          <input type="radio" name="shot" id="shot-en" checked>
+          <label for="shot-en">English</label>
+          <input type="radio" name="shot" id="shot-ar">
+          <label for="shot-ar"><span lang="ar">العربية</span></label>
+        </fieldset>
+        <div class="frame">
+          <img class="shot-en" src="assets/img/ticket-view-en.webp" width="1280" height="720" alt="The Helpdock ticket workspace: the ticket list, an email ticket with its SLA badge and reply composer, and the contact card with the contact's previous tickets" fetchpriority="high">
+          <img class="shot-ar" src="assets/img/ticket-view-ar.webp" width="1280" height="720" alt="The same ticket workspace in Arabic, laid out right to left" loading="lazy">
+        </div>
+        <figcaption class="caption">The ticket workspace, from the admin app's Playwright screenshot baselines.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="features" aria-labelledby="channels-title">
+    <div class="container narrow">
+      <h2 class="visually-hidden" id="channels-title">Channels</h2>
+      <p class="statement reveal"><strong>Every conversation. One desk.</strong> Email, WhatsApp, Messenger, Instagram, Telegram, the chat widget, a web form and the API all file into the same tickets, with the same statuses, SLAs, rules and assignment.</p>
+      <ul class="channels reveal">
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#mail"/></svg></span><strong>Email</strong><span>IMAP or inbound parse, replies over the brand's SMTP</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#phone"/></svg></span><strong>WhatsApp</strong><span>The brand's number, through Meta's Graph API</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#messages-square"/></svg></span><strong>Messenger</strong><span>The brand's Facebook Page</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#camera"/></svg></span><strong>Instagram</strong><span>The brand's professional account</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#send"/></svg></span><strong>Telegram</strong><span>The brand's bot</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#message-circle"/></svg></span><strong>Chat widget</strong><span>Live over WebSocket</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file-text"/></svg></span><strong>Web form</strong><span>Hosted on the help center domain</span></li>
+        <li><span class="disc"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#code"/></svg></span><strong>REST API</strong><span><code>POST /api/v1/tickets</code></span></li>
+      </ul>
+      <p class="note-line reveal">Each brand connects its own accounts. A reply goes back on the channel the customer wrote from.</p>
+    </div>
+  </section>
+
+  <section class="section band-dark" aria-labelledby="release-title">
+    <div class="container">
+      <div class="film reveal">
+        <p class="eyebrow">Helpdock 1.0 · 20 October 2026</p>
+        <h2 class="headline" id="release-title">Stable. And tested before it shipped.</h2>
+        <p class="lead">Every milestone of the 1.0 plan has shipped. Before release: an external pentest of the widget and the API, a load run, a screen-reader pass, an onboarding run with three outside testers and a restore drill.</p>
+        <a class="poster" href="https://x.com/Oday_Hunter/status/2112356690876051954">
+          <img class="poster-img" src="assets/img/release-1-0.webp" width="1280" height="720" alt="Helpdock 1.0 release video: watch it on X" loading="lazy">
+          <span class="poster-play"><span class="play"><svg class="icon play-icon" aria-hidden="true"><use href="assets/icons.svg#play"/></svg></span>Watch on X · 1:09</span>
+        </a>
+        <div class="link-row">
+          <a class="more" href="https://oday-bakkour.com/blog/helpdock-1-0-open-source-help-desk">Read the announcement<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+          <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md">Changelog and known limits<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+        </div>
+        <p class="update"><strong>1.0.1 is the latest release.</strong> It binds Google and GitHub sign-in to the provider account, refuses a CAPTCHA solved on another site, and fixes mixed-direction text in the Arabic admin. Upgrading from 1.0.0? Some Google and GitHub sign-ins must be connected again: <a href="https://github.com/Docker-Hunterpedia/Helpdock/releases/tag/v1.0.1">read the release notes</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="tour-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <h2 class="headline" id="tour-title">Everything in 1.0.</h2>
+        <p class="lead">A help center, a chat widget, SLAs, rules, reports and sign-in, in the one install.</p>
+      </div>
+      <div class="tiles">
+        <article class="tile t-full reveal">
+          <div class="tile-copy">
+            <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#book-open"/></svg>
+            <h3 class="tile-title">A help center on every brand's domain.</h3>
+            <p>Articles in English and Arabic, search in each language and "was this helpful?" feedback. Public and internal articles, so the same knowledge serves customers and staff.</p>
+            <p class="caption">Image: a render of the help center's design artboard.</p>
+          </div>
+          <div class="tile-media"><img src="assets/img/help-center-article.webp" width="1280" height="900" alt="A help center article page: section navigation, the article with a table and a tip, and a Still need help card" loading="lazy"></div>
+        </article>
+
+        <article class="tile t-half reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#message-circle"/></svg>
+          <h3 class="tile-title">A chat widget that stays small.</h3>
+          <p>Live over WebSocket, with optional signed identity for signed-in users. Its first script is held to a 40 KB gzipped budget.</p>
+          <p class="caption">Image: a render of the widget's design artboard.</p>
+          <div class="tile-media portrait"><img src="assets/img/widget-en.webp" width="440" height="760" alt="The chat widget in English: an AI answer citing a help center article, then a handoff to the billing team" loading="lazy"></div>
+        </article>
+
+        <article class="tile t-half reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#key-round"/></svg>
+          <h3 class="tile-title">Staff sign-in, with single sign-on.</h3>
+          <p>Argon2id passwords checked against a breached-password list, a second factor that Admins must use, and magic links. SAML 2.0 and OpenID Connect, with walk-throughs for:</p>
+          <ul class="chips" aria-label="SSO walk-throughs">
+            <li class="chip">Okta</li>
+            <li class="chip">Microsoft Entra ID</li>
+            <li class="chip">Google Workspace</li>
+            <li class="chip">Keycloak</li>
+          </ul>
+          <div class="tile-media portrait"><img src="assets/img/sign-in-en.webp" width="448" height="608" alt="The staff sign-in screen: email and password, a sign-in link by email, and Google and GitHub buttons, with a note that two-factor is required on this install" loading="lazy"></div>
+        </article>
+
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#clock"/></svg>
+          <h3 class="h3">SLAs on your hours.</h3>
+          <p>Business hours with holidays and time zones. Clocks pause in the statuses you mark as paused. A CSAT survey goes out when a ticket is closed.</p>
+        </article>
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#workflow"/></svg>
+          <h3 class="h3">Rules, macros and views.</h3>
+          <p>Workflow and time-based rules with a test run and an execution log. Macros with placeholders. Saved views, merge and split, and a collision indicator.</p>
+        </article>
+        <article class="tile t-third reveal">
+          <svg class="icon tile-icon" aria-hidden="true"><use href="assets/icons.svg#chart-column"/></svg>
+          <h3 class="h3">Reports, API and webhooks.</h3>
+          <p>Volume, response times, SLA compliance, CSAT and workload, with CSV export. A REST API with scoped keys and an OpenAPI document. Webhooks signed with HMAC.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="ai" aria-labelledby="ai-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Grounded AI</p>
+        <h2 class="headline" id="ai-title">It answers from your knowledge. Or it hands off.</h2>
+        <p class="lead">The assistant answers customers and helps agents from the brand's own knowledge base. When that does not answer the question, a person does.</p>
+      </div>
+      <ol class="points reveal">
+        <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#book-open"/></svg><h3 class="h4">Only your knowledge.</h3><p>Help center articles, PDF and DOCX files, crawled websites, Notion and Google Drive. Visitor-facing answers read only public knowledge.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#list-checks"/></svg><h3 class="h4">Sources, cited.</h3><p>Any citation that does not resolve to a document it retrieved is dropped.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#hand"/></svg><h3 class="h4">A handoff, not a guess.</h3><p>When the knowledge base does not answer, or confidence is below the channel's threshold, your team takes over.</p></li>
+        <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#shield-check"/></svg><h3 class="h4">Text in, text out.</h3><p>The model has no tools. PII is redacted and a prompt-injection filter runs before each call. Every call is logged with its cost, and budgets cap each brand.</p></li>
+      </ol>
+
+      <section class="figures reveal" aria-labelledby="eval-title">
+        <h3 class="h3 figures-title" id="eval-title">The bilingual evaluation before 1.0.0 passed every threshold.</h3>
+        <div class="figure-row">
+          <div><span class="figure">97.5%</span><span class="figure-label">of answerable questions answered correctly in English</span></div>
+          <div><span class="figure">94.6%</span><span class="figure-label">of answerable questions answered correctly in Arabic</span></div>
+          <div><span class="figure">100%</span><span class="figure-label">of unanswerable questions handed off, in both</span></div>
+        </div>
+        <ul class="checks">
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg>No injected instruction followed</li>
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg>Every citation resolved</li>
+          <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg>Every answer in the question's language</li>
+        </ul>
+        <p class="fineprint"><code>glm-4.6</code> answering, <code>glm-5.1</code> judging, <code>bge-m3:567m</code> embeddings, in <a href="https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646">run 39322685646</a>. That is one provider pair: <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/ai.md#evaluation">evaluate the model you choose</a>. Suggested replies, summaries, translation, AI triage and voice-note transcription are there too. Every AI mode is off until a brand's Admin turns it on.</p>
+      </section>
+    </div>
+  </section>
+
+  <section class="section" id="arabic" aria-labelledby="arabic-title">
+    <div class="container">
+      <div class="split reverse even">
+        <figure class="stage reveal">
+          <img class="stage-img" src="assets/img/widget-ar.webp" width="440" height="760" alt="The chat widget in Arabic, right to left" loading="lazy">
+        </figure>
+        <div class="stack-lg reveal">
+          <p class="eyebrow">Bilingual</p>
+          <h2 class="headline" id="arabic-title">English and Arabic. From the first screen.</h2>
+          <p class="lead">The admin app, the help center, the chat widget and the emails ship in both languages, with right-to-left layouts.</p>
+          <ul class="facts">
+            <li><strong>A flip, not a fork.</strong><span>Layouts use logical properties, so right to left is the same screen mirrored.</span></li>
+            <li><strong>One type family.</strong><span>IBM Plex Sans and IBM Plex Sans Arabic were drawn together, so mixed lines share weight and rhythm.</span></li>
+            <li><strong>Mixed text stays readable.</strong><span>Ticket ids, emails and URLs inside Arabic sentences keep their left-to-right order.</span></li>
+            <li><strong>Tested in both.</strong><span>The admin's screenshot tests and the AI evaluation run in Arabic as well as English.</span></li>
+          </ul>
+          <p class="caption">The widget image is a render of its design artboard. <a href="ar/" hreflang="ar" lang="ar">اقرأ هذه الصفحة بالعربية</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="brands" aria-labelledby="brands-title">
+    <div class="container">
+      <div class="split">
+        <div class="stack-lg reveal">
+          <p class="eyebrow">Multi-brand</p>
+          <h2 class="headline" id="brands-title">One deploy. Many brands.</h2>
+          <p class="lead">Every brand runs from the one install, each with its own face and its own data.</p>
+          <ul class="ticks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Its own inboxes and channels</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>A help center on its own domain, with a certificate Caddy issues on demand</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Its widget theme: accent, surface tone, radius, logo and launcher</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Its AI knowledge, with daily and monthly budgets</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Departments and teams, with department scope enforced in the database</span></li>
+          </ul>
+        </div>
+        <figure class="stack reveal">
+          <div class="code">
+            <div class="code-head"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#database"/></svg><span class="label">packages/db/drizzle/0036_telegram.sql</span></div>
+<pre><code><span class="k">ALTER TABLE</span> "telegram_bots" <span class="k">ENABLE ROW LEVEL SECURITY</span>;
+<span class="k">ALTER TABLE</span> "telegram_bots" <span class="k">FORCE ROW LEVEL SECURITY</span>;
+
+<span class="k">CREATE POLICY</span> "telegram_bots_tenant_select"
+  <span class="k">ON</span> "telegram_bots" <span class="k">FOR SELECT</span>
+  <span class="k">USING</span> (brand_id = <span class="k">ANY</span> (
+    nullif(current_setting('app.brand_ids', true), '')::uuid[]
+  ));</code></pre>
+          </div>
+          <figcaption class="muted small">Every tenant table carries <code>brand_id</code> under a forced row-level security policy like this one, and the api refuses to serve if its database role could bypass it. Postgres keeps brands apart, not only application code.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section band-dark" id="security" aria-labelledby="security-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Security</p>
+        <h2 class="headline" id="security-title">Security you can check.</h2>
+        <p class="lead">The rules are written down, the code is open, and every release image is signed.</p>
+      </div>
+      <div class="grid-3 reveal">
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#database"/></svg><h3 class="h4">Row-level security</h3><p>Every tenant table is under a forced Postgres policy by brand, with department scope on ticket data.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#key-round"/></svg><h3 class="h4">Encrypted secrets</h3><p>AES-256-GCM under a master key that is not stored in the database. Secrets are never returned after they are saved.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#globe-lock"/></svg><h3 class="h4">SSRF-safe fetching</h3><p>Every fetch of a user-supplied URL goes through one client that blocks loopback, private and cloud-metadata addresses and re-checks every redirect.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#file-scan"/></svg><h3 class="h4">Careful uploads</h3><p>Sniffed by magic bytes, re-encoded, kept in a private bucket and served through short-lived presigned URLs.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#list-checks"/></svg><h3 class="h4">OWASP ASVS Level 2</h3><p>All 258 requirements of ASVS 4.0.3 Level 2 walked one by one, with the evidence named and no gap open.</p></article>
+        <article><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#package-check"/></svg><h3 class="h4">Signed images, with an SBOM</h3><p>Each release image is signed keylessly with Cosign and published with a CycloneDX SBOM.</p></article>
+      </div>
+      <dl class="spec reveal" aria-label="The 1.0.1 release image">
+        <div><dt>Image</dt><dd>ghcr.io/docker-hunterpedia/helpdock:1.0.1</dd></div>
+        <div><dt>Platforms</dt><dd>linux/amd64, linux/arm64</dd></div>
+        <div><dt>Signature</dt><dd>Cosign keyless, GitHub OIDC</dd></div>
+        <div><dt>SBOM</dt><dd>helpdock-1.0.1.cdx.json</dd></div>
+      </dl>
+      <p class="muted small after">Read the <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/security.md">security guide</a>, the <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/completed/asvs-l2.md">ASVS walk-through</a> and how to <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/release.md#verify-the-image-signature">verify the image signature</a>. Report a vulnerability privately, as <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">SECURITY.md</a> describes.</p>
+    </div>
+  </section>
+
+  <section class="section" id="migrate" aria-labelledby="migrate-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Migration</p>
+        <h2 class="headline" id="migrate-title">Move in from Zendesk, Freshdesk or Zoho&nbsp;Desk.</h2>
+        <p class="lead">A bilingual import wizard brings your history across. A manual CSV mapper covers every other tool.</p>
+      </div>
+      <ol class="steps-row reveal">
+        <li><h3 class="h3">Connect</h3><p>Pick the source and connect the account, or upload an export for the CSV mapper.</p></li>
+        <li><h3 class="h3">Map</h3><p>Departments, staff, statuses, priorities, channels, tags and custom fields, with saved presets.</p></li>
+        <li><h3 class="h3">Dry run</h3><p>Compare expected counts and inspect replies, notes, authors, dates and files before anything is written.</p></li>
+        <li><h3 class="h3">Approve</h3><p>Start the reviewed run, watch its log, and pause or resume it.</p></li>
+      </ol>
+      <div class="notes reveal">
+        <p class="note"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#circle-check"/></svg><span>Imported history sends no customer messages and starts no rules, notifications or SLA timers.</span></p>
+        <p class="note"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#list-checks"/></svg><span>The importers were verified against stand-in servers built from each vendor's published API documentation, not against live accounts. <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/importing.md">Importing guide</a></span></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="install" aria-labelledby="install-title">
+    <div class="container">
+      <div class="split top">
+        <div class="stack-lg reveal">
+          <p class="eyebrow">Quick start</p>
+          <h2 class="headline" id="install-title">Install 1.0.1 with Docker.</h2>
+          <p class="lead">One Docker Compose stack on your own Linux server. You need:</p>
+          <ul class="ticks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Docker Engine with the Compose v2 plugin</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>2 vCPU and 4 GB of memory</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Two DNS names pointing at the server: one for the admin app, one for the API and widget</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>Ports 80 and 443 open, so Caddy can get certificates</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#check"/></svg><span>An S3-compatible bucket for attachments and article images</span></li>
+          </ul>
+          <div class="actions start">
+            <a class="btn btn-primary" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/install.md">Read the install guide</a>
+            <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/configuration.md">Configuration reference<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+          </div>
+        </div>
+
+        <div class="code reveal">
+          <div class="code-head">
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#terminal"/></svg><span class="label">1. Get the 1.0.1 Compose file</span>
+            <button class="copy-btn" type="button" data-copy="cmd-get" data-done="Copied" data-failed="Copy failed" hidden><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#copy"/></svg><span data-label aria-live="polite">Copy</span></button>
+          </div>
+<pre><code id="cmd-get">git clone --depth 1 --branch v1.0.1 \
+  https://github.com/Docker-Hunterpedia/Helpdock.git
+cd Helpdock/docker
+cp ../.env.example .env
+openssl rand -base64 32   <span class="c"># the master key, for APP_MASTER_KEY</span></code></pre>
+          <div class="code-note">
+            <p>2. Edit <code>.env</code>: set <code>HELPDOCK_VERSION=1.0.1</code> and at least</p>
+            <p class="env-keys"><code>APP_URL</code><code>APP_MASTER_KEY</code><code>HELPDOCK_APP_PASSWORD</code><code>DATABASE_URL</code><code>POSTGRES_PASSWORD</code><code>DATABASE_MIGRATION_URL</code><code>ADMIN_HOST</code><code>API_HOST</code><code>ACME_EMAIL</code><code>S3_*</code></p>
+          </div>
+          <div class="code-head">
+            <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#terminal"/></svg><span class="label">3. Start the stack</span>
+            <button class="copy-btn" type="button" data-copy="cmd-up" data-done="Copied" data-failed="Copy failed" hidden><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#copy"/></svg><span data-label aria-live="polite">Copy</span></button>
+          </div>
+<pre><code id="cmd-up">docker compose up -d
+docker compose ps</code></pre>
+          <div class="code-note">
+            <p>4. Open <code>https://&lt;ADMIN_HOST&gt;</code> and finish the first-run wizard. Back up <code>.env</code> with the database: without <code>APP_MASTER_KEY</code>, nothing encrypted can be read back.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Roadmap</p>
+        <h2 class="headline" id="roadmap-title">What comes after 1.0.</h2>
+        <p class="lead">Proposed releases from the 1.x plan. Nothing in it has started yet, and its contents and order can change.</p>
+      </div>
+      <div class="road reveal">
+        <article aria-labelledby="road-11">
+          <h3 class="version" id="road-11">1.1</h3>
+          <ul class="ticks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#sparkles"/></svg><span><strong>AI workspace.</strong> A playground, saved tests, a review queue, personas and confidence-gated triage.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#inbox"/></svg><span><strong>Inbox productivity.</strong> Snooze, bulk edits with undo, a command palette and keyboard shortcuts.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#key-round"/></svg><span><strong>Sign-in options.</strong> Passkeys, Microsoft work accounts and a built-in proof-of-work CAPTCHA.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#code"/></svg><span><strong>Helpdock as an MCP server</strong>, for outside AI clients.</span></li>
+          </ul>
+        </article>
+        <article aria-labelledby="road-12">
+          <h3 class="version" id="road-12">1.2</h3>
+          <ul class="ticks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#hand"/></svg><span><strong>AI actions</strong> that change nothing until a person approves them.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#server"/></svg><span><strong>Self-host operations.</strong> A signed one-command installer, backup, restore and update notices.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#upload"/></svg><span><strong>More importers and undo.</strong> Help Scout, Intercom, Gorgias, Zammad and Front.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#message-circle"/></svg><span><strong>Customer surfaces.</strong> An email design editor and several widgets per brand.</span></li>
+          </ul>
+        </article>
+        <article aria-labelledby="road-13">
+          <h3 class="version" id="road-13">1.3</h3>
+          <ul class="ticks">
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#languages"/></svg><span><strong>More languages</strong>, customer-facing surfaces first, translated without touching code.</span></li>
+            <li><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#users"/></svg><span><strong>An installable admin app</strong> for desktop and phone, with notifications and a badge.</span></li>
+          </ul>
+        </article>
+      </div>
+      <p class="muted small after center">The full plan is <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/planning/PRD.md#phase-5--1x">Phase 5 of the PRD</a>.</p>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="faq" aria-labelledby="faq-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <h2 class="headline" id="faq-title">Questions, answered.</h2>
+      </div>
+      <div class="qa reveal">
+        <details><summary>What does it cost?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>Nothing. Helpdock is free software under the GNU AGPL-3.0, with no paid tiers or licence keys. If you change it and let people use your changed version over a network, the AGPL asks you to offer them its source.</p></details>
+        <details><summary>Is there a hosted version?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>No. Helpdock is self-hosted only: you run it on your server and your data stays there. A hosted Helpdock is a stated non-goal for the 1.x releases.</p></details>
+        <details><summary>What do I need to run it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>A Linux server with Docker Engine and the Compose v2 plugin, 2 vCPU and 4 GB of memory (ClamAV, if you turn it on, wants another 2 GB), two DNS names, ports 80 and 443, and an S3-compatible bucket. Docker Compose is the supported runtime.</p></details>
+        <details><summary>Which AI providers work?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>Any provider pi-ai supports, such as OpenAI, Anthropic, Google, OpenRouter, Groq, Mistral, xAI or DeepSeek, by API key or subscription, or any OpenAI-compatible server such as Ollama or vLLM, so the model can run on your own hardware.</p></details>
+        <details><summary>Do I have to use AI?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>No. Every AI mode is off until a brand's Admin turns it on. The desk, channels, help center and widget work without it.</p></details>
+        <details><summary>Which languages does it speak?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>English and Arabic, with right-to-left layouts, across the admin app, help center, widget and emails. More languages are proposed for 1.3.</p></details>
+        <details><summary>Can I bring my tickets from another help desk?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>Yes, from Zendesk, Freshdesk and Zoho Desk with their importers, and from anything else with the manual CSV mapper. Run the dry run first: the importers were verified against stand-ins, not live vendor accounts.</p></details>
+        <details><summary>How do I report a security issue?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>Privately, as <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">SECURITY.md</a> describes. Please do not open a public issue.</p></details>
+        <details><summary>Who builds it?<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#plus"/></svg></summary><p>Helpdock is developed by <a href="https://oday-bakkour.com/">Oday Bakkour</a>, in the open on GitHub. Contributions are welcome; start with <a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p></details>
+        <p class="muted qa-more">Something else? Write to <a href="mailto:contact@oday-bakkour.com">contact@oday-bakkour.com</a> or start a <a href="https://github.com/Docker-Hunterpedia/Helpdock/discussions">discussion on GitHub</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="cta-title">
+    <div class="container">
+      <div class="cta reveal">
+        <svg class="cta-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
+        <h2 class="headline" id="cta-title">Run your help desk on your own server.</h2>
+        <p class="lead">Install 1.0.1 with Docker Compose, read the docs, or star the repository to follow the 1.x releases.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#install">Install with Docker</a>
+          <a class="btn btn-secondary" href="https://github.com/Docker-Hunterpedia/Helpdock"><svg class="icon" aria-hidden="true"><use href="assets/icons.svg#star"/></svg>Star on GitHub</a>
+        </div>
+        <a class="more" href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">Read the docs<svg class="icon" aria-hidden="true"><use href="assets/icons.svg#chevron-right"/></svg></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="stack">
+        <a class="brand" href="./">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#0F766E"/><path d="M10 8h3.2v6.2h5.6V8H22v16h-3.2v-6.6h-5.6V24H10z" fill="#FFFFFF"/></svg>
+          Helpdock
+        </a>
+        <p class="footer-about">Open-source, self-hosted customer support: ticketing, a help center, a live chat widget and grounded AI, in English and Arabic.</p>
+      </div>
+      <nav aria-labelledby="f-product">
+        <h2 id="f-product">Product</h2>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#ai">Grounded AI</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#roadmap">Roadmap</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="f-docs">
+        <h2 id="f-docs">Docs</h2>
+        <ul>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/install.md">Install guide</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/configuration.md">Configuration</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/operations.md">Operations</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock#documentation">All documentation</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CHANGELOG.md">Changelog</a></li>
+        </ul>
+      </nav>
+      <nav aria-labelledby="f-project">
+        <h2 id="f-project">Project</h2>
+        <ul>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock">GitHub</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/releases">Releases</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/LICENSE">License (AGPL-3.0)</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/SECURITY.md">Security policy</a></li>
+          <li><a href="https://github.com/Docker-Hunterpedia/Helpdock/blob/main/CONTRIBUTING.md">Contributing</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="footer-bottom">
+      <p>Developed by <a href="https://oday-bakkour.com/">Oday Bakkour</a> · <a href="mailto:contact@oday-bakkour.com">contact@oday-bakkour.com</a></p>
+      <p><a href="ar/" hreflang="ar" lang="ar">العربية</a> · Free software under the GNU AGPL-3.0. Product names are trademarks of their owners.</p>
+    </div>
+  </div>
+</footer>
+<script src="assets/site.js" defer></script>
+</body>
+</html>

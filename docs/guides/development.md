@@ -64,6 +64,7 @@ apps/          api, admin, helpcenter, widget
 packages/      db, schemas, ai, channels, ui, i18n, config, net, jobs
 scripts/       repository checks run by CI, and the artboard renderer
 docs/          planning, guides, decisions, rendered design screens
+site/          the static product website, deployed to GitHub Pages (website.md)
 ```
 
 Every workspace is `@helpdock/<directory name>`, private, ESM (`"type": "module"`), and has the same four scripts: `build`, `typecheck`, `lint`, `test`. A workspace is a placeholder until its own deliverable lands — it exports a `PACKAGE_NAME` constant and has one test asserting it matches `package.json`, which is enough to prove the pipeline runs end to end. `apps/admin` adds `dev`, `e2e` and `e2e:baselines`, and its `build` is `vite build` rather than `tsc`; see [Admin app](#admin-app).
@@ -991,7 +992,8 @@ image smoke test run for any affected workspace.
 Global configuration, workspace manifests, tooling, unknown paths, empty diffs
 and incomplete GitHub file lists select every suite. A manifest change that only
 bumps `"version"` (the Changesets release pull request) selects none. Renames
-check both paths. Documentation changes skip heavy jobs, except the two guides a
+check both paths. Documentation changes and the static website in `site/` skip
+heavy jobs, except the two guides a
 package test renders and compares: `docs/guides/configuration.md` selects
 `@helpdock/config` and `docs/guides/webhooks.md` selects `@helpdock/jobs`, so a
 hand edit to either fails on its pull request. The reference imports,

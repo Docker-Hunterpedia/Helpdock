@@ -7,7 +7,7 @@ Two targets from [REQUIREMENTS §7](../planning/REQUIREMENTS.md#7-success-criter
 and [DOMAIN-RULES §15](../planning/DOMAIN-RULES.md#15-product-metrics):
 
 - **30 minutes** from `docker compose up` on a clean VM to the first ticket
-  replied, following only the [README](../../README.md#install) and the
+  replied, following only the [README](../../README.md#quick-start) and the
   [install guide](../guides/install.md).
 - **Three clicks** from the ticket list to a sent reply, measured with three
   outside testers.
@@ -39,7 +39,7 @@ needs to reach the npm registry and a real build does not.
 
 ### The README against the published image
 
-On the same day the [install section of the README](../../README.md#install)
+On the same day the [install section of the README](../../README.md#quick-start)
 was followed against `ghcr.io/docker-hunterpedia/helpdock:0.3.1`: the `v0.3.1`
 Compose files, `.env` copied from `.env.example` and filled in as the
 [install guide](../guides/install.md#install) says, `ADMIN_HOST=admin.localhost`

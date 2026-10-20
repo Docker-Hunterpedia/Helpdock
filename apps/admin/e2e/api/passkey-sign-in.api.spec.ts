@@ -1,6 +1,12 @@
 import { expect, type Page, test } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import {
+  ACCOUNT_EMAIL_ENV,
+  ACCOUNT_PASSWORD_ENV,
+  resetStepUpBudget,
+  SKIP_ENV,
+  TOTP_SECRET_ENV,
+} from './install.js';
 import { freshTotpCode } from './totp.js';
 
 /**
@@ -39,6 +45,8 @@ const signOut = async (page: Page): Promise<void> => {
 };
 
 test.describe('passwordless sign-in, against the real api', () => {
+  test.beforeEach(resetStepUpBudget);
+
   test('signs in with a saved passkey and no second step, then refuses one the account no longer holds', async ({
     browser,
   }) => {

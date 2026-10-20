@@ -194,3 +194,5 @@ Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. Do no
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE).
+
+Developed by [Oday Bakkour](https://oday-bakkour.com/).

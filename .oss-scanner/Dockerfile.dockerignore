@@ -1,0 +1,32 @@
+# Read by BuildKit instead of the root .dockerignore when it builds
+# .oss-scanner/Dockerfile. The root file leaves out docs, Markdown, e2e tests and
+# CI config, which the production image never reads but an audit does.
+
+# Installed and built inside the image, for its platform.
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+.turbo
+**/.turbo
+coverage
+**/coverage
+test-results
+**/test-results
+playwright-report
+**/playwright-report
+blob-report
+**/blob-report
+
+# Secrets. `.env.example` is a template and stays.
+.env
+**/.env
+.env.*
+**/.env.*
+!.env.example
+
+# The scanner adds the git history itself, and a worktree's `.git` is a file
+# pointing outside the context. Agent worktrees would be other checkouts.
+.git
+.claude/worktrees

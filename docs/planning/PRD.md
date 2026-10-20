@@ -107,7 +107,7 @@ Update this table in the same PR that changes a milestone's status.
 | 5 1.x | M12 AI workspace | M3, M4, M7, M8 | 14–15 | planned | | |
 | 5 1.x | M13 AI actions and integrations | M12, M8, M0 (M13-09 to M13-11: M8 only) | 14–15 | planned | | |
 | 5 1.x | M14 Inbox productivity | M1, M3, M4, M5, M7, M8, M11 | 20–21 | in development ([#288](https://github.com/Docker-Hunterpedia/Helpdock/issues/288)–[#316](https://github.com/Docker-Hunterpedia/Helpdock/issues/316)) | 2026-10-20 | |
-| 5 1.x | M15 Self-host operations | M9, M11 | 13–14 | planned | | |
+| 5 1.x | M15 Self-host operations | M9, M11 | 13–14 | in progress (#337: M15-08 and platform templates) | | |
 | 5 1.x | M16 More importers and undo | M11 | 15–16 | planned | | |
 | 5 1.x | M17 Apps and languages | M3, M4, M5 | 12 | planned | | |
 | 5 1.x | M18 Sign-in options | M0, M4, M9, M11 | 5–7 | in development ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)–[#287](https://github.com/Docker-Hunterpedia/Helpdock/issues/287)) | 2026-10-20 | |

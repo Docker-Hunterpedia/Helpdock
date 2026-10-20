@@ -119,6 +119,13 @@ Guides: [security](docs/guides/security.md), [security scanning](docs/guides/sec
 
 ## Quick start
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Docker-Hunterpedia/Helpdock)
+[![Deploy to DigitalOcean](https://www.deploytodo.com/do-btn-blue.svg)](https://github.com/Docker-Hunterpedia/Helpdock/blob/main/docs/guides/deploy.md#digitalocean)
+
+[Platform setup guide](docs/guides/deploy.md): Render requires a second database
+configuration step. DigitalOcean opens the manual import guide because its
+one-click button does not support the required worker and managed Valkey.
+
 You need a Linux server with Docker Engine and the Compose v2 plugin, 2 vCPU and 4 GB of memory, two DNS names pointing at it (one for the admin app, one for the API and widget), ports 80 and 443 open, and an S3-compatible bucket. The commands below install 1.0.0.
 
 ```bash

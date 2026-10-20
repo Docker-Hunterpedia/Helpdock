@@ -11,6 +11,7 @@ import {
   ticketMessagePageSchema,
   ticketMessageSchema,
   ticketParamSchema,
+  ticketRoutingSchema,
   ticketSchema,
   ticketStatusListSchema,
   ticketUpdateRequestSchema,
@@ -45,3 +46,5 @@ export class MessageCreateRequestDto extends createZodDto(messageCreateRequestSc
 
 export class TicketBrandParamDto extends createZodDto(brandIdParamSchema) {}
 export class TicketParamDto extends createZodDto(ticketParamSchema) {}
+/** M14-08's routing trail. */
+export class TicketRoutingDto extends createZodDto(ticketRoutingSchema) {}

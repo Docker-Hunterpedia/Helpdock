@@ -63,6 +63,7 @@ import {
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
 import { applyStatusChange, type StatusChangeResult, UnknownStatusError } from './status-change.js';
 import { activityActorFor, writeTicketActivity } from './ticket-activity.js';
 import {
@@ -412,6 +413,7 @@ export class TicketsService {
         // thread does not render "tags: none" on every ticket ever filed.
         ...(filled.tagIds.length === 0 ? {} : { tagIds: filled.tagIds }),
         ...(input.templateId === undefined ? {} : { templateId: input.templateId }),
+        ...arrivalOf(requestArrival(actor, ticket.departmentId)),
       },
     });
 
@@ -728,7 +730,7 @@ export class TicketsService {
     // exist yet, and it decides which ticket that is.
     const landing =
       input.kind === 'public' && authorType === 'contact'
-        ? await this.#lifecycle.onCustomerReply(context, ticket, status)
+        ? await this.#lifecycle.onCustomerReply(context, ticket, status, WIDGET_ENTRY)
         : { ticket, status, continued: false };
 
     if (landing.ticket.id !== ticketId) {

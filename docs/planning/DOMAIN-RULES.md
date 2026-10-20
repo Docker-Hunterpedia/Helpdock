@@ -176,6 +176,16 @@ WhatsApp, Messenger and Instagram let a business write to a customer only for a 
 - The 7-day extension belongs to a person. An AI reply, a rule's canned reply, an auto-responder and the satisfaction survey use the 24-hour window only, whatever the account's switch says.
 - Tests: a reply at 23 h 59 m is queued and sent; at 24 h 01 m it is refused at compose time; one queued at 23 h 59 m whose job runs at 24 h 01 m is `refused` by the job and the stand-in receives nothing; on Messenger at day 3 with the switch on, a person's reply goes out tagged `HUMAN_AGENT` and an AI reply does not go out.
 
+### 2.8 Arrival and the routing trail
+
+Every ticket records how it arrived, once, in the activity row that filed it (M14-08): `to.arrival` on `ticket.created`, on the new ticket's `ticket.continued` for a continuation (§2.3) — the entry point the customer's reply came in through, in the closed ticket's department — and on `ticket.imported` for an import. The record is `{ entry, entryId, address?, departmentId, reason }`, where `address` is the address an email was written to as the message names it, written through one helper by every creation path, so no path can file a ticket without saying how. For email, prefer the mailbox address among recipients, otherwise a nonempty `Delivered-To` (or `X-Original-To` when absent) of at most 320 characters, otherwise the mailbox address; never fall back to an unrelated To/Cc recipient. `reason` is why the ticket took its department: the entry point's own, the brand's first (the widget, or a form without one), named by an API key, chosen by a person, continued from a closed ticket, the department of a ticket an email named but its sender may not reply on (§4.3), or an importer's mapping.
+
+- **No new table.** The trail is derived from the activity log: the arrival, then every department, team, priority and assignee change the system made after it, until the first change by a person (staff or an API key; a reply or a note is not a change).
+- **Read under the ticket's own department policy.** The trail is read in the reader's transaction, so a ticket in another department answers 404 and its activity is invisible, as for every other read of it (§1.2).
+- **Deleted rules are named as such.** A step a rule made names the rule by its current name, and "a rule since deleted" when the rule is gone; nothing about a rule is copied into the activity row. AI triage's changes are the rule's, written with `via = ai`, and read as "by AI triage".
+- A ticket filed before M14 has no arrival and reads "Arrived on <channel>" with the activity that exists. An imported ticket reads "Imported from <source>" and nothing else: an import sends and runs nothing (M11).
+- Tests: the trail's composition for each actor kind and for a deleted rule (unit); the arrival written by each of the six creation paths, and a ticket in another department answering 404 (integration).
+
 ---
 
 ## 3. SLA calculation
@@ -515,3 +525,4 @@ Technical gates alone do not show whether the product works for people. Tracked 
 | 2026-10-18 | §7: imported tickets join the widget queue only when their customer continues them live (M11-17). |
 | 2026-10-20 | The new §12.1 Staff authentication factors, with its first rule, passkey origin (M18-01, [ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). |
 | 2026-10-20 | §12: the SSO first-link rule, with Entra ID's `xms_edov` from members of the one tenant a connection names (M18-09, ADR 0026). |
+| 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |

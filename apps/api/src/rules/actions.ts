@@ -63,6 +63,15 @@ export const ruleActor = (ruleId: string): ActivityActor => ({
 });
 
 /**
+ * The rule, or — for a triage `apply` — the rule with `via = ai`, so the
+ * activity log and M14-08's routing trail can say the model made the change.
+ */
+const actorOf = (context: RuleActionContext): ActivityActor =>
+  context.appliedByAi === true
+    ? { ...ruleActor(context.ruleId), via: 'ai' }
+    : ruleActor(context.ruleId);
+
+/**
  * The lifecycle moments a rule's changes owe: M1's close and reopen (§2.2,
  * §3.5), and M3-02's change and response, which move the SLA clocks as an
  * agent's change or reply would (§3.1 to §3.3).
@@ -89,6 +98,8 @@ export interface RuleActionContext {
   /** The chain the changes carry: the rules before this one, then this one. */
   readonly chain: readonly string[];
   readonly now: Date;
+  /** M7-07 / M14-08: the changes are a triage `apply`, written as the rule with `via = ai`. */
+  readonly appliedByAi?: boolean;
 }
 
 /** What one run of a rule's actions changed, accumulated across them. */
@@ -111,7 +122,7 @@ const UNAVAILABLE: Effect = { effect: 'unavailable' };
 const lifecycleContext = (context: RuleActionContext): LifecycleContext => ({
   tx: context.tx,
   brandId: context.brandId,
-  actor: ruleActor(context.ruleId),
+  actor: actorOf(context),
   now: context.now,
 });
 
@@ -131,7 +142,7 @@ const writeUpdate = async (
     brandId: context.brandId,
     ticketId: updated.id,
     departmentId: updated.departmentId,
-    actor: ruleActor(context.ruleId),
+    actor: actorOf(context),
     action: 'ticket.updated',
     from,
     to: values,
@@ -179,7 +190,7 @@ const moveStatus = async (
   if (updated === undefined) {
     throw new Error('The ticket a rule was acting on disappeared');
   }
-  const actor = ruleActor(context.ruleId);
+  const actor = actorOf(context);
   const base = {
     brandId: context.brandId,
     ticketId: updated.id,
@@ -375,7 +386,7 @@ const changeTag = async (
     brandId: context.brandId,
     ticketId: state.ticket.id,
     departmentId: state.ticket.departmentId,
-    actor: ruleActor(context.ruleId),
+    actor: actorOf(context),
     action: 'ticket.tags.changed',
     from: { tagIds: change.before },
     to: { tagIds: change.after },
@@ -414,7 +425,7 @@ const writeMessage = async (
     brandId: context.brandId,
     ticketId: ticket.id,
     departmentId: ticket.departmentId,
-    actor: ruleActor(context.ruleId),
+    actor: actorOf(context),
     action: message.kind === 'note' ? 'ticket.note_added' : 'ticket.replied',
     to: { messageId: row.id, seq },
   });
@@ -671,7 +682,8 @@ export const applyRuleActions = (
  * What a triage `apply` changes (M7-07), carried out exactly as a rule's own
  * actions are — the same activity rows with actor `rule:<id>`, the same one
  * ticket event with the chain, the same clocks — because it is the rule's
- * change, made a few seconds later.
+ * change, made a few seconds later. The rows say `via = ai` (M14-08), which
+ * is how the routing trail tells "by AI triage" from "by rule".
  */
 export const applyTriageActions = (
   deps: RuleActionDeps,
@@ -679,7 +691,7 @@ export const applyTriageActions = (
   target: { readonly ticket: TicketRow; readonly status: TicketStatusRow },
   actions: readonly (RuleAction | MoveDepartment)[],
 ): Promise<{ action: RuleAction | MoveDepartment; effect: Effect['effect'] }[]> =>
-  applyActions(deps, context, target, actions);
+  applyActions(deps, { ...context, appliedByAi: true }, target, actions);
 
 const applyActions = async <A extends RuleAction | MoveDepartment>(
   deps: RuleActionDeps,

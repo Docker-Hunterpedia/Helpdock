@@ -466,6 +466,25 @@ show "Imported from Zendesk" and nothing else (M11 sends and runs nothing).
 No new table: the activity log is the source of truth, and the trail is read
 under the ticket's own department policy.
 
+**Status: done** ([#295](https://github.com/Docker-Hunterpedia/Helpdock/issues/295)).
+- [x] `arrivalOf` (`apps/api/src/tickets/routing/arrival.ts`) used by the six
+  writers, by a split, by a reopen-policy continuation (on its
+  `ticket.continued` row, recording where the customer's reply came in) and
+  by the importer (on `ticket.imported`). An email's `address` is the
+  mailbox address when present among recipients; otherwise the delivery
+  header (`Delivered-To`, or `X-Original-To` when absent) if nonempty and
+  at most 320 characters, falling back to the mailbox address. This avoids
+  recording a third party's To/Cc address for Bcc mail.
+- [x] `GET /tickets/:id/routing` and its Zod schema (`ticketRoutingSchema`).
+- [x] The "How it got here" card (`RoutingTrail`, DESIGN §6.3).
+- [x] DOMAIN-RULES §2.8; `tickets.md`.
+- Two reasons beyond the list above, because two paths fit none of them:
+  `referenced_ticket` (an email naming a ticket its sender may not reply on,
+  filed in that ticket's department, D §4.3) and `import_mapping` (an import).
+  `entryId` is null for the widget and the web form, which have no id of
+  their own until M19-02. AI triage's applied changes are now written with
+  `via = ai` (still as `rule:<id>`), which is how the trail tells them apart.
+
 ### M14-09 Routing page and Test routing
 
 A **Routing** tab under Admin › Automation (`ticketing:manage`) that explains

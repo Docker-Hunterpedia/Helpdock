@@ -121,6 +121,11 @@ test.describe('reference screens @screenshot', () => {
     // The contact's timeline arrives after the ticket; until it does, the
     // panel holds skeleton rows, which is not the screen being kept.
     await page.getByText(t('tickets:details.hiddenTickets', { count: 2 })).waitFor();
+    // So is "How it got here" (M14-08), which reads its trail once the ticket has loaded.
+    await page
+      .getByRole('region', { name: t('tickets:routing.heading') })
+      .getByText('support@helpdock.test')
+      .waitFor();
 
     await expect(page).toHaveScreenshot('ticket-view.png');
   });

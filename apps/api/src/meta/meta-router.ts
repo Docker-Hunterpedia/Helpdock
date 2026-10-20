@@ -22,6 +22,7 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
+import { arrivalOf } from '../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
@@ -364,7 +365,17 @@ export class MetaConversationRouter {
       departmentId: ticket.departmentId,
       actor,
       action: 'ticket.created',
-      to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+      to: {
+        subject: ticket.subject,
+        statusId: status.id,
+        priority: ticket.priority,
+        ...arrivalOf({
+          entry: 'meta_account',
+          entryId: context.account.id,
+          departmentId: ticket.departmentId,
+          reason: 'entry_department',
+        }),
+      },
     });
     // M3-02: the clocks start when the conversation opens, as for any ticket.
     await this.#deps.lifecycle.onCreated(
@@ -401,6 +412,7 @@ export class MetaConversationRouter {
             lifecycleContext(context, actor),
             current.ticket,
             current.status,
+            { entry: 'meta_account', entryId: context.account.id },
           )
         ).ticket;
     if (target.id !== current.ticket.id) {

@@ -23,6 +23,7 @@ import type {
   TicketMessagePage,
   TicketParticipantList,
   TicketPriority,
+  TicketRouting,
   TicketSort,
   TicketSortDirection,
   TicketSpamSender,
@@ -116,6 +117,9 @@ export interface TicketsApi {
     request: TimeEntryCreateRequest,
   ): Promise<TimeEntryList>;
   deleteTimeEntry(brandId: string, ticketId: string, entryId: string): Promise<TimeEntryList>;
+
+  /** M14-08: "How it got here", composed by the api from the ticket's activity. */
+  routing(brandId: string, ticketId: string): Promise<TicketRouting>;
 
   /** M1-09. Closes `ticketId` into `request.primaryTicketId` (DOMAIN-RULES §2.4). */
   merge(brandId: string, ticketId: string, request: TicketMergeRequest): Promise<TicketMergeResult>;

@@ -35,6 +35,8 @@ export interface EmailFacts {
   /** An SPF or DKIM failure was reported (M2-07). */
   readonly authFailed: boolean;
   readonly recipients: readonly string[];
+  /** Delivered-To, falling back to X-Original-To, for forwarded or Bcc mail. */
+  readonly deliveryAddress?: string | undefined;
 }
 
 export interface EmailInboundMessage extends InboundMessage {
@@ -98,6 +100,8 @@ export const toEmailInboundMessage = (
       automated: automatedReason(email),
       authFailed: authenticationFailed(email),
       recipients: envelope.recipients,
+      deliveryAddress:
+        email.headers.get('delivered-to')?.[0] ?? email.headers.get('x-original-to')?.[0],
     },
   };
 };

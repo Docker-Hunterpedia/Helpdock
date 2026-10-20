@@ -25,6 +25,7 @@ import {
   outbox,
   seedBrandStatuses,
   tags,
+  ticketActivity,
   ticketFieldSuggestions,
   ticketMessages,
   ticketStatuses,
@@ -901,6 +902,16 @@ describe.skipIf(!hasDocker)('agent assist, triage and transcription', () => {
         tx.select().from(tickets).where(eq(tickets.id, ticket.id)),
       );
       expect(row).toMatchObject({ priority: 'urgent', departmentId: billingId });
+      // M14-08: the rule's changes, written `via = ai` so the trail says "by AI triage".
+      const written = await withSystem(db(), brandId, (tx) =>
+        tx
+          .select({ actorId: ticketActivity.actorId, via: ticketActivity.via })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, ticket.id)),
+      );
+      const byRule = written.filter((entry) => entry.actorId === `rule:${ticket.ruleId}`);
+      expect(byRule.length).toBeGreaterThan(0);
+      expect(byRule.every((entry) => entry.via === 'ai')).toBe(true);
       const runs = await call<{ runs: WorkflowRun[] }>(
         'GET',
         `/api/brands/${brandId}/rules/runs?ruleId=${ticket.ruleId}`,

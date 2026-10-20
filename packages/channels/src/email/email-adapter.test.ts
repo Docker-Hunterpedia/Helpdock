@@ -82,3 +82,21 @@ describe('EmailChannelAdapter', () => {
     await expect(new EmailChannelAdapter().send()).rejects.toBeInstanceOf(ChannelCapabilityError);
   });
 });
+
+// M14-08: preserve the delivery address for Bcc and forwarded-mail arrivals.
+describe('delivery address', () => {
+  it.each([
+    [
+      { 'delivered-to': ['alias@acme.test'], 'x-original-to': ['original@acme.test'] },
+      'alias@acme.test',
+    ],
+    [{ 'x-original-to': ['original@acme.test'] }, 'original@acme.test'],
+    [{}, undefined],
+  ])('passes the preferred delivery header to the router: %j', (headers, expected) => {
+    const message = toEmailInboundMessage(
+      envelope({ headers: new Map(Object.entries(headers)) }),
+      new Date('2026-10-20T00:00:00Z'),
+    );
+    expect(message.email.deliveryAddress).toBe(expected);
+  });
+});

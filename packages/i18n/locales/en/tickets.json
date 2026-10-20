@@ -956,5 +956,90 @@
       "nothing-to-work-from": "There is no customer message for the assistant to work from.",
       "unreadable-answer": "The assistant's answer could not be read. Try again."
     }
+  },
+  "routing": {
+    "heading": "How it got here",
+    "loading": "Reading how it got here…",
+    "failed": "How this ticket got here could not be read.",
+    "retry": "Try again",
+    "arrow": "→",
+    "summary": {
+      "mailbox": "Email to <bdi>{{address}}</bdi>",
+      "mailboxNoAddress": "Email",
+      "widget": "Chat widget",
+      "web_form": "Web form",
+      "telegram_bot": "Telegram",
+      "meta_account": "{{channel}}",
+      "api_key": "API",
+      "staff": "Filed by a person",
+      "assigned": "assigned"
+    },
+    "arrived": {
+      "mailbox": "Arrived at <bdi>{{address}}</bdi>",
+      "mailboxNoAddress": "Arrived by email",
+      "widget": "Arrived through the chat widget",
+      "web_form": "Arrived through the web form",
+      "telegram_bot": "Arrived on Telegram",
+      "meta_account": "Arrived on {{channel}}",
+      "api_key": "Filed through the API",
+      "staff": "Filed by a person"
+    },
+    "reason": {
+      "entry_department": {
+        "mailbox": "the mailbox's department",
+        "web_form": "the form's department",
+        "telegram_bot": "the bot's department",
+        "meta_account": "the account's department",
+        "other": "the entry point's department"
+      },
+      "brand_first_department": "the brand's first department",
+      "named_by_api": "named by the API",
+      "chosen_by_staff": "chosen when it was filed",
+      "continued_from": "continues a closed ticket",
+      "referenced_ticket": "the department of the ticket it named",
+      "import_mapping": "mapped by the import"
+    },
+    "unrecorded": {
+      "email": "Arrived by email",
+      "chat": "Arrived by chat",
+      "telegram": "Arrived on Telegram",
+      "form": "Arrived through the web form",
+      "api": "Arrived through the API",
+      "manual": "Filed by a person",
+      "whatsapp": "Arrived on WhatsApp",
+      "messenger": "Arrived on Messenger",
+      "instagram": "Arrived on Instagram",
+      "detail": "Before 1.1, the entry point wasn't recorded."
+    },
+    "imported": {
+      "title": "Imported from {{source}}",
+      "detail": "Imports run no rules and assign no one."
+    },
+    "change": {
+      "moved": "Moved to <bdi>{{department}}</bdi>",
+      "movedWithTeam": "Moved to <bdi>{{department}}</bdi> › <bdi>{{team}}</bdi>",
+      "team": "Given to the <bdi>{{team}}</bdi> team",
+      "teamCleared": "Taken off its team",
+      "priorityRaised": "Priority raised to {{priority}}",
+      "priorityLowered": "Priority lowered to {{priority}}",
+      "prioritySet": "Priority set to {{priority}}",
+      "assigned": "Assigned to <bdi>{{name}}</bdi>",
+      "unassigned": "Unassigned"
+    },
+    "by": {
+      "rule": "by rule “<bdi>{{name}}</bdi>”",
+      "ruleDeleted": "by a rule since deleted",
+      "ai_triage": "by AI triage",
+      "round_robin": "by round-robin",
+      "skill_based": "by skill-based routing",
+      "rotation": "by the rotation",
+      "sla": "by an SLA escalation",
+      "system": "automatically"
+    },
+    "gone": {
+      "department": "a department since deleted",
+      "team": "a team since deleted",
+      "person": "someone no longer in the brand"
+    }
   }
 }

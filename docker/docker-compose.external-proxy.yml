@@ -1,0 +1,23 @@
+# Compose 2.24.4+. Use after docker-compose.yml; see docs/guides/deploy.md.
+# The host proxy owns TLS. Container proxies use the flattened platform templates.
+services:
+  caddy: !reset null
+  api:
+    ports:
+      - '127.0.0.1:3000:3000'
+    environment:
+      PORT: '3000'
+      # Host -> Docker bridge peers are private addresses, not loopback.
+      # Prefer the proxy's exact address/CIDR where the network is shared.
+      TRUST_PROXY: 'uniquelocal'
+    deploy:
+      replicas: 1
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'fetch("http://127.0.0.1:3000/ready").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+  worker:
+    environment:
+      TRUST_PROXY: 'uniquelocal'

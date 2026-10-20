@@ -35,6 +35,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { withContactProfileChange } from '../contacts/contact-profile-change.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
 import { AutoReplyService } from '../email/auto-reply.service.js';
 import { EmailRepository } from '../email/email.repository.js';
@@ -519,15 +520,26 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
         .where(eq(contacts.id, ticket.contactId ?? '')),
     );
     expect(contact).toMatchObject({ name: 'Omar Khalil', locale: 'ar' });
-    const profileEvents = await withSystem(runtime.db, seeded.brandId, (tx) =>
-      tx
-        .select()
-        .from(outbox)
-        .where(
-          sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${contact?.id ?? ''}`,
-        ),
+    const profileEvents = () =>
+      withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select()
+          .from(outbox)
+          .where(
+            sql`${outbox.event} = 'contact.updated' AND ${outbox.payload}->>'contactId' = ${contact?.id ?? ''}`,
+          ),
+      );
+    // The locale was recorded in the transaction that created the contact, so contact.created carries it.
+    expect(await profileEvents()).toHaveLength(0);
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      withContactProfileChange(tx, contact?.id ?? '', async () => {
+        await tx
+          .update(contacts)
+          .set({ name: 'Omar K. Khalil' })
+          .where(eq(contacts.id, contact?.id ?? ''));
+      }),
     );
-    expect(profileEvents).toHaveLength(1);
+    expect(await profileEvents()).toHaveLength(1);
 
     const identities = await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx

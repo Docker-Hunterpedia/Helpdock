@@ -1,6 +1,6 @@
 import { strings } from '../strings.js';
 import { expect, test } from './admin-session.js';
-import { ACCOUNT_PASSWORD_ENV, SKIP_ENV } from './install.js';
+import { ACCOUNT_PASSWORD_ENV, resetStepUpBudget, SKIP_ENV } from './install.js';
 
 /**
  * Passkeys on `/me/security` against the real api (M18-02): a Chromium virtual
@@ -19,6 +19,8 @@ test.skip(
 const t = strings('en');
 
 test.describe('passkeys against the real api', () => {
+  test.beforeEach(resetStepUpBudget);
+
   test('adds, renames with the passkey itself, and removes one', async ({ page }) => {
     const session = await page.context().newCDPSession(page);
     await session.send('WebAuthn.enable');

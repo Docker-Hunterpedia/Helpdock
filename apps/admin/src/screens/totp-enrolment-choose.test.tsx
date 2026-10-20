@@ -87,7 +87,7 @@ describe('the chooser', () => {
       ssoEnforced: false,
       password: true,
       magicLink: true,
-      oauth: { google: false, github: false },
+      oauth: { google: false, github: false, microsoft: false },
       passkey: false,
       passkeysPaused: true,
     });

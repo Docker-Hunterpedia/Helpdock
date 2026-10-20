@@ -1,6 +1,12 @@
 import { expect, type Page, test } from '@playwright/test';
 import { strings } from '../strings.js';
-import { ACCOUNT_EMAIL_ENV, ACCOUNT_PASSWORD_ENV, SKIP_ENV, TOTP_SECRET_ENV } from './install.js';
+import {
+  ACCOUNT_EMAIL_ENV,
+  ACCOUNT_PASSWORD_ENV,
+  resetStepUpBudget,
+  SKIP_ENV,
+  TOTP_SECRET_ENV,
+} from './install.js';
 import { freshTotpCode } from './totp.js';
 
 /**
@@ -38,6 +44,8 @@ const submitPassword = async (page: Page): Promise<void> => {
 };
 
 test.describe('a passkey as the second factor, against the real api', () => {
+  test.beforeEach(resetStepUpBudget);
+
   test('adds one, answers the next second step with it, and shares the attempts with codes', async ({
     browser,
   }) => {

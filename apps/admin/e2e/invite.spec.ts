@@ -86,7 +86,7 @@ test.describe('accepting an invitation', () => {
     await group.getByRole('button', { name: t('auth:signIn.microsoft') }).click();
 
     await expect(
-      page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
+      page.getByRole('heading', { name: t('auth:enrolment.choose.title'), level: 1 }),
     ).toBeVisible();
   });
 

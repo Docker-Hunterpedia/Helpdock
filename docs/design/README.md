@@ -178,6 +178,7 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 | Artboard | Deliverables | Screen | Source |
 |---|---|---|---|
 | `Admin/SignIn-MagicLink` | M9-01 (F6) | [Admin-SignIn-MagicLink.png](screens/m9/Admin-SignIn-MagicLink.png) | [AdminMagicLink.dc.html](artboards/AdminMagicLink.dc.html) |
+| `Admin/Shell-SidebarCollapse` | 1.0.2, owner request (DESIGN §6.5) | [Admin-Shell-SidebarCollapse.png](screens/m9/Admin-Shell-SidebarCollapse.png) | [AdminShellSidebarCollapse.dc.html](artboards/AdminShellSidebarCollapse.dc.html) |
 | `Admin/SignIn-MagicLink-AR` | M9-01 (F6) | [Admin-SignIn-MagicLink-AR.png](screens/m9/Admin-SignIn-MagicLink-AR.png) | [AdminMagicLinkAR.dc.html](artboards/AdminMagicLinkAR.dc.html) |
 | `Admin/Ticket-ContactHistory` | M1-04 follow-up (#237) | [Admin-Ticket-ContactHistory.png](screens/m9/Admin-Ticket-ContactHistory.png) | [AdminTicketContactHistory.dc.html](artboards/AdminTicketContactHistory.dc.html) |
 
@@ -585,6 +586,10 @@ The same screens, inline. Large boards are shown at their full canvas size; open
 #### `Admin/SignIn-MagicLink`
 
 ![Admin/SignIn-MagicLink](screens/m9/Admin-SignIn-MagicLink.png)
+
+#### `Admin/Shell-SidebarCollapse`
+
+![Admin/Shell-SidebarCollapse](screens/m9/Admin-Shell-SidebarCollapse.png)
 
 #### `Admin/SignIn-MagicLink-AR`
 

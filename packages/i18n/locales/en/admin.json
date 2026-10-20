@@ -15,7 +15,11 @@
     "brand": "Brand",
     "channels": "Channels",
     "ai": "AI",
-    "developers": "Developers"
+    "developers": "Developers",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "withCount": "{{label}} · {{count}}",
+    "ctrlKey": "Ctrl"
   },
   "brandSwitcher": {
     "caption": "Brand · switch",
@@ -24,6 +28,7 @@
   "currentUser": {
     "installAdmin": "Install admin",
     "menuLabel": "Account menu for {{name}}",
+    "nameAndStatus": "{{name}} · {{status}}",
     "signOut": "Sign out"
   },
   "presence": {

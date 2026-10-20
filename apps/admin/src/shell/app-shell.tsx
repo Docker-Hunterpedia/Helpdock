@@ -7,6 +7,7 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
 import { SIDEBAR_WIDTH, Sidebar } from './sidebar.tsx';
+import { useSidebarCollapse } from './sidebar-collapse.js';
 
 /** DESIGN §6.5: below 1024 px the list and the sidebar become drawers. */
 const SIDEBAR_BREAKPOINT = '(min-width:1024px)';
@@ -28,6 +29,7 @@ export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): 
   const tokens = useSemanticTokens();
   const session = useSession();
   const wide = useMediaQuery(SIDEBAR_BREAKPOINT, { noSsr: true });
+  const { collapsed, toggle } = useSidebarCollapse({ shortcut: wide });
   const brand = currentBrand(session);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -55,7 +57,7 @@ export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): 
         }}
       >
         <Box sx={{ position: 'sticky', insetBlockStart: 0, height: '100dvh' }}>
-          <Sidebar />
+          <Sidebar collapse={{ collapsed, onToggle: toggle }} />
         </Box>
         {content}
       </Box>

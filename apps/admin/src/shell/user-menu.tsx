@@ -21,6 +21,7 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { useAuthApi, useSession, useSetSession } from '../auth/session.tsx';
 import { useRealtime } from '../realtime/realtime-provider.tsx';
 import { PresenceDot } from '../ui/presence-dot.tsx';
+import { RailTooltip } from './rail-tooltip.tsx';
 import { SidebarMenuTrigger } from './sidebar-menu-trigger.tsx';
 
 const THEME_OPTIONS = [
@@ -45,7 +46,12 @@ const initials = (name: string): string =>
  * The caption carries the presence dot of DESIGN §6.2 and the status in words,
  * because a colour on its own is not a label anyone can read (DESIGN §10).
  */
-export function UserMenu(): ReactNode {
+export function UserMenu({
+  variant = 'full',
+}: {
+  /** `avatar` is the collapsed rail's: the avatar alone, the name and status in a Tooltip. */
+  readonly variant?: 'full' | 'avatar';
+} = {}): ReactNode {
   const t = useT();
   const session = useSession();
   const api = useAuthApi();
@@ -74,47 +80,72 @@ export function UserMenu(): ReactNode {
     setAnchor(null);
   };
 
+  const avatar = (
+    <Avatar
+      aria-hidden="true"
+      sx={{
+        width: 28,
+        height: 28,
+        fontSize: 12,
+        fontWeight: 600,
+        backgroundColor: tokens['action.primary.tint'],
+        color: tokens['text.primary'],
+      }}
+    >
+      {initials(session.user.name)}
+    </Avatar>
+  );
+  const statusWord = t(`admin:presence.status.${status}`);
+
   return (
     <>
-      <SidebarMenuTrigger
-        label={menuLabel}
-        menuId={menuId}
-        open={anchor !== null}
-        onOpen={setAnchor}
-      >
-        <Avatar
-          aria-hidden="true"
-          sx={{
-            width: 28,
-            height: 28,
-            fontSize: 12,
-            fontWeight: 600,
-            backgroundColor: tokens['action.primary.tint'],
-            color: tokens['text.primary'],
-          }}
+      {variant === 'avatar' ? (
+        <RailTooltip
+          title={t('admin:currentUser.nameAndStatus', {
+            name: session.user.name,
+            status: statusWord,
+          })}
+          describeChild
         >
-          {initials(session.user.name)}
-        </Avatar>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="bodyStrong" noWrap component="span" sx={{ display: 'block' }}>
-            {session.user.name}
-          </Typography>
-          <Typography
-            variant="caption"
-            noWrap
-            component="span"
-            sx={{ display: 'flex', alignItems: 'center', gap: 2, color: 'text.secondary' }}
+          <SidebarMenuTrigger
+            label={menuLabel}
+            menuId={menuId}
+            open={anchor !== null}
+            onOpen={setAnchor}
+            shape="square"
           >
-            <PresenceDot status={status} />
-            {t('admin:presence.caption', {
-              role: session.user.installAdmin
-                ? t('admin:currentUser.installAdmin')
-                : t(`staff:roles.${session.user.role}`),
-              status: t(`admin:presence.status.${status}`),
-            })}
-          </Typography>
-        </Box>
-      </SidebarMenuTrigger>
+            {avatar}
+          </SidebarMenuTrigger>
+        </RailTooltip>
+      ) : (
+        <SidebarMenuTrigger
+          label={menuLabel}
+          menuId={menuId}
+          open={anchor !== null}
+          onOpen={setAnchor}
+        >
+          {avatar}
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="bodyStrong" noWrap component="span" sx={{ display: 'block' }}>
+              {session.user.name}
+            </Typography>
+            <Typography
+              variant="caption"
+              noWrap
+              component="span"
+              sx={{ display: 'flex', alignItems: 'center', gap: 2, color: 'text.secondary' }}
+            >
+              <PresenceDot status={status} />
+              {t('admin:presence.caption', {
+                role: session.user.installAdmin
+                  ? t('admin:currentUser.installAdmin')
+                  : t(`staff:roles.${session.user.role}`),
+                status: statusWord,
+              })}
+            </Typography>
+          </Box>
+        </SidebarMenuTrigger>
+      )}
 
       <Menu
         id={menuId}

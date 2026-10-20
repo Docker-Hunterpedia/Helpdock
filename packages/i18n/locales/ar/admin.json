@@ -15,7 +15,11 @@
     "brand": "العلامة",
     "channels": "القنوات",
     "ai": "الذكاء الاصطناعي",
-    "developers": "المطوّرون"
+    "developers": "المطوّرون",
+    "collapse": "طي الشريط الجانبي",
+    "expand": "توسيع الشريط الجانبي",
+    "withCount": "{{label}} · {{count}}",
+    "ctrlKey": "Ctrl"
   },
   "brandSwitcher": {
     "caption": "العلامة التجارية · تبديل",
@@ -24,6 +28,7 @@
   "currentUser": {
     "installAdmin": "مدير التثبيت",
     "menuLabel": "قائمة حساب {{name}}",
+    "nameAndStatus": "{{name}} · {{status}}",
     "signOut": "تسجيل الخروج"
   },
   "presence": {

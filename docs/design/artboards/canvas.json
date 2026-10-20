@@ -723,6 +723,13 @@
       "h": 800,
       "title": "Admin/SignIn-MagicLink"
     },
+    "AdminShellSidebarCollapse.dc.html": {
+      "x": 0,
+      "y": 62960,
+      "w": 1760,
+      "h": 740,
+      "title": "Admin/Shell-SidebarCollapse"
+    },
     "AdminMagicLinkAR.dc.html": {
       "x": 1360,
       "y": 60280,
@@ -1029,6 +1036,7 @@
     "AdminImportFileMapper.dc.html",
     "AdminTicketImported.dc.html",
     "AdminMagicLink.dc.html",
+    "AdminShellSidebarCollapse.dc.html",
     "AdminMagicLinkAR.dc.html",
     "AdminTicketContactHistory.dc.html"
   ],

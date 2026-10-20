@@ -189,6 +189,25 @@ export const oauthCallbackQuerySchema = z.object({
 });
 export type OauthCallbackQuery = z.infer<typeof oauthCallbackQuerySchema>;
 
+/**
+ * What connecting or disconnecting a Google or GitHub account costs from inside
+ * a session (1.0.1): the current password or a live authenticator code, one of
+ * the two. A session proves somebody signed in, not who is at the keyboard now.
+ */
+export const oauthStepUpRequestSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(PASSWORD_MAX_LENGTH).optional(),
+    code: z
+      .string()
+      .regex(/^\d{6}$/)
+      .optional(),
+  })
+  .refine(
+    (value) => (value.currentPassword === undefined) !== (value.code === undefined),
+    'Send the current password or an authentication code, and only one of them',
+  );
+export type OauthStepUpRequest = z.infer<typeof oauthStepUpRequestSchema>;
+
 // --------------------------------------------------------------------------
 // Responses
 // --------------------------------------------------------------------------
@@ -197,6 +216,21 @@ const oauthProviders = ['google', 'github'] as const;
 export const oauthProviderSchema = z.enum(oauthProviders);
 export type OauthProvider = z.infer<typeof oauthProviderSchema>;
 export const OAUTH_PROVIDERS: readonly OauthProvider[] = oauthProviders;
+
+/** Where the browser goes to connect a provider account; the api has stored the state. */
+export const oauthConnectStartSchema = z.object({ url: z.url() });
+export type OauthConnectStart = z.infer<typeof oauthConnectStartSchema>;
+
+/** One provider account that signs in as the caller, and the address it had when linked. */
+export const oauthIdentitySchema = z.object({
+  provider: oauthProviderSchema,
+  email: z.string(),
+  connectedAt: z.iso.datetime(),
+});
+export type OauthIdentity = z.infer<typeof oauthIdentitySchema>;
+
+export const oauthIdentityListSchema = z.object({ identities: z.array(oauthIdentitySchema) });
+export type OauthIdentityList = z.infer<typeof oauthIdentityListSchema>;
 
 /**
  * Which ways in this install offers, so the sign-in screen hides a provider
@@ -296,6 +330,14 @@ const authErrorCodes = [
   'sso-invalid-response',
   /** The matched account already has an identity on this or another SSO connection. */
   'sso-identity-conflict',
+  /**
+   * The provider does not control this address (GitHub always; Google on a
+   * non-Workspace, non-Gmail address), so it cannot make the first link: the
+   * person signs in another way and connects the account from the security page.
+   */
+  'oauth-link-required',
+  /** The provider account is linked to another person, or this person already has one of that provider. */
+  'oauth-identity-conflict',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

@@ -2063,6 +2063,65 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(body.visibleCount).toBe(51);
       expect(body.hiddenCount).toBe(0);
     }, 60_000);
+
+    it('leaves a deleted ticket out of the timeline and of every count', async () => {
+      // DOMAIN-RULES §2.2: a soft-deleted ticket is "hidden from all views".
+      const { body: contact } = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Deleted History' },
+      );
+      const kept = await createTicket(sam, { subject: 'Kept', contactId: contact.id });
+      const deletedHere = await createTicket(sam, { subject: 'Deleted', contactId: contact.id });
+      const deletedElsewhere = await createTicket(bo, {
+        subject: 'Deleted in billing',
+        departmentId: billing,
+        contactId: contact.id,
+      });
+      for (const { ticket } of [deletedHere, deletedElsewhere]) {
+        expect(
+          (await call('DELETE', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada)).status,
+        ).toBe(204);
+      }
+
+      const timeline = await call<{
+        items: { id: string }[];
+        visibleCount: number;
+        hiddenCount: number;
+      }>('GET', `${brandPath(seeded.brandId)}/contacts/${contact.id}/timeline`, sam);
+      const listed = await call<{ contacts: { id: string; stats: ContactStats }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts?hasOpenTickets=true`,
+        ada,
+      );
+
+      expect(timeline.body.items.map((item) => item.id)).toEqual([kept.ticket.id]);
+      expect(timeline.body.visibleCount).toBe(1);
+      expect(timeline.body.hiddenCount).toBe(0);
+      const stats = listed.body.contacts.find((row) => row.id === contact.id)?.stats;
+      expect(stats?.totalTickets).toBe(1);
+      expect(stats?.openTickets).toBe(1);
+    });
+
+    it('does not call a contact whose only open ticket was deleted one with open tickets', async () => {
+      const { body: contact } = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Only Deleted' },
+      );
+      const { ticket } = await createTicket(sam, { contactId: contact.id });
+      await call('DELETE', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, ada);
+
+      const { body } = await call<{ contacts: { id: string }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts?hasOpenTickets=true`,
+        ada,
+      );
+
+      expect(body.contacts.map((row) => row.id)).not.toContain(contact.id);
+    });
   });
 
   // --------------------------------------------------------------- realtime

@@ -6,7 +6,9 @@ import type {
   AuthSessionResponse,
   EmailTokenPayload,
   MagicLinkPreview,
+  OauthIdentityList,
   OauthProvider,
+  OauthStepUpRequest,
   RecoveryCodes,
   Session,
   TotpEnrolment,
@@ -23,8 +25,10 @@ import { assertNotBreached } from './breached/breached-passwords.js';
 import type { SecurityChange } from './email-templates.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
-import type { OauthService } from './oauth/oauth.service.js';
+import type { OauthIdentity, OauthService } from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
+import type { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
+import { decideOauthSignIn } from './oauth/oauth-linking.js';
 import type { PasswordHasher } from './password.js';
 import {
   EMAIL_DISPATCH_RULE,
@@ -90,6 +94,15 @@ export type SignInOutcome =
   | { readonly kind: 'totp-required'; readonly challengeId: string; readonly email: string }
   | { readonly kind: 'totp-enrolment-required'; readonly challengeId: string };
 
+/** An OAuth callback ends a sign-in, or connects a provider to the account that started it. */
+export type OauthCallbackOutcome = SignInOutcome | { readonly kind: 'connected' };
+
+/** How a provider is named in a security notice: a product name, the same in every language. */
+const PROVIDER_NAMES: Readonly<Record<OauthProvider, string>> = {
+  google: 'Google',
+  github: 'GitHub',
+};
+
 /** What one invite message needs beyond the catalogs (M0-06). */
 export interface InviteEmailInput {
   /** The invited account. Its address and language are read when the email is sent. */
@@ -124,6 +137,8 @@ export interface AuthServiceOptions {
   readonly exchanges: ExchangeStore;
   readonly limiter: RateLimiter;
   readonly oauth: OauthService;
+  /** Which provider account is bound to which staff account (1.0.1). */
+  readonly oauthIdentities: OauthIdentityRepository;
   readonly settings: Settings;
   readonly keyring: Keyring;
   /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
@@ -451,21 +466,7 @@ export class AuthService {
     readonly keepFamilyId: string | null;
     readonly tx?: DbTransaction;
   }): Promise<void> {
-    await this.#spendStepUp(userId);
-
-    const user = await this.#requireUser(userId, tx);
-    if (user.passwordHash === null) {
-      // An account that signs in with OAuth or a link alone has no current
-      // password to prove; it sets one through the reset flow, which proves
-      // the address instead.
-      throw new AuthFailure('invalid-credentials');
-    }
-
-    const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
-    if (!verification.valid) {
-      await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
-      throw new AuthFailure('invalid-credentials');
-    }
+    const user = await this.#requireCurrentPassword(userId, currentPassword, tx);
     assertNotBreached(newPassword);
 
     await this.#parts.staff.updatePasswordHash(
@@ -714,8 +715,10 @@ export class AuthService {
   }
 
   /**
-   * Matches on a verified address and nothing else. No account is created:
-   * owning a Google address is not a reason to be staff here.
+   * The callback of either flow. A flow a signed-in person started to connect
+   * a provider links it to them; any other is a sign-in, bound by the provider
+   * account's subject (`oauth-linking.ts`). No account is created: owning a
+   * Google address is not a reason to be staff here.
    */
   async completeOauth({
     provider,
@@ -729,30 +732,180 @@ export class AuthService {
     readonly state: string;
     readonly browserNonce: string | undefined;
     readonly userAgent: string | undefined;
-  }): Promise<SignInOutcome> {
-    let identity: Awaited<ReturnType<OauthService['complete']>>;
+  }): Promise<OauthCallbackOutcome> {
+    let completion: Awaited<ReturnType<OauthService['complete']>>;
     try {
-      identity = await this.#parts.oauth.complete({ provider, code, state, browserNonce });
+      completion = await this.#parts.oauth.complete({ provider, code, state, browserNonce });
     } catch (error) {
       this.#parts.logger.warn({ err: error, provider }, 'An OAuth callback could not be completed');
       throw new AuthFailure(error instanceof OauthError ? 'no-account' : 'unavailable');
     }
 
+    if (completion.linkUserId !== undefined) {
+      await this.#connectOauth(completion.linkUserId, completion.identity);
+      return { kind: 'connected' };
+    }
+    return this.#signInWithOauth(completion.identity, userAgent);
+  }
+
+  /** The provider accounts that sign in as this person, for their security page. */
+  async oauthIdentities(userId: string, tx?: Queryable): Promise<OauthIdentityList> {
+    const rows = await this.#parts.oauthIdentities.ofUser(userId, tx);
+    return {
+      identities: rows.map((row) => ({
+        provider: row.provider,
+        email: row.emailAtLink,
+        connectedAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Starts a flow that connects `provider` to the signed-in account, once the
+   * person has proved the password or a live code again: a stolen session
+   * must not be able to add a way in. The callback links whichever provider
+   * account the browser comes back with.
+   */
+  async startOauthConnect({
+    userId,
+    provider,
+    proof,
+    tx,
+  }: {
+    readonly userId: string;
+    readonly provider: OauthProvider;
+    readonly proof: OauthStepUpRequest;
+    readonly tx?: DbTransaction;
+  }): Promise<{ url: string; browserNonce: string }> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#requireStepUp(userId, proof, tx);
+    if (await this.#parts.oauthIdentities.hasProvider(userId, provider, tx)) {
+      throw new AuthFailure('oauth-identity-conflict');
+    }
+    try {
+      return await this.#parts.oauth.start(provider, { linkUserId: userId });
+    } catch (error) {
+      this.#parts.logger.warn({ err: error, provider }, 'Could not start an OAuth connect flow');
+      throw new AuthFailure('unavailable');
+    }
+  }
+
+  /** Removes a provider account from the signed-in account, behind the same step-up. */
+  async disconnectOauth({
+    userId,
+    provider,
+    proof,
+    tx,
+  }: {
+    readonly userId: string;
+    readonly provider: OauthProvider;
+    readonly proof: OauthStepUpRequest;
+    readonly tx?: DbTransaction;
+  }): Promise<void> {
+    await this.#requireStepUp(userId, proof, tx);
+    if (!(await this.#parts.oauthIdentities.unlink(userId, provider, tx))) {
+      return;
+    }
+    this.#parts.logger.info({ userId, provider }, 'Disconnected a sign-in provider account');
+    await this.#audit('auth.oauth.unlinked', userId, 'staff', { provider });
+    await this.#notifySecurityChange(userId, 'oauthDisconnected', tx, {
+      provider: PROVIDER_NAMES[provider],
+    });
+  }
+
+  async #signInWithOauth(
+    identity: OauthIdentity,
+    userAgent: string | undefined,
+  ): Promise<SignInOutcome> {
+    const { provider } = identity;
     await this.#parts.ssoPolicy.assertLocal(identity.email, 'oauth');
-    const user = await this.#parts.staff.findByEmail(identity.email);
-    if (user === undefined || !this.#isUsable(user)) {
-      await this.#audit('auth.sign_in.failed', user?.id ?? null, 'system', {
+    const linkedUserId = await this.#parts.oauthIdentities.userFor(provider, identity.subject);
+    const decision = decideOauthSignIn({
+      linkedUserId,
+      authoritative: identity.authoritative,
+      emailMatch: linkedUserId === undefined ? await this.#emailMatchFor(identity) : undefined,
+    });
+    if (decision.kind === 'refuse') {
+      await this.#audit('auth.sign_in.failed', decision.userId, 'system', {
         method: 'oauth',
         provider,
-        reason: user === undefined ? 'unknown-account' : 'unusable-account',
+        reason: decision.reason,
+      });
+      throw new AuthFailure(decision.code);
+    }
+
+    const user = await this.#parts.staff.findById(decision.userId);
+    if (user === undefined || !this.#isUsable(user)) {
+      await this.#audit('auth.sign_in.failed', decision.userId, 'system', {
+        method: 'oauth',
+        provider,
+        reason: 'unusable-account',
       });
       throw new AuthFailure('no-account');
+    }
+    if (decision.link) {
+      await this.#linkOauth(user.id, identity, 'sign-in');
     }
 
     return this.#afterFirstFactor(user, {
       method: 'oauth',
       userAgent,
       trustedDeviceCookie: undefined,
+    });
+  }
+
+  /** Who holds the address the provider reported, and whether they already have one of its accounts. */
+  async #emailMatchFor(
+    identity: OauthIdentity,
+  ): Promise<{ userId: string; hasProviderIdentity: boolean } | undefined> {
+    const matched = await this.#parts.staff.findByEmail(identity.email);
+    if (matched === undefined) {
+      return undefined;
+    }
+    return {
+      userId: matched.id,
+      hasProviderIdentity: await this.#parts.oauthIdentities.hasProvider(
+        matched.id,
+        identity.provider,
+      ),
+    };
+  }
+
+  /** The callback half of {@link startOauthConnect}. */
+  async #connectOauth(userId: string, identity: OauthIdentity): Promise<void> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const user = await this.#requireUser(userId);
+    await this.#linkOauth(user.id, identity, 'connect');
+  }
+
+  /**
+   * Binds the provider account, audits it, and tells the account holder: a new
+   * way into their account is a change they must hear about (ASVS 2.5.5).
+   */
+  async #linkOauth(
+    userId: string,
+    identity: OauthIdentity,
+    via: 'sign-in' | 'connect',
+  ): Promise<void> {
+    const { provider } = identity;
+    const linked = await this.#parts.oauthIdentities.link({
+      userId,
+      provider,
+      subject: identity.subject,
+      email: identity.email,
+    });
+    if (linked === 'conflict') {
+      await this.#audit('auth.oauth.link_refused', userId, 'system', { provider, via });
+      throw new AuthFailure('oauth-identity-conflict');
+    }
+
+    this.#parts.logger.info({ userId, provider, via }, 'Connected a sign-in provider account');
+    await this.#audit('auth.oauth.linked', userId, via === 'connect' ? 'staff' : 'system', {
+      provider,
+      via,
+    });
+    await this.#notifySecurityChange(userId, 'oauthConnected', undefined, {
+      provider: PROVIDER_NAMES[provider],
     });
   }
 
@@ -1129,6 +1282,38 @@ export class AuthService {
     return user;
   }
 
+  /** The account behind a signed-in request, with its current password proved again. */
+  async #requireCurrentPassword(
+    userId: string,
+    currentPassword: string,
+    tx?: Queryable,
+  ): Promise<StaffUser> {
+    await this.#spendStepUp(userId);
+
+    const user = await this.#requireUser(userId, tx);
+    if (user.passwordHash === null) {
+      // An account that signs in with OAuth or a link alone has no current
+      // password to prove; it sets one through the reset flow, which proves
+      // the address instead.
+      throw new AuthFailure('invalid-credentials');
+    }
+
+    const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
+    if (!verification.valid) {
+      await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
+      throw new AuthFailure('invalid-credentials');
+    }
+
+    return user;
+  }
+
+  /** Whichever of the two a person offered: the current password, or a live code. */
+  #requireStepUp(userId: string, proof: OauthStepUpRequest, tx?: Queryable): Promise<StaffUser> {
+    return proof.code === undefined
+      ? this.#requireCurrentPassword(userId, proof.currentPassword ?? '', tx)
+      : this.#requireLiveCode(userId, proof.code, tx);
+  }
+
   /**
    * The budget for re-proving a credential from inside a session. Sign-in has a
    * spendable challenge for this; these routes have none, so without a limit
@@ -1202,12 +1387,13 @@ export class AuthService {
     userId: string,
     change: SecurityChange,
     tx?: DbTransaction,
+    values: Readonly<Record<string, string>> = {},
   ): Promise<void> {
     const request: AuthEmailRequest = {
       kind: 'securityChange',
       userId,
       url: new URL('/me/security', this.#parts.appUrl).toString(),
-      values: { change },
+      values: { ...values, change },
     };
 
     const [brandId] =

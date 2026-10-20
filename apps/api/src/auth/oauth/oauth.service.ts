@@ -7,6 +7,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { z } from 'zod';
 import type { Logger } from '../../logging/logger.js';
 import { hashToken, oauthStateKey } from '../redis-keys.js';
+import { googleIsAuthoritative } from './oauth-linking.js';
 import {
   GITHUB_IDENTITY,
   GOOGLE_IDENTITY,
@@ -29,10 +30,14 @@ import {
  * - **A fixed redirect.** Built from `APP_URL`, never echoed from the request,
  *   so there is no open redirect to point at.
  *
- * Matching is by **verified address only**, and no account is created: M0-05
- * signs people in, M0-06 invites them. An unrecognised address is `no-account`,
- * which is the honest answer and does not quietly make an admin out of anyone
- * who happens to own a Google account.
+ * What comes back is the provider account's stable subject, its address, and
+ * whether the provider controls that address. Which staff account that is —
+ * by subject first, by address only for a first link the provider can vouch
+ * for — is `oauth-linking.ts`'s decision, and no account is ever created:
+ * M0-05 signs people in, M0-06 invites them.
+ *
+ * A flow started from inside a session to connect a provider account carries
+ * that account's id in its state, so the callback links rather than signs in.
  */
 
 export const OAUTH_STATE_TTL_SECONDS = 600;
@@ -45,11 +50,16 @@ const stateRecordSchema = z.object({
   codeVerifier: z.string().min(1),
   browserNonceHash: z.string().min(1),
   createdAt: z.number().int(),
+  /** Set when a signed-in person started the flow to connect this provider to their account. */
+  linkUserId: z.uuid().optional(),
 });
 
 const googleClaimsSchema = z.object({
+  sub: z.string().min(1).max(255),
   email: z.email(),
   email_verified: z.union([z.boolean(), z.literal('true'), z.literal('false')]).optional(),
+  /** Present only on a managed Workspace account: its domain. */
+  hd: z.string().optional(),
   name: z.string().optional(),
 });
 
@@ -57,11 +67,26 @@ const githubEmailsSchema = z.array(
   z.object({ email: z.email(), primary: z.boolean(), verified: z.boolean() }),
 );
 
-const githubUserSchema = z.object({ name: z.string().nullable(), login: z.string() });
+const githubUserSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().nullable(),
+  login: z.string(),
+});
 
 export interface OauthIdentity {
+  readonly provider: OauthProvider;
+  /** Google's `sub`, GitHub's numeric id: what the account is bound by. */
+  readonly subject: string;
   readonly email: string;
   readonly name: string | undefined;
+  /** Whether the provider controls `email`, which is what may make a first link. */
+  readonly authoritative: boolean;
+}
+
+export interface OauthCompletion {
+  readonly identity: OauthIdentity;
+  /** The signed-in account that started this flow to connect the provider, if one did. */
+  readonly linkUserId: string | undefined;
 }
 
 export interface OauthCredentials {
@@ -167,7 +192,10 @@ export class OauthService {
    * The provider URL to redirect the browser to, with the state already stored,
    * and the nonce that browser must present on the callback.
    */
-  async start(provider: OauthProvider): Promise<{ url: string; browserNonce: string }> {
+  async start(
+    provider: OauthProvider,
+    { linkUserId }: { readonly linkUserId?: string } = {},
+  ): Promise<{ url: string; browserNonce: string }> {
     const { clientId } = await this.#credentials(provider);
     if (clientId === '') {
       throw new OauthError(`${provider} sign-in is not configured on this install`);
@@ -185,6 +213,7 @@ export class OauthService {
         codeVerifier,
         browserNonceHash: hashToken(browserNonce),
         createdAt: Math.floor(Date.now() / 1000),
+        ...(linkUserId === undefined ? {} : { linkUserId }),
       }),
       'EX',
       OAUTH_STATE_TTL_SECONDS,
@@ -203,7 +232,7 @@ export class OauthService {
   }
 
   /**
-   * Spends the state and the code and answers with the verified address. A
+   * Spends the state and the code and answers with the provider account. A
    * state that does not belong to this provider is refused even if it is
    * otherwise valid, so one provider's callback cannot complete another's flow,
    * and so is one from a browser that does not hold the flow's nonce.
@@ -218,7 +247,7 @@ export class OauthService {
     readonly code: string;
     readonly state: string;
     readonly browserNonce: string | undefined;
-  }): Promise<OauthIdentity> {
+  }): Promise<OauthCompletion> {
     const raw = await this.#redis.getdel(oauthStateKey(hashToken(state)));
     if (raw === null) {
       throw new OauthError('This sign-in attempt has expired or was already completed');
@@ -252,9 +281,13 @@ export class OauthService {
     );
 
     try {
-      return provider === 'google'
-        ? await this.#googleIdentity(tokens.id_token, clientId)
-        : await this.#githubIdentity(tokens.access_token);
+      return {
+        identity:
+          provider === 'google'
+            ? await this.#googleIdentity(tokens.id_token, clientId)
+            : await this.#githubIdentity(tokens.access_token),
+        linkUserId: record.data.linkUserId,
+      };
     } catch (error) {
       if (error instanceof OauthError) {
         throw error;
@@ -281,12 +314,21 @@ export class OauthService {
 
     const claims = googleClaimsSchema.parse(payload);
     // Google sends `email_verified` as a boolean, and as the string "true" in
-    // some older responses. Anything else counts as unverified.
-    if (claims.email_verified !== true && claims.email_verified !== 'true') {
-      throw new OauthError('Google has not verified that address');
-    }
+    // some older responses. Anything else counts as unverified, which keeps a
+    // bound subject signing in but can never make a first link.
+    const emailVerified = claims.email_verified === true || claims.email_verified === 'true';
 
-    return { email: claims.email, name: claims.name };
+    return {
+      provider: 'google',
+      subject: claims.sub,
+      email: claims.email,
+      name: claims.name,
+      authoritative: googleIsAuthoritative({
+        email: claims.email,
+        emailVerified,
+        hostedDomain: claims.hd,
+      }),
+    };
   }
 
   async #githubIdentity(accessToken: string | undefined): Promise<OauthIdentity> {
@@ -302,7 +344,15 @@ export class OauthService {
 
     const user = githubUserSchema.parse(await getJson(GITHUB_IDENTITY.userUrl, accessToken));
 
-    return { email: primary.email, name: user.name ?? user.login };
+    return {
+      provider: 'github',
+      subject: String(user.id),
+      email: primary.email,
+      name: user.name ?? user.login,
+      // A GitHub address stays "verified" after its owner loses the mailbox, so
+      // GitHub never vouches for one: it links from inside a session only.
+      authoritative: false,
+    };
   }
 
   #jwksFor(url: string): ReturnType<typeof createRemoteJWKSet> {

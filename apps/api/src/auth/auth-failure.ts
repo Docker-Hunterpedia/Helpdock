@@ -22,6 +22,8 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'sso-required': HttpStatus.FORBIDDEN,
   'sso-invalid-response': HttpStatus.UNAUTHORIZED,
   'sso-identity-conflict': HttpStatus.FORBIDDEN,
+  'oauth-link-required': HttpStatus.FORBIDDEN,
+  'oauth-identity-conflict': HttpStatus.FORBIDDEN,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
   'totp-mismatch': HttpStatus.UNAUTHORIZED,
   'recovery-invalid': HttpStatus.UNAUTHORIZED,
@@ -41,6 +43,10 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'sso-required': 'Single sign-on is required',
   'sso-invalid-response': 'The identity provider response is invalid',
   'sso-identity-conflict': 'This account is already linked to another single sign-on identity',
+  'oauth-link-required':
+    'Sign in another way once, then connect this provider account from the security page',
+  'oauth-identity-conflict':
+    'That provider account is linked to another person, or this account already has one',
   'invalid-credentials': 'That email and password do not match',
   'totp-mismatch': 'That authentication code does not match',
   'recovery-invalid': 'That recovery code is not valid or has already been used',

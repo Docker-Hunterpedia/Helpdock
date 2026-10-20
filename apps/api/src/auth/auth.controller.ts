@@ -4,6 +4,8 @@ import type {
   AuthSessionResponse,
   EnrolmentCompleteResponse,
   MagicLinkPreview,
+  OauthConnectStart,
+  OauthIdentityList,
   OauthProvider,
   RecoveryCodes,
   Session,
@@ -28,7 +30,12 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { getTx, requireRequestContext } from '../context/request-context.js';
 import { ENV } from '../runtime/tokens.js';
-import { AuthService, magicLinkScreenUrl, type SignInOutcome } from './auth.service.js';
+import {
+  AuthService,
+  magicLinkScreenUrl,
+  type OauthCallbackOutcome,
+  type SignInOutcome,
+} from './auth.service.js';
 import { AuthFailure, isAuthFailure } from './auth-failure.js';
 import {
   AuthMethodsDto,
@@ -42,7 +49,10 @@ import {
   MagicLinkTokenParamDto,
   MagicLinkTokenRequestDto,
   OauthCallbackQueryDto,
+  OauthConnectStartDto,
+  OauthIdentityListDto,
   OauthProviderParamDto,
+  OauthStepUpRequestDto,
   PasswordForgotRequestDto,
   PasswordResetRequestDto,
   RecoveryCodeRequestDto,
@@ -351,7 +361,7 @@ export class AuthController {
       return;
     }
 
-    let outcome: SignInOutcome;
+    let outcome: OauthCallbackOutcome;
     try {
       outcome = await this.#auth.completeOauth({
         provider: known.data,
@@ -368,7 +378,60 @@ export class AuthController {
       return;
     }
 
+    if (outcome.kind === 'connected') {
+      await this.#redirect(reply, '/me/security', { connected: known.data });
+      return;
+    }
     await this.#redirectFor(outcome, reply, '/oauth/callback', { provider });
+  }
+
+  /** The provider accounts that sign in as the caller (1.0.1). */
+  @Get('oauth/identities')
+  @Authenticated()
+  @ZodSerializerDto(OauthIdentityListDto)
+  oauthIdentities(): Promise<OauthIdentityList> {
+    return this.#auth.oauthIdentities(this.#staffId(), getTx());
+  }
+
+  /**
+   * Starts connecting a provider account to the caller, behind a step-up. It
+   * answers the provider URL rather than redirecting, because the admin calls
+   * it with its bearer token; the nonce cookie is set here all the same, so the
+   * callback still has to come back to this browser.
+   */
+  @Post('oauth/:provider/connect')
+  @Authenticated()
+  @ZodSerializerDto(OauthConnectStartDto)
+  async connectOauth(
+    @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
+    @Body(new ZodValidationPipe(OauthStepUpRequestDto)) proof: OauthStepUpRequestDto,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<OauthConnectStart> {
+    const known = this.#provider(provider);
+    const { url, browserNonce } = await this.#auth.startOauthConnect({
+      userId: this.#staffId(),
+      provider: known,
+      proof,
+      tx: getTx(),
+    });
+    const nonceCookie = this.#oauthNonceCookie(known);
+    reply.setCookie(nonceCookie.name, browserNonce, nonceCookie.attributes);
+    return { url };
+  }
+
+  @Post('oauth/:provider/disconnect')
+  @Authenticated()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async disconnectOauth(
+    @Param(new ZodValidationPipe(OauthProviderParamDto)) { provider }: OauthProviderParamDto,
+    @Body(new ZodValidationPipe(OauthStepUpRequestDto)) proof: OauthStepUpRequestDto,
+  ): Promise<void> {
+    await this.#auth.disconnectOauth({
+      userId: this.#staffId(),
+      provider: this.#provider(provider),
+      proof,
+      tx: getTx(),
+    });
   }
 
   // ------------------------------------------------------------------

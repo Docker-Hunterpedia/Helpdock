@@ -193,8 +193,12 @@ their protocols require.
 
 OAuth sign-in (Google, GitHub) uses PKCE, a single-use, hashed `state` and,
 since 2026-10-11, the `hd_oauth` cookie of the browser that started the flow
-(`api/auth/oauth/oauth.service.ts`), and only signs in an address the install
-already knows. The knowledge connectors' OAuth (Notion, Google Drive, M7-03)
+(`api/auth/oauth/oauth.service.ts`). Since 1.0.1 it signs in by the provider
+account's subject, bound in `user_oauth_identities`; an address makes the first
+link only where the provider controls it (Google Workspace on its own domain, or
+Gmail), and GitHub links only from inside a session behind a step-up
+(`api/auth/oauth/oauth-linking.ts`,
+[ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)). The knowledge connectors' OAuth (Notion, Google Drive, M7-03)
 is weaker: its `state` is HMAC-signed with a key derived from
 `APP_MASTER_KEY`, names the brand, source and person, lasts ten minutes and,
 since 2026-10-11, is spent once (its nonce is `GETDEL`ed,

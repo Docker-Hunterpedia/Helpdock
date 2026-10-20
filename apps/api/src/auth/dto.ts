@@ -10,7 +10,10 @@ import {
   magicLinkTokenParamSchema,
   magicLinkTokenRequestSchema,
   oauthCallbackQuerySchema,
+  oauthConnectStartSchema,
+  oauthIdentityListSchema,
   oauthProviderParamSchema,
+  oauthStepUpRequestSchema,
   passwordForgotRequestSchema,
   passwordResetRequestSchema,
   recoveryCodeRequestSchema,
@@ -44,6 +47,9 @@ export class MagicLinkTokenRequestDto extends createZodDto(magicLinkTokenRequest
 export class MagicLinkPreviewDto extends createZodDto(magicLinkPreviewSchema) {}
 export class OauthProviderParamDto extends createZodDto(oauthProviderParamSchema) {}
 export class OauthCallbackQueryDto extends createZodDto(oauthCallbackQuerySchema) {}
+export class OauthStepUpRequestDto extends createZodDto(oauthStepUpRequestSchema) {}
+export class OauthConnectStartDto extends createZodDto(oauthConnectStartSchema) {}
+export class OauthIdentityListDto extends createZodDto(oauthIdentityListSchema) {}
 export class TotpRequestDto extends createZodDto(totpRequestSchema) {}
 export class TotpConfirmRequestDto extends createZodDto(totpConfirmRequestSchema) {}
 export class RecoveryCodeRequestDto extends createZodDto(recoveryCodeRequestSchema) {}

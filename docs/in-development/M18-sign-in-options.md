@@ -453,11 +453,11 @@ Backlog or never:
 | M18-02 | **Register and manage passkeys.** `GET/POST/PATCH/DELETE /api/me/passkeys` (begin/finish, rename, remove) with step-up (password, TOTP or existing passkey; 5-per-15-min budget), at most 10 per account, `excludeCredentials`, last-factor refusal, audit `auth.passkey.added/.renamed/.removed`, `securityChange` email (en/ar) | ASVS 2.2.3, 2.5.5, 3.7.1 | 2.5 | M18-01 |
 | M18-03 | **Passkey as a second factor.** The challenge answers `POST /api/auth/passkey/second-factor/{options,verify}` beside TOTP and recovery codes, sharing the three-attempt budget and lock; the enrolment challenge accepts a passkey (`second-factor-enrolment-required`, old code aliased); `isSecondFactorRequired` / "has a factor" = TOTP OR passkey; recovery codes issued with the first factor of either kind; redraw by TOTP or passkey; admin "reset second factor" removes passkeys too | ASVS 4.3.1, 2.5.7, 2.6.1 | 3 | M18-01, M18-02 |
 | M18-04 | **Passwordless sign-in.** `POST /api/auth/passkey/{options,verify}`: discoverable, UV required, no `allowCredentials`, same refusal (`invalid-credentials`) for unknown credential, bad signature, deactivated or no-brand account; per-IP budget shared with sign-in; counter check; `last_used_at`; audit `method: passkey, secondFactor: passkey-uv`; refused under SSO enforcement (`sso-required`) | ASVS 2.2.1, 3.2.1; D §1.6 | 2.5 | M18-01, M18-03 |
-| M18-05 | **SSO and break-glass integration.** The break-glass form accepts password plus fresh TOTP **or** passkey (UV) (pending the owner, D-50); the enforcement precondition becomes TOTP or passkey; pending challenges recheck enforcement; ADR 0053 (amends ADR 0026) | ADR 0026 (10), ADR 0053 | 1.5 | M18-03, M18-04 |
+| M18-05 | **SSO and break-glass integration.** The break-glass form accepts password plus fresh TOTP **or** passkey (UV) (pending the owner, D-50); the enforcement precondition becomes TOTP or passkey; pending challenges recheck enforcement; ADR 0053 (amends ADR 0026). TODO: change the Settings › Single sign-on break-glass copy (`sso:enforcementHint`, `sso:breakGlassHint`, `sso:ineligible`) to "an authenticator app or a passkey" in this deliverable, not before (`Admin/Settings-SSO-M18`) | ADR 0026 (10), ADR 0053 | 1.5 | M18-03, M18-04 |
 | M18-06 | **Admin passkey screens.** Sign-in: a "Sign in with a passkey" button and conditional mediation on the email field (`autocomplete="username webauthn"`), with cancelled, unsupported and RP-changed states. Second-factor screen: a passkey option. Enrolment chooser. Security › Passkeys card with add, rename and remove dialogs and a step-up dialog. Settings › Authentication: passkeys status and RP ID. `@simplewebauthn/browser` 14.0.0 in the admin bundle only. Lucide `KeyRound`. en/ar | DESIGN §6, §10 | 4 | M18-02 to M18-05 |
 | M18-07 | **OAuth identities bound by subject.** `user_oauth_identities` (install scope); first-link-only rules per provider (Google `hd`/gmail, GitHub never by email); `oauth-link-required`; connect and disconnect from Security › Sign-in methods with step-up and email; binding at invitation acceptance; `oauth.google.allowedDomains`; migration behaviour for 1.0 users; audit `auth.oauth.linked/.unlinked`; ADR 0051. The binding itself lands early as a 1.0.1 security fix; this deliverable keeps what that fix leaves | #219 rules; D §12; ADR 0051 | 3.5 | — |
 | M18-08 | **Microsoft sign-in.** A third built-in provider via `openid-client` 6.x + `safeFetch`; `oauth.microsoft.{tenantId,clientId,clientSecret}` (secret write-only, `HD_*` pinnable); an exact issuer, a `tid` check, `xms_edov` for first link; provider mark (DESIGN §5 amendment); a stand-in IdP for tests | A §7; D §13 | 2.5 | M18-07 |
-| M18-09 | **SSO presets.** "Google Workspace (OIDC)" and "Microsoft Entra ID (OIDC)" presets in the connection form: discovery URL template, email and group claim names, domain hint, links to the guide sections. Form only, no protocol change | ADR 0026 | 1.5 | — |
+| M18-09 | **SSO presets.** "Google Workspace (OIDC)" and "Microsoft Entra ID (OIDC)" presets in the connection form: discovery URL template, email and group claim names, domain hint, links to the guide sections. One protocol change, decided on the PR: an OIDC first link also accepts Entra's `xms_edov` from members (`acct` 0) of the one tenant the issuer names, since Entra sends no `email_verified` (ADR 0026 amendment) | ADR 0026 | 1.5 | — |
 | M18-10 | **Proof-of-work CAPTCHA provider.** `pow` in `CAPTCHA_PROVIDERS`: an HMAC-signed challenge under an HKDF key from `APP_MASTER_KEY`, single-use spend in Redis, expiry, difficulty setting (`low`/`medium`), WebCrypto solver in a lazy widget chunk and in the web form page, en/ar copy for the "Checking…" and failure states; widget size check stays green; ADR 0052 | ADR 0003, ADR 0052; R §5.1 | 3 | — |
 | M18-11 | **CAPTCHA and abuse hardening.** Verify Turnstile/hCaptcha `hostname` against the brand's widget origins or the web form host; Turnstile `action` per surface (`widget-first-message`, `web-form`); a per-IP bucket on sign-in-link and reset requests; a per-IP limit on help-center feedback POSTs; `rate_limit_refusals_total` labels | ASVS 11.1.4, 2.2.1 | 1.5 | — |
 | M18-12 | **Docs.** `authentication.md` (passkeys, OAuth binding, Microsoft, rate limits), `sso.md` (presets, break-glass), `staff-and-roles.md` (Security page, enrolment), a new `docs/guides/sign-in-providers.md` (Google, Microsoft, GitHub app setup, step by step), the CAPTCHA section of `channels.md`/`web-form.md`, the configuration reference, `.env.example`, the release note on GitHub re-linking and RP-ID pinning, ARCHITECTURE §1/§7, DOMAIN-RULES additions (below) | A §2 | 2.5 | all |
@@ -483,7 +483,41 @@ Backlog or never:
   passkeys card can read `WebAuthnService.status()` (state, current and pinned
   RP ID, pin date); the "in use" count and the route that serves the card are
   not built yet.
-- [ ] M18-02 to M18-13.
+- [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
+  A "Start from" select on a new OIDC connection
+  (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom
+  OpenID Connect, Google Workspace (OIDC) and Microsoft Entra ID (OIDC). A
+  preset (`sso-presets.ts`) fills the issuer or the Entra
+  `https://login.microsoftonline.com/{tenant-id}/v2.0` template, the email,
+  name and groups claims, hint text on the issuer, groups and email domains
+  fields, and an info Banner linking to its `sso.md` section. It overwrites only
+  those fields, once, when picked; later edits stay, and nothing about the
+  preset is saved. The form refuses to save an issuer that still holds
+  `{tenant-id}`. Two choices differ from `Admin/Settings-SSO-M18`, both
+  accepted on the PR:
+  - The board's separate "Domain hint" field, "sent as `hd`", is not built:
+    Helpdock sends neither `hd` nor `domain_hint`. The preset puts its domain
+    hint on the existing **Email domains** field instead.
+  - The select shows only on a new connection. On a saved connection it would
+    always read "Custom", because the preset is not stored.
+
+  **Entra email verification.** Entra ID tokens carry no `email_verified`, so
+  without a change no Entra OIDC connection could link or create anyone. An
+  OIDC assertion's email now also counts as verified when the email claim is
+  `email`, the connection's issuer is
+  `https://login.microsoftonline.com/<tenant GUID>/v2.0` (global cloud; not
+  `common`, `organizations`, `consumers` or the personal-account tenant), the
+  token's `iss` and `tid` match it, `acct === 0` (a member, never a guest),
+  and `xms_edov === true`
+  (`oidcAssertion` in `apps/api/src/sso/oidc-contracts.ts`, which feeds the
+  first-link check in `identity.service.ts`). Guests are excluded because
+  their `xms_edov` speaks for their home tenant or a personal account; they
+  cannot make a first link through Entra OIDC, as Helpdock has no manual SSO
+  link. The connection schema also refuses `{`/`}` in an OIDC issuer. ADR 0026
+  and DOMAIN-RULES §12 record it.
+
+  The break-glass copy stays as it is until M18-05 (see its row).
+- [ ] The other deliverables.
 
 ## Data model
 

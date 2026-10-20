@@ -137,6 +137,7 @@ export class OidcService {
       }
       const assertion = oidcAssertion({
         connectionId: row.id,
+        issuer: config.issuer,
         claims,
         supplemental,
         emailClaim: config.emailClaim,

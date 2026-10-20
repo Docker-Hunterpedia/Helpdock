@@ -1,6 +1,6 @@
 import type { DbTransaction } from '@helpdock/db';
 import { csvLine, type ReportExport } from '@helpdock/schemas';
-import { csatAverage, fillDays } from './report-math.js';
+import { csatAverage, fillDays, rankTags } from './report-math.js';
 import type { DailyDetailRow, ReportScope, ReportsRepository } from './reports.repository.js';
 
 /**
@@ -53,6 +53,13 @@ const rowsOf = async (
       return {
         header: ['day', 'status_id', 'status', 'created'],
         rows: days.map((d) => [d.day, d.key, statuses.get(d.key) ?? null, d.created]),
+      };
+    }
+    case 'volume_by_tag': {
+      const tags = rankTags(await repository.byTag(tx, scope), null);
+      return {
+        header: ['tag_id', 'tag', 'tag_ar', 'created'],
+        rows: tags.map((g) => [g.tagId, g.name, g.nameAr, g.tickets]),
       };
     }
     case 'response_times': {

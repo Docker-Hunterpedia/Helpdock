@@ -10,6 +10,11 @@ import { daysOf, isoDay } from './report-range.js';
 
 const SUPPORT_STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000d1';
 const WAITING_STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000d2';
+const AWAITING_STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000d3';
+const ON_HOLD_STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000d4';
+const SNOOZED_STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000d5';
+
+const tagId = (n: number): string => `0192c3f0-1a2b-7c3d-8e4f-0000000000e${n}`;
 
 export const LINA = '0192c3f0-1a2b-7c3d-8e4f-00000000000a';
 export const OMAR = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
@@ -54,6 +59,53 @@ export const reportSummary = (
         { day, statusId: SUPPORT_STATUS, tickets: 4 },
         { day, statusId: WAITING_STATUS, tickets: 26 + (index % 9) },
       ]),
+      // `Admin/M14-Amendments`' Volume by tag; login has no Arabic name.
+      byTag: [
+        { tagId: tagId(1), name: 'refund', nameAr: 'استرداد', tickets: 182 },
+        { tagId: tagId(2), name: 'shipping', nameAr: 'الشحن', tickets: 140 },
+        { tagId: tagId(3), name: 'login', nameAr: null, tickets: 96 },
+        { tagId: tagId(4), name: 'vip', nameAr: 'كبار العملاء', tickets: 41 },
+      ],
+    },
+    // `Admin/M14-Amendments`' Backlog by status.
+    backlogByStatus: {
+      open: 118,
+      unassigned: 14,
+      unassignedShare: 14 / 118,
+      byStatus: [
+        {
+          statusId: SUPPORT_STATUS,
+          name: 'Open',
+          nameAr: 'مفتوحة',
+          systemState: 'open',
+          open: 64,
+          unassigned: 12,
+        },
+        {
+          statusId: AWAITING_STATUS,
+          name: 'Awaiting customer',
+          nameAr: 'بانتظار العميل',
+          systemState: 'on_hold',
+          open: 38,
+          unassigned: 0,
+        },
+        {
+          statusId: ON_HOLD_STATUS,
+          name: 'On hold',
+          nameAr: 'معلّقة',
+          systemState: 'on_hold',
+          open: 9,
+          unassigned: 2,
+        },
+        {
+          statusId: SNOOZED_STATUS,
+          name: 'Snoozed',
+          nameAr: 'مؤجّلة',
+          systemState: 'on_hold',
+          open: 7,
+          unassigned: 0,
+        },
+      ],
     },
     firstResponse: { count: 980, medianMs: 42 * 60_000, p90Ms: 190 * 60_000 },
     resolution: { count: 860, medianMs: 495 * 60_000, p90Ms: 2320 * 60_000 },

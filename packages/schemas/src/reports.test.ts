@@ -107,10 +107,38 @@ describe('reportSummarySchema', () => {
   });
 });
 
+describe('reportSummarySchema.backlogByStatus', () => {
+  const backlog = reportSummarySchema.shape.backlogByStatus;
+  const row = (systemState: string) => ({
+    statusId: '01924f00-0000-7000-8000-0000000000cc',
+    name: 'Open',
+    nameAr: null,
+    systemState,
+    open: 3,
+    unassigned: 1,
+  });
+
+  it('holds the statuses a ticket can be open in, and refuses a closed one', () => {
+    const parse = (systemState: string) =>
+      backlog.safeParse({
+        open: 3,
+        unassigned: 1,
+        unassignedShare: 1 / 3,
+        byStatus: [row(systemState)],
+      }).success;
+
+    expect(['open', 'on_hold', 'escalated'].map(parse)).toEqual([true, true, true]);
+    expect(parse('closed')).toBe(false);
+  });
+});
+
 describe('reportExportFileName', () => {
   it('names the file after the report and the range, with dashes for underscores', () => {
     expect(reportExportFileName('busiest_hours', '2026-09-01', '2026-09-30')).toBe(
       'helpdock-busiest-hours-2026-09-01-2026-09-30.csv',
+    );
+    expect(reportExportFileName('volume_by_tag', '2026-10-01', '2026-10-20')).toBe(
+      'helpdock-volume-by-tag-2026-10-01-2026-10-20.csv',
     );
   });
 });

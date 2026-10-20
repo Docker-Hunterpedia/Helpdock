@@ -104,7 +104,10 @@
     "action": "Action",
     "slice": "Priority or clock",
     "slaMet": "SLA met",
-    "csat": "CSAT"
+    "csat": "CSAT",
+    "tag": "Tag",
+    "status": "Status",
+    "unassigned": "Unassigned"
   },
   "volume": {
     "title": "Ticket volume",
@@ -169,6 +172,22 @@
     "stars_one": "{{count}} star",
     "stars_other": "{{count}} stars",
     "chartLabel": "Answers by rating: {{figures}}."
+  },
+  "tags": {
+    "title": "Volume by tag",
+    "caption_one": "Tickets created in the period, by the tags they carry now · top {{count}} tag",
+    "caption_other": "Tickets created in the period, by the tags they carry now · top {{count}} tags",
+    "empty": "No ticket created in this period carries a tag.",
+    "chartLabel": "Tickets created per tag: {{figures}}."
+  },
+  "backlogStatus": {
+    "title": "Backlog by status",
+    "caption": "Open tickets now, by status · not limited to the dates above",
+    "empty": "No ticket is open.",
+    "chartLabel": "Open tickets now by status: {{figures}}.",
+    "unassigned_one": "· {{count}} unassigned",
+    "unassigned_other": "· {{count}} unassigned",
+    "sentence": "{{unassigned}} of {{open}} open tickets are unassigned ({{share}})."
   },
   "agents": {
     "title": "Agent workload",

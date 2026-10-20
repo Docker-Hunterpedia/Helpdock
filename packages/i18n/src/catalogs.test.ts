@@ -15,7 +15,12 @@ const PLURAL_PATTERN = new RegExp(`_(${PLURAL_SUFFIXES.join('|')})$`);
 
 const ENGLISH_PLURAL_FORMS = ['one', 'other'];
 const ARABIC_PLURAL_FORMS = [...PLURAL_SUFFIXES];
-const INVARIANT_PRODUCT_NAMES = new Set(['Zoho Desk', 'Help Scout']);
+const INVARIANT_PRODUCT_NAMES = new Set([
+  'Zoho Desk',
+  'Help Scout',
+  'Google Workspace (OIDC)',
+  'Microsoft Entra ID (OIDC)',
+]);
 
 type Catalog = Record<string, unknown>;
 

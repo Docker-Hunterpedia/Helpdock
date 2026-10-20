@@ -102,5 +102,27 @@
   "refusals": {
     "sso-email-domain-taken": "{{domains}} مستخدَم في اتصال مفعَّل آخر. يسجّل كل نطاق بريد الدخول عبر اتصال مفعَّل واحد فقط.",
     "sso-metadata-confirm-certificates": "تتضمّن البيانات الوصفية لدى المزوّد شهادة توقيع غير محفوظة هنا. تحقّق منها لدى مزوّد الهوية، ثم أضفها ضمن شهادات التوقيع واحفظ."
+  },
+  "presets": {
+    "label": "البدء من",
+    "hint": "يملأ الإعداد المسبق الحقول أدناه. يمكنك تغيير أي منها.",
+    "guide": "دليل الإعداد",
+    "custom": {
+      "name": "OpenID Connect مخصّص"
+    },
+    "google-workspace": {
+      "name": "Google Workspace (OIDC)",
+      "banner": "Google Workspace: أنشئ عميل OAuth في مشروع Google Cloud التابع لـ Workspace، واضبط شاشة الموافقة على Internal (داخلي).",
+      "issuerHint": "تستخدم Google هذا المُصدِر نفسه لكل Workspace.",
+      "groupsHint": "اتركه فارغاً. لا ترسل Google المجموعات في رمز الهوية، لذا استخدم الوصول الافتراضي أو امنح الأدوار يدوياً.",
+      "domainsHint": "أدخل نطاق Workspace، مثل example.com. يمكن للعناوين ضمنه فقط الارتباط بهذا الاتصال."
+    },
+    "entra-id": {
+      "name": "Microsoft Entra ID (OIDC)",
+      "banner": "Microsoft Entra ID: سجّل تطبيقاً لمستأجر واحد بعنوان إعادة توجيه من نوع Web يشير إلى عنوان إعادة التوجيه لهذا الاتصال. من Token configuration أضف المطالبات الاختيارية email وxms_edov وacct، ومطالبة groups.",
+      "issuerHint": "استبدل {tenant-id} بمعرّف الدليل (المستأجر).",
+      "groupsHint": "أضف مطالبة groups من Token configuration. القيم هي معرّفات كائنات المجموعات.",
+      "domainsHint": "أدخل النطاقات الموثّقة في مستأجر Entra، مثل example.com."
+    }
   }
 }

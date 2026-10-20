@@ -13,10 +13,12 @@ import {
   hcSections,
   reportDaily,
   seedBrandStatuses,
+  tags,
   ticketMessages,
   ticketSlaClocks,
   ticketStatuses,
   tickets,
+  ticketTags,
   users,
   uuidv7,
   widgetVisitors,
@@ -94,6 +96,20 @@ describe.skipIf(!hasDocker)('reports', () => {
   let runtime: Runtime;
   let app: ApiApp;
   let number = 0;
+  /** The seeded tickets the tag and backlog tests point at. */
+  const seeded: Record<
+    't1' | 't2' | 't3' | 'spam' | 'merged' | 'deleted' | 't7' | 'brandB',
+    string
+  > = {
+    t1: '',
+    t2: '',
+    t3: '',
+    spam: '',
+    merged: '',
+    deleted: '',
+    t7: '',
+    brandB: '',
+  };
 
   const db = (): Db => runtime.db;
 
@@ -122,7 +138,7 @@ describe.skipIf(!hasDocker)('reports', () => {
     readonly departmentId: string;
     readonly channel: 'email' | 'chat' | 'form' | 'api' | 'manual';
     readonly priority: 'low' | 'medium' | 'high' | 'urgent';
-    readonly status: 'Open' | 'Closed' | 'Spam';
+    readonly status: 'Open' | 'Awaiting customer' | 'Closed' | 'Spam';
     readonly createdAt: Date;
     readonly closedAt?: Date;
     readonly assigneeId?: string;
@@ -285,6 +301,7 @@ describe.skipIf(!hasDocker)('reports', () => {
     });
     await reply(t1, AGENT_ONE, at(0, '09:45'));
     await rate(t1, SUPPORT, 5, at(1, '12:00'));
+    seeded.t1 = t1;
 
     // T2: chat, under SLA clocks — answered in an hour with ten minutes paused
     // waiting on the customer, resolution breached a day later, then reopened
@@ -305,6 +322,7 @@ describe.skipIf(!hasDocker)('reports', () => {
       satisfiedAt: at(0, '15:00'),
       pausedTotalMs: 600_000,
     });
+    seeded.t2 = t2;
     await clock(t2, {
       kind: 'resolution',
       cycle: 0,
@@ -327,9 +345,10 @@ describe.skipIf(!hasDocker)('reports', () => {
       createdAt: at(1, '08:00'),
       visitorId: VISITOR,
     });
+    seeded.t3 = t3;
 
     // Spam, merged and deleted tickets count nowhere.
-    await seedTicket({
+    seeded.spam = await seedTicket({
       departmentId: SUPPORT,
       channel: 'email',
       priority: 'medium',
@@ -337,7 +356,7 @@ describe.skipIf(!hasDocker)('reports', () => {
       createdAt: at(1, '10:00'),
       closedAt: at(1, '10:05'),
     });
-    await seedTicket({
+    seeded.merged = await seedTicket({
       departmentId: BILLING,
       channel: 'email',
       priority: 'medium',
@@ -345,7 +364,7 @@ describe.skipIf(!hasDocker)('reports', () => {
       createdAt: at(1, '11:00'),
       mergedIntoId: t3,
     });
-    await seedTicket({
+    seeded.deleted = await seedTicket({
       departmentId: BILLING,
       channel: 'email',
       priority: 'medium',
@@ -366,9 +385,10 @@ describe.skipIf(!hasDocker)('reports', () => {
     });
     await reply(t7, ADMIN, at(2, '12:00'));
     await rate(t7, BILLING, 2, at(2, '19:00'));
+    seeded.t7 = t7;
 
     // Brand B: one API ticket, which must never reach brand A's report.
-    await seedTicket({
+    seeded.brandB = await seedTicket({
       brandId: BRAND_B,
       departmentId: OTHER_DEPARTMENT,
       channel: 'api',
@@ -701,6 +721,160 @@ describe.skipIf(!hasDocker)('reports', () => {
     it('refuses a range that ends before it starts', async () => {
       const response = await get(`/api/brands/${BRAND_A}/reports?from=${TO}&to=${FROM}`);
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('volume by tag and backlog by status (M14-29)', () => {
+    const REFUND = uuidv7();
+    const VIP = uuidv7();
+    const UNUSED = uuidv7();
+    const B_REFUND = uuidv7();
+
+    const tagTickets = (
+      brandId: string,
+      rows: readonly { ticketId: string; tagId: string; departmentId: string }[],
+    ) =>
+      withSystem(db(), brandId, (tx) =>
+        tx.insert(ticketTags).values(rows.map((row) => ({ ...row, brandId }))),
+      );
+
+    beforeAll(async () => {
+      await withSystem(db(), BRAND_A, (tx) =>
+        tx.insert(tags).values([
+          { id: REFUND, brandId: BRAND_A, name: 'refund', nameAr: 'استرداد' },
+          { id: VIP, brandId: BRAND_A, name: '=vip' },
+          { id: UNUSED, brandId: BRAND_A, name: 'unused' },
+        ]),
+      );
+      await withSystem(db(), BRAND_B, (tx) =>
+        tx.insert(tags).values({ id: B_REFUND, brandId: BRAND_B, name: 'refund' }),
+      );
+      // Waiting on the customer in Billing with nobody on it, created today:
+      // after the range, so in the backlog now and in no tag count.
+      const waiting = await seedTicket({
+        departmentId: BILLING,
+        channel: 'chat',
+        priority: 'low',
+        status: 'Awaiting customer',
+        createdAt: new Date(),
+      });
+      await tagTickets(BRAND_A, [
+        { ticketId: seeded.t1, tagId: REFUND, departmentId: SUPPORT },
+        { ticketId: seeded.t1, tagId: VIP, departmentId: SUPPORT },
+        { ticketId: seeded.t2, tagId: REFUND, departmentId: SUPPORT },
+        { ticketId: seeded.t3, tagId: REFUND, departmentId: BILLING },
+        { ticketId: seeded.t7, tagId: VIP, departmentId: BILLING },
+        { ticketId: seeded.spam, tagId: REFUND, departmentId: SUPPORT },
+        { ticketId: seeded.merged, tagId: REFUND, departmentId: BILLING },
+        { ticketId: seeded.deleted, tagId: VIP, departmentId: BILLING },
+        { ticketId: waiting, tagId: REFUND, departmentId: BILLING },
+      ]);
+      await tagTickets(BRAND_B, [
+        { ticketId: seeded.brandB, tagId: B_REFUND, departmentId: OTHER_DEPARTMENT },
+      ]);
+      // Today's rollup takes today's ticket in, as the hourly run would.
+      await rollUp(BRAND_A);
+    });
+
+    const tagCounts = (summary: ReportSummary) =>
+      summary.volume.byTag.map((row) => [row.name, row.tickets]);
+    const backlogRows = (summary: ReportSummary) =>
+      summary.backlogByStatus.byStatus.map((row) => [row.name, row.open, row.unassigned]);
+
+    it('counts the tickets created in the range per tag, a ticket under each of its tags', async () => {
+      const summary = await report();
+
+      // T1, T2 and T3 carry refund; T1 and T7 carry =vip. The spam, merged and
+      // deleted tickets and today's ticket carry one too and count in neither;
+      // a tag on no ticket has no row.
+      expect(tagCounts(summary)).toEqual([
+        ['refund', 3],
+        ['=vip', 2],
+      ]);
+      expect(summary.volume.byTag[0]).toMatchObject({ tagId: REFUND, nameAr: 'استرداد' });
+    });
+
+    it('counts the tickets open now by status, with the unassigned ones', async () => {
+      const summary = await report();
+      const { backlogByStatus } = summary;
+
+      // T2 (agent one) and T3 (nobody) are Open; today's ticket waits, unassigned.
+      expect(backlogRows(summary)).toEqual([
+        ['Open', 2, 1],
+        ['Awaiting customer', 1, 1],
+      ]);
+      expect(backlogByStatus).toMatchObject({ open: 3, unassigned: 2 });
+      expect(backlogByStatus.unassignedShare).toBeCloseTo(2 / 3, 10);
+    });
+
+    it('narrows both to a department, a channel and an agent', async () => {
+      const billing = await report(`&departmentId=${BILLING}`);
+      const agentOne = await report(`&agentId=${AGENT_ONE}`);
+
+      expect(tagCounts(billing)).toEqual([
+        ['=vip', 1],
+        ['refund', 1],
+      ]);
+      expect(backlogRows(billing)).toEqual([
+        ['Open', 1, 1],
+        ['Awaiting customer', 1, 1],
+      ]);
+      expect(backlogRows(await report('&channel=chat'))).toEqual([
+        ['Open', 1, 0],
+        ['Awaiting customer', 1, 1],
+      ]);
+      expect(tagCounts(agentOne)).toEqual([
+        ['refund', 2],
+        ['=vip', 1],
+      ]);
+      expect(agentOne.backlogByStatus).toMatchObject({ open: 1, unassigned: 0 });
+    });
+
+    it("gives a Team Leader in Support Support's tickets only, and nothing of Billing's", async () => {
+      const lead = principal('team_leader', [SUPPORT]);
+      const support = await report('', lead);
+      const billing = await report(`&departmentId=${BILLING}`, lead);
+
+      expect(tagCounts(support)).toEqual([
+        ['refund', 2],
+        ['=vip', 1],
+      ]);
+      expect(backlogRows(support)).toEqual([['Open', 1, 0]]);
+      expect(support.backlogByStatus.unassignedShare).toBe(0);
+      expect(billing.volume.byTag).toEqual([]);
+      expect(billing.backlogByStatus).toEqual({
+        open: 0,
+        unassigned: 0,
+        unassignedShare: null,
+        byStatus: [],
+      });
+    });
+
+    it("never counts brand B's tags or tickets", async () => {
+      const summary = await report();
+
+      expect(summary.volume.byTag.map((row) => row.tagId)).not.toContain(B_REFUND);
+      expect(summary.backlogByStatus.open).toBe(3);
+    });
+
+    it('exports every tag with tickets as CSV under the reader’s scope, a formula-like name as text', async () => {
+      const exportOf = (as?: Principal) =>
+        get(`/api/brands/${BRAND_A}/reports/exports/volume_by_tag?from=${FROM}&to=${TO}`, as);
+
+      const response = await exportOf();
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-disposition']).toBe(
+        `attachment; filename="helpdock-volume-by-tag-${FROM}-${TO}.csv"`,
+      );
+      expect(response.body.trimEnd().split('\r\n')).toEqual([
+        'tag_id,tag,tag_ar,created',
+        `${REFUND},refund,استرداد,3`,
+        `${VIP},'=vip,,2`,
+      ]);
+      expect(
+        (await exportOf(principal('team_leader', [SUPPORT]))).body.trimEnd().split('\r\n'),
+      ).toEqual(['tag_id,tag,tag_ar,created', `${REFUND},refund,استرداد,2`, `${VIP},'=vip,,1`]);
+      expect((await exportOf(principal('agent'))).statusCode).toBe(403);
     });
   });
 

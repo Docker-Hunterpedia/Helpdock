@@ -666,6 +666,50 @@ describe('verifyTotp', () => {
     ]);
   });
 
+  it('still verifies after junk passwords exhaust the address budget (#343)', async () => {
+    const { challengeId, secret } = await start();
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await signIn({ password: 'nope', ip: '198.51.100.7' }).catch(() => undefined);
+    }
+    await expect(signIn({ password: 'nope', ip: '198.51.100.8' })).rejects.toMatchObject({
+      auth: { code: 'rate-limited' },
+    });
+
+    await expect(
+      service.verifyTotp({
+        ip: '203.0.113.5',
+        challengeId,
+        code: await generate({ secret }),
+        trustDevice: false,
+        userAgent: undefined,
+      }),
+    ).resolves.toMatchObject({ issued: expect.anything() });
+  });
+
+  it('does not charge wrong codes to the address budget, and still locks after three (#343)', async () => {
+    const { challengeId } = await start();
+    const codes: unknown[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service
+        .verifyTotp({
+          ip: '203.0.113.5',
+          challengeId,
+          code: '000000',
+          trustDevice: false,
+          userAgent: undefined,
+        })
+        .catch((error: AuthFailure) => codes.push(error.auth.code));
+    }
+    expect(codes).toEqual(['totp-mismatch', 'totp-mismatch', 'totp-locked']);
+
+    // Ten password failures are still allowed: the three bad codes spent none.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(signIn({ password: 'nope', ip: '198.51.100.7' })).rejects.toMatchObject({
+        auth: { code: 'invalid-credentials' },
+      });
+    }
+  });
+
   it('refuses a challenge that was never issued', async () => {
     await expect(
       service.verifyTotp({

@@ -717,8 +717,8 @@ whole budget at the end of one window and again at the start of the next.
 
 | Bucket | Limit |
 |---|---|
-| Sign-in, per address | 10 failures per 15 minutes |
-| Sign-in, per IP | 100 failures per 15 minutes |
+| Sign-in password step, per address | 10 failures per 15 minutes |
+| Sign-in password and second-factor steps, per IP | 100 failures per 15 minutes |
 | SSO discovery, per IP (`sso-discovery`) | 20 per minute |
 | SSO starts, per IP (`sso-start`) | 20 per minute |
 | SSO OIDC callbacks, per IP (`sso-callback`) | 40 per minute |
@@ -730,15 +730,20 @@ whole budget at the end of one window and again at the start of the next.
 | Reading or accepting an invitation, per IP | 30 per 15 minutes |
 | Re-proving a credential from inside a session, per account | 5 per 15 minutes |
 
-Password, TOTP, recovery-code and sign-in enrolment failures count. In-flight
-verification reserves a slot atomically so parallel guesses cannot exceed the
-limit. A proved password that issues a TOTP or required-enrolment challenge
-atomically removes only its own reservation from both buckets, preserving earlier
-failures. Abandoning a challenge adds no password failure. Bad second-factor
-address entries remain until they expire or a full session opens. Earlier IP
-failures remain until they expire. A password-only session,
-or successful TOTP, recovery-code or required-enrolment completion, clears address
-failures and refunds only the successful attempt from the IP bucket.
+The per-address bucket guards the password and is spent only by the password
+step. The per-IP bucket is spent by the password step and by every second-factor
+step (TOTP, recovery code, sign-in enrolment). A second-factor step never spends
+or is blocked by the per-address bucket, so junk passwords sent for a known
+address cannot lock that person out of an SSO, magic-link or OAuth sign-in; guesses
+at a code are bounded by the challenge's three attempts and the fifteen-minute
+account lock. In-flight verification reserves a slot atomically so parallel
+guesses cannot exceed the limit. A proved password that issues a TOTP or
+required-enrolment challenge atomically removes only its own reservation from
+both buckets, preserving earlier failures. Abandoning a challenge adds no
+password failure. Address failures are cleared, and only the successful attempt
+is refunded from the IP bucket, when every required factor has succeeded and a
+session opens; nothing else refunds or resets either bucket. Earlier IP failures
+remain until they expire.
 SSO discovery, starts and callbacks have separate named buckets. Discovery moved
 from the shared 20-per-15-minute credential bucket to its own 20-per-minute bucket.
 
@@ -757,7 +762,7 @@ CAPTCHA on these forms, since an email goes only to an existing account.
 The address is hashed before it becomes a key, so Redis holds no list of who has
 tried to sign in here.
 
-The per-account credential bucket is the one the security page spends. Signing
+The "Re-proving a credential from inside a session" row above is the bucket the security page spends. Signing
 in has a spendable challenge — three attempts, then a fifteen-minute lock — and the routes that
 re-prove a credential from inside a session have none, so the budget is the
 lock. It covers `POST /api/me/password`, `POST /api/me/totp/disable` and

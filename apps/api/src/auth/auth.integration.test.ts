@@ -441,21 +441,13 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(cookieOf(second, REFRESH_COOKIE)).toEqual(expect.any(String));
     });
 
-    it('refuses exactly at the sixth password step after five two-bad-TOTP rounds (#344)', async () => {
-      const goodCode = await totpCode();
-      const badCode = goodCode === '000000' ? '111111' : '000000';
+    it('never lets bad TOTP codes spend the address budget, so rounds of them do not lock the password step (#343)', async () => {
+      const badCode = (await totpCode()) === '000000' ? '111111' : '000000';
       for (let round = 1; round <= 6; round++) {
         const first = await post('/api/auth/sign-in', {
           email: seeded.email,
           password: seeded.password,
         });
-        if (round === 6) {
-          expect(first.statusCode).toBe(429);
-          expect(first.json().error.auth).toEqual({ code: 'rate-limited' });
-          expect(Number(first.headers['retry-after'])).toBeGreaterThan(0);
-          expect(Number(first.headers['retry-after'])).toBeLessThanOrEqual(900);
-          break;
-        }
         expect(first.statusCode).toBe(201);
         expect(first.json().kind).toBe('totp-required');
         const challengeId = first.json().challengeId as string;
@@ -472,6 +464,50 @@ describe.skipIf(!hasDocker)('the auth service', () => {
           });
         }
       }
+      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
+    });
+
+    it('keeps TOTP guessing capped at three per challenge when the address budget is spent (#343)', async () => {
+      const link = await post('/api/auth/magic-link', { email: seeded.email });
+      expect(link.statusCode).toBe(204);
+      const token = tokenOf(linkIn(await email.last()));
+      const started = await post('/api/auth/magic-link/consume', { token });
+      const challengeId = started.json().challengeId as string;
+      const badCode = (await totpCode()) === '000000' ? '111111' : '000000';
+
+      const codes: string[] = [];
+      for (let guess = 0; guess < 3; guess++) {
+        const response = await post('/api/auth/totp', {
+          challengeId,
+          code: badCode,
+          trustDevice: false,
+        });
+        codes.push(response.json().error.auth.code);
+      }
+      expect(codes).toEqual(['totp-mismatch', 'totp-mismatch', 'totp-locked']);
+    });
+
+    it('verifies a magic-link TOTP challenge after junk passwords exhaust the address budget (#343)', async () => {
+      expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
+      const token = tokenOf(linkIn(await email.last()));
+      const started = await post('/api/auth/magic-link/consume', { token });
+      expect(started.json().kind).toBe('totp-required');
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+      }
+      const blocked = await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+      expect(blocked.statusCode).toBe(429);
+
+      const verified = await post('/api/auth/totp', {
+        challengeId: started.json().challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(verified.statusCode).toBe(201);
+      expect(verified.json().accessToken).toEqual(expect.any(String));
+      // Completing every factor is what clears the address bucket.
+      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
     });
 
     it('counts failed TOTP codes and refunds success without erasing earlier IP failures', async () => {

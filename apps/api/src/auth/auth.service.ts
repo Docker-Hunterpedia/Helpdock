@@ -1391,7 +1391,15 @@ export class AuthService {
     return withinEmailBudget && withinIpBudget;
   }
 
-  /** Invalid/expired challenges have no trusted address, but still spend the IP budget. */
+  /**
+   * A second-factor step spends the IP budget only, never the address one. The
+   * address bucket guards the password: charging it here would let anyone who
+   * knows a staff address lock that person out of an SSO, magic-link or OAuth
+   * sign-in with junk passwords. Guesses at the code are bounded by the
+   * challenge's three attempts and the account lock. The returned attempt
+   * carries the address solely so that a completed sign-in clears the address
+   * bucket; the attempt was never added to it.
+   */
   async #signInChallenge(challengeId: string, kind: 'second-factor' | 'enrolment', ip: string) {
     let resolved: { challenge: Awaited<ReturnType<TotpChallengeStore['read']>>; user: StaffUser };
     try {
@@ -1400,8 +1408,8 @@ export class AuthService {
       if (error instanceof AuthFailure) await this.#assertSignInAllowed(undefined, ip);
       throw error;
     }
-    const attempt = await this.#assertSignInAllowed(resolved.user.email, ip);
-    return { ...resolved, attempt };
+    const reserved = await this.#assertSignInAllowed(undefined, ip);
+    return { ...resolved, attempt: { ...reserved, email: resolved.user.email } };
   }
 
   async #requireChallenge(

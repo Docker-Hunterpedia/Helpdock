@@ -2122,6 +2122,61 @@ describe.skipIf(!hasDocker)('tickets', () => {
 
       expect(body.contacts.map((row) => row.id)).not.toContain(contact.id);
     });
+
+    it('leaves a spam ticket out of the timeline and of every count, and keeps a merged one', async () => {
+      // Owner decision for 1.0.2: spam is not the contact's history; a merged
+      // ticket still is, listed with its Merged status.
+      const { body: contact } = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+        { name: 'Spam History' },
+      );
+      const kept = await createTicket(sam, { subject: 'Kept', contactId: contact.id });
+      const spamHere = await createTicket(sam, { subject: 'Spam', contactId: contact.id });
+      const spamElsewhere = await createTicket(bo, {
+        subject: 'Spam in billing',
+        departmentId: billing,
+        contactId: contact.id,
+      });
+      const merged = await createTicket(sam, { subject: 'Merged', contactId: contact.id });
+      for (const { ticket } of [spamHere, spamElsewhere]) {
+        const marked = await call(
+          'POST',
+          `${brandPath(seeded.brandId)}/tickets/${ticket.id}/spam`,
+          ada,
+          { blockSender: false },
+        );
+        expect(marked.status).toBe(201);
+      }
+      const merge = await call(
+        'POST',
+        `${brandPath(seeded.brandId)}/tickets/${merged.ticket.id}/merge`,
+        ada,
+        { primaryTicketId: kept.ticket.id },
+      );
+      expect(merge.status).toBe(200);
+
+      const timeline = await call<{
+        items: { id: string }[];
+        visibleCount: number;
+        hiddenCount: number;
+      }>('GET', `${brandPath(seeded.brandId)}/contacts/${contact.id}/timeline`, sam);
+      const listed = await call<{ contacts: { id: string; stats: ContactStats }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/contacts`,
+        ada,
+      );
+
+      expect(timeline.body.items.map((item) => item.id)).toEqual([
+        merged.ticket.id,
+        kept.ticket.id,
+      ]);
+      expect(timeline.body.visibleCount).toBe(2);
+      expect(timeline.body.hiddenCount).toBe(0);
+      const stats = listed.body.contacts.find((row) => row.id === contact.id)?.stats;
+      expect(stats?.totalTickets).toBe(2);
+    });
   });
 
   // --------------------------------------------------------------- realtime

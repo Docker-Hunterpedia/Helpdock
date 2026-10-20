@@ -1302,8 +1302,8 @@ timeline the panel already loads for the hidden count
 department-scoped like every ticket read: it lists only tickets the viewer may
 open.
 
-- **Up to three rows, newest first**, the open ticket and any deleted ticket
-  left out; a merged or spam ticket is listed with its status. Each row is one
+- **Up to three rows, newest first**, the open ticket and any deleted or spam
+  ticket left out; a merged ticket is listed with its status. Each row is one
   link to that ticket: the subject, the reference and the day it was created
   (with the year when it was not this year), and its status badge.
 - **The heading counts every other ticket the viewer may see**, not only the

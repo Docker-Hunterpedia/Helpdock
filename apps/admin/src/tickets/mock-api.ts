@@ -849,13 +849,14 @@ export class MockTicketsApi implements TicketsApi {
 
   /**
    * A contact's tickets as the api's timeline answers them, newest first, so
-   * the contact fixture's timeline names the tickets this fixture holds.
+   * the contact fixture's timeline names the tickets this fixture holds. Spam
+   * is not the contact's history and is left out, as the api does.
    */
   contactHistory(
     contactId: string,
   ): Pick<ContactTimeline, 'items' | 'visibleCount' | 'hiddenCount'> {
     const items = this.#tickets
-      .filter((ticket) => ticket.contactId === contactId)
+      .filter((ticket) => ticket.contactId === contactId && !ticket.status.isSpam)
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       .map((ticket) => ({
         id: ticket.id,

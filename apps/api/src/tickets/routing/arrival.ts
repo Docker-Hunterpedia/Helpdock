@@ -1,7 +1,6 @@
 import {
+  TICKET_ARRIVAL_ADDRESS_MAX,
   type TicketArrival,
-  type TicketArrivalEntry,
-  type TicketChannel,
   ticketArrivalSchema,
 } from '@helpdock/schemas';
 import type { ActivityActor } from '../ticket-activity.js';
@@ -41,30 +40,40 @@ export const requestArrival = (
     ? { entry: 'api_key', entryId: actor.actorId, departmentId, reason: 'named_by_api' }
     : { entry: 'staff', entryId: actor.actorId, departmentId, reason: 'chosen_by_staff' };
 
-const ENTRY_OF_CHANNEL: Readonly<Record<TicketChannel, TicketArrivalEntry>> = {
-  email: 'mailbox',
-  chat: 'widget',
-  form: 'web_form',
-  telegram: 'telegram_bot',
-  whatsapp: 'meta_account',
-  messenger: 'meta_account',
-  instagram: 'meta_account',
-  api: 'api_key',
-  manual: 'staff',
-};
+/** Where a message came in: the arrival without its department and reason. */
+export type ArrivalEntryPoint = Pick<TicketArrival, 'entry' | 'entryId' | 'address'>;
 
 /**
- * A continuation's arrival (§2.3): the closed ticket's entry point, in the
- * closed ticket's department. A ticket closed before M14 recorded no entry, so
- * its channel stands in for it, without an id.
+ * The brand's one widget, which has no id of its own until M19-02. A visitor
+ * writing through the tickets service is writing through it too.
+ */
+export const WIDGET_ENTRY: ArrivalEntryPoint = { entry: 'widget', entryId: null };
+
+/**
+ * A continuation's arrival (§2.3): the door the customer's reply came in
+ * through — which may not be the closed ticket's, as when a reply to
+ * billing@ continues a ticket that arrived at support@ — in the closed
+ * ticket's department, which is where the new ticket is filed.
  */
 export const continuationArrival = (
-  closed: { readonly channel: TicketChannel; readonly arrival: TicketArrival | undefined },
+  inbound: ArrivalEntryPoint,
   departmentId: string,
-): TicketArrival => ({
-  entry: closed.arrival?.entry ?? ENTRY_OF_CHANNEL[closed.channel],
-  entryId: closed.arrival?.entryId ?? null,
-  ...(closed.arrival?.address === undefined ? {} : { address: closed.arrival.address }),
-  departmentId,
-  reason: 'continued_from',
-});
+): TicketArrival => ({ ...inbound, departmentId, reason: 'continued_from' });
+
+/**
+ * The address the customer wrote to, as the inbound message names it: the
+ * mailbox's own when it is among the recipients, otherwise the first
+ * recipient (an alias forwarded into an IMAP mailbox), envelope first, then
+ * To, then Cc. None, or one too long to be an address, records none rather
+ * than refusing the mail.
+ */
+export const addressWrittenTo = (
+  recipients: readonly string[],
+  mailboxAddress: string,
+): string | undefined => {
+  const mailbox = mailboxAddress.toLowerCase();
+  const written = recipients.includes(mailbox) ? mailbox : recipients[0];
+  return written !== undefined && written.length <= TICKET_ARRIVAL_ADDRESS_MAX
+    ? written
+    : undefined;
+};

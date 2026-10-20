@@ -75,7 +75,7 @@ const isPerson = (row: TrailRow): boolean =>
   row.actorType === 'staff' || row.actorType === 'apikey';
 
 /** The row that filed this ticket: its creation, or the continuation that opened it. */
-export const isOrigin = (ticketId: string, row: TrailRow): boolean =>
+const isOrigin = (ticketId: string, row: TrailRow): boolean =>
   row.action === 'ticket.created' ||
   (row.action === 'ticket.continued' &&
     row.to?.ticketId === ticketId &&

@@ -7,6 +7,7 @@ import {
   brands,
   createDb,
   departments,
+  ticketActivity,
   tickets,
   withSystem,
 } from '@helpdock/db';
@@ -38,7 +39,7 @@ import type {
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import type { Job } from 'bullmq';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
@@ -483,7 +484,8 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
 
   describe('REST v1 (M8-02)', () => {
     it('files a ticket on the api channel, pages the list, and replies through the same rules', async () => {
-      const { key } = await issueKey(['tickets:read', 'tickets:write']);
+      const issued = await issueKey(['tickets:read', 'tickets:write']);
+      const { key } = issued;
 
       const created = await call<V1TicketDetail>(
         'POST',
@@ -496,6 +498,21 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       expect(created.body.messages).toHaveLength(1);
 
       const ticketId = created.body.ticket.id;
+      // M14-08: the key named the department, and the arrival says which key.
+      const [filed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ to: ticketActivity.to })
+          .from(ticketActivity)
+          .where(
+            and(eq(ticketActivity.ticketId, ticketId), eq(ticketActivity.action, 'ticket.created')),
+          ),
+      );
+      expect(filed?.to?.arrival).toEqual({
+        entry: 'api_key',
+        entryId: issued.id,
+        departmentId,
+        reason: 'named_by_api',
+      });
       const reply = await call('POST', `/api/v1/tickets/${ticketId}/messages`, key, {
         kind: 'note',
         bodyHtml: '<p>Checked the carrier.</p>',

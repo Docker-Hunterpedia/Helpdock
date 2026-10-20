@@ -6,6 +6,7 @@ import type {
 import type { BrandSettings, ReopenPolicy, TicketArrival } from '@helpdock/schemas';
 import { DEFAULT_CONTENT_POLICY } from '@helpdock/schemas';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ArrivalEntryPoint } from '../routing/arrival.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { TicketLifecycleHooks } from './hooks.js';
 import type { TicketLifecycleRepository } from './lifecycle.repository.js';
@@ -28,6 +29,8 @@ import { TicketLifecycleFailure } from './lifecycle-failure.js';
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 const BRAND = '0199f4b2-0000-7000-8000-0000000000b1';
 const DEPARTMENT = '0199f4b2-0000-7000-8000-0000000000d1';
+/** Where a customer reply came in; only a continuation records it. */
+const INBOUND: ArrivalEntryPoint = { entry: 'widget', entryId: null };
 
 const status = (
   id: string,
@@ -118,8 +121,6 @@ const settingsOf = (policy: ReopenPolicy, autoAwait = true): BrandSettings => ({
 const harness = (options: {
   readonly statuses?: readonly TicketStatusRow[];
   readonly settings?: BrandSettings;
-  /** M14-08: what the closed ticket recorded when it arrived. */
-  readonly closedArrival?: TicketArrival;
 }) => {
   const recorder: Recorder = { inserts: [] };
 
@@ -147,7 +148,6 @@ const harness = (options: {
     ),
     localeForContact: vi.fn(async () => 'en' as const),
     writeAudit: vi.fn(async () => undefined),
-    arrivalOf: vi.fn(async () => options.closedArrival),
   } as unknown as TicketLifecycleRepository;
 
   const created: TicketRow[] = [];
@@ -236,7 +236,7 @@ describe('a customer reply to an open-like ticket (§2.2 row 1)', () => {
   it('moves it to the brand’s default open status', async () => {
     const { service, context, updates } = harness({});
 
-    const landing = await service.onCustomerReply(context, ticket(), AWAITING);
+    const landing = await service.onCustomerReply(context, ticket(), AWAITING, INBOUND);
 
     expect(landing.continued).toBe(false);
     expect(landing.status.id).toBe(OPEN.id);
@@ -246,7 +246,7 @@ describe('a customer reply to an open-like ticket (§2.2 row 1)', () => {
   it('writes nothing when the ticket is already in that status', async () => {
     const { service, context, updates } = harness({});
 
-    const landing = await service.onCustomerReply(context, ticket(), OPEN);
+    const landing = await service.onCustomerReply(context, ticket(), OPEN, INBOUND);
 
     expect(landing.status.id).toBe(OPEN.id);
     expect(updates).toHaveLength(0);
@@ -256,7 +256,7 @@ describe('a customer reply to an open-like ticket (§2.2 row 1)', () => {
     const { service, context } = harness({});
 
     await expect(
-      service.onCustomerReply(context, ticket({ mergedIntoId: 'primary' }), OPEN),
+      service.onCustomerReply(context, ticket({ mergedIntoId: 'primary' }), OPEN, INBOUND),
     ).rejects.toBeInstanceOf(TicketLifecycleFailure);
   });
 });
@@ -271,6 +271,7 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
       context,
       ticket({ closedAt: new Date(NOW.getTime() - 24 * 60 * 60 * 1000) }),
       CLOSED,
+      INBOUND,
     );
 
     expect(landing.continued).toBe(false);
@@ -284,7 +285,7 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
     });
 
     const closed = ticket({ closedAt: new Date(NOW.getTime() - 8 * 24 * 60 * 60 * 1000) });
-    const landing = await service.onCustomerReply(context, closed, CLOSED);
+    const landing = await service.onCustomerReply(context, closed, CLOSED, INBOUND);
 
     expect(landing.continued).toBe(true);
     expect(created[0]).toMatchObject({ parentId: closed.id, statusId: OPEN.id });
@@ -295,42 +296,20 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
     expect(written).toEqual(['Continued from HD-1042', 'Continued in HD-1101']);
   });
 
-  it("records the continuation as an arrival through the closed ticket's entry point", async () => {
-    const { service, context, recorder } = harness({
-      settings: settingsOf({ kind: 'never' }),
-      closedArrival: {
-        entry: 'mailbox',
-        entryId: 'mailbox-1',
-        address: 'billing@acme.test',
-        departmentId: DEPARTMENT,
-        reason: 'entry_department',
-      },
-    });
+  it("records the continuation as arriving where the reply came in, in the closed ticket's department", async () => {
+    const { service, context, recorder } = harness({ settings: settingsOf({ kind: 'never' }) });
 
-    const landing = await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED);
+    const landing = await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED, {
+      entry: 'mailbox',
+      entryId: 'billing-mailbox',
+      address: 'billing@acme.test',
+    });
 
     expect(continuation(recorder, landing.ticket.id)?.arrival).toEqual({
       entry: 'mailbox',
-      entryId: 'mailbox-1',
+      entryId: 'billing-mailbox',
       address: 'billing@acme.test',
-      departmentId: landing.ticket.departmentId,
-      reason: 'continued_from',
-    });
-  });
-
-  it('names the channel when the closed ticket predates arrival records', async () => {
-    const { service, context, recorder } = harness({ settings: settingsOf({ kind: 'never' }) });
-
-    const landing = await service.onCustomerReply(
-      context,
-      ticket({ closedAt: NOW, channel: 'telegram' }),
-      CLOSED,
-    );
-
-    expect(continuation(recorder, landing.ticket.id)?.arrival).toEqual({
-      entry: 'telegram_bot',
-      entryId: null,
-      departmentId: landing.ticket.departmentId,
+      departmentId: DEPARTMENT,
       reason: 'continued_from',
     });
   });
@@ -338,7 +317,12 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
   it('never reopens under `never`', async () => {
     const { service, context } = harness({ settings: settingsOf({ kind: 'never' }) });
 
-    const landing = await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED);
+    const landing = await service.onCustomerReply(
+      context,
+      ticket({ closedAt: NOW }),
+      CLOSED,
+      INBOUND,
+    );
 
     expect(landing.continued).toBe(true);
   });
@@ -350,6 +334,7 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
       context,
       ticket({ closedAt: new Date('2020-01-01T00:00:00.000Z') }),
       CLOSED,
+      INBOUND,
     );
 
     expect(landing.continued).toBe(false);
@@ -358,7 +343,7 @@ describe('a customer reply to a closed ticket (§2.2 row 5, §2.3)', () => {
   it('writes both halves of the pair, and only those two', async () => {
     const { service, context, recorder } = harness({ settings: settingsOf({ kind: 'never' }) });
 
-    await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED);
+    await service.onCustomerReply(context, ticket({ closedAt: NOW }), CLOSED, INBOUND);
 
     // The customer's own message is written by the message path afterwards, so
     // the lifecycle leaves exactly the two system rows §2.3 names.

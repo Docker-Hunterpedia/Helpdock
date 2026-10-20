@@ -349,14 +349,14 @@ drift:
 
 | Path | `entry` | `entryId` | `reason` |
 |---|---|---|---|
-| Inbound email | `mailbox` | the mailbox, with `address` | `entry_department`; `referenced_ticket` when the mail named a ticket its sender is not a participant of and was filed in that ticket's department (§4.3) |
+| Inbound email | `mailbox` | the mailbox, with `address`: the address the message was written to — the mailbox's own when it is among the recipients, otherwise the first recipient (an alias forwarded into an IMAP mailbox), envelope first, then To, then Cc | `entry_department`; `referenced_ticket` when the mail named a ticket its sender is not a participant of and was filed in that ticket's department (§4.3) |
 | Chat widget | `widget` | null | `brand_first_department`: the widget files into the brand's first department until M19-02 gives each widget its own |
 | Web form | `web_form` | null | `entry_department` when the form names a department, otherwise `brand_first_department` |
 | Telegram | `telegram_bot` | the bot | `entry_department` |
 | WhatsApp, Messenger, Instagram | `meta_account` | the number, Page or account | `entry_department` |
 | `POST /tickets` with an API key | `api_key` | the key | `named_by_api` |
 | `POST /tickets` or a split by a person | `staff` | the person | `chosen_by_staff` |
-| A reply past the reopen window (§2.3) | the closed ticket's entry, or its channel's when it predates M14 | the closed ticket's, or null | `continued_from`, on the new ticket's `ticket.continued` row |
+| A reply past the reopen window (§2.3) | where the reply came in: the mailbox (with the address written to), the bot, the account or the widget — not necessarily the closed ticket's | that entry's | `continued_from`, in the closed ticket's department, on the new ticket's `ticket.continued` row |
 | An importer (M11) | `import` | the import run | `import_mapping`, on the `ticket.imported` row |
 
 `GET /tickets/:ticketId/routing` reads the trail back from the activity log;
@@ -1398,8 +1398,8 @@ the mailbox's department", "Moved to Billing › Refunds by rule “Refunds to t
 refund team”", "Priority raised to High by AI triage", "Assigned to Lina Haddad
 by round-robin". A ticket filed before 1.1 says "Arrived by email" and that the
 entry point was not recorded; an imported one says "Imported from Zendesk".
-The card reads the trail again whenever the ticket changes, and offers "Try
-again" when the read fails.
+The card reads the trail again whenever the ticket changes, keeping the one it
+read on screen meanwhile, and offers "Try again" when the read fails.
 
 ### Keyboard
 

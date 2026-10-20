@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalOf, continuationArrival, recordedArrival, requestArrival } from './arrival.js';
+import { addressWrittenTo, arrivalOf, recordedArrival, requestArrival } from './arrival.js';
 
 const DEPARTMENT = '0199f4b2-0000-7000-8000-0000000000d1';
 
@@ -50,12 +50,21 @@ describe('requestArrival', () => {
   });
 });
 
-describe('continuationArrival', () => {
-  it('maps each channel to its entry point when the closed ticket recorded none', () => {
-    const entries = (['whatsapp', 'form', 'chat', 'api', 'manual'] as const).map(
-      (channel) => continuationArrival({ channel, arrival: undefined }, DEPARTMENT).entry,
+describe('addressWrittenTo', () => {
+  it('prefers the mailbox among the recipients, whatever case the mailbox was saved in', () => {
+    expect(addressWrittenTo(['ceo@acme.test', 'billing@acme.test'], 'Billing@acme.test')).toBe(
+      'billing@acme.test',
     );
+  });
 
-    expect(entries).toEqual(['meta_account', 'web_form', 'widget', 'api_key', 'staff']);
+  it('takes the first recipient when the mailbox is not named, as an alias forwarded into it', () => {
+    expect(addressWrittenTo(['sales@acme.test', 'cc@acme.test'], 'inbox@helpdock.test')).toBe(
+      'sales@acme.test',
+    );
+  });
+
+  it('records no address for no recipients, or for one too long to be an address', () => {
+    expect(addressWrittenTo([], 'inbox@helpdock.test')).toBeUndefined();
+    expect(addressWrittenTo([`${'a'.repeat(320)}@x.test`], 'inbox@helpdock.test')).toBeUndefined();
   });
 });

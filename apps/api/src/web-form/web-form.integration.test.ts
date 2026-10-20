@@ -551,6 +551,44 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
     expect(suggestions).toMatchObject([{ otherContactId: first.contactId, reason: 'email' }]);
   });
 
+  it("files into the brand's first department when the form names none, and says so (M14-08)", async () => {
+    await saveForm({ departmentId: null });
+    let ticket: Awaited<ReturnType<typeof ticketFor>>;
+    try {
+      ticket = await ticketFor(
+        referenceIn(
+          (
+            await post({
+              name: 'Sami',
+              email: 'sami@example.com',
+              subject: 'No department',
+              message: 'Hello',
+              'custom:product': 'Desk',
+            })
+          ).html,
+        ),
+      );
+    } finally {
+      await saveForm({ departmentId: billing });
+    }
+
+    expect(ticket.departmentId).not.toBe(billing);
+    const [created] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ to: ticketActivity.to })
+        .from(ticketActivity)
+        .where(
+          and(eq(ticketActivity.ticketId, ticket.id), eq(ticketActivity.action, 'ticket.created')),
+        ),
+    );
+    expect(created?.to?.arrival).toEqual({
+      entry: 'web_form',
+      entryId: null,
+      departmentId: ticket.departmentId,
+      reason: 'brand_first_department',
+    });
+  });
+
   it('records the help center article "Still need help?" came from, when it is a public one (M5-08)', async () => {
     const [publicId, internalId] = [uuidv7(), uuidv7()];
     await withSystem(runtime.db, seeded.brandId, async (tx) => {

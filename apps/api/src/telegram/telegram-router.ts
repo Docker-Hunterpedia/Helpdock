@@ -224,6 +224,7 @@ export class TelegramConversationRouter {
             lifecycleContext(context, actor),
             current.ticket,
             current.status,
+            { entry: 'telegram_bot', entryId: context.bot.id },
           )
         ).ticket;
     if (target.id !== current.ticket.id) {

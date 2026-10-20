@@ -17,6 +17,7 @@ import {
   emailOutboundSettings,
   outbox,
   ticketMessages,
+  ticketStatuses,
   tickets,
   userBrandRoles,
   users,
@@ -30,6 +31,7 @@ import {
   defaultWeeklyHours,
   SOCKET_IO_PATH,
   type TicketDetail,
+  type TicketRouting,
   type WeeklyHours,
   WIDGET_EVENTS,
   WIDGET_NAMESPACE,
@@ -210,7 +212,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
   };
 
   const staff = <T>(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     path: string,
     who: Person,
     payload?: unknown,
@@ -739,6 +741,52 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         entryId: null,
         departmentId: detail.body.ticket.departmentId,
         reason: 'brand_first_department',
+      });
+    });
+
+    it('records a reply past the reopen window as a continuation through the widget (M14-08)', async () => {
+      const visitor = await newVisitor();
+      const started = await start(visitor);
+      const conversationId = started.body.conversation.id;
+      const [closed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ id: ticketStatuses.id })
+          .from(ticketStatuses)
+          .where(and(eq(ticketStatuses.systemState, 'closed'), eq(ticketStatuses.isSpam, false))),
+      );
+      const closing = await staff(
+        'PATCH',
+        `/api/brands/${seeded.brandId}/tickets/${conversationId}`,
+        ada,
+        {
+          statusId: closed?.id,
+        },
+      );
+      expect(closing.status).toBe(200);
+      await staff('PATCH', `/api/brands/${seeded.brandId}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'never' },
+      });
+
+      let sent: Awaited<ReturnType<typeof send>>;
+      try {
+        sent = await send(visitor, conversationId, { clientId: uuidv7(), text: 'Back again' });
+      } finally {
+        await staff('PATCH', `/api/brands/${seeded.brandId}/ticketing/reply-behaviour`, ada, {
+          reopenPolicy: { kind: 'within_days', days: 7 },
+        });
+      }
+
+      const continuedId = sent.body.conversation.id;
+      expect(continuedId).not.toBe(conversationId);
+      const routing = await staff<TicketRouting>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${continuedId}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        entry: 'widget',
+        reason: 'continued_from',
       });
     });
 

@@ -412,6 +412,7 @@ export class MetaConversationRouter {
             lifecycleContext(context, actor),
             current.ticket,
             current.status,
+            { entry: 'meta_account', entryId: context.account.id },
           )
         ).ticket;
     if (target.id !== current.ticket.id) {

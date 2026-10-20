@@ -158,12 +158,15 @@ export function TicketView({
   });
   const activityHistory = useTicketActivity(api, brandId, ticketId, detail.data);
   // M14-08. Keyed by the ticket's `updatedAt` too, so a rule or the rotation
-  // moving the ticket while it is open reads the trail again.
+  // moving the ticket while it is open reads the trail again; the trail read
+  // before stays on screen meanwhile, but never another ticket's.
   const routing = useQuery({
     queryKey: [...ticketKeys.routing(brandId, ticketId), detail.data?.ticket.updatedAt],
     queryFn: () => api.routing(brandId, ticketId),
     enabled: detail.data !== undefined,
     retry: false,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === ticketId ? previous : undefined,
   });
 
   // "Is replying" while the composer holds something unsent (M1-09).

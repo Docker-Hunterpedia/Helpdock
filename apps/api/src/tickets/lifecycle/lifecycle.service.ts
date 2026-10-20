@@ -7,7 +7,7 @@ import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
 import { type BrandSettings, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
-import { arrivalOf, continuationArrival } from '../routing/arrival.js';
+import { type ArrivalEntryPoint, arrivalOf, continuationArrival } from '../routing/arrival.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -121,6 +121,8 @@ export class TicketLifecycleService {
     context: LifecycleContext,
     ticket: TicketRow,
     status: TicketStatusRow,
+    /** M14-08: where the reply came in, which a continuation records as its arrival. */
+    inbound: ArrivalEntryPoint,
   ): Promise<CustomerReplyLanding> {
     const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'customer.reply');
     if (outcome.kind === 'refused') {
@@ -140,7 +142,7 @@ export class TicketLifecycleService {
 
     return decision.kind === 'reopen'
       ? this.reopen(context, ticket, status)
-      : this.#continueInNewTicket(context, ticket);
+      : this.#continueInNewTicket(context, ticket, inbound);
   }
 
   // ------------------------------------------------------------- agent replies
@@ -516,6 +518,7 @@ export class TicketLifecycleService {
   async #continueInNewTicket(
     context: LifecycleContext,
     closed: TicketRow,
+    inbound: ArrivalEntryPoint,
   ): Promise<CustomerReplyLanding> {
     const open = await this.#requireDefaultOpen(context.tx);
     const locale = await this.#lifecycle.localeForContact(
@@ -557,15 +560,7 @@ export class TicketLifecycleService {
       to: {
         ticketId: created.id,
         // M14-08: the continuation is how this ticket arrived.
-        ...arrivalOf(
-          continuationArrival(
-            {
-              channel: closed.channel,
-              arrival: await this.#lifecycle.arrivalOf(context.tx, closed.id),
-            },
-            created.departmentId,
-          ),
-        ),
+        ...arrivalOf(continuationArrival(inbound, created.departmentId)),
       },
     });
     await writeTicketActivity(context.tx, {

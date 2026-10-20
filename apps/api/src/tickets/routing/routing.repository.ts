@@ -7,10 +7,8 @@ import {
   users,
   workflowRules,
 } from '@helpdock/db';
-import type { TicketArrival } from '@helpdock/schemas';
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import { recordedArrival } from './arrival.js';
-import { isOrigin, type TrailIds, type TrailNames, type TrailRow } from './routing-trail.js';
+import type { TrailIds, TrailNames, TrailRow } from './routing-trail.js';
 
 /**
  * The reads behind M14-08, all through the caller's transaction, so an Agent's
@@ -42,26 +40,6 @@ export const readTrailRows = (tx: DbTransaction, ticketId: string): Promise<Trai
     .where(eq(ticketActivity.ticketId, ticketId))
     .orderBy(asc(ticketActivity.createdAt), asc(ticketActivity.id))
     .limit(TRAIL_ROWS_READ);
-
-/** The arrival a ticket recorded, for a continuation to carry on (§2.3). */
-export const readArrival = async (
-  tx: DbTransaction,
-  ticketId: string,
-): Promise<TicketArrival | undefined> => {
-  const rows = await tx
-    .select(trailColumns)
-    .from(ticketActivity)
-    .where(
-      and(
-        eq(ticketActivity.ticketId, ticketId),
-        inArray(ticketActivity.action, ['ticket.created', 'ticket.continued']),
-      ),
-    )
-    .orderBy(asc(ticketActivity.createdAt), asc(ticketActivity.id))
-    .limit(TRAIL_ROWS_READ);
-  const origin = rows.find((row) => isOrigin(ticketId, row));
-  return origin === undefined ? undefined : recordedArrival(origin.to);
-};
 
 export const readTrailNames = async (
   tx: DbTransaction,

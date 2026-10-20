@@ -59,7 +59,11 @@ export const ticketArrivalSchema = z.object({
    * which have no id of their own.
    */
   entryId: z.string().min(1).max(200).nullable(),
-  /** The address the customer wrote to, for a mailbox. */
+  /**
+   * For a mailbox, the address the customer wrote to, as the inbound message
+   * names it: the mailbox's own address when it is among the recipients,
+   * otherwise the first recipient (an alias forwarded into the mailbox).
+   */
   address: z.string().min(1).max(TICKET_ARRIVAL_ADDRESS_MAX).optional(),
   departmentId: z.uuid(),
   reason: ticketArrivalReasonSchema,

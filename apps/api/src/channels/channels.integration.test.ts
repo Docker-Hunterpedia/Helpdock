@@ -164,7 +164,7 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
     }) as Env;
 
   const call = <T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     who: Person | null,
     payload?: unknown,
@@ -872,6 +872,66 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       });
       // The secondary's contact is a CC of the primary after a merge (§2.4), so it threads there.
       expect((await messageOf('merge-c@x'))?.ticketId).toBe(primary?.ticketId);
+    });
+
+    it('records a continuation as arriving at the address the reply was written to (M14-08)', async () => {
+      const from = unique('continues');
+      await parse({
+        from: { address: from },
+        to: [{ address: 'hello@helpdock.test' }],
+        subject: 'Order 77',
+        text: 'Where is it?',
+        messageId: '<continue-1@acme.de>',
+      });
+      const original = await messageOf('continue-1@acme.de');
+      const [closed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ id: ticketStatuses.id })
+          .from(ticketStatuses)
+          .where(and(eq(ticketStatuses.systemState, 'closed'), eq(ticketStatuses.isSpam, false))),
+      );
+      const closing = await call('PATCH', `${brandPath()}/tickets/${original?.ticketId}`, ada, {
+        statusId: closed?.id,
+      });
+      expect(closing.status).toBe(200);
+      await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'never' },
+      });
+      // A second mailbox in another department: the reply comes in there, and
+      // the continuation stays in the closed ticket's department.
+      expect(
+        (await createMailbox({ address: 'refunds@helpdock.test', departmentId: billing })).status,
+      ).toBe(201);
+
+      try {
+        await parse({
+          from: { address: from },
+          to: [{ address: 'refunds@helpdock.test' }],
+          subject: 'Re: Order 77',
+          text: 'Still nothing.',
+          messageId: '<continue-2@acme.de>',
+          inReplyTo: '<continue-1@acme.de>',
+        });
+      } finally {
+        await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+          reopenPolicy: { kind: 'within_days', days: 7 },
+        });
+      }
+
+      const reply = await messageOf('continue-2@acme.de');
+      expect(reply?.ticketId).not.toBe(original?.ticketId);
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${reply?.ticketId}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        entry: 'mailbox',
+        address: 'refunds@helpdock.test',
+        reason: 'continued_from',
+        department: { id: support },
+      });
     });
 
     it('drops automated mail unless the mailbox allow-lists the sender, and blocked senders', async () => {

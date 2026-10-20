@@ -102,3 +102,29 @@ describe('HttpTransport on a 401', () => {
     expect(bearerOf(2)).toBe('Bearer fresh');
   });
 });
+
+describe('429 sign-in refusals', () => {
+  it.each([true, false])('carries Retry-After with an auth envelope: %s', async (envelope) => {
+    const response = new Response(
+      JSON.stringify(
+        envelope
+          ? {
+              error: {
+                code: 'rate_limited',
+                message: 'Too many sign-in attempts',
+                requestId: 'r',
+                auth: { code: 'rate-limited' },
+              },
+            }
+          : {},
+      ),
+      { status: 429, headers: { 'Retry-After': '121' } },
+    );
+    fetchMock.mockResolvedValueOnce(response);
+    await expect(new HttpTransport().request('POST', '/auth/sign-in', {})).rejects.toMatchObject({
+      code: 'rate-limited',
+      retryAfter: 121,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

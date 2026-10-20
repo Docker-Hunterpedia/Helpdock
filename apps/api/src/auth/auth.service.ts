@@ -34,8 +34,7 @@ import {
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
   type RateLimiter,
-  SIGN_IN_EMAIL_RULE,
-  SIGN_IN_IP_RULE,
+  type SignInAttempt,
   STEP_UP_RULE,
 } from './rate-limit.js';
 import type { SecurityChange } from './security-notice-email.js';
@@ -214,7 +213,7 @@ export class AuthService {
   // ------------------------------------------------------------------
 
   async signIn(input: SignInInput): Promise<SignInOutcome> {
-    await this.#assertSignInAllowed(input.email, input.ip);
+    const attempt = await this.#assertSignInAllowed(input.email, input.ip);
 
     await this.#parts.ssoPolicy.assertLocal(input.email, 'password');
     const user = await this.#parts.staff.findByEmail(input.email);
@@ -263,13 +262,17 @@ export class AuthService {
       );
     }
 
-    await this.#parts.limiter.reset(SIGN_IN_EMAIL_RULE, input.email);
-
-    return this.#afterFirstFactor(user, {
+    const outcome = await this.#afterFirstFactor(user, {
       method: 'password',
       userAgent: input.userAgent,
       trustedDeviceCookie: input.trustedDeviceCookie,
     });
+    if (outcome.kind === 'session') {
+      await this.#parts.limiter.signInSucceeded(attempt);
+    } else {
+      await this.#parts.limiter.refundSignIn(attempt);
+    }
+    return outcome;
   }
 
   // ------------------------------------------------------------------
@@ -278,26 +281,35 @@ export class AuthService {
 
   async verifyTotp({
     challengeId,
+    ip,
     code,
     trustDevice,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly trustDevice: boolean;
     readonly userAgent: string | undefined;
   }): Promise<{ readonly issued: IssuedSession; readonly trustedDeviceCookie: string | null }> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
 
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     if ((await this.#checkCode(user, code, 'sign-in')) !== 'accepted') {
-      throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'totp-mismatch');
     }
 
-    await this.#parts.challenges.consume(challengeId);
+    await this.#consumeChallenge(challengeId, user.id);
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
 
     return {
       issued,
@@ -307,28 +319,37 @@ export class AuthService {
 
   async useRecoveryCode({
     challengeId,
+    ip,
     code,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly userAgent: string | undefined;
   }): Promise<IssuedSession> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
 
     if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
     if (match === null) {
       await this.#audit('auth.second_factor.failed', user.id, 'system', {
         factor: 'recovery-code',
       });
-      throw await this.#spendAttempt(challengeId, challenge, 'recovery-invalid');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'recovery-invalid');
     }
 
-    // Spent before the session exists: a crash between the two costs the person
+    // The challenge goes first, atomically: if a lock landed while the slow
+    // hash was running, no code is spent and no session opens. Then the code is
+    // spent before the session exists: a crash between the two costs the person
     // one recovery code, which is the right way round.
+    await this.#consumeChallenge(challengeId, user.id);
     await this.#parts.staff.replaceRecoveryCodes(user.id, match.remaining);
-    await this.#parts.challenges.consume(challengeId);
     this.#parts.logger.warn(
       { userId: user.id, remaining: match.remaining.length },
       'A recovery code was spent to sign in',
@@ -337,10 +358,13 @@ export class AuthService {
       remaining: match.remaining.length,
     });
 
-    return this.#openSession(user, userAgent, {
+    const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'recovery-code',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
+    return issued;
   }
 
   // ------------------------------------------------------------------
@@ -390,25 +414,30 @@ export class AuthService {
    */
   async completeEnrolment({
     challengeId,
+    ip,
     code,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly userAgent: string | undefined;
   }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'enrolment');
+    const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
 
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
     if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
-      throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'totp-mismatch');
     }
 
+    await this.#consumeChallenge(challengeId, user.id);
     const { recoveryCodes } = await this.#enableSecondFactor(user);
-    await this.#parts.challenges.consume(challengeId);
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
 
     return { recoveryCodes, issued };
   }
@@ -1334,16 +1363,10 @@ export class AuthService {
     return 'accepted';
   }
 
-  async #assertSignInAllowed(email: string, ip: string): Promise<void> {
-    const withinIpBudget = await this.#parts.limiter.consume(SIGN_IN_IP_RULE, ip);
-    const withinEmailBudget = await this.#parts.limiter.consume(SIGN_IN_EMAIL_RULE, email);
-
-    // Both are consumed before either is judged, so which limit was hit cannot
-    // be read off the response, and neither can the existence of the address.
-    if (!withinIpBudget || !withinEmailBudget) {
-      this.#parts.logger.warn({ ip }, 'A sign-in attempt was refused by the rate limit');
-      throw new AuthFailure('unavailable');
-    }
+  async #assertSignInAllowed(email: string | undefined, ip: string): Promise<SignInAttempt> {
+    const { attempt, retryAfter } = await this.#parts.limiter.reserveSignIn(ip, email);
+    if (retryAfter > 0) throw new AuthFailure('rate-limited', { retryAfter });
+    return attempt;
   }
 
   /**
@@ -1376,6 +1399,30 @@ export class AuthService {
     return withinEmailBudget && withinIpBudget;
   }
 
+  /**
+   * A second-factor step spends the IP budget only, never the address one. The
+   * address bucket guards the password: charging it here would let anyone who
+   * knows a staff address lock that person out of an SSO, magic-link or OAuth
+   * sign-in with junk passwords. Guesses at the code are bounded per
+   * account, not per address: each wrong value also counts on the user's own
+   * counter, across challenges, and three of them set the 15-minute lock
+   * (TotpChallengeStore.reserveAttempt). Only someone holding a live challenge,
+   * who has proved the first factor, can spend it. The returned attempt carries
+   * the address solely so that a completed sign-in clears the address bucket;
+   * the attempt was never added to it.
+   */
+  async #signInChallenge(challengeId: string, kind: 'second-factor' | 'enrolment', ip: string) {
+    let resolved: { challenge: Awaited<ReturnType<TotpChallengeStore['read']>>; user: StaffUser };
+    try {
+      resolved = await this.#requireChallenge(challengeId, kind);
+    } catch (error) {
+      if (error instanceof AuthFailure) await this.#assertSignInAllowed(undefined, ip);
+      throw error;
+    }
+    const reserved = await this.#assertSignInAllowed(undefined, ip);
+    return { ...resolved, attempt: { ...reserved, email: resolved.user.email } };
+  }
+
   async #requireChallenge(
     challengeId: string,
     kind: 'second-factor' | 'enrolment',
@@ -1406,12 +1453,38 @@ export class AuthService {
   }
 
   /**
-   * A wrong value costs one attempt whichever form it was typed into, so a lock
-   * cannot be dodged by switching to the recovery code field.
+   * Taken before any code is evaluated, whichever form it was typed into, so a
+   * lock cannot be dodged by switching to the recovery code field and a
+   * parallel burst cannot evaluate more guesses than the budget allows.
+   * Returns the attempts left once this one is counted.
    */
-  async #spendAttempt(
+  async #reserveAttempt(
     challengeId: string,
     found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+  ): Promise<number> {
+    /* c8 ignore next 3 -- `#requireChallenge` only ever hands over an `ok`. */
+    if (found.status !== 'ok') {
+      throw new AuthFailure('challenge-expired');
+    }
+
+    const outcome = await this.#parts.challenges.reserveAttempt(challengeId, found.challenge);
+    if (outcome.status === 'expired') throw new AuthFailure('challenge-expired');
+    if (outcome.status === 'locked') {
+      await this.#audit('auth.sign_in.failed', found.challenge.userId, 'system', {
+        method: found.challenge.firstFactor ?? 'unknown',
+        reason: 'locked',
+      });
+      throw new AuthFailure('totp-locked');
+    }
+
+    return outcome.attemptsLeft;
+  }
+
+  /** A reserved evaluation came back wrong; the last one locks the account. */
+  async #failAttempt(
+    challengeId: string,
+    found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+    attemptsLeft: number,
     code: 'totp-mismatch' | 'recovery-invalid',
   ): Promise<AuthFailure> {
     /* c8 ignore next 3 -- `#requireChallenge` only ever hands over an `ok`. */
@@ -1419,7 +1492,11 @@ export class AuthService {
       return new AuthFailure('challenge-expired');
     }
 
-    const outcome = await this.#parts.challenges.spendAttempt(challengeId, found.challenge);
+    const outcome = await this.#parts.challenges.failAttempt(
+      challengeId,
+      found.challenge,
+      attemptsLeft,
+    );
     if (outcome.status === 'locked') {
       this.#parts.logger.warn(
         { userId: found.challenge.userId },
@@ -1432,6 +1509,13 @@ export class AuthService {
     }
 
     return new AuthFailure(code, { attemptsLeft: outcome.attemptsLeft });
+  }
+
+  /** Spends the challenge for a correct code, refusing if it was locked or taken meanwhile. */
+  async #consumeChallenge(challengeId: string, userId: string): Promise<void> {
+    const result = await this.#parts.challenges.consume(challengeId, userId);
+    if (result === 'locked') throw new AuthFailure('totp-locked');
+    if (result === 'expired') throw new AuthFailure('challenge-expired');
   }
 
   /**

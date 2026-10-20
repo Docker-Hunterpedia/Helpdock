@@ -33,6 +33,9 @@ export const totpChallengeKey = (challengeId: string): string => `auth:totp:${ch
 /** Set when a challenge burns its last attempt; blocks sign-in for this account. */
 export const totpLockKey = (userId: string): string => `auth:totp-lock:${userId}`;
 
+/** Wrong second-factor values of one account, across challenges; reaching the limit sets the lock. */
+export const totpFailuresKey = (userId: string): string => `auth:totp-failures:${userId}`;
+
 /** The last time step an authenticator code of this account was accepted at. */
 export const totpUsedStepKey = (userId: string): string => `auth:totp-step:${userId}`;
 

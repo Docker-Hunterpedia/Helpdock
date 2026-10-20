@@ -377,6 +377,7 @@ const authErrorCodes = [
   'oauth-domain-not-allowed',
   /** An invitation accepted with a provider after the invitation was spent or withdrawn (M18-07). */
   'invite-expired',
+  'rate-limited',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

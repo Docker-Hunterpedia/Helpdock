@@ -1,8 +1,17 @@
+import { createI18n } from '@helpdock/i18n';
 import { screen } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { LOCALE_STORAGE_KEY } from '../app/preferences.js';
 import { AppRoutes } from '../app/routes.tsx';
-import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_RECOVERY_CODE, MOCK_TOTP_CODE } from '../auth/mock-api.js';
+import { AuthError } from '../auth/api.js';
+import {
+  MOCK_EMAIL,
+  MOCK_PASSWORD,
+  MOCK_RECOVERY_CODE,
+  MOCK_TOTP_CODE,
+  MockAuthApi,
+} from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 
 async function reachCodeScreen(): Promise<{ user: UserEvent }> {
@@ -105,3 +114,36 @@ describe('Totp', () => {
     expect(await screen.findByRole('heading', { name: 'My open' })).toBeInTheDocument();
   });
 });
+
+it.each([
+  ['en', false],
+  ['ar', false],
+  ['en', true],
+  ['ar', true],
+] as const)(
+  'shows the rounded-up rate-limit wait in %s (recovery: %s)',
+  async (locale, recovery) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    const t = createI18n({ lng: locale }).getFixedT(locale, 'auth');
+    const api = new MockAuthApi();
+    vi.spyOn(api, recovery ? 'useRecoveryCode' : 'verifyTotp').mockRejectedValue(
+      new AuthError('rate-limited', { retryAfter: 61 }),
+    );
+    const { user } = renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in'] });
+    await user.type(await screen.findByLabelText(t('signIn.emailLabel')), MOCK_EMAIL);
+    await user.type(screen.getByLabelText(t('signIn.passwordLabel')), MOCK_PASSWORD);
+    await user.click(screen.getByRole('button', { name: t('signIn.submit') }));
+    await screen.findByRole('heading', { name: t('totp.title') });
+    if (recovery) {
+      await user.click(screen.getByRole('button', { name: t('totp.useRecoveryCode') }));
+    }
+    await user.type(
+      screen.getByLabelText(t(recovery ? 'totp.recoveryCodeLabel' : 'totp.codeLabel')),
+      recovery ? MOCK_RECOVERY_CODE : MOCK_TOTP_CODE,
+    );
+    await user.click(screen.getByRole('button', { name: t('totp.submit') }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      t('signIn.rateLimited', { count: 2 }),
+    );
+  },
+);

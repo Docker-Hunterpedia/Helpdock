@@ -148,6 +148,19 @@ describe.each(NAMESPACES)('%s namespace', (namespace) => {
   });
 });
 
+// #343: the call sites pass only `count`, so any other placeholder would print raw.
+it.each(SUPPORTED_LNGS)('interpolates nothing but count in the %s sign-in wait', (locale) => {
+  const catalog = keysOf(locale, 'auth');
+  for (const form of formsFor(catalog.keys(), 'signIn.rateLimited')) {
+    const text = catalog.get(`signIn.rateLimited_${form}`) ?? '';
+    const names = [...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1]);
+    expect(
+      names.filter((name) => name !== 'count'),
+      `${locale} rateLimited_${form}`,
+    ).toEqual([]);
+  }
+});
+
 describe('the catalogs as a whole', () => {
   it('carries at least one plural key, so the rules above are exercised', () => {
     const plurals = [...catalogs.values()].flatMap((catalog) =>

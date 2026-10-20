@@ -1,7 +1,7 @@
 import { uuidv7 } from '@helpdock/db';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
-import { totpChallengeKey, totpLockKey } from '../redis-keys.js';
+import { totpChallengeKey, totpFailuresKey, totpLockKey } from '../redis-keys.js';
 
 /**
  * The state between "the password was right" and "the code was right".
@@ -48,9 +48,72 @@ export type ChallengeCheck =
   | { readonly status: 'expired' }
   | { readonly status: 'locked' };
 
+export type ReservationOutcome =
+  | { readonly status: 'reserved'; readonly attemptsLeft: number }
+  | { readonly status: 'locked' }
+  | { readonly status: 'expired' };
+
 export type AttemptOutcome =
   | { readonly status: 'remaining'; readonly attemptsLeft: number }
   | { readonly status: 'locked' };
+
+/**
+ * Reserves one evaluation of a code before the code is looked at, so the number
+ * of guesses ever evaluated is bounded by the limit even under a parallel
+ * burst. Two budgets are charged together: the challenge's own (KEYS[1]) and the
+ * account's (KEYS[3]), which survives the challenge and whose expiry slides
+ * from the last reservation, so any 15 minutes hold at most three; without the second,
+ * someone holding the first factor could start a fresh challenge for every two
+ * wrong codes and never reach the lock.
+ *
+ * A locked account loses its challenge; a missing or consumed challenge is
+ * never recreated; the account is bound to the stored record, not the caller's
+ * copy; the TTL is kept, not extended. A reservation past the limit sets the
+ * lock and is refused unevaluated. Reaching the limit exactly is allowed, so a
+ * correct third code still signs in; the wrong third code locks through
+ * {@link TotpChallengeStore.failAttempt}. ARGV: user id, limit, lock seconds.
+ * Returns {status, attemptsLeft}: 1 reserved, 0 locked, -1 expired.
+ */
+export const RESERVE_ATTEMPT_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {-1, 0} end
+local challenge = cjson.decode(raw)
+if challenge.userId ~= ARGV[1] then return {-1, 0} end
+local limit = tonumber(ARGV[2])
+local lock = tonumber(ARGV[3])
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  redis.call('DEL', KEYS[1])
+  return {0, 0}
+end
+local attempts = challenge.attempts + 1
+local failures = redis.call('INCR', KEYS[3])
+redis.call('EXPIRE', KEYS[3], lock)
+if attempts > limit or failures > limit then
+  redis.call('DEL', KEYS[1], KEYS[3])
+  redis.call('SET', KEYS[2], '1', 'EX', lock)
+  return {0, 0}
+end
+challenge.attempts = attempts
+redis.call('SET', KEYS[1], cjson.encode(challenge), 'KEEPTTL')
+return {1, limit - math.max(attempts, failures)}
+`;
+
+/**
+ * Spends the challenge on a correct code, only if it still exists for this user
+ * and no lock has been set since the code was read. Returns 1 spent, 0 locked
+ * (the challenge is removed), -1 gone. ARGV: user id.
+ */
+export const CONSUME_CHALLENGE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return -1 end
+if cjson.decode(raw).userId ~= ARGV[1] then return -1 end
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  redis.call('DEL', KEYS[1])
+  return 0
+end
+redis.call('DEL', KEYS[1])
+return 1
+`;
 
 export class TotpChallengeStore {
   readonly #redis: Redis;
@@ -113,39 +176,66 @@ export class TotpChallengeStore {
   }
 
   /**
-   * Charges one attempt, whichever field the wrong value was typed into. A
+   * Reserve before evaluating a code, whichever field it was typed into. A
    * recovery code and an authenticator code share the budget on purpose: the
    * lock would be trivially avoidable if switching forms bought three more
-   * tries.
+   * tries. Only a `reserved` outcome may evaluate the code.
    */
-  async spendAttempt(challengeId: string, challenge: TotpChallenge): Promise<AttemptOutcome> {
-    const attempts = challenge.attempts + 1;
-    const attemptsLeft = TOTP_MAX_ATTEMPTS - attempts;
-
-    if (attemptsLeft <= 0) {
-      await this.#redis
-        .multi()
-        .del(totpChallengeKey(challengeId))
-        .set(totpLockKey(challenge.userId), '1', 'EX', TOTP_LOCK_SECONDS)
-        .exec();
-
-      return { status: 'locked' };
-    }
-
-    // The TTL is kept, not extended: wrong answers must not be a way to hold a
-    // challenge open indefinitely.
-    await this.#redis.set(
+  async reserveAttempt(challengeId: string, challenge: TotpChallenge): Promise<ReservationOutcome> {
+    const [status, attemptsLeft] = (await this.#redis.eval(
+      RESERVE_ATTEMPT_SCRIPT,
+      3,
       totpChallengeKey(challengeId),
-      JSON.stringify({ ...challenge, attempts }),
-      'KEEPTTL',
-    );
+      totpLockKey(challenge.userId),
+      totpFailuresKey(challenge.userId),
+      challenge.userId,
+      String(TOTP_MAX_ATTEMPTS),
+      String(TOTP_LOCK_SECONDS),
+    )) as [number, number];
 
-    return { status: 'remaining', attemptsLeft };
+    if (status === 1) return { status: 'reserved', attemptsLeft };
+    return { status: status === 0 ? 'locked' : 'expired' };
   }
 
-  /** The challenge is spent the moment it succeeds, so one code opens one session. */
-  async consume(challengeId: string): Promise<void> {
-    await this.#redis.del(totpChallengeKey(challengeId));
+  /**
+   * The reserved evaluation was wrong: it already counted, so this charges
+   * nothing more. The last one locks the account and ends the challenge.
+   */
+  async failAttempt(
+    challengeId: string,
+    challenge: TotpChallenge,
+    attemptsLeft: number,
+  ): Promise<AttemptOutcome> {
+    if (attemptsLeft > 0) return { status: 'remaining', attemptsLeft };
+
+    await this.#redis
+      .multi()
+      .del(totpChallengeKey(challengeId), totpFailuresKey(challenge.userId))
+      .set(totpLockKey(challenge.userId), '1', 'EX', TOTP_LOCK_SECONDS)
+      .exec();
+
+    return { status: 'locked' };
+  }
+
+  /** A completed sign-in forgives earlier wrong codes; only proof of every factor does. */
+  async clearFailures(userId: string): Promise<void> {
+    await this.#redis.del(totpFailuresKey(userId));
+  }
+
+  /**
+   * The challenge is spent the moment a correct code succeeds, so one code opens
+   * one session; and only while no lock has landed since the code was read.
+   */
+  async consume(challengeId: string, userId: string): Promise<'spent' | 'locked' | 'expired'> {
+    const result = await this.#redis.eval(
+      CONSUME_CHALLENGE_SCRIPT,
+      2,
+      totpChallengeKey(challengeId),
+      totpLockKey(userId),
+      userId,
+    );
+
+    return result === 1 ? 'spent' : result === 0 ? 'locked' : 'expired';
   }
 
   /** Checked before the password is even verified, so a locked account stays locked. */

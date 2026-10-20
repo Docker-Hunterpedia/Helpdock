@@ -6,6 +6,7 @@ import {
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
   users,
+  uuidv7,
   withTenant,
 } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -14,15 +15,30 @@ import { desc, eq, like, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
 import { generate } from 'otplib';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import {
+  type ApiApp,
+  createApiApp,
+  createRuntime,
+  type Runtime,
+  resetUntrustedForwardingWarningForTests,
+} from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { OidcService } from '../sso/oidc.service.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
-import { PRINCIPAL_REVOKED_CHANNEL } from './redis-keys.js';
+import { RateLimiter, SIGN_IN_EMAIL_RULE, SIGN_IN_IP_RULE } from './rate-limit.js';
+import {
+  hashSubject,
+  PRINCIPAL_REVOKED_CHANNEL,
+  rateLimitKey,
+  totpChallengeKey,
+  totpLockKey,
+} from './redis-keys.js';
 import { oauthNonceCookie, refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
+import { TotpChallengeStore } from './totp/challenge-store.js';
 
 /**
  * The whole of M0-05 over HTTP, against a real Postgres and a real Redis: the
@@ -285,14 +301,17 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(unknown).toBeGreaterThan(5);
     });
 
-    it('answers "unavailable" once the per-address limit is spent', async () => {
+    it('answers "rate-limited" once the per-address limit is spent', async () => {
       const attempts = [];
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 11; attempt += 1) {
         attempts.push(await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' }));
       }
 
+      expect(attempts.slice(0, 10).every((response) => response.statusCode === 401)).toBe(true);
+      expect(Number(attempts.at(-1)?.headers['retry-after'])).toBeGreaterThan(0);
+      expect(Number(attempts.at(-1)?.headers['retry-after'])).toBeLessThanOrEqual(900);
       expect(attempts.at(-1)?.statusCode).toBe(429);
-      expect(attempts.at(-1)?.json()).toMatchObject({ error: { auth: { code: 'unavailable' } } });
+      expect(attempts.at(-1)?.json()).toMatchObject({ error: { auth: { code: 'rate-limited' } } });
     });
 
     it('refuses a body that is not a sign-in, naming the fields', async () => {
@@ -302,6 +321,380 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(response.json()).toMatchObject({
         error: { code: 'validation_failed', fields: expect.any(Array) },
       });
+    });
+  });
+
+  describe('failures-only sign-in limits (#343)', () => {
+    it('allows 25 complete successful sign-ins from one IP without changing its budget', async () => {
+      for (let i = 0; i < 25; i++) await signIn();
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      for (const key of keys) expect(await runtime.redis.zcard(key)).toBe(0);
+    });
+
+    it('clears address failures after success but retains earlier IP failures', async () => {
+      for (let i = 0; i < 9; i++) {
+        expect(
+          (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
+        ).toBe(401);
+      }
+      await signIn();
+      for (let i = 0; i < 10; i++) {
+        expect(
+          (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
+        ).toBe(401);
+      }
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(keys).toHaveLength(1);
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(19);
+    });
+
+    it('locks the IP after 100 failures across addresses and gives the same refusal for known and unknown accounts', async () => {
+      for (let i = 0; i < 100; i++) {
+        expect(
+          (
+            await post('/api/auth/sign-in', {
+              email: `unknown-${i}@example.com`,
+              password: 'wrong',
+            })
+          ).statusCode,
+        ).toBe(401);
+      }
+      const known = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const unknown = await post('/api/auth/sign-in', {
+        email: 'another@example.com',
+        password: 'wrong',
+      });
+      for (const response of [known, unknown]) {
+        expect(response.statusCode).toBe(429);
+        expect(response.json().error.auth).toEqual({ code: 'rate-limited' });
+        expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+        expect(Number(response.headers['retry-after'])).toBeLessThanOrEqual(900);
+      }
+      const { requestId: _known, ...knownBody } = known.json().error;
+      const { requestId: _unknown, ...unknownBody } = unknown.json().error;
+      expect(knownBody).toEqual(unknownBody);
+    });
+
+    it('allows exactly ten parallel failed verifications and refuses the rest atomically', async () => {
+      const results = await Promise.all(
+        Array.from({ length: 30 }, () =>
+          post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' }),
+        ),
+      );
+      expect(results.filter((result) => result.statusCode === 401)).toHaveLength(10);
+      expect(results.filter((result) => result.statusCode === 429)).toHaveLength(20);
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(10);
+    });
+
+    it('atomically bounds a parallel spray across addresses to 100 verifications', async () => {
+      const limiter = new RateLimiter(runtime.redis);
+      const attempts = await Promise.all(
+        Array.from({ length: 150 }, (_, index) =>
+          limiter.reserveSignIn('spray', `person-${index}@example.com`),
+        ),
+      );
+      expect(attempts.filter((attempt) => attempt.retryAfter === 0)).toHaveLength(100);
+      expect(attempts.filter((attempt) => attempt.retryAfter > 0)).toHaveLength(50);
+    });
+
+    it('returns the larger oldest-entry expiry from real Redis without extending the lock', async () => {
+      const now = Date.now();
+      const ipKey = rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject('office'));
+      const emailKey = rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashSubject('person@example.com'));
+      for (let i = 0; i < 100; i++) await runtime.redis.zadd(ipKey, now - 60_000, `ip-${i}`);
+      for (let i = 0; i < 10; i++) await runtime.redis.zadd(emailKey, now - 30_000, `email-${i}`);
+      const limiter = new RateLimiter(runtime.redis);
+      const refused = await limiter.reserveSignIn('office', 'person@example.com');
+      expect(refused.retryAfter).toBeGreaterThanOrEqual(869);
+      expect(refused.retryAfter).toBeLessThanOrEqual(870);
+      expect(await runtime.redis.zcard(ipKey)).toBe(100);
+      expect(await runtime.redis.zcard(emailKey)).toBe(10);
+    });
+
+    it('warns once when forwarded requests arrive with proxy trust off without logging the header', async () => {
+      resetUntrustedForwardingWarningForTests();
+      const logStart = logLines.length;
+      for (let i = 0; i < 2; i++) {
+        await get('/api/auth/methods', { 'x-forwarded-for': 'forwarded-header-marker' });
+      }
+      const warnings = logLines
+        .slice(logStart)
+        .filter((line) => line.includes('X-Forwarded-For received while TRUST_PROXY is off'));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).not.toContain('forwarded-header-marker');
+    });
+
+    it('opens a session after nine password failures and a correct password and TOTP (#343)', async () => {
+      for (let attempt = 0; attempt < 9; attempt++) {
+        const failed = await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+        expect(failed.statusCode).toBe(401);
+      }
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(first.statusCode).toBe(201);
+      expect(first.json().kind).toBe('totp-required');
+      const second = await post('/api/auth/totp', {
+        challengeId: first.json().challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(second.statusCode).toBe(201);
+      expect(second.json().accessToken).toEqual(expect.any(String));
+      expect(cookieOf(second, REFRESH_COOKIE)).toEqual(expect.any(String));
+    });
+
+    it('locks the account once wrong codes across challenges reach the per-user limit (#343)', async () => {
+      const badCode = (await totpCode()) === '000000' ? '111111' : '000000';
+      const start = async (): Promise<string> => {
+        const first = await post('/api/auth/sign-in', {
+          email: seeded.email,
+          password: seeded.password,
+        });
+        expect(first.statusCode).toBe(201);
+        expect(first.json().kind).toBe('totp-required');
+        return first.json().challengeId as string;
+      };
+      const guess = (challengeId: string) =>
+        post('/api/auth/totp', { challengeId, code: badCode, trustDevice: false });
+
+      const first = await start();
+      expect((await guess(first)).json().error.auth).toEqual({
+        code: 'totp-mismatch',
+        attemptsLeft: 2,
+      });
+      expect((await guess(first)).json().error.auth).toEqual({
+        code: 'totp-mismatch',
+        attemptsLeft: 1,
+      });
+
+      // A fresh challenge does not reset the account's count: its first wrong
+      // code is the third failure.
+      const second = await start();
+      expect((await guess(second)).json().error.auth).toEqual({ code: 'totp-locked' });
+
+      const locked = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(locked.statusCode).toBe(429);
+      expect(locked.json().error.auth).toEqual({ code: 'totp-locked' });
+      // Only the refused password step is on the address budget, not the codes.
+      const [addressKey = ''] = await runtime.redis.keys('auth:rate:signin-email:*');
+      expect(await runtime.redis.zcard(addressKey)).toBe(1);
+    });
+
+    it('reserves at most three of many parallel guesses on one challenge (#347)', async () => {
+      const store = new TotpChallengeStore(runtime.redis);
+      const userId = uuidv7();
+      const challengeId = await store.create({ userId, kind: 'second-factor' });
+      const found = await store.read(challengeId);
+      if (found.status !== 'ok') throw new Error('expected an open challenge');
+
+      const outcomes = await Promise.all(
+        Array.from({ length: 12 }, () => store.reserveAttempt(challengeId, found.challenge)),
+      );
+
+      expect(outcomes.filter((o) => o.status === 'reserved')).toHaveLength(3);
+      expect(outcomes.filter((o) => o.status === 'locked')).toHaveLength(1);
+      expect(outcomes.filter((o) => o.status === 'expired')).toHaveLength(8);
+      expect(await store.isLocked(userId)).toBe(true);
+      expect(await runtime.redis.ttl(totpLockKey(userId))).toBeGreaterThan(890);
+      expect(await runtime.redis.get(totpChallengeKey(challengeId))).toBeNull();
+    });
+
+    /** Codes actually evaluated and found wrong, for the seeded account. */
+    const evaluatedWrong = async (action: string): Promise<number> => {
+      const rows = await withTenant(
+        runtime.db,
+        {
+          brandIds: [INSTALL_SCOPE_BRAND_ID],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'test',
+        },
+        (tx) => tx.select().from(auditLog).where(eq(auditLog.action, action)),
+      );
+      return rows.filter((row) => row.targetId === seeded.userId).length;
+    };
+
+    const challengeFor = async (): Promise<string> => {
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(first.json().kind).toBe('totp-required');
+      return first.json().challengeId as string;
+    };
+
+    it('evaluates at most three codes of a parallel burst, correct one included (#347)', async () => {
+      const goodCode = await totpCode();
+      const badCode = goodCode === '000000' ? '111111' : '000000';
+      const challengeId = await challengeFor();
+      const before = await evaluatedWrong('auth.second_factor.failed');
+
+      const responses = await Promise.all(
+        [...Array.from({ length: 9 }, () => badCode), goodCode].map((code) =>
+          post('/api/auth/totp', { challengeId, code, trustDevice: false }),
+        ),
+      );
+
+      const sessions = responses.filter((response) => response.statusCode === 201).length;
+      expect(sessions).toBeLessThanOrEqual(1);
+      expect(
+        (await evaluatedWrong('auth.second_factor.failed')) - before + sessions,
+      ).toBeLessThanOrEqual(3);
+      // Whatever the interleaving, the lock never lets a later code through.
+      const late = await post('/api/auth/totp', {
+        challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(late.statusCode).not.toBe(201);
+    });
+
+    it('evaluates at most three recovery codes of a parallel burst, correct one included (#347)', async () => {
+      const { PasswordHasher } = await import('./password.js');
+      const { normalizeRecoveryCode } = await import('./totp/recovery-codes.js');
+      const hasher = new PasswordHasher(Buffer.from(MASTER_KEY, 'base64'));
+      const good = 'RC-ABCD-EFGH';
+      const hashed = [await hasher.hash(normalizeRecoveryCode(good))];
+      await runtime.db
+        .update(users)
+        .set({ recoveryCodesHashed: hashed })
+        .where(eq(users.id, seeded.userId));
+      const challengeId = await challengeFor();
+      const before = await evaluatedWrong('auth.second_factor.failed');
+
+      const responses = await Promise.all(
+        [...Array.from({ length: 9 }, (_, i) => `RC-WRNG-000${i}`), good].map((code) =>
+          post('/api/auth/recovery-code', { challengeId, code }),
+        ),
+      );
+
+      const sessions = responses.filter((response) => response.statusCode === 201).length;
+      expect(sessions).toBeLessThanOrEqual(1);
+      expect(
+        (await evaluatedWrong('auth.second_factor.failed')) - before + sessions,
+      ).toBeLessThanOrEqual(3);
+      const late = await post('/api/auth/recovery-code', { challengeId, code: good });
+      expect(late.statusCode).not.toBe(201);
+      await runtime.db
+        .update(users)
+        .set({ recoveryCodesHashed: [] })
+        .where(eq(users.id, seeded.userId));
+    });
+
+    it('keeps TOTP guessing capped at three per challenge when the address budget is spent (#343)', async () => {
+      const link = await post('/api/auth/magic-link', { email: seeded.email });
+      expect(link.statusCode).toBe(204);
+      const token = tokenOf(linkIn(await email.last()));
+      const started = await post('/api/auth/magic-link/consume', { token });
+      const challengeId = started.json().challengeId as string;
+      const badCode = (await totpCode()) === '000000' ? '111111' : '000000';
+
+      const codes: string[] = [];
+      for (let guess = 0; guess < 3; guess++) {
+        const response = await post('/api/auth/totp', {
+          challengeId,
+          code: badCode,
+          trustDevice: false,
+        });
+        codes.push(response.json().error.auth.code);
+      }
+      expect(codes).toEqual(['totp-mismatch', 'totp-mismatch', 'totp-locked']);
+    });
+
+    it('verifies a magic-link TOTP challenge after junk passwords exhaust the address budget (#343)', async () => {
+      expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
+      const token = tokenOf(linkIn(await email.last()));
+      const started = await post('/api/auth/magic-link/consume', { token });
+      expect(started.json().kind).toBe('totp-required');
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+      }
+      const blocked = await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+      expect(blocked.statusCode).toBe(429);
+
+      const verified = await post('/api/auth/totp', {
+        challengeId: started.json().challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(verified.statusCode).toBe(201);
+      expect(verified.json().accessToken).toEqual(expect.any(String));
+      // Completing every factor is what clears the address bucket.
+      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
+    });
+
+    it('counts failed TOTP codes and refunds success without erasing earlier IP failures', async () => {
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const challengeId = (first.json() as { challengeId: string }).challengeId;
+      const goodCode = await totpCode();
+      const badCode = goodCode === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 2; i++) {
+        expect(
+          (await post('/api/auth/totp', { challengeId, code: badCode, trustDevice: false }))
+            .statusCode,
+        ).toBe(401);
+      }
+      expect(
+        (await post('/api/auth/totp', { challengeId, code: goodCode, trustDevice: false }))
+          .statusCode,
+      ).toBe(201);
+      const ipKeys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(await runtime.redis.zcard(ipKeys[0] ?? '')).toBe(2);
+      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
+    });
+
+    it.each(['/api/auth/totp', '/api/auth/recovery-code', '/api/auth/enrolment/confirm'])(
+      'counts expired challenges in the IP bucket on %s',
+      async (path) => {
+        const limiter = new RateLimiter(runtime.redis);
+        for (let i = 0; i < 99; i++) await limiter.reserveSignIn('127.0.0.1');
+        const body = {
+          challengeId: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
+          code: '000000',
+          trustDevice: false,
+        };
+        expect((await post(path, body)).statusCode).toBe(401);
+        const refused = await post(path, body);
+        expect(refused.statusCode).toBe(429);
+        expect(refused.json().error.auth).toEqual({ code: 'rate-limited' });
+      },
+    );
+
+    it('SSO discovery and OIDC starts never spend the password budget', async () => {
+      const oidc = new OidcService({
+        db: runtime.db,
+        redis: runtime.redis,
+        logger: runtime.logger,
+        keyring: createKeyring(envFor()),
+        env: envFor(),
+      });
+      for (let i = 0; i < 25; i++) {
+        await expect(
+          oidc.start({
+            connectionId: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
+            returnTo: '/tickets',
+            ip: '127.0.0.1',
+          }),
+        ).rejects.toThrow(i < 20 ? 'sso-connection-disabled' : 'sso-rate-limited');
+        await post('/api/auth/sso/discover', { email: seeded.email });
+      }
+      expect(await runtime.redis.keys('auth:rate:signin-*')).toEqual([]);
+      const ssoKeys = await runtime.redis.keys('auth:rate:sso-*');
+      expect(ssoKeys.length).toBeGreaterThan(0);
+      await signIn();
     });
   });
 
@@ -853,7 +1246,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     });
 
     it('counts refusals in rate_limit_refusals_total', async () => {
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 11; attempt += 1) {
         await post('/api/auth/sign-in', { email: 'flood@example.com', password: 'whatever it is' });
       }
 

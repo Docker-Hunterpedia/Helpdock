@@ -708,6 +708,9 @@ jobs:
         if: steps.baselines.outputs.present == 'true'
         run: pnpm --filter @helpdock/admin e2e:screenshots
 
+      - name: Sign-in rate-limit browser tests (en and ar, stubbed HTTP)
+        run: pnpm --filter @helpdock/admin exec playwright test --config playwright.auth-refusals.config.ts
+
       - name: Browser tests against the real api
         run: pnpm --filter @helpdock/admin e2e:api
 

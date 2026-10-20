@@ -1,6 +1,11 @@
 import type { Redis } from 'ioredis';
-import { CONSUME_SCRIPT } from '../auth/rate-limit.js';
+import {
+  CONSUME_SCRIPT,
+  REFUND_SIGN_IN_SCRIPT,
+  RESERVE_SIGN_IN_SCRIPT,
+} from '../auth/rate-limit.js';
 import { REGISTER_SESSION_SCRIPT, ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
+import { CONSUME_CHALLENGE_SCRIPT, RESERVE_ATTEMPT_SCRIPT } from '../auth/totp/challenge-store.js';
 import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
 
@@ -60,6 +65,30 @@ export const authRedisStub = (): RedisStub =>
 
       return ['rotated', userId];
     })
+    .defineScript(RESERVE_SIGN_IN_SCRIPT, async (stub, keys, args) => {
+      const now = Number(args[0]);
+      const windowMs = Number(args[1]);
+      let retry = 0;
+      const blocked = [0, 0];
+      for (const [index, key] of keys.entries()) {
+        await stub.zremrangebyscore(key, '-Infinity', now - windowMs);
+        if ((await stub.zcard(key)) >= Number(args[index + 2])) {
+          blocked[index] = 1;
+          const oldest = await stub.zrange(key, 0, 0, 'WITHSCORES');
+          retry = Math.max(retry, Number(oldest[1]) + windowMs);
+        }
+      }
+      if (retry > 0) return [retry, ...blocked];
+      for (const key of keys) {
+        await stub.zadd(key, now, args[4] ?? '');
+        await stub.pexpire(key, windowMs);
+      }
+      return [0, 0, 0];
+    })
+    .defineScript(REFUND_SIGN_IN_SCRIPT, async (stub, keys, args) => {
+      for (const key of keys) await stub.zrem(key, args[0] ?? '');
+      return 0;
+    })
     .defineScript(CONSUME_SCRIPT, async (stub, keys, args) => {
       const [counterKey = ''] = keys;
       const [cutoff = '0', now = '0', limit = '0', windowMs = '0', member = ''] = args;
@@ -74,6 +103,38 @@ export const authRedisStub = (): RedisStub =>
       await stub.pexpire(counterKey, Number(windowMs));
 
       return 1;
+    })
+    .defineScript(RESERVE_ATTEMPT_SCRIPT, async (stub, keys, args) => {
+      const [challengeKey = '', lockKey = '', failuresKey = ''] = keys;
+      const [userId = '', limitText = '0', lockText = '0'] = args;
+      const raw = await stub.get(challengeKey);
+      if (raw === null) return [-1, 0];
+      const challenge = JSON.parse(raw) as { userId: string; attempts: number };
+      if (challenge.userId !== userId) return [-1, 0];
+      if (await stub.exists(lockKey)) {
+        await stub.del(challengeKey);
+        return [0, 0];
+      }
+      const limit = Number(limitText);
+      const lock = Number(lockText);
+      const attempts = challenge.attempts + 1;
+      const failures = await stub.incr(failuresKey);
+      await stub.expire(failuresKey, lock);
+      if (attempts > limit || failures > limit) {
+        await stub.del(challengeKey, failuresKey);
+        await stub.set(lockKey, '1', 'EX', lock);
+        return [0, 0];
+      }
+      await stub.set(challengeKey, JSON.stringify({ ...challenge, attempts }), 'KEEPTTL');
+      return [1, limit - Math.max(attempts, failures)];
+    })
+    .defineScript(CONSUME_CHALLENGE_SCRIPT, async (stub, keys, args) => {
+      const [challengeKey = '', lockKey = ''] = keys;
+      const raw = await stub.get(challengeKey);
+      if (raw === null) return -1;
+      if ((JSON.parse(raw) as { userId: string }).userId !== args[0]) return -1;
+      await stub.del(challengeKey);
+      return (await stub.exists(lockKey)) ? 0 : 1;
     })
     .defineScript(CLAIM_STEP_SCRIPT, async (stub, keys, args) => {
       const [stepKey = ''] = keys;

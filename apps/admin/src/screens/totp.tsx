@@ -6,6 +6,7 @@ import { Navigate, Link as RouterLink, useLocation, useNavigate } from 'react-ro
 import { useT } from '../app/i18n.js';
 import { ROUTES, safeReturnTo } from '../app/route-paths.js';
 import { isAuthError } from '../auth/api.js';
+import { retryAfterMinutes } from '../auth/auth-error.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../ui/field.tsx';
@@ -39,6 +40,13 @@ function describeFailure(t: ReturnType<typeof useT>, error: unknown): Failure {
   }
 
   switch (error.code) {
+    case 'rate-limited': {
+      const minutes = retryAfterMinutes(error.retryAfter);
+      return {
+        message: t('auth:signIn.rateLimited', { count: minutes }),
+        locked: false,
+      };
+    }
     case 'totp-locked':
       return { message: t('auth:totp.locked'), locked: true };
     case 'challenge-expired':

@@ -18,6 +18,7 @@ import { useT } from '../app/i18n.js';
 import { ROUTES, safeReturnTo } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
+import { retryAfterMinutes } from '../auth/auth-error.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../ui/field.tsx';
@@ -126,11 +127,19 @@ export function TotpEnrolment(): ReactNode {
       setStep('codes');
     },
     onError: (error) => {
-      setCodeError(
-        isAuthError(error) && error.code === 'totp-mismatch'
-          ? t('me:twoFactor.codeWrong')
-          : t('auth:unavailable'),
-      );
+      if (isAuthError(error)) {
+        switch (error.code) {
+          case 'rate-limited': {
+            const minutes = retryAfterMinutes(error.retryAfter);
+            setCodeError(t('auth:signIn.rateLimited', { count: minutes }));
+            return;
+          }
+          case 'totp-mismatch':
+            setCodeError(t('me:twoFactor.codeWrong'));
+            return;
+        }
+      }
+      setCodeError(t('auth:unavailable'));
     },
   });
 

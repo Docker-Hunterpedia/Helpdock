@@ -8,6 +8,7 @@ import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES, safeReturnTo } from '../app/route-paths.js';
 import type { AuthApi } from '../auth/api.js';
 import { isAuthError } from '../auth/api.js';
+import { retryAfterMinutes } from '../auth/auth-error.js';
 import { useAuthApi } from '../auth/session.tsx';
 import { ssoErrorKey } from '../auth/sso-error.js';
 import { readPublicInstallInfo } from '../install/public-info.js';
@@ -82,6 +83,8 @@ export function SignIn(): ReactNode {
   const [errors, setErrors] = useState<SignInFormErrors>({});
   const [failure, setFailure] = useState<AuthErrorCode | null>(null);
 
+  const [retryMinutes, setRetryMinutes] = useState(15);
+
   const install = useMemo(() => readPublicInstallInfo(), []);
 
   const finishSignIn = useFinishSignIn(returnTo);
@@ -91,6 +94,7 @@ export function SignIn(): ReactNode {
     onSuccess: finishSignIn,
     onError: (error: unknown) => {
       setFailure(isAuthError(error) ? error.code : 'unavailable');
+      setRetryMinutes(retryAfterMinutes(isAuthError(error) ? error.retryAfter : undefined));
     },
   });
 
@@ -157,15 +161,17 @@ export function SignIn(): ReactNode {
   const passwordError = errors.password ? t('auth:signIn.passwordRequired') : undefined;
   const ssoFailure = ssoErrorKey(failure);
   const failureMessage =
-    failure === 'invalid-credentials'
-      ? t('auth:signIn.invalidCredentials')
-      : failure === 'no-account'
-        ? t('auth:noAccount')
-        : ssoFailure
-          ? t(ssoFailure)
-          : failure
-            ? t('auth:unavailable')
-            : undefined;
+    failure === 'rate-limited'
+      ? t('auth:signIn.rateLimited', { count: retryMinutes })
+      : failure === 'invalid-credentials'
+        ? t('auth:signIn.invalidCredentials')
+        : failure === 'no-account'
+          ? t('auth:noAccount')
+          : ssoFailure
+            ? t(ssoFailure)
+            : failure
+              ? t('auth:unavailable')
+              : undefined;
 
   return (
     <AuthLayout

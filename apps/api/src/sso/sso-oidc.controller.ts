@@ -15,7 +15,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { AuthFailure } from '../auth/auth-failure.js';
-import { RateLimiter, SIGN_IN_IP_RULE } from '../auth/rate-limit.js';
+import { RateLimiter, SSO_DISCOVERY_RULE } from '../auth/rate-limit.js';
 import { Public } from '../auth/route-declaration.js';
 import { ENV, REDIS } from '../runtime/tokens.js';
 import {
@@ -52,7 +52,7 @@ export class SsoOidcController {
     @Body(new ZodValidationPipe(SsoDiscoveryRequestDto)) body: SsoDiscoveryRequestDto,
     @Req() request: FastifyRequest,
   ) {
-    if (!(await new RateLimiter(this.redis).consume(SIGN_IN_IP_RULE, request.ip)))
+    if (!(await new RateLimiter(this.redis).consume(SSO_DISCOVERY_RULE, request.ip)))
       throw new AuthFailure('unavailable');
     return this.policy.discover(body.email);
   }

@@ -159,6 +159,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SignInResponse> {
     const { issued, trustedDeviceCookie } = await this.#auth.verifyTotp({
+      ip: request.ip,
       challengeId: body.challengeId,
       code: body.code,
       trustDevice: body.trustDevice,
@@ -180,6 +181,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<SignInResponse> {
     const issued = await this.#auth.useRecoveryCode({
+      ip: request.ip,
       challengeId: body.challengeId,
       code: body.code,
       userAgent: request.headers['user-agent'],
@@ -212,6 +214,7 @@ export class AuthController {
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<EnrolmentCompleteResponse> {
     const { recoveryCodes, issued } = await this.#auth.completeEnrolment({
+      ip: request.ip,
       challengeId: body.challengeId,
       code: body.code,
       userAgent: request.headers['user-agent'],

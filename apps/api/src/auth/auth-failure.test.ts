@@ -82,3 +82,10 @@ describe('the body an auth failure produces', () => {
     expect(mapError(new AuthFailure('invalid-credentials')).unexpected).toBe(false);
   });
 });
+
+it('keeps the retry duration out of the identical refusal body', () => {
+  const failure = new AuthFailure('rate-limited', { retryAfter: 42 });
+  expect(failure.getStatus()).toBe(429);
+  expect(failure.retryAfter).toBe(42);
+  expect(failure.auth).toEqual({ code: 'rate-limited' });
+});

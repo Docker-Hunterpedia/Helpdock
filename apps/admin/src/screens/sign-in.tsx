@@ -8,6 +8,7 @@ import { useT } from '../app/i18n.js';
 import { RETURN_TO_PARAM, ROUTES, safeReturnTo } from '../app/route-paths.js';
 import type { AuthApi } from '../auth/api.js';
 import { isAuthError } from '../auth/api.js';
+import { retryAfterMinutes } from '../auth/auth-error.js';
 import { useAuthApi } from '../auth/session.tsx';
 import { ssoErrorKey } from '../auth/sso-error.js';
 import { readPublicInstallInfo } from '../install/public-info.js';
@@ -93,9 +94,7 @@ export function SignIn(): ReactNode {
     onSuccess: finishSignIn,
     onError: (error: unknown) => {
       setFailure(isAuthError(error) ? error.code : 'unavailable');
-      setRetryMinutes(
-        Math.max(1, Math.ceil((isAuthError(error) ? (error.retryAfter ?? 900) : 900) / 60)),
-      );
+      setRetryMinutes(retryAfterMinutes(isAuthError(error) ? error.retryAfter : undefined));
     },
   });
 

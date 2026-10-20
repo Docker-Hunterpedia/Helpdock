@@ -732,9 +732,13 @@ whole budget at the end of one window and again at the start of the next.
 
 Password, TOTP, recovery-code and sign-in enrolment failures count. In-flight
 verification reserves a slot atomically so parallel guesses cannot exceed the
-limit. A proved password removes its own IP reservation; it clears address
-failures only if no further factor is required. TOTP, recovery-code or required
-enrolment completion clears address failures only after opening a session.
+limit. A proved password that issues a TOTP or required-enrolment challenge
+atomically removes only its own reservation from both buckets, preserving earlier
+failures. Abandoning a challenge adds no password failure. Bad second-factor
+address entries remain until they expire or a full session opens. Earlier IP
+failures remain until they expire. A password-only session,
+or successful TOTP, recovery-code or required-enrolment completion, clears address
+failures and refunds only the successful attempt from the IP bucket.
 SSO discovery, starts and callbacks have separate named buckets. Discovery moved
 from the shared 20-per-15-minute credential bucket to its own 20-per-minute bucket.
 

@@ -34,7 +34,6 @@ import {
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
   type RateLimiter,
-  SIGN_IN_EMAIL_RULE,
   type SignInAttempt,
   STEP_UP_RULE,
 } from './rate-limit.js';
@@ -268,9 +267,10 @@ export class AuthService {
       userAgent: input.userAgent,
       trustedDeviceCookie: input.trustedDeviceCookie,
     });
-    await this.#parts.limiter.refundSignInIp(attempt);
     if (outcome.kind === 'session') {
-      await this.#parts.limiter.reset(SIGN_IN_EMAIL_RULE, input.email);
+      await this.#parts.limiter.signInSucceeded(attempt);
+    } else {
+      await this.#parts.limiter.refundSignIn(attempt);
     }
     return outcome;
   }

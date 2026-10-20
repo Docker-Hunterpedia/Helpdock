@@ -1,5 +1,9 @@
 import type { Redis } from 'ioredis';
-import { CONSUME_SCRIPT, RESERVE_SIGN_IN_SCRIPT } from '../auth/rate-limit.js';
+import {
+  CONSUME_SCRIPT,
+  REFUND_SIGN_IN_SCRIPT,
+  RESERVE_SIGN_IN_SCRIPT,
+} from '../auth/rate-limit.js';
 import { REGISTER_SESSION_SCRIPT, ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
 import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
@@ -79,6 +83,10 @@ export const authRedisStub = (): RedisStub =>
         await stub.pexpire(key, windowMs);
       }
       return [0, 0, 0];
+    })
+    .defineScript(REFUND_SIGN_IN_SCRIPT, async (stub, keys, args) => {
+      for (const key of keys) await stub.zrem(key, args[0] ?? '');
+      return 0;
     })
     .defineScript(CONSUME_SCRIPT, async (stub, keys, args) => {
       const [counterKey = ''] = keys;

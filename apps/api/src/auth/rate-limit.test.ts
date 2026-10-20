@@ -138,14 +138,14 @@ describe('sign-in reservations', () => {
     expect(retryAfterSeconds(910_000, 910_000)).toBe(1);
   });
 
-  it('a proved first factor refunds its IP entry while preserving address attempts', async () => {
+  it('a proved first factor refunds only its own entries from both buckets', async () => {
     await limiter.reserveSignIn('office', 'person@example.com');
     const password = await limiter.reserveSignIn('office', 'person@example.com');
-    await limiter.refundSignInIp(password.attempt);
+    await limiter.refundSignIn(password.attempt);
     expect(await stub.zcard(rateLimitKey(SIGN_IN_IP_RULE.bucket, hashOf('office')))).toBe(1);
     expect(
       await stub.zcard(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashOf('person@example.com'))),
-    ).toBe(2);
+    ).toBe(1);
   });
 
   it('success refunds only its own IP entry and clears the address', async () => {

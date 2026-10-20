@@ -73,7 +73,7 @@ export const retryAfterSeconds = (retryAt: number, now: number): number =>
 /**
  * Reserve before verification: in-flight guesses occupy slots, so
  * parallel requests cannot all verify below the limit. A proved password removes
- * its own IP member; only a complete sign-in resets the address failures.
+ * its own member from both buckets; only a complete sign-in resets address failures.
  * Both buckets are checked in one script before either is changed. A refusal
  * therefore spends neither bucket and does identical work for every address.
  */
@@ -97,6 +97,13 @@ for i = 1, #KEYS do
   redis.call('PEXPIRE', KEYS[i], window)
 end
 return {0, 0, 0}
+`;
+
+export const REFUND_SIGN_IN_SCRIPT = `
+for i = 1, #KEYS do
+  redis.call('ZREM', KEYS[i], ARGV[1])
+end
+return 0
 `;
 
 export interface SignInAttempt {
@@ -214,6 +221,14 @@ export class RateLimiter {
     if (blockedIp) rateLimitRefusals().record(SIGN_IN_IP_RULE.bucket);
     if (blockedEmail) rateLimitRefusals().record(SIGN_IN_EMAIL_RULE.bucket);
     return { attempt, retryAfter: retryAt > 0 ? retryAfterSeconds(retryAt, now) : 0 };
+  }
+
+  async refundSignIn(attempt: SignInAttempt): Promise<void> {
+    const keys = [rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject(attempt.ip))];
+    if (attempt.email !== undefined) {
+      keys.push(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashSubject(attempt.email)));
+    }
+    await this.#redis.eval(REFUND_SIGN_IN_SCRIPT, keys.length, ...keys, attempt.member);
   }
 
   async refundSignInIp(attempt: SignInAttempt): Promise<void> {

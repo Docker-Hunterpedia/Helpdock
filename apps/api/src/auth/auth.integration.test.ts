@@ -324,8 +324,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     });
 
     it('clears address failures after success but retains earlier IP failures', async () => {
-      // Password and TOTP each need a reservation before the full sign-in clears them.
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 9; i++) {
         expect(
           (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
         ).toBe(401);
@@ -338,7 +337,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       }
       const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
       expect(keys).toHaveLength(1);
-      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(18);
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(19);
     });
 
     it('locks the IP after 100 failures across addresses and gives the same refusal for known and unknown accounts', async () => {
@@ -421,14 +420,42 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(warnings[0]).not.toContain('forwarded-header-marker');
     });
 
-    it('refuses by the fourth password-and-two-bad-TOTP round even with fresh challenges (#344)', async () => {
+    it('opens a session after nine password failures and a correct password and TOTP (#343)', async () => {
+      for (let attempt = 0; attempt < 9; attempt++) {
+        const failed = await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' });
+        expect(failed.statusCode).toBe(401);
+      }
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(first.statusCode).toBe(201);
+      expect(first.json().kind).toBe('totp-required');
+      const second = await post('/api/auth/totp', {
+        challengeId: first.json().challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(second.statusCode).toBe(201);
+      expect(second.json().accessToken).toEqual(expect.any(String));
+      expect(cookieOf(second, REFRESH_COOKIE)).toEqual(expect.any(String));
+    });
+
+    it('refuses exactly at the sixth password step after five two-bad-TOTP rounds (#344)', async () => {
       const goodCode = await totpCode();
       const badCode = goodCode === '000000' ? '111111' : '000000';
-      for (let round = 0; round < 4; round++) {
+      for (let round = 1; round <= 6; round++) {
         const first = await post('/api/auth/sign-in', {
           email: seeded.email,
           password: seeded.password,
         });
+        if (round === 6) {
+          expect(first.statusCode).toBe(429);
+          expect(first.json().error.auth).toEqual({ code: 'rate-limited' });
+          expect(Number(first.headers['retry-after'])).toBeGreaterThan(0);
+          expect(Number(first.headers['retry-after'])).toBeLessThanOrEqual(900);
+          break;
+        }
         expect(first.statusCode).toBe(201);
         expect(first.json().kind).toBe('totp-required');
         const challengeId = first.json().challengeId as string;
@@ -438,12 +465,6 @@ describe.skipIf(!hasDocker)('the auth service', () => {
             code: badCode,
             trustDevice: false,
           });
-          if (round === 3) {
-            expect(response.statusCode).toBe(429);
-            expect(response.json().error.auth.code).toBe('rate-limited');
-            expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
-            return;
-          }
           expect(response.statusCode).toBe(401);
           expect(response.json().error.auth).toEqual({
             code: 'totp-mismatch',

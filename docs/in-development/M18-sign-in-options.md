@@ -149,7 +149,7 @@ Recheck with Context7 at the PR, per CLAUDE.md.
 - Related Origin Requests (`/.well-known/webauthn`) cap a credential at five
   distinct registrable-domain labels. That is no basis for a multi-brand
   product, and it is not needed for staff.
-- **Pin the RP ID** in a setting, `auth.webauthn.rpId`, written at first use.
+- **Pin the RP ID** in a setting, `auth.webauthn.rpId`, written by the first successful passkey registration.
   If `APP_URL`'s host later differs:
   - passkey ceremonies are refused, with `passkeys-rp-changed`;
   - the System page and Settings › Authentication show a warning Banner;
@@ -449,7 +449,7 @@ Backlog or never:
 
 | Id | Deliverable | Spec | Effort (d) | Depends on |
 |---|---|---|---|---|
-| M18-01 | **WebAuthn foundation.** `webauthn_credentials` table (install scope, `GLOBAL_TABLES`); `users.webauthn_user_handle`; `auth.webauthn.rpId` pinned at first use and the `passkeys-rp-changed` refusal; a Redis ceremony store (`GETDEL`, 5 min, purpose-bound); a thin `WebAuthnService` over `@simplewebauthn/server` 14.0.3 (RP from `APP_URL`, algorithms `[-8,-7,-257]`, attestation `none`); `methods().passkey`; ADR 0050; ARCHITECTURE §1 Auth row | A §1, §7; D §1.5; ADR 0050 | 3 | — |
+| M18-01 | **WebAuthn foundation.** `webauthn_credentials` table (install scope, `GLOBAL_TABLES`); `users.webauthn_user_handle`; `auth.webauthn.rpId` pinned by the first successful registration and the `passkeys-rp-changed` refusal; a Redis ceremony store (`GETDEL`, 5 min, purpose-bound); a thin `WebAuthnService` over `@simplewebauthn/server` 14.0.3 (RP from `APP_URL`, algorithms `[-8,-7,-257]`, attestation `none`); `methods().passkey`; ADR 0050; ARCHITECTURE §1 Auth row | A §1, §7; D §1.5; ADR 0050 | 3 | — |
 | M18-02 | **Register and manage passkeys.** `GET/POST/PATCH/DELETE /api/me/passkeys` (begin/finish, rename, remove) with step-up (password, TOTP or existing passkey; 5-per-15-min budget), at most 10 per account, `excludeCredentials`, last-factor refusal, audit `auth.passkey.added/.renamed/.removed`, `securityChange` email (en/ar) | ASVS 2.2.3, 2.5.5, 3.7.1 | 2.5 | M18-01 |
 | M18-03 | **Passkey as a second factor.** The challenge answers `POST /api/auth/passkey/second-factor/{options,verify}` beside TOTP and recovery codes, sharing the three-attempt budget and lock; the enrolment challenge accepts a passkey (`second-factor-enrolment-required`, old code aliased); `isSecondFactorRequired` / "has a factor" = TOTP OR passkey; recovery codes issued with the first factor of either kind; redraw by TOTP or passkey; admin "reset second factor" removes passkeys too | ASVS 4.3.1, 2.5.7, 2.6.1 | 3 | M18-01, M18-02 |
 | M18-04 | **Passwordless sign-in.** `POST /api/auth/passkey/{options,verify}`: discoverable, UV required, no `allowCredentials`, same refusal (`invalid-credentials`) for unknown credential, bad signature, deactivated or no-brand account; per-IP budget shared with sign-in; counter check; `last_used_at`; audit `method: passkey, secondFactor: passkey-uv`; refused under SSO enforcement (`sso-required`) | ASVS 2.2.1, 3.2.1; D §1.6 | 2.5 | M18-01, M18-03 |

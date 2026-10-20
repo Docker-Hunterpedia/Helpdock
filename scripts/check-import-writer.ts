@@ -17,6 +17,8 @@ const ALLOWED_MODULES = new Set([
   '../../help-center/slugs.js',
   '../../media/keys.js',
   '../../media/object-purge.js',
+  // M14-08: a pure Zod parse of the arrival record; it writes and sends nothing.
+  '../../tickets/routing/arrival.js',
   '@helpdock/channels',
   '@helpdock/db',
   '@helpdock/importers',
@@ -56,6 +58,7 @@ const REVIEWED_EXPORTS = new Map([
   ['../../help-center/slugs.js', new Set(['resolveSlug'])],
   ['../../media/keys.js', new Set(['attachmentKey'])],
   ['../../media/object-purge.js', new Set(['enqueueObjectPurge'])],
+  ['../../tickets/routing/arrival.js', new Set(['arrivalOf'])],
 ]);
 const FORBIDDEN_IDENTIFIERS = new Set([
   'TicketsService',

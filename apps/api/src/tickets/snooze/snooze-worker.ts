@@ -48,6 +48,8 @@ export interface SnoozeWorkerDeps {
   readonly sla: SlaService;
   readonly snoozeTimers: SnoozeTimerQueue;
   readonly now?: () => Date;
+  /** Tickets one rebuild transaction reads; a test makes it small. */
+  readonly batchSize?: number;
 }
 
 /** A timer may run up to this much before its moment and still fire. */
@@ -151,6 +153,7 @@ export const rebuildSnoozes = async (
   after?: string,
 ): Promise<RebuildResult> => {
   const now = deps.now?.() ?? new Date();
+  const limit = deps.batchSize ?? REBUILD_BATCH;
   let woke = 0;
   let scheduled = 0;
 
@@ -172,7 +175,7 @@ export const rebuildSnoozes = async (
       ),
     )
     .orderBy(asc(tickets.id))
-    .limit(REBUILD_BATCH);
+    .limit(limit);
 
   for (const row of rows) {
     if (row.until === null || row.status !== 'snoozed') {
@@ -190,7 +193,7 @@ export const rebuildSnoozes = async (
     }
   }
 
-  return { woke, scheduled, next: rows.length < REBUILD_BATCH ? undefined : rows.at(-1)?.id };
+  return { woke, scheduled, next: rows.length < limit ? undefined : rows.at(-1)?.id };
 };
 
 /**

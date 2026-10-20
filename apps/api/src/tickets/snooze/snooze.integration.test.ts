@@ -826,6 +826,45 @@ describe.skipIf(!hasDocker)('snooze', () => {
     });
   });
 
+  describe('a long outage', () => {
+    it('wakes every overdue snooze across batches, one transaction per batch', async () => {
+      const made = await Promise.all([1, 2, 3, 4, 5].map(() => createTicket()));
+      for (const { ticket } of made) {
+        await snooze(ticket.id, new Date(Date.now() + 2 * HOUR));
+      }
+      const ids = made.map(({ ticket }) => ticket.id);
+      await owner.db
+        .update(tickets)
+        .set({ snoozedUntil: new Date(Date.now() - HOUR) })
+        .where(
+          sql`${tickets.id} IN (${sql.join(
+            ids.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`,
+        );
+
+      let after: string | undefined;
+      let batches = 0;
+      let woke = 0;
+      do {
+        const cursor = after;
+        const result = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          rebuildSnoozes(tx, { ...slaDeps(), batchSize: 2 }, seeded.brandId, cursor),
+        );
+        batches += 1;
+        woke += result.woke;
+        after = result.next;
+      } while (after !== undefined);
+
+      // Other tests leave snoozed tickets behind, so at least three batches of two.
+      expect(batches).toBeGreaterThanOrEqual(3);
+      expect(woke).toBeGreaterThanOrEqual(5);
+      for (const id of ids) {
+        expect((await rowOf(id)).snoozedUntil).toBeNull();
+      }
+    });
+  });
+
   describe('a Redis that lost its timers', () => {
     it('wakes what is already due and re-adds the timer of what is not', async () => {
       const due = (await createTicket({ subject: 'Overdue snooze' })).ticket;

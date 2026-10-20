@@ -467,7 +467,6 @@ export class RulesRepository {
     return row !== undefined;
   }
 
-  /** How many of `ids` are rows of that kind in this brand. */
   /** Whether any of these statuses is Snoozed, which a rule cannot set (it needs a wake time). */
   async includesSnoozed(tx: DbTransaction, ids: readonly string[]): Promise<boolean> {
     if (ids.length === 0) {
@@ -482,6 +481,7 @@ export class RulesRepository {
     return rows.length > 0;
   }
 
+  /** How many of `ids` are rows of that kind in this brand. */
   async countExisting(
     tx: DbTransaction,
     kind: 'status' | 'department' | 'team' | 'tag',

@@ -337,5 +337,7 @@ describe('deploy template contracts (#337, M15-08 / M15-13)', () => {
     expect(images).toHaveLength(8);
     expect(images[0]).toMatch(/^ghcr\.io\/docker-hunterpedia\/helpdock:\d+\.\d+\.\d+$/);
     expect(new Set(images).size).toBe(1);
+    const metadata = JSON.parse(read('deploy/dokploy/meta.json')) as { version: string };
+    expect(metadata.version).toBe(images[0]?.split(':').at(-1));
   });
 });

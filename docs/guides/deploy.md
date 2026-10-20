@@ -90,6 +90,16 @@ map $http_upgrade $helpdock_connection {
 }
 
 # Inside the HTTPS server block:
+# For inbound-parse email delivery, uncomment this longer-prefix exception.
+# location ^~ /internal/inbound-parse/ {
+#     proxy_pass http://127.0.0.1:3000;
+#     proxy_http_version 1.1;
+#     proxy_set_header Host $host;
+#     proxy_set_header X-Forwarded-Host $host;
+#     proxy_set_header X-Forwarded-Proto $scheme;
+#     proxy_set_header X-Forwarded-For $remote_addr;
+#     proxy_set_header X-Request-Id $request_id;
+# }
 location ^~ /internal/ { return 404; }
 location = /metrics { return 404; }
 location / {
@@ -114,6 +124,8 @@ http:
   routers:
     helpdock:
       rule: 'Host(`support.example.com`) && !PathPrefix(`/internal/`) && !Path(`/metrics`)'
+      # For inbound-parse email delivery, replace the rule above with:
+      # rule: 'Host(`support.example.com`) && (!PathPrefix(`/internal/`) || PathPrefix(`/internal/inbound-parse/`)) && !Path(`/metrics`)'
       entryPoints: [websecure]
       tls:
         certResolver: letsencrypt
@@ -137,7 +149,9 @@ forge the address used by rate limits.
 
 The host-proxy examples above return 404 for `/internal/*` and `/metrics`.
 If using inbound-parse email delivery, allow `/internal/inbound-parse/*` through
-that proxy; it verifies each mailbox brand's shared secret (header or Basic
+that proxy by enabling the nginx exception or replacing the Traefik rule as
+shown above; the longer nginx prefix wins over `/internal/`. Inbound parsing
+verifies each mailbox brand's shared secret (header or Basic
 auth password). Do not block a provider route you need.
 
 The platform templates below ship no path-deny rules. Their residual exposure is:

@@ -175,10 +175,11 @@ the next patch ([security scanning](security-scanning.md)).
   a follow-up PR bumping **both roles** to that published tag in `render.yaml`,
   `.do/app.yaml`, `deploy/dokploy/docker-compose.yml` and
   `deploy/coolify/docker-compose.yml`. Update the pinned version in
-  `docs/guides/deploy.md` too. Run
+  `docs/guides/deploy.md` and the `version` field in
+  `deploy/dokploy/meta.json` too. Run
   `pnpm exec vitest run --project tooling scripts/deploy-templates.test.ts`;
-  it requires all platform image pins to agree. Do not tie this assertion to
-  `apps/api/package.json`: Changesets bumps it before the release image exists,
+  it requires all platform image pins and the Dokploy metadata version to agree.
+  Do not tie this assertion to `apps/api/package.json`: Changesets bumps it before the release image exists,
   while templates must continue pointing at an already published image.
 
 - Check `docker pull ghcr.io/docker-hunterpedia/helpdock:<version>` from a

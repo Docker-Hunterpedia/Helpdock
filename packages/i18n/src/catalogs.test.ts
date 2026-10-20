@@ -148,6 +148,15 @@ describe.each(NAMESPACES)('%s namespace', (namespace) => {
   });
 });
 
+// #343: the rounded minute count drives both plural selection and interpolation.
+it.each(SUPPORTED_LNGS)('uses only count in every %s sign-in wait plural form', (locale) => {
+  const catalog = keysOf(locale, 'auth');
+  for (const form of formsFor(catalog.keys(), 'signIn.rateLimited')) {
+    const text = catalog.get(`signIn.rateLimited_${form}`) ?? '';
+    expect([...text.matchAll(/\{\{(\w+)\}\}/g)].map((match) => match[1])).toEqual(['count']);
+  }
+});
+
 describe('the catalogs as a whole', () => {
   it('carries at least one plural key, so the rules above are exercised', () => {
     const plurals = [...catalogs.values()].flatMap((catalog) =>

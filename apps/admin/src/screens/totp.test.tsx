@@ -143,7 +143,7 @@ it.each([
     );
     await user.click(screen.getByRole('button', { name: t('totp.submit') }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      t('signIn.rateLimited', { count: 2, minutes: 2 }),
+      t('signIn.rateLimited', { count: 2 }),
     );
   },
 );

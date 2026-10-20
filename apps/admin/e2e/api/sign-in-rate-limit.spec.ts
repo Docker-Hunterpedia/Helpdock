@@ -52,7 +52,7 @@ for (const [seconds, minutes] of [
     await page.getByLabel(t('auth:signIn.passwordLabel')).fill('password');
     await page.getByRole('button', { name: t('auth:signIn.submit'), exact: true }).click();
     await expect(page.getByRole('alert')).toHaveText(
-      t('auth:signIn.rateLimited', { count: minutes, minutes }),
+      t('auth:signIn.rateLimited', { count: minutes }),
     );
     await expect(page).toHaveURL(/\/sign-in$/);
     await expect(page.locator('html')).toHaveAttribute('dir', appLocale === 'ar' ? 'rtl' : 'ltr');

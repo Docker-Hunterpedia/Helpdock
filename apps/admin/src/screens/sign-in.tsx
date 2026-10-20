@@ -162,7 +162,7 @@ export function SignIn(): ReactNode {
   const ssoFailure = ssoErrorKey(failure);
   const failureMessage =
     failure === 'rate-limited'
-      ? t('auth:signIn.rateLimited', { count: retryMinutes, minutes: retryMinutes })
+      ? t('auth:signIn.rateLimited', { count: retryMinutes })
       : failure === 'invalid-credentials'
         ? t('auth:signIn.invalidCredentials')
         : failure === 'no-account'

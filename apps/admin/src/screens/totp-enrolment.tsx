@@ -130,7 +130,7 @@ export function TotpEnrolment(): ReactNode {
         switch (error.code) {
           case 'rate-limited': {
             const minutes = retryAfterMinutes(error.retryAfter);
-            setCodeError(t('auth:signIn.rateLimited', { count: minutes, minutes }));
+            setCodeError(t('auth:signIn.rateLimited', { count: minutes }));
             return;
           }
           case 'totp-mismatch':

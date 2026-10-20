@@ -42,7 +42,7 @@ function describeFailure(t: ReturnType<typeof useT>, error: unknown): Failure {
     case 'rate-limited': {
       const minutes = retryAfterMinutes(error.retryAfter);
       return {
-        message: t('auth:signIn.rateLimited', { count: minutes, minutes }),
+        message: t('auth:signIn.rateLimited', { count: minutes }),
         locked: false,
       };
     }

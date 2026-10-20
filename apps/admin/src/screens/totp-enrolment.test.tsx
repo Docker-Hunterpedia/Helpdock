@@ -144,8 +144,6 @@ it.each(['en', 'ar'] as const)(
     await screen.findByText(MOCK_TOTP_SECRET);
     await user.type(screen.getByLabelText(t('enrolment.step1.codeLabel')), MOCK_ENROLMENT_CODE);
     await user.click(screen.getByRole('button', { name: t('enrolment.step1.submit') }));
-    expect(
-      await screen.findByText(t('signIn.rateLimited', { count: 2, minutes: 2 })),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(t('signIn.rateLimited', { count: 2 }))).toBeInTheDocument();
   },
 );

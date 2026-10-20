@@ -304,7 +304,7 @@ describe.skipIf(!hasDocker)('tickets', () => {
       repository: new NotificationsRepository(),
       broadcast: new RedisRealtimeBroadcast(worker),
       pushConfigured: async () => false,
-      queue: { addEmail: async () => undefined, addPush: async () => undefined },
+      queue: { addEmailSchedule: async () => undefined, addPush: async () => undefined },
     });
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
@@ -1216,6 +1216,97 @@ describe.skipIf(!hasDocker)('tickets', () => {
         (await call<TicketList>('GET', `${brandPath(seeded.brandId)}/tickets`, sam)).status,
       ).toBe(200);
     });
+
+    it.each(['search', 'plain'])(
+      'M14-07 %s list orders SLA due under department scope and pages tied due times and nulls',
+      async (mode) => {
+        const label = 'Slaordering';
+        const tag = await call<{ id: string }>('POST', `${brandPath(seeded.brandId)}/tags`, ada, {
+          name: `${label} ${mode}`,
+        });
+        expect(tag.status).toBe(201);
+        const dueTimes = [
+          null,
+          '2026-10-20T11:00:00.000Z',
+          '2026-10-20T09:00:00.000400Z',
+          '2026-10-20T09:00:00.000100Z',
+          null,
+          '2026-10-21T09:00:00.000Z',
+        ];
+        const fixtures: { id: string; due: string | null }[] = [];
+        for (const [index, due] of dueTimes.entries()) {
+          const { ticket } = await createTicket(sam, {
+            subject: label,
+            tagIds: [tag.body.id],
+          });
+          await withSystem(runtime.db, seeded.brandId, (tx) =>
+            tx
+              .update(tickets)
+              .set({
+                firstResponseDueAt:
+                  index === 1
+                    ? new Date('2027-01-01T00:00:00.000Z')
+                    : due === null
+                      ? null
+                      : new Date(due),
+                resolutionDueAt: index === 1 && due !== null ? new Date(due) : null,
+              })
+              .where(eq(tickets.id, ticket.id)),
+          );
+          if (index === 2 || index === 3) {
+            // Preserve sub-millisecond source precision: JS Date would hide the cursor regression.
+            await withSystem(runtime.db, seeded.brandId, (tx) =>
+              tx.execute(
+                sql`UPDATE tickets SET first_response_due_at = ${due}::timestamptz WHERE id = ${ticket.id}`,
+              ),
+            );
+          }
+          fixtures.push({ id: ticket.id, due: due === null ? null : new Date(due).toISOString() });
+        }
+        const hidden = await createTicket(bo, {
+          subject: label,
+          departmentId: billing,
+          tagIds: [tag.body.id],
+        });
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(tickets)
+            .set({
+              resolutionDueAt: new Date('2020-01-01T00:00:00.000Z'),
+            })
+            .where(eq(tickets.id, hidden.ticket.id)),
+        );
+        const expected = [...fixtures]
+          .sort(
+            (a, b) =>
+              (a.due === null
+                ? b.due === null
+                  ? 0
+                  : 1
+                : b.due === null
+                  ? -1
+                  : a.due.localeCompare(b.due)) || a.id.localeCompare(b.id),
+          )
+          .map((row) => row.id);
+        for (const direction of ['asc', 'desc']) {
+          const seen: string[] = [];
+          let cursor: string | null = null;
+          for (let page = 0; page < 10; page++) {
+            const answer: { status: number; body: TicketList } = await call<TicketList>(
+              'GET',
+              `${brandPath(seeded.brandId)}/tickets?tagId=${tag.body.id}${mode === 'search' ? `&q=${label}` : ''}&sort=slaDue&direction=${direction}&limit=1${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`,
+              sam,
+            );
+            expect(answer.status).toBe(200);
+            seen.push(...answer.body.tickets.map((row) => row.id));
+            cursor = answer.body.nextCursor;
+            if (cursor === null) break;
+          }
+          expect(seen).toEqual(expected);
+          expect(seen).not.toContain(hidden.ticket.id);
+        }
+      },
+    );
 
     it('answers 400 for a cursor from another ordering', async () => {
       const page = await call<TicketList>(

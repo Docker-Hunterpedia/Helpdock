@@ -1,5 +1,5 @@
 {
-  "id": "c9eededc-1d7a-44c7-8dc0-7312d16e98a7",
+  "id": "087967c2-22f4-4cab-9eea-042ef253b688",
   "prevId": "daa72b1b-56f7-4199-8b8f-ab2dedb71f9b",
   "version": "7",
   "dialect": "postgresql",
@@ -9166,6 +9166,300 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notification_email_batches": {
+      "name": "notification_email_batches",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "notification_email_batch_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "notification_email_batch_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "scheduled_for": {
+          "name": "scheduled_for",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "urgent": {
+          "name": "urgent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "held_since": {
+          "name": "held_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seen_online_at": {
+          "name": "seen_online_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "send_failures": {
+          "name": "send_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "digest_tick_at": {
+          "name": "digest_tick_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_count": {
+          "name": "item_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "notification_email_batches_one_pending_key": {
+          "name": "notification_email_batches_one_pending_key",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"notification_email_batches\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notification_email_batches_brand_status_idx": {
+          "name": "notification_email_batches_brand_status_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_email_batches_brand_id_brands_id_fk": {
+          "name": "notification_email_batches_brand_id_brands_id_fk",
+          "tableFrom": "notification_email_batches",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notification_email_batches_user_id_users_id_fk": {
+          "name": "notification_email_batches_user_id_users_id_fk",
+          "tableFrom": "notification_email_batches",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notification_email_pacing": {
+      "name": "notification_email_pacing",
+      "schema": "",
+      "columns": {
+        "brand_id": {
+          "name": "brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "step": {
+          "name": "step",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "next_allowed_at": {
+          "name": "next_allowed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quiet_since": {
+          "name": "quiet_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hour_window_start": {
+          "name": "hour_window_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_in_hour": {
+          "name": "sent_in_hour",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "day_window_start": {
+          "name": "day_window_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_in_day": {
+          "name": "sent_in_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "urgent_sent_in_day": {
+          "name": "urgent_sent_in_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_urgent_at": {
+          "name": "last_urgent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_email_pacing_brand_id_brands_id_fk": {
+          "name": "notification_email_pacing_brand_id_brands_id_fk",
+          "tableFrom": "notification_email_pacing",
+          "tableTo": "brands",
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notification_email_pacing_user_id_users_id_fk": {
+          "name": "notification_email_pacing_user_id_users_id_fk",
+          "tableFrom": "notification_email_pacing",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notification_email_pacing_brand_id_user_id_pk": {
+          "name": "notification_email_pacing_brand_id_user_id_pk",
+          "columns": ["brand_id", "user_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.notification_prefs": {
       "name": "notification_prefs",
       "schema": "",
@@ -9181,6 +9475,33 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "email_schedule": {
+          "name": "email_schedule",
+          "type": "notification_email_schedule",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'immediate'"
+        },
+        "digest_hour": {
+          "name": "digest_hour",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 8
+        },
+        "paused_until": {
+          "name": "paused_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_unsubscribed_at": {
+          "name": "email_unsubscribed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "updated_at": {
           "name": "updated_at",
@@ -9205,7 +9526,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "notification_prefs_digest_hour_range": {
+          "name": "notification_prefs_digest_hour_range",
+          "value": "\"notification_prefs\".\"digest_hour\" >= 0 AND \"notification_prefs\".\"digest_hour\" <= 23"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.notifications": {
@@ -9298,6 +9624,25 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "email_state": {
+          "name": "email_state",
+          "type": "notification_email_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_batch_id": {
+          "name": "email_batch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "emailed_at": {
+          "name": "emailed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -9318,6 +9663,49 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notifications_email_pending_idx": {
+          "name": "notifications_email_pending_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"notifications\".\"email_state\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notifications_email_batch_idx": {
+          "name": "notifications_email_batch_idx",
+          "columns": [
+            {
+              "expression": "email_batch_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -9371,6 +9759,15 @@
           "tableFrom": "notifications",
           "tableTo": "users",
           "columnsFrom": ["actor_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "notifications_email_batch_id_notification_email_batches_id_fk": {
+          "name": "notifications_email_batch_id_notification_email_batches_id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "notification_email_batches",
+          "columnsFrom": ["email_batch_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
@@ -14188,13 +14585,6 @@
           "type": "bytea",
           "primaryKey": false,
           "notNull": false
-        },
-        "single_key_shortcuts": {
-          "name": "single_key_shortcuts",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         }
       },
       "indexes": {
@@ -15897,6 +16287,36 @@
       "name": "meta_token_kind",
       "schema": "public",
       "values": ["system_user", "page", "instagram_user"]
+    },
+    "public.notification_email_batch_kind": {
+      "name": "notification_email_batch_kind",
+      "schema": "public",
+      "values": ["immediate", "hourly", "daily"]
+    },
+    "public.notification_email_batch_status": {
+      "name": "notification_email_batch_status",
+      "schema": "public",
+      "values": ["pending", "sent", "empty", "failed"]
+    },
+    "public.notification_email_schedule": {
+      "name": "notification_email_schedule",
+      "schema": "public",
+      "values": ["immediate", "hourly", "daily", "off"]
+    },
+    "public.notification_email_state": {
+      "name": "notification_email_state",
+      "schema": "public",
+      "values": [
+        "pending",
+        "sent",
+        "skipped_read",
+        "skipped_paused",
+        "skipped_off",
+        "skipped_scope",
+        "skipped_failed",
+        "skipped_unconfigured",
+        "withdrawn"
+      ]
     },
     "public.notification_kind": {
       "name": "notification_kind",

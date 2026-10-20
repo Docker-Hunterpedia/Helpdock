@@ -37,14 +37,11 @@ const controls = [
   ['select', '<select><option>First</option></select>'],
   ['number input', '<input type="number">'],
   ['DatePicker input', '<input type="date">'],
-  ['checkbox', '<input type="checkbox">'],
-  ['radio', '<input type="radio">'],
   ['range', '<input type="range">'],
   ['MUI Select', '<div role="combobox" tabindex="0"></div>'],
   ['Autocomplete', '<input role="combobox">'],
   ['ARIA spinbutton', '<div role="spinbutton" tabindex="0"></div>'],
   ['ARIA slider', '<div role="slider" tabindex="0"></div>'],
-  ['ARIA switch', '<div role="switch" tabindex="0"></div>'],
   ['ARIA textbox', '<div role="textbox" tabindex="0"></div>'],
   ['contenteditable child', '<div contenteditable="true"><span tabindex="0"></span></div>'],
   [
@@ -124,10 +121,59 @@ describe('M14-01 keyboard ownership', () => {
     container.append(toast);
     expect(screen.getByRole('status')).toHaveTextContent('Saved');
     fireEvent.keyDown(document.body, { key: 'g' });
-    expect(screen.getAllByRole('status')).toHaveLength(2);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
     fireEvent.keyDown(document.body, { key: 'q' });
     expect(screen.getByRole('status')).toHaveTextContent('Saved');
   });
+
+  it('keeps an idle polite atomic live region mounted without a status role', async () => {
+    const { container } = await renderKeyboard();
+    const region = container.querySelector('[aria-live="polite"][aria-atomic="true"]');
+    expect(region).not.toBeNull();
+    expect(region).toBeEmptyDOMElement();
+    expect(region).not.toHaveAttribute('role');
+    fireEvent.keyDown(document.body, { key: 'g' });
+    expect(region).toHaveTextContent('g');
+    expect(region).not.toHaveAttribute('role');
+  });
+
+  it.each([
+    '<button>Action</button>',
+    '<input type="checkbox">',
+    '<input type="radio">',
+    '<input type="button">',
+    '<input type="submit">',
+    '<div role="switch" tabindex="0"></div>',
+    '<div role="checkbox" tabindex="0"></div>',
+    '<div role="radio" tabindex="0"></div>',
+  ])('allows a letter shortcut on a focused non-typing control: %s', async (html) => {
+    const { container, shortcut } = await renderKeyboard();
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    container.append(host);
+    const control = host.firstElementChild as HTMLElement;
+    control.focus();
+    expect(control).toHaveFocus();
+    expect(fireEvent.keyDown(control, { key: 'j' })).toBe(false);
+    expect(shortcut).toHaveBeenCalledOnce();
+  });
+
+  it.each(['aria-hidden', 'fading'])(
+    'releases keys when a dialog is %s during exit',
+    async (exit) => {
+      const { container, shortcut } = await renderKeyboard();
+      const transition = document.createElement('div');
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      transition.append(dialog);
+      container.append(transition);
+      expect(fireEvent.keyDown(document.body, { key: 'j' })).toBe(true);
+      if (exit === 'aria-hidden') transition.setAttribute('aria-hidden', 'true');
+      else transition.style.opacity = '0';
+      expect(fireEvent.keyDown(document.body, { key: 'j' })).toBe(false);
+      expect(shortcut).toHaveBeenCalledOnce();
+    },
+  );
 
   it('never cancels an unmatched second sequence key', async () => {
     const { shortcut } = await renderKeyboard();

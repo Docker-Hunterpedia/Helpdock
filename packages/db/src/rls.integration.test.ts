@@ -65,6 +65,8 @@ import {
   metaAccounts,
   metaConversations,
   metaDeliveries,
+  notificationEmailBatches,
+  notificationEmailPacing,
   notifications,
   outbox,
   reportAgentDaily,
@@ -769,6 +771,22 @@ const fixtures = [
         email: false,
         push: false,
       }),
+  },
+  {
+    name: 'notification_email_batches',
+    // M14-10. Written by the worker for its owner, as `notifications` is.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(notificationEmailBatches).values({
+        brandId,
+        userId,
+        kind: 'immediate',
+        scheduledFor: new Date(),
+      }),
+  },
+  {
+    name: 'notification_email_pacing',
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(notificationEmailPacing).values({ brandId, userId }),
   },
   {
     name: 'widget_settings',
@@ -1691,6 +1709,57 @@ describe.skipIf(!hasDocker)('row-level security', () => {
           email: false,
           push: false,
         }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+  });
+
+  describe("a person's email batches and pacing (M14-10)", () => {
+    const ownerId = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const batchOwners = async (tx: DbTransaction): Promise<string[]> =>
+      (
+        await tx.select({ userId: notificationEmailBatches.userId }).from(notificationEmailBatches)
+      ).map((row) => row.userId);
+    const pacingOwners = async (tx: DbTransaction): Promise<string[]> =>
+      (
+        await tx.select({ userId: notificationEmailPacing.userId }).from(notificationEmailPacing)
+      ).map((row) => row.userId);
+
+    beforeAll(async () => {
+      await db.insert(users).values({ id: ownerId, email: 'paced@example.com', name: 'Paced' });
+      await withSystem(db, brandA, async (tx) => {
+        await tx.insert(notificationEmailBatches).values({
+          brandId: brandA,
+          userId: ownerId,
+          kind: 'daily',
+          scheduledFor: new Date(),
+        });
+        await tx.insert(notificationEmailPacing).values({ brandId: brandA, userId: ownerId });
+      });
+    });
+
+    it('is its owner’s and the worker’s alone, an Admin of the brand included', async () => {
+      expect(await withTenant(db, as(ownerId), batchOwners)).toEqual([ownerId]);
+      expect(await withTenant(db, as(ownerId), pacingOwners)).toEqual([ownerId]);
+      expect(await withSystem(db, brandA, batchOwners)).toContain(ownerId);
+      expect(await withTenant(db, as(userId), batchOwners)).not.toContain(ownerId);
+      expect(await withTenant(db, as(userId), pacingOwners)).not.toContain(ownerId);
+    });
+
+    it('cannot be written for somebody else by a member of staff', async () => {
+      const rejection = await withTenant(db, as(userId), (tx) =>
+        tx.insert(notificationEmailPacing).values({ brandId: brandA, userId: ownerId }),
       ).then(
         () => undefined,
         (error: unknown) => error as { cause?: { message?: string } },

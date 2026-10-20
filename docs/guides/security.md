@@ -186,8 +186,9 @@ replies.
   ([install](install.md#install)).
 - Back up `.env` somewhere other than the server
   ([operations](operations.md#backups)).
-- Keep `/internal/*` and `/metrics` away from the internet. The shipped
-  Caddyfile answers 404 for `/internal/*`, and the api refuses `/metrics` to
+- Keep `/internal/*` and `/metrics` away from the internet, except
+  `/internal/inbound-parse/*` on the API and admin hosts. The shipped Caddyfiles
+  answer 404 for the other internal paths, and the api refuses `/metrics` to
   a request that came through a proxy without `METRICS_TOKEN`
   ([operations](operations.md#metrics-is-never-routed-publicly)); a proxy of
   your own should do the same.

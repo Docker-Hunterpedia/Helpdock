@@ -119,7 +119,7 @@ export class NotificationPreferencesController {
     @Body(new ZodValidationPipe(NotificationPreferencesUpdateDto))
     body: NotificationPreferencesUpdateDto,
   ): Promise<NotificationPreferencesView> {
-    return this.#notifications.updatePreferences(getTx(), userId(), body.preferences);
+    return this.#notifications.updatePreferences(getTx(), userId(), body);
   }
 
   @Post('push-subscriptions')

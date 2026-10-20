@@ -100,7 +100,7 @@ test.describe('the keys', () => {
 
     await page.keyboard.press('g');
     const chip = page
-      .getByRole('status')
+      .locator('[aria-live="polite"][aria-atomic="true"]')
       .filter({ hasText: t('tickets:keyboard.shortcut.goTo.myOpen') });
     await expect(chip).toBeVisible();
 

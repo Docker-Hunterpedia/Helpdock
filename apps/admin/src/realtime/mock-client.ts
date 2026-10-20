@@ -1,5 +1,6 @@
 import type {
   NotificationCreated,
+  NotificationRead,
   PresenceMap,
   PresenceStatus,
   SettablePresenceStatus,
@@ -142,6 +143,10 @@ export class MockRealtimeClient implements RealtimeClient {
   /** Plays the server: a new notification for the signed-in person (M3-07). */
   emitNotificationCreated(created: NotificationCreated): void {
     this.#listeners.notificationCreated(created);
+  }
+
+  emitNotificationRead(read: NotificationRead): void {
+    this.#listeners.notificationRead(read);
   }
 
   emitTicketMessage(event: TicketMessageEvent): void {

@@ -98,7 +98,7 @@ export const isTyping = (target: EventTarget | null | undefined): boolean => {
   }
   if (
     target.closest(
-      'input, textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"], [role="spinbutton"], [role="slider"], [role="checkbox"], [role="radio"], [role="switch"]',
+      'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select, [role="textbox"], [role="searchbox"], [role="combobox"], [role="spinbutton"], [role="slider"]',
     ) !== null
   ) {
     return true;
@@ -120,9 +120,12 @@ const isVisibleOverlay = (overlay: Element): boolean => {
     if (node.hasAttribute('hidden') || node.getAttribute('aria-hidden') === 'true') {
       return false;
     }
+    // MUI Fade's inline target changes before the computed opacity finishes transitioning.
+    if (node instanceof HTMLElement && node.style.opacity === '0') return false;
     const style = getComputedStyle(node);
     if (
       style.display === 'none' ||
+      style.opacity === '0' ||
       style.visibility === 'hidden' ||
       style.visibility === 'collapse'
     ) {

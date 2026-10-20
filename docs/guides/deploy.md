@@ -92,6 +92,7 @@ map $http_upgrade $helpdock_connection {
 # Inside the HTTPS server block:
 # For inbound-parse email delivery, uncomment this longer-prefix exception.
 # location ^~ /internal/inbound-parse/ {
+#     client_max_body_size 40m;
 #     proxy_pass http://127.0.0.1:3000;
 #     proxy_http_version 1.1;
 #     proxy_set_header Host $host;
@@ -150,8 +151,11 @@ forge the address used by rate limits.
 The host-proxy examples above return 404 for `/internal/*` and `/metrics`.
 If using inbound-parse email delivery, allow `/internal/inbound-parse/*` through
 that proxy by enabling the nginx exception or replacing the Traefik rule as
-shown above; the longer nginx prefix wins over `/internal/`. Inbound parsing
-verifies each mailbox brand's shared secret (header or Basic
+shown above; the longer nginx prefix wins over `/internal/`. The exception
+sets `client_max_body_size 40m` to match the API's `INBOUND_PARSE_BODY_LIMIT`
+(40 × 1024 × 1024 bytes in `apps/api/src/channels/inbound/inbound-parse-body.ts`),
+so nginx does not reject attachment-bearing messages with its default 1 MB limit.
+Inbound parsing verifies each mailbox brand's shared secret (header or Basic
 auth password). Do not block a provider route you need.
 
 The platform templates below ship no path-deny rules. Their residual exposure is:

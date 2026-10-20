@@ -103,9 +103,10 @@ and so to the sheet and this guide, with the deliverable that builds it.
 A key without a modifier is never taken from you while you are writing: in a
 text field, a select, the composer or a rich-text editor, a letter is a
 letter, and nothing is taken while an input method is composing a character.
-Form controls also keep their keys, including checkboxes, radios, MUI
-Select and Autocomplete controls, and date inputs. A focused button outside
-an overlay can still use letter shortcuts. An open dialog, menu or list box
+Text-entry and value controls keep their keys, including MUI Select and
+Autocomplete controls, date inputs and sliders. Checkboxes, radios, switches,
+button and submit inputs, and real buttons still allow letter shortcuts
+outside an overlay. An open dialog, menu or list box
 owns the keyboard even while focus is moving into it; page shortcuts,
 including modifier shortcuts, wait until it closes. Outside overlays, a
 shortcut with `⌘` or `Ctrl` still works in a field; send shortcuts only answer

@@ -54,6 +54,7 @@ const shared = {
 export const ticketCursorSchema = z.discriminatedUnion('s', [
   z.object({ s: z.literal('updatedAt'), v: z.iso.datetime(), ...shared }),
   z.object({ s: z.literal('createdAt'), v: z.iso.datetime(), ...shared }),
+  z.object({ s: z.literal('slaDue'), v: z.iso.datetime().nullable(), ...shared }),
   z.object({ s: z.literal('number'), v: z.int().positive(), ...shared }),
   z.object({ s: z.literal('priority'), v: z.enum(['low', 'medium', 'high', 'urgent']), ...shared }),
 ]);
@@ -61,7 +62,7 @@ export const ticketCursorSchema = z.discriminatedUnion('s', [
 export interface TicketCursor {
   readonly sort: TicketSort;
   readonly direction: TicketSortDirection;
-  readonly value: string | number;
+  readonly value: string | number | null;
   readonly id: string;
   /** The page was read with the search's fuzzy half; so is the next one. */
   readonly fuzzy?: true;

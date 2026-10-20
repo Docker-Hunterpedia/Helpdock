@@ -171,7 +171,7 @@ L 6 d.
 | M14-04 | Bulk edit UI: checkboxes, `x` / `Shift`+`x` / Shift-click, bulk bar, preview dialog, Undo toast | 4 d | M14-01, M14-03 |
 | M14-05 | Command palette: quick-search read, page and settings registry, actions, recents | 6 d | M14-01 |
 | M14-06 | Inbox empty states with keyboard hints, and the `Kbd` component | 1.5 d | M14-01 |
-| M14-07 | Sort by SLA due | 1.5 d | — |
+| M14-07 | Sort by SLA due — implemented, pending review (#294) | 1.5 d | — |
 | M14-08 | Routing trail: arrival recorded on every creation path, "How it got here" on the ticket | 4 d | — |
 | M14-09 | Routing page and Test routing dry run | 6 d | M14-08 |
 | M14-10 | Notification pacing engine: batching with back-off, digests, pause, read re-check, presence hold | 8 d | — |
@@ -222,15 +222,6 @@ tab, with the sheet also in the account menu so a person who turned `?` off
 can reach it; `Kbd` lands here
 rather than in M14-06, because the sheet draws with it. Guide:
 [Keyboard shortcuts](../guides/keyboard-shortcuts.md).
-
-Review regression fix (PR #324): the sequence chip keeps its polite live
-region mounted but exposes `status` only while a sequence is pending, so an
-idle chip does not compete with toast statuses. The keyboard guard covers
-native and ARIA form controls, editable descendants, open overlays even
-outside the event target, and IME composition. Overlay keys remain with the
-overlay, including modified Enter; a closed sheet releases the keyboard
-before its exit animation ends. Unmatched sequence keys are not cancelled.
-The unchanged statuses and SLA specs reproduce the idle-status failure.
 
 One registry (`apps/admin/src/keyboard/registry.ts`, new) names every shortcut
 once: its id, keys, scope (global, list, ticket, composer), the i18n label, and
@@ -447,9 +438,34 @@ M14-23.
 unsatisfied clocks, breached ones first by how long ago, then soonest due, then
 tickets without a clock. A stored generated column `tickets.sla_next_due_at`
 (least of the two due columns the SLA engine already maintains) with an index
-`(brand_id, department_id, sla_next_due_at)`. Offered in the list's sort menu
+`(brand_id, sla_next_due_at, id)`. Offered in the list's sort menu
 and the view editor. The 50k-ticket p95 under D §14 is re-measured for this
 sort.
+
+Implementation (M14-07, #294): complete, pending PR review. The engine's
+`summaryColumns` writes `first_response_due_at` and `resolution_due_at` only
+for counting clocks; PostgreSQL generates `sla_next_due_at` with `least` of
+those columns (one null leaves the other; both null produce null). The index
+is `(brand_id, sla_next_due_at, id)`. The API, list Sort menu and
+view editor accept `slaDue`. Urgency is always ascending, nulls last, with
+ascending ticket ID ties, regardless of `direction` (including its default).
+Nullable cursors cover both the transition into the no-clock tail and ties
+within it. Existing RLS and exact-reference search precedence still apply.
+
+Review-approved departure from the original index wording: the department RLS
+predicate cannot be an index condition, so putting `department_id` before the
+sort key prevents an ordered scan of the scoped list. The explicit brand
+equality in `liveTicketsOf` lets `(brand_id, sla_next_due_at, id)` serve both
+Admin and Agent lists, with department RLS filtering rows. The generated
+column uses millisecond precision, matching the cursor timestamps. The
+performance harness includes SLA due and SLA due page 2 for both roles.
+
+Validation covers cursor encoding and predicates, saved-view schemas, clock
+exclusion, generated values through real SLA transitions, department-scoped
+ordering and pagination with ties, and the menu/list/view editor in `en` and
+`ar`. The 50k-ticket p95 measurement in DOMAIN-RULES §14 was **not re-run
+locally**; the performance gate remains to be measured on the constrained
+reference host. No new configuration or ADR is needed.
 
 ### M14-08 Routing trail
 
@@ -528,6 +544,26 @@ any case.
 
 ### M14-10 Notification pacing engine
 
+**Status: built, in review** (issue #297). Built as below, with
+[ADR 0037](../decisions/0037-paced-notification-email-and-digests.md) accepted
+and [DOMAIN-RULES §20](../planning/DOMAIN-RULES.md#20-notification-delivery)
+written, and these differences: the schedule's Right away value is
+`immediate`, as the batch kind is; batches also keep `urgent`, `held_since`
+and `seen_online_at`, and pacing `last_urgent_at`, which the urgent interval
+and a resumable presence hold need; the hold's "away for 5 minutes" is
+measured from the last time the send found the person online, re-checked every
+minute; `bulk_operation_id` is left to M14-03, and the folding already groups
+by it; the daily digest's hour is read in the brand's time zone until M14-12
+adds `users.time_zone`; opening a ticket (`GET /tickets/:id` by a person)
+marks their notifications about it read; an install without SMTP marks rows
+`skipped_unconfigured` at scheduling rather than opening batches; the English
+catalog says
+"replied 2 times" where the artboard says "twice" (English has no dual plural
+form; Arabic uses its own). For M14-11, `GET`/`PUT /api/me/notification-preferences`
+already carry the schedule, digest hour and pause (`emailDelivery`); the test
+email, the unsubscribe link and the `List-Unsubscribe` headers are left to it.
+Guide: [Notifications › Email](../guides/notifications.md#email).
+
 Email only; the bell is always immediate and push stays immediate (both obey
 pause). A person chooses an **email schedule**:
 
@@ -584,7 +620,25 @@ compute its send time from the pacing state, add a delayed
 `job_receipts` and a deterministic `Message-ID` from the batch id);
 `notify.digest.tick` (hourly cron, one child job per brand, D §1.4);
 `notify.email_rebuild` (boot and hourly: recreate batch jobs for pending rows).
-The current per-notification `notify.email` job is retired.
+The current per-notification `notify.email` job hands off recent (at most 24
+hours), email-enabled legacy rows without a transactional send receipt; the
+schedule path does the same for delayed `notification.created` events. Other
+legacy rows are dropped with a log. Send/render failures count only on a job's
+last attempt, once per exhausted job across hourly rebuilds; database and other
+infrastructure errors do not count. Five exhausted send jobs terminally mark a
+batch `failed` and its rows `skipped_failed`,
+freeing the pending slot and logging once at warn. Rebuild locks people in
+user-id order, matching digest ticks. Ticket-read bell invalidation uses a
+dedicated `notification:read` realtime event; `notification:created` remains
+reserved for new notifications, including future new-notification sounds (M14-25).
+
+The daily repeat guard uses the represented tick hour. A daily digest over a
+cap at its tick waits for the next day; a missed cron hour skips that day.
+Ticks run at UTC hour boundaries: in half-hour or quarter-hour zones, the
+chosen hour sends at the tick within that local hour (08:30 in Asia/Kolkata
+for hour 08). Opening a ticket also invalidates the bell over its existing
+realtime path. Updating the schedule alone preserves the stored preference
+matrix, including missing keys that follow defaults.
 
 M12-09's AI notification kinds (`ai_budget`, `ai_provider`, `ai_handoff`) are
 rows in the same preference matrix and follow these pacing rules.
@@ -596,8 +650,10 @@ the schedule as `RadioCard`s with the digest hour, the person's time zone (from
 M14-12), *Pause* with its menu and the time it ends, *Send me a test email*,
 and a status line when something stops emails ("Paused until 17:00 · Resume",
 "You unsubscribed on 3 October · Turn email back on", "Email is off"). The
-same line heads the bell's panel. Urgent kinds carry an "Urgent" caption in the
-matrix.
+same line heads the bell's panel. Distinguish missing install SMTP
+(`skipped_unconfigured`) from a person's Off choice (`skipped_off`); show
+that email is not configured on this install when applicable. Urgent kinds
+carry an "Urgent" caption in the matrix.
 
 **One-click unsubscribe.** Every notification email carries
 `List-Unsubscribe` (an HTTPS link with a token) and `List-Unsubscribe-Post:
@@ -929,7 +985,7 @@ New tenant tables:
 |---|---|---|---|
 | `ticket_bulk_operations` | brand + owner (the actor only) | `actor_id`, `changes jsonb` (ids and enums), `ticket_count`, `undo_until`, `undone_at` | 7 days |
 | `ticket_bulk_operation_items` | brand + **department** (denormalised by the same trigger as `ticket_activity`) | `operation_id`, `ticket_id`, `department_id`, `before jsonb`, `after jsonb` | 7 days, with the operation |
-| `notification_email_batches` | brand + owner | `user_id`, `kind` (`immediate`, `hourly`, `daily`), `scheduled_for`, `sent_at`, `item_count`, `status` | 30 days, as notifications |
+| `notification_email_batches` | brand + owner | `user_id`, `kind` (`immediate`, `hourly`, `daily`), `scheduled_for`, `sent_at`, `item_count`, `status` (`pending`, `sent`, `empty`, `failed`), `send_failures`, `digest_tick_at` | 30 days, as notifications |
 | `notification_email_pacing` | brand + owner; PK `(brand_id, user_id)` | `step`, `next_allowed_at`, `quiet_since`, `hour_window_start`, `sent_in_hour`, `day_window_start`, `sent_in_day`, `urgent_sent_in_day` | kept while the person holds a role |
 | `setup_checklist_dismissals` | brand + owner; PK `(brand_id, user_id)` | `dismissed_at` | with the role |
 
@@ -937,9 +993,9 @@ Changed tables:
 
 | Table | Change |
 |---|---|
-| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, department_id, sla_next_due_at)`; GIN on `custom` |
+| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, sla_next_due_at, id)`; GIN on `custom` |
 | `ticket_statuses` | built-in key `snoozed`, seeded for every brand by `seedBrandStatuses` (`packages/db/src/ticket-statuses.ts`) and backfilled by the migration; its state and flags fixed like the other system statuses |
-| `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `withdrawn`), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
+| `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (reserved for M14-03)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
 | `notification_prefs` (install scope, per person) | `email_schedule`, `digest_hour`, `paused_until`, `email_unsubscribed_at` |
 | `users` (install scope) | `public_name`, `job_title_en`, `job_title_ar`, `public_phone`, `photo_media_id`, `time_zone`, `single_key_shortcuts boolean default true` |
 | `canned_responses` (macros share it) | `shortcut text` unique per owner scope, `use_count int` |

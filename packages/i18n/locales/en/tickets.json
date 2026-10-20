@@ -532,6 +532,20 @@
     "priority": {
       "desc": "highest priority first",
       "asc": "lowest priority first"
+    },
+    "slaDue": {
+      "asc": "SLA due",
+      "desc": "SLA due",
+      "hint": "Breached first, then soonest due"
+    },
+    "action": "Sort",
+    "label": "Sort by",
+    "menu": {
+      "updatedAt": "Last updated",
+      "createdNewest": "Created, newest first",
+      "createdOldest": "Created, oldest first",
+      "priority": "Priority",
+      "slaDue": "SLA due"
     }
   },
   "viewBar": {

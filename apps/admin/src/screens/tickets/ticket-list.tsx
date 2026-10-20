@@ -9,6 +9,7 @@ import { EmptyState } from '../../shell/empty-state.tsx';
 import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
+import { SortMenu } from './sort-menu.tsx';
 import { TicketRow } from './ticket-row.tsx';
 import { TicketListSkeleton } from './ticket-skeletons.tsx';
 
@@ -140,6 +141,7 @@ export function TicketList({
             {heading}
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <SortMenu filters={filters} onChange={onFiltersChange} />
             <Button
               ref={filterButton}
               variant="outlined"

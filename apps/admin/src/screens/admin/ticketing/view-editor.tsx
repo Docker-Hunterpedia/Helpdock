@@ -364,7 +364,7 @@ export function ViewEditor({
               sortChoice(filters),
               SORT_CHOICES.map((choice) => {
                 const [sort, direction] = choice.split(':') as [
-                  'updatedAt' | 'createdAt' | 'priority',
+                  'updatedAt' | 'createdAt' | 'priority' | 'slaDue',
                   'asc' | 'desc',
                 ];
                 return { value: choice, label: t(`tickets:sort.${sort}.${direction}`) };
@@ -376,6 +376,11 @@ export function ViewEditor({
               }
             },
           )}
+          {filters.sort === 'slaDue' ? (
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {t('tickets:sort.slaDue.hint')}
+            </Typography>
+          ) : null}
         </Box>
       </Box>
 

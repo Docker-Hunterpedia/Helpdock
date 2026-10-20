@@ -53,6 +53,7 @@ const SORT_COLUMNS: Record<TicketSort, { readonly column: PgColumn; readonly cas
   createdAt: { column: tickets.createdAt, cast: 'timestamptz' },
   number: { column: tickets.number, cast: 'bigint' },
   priority: { column: tickets.priority, cast: 'ticket_priority' },
+  slaDue: { column: tickets.slaNextDueAt, cast: 'timestamptz' },
 };
 
 /**
@@ -366,6 +367,18 @@ const escapeLike = (term: string): string =>
  * answer the first from an index in one seek.
  */
 const keysetFilter = (cursor: TicketCursor): SQL => {
+  // SLA urgency has one direction: oldest breach, nearest due, then no clock.
+  // NULL needs its own branch: SQL row comparisons cannot step through it.
+  if (cursor.sort === 'slaDue') {
+    const due = tickets.slaNextDueAt;
+    if (cursor.value === null) {
+      return and(isNull(due), gt(tickets.id, cursor.id)) as SQL;
+    }
+    return or(
+      gt(sql`(${due}, ${tickets.id})`, sql`(${cursor.value}::timestamptz, ${cursor.id}::uuid)`),
+      isNull(due),
+    ) as SQL;
+  }
   const { column, cast } = SORT_COLUMNS[cursor.sort];
   const row = sql`(${column}, ${tickets.id})`;
   // Cast both halves explicitly. The schema already types the value per sort,
@@ -489,6 +502,9 @@ export const ticketFilters = ({
  * lands between them would drop one row or repeat it.
  */
 export const ticketOrder = (sort: TicketSort, direction: TicketSortDirection): SQL[] => {
+  if (sort === 'slaDue') {
+    return [sql`${tickets.slaNextDueAt} asc nulls last`, asc(tickets.id)];
+  }
   const order = direction === 'desc' ? desc : asc;
 
   return [order(SORT_COLUMNS[sort].column), order(tickets.id)];
@@ -500,7 +516,7 @@ export const ticketOrder = (sort: TicketSort, direction: TicketSortDirection): S
  * tickets the search term names.
  */
 export const cursorAfter = (
-  row: { readonly id: string; readonly sortValue: string | number | Date },
+  row: { readonly id: string; readonly sortValue: string | number | Date | null },
   sort: TicketSort,
   direction: TicketSortDirection,
   {
@@ -524,9 +540,10 @@ export const sortValueOf = (
     readonly createdAt: Date;
     readonly number: number;
     readonly priority: string;
+    readonly slaNextDueAt: Date | null;
   },
   sort: TicketSort,
-): string | number | Date => {
+): string | number | Date | null => {
   switch (sort) {
     case 'updatedAt':
       return row.updatedAt;
@@ -536,6 +553,8 @@ export const sortValueOf = (
       return row.number;
     case 'priority':
       return row.priority;
+    case 'slaDue':
+      return row.slaNextDueAt;
   }
 };
 

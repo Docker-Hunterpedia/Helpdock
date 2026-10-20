@@ -271,7 +271,7 @@ describe('g sequences', () => {
     await user.keyboard('g');
     const chip = await screen.findByText(
       (_text, node) =>
-        node?.getAttribute('role') === 'status' && (node.textContent ?? '').startsWith('g…'),
+        node?.getAttribute('aria-live') === 'polite' && (node.textContent ?? '').startsWith('g…'),
     );
     expect(chip.textContent).toContain('i My open');
     expect(chip.textContent).toContain('s Settings');

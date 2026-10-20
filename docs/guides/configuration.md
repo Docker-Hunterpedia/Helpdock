@@ -484,6 +484,13 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_META_APP_SECRET` | `meta.appSecret` | install | yes | — | App secret of the Meta developer app. Every webhook from Meta is signed with it (X-Hub-Signature-256) and refused without a match. |
 | `HD_META_INSTAGRAM_APP_SECRET` | `meta.instagramAppSecret` | install | yes | — | Instagram app secret, from the Instagram product of the Meta app. Empty when Instagram webhooks are signed with the app secret; a webhook is accepted when either matches. |
 | `HD_META_WEBHOOK_VERIFY_TOKEN` | `meta.webhookVerifyToken` | install | yes | — | The token Meta sends with its callback-URL handshake. Generated on first read when empty; paste the same value into the Meta dashboard. |
+| `HD_NOTIFY_EMAIL_FIRST_WAIT_MINUTES` | `notify.email.firstWaitMinutes` | install | no | `2` | Right away email: minutes from the first notification to its email, gathering what arrives meanwhile. |
+| `HD_NOTIFY_EMAIL_BACKOFF_MINUTES` | `notify.email.backoffMinutes` | install | no | `[10,20,40,60]` | Right away email: minutes between emails while more keeps arriving, one step per email; the last step repeats. A JSON array. |
+| `HD_NOTIFY_EMAIL_QUIET_RESET_MINUTES` | `notify.email.quietResetMinutes` | install | no | `120` | Right away email: after this many minutes with nothing new, the next email waits the first wait again. |
+| `HD_NOTIFY_EMAIL_URGENT_INTERVAL_MINUTES` | `notify.email.urgentIntervalMinutes` | install | no | `5` | Right away email: a mention, SLA breach or escalation may cut the wait, but no more often than every this many minutes. |
+| `HD_NOTIFY_EMAIL_URGENT_PER_DAY` | `notify.email.urgentPerDay` | install | no | `8` | Right away email: how many times a day an urgent notification may cut the wait. |
+| `HD_NOTIFY_EMAIL_PER_HOUR` | `notify.email.perHour` | install | no | `6` | Most notification emails one person gets from one brand in an hour, digests included. |
+| `HD_NOTIFY_EMAIL_PER_DAY` | `notify.email.perDay` | install | no | `40` | Most notification emails one person gets from one brand in a day, digests included. |
 
 SAML connections may set `idpMetadataUrl`. M11-03 validates it on save and
 refreshes enabled providers daily at 04:45 UTC through the maintenance worker;

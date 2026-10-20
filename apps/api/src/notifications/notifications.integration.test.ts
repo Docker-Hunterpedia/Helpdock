@@ -1,4 +1,3 @@
-import type { EmailMessage } from '@helpdock/channels';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   createDb,
@@ -15,9 +14,8 @@ import {
 } from '@helpdock/db';
 import {
   enqueueOutbox,
-  type NotifyEmailPayload,
+  type NotifyEmailSchedulePayload,
   type NotifyPushPayload,
-  notifyEmailJob,
   silentLogger,
 } from '@helpdock/jobs';
 import {
@@ -31,7 +29,6 @@ import {
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import type { Job } from 'bullmq';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
@@ -41,7 +38,6 @@ import type { RealtimeBroadcastInput } from '../realtime/broadcast.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
-import { createNotifyProcessor } from './delivery.js';
 import {
   CONSUMED_EVENTS,
   createFanOutHandler,
@@ -103,7 +99,7 @@ describe.skipIf(!hasDocker)('notifications', () => {
 
   const repository = new NotificationsRepository();
   const frames: RealtimeBroadcastInput[] = [];
-  const emailJobs: NotifyEmailPayload[] = [];
+  const emailJobs: NotifyEmailSchedulePayload[] = [];
   const pushJobs: NotifyPushPayload[] = [];
   const handled = new Set<string>();
 
@@ -201,7 +197,7 @@ describe.skipIf(!hasDocker)('notifications', () => {
       repository,
       broadcast: { emit: async (input) => void frames.push(input) },
       queue: {
-        addEmail: async (_jobId, payload) => void emailJobs.push(payload),
+        addEmailSchedule: async (_jobId, payload) => void emailJobs.push(payload),
         addPush: async (_jobId, payload) => void pushJobs.push(payload),
       },
     });
@@ -450,35 +446,17 @@ describe.skipIf(!hasDocker)('notifications', () => {
     });
   });
 
-  describe('email delivery', () => {
-    it('sends one email per notification, however often its job runs', async () => {
-      const [row] = await rowsFor(bo.id);
-      const sent: EmailMessage[] = [];
-      const processor = createNotifyProcessor(
-        {
-          repository,
-          appUrl: 'https://support.example.com',
-          push: { send: async () => 'sent' },
-          settings: {
-            systemSender: async () => ({ send: async (message) => void sent.push(message) }),
-            vapidKeys: async () => null,
-          },
-        },
-        { db: runtime.db },
+  describe('email', () => {
+    it('marks a row made with email pending for the pacer, and one made without it null', async () => {
+      expect((await rowsFor(bo.id)).map((row) => [row.email, row.emailState])).toEqual([
+        [true, 'pending'],
+      ]);
+      // Sam's SLA warning and reply rows were made without email, by the defaults.
+      const sams = await rowsFor(sam.id);
+      expect(sams.some((row) => !row.email)).toBe(true);
+      expect(sams.map((row) => row.emailState)).toEqual(
+        sams.map((row) => (row.email ? 'pending' : null)),
       );
-      const job = {
-        name: notifyEmailJob.name,
-        id: `notify.email.${row?.id}`,
-        data: { brandId: seeded.brandId, notificationId: row?.id },
-      } as Job;
-
-      await processor(job);
-      await processor(job);
-
-      expect(sent).toHaveLength(1);
-      expect(sent[0]?.to.address).toBe(bo.email);
-      expect(sent[0]?.subject).toMatch(/^\[.+\] Escalated: Refund for order 42$/);
-      expect(sent[0]?.text).toContain('Department: Billing');
     });
   });
 
@@ -495,6 +473,12 @@ describe.skipIf(!hasDocker)('notifications', () => {
         preferences: NOTIFICATION_PREFERENCE_DEFAULTS,
         email: sam.email,
         push: { configured: false, publicKey: null, subscriptions: [] },
+        emailDelivery: {
+          schedule: 'immediate',
+          digestHour: 8,
+          pausedUntil: null,
+          unsubscribedAt: null,
+        },
       });
     });
 

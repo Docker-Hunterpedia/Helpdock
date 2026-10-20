@@ -23,7 +23,10 @@ export const QUEUE_NAMES = {
   knowledge: 'knowledge',
   /** `media.process`, `media.scan`; `help_center.media_process` (M5-02). */
   media: 'media',
-  /** `notify.inapp`, `notify.email`, `notify.push`, and `auth.email` for sign-in mail. */
+  /**
+   * `notify.email_schedule`, `notify.email_batch`, `notify.digest.tick` and
+   * `notify.email_rebuild` (M14-10), `notify.push`, and `auth.email` for sign-in mail.
+   */
   notify: 'notify',
   /** `webhook.deliver`. */
   webhooks: 'webhooks',

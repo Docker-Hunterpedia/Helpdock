@@ -73,3 +73,12 @@ describe('ticketViewUpdateRequestSchema', () => {
     expect(ticketViewUpdateRequestSchema.parse({ hidden: true })).toEqual({ hidden: true });
   });
 });
+
+describe('SLA due saved views', () => {
+  it('accepts the list sort in saved filters', () => {
+    expect(ticketViewFiltersSchema.parse({ sort: 'slaDue', direction: 'asc' })).toMatchObject({
+      sort: 'slaDue',
+      direction: 'asc',
+    });
+  });
+});

@@ -513,7 +513,7 @@ export type TicketDetail = z.infer<typeof ticketDetailSchema>;
  * "what moved last" — and `number` is what somebody looking for one ticket
  * sorts by.
  */
-export const ticketSortSchema = z.enum(['updatedAt', 'createdAt', 'number', 'priority']);
+export const ticketSortSchema = z.enum(['updatedAt', 'createdAt', 'number', 'priority', 'slaDue']);
 export type TicketSort = z.infer<typeof ticketSortSchema>;
 
 export const ticketSortDirectionSchema = z.enum(['asc', 'desc']);
@@ -596,7 +596,11 @@ export const ticketListQuerySchema = z.object({
    * same as leaving it off — "not overdue" is not a queue anybody works.
    */
   overdue: queryBoolean.optional(),
-  sort: ticketSortSchema.default('updatedAt'),
+  sort: ticketSortSchema
+    .default('updatedAt')
+    .describe(
+      'slaDue always orders oldest breach first, then soonest running due time, then tickets without a clock; direction does not reverse SLA urgency.',
+    ),
   direction: ticketSortDirectionSchema.default('desc'),
   /** Opaque. It is the api's own encoding of "the row after this one". */
   cursor: z.string().max(512).optional(),

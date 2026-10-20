@@ -127,20 +127,23 @@ describe('isTyping', () => {
     expect(isTyping(element('div', true))).toBe(true);
   });
 
-  it.each(['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'])(
-    'is true on a form input of type %s',
+  it.each(['checkbox', 'radio', 'button', 'submit'])(
+    'is false on a non-typing input of type %s',
+    (type) => {
+      const input = document.createElement('input');
+      input.type = type;
+      expect(isTyping(input)).toBe(false);
+    },
+  );
+
+  it.each(['search', 'email', 'number', 'date', 'range', 'color', 'file'])(
+    'is true in an input of type %s',
     (type) => {
       const input = document.createElement('input');
       input.type = type;
       expect(isTyping(input)).toBe(true);
     },
   );
-
-  it.each(['search', 'email', 'number', 'date'])('is true in an input of type %s', (type) => {
-    const input = document.createElement('input');
-    input.type = type;
-    expect(isTyping(input)).toBe(true);
-  });
 
   it('is false on the page itself', () => {
     expect(isTyping(element('div'))).toBe(false);

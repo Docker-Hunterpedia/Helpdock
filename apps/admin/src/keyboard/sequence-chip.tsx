@@ -13,8 +13,8 @@ import { isSequence, SHORTCUT_LIST, type ShortcutPermission, shortcutLabel } fro
  * surface, `bg.inverse` at 13 px.
  *
  * The live region is always mounted and only its content comes and goes, so
- * a screen reader announces the chip when it appears. Only a pending
- * sequence exposes a status; an idle chip is not an empty toast.
+ * a screen reader can announce the chip when it appears. No status role is
+ * needed beside the explicit live attributes.
  */
 export function SequenceChip({
   pending,
@@ -38,7 +38,6 @@ export function SequenceChip({
 
   return (
     <Box
-      role={pending === null ? undefined : 'status'}
       aria-live="polite"
       aria-atomic="true"
       sx={{

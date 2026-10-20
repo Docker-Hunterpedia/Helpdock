@@ -17,6 +17,7 @@ import {
   metaAccounts,
   metaConversations,
   metaDeliveries,
+  notificationEmailBatches,
   notifications,
   outbox,
   retentionSettings,
@@ -598,6 +599,32 @@ describe.skipIf(!hasDocker)('data retention', () => {
           })
         ).notifications,
       ).toBe(0);
+    });
+
+    it('purges sent notification email batches with the window, and keeps a pending one (M14-10)', async () => {
+      const batch = (createdAt: Date, status: 'pending' | 'sent' | 'empty') => ({
+        id: uuidv7(),
+        brandId: brandA.id,
+        userId: seeded.userId,
+        kind: status === 'pending' ? ('daily' as const) : ('immediate' as const),
+        status,
+        scheduledFor: createdAt,
+        createdAt,
+      });
+      const old = batch(daysAgo(31), 'sent');
+      const empty = batch(daysAgo(40), 'empty');
+      const recent = batch(daysAgo(1), 'sent');
+      const waiting = batch(daysAgo(31), 'pending');
+      await withSystem(db(), brandA.id, (tx) =>
+        tx.insert(notificationEmailBatches).values([old, empty, recent, waiting]),
+      );
+
+      await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-batches', batchSize: 1 });
+
+      const left = await withSystem(db(), brandA.id, (tx) =>
+        tx.select({ id: notificationEmailBatches.id }).from(notificationEmailBatches),
+      );
+      expect(left.map((row) => row.id).sort()).toEqual([recent.id, waiting.id].sort());
     });
 
     it('nulls AI call bodies past the brand window and keeps their counts and cost (M7)', async () => {

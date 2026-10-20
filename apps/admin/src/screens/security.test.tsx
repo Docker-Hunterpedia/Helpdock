@@ -212,6 +212,7 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
     expect(
       await within(card).findByRole('button', { name: 'Disconnect GitHub' }),
     ).toBeInTheDocument();
+    expect(within(card).getByText(/not used to sign in yet/)).toBeInTheDocument();
     expect(within(card).queryByRole('status')).not.toBeInTheDocument();
   });
 

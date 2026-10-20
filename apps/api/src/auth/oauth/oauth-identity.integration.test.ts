@@ -26,6 +26,7 @@ import {
   type FakeGoogle,
   fakeGithubFetch,
 } from '../../testing/fake-oauth-providers.js';
+import { EmailTokenStore } from '../email-token.store.js';
 import { PasswordHasher } from '../password.js';
 import { oauthNonceCookie } from '../session/cookies.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth.service.js';
@@ -186,6 +187,46 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
     return landing(
       await callback(provider, (started.json() as { url: string }).url, nonce, providerFetch),
     );
+  };
+
+  /** An invited account of the seeded brand and the token its invitation link carries. */
+  const addInvited = async (address: string): Promise<{ id: string; token: string }> => {
+    const id = uuidv7();
+    await runtime.db.insert(users).values({ id, email: address, name: address, status: 'invited' });
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .insert(userBrandRoles)
+        .values({ userId: id, brandId: seeded.brandId, role: 'agent', departmentIds: [] }),
+    );
+    const token = await new EmailTokenStore(runtime.redis).issue(
+      {
+        purpose: 'invite',
+        userId: id,
+        email: address,
+        brandId: seeded.brandId,
+        role: 'agent',
+        departmentIds: [],
+        issuedAt: Date.now(),
+      },
+      3_600,
+    );
+    return { id, token };
+  };
+
+  /** Accepting an invitation with a provider: the invite screen's start, then the callback. */
+  const acceptWith = async (
+    provider: OauthProvider,
+    token: string,
+    providerFetch: ReturnType<typeof vi.fn>,
+  ) => {
+    const started = await post(`/api/auth/invites/${token}/oauth/${provider}`, {
+      name: 'Nour Saleh',
+      locale: 'ar',
+    });
+    expect(started.statusCode).toBe(201);
+    const nonce =
+      started.cookies.find((cookie) => cookie.name === nonceCookieOf(provider))?.value ?? '';
+    return { started, url: (started.json() as { url: string }).url, nonce, providerFetch };
   };
 
   const googleAs = async (claims: Record<string, unknown>) =>
@@ -413,6 +454,115 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
     });
   });
 
+  describe('accepting an invitation with a provider (M18-07)', () => {
+    const userRow = async (id: string) => {
+      const [row] = await runtime.db
+        .select({ status: users.status, passwordHash: users.passwordHash, name: users.name })
+        .from(users)
+        .where(eq(users.id, id));
+      return row;
+    };
+    const linkRow = async (id: string) => {
+      const [row] = await runtime.db
+        .select({
+          linkedVia: userOauthIdentities.linkedVia,
+          lastUsedAt: userOauthIdentities.lastUsedAt,
+        })
+        .from(userOauthIdentities)
+        .where(eq(userOauthIdentities.userId, id));
+      return row;
+    };
+
+    it('binds the provider account whose verified address is the invited one, with no password', async () => {
+      const nour = await addInvited('nour@acme.test');
+      const flow = await acceptWith(
+        'google',
+        nour.token,
+        await googleAs({ sub: 'g-nour-invited', email: 'nour@acme.test', hd: 'acme.test' }),
+      );
+
+      const landed = landing(await callback('google', flow.url, flow.nonce, flow.providerFetch));
+
+      expect(landed.pathname).toBe('/oauth/callback');
+      expect(landed.searchParams.get('code')).not.toBeNull();
+      expect(await userRow(nour.id)).toEqual({
+        status: 'active',
+        passwordHash: null,
+        name: 'Nour Saleh',
+      });
+      expect(await identitiesOf(nour.id)).toEqual([
+        { provider: 'google', subject: 'g-nour-invited' },
+      ]);
+      expect(await linkRow(nour.id)).toEqual({ linkedVia: 'invite', lastUsedAt: expect.any(Date) });
+      expect(await authRowsOf(nour.id)).toContainEqual({
+        action: 'auth.oauth.linked',
+        actorType: 'staff',
+        meta: { provider: 'google', via: 'invite' },
+      });
+      // Spent: the link no longer opens, and a second acceptance has nothing to spend.
+      expect((await get(`/api/auth/invites/${nour.token}`)).statusCode).toBe(410);
+    });
+
+    it('takes any verified GitHub address that is the invited one', async () => {
+      const salma = await addInvited('salma@acme.test');
+      const github = fakeGithubFetch({
+        id: 6060,
+        email: 'salma.personal@elsewhere.test',
+        alsoVerified: ['salma@acme.test'],
+      });
+      const flow = await acceptWith('github', salma.token, github);
+
+      const landed = landing(await callback('github', flow.url, flow.nonce, github));
+
+      expect(landed.searchParams.get('code')).not.toBeNull();
+      expect(await identitiesOf(salma.id)).toEqual([{ provider: 'github', subject: '6060' }]);
+    });
+
+    it('refuses another address with the mismatch, and spends and creates nothing', async () => {
+      const omar = await addInvited('omar.invited@acme.test');
+      const github = fakeGithubFetch({ id: 7070, email: 'omar@elsewhere.test' });
+      const flow = await acceptWith('github', omar.token, github);
+
+      const landed = landing(await callback('github', flow.url, flow.nonce, github));
+
+      expect(landed.pathname).toBe('/oauth/callback');
+      expect(landed.searchParams.get('error')).toBe('oauth-invite-mismatch');
+      // The provider's address rides in the fragment, never in a logged query string.
+      expect(landed.searchParams.has('account')).toBe(false);
+      expect(new URLSearchParams(landed.hash.slice(1)).get('account')).toBe('omar@elsewhere.test');
+      expect(await userRow(omar.id)).toMatchObject({ status: 'invited' });
+      expect(await identitiesOf(omar.id)).toEqual([]);
+      expect((await get(`/api/auth/invites/${omar.token}`)).statusCode).toBe(200);
+    });
+
+    it('accepts an invitation once, however many provider round trips were started', async () => {
+      const rana = await addInvited('rana@acme.test');
+      const google = await googleAs({ sub: 'g-rana', email: 'rana@acme.test', hd: 'acme.test' });
+      // A second Google account on the same address, so the refusal is the spent
+      // invitation and not the already-bound provider account.
+      const other = await googleAs({ sub: 'g-rana-2', email: 'rana@acme.test', hd: 'acme.test' });
+      const first = await acceptWith('google', rana.token, google);
+      const second = await acceptWith('google', rana.token, other);
+
+      const won = landing(await callback('google', first.url, first.nonce, google));
+      const lost = landing(await callback('google', second.url, second.nonce, other));
+
+      expect(won.searchParams.get('code')).not.toBeNull();
+      expect(lost.searchParams.get('error')).toBe('invite-expired');
+      expect(lost.searchParams.get('code')).toBeNull();
+      expect(await identitiesOf(rana.id)).toEqual([{ provider: 'google', subject: 'g-rana' }]);
+    });
+
+    it('refuses to start for a link that is not a live invitation', async () => {
+      const response = await post('/api/auth/invites/not-a-real-token/oauth/google', {
+        name: 'Nour',
+        locale: 'en',
+      });
+
+      expect(response.statusCode).toBe(410);
+    });
+  });
+
   describe('connecting from a session', () => {
     it('reconnects GitHub behind a step-up, signs in by it, and disconnects it again', async () => {
       const dina = await addAgent('dina@acme.test');
@@ -435,7 +585,13 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
       expect(signedIn.searchParams.get('code')).not.toBeNull();
       expect((await get('/api/auth/oauth/identities', token)).json()).toEqual({
         identities: [
-          { provider: 'github', email: 'dina-old@acme.test', connectedAt: expect.any(String) },
+          {
+            provider: 'github',
+            email: 'dina-old@acme.test',
+            connectedAt: expect.any(String),
+            // Signed in with once, just above.
+            lastUsedAt: expect.any(String),
+          },
         ],
         passwordSet: true,
       });

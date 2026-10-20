@@ -93,3 +93,27 @@ it('falls back to the sentence when the callback names no provider', async () =>
     'This account is not connected here yet. Sign in another way once, then connect it from your security page.',
   );
 });
+
+it('says what happened when this tab no longer knows which invitation it came from', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-invite-mismatch&provider=github'] },
+  );
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'That GitHub account is not the invited address.',
+  );
+});
+
+it('says an invitation spent by another tab is no longer valid', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=invite-expired&provider=google'] },
+  );
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('This invitation is no longer valid.');
+});

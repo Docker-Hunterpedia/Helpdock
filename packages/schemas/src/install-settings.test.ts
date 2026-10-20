@@ -84,6 +84,16 @@ describe('the allowed Workspace domains', () => {
     },
   );
 
+  it.each([['gmail.com'], ['GoogleMail.com']])(
+    'refuses the consumer domain %s with a message saying why',
+    (domain) => {
+      const parsed = update([domain]);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toMatch(/not Workspace domains/);
+    },
+  );
+
   it('refuses more than twenty domains', () => {
     expect(update(Array.from({ length: 21 }, (_, index) => `d${index}.example.com`)).success).toBe(
       false,

@@ -17,6 +17,12 @@ export const WORKSPACE_DOMAIN_PATTERN =
   /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 export const MAX_GOOGLE_ALLOWED_DOMAINS = 20;
 
+/**
+ * Google's consumer domains. Their accounts carry no `hd` claim, so listing one
+ * would match nobody while looking like it lets Gmail in.
+ */
+export const GOOGLE_CONSUMER_DOMAINS: readonly string[] = ['gmail.com', 'googlemail.com'];
+
 export const workspaceDomainSchema = z
   .string()
   .trim()
@@ -51,7 +57,12 @@ const oauthProviderSettingsUpdateSchema = z.strictObject({
 const googleSettingsUpdateSchema = oauthProviderSettingsUpdateSchema.extend({
   /** Omitted keeps the stored list. Duplicates are dropped. */
   allowedDomains: z
-    .array(workspaceDomainSchema)
+    .array(
+      workspaceDomainSchema.refine((domain) => !GOOGLE_CONSUMER_DOMAINS.includes(domain), {
+        message:
+          'gmail.com and googlemail.com are not Workspace domains; leave the list empty to allow Gmail',
+      }),
+    )
     .max(MAX_GOOGLE_ALLOWED_DOMAINS)
     .transform((domains) => [...new Set(domains)])
     .optional(),

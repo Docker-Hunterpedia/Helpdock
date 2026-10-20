@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Settings } from '@helpdock/config';
 import type { OauthProvider } from '@helpdock/schemas';
-import { oauthProviderSchema } from '@helpdock/schemas';
+import { localeSchema, oauthProviderSchema } from '@helpdock/schemas';
 import type { Redis } from 'ioredis';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { z } from 'zod';
@@ -38,6 +38,9 @@ import {
  *
  * A flow started from inside a session to connect a provider account carries
  * that account's id in its state, so the callback links rather than signs in.
+ * One started from an invitation carries the invitation instead (M18-07): the
+ * hash of its token, never the token, and the name and language typed on the
+ * invite screen.
  */
 
 export const OAUTH_STATE_TTL_SECONDS = 600;
@@ -52,7 +55,17 @@ const stateRecordSchema = z.object({
   createdAt: z.number().int(),
   /** Set when a signed-in person started the flow to connect this provider to their account. */
   linkUserId: z.uuid().optional(),
+  /** Set when the flow accepts an invitation with this provider. */
+  invite: z
+    .object({
+      tokenHash: z.string().min(1),
+      name: z.string().min(1).max(120),
+      locale: localeSchema,
+    })
+    .optional(),
 });
+
+export type OauthInviteState = NonNullable<z.infer<typeof stateRecordSchema>['invite']>;
 
 const googleClaimsSchema = z.object({
   sub: z.string().min(1).max(255),
@@ -83,12 +96,20 @@ export interface OauthIdentity {
   readonly authoritative: boolean;
   /** Google's `hd` claim: the Workspace domain of a managed account. Absent otherwise. */
   readonly hostedDomain: string | undefined;
+  /**
+   * Every address the provider says is verified for this account: Google's one
+   * address when verified, every verified address of a GitHub account. Only an
+   * invitation reads it, to tell the invited address is this account's.
+   */
+  readonly verifiedEmails: readonly string[];
 }
 
 export interface OauthCompletion {
   readonly identity: OauthIdentity;
   /** The signed-in account that started this flow to connect the provider, if one did. */
   readonly linkUserId: string | undefined;
+  /** The invitation this flow accepts, if it was started from one. */
+  readonly invite: OauthInviteState | undefined;
 }
 
 export interface OauthCredentials {
@@ -196,7 +217,10 @@ export class OauthService {
    */
   async start(
     provider: OauthProvider,
-    { linkUserId }: { readonly linkUserId?: string } = {},
+    {
+      linkUserId,
+      invite,
+    }: { readonly linkUserId?: string; readonly invite?: OauthInviteState } = {},
   ): Promise<{ url: string; browserNonce: string }> {
     const { clientId } = await this.#credentials(provider);
     if (clientId === '') {
@@ -216,6 +240,7 @@ export class OauthService {
         browserNonceHash: hashToken(browserNonce),
         createdAt: Math.floor(Date.now() / 1000),
         ...(linkUserId === undefined ? {} : { linkUserId }),
+        ...(invite === undefined ? {} : { invite }),
       }),
       'EX',
       OAUTH_STATE_TTL_SECONDS,
@@ -289,6 +314,7 @@ export class OauthService {
             ? await this.#googleIdentity(tokens.id_token, clientId)
             : await this.#githubIdentity(tokens.access_token),
         linkUserId: record.data.linkUserId,
+        invite: record.data.invite,
       };
     } catch (error) {
       if (error instanceof OauthError) {
@@ -331,6 +357,7 @@ export class OauthService {
         hostedDomain: claims.hd,
       }),
       hostedDomain: claims.hd,
+      verifiedEmails: emailVerified ? [claims.email] : [],
     };
   }
 
@@ -356,6 +383,7 @@ export class OauthService {
       // GitHub never vouches for one: it links from inside a session only.
       authoritative: false,
       hostedDomain: undefined,
+      verifiedEmails: emails.filter((entry) => entry.verified).map((entry) => entry.email),
     };
   }
 

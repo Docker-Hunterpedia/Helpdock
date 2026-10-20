@@ -179,6 +179,16 @@ export const inviteAcceptRequestSchema = z.object({
 });
 export type InviteAcceptRequest = z.infer<typeof inviteAcceptRequestSchema>;
 
+/** Accepting with a provider instead of a password (M18-07): the provider proves the rest. */
+export const inviteProviderStartRequestSchema = inviteAcceptRequestSchema.omit({ password: true });
+export type InviteProviderStartRequest = z.infer<typeof inviteProviderStartRequestSchema>;
+
+export const inviteProviderParamSchema = z.object({
+  token: z.string().min(1).max(200),
+  provider: z.string().min(1).max(32),
+});
+export type InviteProviderParam = z.infer<typeof inviteProviderParamSchema>;
+
 export const inviteTokenParamSchema = z.object({ token: z.string().min(1).max(200) });
 export type InviteTokenParam = z.infer<typeof inviteTokenParamSchema>;
 

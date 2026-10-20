@@ -32,6 +32,7 @@
     "allowedDomainsPlaceholder": "أضف نطاقًا",
     "allowedDomainsHint": "فارغ: أي حساب Google يضمنه Google (حساب Workspace على نطاقه، أو حساب Gmail). مع نطاقات: حسابات Workspace على هذه النطاقات فقط. اضغط Enter بعد كل نطاق.",
     "allowedDomainsInvalid": "أدخل نطاقًا مثل example.com، دون @.",
+    "allowedDomainsConsumer": "Gmail ليس نطاق Workspace. اترك القائمة فارغة للسماح بحسابات Gmail.",
     "allowedDomainsTooMany": "أدرج {{count}} نطاقًا على الأكثر."
   },
   "status": {

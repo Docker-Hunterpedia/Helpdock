@@ -82,7 +82,15 @@ describe('SettingsPage', () => {
     expect(domains).toHaveAccessibleDescription('Enter a domain like example.com, without @.');
 
     await user.clear(domains);
-    await user.type(domains, ' Helpdock.COM{Enter}@helpdock.sa{Enter}');
+    await user.type(domains, 'gmail.com{Enter}');
+    expect(
+      screen.getByText(
+        'Gmail is not a Workspace domain. Leave the list empty to allow Gmail accounts.',
+      ),
+    ).toBeVisible();
+
+    await user.clear(domains);
+    await user.type(domains, ' Helpdock.COM{Enter} @helpdock.sa{Enter}');
     expect(screen.getByText('helpdock.com')).toBeVisible();
     expect(screen.getByText('helpdock.sa')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Save changes' }));

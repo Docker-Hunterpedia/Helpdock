@@ -58,6 +58,8 @@
     "notice": "Since 1.0.1, a provider signs you in only after you connect it here once. Your password, magic link and two-factor work as before.",
     "connected": "Connected",
     "connectedOn": "connected {{date}}",
+    "lastUsed": "last used {{date}}",
+    "neverUsed": "not used to sign in yet",
     "notConnected": "Not connected. Connect it to sign in with {{provider}}.",
     "connect": "Connect {{provider}}",
     "disconnect": "Disconnect {{provider}}",

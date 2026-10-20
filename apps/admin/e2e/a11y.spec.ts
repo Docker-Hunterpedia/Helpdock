@@ -363,6 +363,12 @@ test.describe('accessibility', () => {
 
     await page.goto(`/invite/${MOCK_INVITE_TOKEN}`);
     await page.getByLabel(t('auth:invite.nameLabel')).waitFor();
+    await page.getByRole('group', { name: t('auth:invite.providers.label') }).waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByLabel(t('auth:invite.nameLabel')).fill('Karim Aziz');
+    await page.getByRole('button', { name: t('auth:signIn.github') }).click();
+    await page.getByRole('button', { name: t('auth:invite.providers.choosePassword') }).waitFor();
     expect(await violations(page)).toEqual([]);
 
     await page.goto(`/invite/${MOCK_EXPIRED_INVITE_TOKEN}`);

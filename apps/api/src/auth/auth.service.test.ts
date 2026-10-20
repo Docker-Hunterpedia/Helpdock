@@ -215,7 +215,11 @@ class FakeOauthService {
     if (this.identity instanceof Error) {
       return Promise.reject(this.identity);
     }
-    return Promise.resolve({ identity: this.identity, linkUserId: this.linkUserId });
+    return Promise.resolve({
+      identity: this.identity,
+      linkUserId: this.linkUserId,
+      invite: undefined,
+    });
   }
 }
 
@@ -239,6 +243,13 @@ class FakeOauthIdentities {
     this.links.push(link);
     return Promise.resolve('linked');
   }
+
+  readonly used: string[] = [];
+
+  markUsed(_provider: string, subject: string): Promise<void> {
+    this.used.push(subject);
+    return Promise.resolve();
+  }
 }
 
 const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity => ({
@@ -248,6 +259,7 @@ const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity =
   name: 'Lina',
   authoritative: true,
   hostedDomain: 'helpdock.com',
+  verifiedEmails: ['lina@helpdock.com'],
   ...overrides,
 });
 
@@ -1015,10 +1027,38 @@ describe('OAuth', () => {
       }),
     ).resolves.toMatchObject({ kind: 'session' });
     expect(oauthIdentities.links).toEqual([
-      { userId: lina.id, provider: 'google', subject: '1049', email: 'lina@helpdock.com' },
+      {
+        userId: lina.id,
+        provider: 'google',
+        subject: '1049',
+        email: 'lina@helpdock.com',
+        via: 'sign-in',
+      },
     ]);
     expect(audit.actions()).toContain('auth.oauth.linked');
     expect(mail.sent.map((sent) => sent.values?.change)).toContain('oauthConnected');
+  });
+
+  it('records the sign-in on a bound provider account, for the security page', async () => {
+    const lina = staff.add(await newUser());
+    oauthIdentities.links.push({
+      userId: lina.id,
+      provider: 'google',
+      subject: '1049',
+      email: lina.email,
+      via: 'connect',
+    });
+    oauth.identity = googleIdentity();
+
+    await service.completeOauth({
+      provider: 'google',
+      code: 'c',
+      state: 's',
+      browserNonce: 'n',
+      userAgent: 'Firefox',
+    });
+
+    expect(oauthIdentities.used).toEqual(['1049']);
   });
 
   it('asks a provider that does not vouch for the address to be connected from a session', async () => {
@@ -1095,6 +1135,7 @@ describe('OAuth', () => {
         provider: 'google',
         subject: '1049',
         email: lina.email,
+        via: 'sign-in',
       });
       await settings.set('oauth.google.allowedDomains', ['acme.com'], { updatedBy: 'test' });
       oauth.identity = googleIdentity();

@@ -556,12 +556,35 @@ the person who holds it here.
   rules above allow. A list allows only managed Workspace accounts whose `hd`
   claim is one of the listed domains, so a Gmail or other consumer account is
   refused. The check is on `hd`, which Google asserts, not on the address's
-  domain, and it applies to every Google sign-in and connect, **bound accounts
-  included**: taking a domain off the list turns away the accounts on it.
+  domain, and it is checked at every Google sign-in, connect and invitation
+  acceptance, **bound accounts included**: taking a domain off the list turns
+  away the accounts on it from their next sign-in. It does **not** end sessions
+  already open, which last until they expire or are revoked. To cut someone off
+  at once, deactivate them, which revokes their sessions
+  ([staff and roles](staff-and-roles.md#changing-somebody)), or have them sign
+  out everywhere from their own security page ([revocation](#revocation)).
   A refusal answers **`oauth-domain-not-allowed`** ("This Google account can't
   sign in here"), says nothing about whether an account exists, and is audited
   as `auth.sign_in.failed` (or `auth.oauth.link_refused` for a connect) with
   `reason: domain-not-allowed`. GitHub has no such list (D-53).
+- **An invitation can be accepted with a provider** (M18-07). The invite
+  screen offers the configured providers beside the password. The invitation
+  token already proved the mailbox, so the provider account is bound when its
+  verified address is the invited one: Google's verified address, or any
+  verified address on the GitHub account. Otherwise the person comes back to
+  the invite screen, which names the address that answered; nothing is spent
+  or created and they can try another account or choose a password. A match
+  spends the invitation once, activates the account **with no password**, binds
+  the provider account (`linked_via: invite`, audited `auth.oauth.linked` with
+  `via: invite`, emailed) and signs them in, with enrolment next when the
+  install requires a second factor. Such an account sets a password later
+  through the reset flow. An invitation spent between the two steps lands on
+  `invite-expired`. The allowed domains and SSO enforcement apply here too.
+- **Each identity records how it was linked and when it last signed in**
+  (`linked_via`: `sign-in`, `connect` or `invite`; `last_used_at`). The
+  security page shows "last used" beside each provider, so a provider account
+  somebody else linked and uses stands out. Identities linked before 1.1 show
+  no `linked_via`, and "not used to sign in yet" until their next sign-in.
 - **Nothing else changes after the first factor.** The second factor, the
   trusted-browser check and enrolment for those who must have one run exactly
   as after a password. Deactivated accounts still cannot sign in.
@@ -775,6 +798,7 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/totp/confirm` | `@Authenticated()` | Enable it, return recovery codes |
 | `GET /api/auth/invites/:token` | `@Public()` | Read an invitation without spending it |
 | `POST /api/auth/invites/:token/accept` | `@Public()` | Spend it, and sign in |
+| `POST /api/auth/invites/:token/oauth/:provider` | `@Public()` | Start accepting it with a provider: `{ name, locale }` in, `{ url }` out and the `hd_oauth` cookie set. Spends nothing; the callback does |
 
 The `/api/me/*` routes that change a password, turn the second factor off or
 list the browsers an account is signed in on are in [staff and

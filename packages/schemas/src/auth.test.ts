@@ -255,6 +255,7 @@ describe('isLastSignInMethod', () => {
     provider,
     email: 'lina@helpdock.com',
     connectedAt: '2026-10-20T09:00:00.000Z',
+    lastUsedAt: null,
   });
 
   it.each([

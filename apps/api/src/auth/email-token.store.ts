@@ -66,6 +66,19 @@ export class EmailTokenStore {
   }
 
   /**
+   * {@link read} and {@link consume} by the token's hash, for a flow that must
+   * not hold the token itself: an invitation accepted with a provider keeps
+   * only the hash in the provider round trip's state (M18-07).
+   */
+  async readInviteByHash(tokenHash: string): Promise<EmailTokenPayload | null> {
+    return this.#parse(await this.#redis.get(emailTokenKey(tokenHash)), 'invite');
+  }
+
+  async consumeInviteByHash(tokenHash: string): Promise<EmailTokenPayload | null> {
+    return this.#parse(await this.#redis.getdel(emailTokenKey(tokenHash)), 'invite');
+  }
+
+  /**
    * Forgets a token by the hash the issuer kept. Resending an invite has to
    * kill the previous link in the same breath as sending the next one, or a
    * person would hold two working invitations and DOMAIN-RULES §12's "single

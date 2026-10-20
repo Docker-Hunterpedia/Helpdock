@@ -1,20 +1,25 @@
 import type { Locale } from '@helpdock/i18n';
 import { SUPPORTED_LNGS } from '@helpdock/i18n';
-import { PASSWORD_MIN_LENGTH } from '@helpdock/schemas';
-import { Box, Button, Link, MenuItem, TextField, Typography } from '@mui/material';
+import { type OauthProvider, oauthProviderSchema, PASSWORD_MIN_LENGTH } from '@helpdock/schemas';
+import { Box, Button, Divider, Link, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router';
+import { z } from 'zod';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from '../app/route-paths.js';
 import { isAuthError } from '../auth/api.js';
+import { rememberInviteReturn } from '../auth/invite-return.js';
+import { PROVIDER_NAME_KEYS } from '../auth/provider-names.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { PasswordField } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { AuthLayout } from './auth-layout.tsx';
+import { InviteProviderButtons, useConfiguredProviders } from './invite-providers.tsx';
 import { InviteSsoButtons } from './sso-sign-in.tsx';
+import { isolate } from './tickets/format.js';
 
 /**
  * `Admin/AcceptInvite`: the one screen somebody without an account ever sees.
@@ -26,7 +31,19 @@ import { InviteSsoButtons } from './sso-sign-in.tsx';
  * The expired state names the person who invited them when the api still knows
  * it, so "ask an administrator" is a name rather than a shrug. When the token
  * is gone entirely there is nobody to name, and the caption says so instead.
+ *
+ * `Admin/AcceptInvite-Providers` (M18-07) adds the configured providers as a
+ * second way to accept: the provider's account, when it is the invited
+ * address's, becomes the new account's way in, with no password. When it is
+ * not, the callback sends the person back here with the mismatch state, which
+ * offers the providers again or the password form.
  */
+
+/** What `/oauth/callback` hands back when the provider account was not the invited one. */
+const returnStateSchema = z.object({
+  mismatch: z.object({ provider: oauthProviderSchema, account: z.string() }).optional(),
+  name: z.string().optional(),
+});
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -40,12 +57,17 @@ export function AcceptInvite(): ReactNode {
   const setSession = useSetSession();
   const { locale: appLocale, setLocale } = usePreferences();
   const { token = '' } = useParams<{ token: string }>();
+  const location = useLocation();
+  const returned = returnStateSchema.safeParse(location.state).data ?? {};
+  const providers = useConfiguredProviders();
 
   const nameId = useId();
   const passwordId = useId();
   const localeId = useId();
+  const providersId = useId();
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState(returned.name ?? '');
+  const [mismatch, setMismatch] = useState(returned.mismatch);
   const [password, setPassword] = useState('');
   const [locale, setChosenLocale] = useState<Locale>(appLocale);
   const [errors, setErrors] = useState<{ name?: string; password?: string }>({});
@@ -84,6 +106,30 @@ export function AcceptInvite(): ReactNode {
       });
     },
   });
+
+  const startWithProvider = useMutation({
+    mutationFn: (provider: OauthProvider) =>
+      api.startInviteOauth(token, provider, { name: name.trim(), locale }),
+    onSuccess: (url) => {
+      rememberInviteReturn({ path: location.pathname, name: name.trim() });
+      // An app path stays in the router; a provider's address is a page load.
+      if (url.startsWith('/')) {
+        void navigate(url);
+      } else {
+        window.location.assign(url);
+      }
+    },
+  });
+
+  const chooseProvider = (provider: OauthProvider): void => {
+    if (name.trim() === '') {
+      setMismatch(undefined);
+      setErrors({ name: t('auth:invite.nameRequired') });
+      return;
+    }
+    setErrors({});
+    startWithProvider.mutate(provider);
+  };
 
   const strength = passwordStrength(password);
 
@@ -160,9 +206,40 @@ export function AcceptInvite(): ReactNode {
         sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}
       >
         <InviteSsoButtons email={invite.data.email} />
-        {!methods.data?.ssoEnforced ? (
+        {!methods.data?.ssoEnforced && mismatch !== undefined ? (
           <>
-            {accept.isError && !breached ? (
+            <AlertBanner tone="danger">
+              {t('auth:invite.providers.mismatch', {
+                provider: t(PROVIDER_NAME_KEYS[mismatch.provider]),
+                account: isolate(mismatch.account),
+                email: isolate(invite.data.email),
+              })}
+            </AlertBanner>
+            <InviteProviderButtons
+              providers={providers}
+              busy={startWithProvider.isPending}
+              onChoose={chooseProvider}
+            />
+            <Divider>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {t('auth:signIn.or')}
+              </Typography>
+            </Divider>
+            <Button
+              type="button"
+              variant="outlined"
+              color="secondary"
+              onClick={() => {
+                setMismatch(undefined);
+              }}
+            >
+              {t('auth:invite.providers.choosePassword')}
+            </Button>
+          </>
+        ) : null}
+        {!methods.data?.ssoEnforced && mismatch === undefined ? (
+          <>
+            {(accept.isError && !breached) || startWithProvider.isError ? (
               <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner>
             ) : null}
 
@@ -177,6 +254,28 @@ export function AcceptInvite(): ReactNode {
               helperText={errors.name ?? ' '}
               slotProps={{ htmlInput: { autoComplete: 'name', maxLength: 120 } }}
             />
+
+            {providers.length > 0 ? (
+              <Box
+                role="group"
+                aria-labelledby={providersId}
+                sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}
+              >
+                <Typography id={providersId} variant="bodyStrong" component="p">
+                  {t('auth:invite.providers.label')}
+                </Typography>
+                <InviteProviderButtons
+                  providers={providers}
+                  busy={startWithProvider.isPending}
+                  onChoose={chooseProvider}
+                />
+                <Divider>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {t('auth:invite.providers.orPassword')}
+                  </Typography>
+                </Divider>
+              </Box>
+            ) : null}
 
             <PasswordField
               id={passwordId}

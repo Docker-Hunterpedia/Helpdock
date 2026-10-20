@@ -200,7 +200,7 @@ describe('complete', () => {
     expect(body.get('redirect_uri')).toBe(oauthRedirectUri(APP_URL, 'google'));
   });
 
-  it('takes only a verified primary address from GitHub', async () => {
+  it('takes the verified primary address from GitHub, and lists every verified one', async () => {
     await configure('github');
     const { state, browserNonce } = await started('github');
     vi.stubGlobal(
@@ -213,6 +213,7 @@ describe('complete', () => {
             JSON.stringify([
               { email: 'old@helpdock.com', primary: false, verified: true },
               { email: 'lina@helpdock.com', primary: true, verified: true },
+              { email: 'unproven@helpdock.com', primary: false, verified: false },
             ]),
           ),
         )
@@ -231,8 +232,12 @@ describe('complete', () => {
         name: 'Lina',
         // GitHub never vouches for an address (1.0.1): it links from a session only.
         authoritative: false,
+        hostedDomain: undefined,
+        // An invitation accepts any of these (M18-07); the unverified one is not among them.
+        verifiedEmails: ['old@helpdock.com', 'lina@helpdock.com'],
       },
       linkUserId: undefined,
+      invite: undefined,
     });
   });
 

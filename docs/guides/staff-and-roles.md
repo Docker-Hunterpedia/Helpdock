@@ -167,6 +167,15 @@ The password is checked against the breached-password list
 ([authentication](authentication.md#breached-passwords)), and the field has a
 show/hide toggle.
 
+When the install has Google or GitHub sign-in configured, the screen also
+offers **Accept with an account you already use** (M18-07). The person types
+their name and picks a provider; the provider account must be the invited
+address's (Google's verified address, or any verified address on the GitHub
+account). It then becomes their way in, with no password, and the second-factor
+step follows as above. Another address brings them back to the screen with the
+address that answered and the choice of another account or a password; nothing
+is spent ([authentication](authentication.md#which-account-a-provider-signs-in-as)).
+
 An expired, revoked or already-accepted link answers `410` and the screen says
 so. All three read the same from outside, so a stale link cannot be used to find
 out whether an address still works here.

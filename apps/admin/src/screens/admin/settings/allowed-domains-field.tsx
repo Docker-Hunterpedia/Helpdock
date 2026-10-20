@@ -1,4 +1,8 @@
-import { MAX_GOOGLE_ALLOWED_DOMAINS, workspaceDomainSchema } from '@helpdock/schemas';
+import {
+  GOOGLE_CONSUMER_DOMAINS,
+  MAX_GOOGLE_ALLOWED_DOMAINS,
+  workspaceDomainSchema,
+} from '@helpdock/schemas';
 import { Autocomplete, Chip, TextField } from '@mui/material';
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
@@ -33,9 +37,15 @@ export function AllowedDomainsField({
   const hint = locked ? lockHint : t('settings:oauth.allowedDomainsHint');
 
   const add = (entries: readonly string[]): void => {
-    const parsed = entries.map((entry) => workspaceDomainSchema.safeParse(entry.replace(/^@/, '')));
+    const parsed = entries.map((entry) =>
+      workspaceDomainSchema.safeParse(entry.trim().replace(/^@/, '')),
+    );
     if (parsed.some((result) => !result.success)) {
       setError(t('settings:oauth.allowedDomainsInvalid'));
+      return;
+    }
+    if (parsed.some((result) => GOOGLE_CONSUMER_DOMAINS.includes(result.data ?? ''))) {
+      setError(t('settings:oauth.allowedDomainsConsumer'));
       return;
     }
     const next = [...new Set(parsed.flatMap((result) => (result.success ? [result.data] : [])))];

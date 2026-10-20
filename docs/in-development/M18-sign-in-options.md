@@ -17,8 +17,8 @@ ahead of this milestone: 1.0.1 (#249) brought `user_oauth_identities`
 (migration `0056`), the first-link rules per provider, `oauth-link-required`,
 the connect and disconnect API with step-up, the `auth.oauth.*` audit and the
 `securityChange` email; 1.0.2 (#269) brought the security page's card and the
-`oauth-last-sign-in` refusal. M18-07 itself (#281) adds what was left: see
-[Task status](#task-status).
+`oauth-last-sign-in` refusal. M18-07 itself (#281) adds what was left,
+binding at invitation acceptance included: see [Task status](#task-status).
 
 ---
 
@@ -525,7 +525,7 @@ Backlog or never:
 
 | Id | Status | Notes |
 |---|---|---|
-| M18-07 | in review (#281) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in and connect, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input); the `Admin/Login-Providers` callback screens for `oauth-link-required` and `oauth-domain-not-allowed`; the card renamed Sign-in methods per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout for every security notice, with the provider account and "When". Not done: binding at invitation acceptance (no artboard for provider buttons on the invitation screen); the `issuer`, `linked_via` and `last_used_at` columns of the data model below (1.0.1 keys by `(provider, provider_subject)`; nothing reads the other two yet); passkey step-up and passkey-as-first-factor (with M18-02/M18-06); Microsoft (M18-08). |
+| M18-07 | in review (#281, PR #321) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in, connect and invitation, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input refusing gmail.com); the `Admin/Login-Providers` callback screens; the card renamed Sign-in methods with "last used" per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout; binding at invitation acceptance (`Admin/AcceptInvite-Providers`, `oauth-invite-mismatch`, `invite-expired`); migration `0059_oauth_identity_use` (`linked_via`, `last_used_at`). Not built, by design: the `issuer` column (ADR 0051, "No issuer column": one issuer per provider per install). Left to other deliverables: passkey step-up and passkey-as-first-factor (M18-02/M18-06), Microsoft (M18-08). |
 
 ## Data model
 
@@ -557,12 +557,12 @@ user_oauth_identities                             -- install scope, GLOBAL_TABLE
   id               uuid pk (uuidv7)
   user_id          uuid not null references users(id) on delete cascade
   provider         oauth_provider not null        -- google | github | microsoft
-  issuer           text not null                  -- https://accounts.google.com | https://github.com | https://login.microsoftonline.com/<tid>/v2.0
+  -- issuer: not built; one issuer per provider per install (ADR 0051, "No issuer column")
   subject          text not null                  -- sub | GitHub numeric id | Entra oid+tid (see note)
   email_at_link    text not null                  -- for display and audit, never for matching
-  linked_via       text not null                  -- session | invite | first-sign-in
+  linked_via       oauth_linked_via null          -- sign-in | connect | invite (0059; null for 1.0.x links)
   created_at, last_used_at
-  unique (issuer, subject)
+  unique (provider, provider_subject)              -- as shipped in 0056
   unique (user_id, provider)                      -- one identity per provider per account (as #219)
 ```
 

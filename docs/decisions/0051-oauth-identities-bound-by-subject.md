@@ -4,9 +4,9 @@ Status: accepted
 Date: 2026-10-20
 
 Accepted with the 1.0.1 security fix, which implements the binding for Google
-and GitHub (see "Implementation" below). M18-07 adds the Google allow-list; the
-Microsoft provider, passkey step-up and invitation binding are still to be
-built in M18 (M18-08, the passkey deliverables, and M18-07's invitation part).
+and GitHub (see "Implementation" below). M18-07 adds the Google allow-list and
+binding at invitation acceptance; the Microsoft provider and passkey step-up
+are still to be built in M18 (M18-08 and the passkey deliverables).
 
 ## Context
 
@@ -125,8 +125,25 @@ password, no other provider) is refused with `oauth-last-sign-in`.
   (`Admin/Profile-Security-SignInMethods`).
 - The `securityChange` email for a connected or disconnected provider names
   the provider account and when it changed (`Email/SecurityChange-M18`).
+- **Binding at invitation acceptance** (decision 3, `Admin/AcceptInvite-Providers`):
+  `POST /api/auth/invites/:token/oauth/:provider` starts a provider round
+  trip whose state carries the invitation token's hash, never the token. The
+  callback binds the provider account when one of its verified addresses is
+  the invited one (Google's verified address; any verified GitHub address),
+  spends the invitation and activates the account with no password, in one
+  transaction. Another address answers `oauth-invite-mismatch` and spends
+  nothing; the address that answered travels in the redirect's fragment, never
+  its query.
+- Migration `0059_oauth_identity_use` adds `linked_via` (`sign-in`, `connect`,
+  `invite`) and `last_used_at`, which the security page shows, so a provider
+  account somebody else linked and uses is visible to its holder.
+- **No `issuer` column.** The key stays `(provider, provider_subject)`. Each
+  provider has exactly one issuer on an install: Google's and GitHub's are
+  fixed, and Microsoft (M18-08) is single-tenant by decision 4, with the tenant
+  in its subject (`oid` with `tid`). A pair of provider and subject therefore
+  names one issuer and one account, which is what `(issuer, subject)` was for;
+  a column that always repeats what the provider says would be a second place
+  to keep in step.
 
-Still open: Microsoft and its tenant pin (M18-08), a passkey as step-up and as
-a first factor in the last-way-in rule (with passkeys, M18-02/M18-06), and
-binding at invitation acceptance, which waits for an invitation screen with
-provider buttons on the design canvas.
+Still open: Microsoft and its tenant pin (M18-08), and a passkey as step-up and
+as a first factor in the last-way-in rule (with passkeys, M18-02/M18-06).

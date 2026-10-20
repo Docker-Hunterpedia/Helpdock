@@ -210,6 +210,12 @@ function ProviderRow({
               {t('me:signInProviders.connectedOn', {
                 date: formatDay(linked.connectedAt, locale),
               })}
+              {' · '}
+              {linked.lastUsedAt === null
+                ? t('me:signInProviders.neverUsed')
+                : t('me:signInProviders.lastUsed', {
+                    date: formatDay(linked.lastUsedAt, locale),
+                  })}
             </>
           )}
         </Typography>

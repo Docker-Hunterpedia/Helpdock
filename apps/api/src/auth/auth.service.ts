@@ -24,9 +24,9 @@ import { AuthFailure } from './auth-failure.js';
 import { assertNotBreached } from './breached/breached-passwords.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
-import type { OauthIdentity, OauthService } from './oauth/oauth.service.js';
+import type { OauthIdentity, OauthInviteState, OauthService } from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
-import type { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
+import type { OauthIdentityRepository, OauthLinkedVia } from './oauth/oauth-identity.repository.js';
 import { decideOauthSignIn, googleDomainAllowed } from './oauth/oauth-linking.js';
 import type { PasswordHasher } from './password.js';
 import {
@@ -96,8 +96,31 @@ export type SignInOutcome =
   | { readonly kind: 'totp-required'; readonly challengeId: string; readonly email: string }
   | { readonly kind: 'totp-enrolment-required'; readonly challengeId: string };
 
-/** An OAuth callback ends a sign-in, or connects a provider to the account that started it. */
-export type OauthCallbackOutcome = SignInOutcome | { readonly kind: 'connected' };
+/**
+ * An OAuth callback ends a sign-in, connects a provider to the account that
+ * started it, or accepts an invitation, which it may refuse because the
+ * provider account is not the invited address's.
+ */
+export type OauthCallbackOutcome =
+  | SignInOutcome
+  | { readonly kind: 'connected' }
+  | { readonly kind: 'invite-mismatch'; readonly account: string };
+
+/** What the staff module needs to accept an invitation once the provider has answered. */
+export interface OauthInviteAcceptance {
+  readonly invite: OauthInviteState;
+  readonly identity: OauthIdentity;
+  readonly userAgent: string | undefined;
+}
+
+/**
+ * Accepting an invitation is the staff module's, and that module depends on
+ * this service, so it hands itself over through {@link AuthService.acceptInvitesWith}
+ * instead of being injected here.
+ */
+export interface OauthInviteAcceptor {
+  acceptWithProvider(acceptance: OauthInviteAcceptance): Promise<OauthCallbackOutcome>;
+}
 
 /** How a provider is named in a security notice: a product name, the same in every language. */
 const PROVIDER_NAMES: Readonly<Record<OauthProvider, string>> = {
@@ -154,6 +177,7 @@ export interface AuthServiceOptions {
 
 export class AuthService {
   readonly #parts: AuthServiceOptions;
+  #inviteAcceptor: OauthInviteAcceptor | undefined;
 
   constructor(options: AuthServiceOptions) {
     this.#parts = options;
@@ -754,7 +778,75 @@ export class AuthService {
       await this.#connectOauth(completion.linkUserId, completion.identity);
       return { kind: 'connected' };
     }
+    if (completion.invite !== undefined) {
+      return this.#acceptInviteWithOauth(completion.invite, completion.identity, userAgent);
+    }
     return this.#signInWithOauth(completion.identity, userAgent);
+  }
+
+  /** Called once, by the staff module, which owns invitations (see {@link OauthInviteAcceptor}). */
+  acceptInvitesWith(acceptor: OauthInviteAcceptor): void {
+    this.#inviteAcceptor = acceptor;
+  }
+
+  /**
+   * Starts accepting an invitation with a provider (M18-07). The caller has
+   * read the invitation; the flow's state carries its token's hash, never the
+   * token, and the name and language the person typed.
+   */
+  async startInviteOauth(
+    provider: OauthProvider,
+    invite: OauthInviteState,
+  ): Promise<{ url: string; browserNonce: string }> {
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    try {
+      return await this.#parts.oauth.start(provider, { invite });
+    } catch (error) {
+      this.#parts.logger.warn({ err: error, provider }, 'Could not start an invitation OAuth flow');
+      throw new AuthFailure('unavailable');
+    }
+  }
+
+  /**
+   * Binds the provider account an invitation was accepted with, in the
+   * acceptance's own transaction: the invitation token already proved the
+   * mailbox, so no step-up is asked (DOMAIN-RULES §12, "sets password or OAuth
+   * link").
+   */
+  async linkInvitedIdentity(
+    tx: DbTransaction,
+    userId: string,
+    identity: OauthIdentity,
+  ): Promise<void> {
+    await this.#linkOauth(userId, identity, 'invite', tx);
+  }
+
+  /**
+   * The callback half of an invitation accepted with a provider. Refusals that
+   * do not depend on the invitation come first: the allowed domains, and a
+   * provider account that already signs in as somebody else.
+   */
+  async #acceptInviteWithOauth(
+    invite: OauthInviteState,
+    identity: OauthIdentity,
+    userAgent: string | undefined,
+  ): Promise<OauthCallbackOutcome> {
+    const { provider } = identity;
+    if (!(await this.#domainAllowed(identity))) {
+      await this.#audit('auth.sign_in.failed', null, 'system', {
+        method: 'invite',
+        provider,
+        reason: 'domain-not-allowed',
+      });
+      throw new AuthFailure('oauth-domain-not-allowed');
+    }
+    if ((await this.#parts.oauthIdentities.userFor(provider, identity.subject)) !== undefined) {
+      throw new AuthFailure('oauth-identity-conflict');
+    }
+    if (this.#inviteAcceptor === undefined) {
+      throw new AuthFailure('unavailable');
+    }
+    return this.#inviteAcceptor.acceptWithProvider({ invite, identity, userAgent });
   }
 
   /**
@@ -770,6 +862,7 @@ export class AuthService {
         provider: row.provider,
         email: row.emailAtLink,
         connectedAt: row.createdAt.toISOString(),
+        lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
       })),
       passwordSet: user.passwordHash !== null,
     };
@@ -877,6 +970,8 @@ export class AuthService {
     }
     if (decision.link) {
       await this.#linkOauth(user.id, identity, 'sign-in');
+    } else {
+      await this.#parts.oauthIdentities.markUsed(provider, identity.subject);
     }
 
     return this.#afterFirstFactor(user, {
@@ -936,26 +1031,25 @@ export class AuthService {
   async #linkOauth(
     userId: string,
     identity: OauthIdentity,
-    via: 'sign-in' | 'connect',
+    via: OauthLinkedVia,
+    tx?: DbTransaction,
   ): Promise<void> {
     const { provider } = identity;
-    const linked = await this.#parts.oauthIdentities.link({
-      userId,
-      provider,
-      subject: identity.subject,
-      email: identity.email,
-    });
+    const linked = await this.#parts.oauthIdentities.link(
+      { userId, provider, subject: identity.subject, email: identity.email, via },
+      tx,
+    );
     if (linked === 'conflict') {
       await this.#audit('auth.oauth.link_refused', userId, 'system', { provider, via });
       throw new AuthFailure('oauth-identity-conflict');
     }
 
     this.#parts.logger.info({ userId, provider, via }, 'Connected a sign-in provider account');
-    await this.#audit('auth.oauth.linked', userId, via === 'connect' ? 'staff' : 'system', {
+    await this.#audit('auth.oauth.linked', userId, via === 'sign-in' ? 'system' : 'staff', {
       provider,
       via,
     });
-    await this.#notifySecurityChange(userId, 'oauthConnected', undefined, {
+    await this.#notifySecurityChange(userId, 'oauthConnected', tx, {
       provider: PROVIDER_NAMES[provider],
       account: identity.email,
     });

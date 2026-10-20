@@ -22,6 +22,9 @@ describe('googleDomainAllowed (oauth.google.allowedDomains)', () => {
     ['a listed domain Google sends in another case', 'ACME.sa', ['acme.com', 'acme.sa'], true],
     ['a Workspace account on another domain', 'other.com', ['acme.com'], false],
     ['a consumer account, which has no hd', undefined, ['acme.com'], false],
+    ['a domain that ends with a listed one', 'evil-acme.com', ['acme.com'], false],
+    ['a domain that starts with a listed one', 'acme.com.evil.net', ['acme.com'], false],
+    ['a subdomain of a listed one', 'sub.acme.com', ['acme.com'], false],
   ] as const)('allows %s: %s', (_case, hostedDomain, allowedDomains, expected) => {
     expect(googleDomainAllowed({ hostedDomain, allowedDomains })).toBe(expected);
   });

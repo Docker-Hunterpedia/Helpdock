@@ -26,6 +26,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'oauth-identity-conflict': HttpStatus.FORBIDDEN,
   'oauth-last-sign-in': HttpStatus.CONFLICT,
   'oauth-domain-not-allowed': HttpStatus.FORBIDDEN,
+  'invite-expired': HttpStatus.GONE,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
   'totp-mismatch': HttpStatus.UNAUTHORIZED,
   'recovery-invalid': HttpStatus.UNAUTHORIZED,
@@ -55,6 +56,7 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
     'This provider account is the only way to sign in; set a password or connect another first',
   'oauth-domain-not-allowed':
     'This install accepts Google accounts from its allowed Workspace domains only',
+  'invite-expired': 'That invitation is no longer valid',
   'invalid-credentials': 'That email and password do not match',
   'totp-mismatch': 'That authentication code does not match',
   'recovery-invalid': 'That recovery code is not valid or has already been used',

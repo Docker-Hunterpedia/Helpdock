@@ -132,6 +132,38 @@ describe('a live invitation', () => {
   });
 });
 
+describe('accepting with a provider (Admin/AcceptInvite-Providers)', () => {
+  it('asks for the name before it leaves for the provider', async () => {
+    const authApi = new MockAuthApi(new MockStaffApi());
+    const start = vi.spyOn(authApi, 'startInviteOauth');
+    const { user } = renderInvite(MOCK_INVITE_TOKEN, authApi);
+
+    await user.click(await screen.findByRole('button', { name: 'Google' }));
+
+    expect(await screen.findByText('Enter your name.')).toBeVisible();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('comes back to say which account answered, and offers the password instead', async () => {
+    const { user } = renderInvite(MOCK_INVITE_TOKEN);
+
+    await user.type(await screen.findByLabelText('Your name'), 'Karim Aziz');
+    await user.click(screen.getByRole('button', { name: 'GitHub' }));
+
+    expect(
+      await screen.findByText(
+        /That GitHub account is .*nour\.s@users\.noreply\.github\.com.*, but the invitation is for .*karim@helpdock\.com/,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByLabelText('Choose a password')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Choose a password instead' }));
+
+    expect(screen.getByLabelText('Your name')).toHaveValue('Karim Aziz');
+    expect(screen.getByLabelText('Choose a password')).toBeVisible();
+  });
+});
+
 describe('an invitation that is no longer valid', () => {
   it('says so, and offers the way back rather than a form', async () => {
     renderInvite(MOCK_EXPIRED_INVITE_TOKEN);

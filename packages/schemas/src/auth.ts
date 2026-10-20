@@ -226,6 +226,8 @@ export const oauthIdentitySchema = z.object({
   provider: oauthProviderSchema,
   email: z.string(),
   connectedAt: z.iso.datetime(),
+  /** The last sign-in through it; null until one happens (M18-07). */
+  lastUsedAt: z.iso.datetime().nullable(),
 });
 export type OauthIdentity = z.infer<typeof oauthIdentitySchema>;
 
@@ -365,6 +367,8 @@ const authErrorCodes = [
   'oauth-last-sign-in',
   /** A Google account outside `oauth.google.allowedDomains` (M18-07). Says nothing about accounts. */
   'oauth-domain-not-allowed',
+  /** An invitation accepted with a provider after the invitation was spent or withdrawn (M18-07). */
+  'invite-expired',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

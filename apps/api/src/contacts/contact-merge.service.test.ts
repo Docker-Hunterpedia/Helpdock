@@ -4,6 +4,7 @@ import type {
   Contact as ContactRow,
   DbTransaction,
 } from '@helpdock/db';
+import { contacts, outbox } from '@helpdock/db';
 import type { ContactDetail } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -120,8 +121,21 @@ const contactsRepository = {
 } as unknown as ContactsRepository;
 
 const tx = {
-  insert: () => ({
+  select: () => ({
+    from: (table: unknown) => ({
+      where: () => {
+        const selected = table === contacts ? [...rows.values()] : [];
+        const query = Object.assign(Promise.resolve(selected), {
+          orderBy: () => query,
+          for: async () => selected,
+        });
+        return query;
+      },
+    }),
+  }),
+  insert: (table: unknown) => ({
     values: (row: { action: string; meta: Record<string, unknown> }) => {
+      if (table === outbox) return { returning: async () => [{ id: 'outbox-event' }] };
       audit.push(row);
       return Promise.resolve();
     },

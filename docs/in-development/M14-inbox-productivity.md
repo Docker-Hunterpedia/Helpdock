@@ -922,13 +922,13 @@ mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 
 ### M14-28 More webhook events
 
-Status: implemented for #315; PR #335 review fixes applied; pending independent re-review and CI. Migration regeneration waits for the owner after the earlier migration PRs merge.
+Status: implemented for #315; PR #335 second-review fixes applied; pending independent re-review and CI. Migration regeneration waits for the owner after the earlier migration PRs merge.
 
 - [x] Eight additional events, Zod source/output contracts, transactional producers, brand and department scope.
 - [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.
+- [x] Merge undo publishes profile updates for the changed survivor and restored contact; identity transfers lock contact pairs in id order; the notes hint remains an accessible description outside the checkbox label.
 - [x] Focused unit, real Postgres/Redis integration and en/ar Playwright coverage; payload reference in `webhooks.md`, OpenAPI webhooks and API minor changeset.
-- [ ] Deferred to M14-03: bulk status/assignee changes emit one event per ticket (acceptance test in M14-03). M14-03 bulk apply/undo integration: that deliverable is not in this checkout; its implementation must use the shared ticket mutation paths and emit per ticket.
-
+- [ ] Deferred to M14-03: bulk apply/undo status and assignee changes emit one event per ticket through the shared ticket mutation paths; implementation and acceptance coverage belong to M14-03.
 
 `WEBHOOK_EVENTS` today holds `ticket.created`, `ticket.updated`,
 `ticket.replied`, `ticket.closed`, `contact.created`, `csat.received` and

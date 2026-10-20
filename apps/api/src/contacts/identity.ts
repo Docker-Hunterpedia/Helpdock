@@ -439,45 +439,51 @@ export const attachVerifiedIdentity = async (
     throw new TypeError(`attachVerifiedIdentity takes proven identifiers, not ${claim.source}`);
   }
   const value = requireNormalised(claim.kind, claim.value);
-  return withContactProfileChange(tx, contactId, async () => {
-    const holder = await findByIdentity(tx, brandId, claim.kind, value);
-    const plan = planVerifiedAttach(holder, contactId);
+  const previousHolder = await findByIdentity(tx, brandId, claim.kind, value);
+  return withContactProfileChange(
+    tx,
+    contactId,
+    async () => {
+      const holder = await findByIdentity(tx, brandId, claim.kind, value);
+      const plan = planVerifiedAttach(holder, contactId);
 
-    if (holder === undefined) {
-      const identity = await insertIdentity(tx, {
+      if (holder === undefined) {
+        const identity = await insertIdentity(tx, {
+          brandId,
+          contactId,
+          kind: claim.kind,
+          value,
+          verified: true,
+          source: claim.source,
+        });
+        return { plan, identity, otherContactId: null };
+      }
+      if (plan === 'unchanged') {
+        return { plan, identity: holder, otherContactId: null };
+      }
+      if (plan === 'verify') {
+        return {
+          plan,
+          identity: await takeVerified(tx, holder.id, contactId, claim.source),
+          otherContactId: null,
+        };
+      }
+
+      await suggestDuplicate(tx, {
         brandId,
         contactId,
-        kind: claim.kind,
-        value,
-        verified: true,
-        source: claim.source,
+        otherContactId: holder.contactId,
+        reason: claim.kind,
       });
-      return { plan, identity, otherContactId: null };
-    }
-    if (plan === 'unchanged') {
-      return { plan, identity: holder, otherContactId: null };
-    }
-    if (plan === 'verify') {
       return {
         plan,
-        identity: await takeVerified(tx, holder.id, contactId, claim.source),
-        otherContactId: null,
+        identity:
+          plan === 'move' ? await takeVerified(tx, holder.id, contactId, claim.source) : holder,
+        otherContactId: holder.contactId,
       };
-    }
-
-    await suggestDuplicate(tx, {
-      brandId,
-      contactId,
-      otherContactId: holder.contactId,
-      reason: claim.kind,
-    });
-    return {
-      plan,
-      identity:
-        plan === 'move' ? await takeVerified(tx, holder.id, contactId, claim.source) : holder,
-      otherContactId: holder.contactId,
-    };
-  });
+    },
+    previousHolder === undefined ? [] : [previousHolder.contactId],
+  );
 };
 
 /**
@@ -621,6 +627,6 @@ const takeVerified = async (
     return identity;
   };
   return previous !== undefined && previous.contactId !== contactId
-    ? withContactProfileChange(tx, previous.contactId, change)
+    ? withContactProfileChange(tx, previous.contactId, change, [contactId])
     : change();
 };

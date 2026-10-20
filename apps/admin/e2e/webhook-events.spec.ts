@@ -40,8 +40,9 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
     await dialog.getByRole('checkbox', { name: event, exact: true }).check();
   const notes = dialog.getByRole('checkbox', {
     name: t('developers:webhooks.includeInternalNotes'),
-    exact: false,
+    exact: true,
   });
+  await expect(notes).toHaveAccessibleDescription(t('developers:webhooks.notesHint'));
   await expect(notes).not.toBeChecked();
   await notes.check();
   const accessibility = await new AxeBuilder({ page })
@@ -63,7 +64,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
   await expect(
     edit.getByRole('checkbox', {
       name: t('developers:webhooks.includeInternalNotes'),
-      exact: false,
+      exact: true,
     }),
   ).toBeChecked();
   for (const event of selected)
@@ -74,7 +75,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
       }),
     ).toBeChecked();
   await edit
-    .getByRole('checkbox', { name: t('developers:webhooks.includeInternalNotes'), exact: false })
+    .getByRole('checkbox', { name: t('developers:webhooks.includeInternalNotes'), exact: true })
     .uncheck();
   await edit.getByRole('button', { name: t('developers:webhooks.form.save'), exact: true }).click();
   await row
@@ -86,7 +87,7 @@ test('M14-28 groups events, requires a selection, and persists the notes opt-in'
   await expect(
     edit.getByRole('checkbox', {
       name: t('developers:webhooks.includeInternalNotes'),
-      exact: false,
+      exact: true,
     }),
   ).not.toBeChecked();
   expect(errors).toEqual([]);

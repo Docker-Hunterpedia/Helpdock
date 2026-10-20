@@ -413,6 +413,86 @@ describe.skipIf(!hasDocker)('the webhooks subscriber (M8-03)', () => {
     });
   });
 
+  it('serializes simultaneous identity transfers between the same contacts in opposite directions', async () => {
+    const pair = await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      const firstEmail = `${uuidv7()}@example.test`;
+      const secondEmail = `${uuidv7()}@example.test`;
+      const first = await service.create(context, {
+        name: 'First transfer',
+        identities: [{ kind: 'email', value: firstEmail }],
+      });
+      const second = await service.create(context, {
+        name: 'Second transfer',
+        identities: [{ kind: 'email', value: secondEmail }],
+      });
+      return [
+        { contactId: second.id, email: firstEmail },
+        { contactId: first.id, email: secondEmail },
+      ];
+    });
+    const transferred = await Promise.all(
+      pair.map(({ contactId, email }) =>
+        withSystem(db(), seeded.brandId, async (tx) => {
+          await tx.execute(sql`SET LOCAL lock_timeout = '5s'`);
+          return attachVerifiedIdentity(tx, seeded.brandId, contactId, {
+            kind: 'email',
+            value: email,
+            source: 'email.inbound',
+          });
+        }),
+      ),
+    );
+    expect(transferred.map(({ identity }) => identity)).toEqual(
+      pair.map(({ contactId, email }) =>
+        expect.objectContaining({ contactId, value: email, verified: true }),
+      ),
+    );
+  });
+
+  it('undoing a contact merge emits exactly one update for each existing contact', async () => {
+    await withSystem(db(), seeded.brandId, async (tx) => {
+      const context = {
+        tx,
+        brandId: seeded.brandId,
+        actor: { userId: seeded.userId, role: 'admin' as const },
+      };
+      const service = app.get(ContactsService);
+      const survivor = await service.create(context, { name: 'Undo survivor', identities: [] });
+      const restored = await service.create(context, {
+        name: 'Undo restored',
+        identities: [{ kind: 'email', value: `${uuidv7()}@example.test` }],
+      });
+      const merges = app.get(ContactMergeService);
+      const merged = await merges.merge(context, survivor.id, { mergedContactId: restored.id });
+      const merge = merged.merges[0];
+      if (merge === undefined) throw new Error('Missing active merge');
+      const before = new Set((await tx.select().from(outbox)).map((row) => row.id));
+      await merges.undo(context, survivor.id, merge.id);
+      const events = (await tx.select().from(outbox)).filter((row) => !before.has(row.id));
+      expect(events).toHaveLength(2);
+      expect(events.map(({ event, payload }) => ({ event, payload }))).toEqual(
+        expect.arrayContaining([
+          {
+            event: 'contact.updated',
+            payload: { contactId: survivor.id, departmentId: null },
+          },
+          {
+            event: 'contact.updated',
+            payload: { contactId: restored.id, departmentId: null },
+          },
+        ]),
+      );
+      expect((await service.detail(context, restored.id)).identities).toHaveLength(1);
+      expect((await service.detail(context, survivor.id)).identities).toHaveLength(0);
+    });
+  });
+
   const mutate = async (tx: DbTransaction, suffix: string) => {
     const principal = {
       type: 'staff' as const,

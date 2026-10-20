@@ -17,7 +17,13 @@ const profile = {
   updatedAt: '2026-10-20T00:00:00Z',
 };
 const tx = {
-  select: () => ({ from: () => ({ where: () => ({ for: async () => [{ brandId: 'brand' }] }) }) }),
+  select: () => ({
+    from: () => ({
+      where: () => ({
+        orderBy: () => ({ for: async () => [{ id: profile.id, brandId: 'brand' }] }),
+      }),
+    }),
+  }),
 } as unknown as DbTransaction;
 beforeEach(() => vi.resetAllMocks());
 describe('withContactProfileChange', () => {

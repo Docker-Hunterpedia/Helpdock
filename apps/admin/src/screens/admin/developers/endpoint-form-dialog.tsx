@@ -273,16 +273,18 @@ export function EndpointFormDialog({
                 />
               }
               label={
-                <Box>
-                  <Typography variant="body2">
-                    {t('developers:webhooks.includeInternalNotes')}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    <span id={`${urlId}-notes-hint`}>{t('developers:webhooks.notesHint')}</span>
-                  </Typography>
-                </Box>
+                <Typography variant="body2">
+                  {t('developers:webhooks.includeInternalNotes')}
+                </Typography>
               }
             />
+            <Typography
+              id={`${urlId}-notes-hint`}
+              variant="caption"
+              sx={{ color: 'text.secondary' }}
+            >
+              {t('developers:webhooks.notesHint')}
+            </Typography>
           </Box>
 
           {editing === null ? (

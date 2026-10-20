@@ -477,7 +477,7 @@ describe.skipIf(!hasDocker)('a passkey as the second factor', () => {
     const enrolmentFor = async () => {
       const account = await makeAccount('admin');
       const { body } = await challengeFor(account.email);
-      expect(body.kind).toBe('second-factor-enrolment-required');
+      expect(body.kind).toBe('totp-enrolment-required');
       return { account, challengeId: body.challengeId };
     };
 
@@ -794,6 +794,97 @@ describe.skipIf(!hasDocker)('a passkey as the second factor', () => {
       expect(removed.statusCode).toBe(409);
       expect(authOf(removed).code).toBe('second-factor-required');
       expect(await stored(admin.id)).toHaveLength(1);
+    });
+  });
+
+  describe('a stale enrolment challenge', () => {
+    const totpOf = async (userId: string) => {
+      const [row] = await runtime.db.select().from(users).where(eq(users.id, userId));
+      return row;
+    };
+
+    it('cannot replace the authenticator the account turned on after the challenge was handed out', async () => {
+      const admin = await makeAccount('admin');
+      const { body } = await challengeFor(admin.email);
+      expect(body.kind).toBe('totp-enrolment-required');
+      await runtime.db
+        .update(users)
+        .set({
+          totpEnabled: true,
+          totpSecretEncrypted: encryptSecret(SECRET, createKeyring(envFor())),
+        })
+        .where(eq(users.id, admin.id));
+      const before = (await totpOf(admin.id))?.totpSecretEncrypted;
+
+      const staged = await call('POST', '/api/auth/enrolment/start', {
+        challengeId: body.challengeId,
+      });
+      const confirmed = await call('POST', '/api/auth/enrolment/confirm', {
+        challengeId: body.challengeId,
+        code: await totpCode(SECRET),
+      });
+
+      expect(staged.statusCode).toBe(401);
+      expect(authOf(staged).code).toBe('challenge-expired');
+      expect(confirmed.statusCode).toBe(401);
+      expect(sessionCookie(confirmed)).toBe(false);
+      expect(await totpOf(admin.id)).toMatchObject({
+        totpEnabled: true,
+        totpSecretEncrypted: before,
+      });
+    });
+
+    it('cannot add an authenticator beside a passkey the account added after the challenge', async () => {
+      const admin = await makeAccount('admin');
+      const { body } = await challengeFor(admin.email);
+      await holdPasskey(admin.id, new SoftwareAuthenticator());
+
+      const staged = await call('POST', '/api/auth/enrolment/start', {
+        challengeId: body.challengeId,
+      });
+      const passkeyOptions = await call('POST', '/api/auth/enrolment/passkey/options', {
+        challengeId: body.challengeId,
+      });
+
+      expect(authOf(staged).code).toBe('challenge-expired');
+      expect(passkeyOptions.statusCode).toBe(200);
+      const done = await call('POST', '/api/auth/enrolment/passkey/confirm', {
+        challengeId: body.challengeId,
+        ceremonyId: (passkeyOptions.json() as { ceremonyId: string }).ceremonyId,
+        response: new SoftwareAuthenticator().register(
+          (passkeyOptions.json() as { options: CreationOptions }).options,
+          { origin: APP_URL },
+        ),
+        name: 'Late',
+      });
+      expect(done.statusCode).toBe(401);
+      expect(sessionCookie(done)).toBe(false);
+      expect(await stored(admin.id)).toHaveLength(1);
+      expect((await totpOf(admin.id))?.totpSecretEncrypted).toBeNull();
+    });
+
+    it('is not a way for a bare session to switch an Admin’s required app off', async () => {
+      const admin = await makeAccount('admin', {
+        totpEnabled: true,
+        totpSecretEncrypted: encryptSecret(SECRET, createKeyring(envFor())),
+      });
+      const first = await challengeFor(admin.email);
+      const signedIn = await call('POST', '/api/auth/totp', {
+        challengeId: first.body.challengeId,
+        code: await totpCode(SECRET),
+        trustDevice: false,
+      });
+      const token = (signedIn.json() as { accessToken: string }).accessToken;
+      const before = (await totpOf(admin.id))?.totpSecretEncrypted;
+
+      const enrol = await call('POST', '/api/auth/totp/enrol', undefined, token);
+
+      expect(enrol.statusCode).toBe(429);
+      expect(authOf(enrol).code).toBe('unavailable');
+      expect(await totpOf(admin.id)).toMatchObject({
+        totpEnabled: true,
+        totpSecretEncrypted: before,
+      });
     });
   });
 

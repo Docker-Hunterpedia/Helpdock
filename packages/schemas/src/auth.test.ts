@@ -15,6 +15,7 @@ import {
   signInResponseSchema,
   signInResultSchema,
   totpRequestSchema,
+  toWireSignInResponse,
 } from './auth.js';
 
 const BRAND_ID = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
@@ -304,5 +305,27 @@ describe('isLastSignInMethod', () => {
     expect(isLastSignInMethod({ passwordSet, identities: providers.map(linked) }, 'github')).toBe(
       last,
     );
+  });
+});
+
+describe('toWireSignInResponse', () => {
+  it('sends the enrolment challenge under its old name for one release, and nothing else changes', () => {
+    expect(
+      toWireSignInResponse({ kind: 'second-factor-enrolment-required', challengeId: 'c1' }),
+    ).toEqual({ kind: 'totp-enrolment-required', challengeId: 'c1' });
+    const challenge = signInResponseSchema.parse({
+      kind: 'totp-required',
+      challengeId: 'c1',
+      email: 'lina@helpdock.com',
+    });
+    expect(toWireSignInResponse(challenge)).toBe(challenge);
+  });
+
+  it('is read back as the new name', () => {
+    expect(
+      signInResponseSchema.parse(
+        toWireSignInResponse({ kind: 'second-factor-enrolment-required', challengeId: 'c1' }),
+      ),
+    ).toEqual({ kind: 'second-factor-enrolment-required', challengeId: 'c1' });
   });
 });

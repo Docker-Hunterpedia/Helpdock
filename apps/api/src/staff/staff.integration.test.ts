@@ -192,7 +192,7 @@ describe.skipIf(!hasDocker)('staff and roles', () => {
     // hands over an enrolment challenge; the session comes from spending it.
     const outcome = accepted.json() as { kind: string; challengeId?: string };
     const session =
-      outcome.kind === 'second-factor-enrolment-required'
+      outcome.kind === 'totp-enrolment-required'
         ? await enrolWith(outcome.challengeId ?? '')
         : accepted;
 

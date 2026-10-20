@@ -11,10 +11,14 @@ import type {
   PasskeyStepUpOptions,
   RecoveryCodes,
   Session,
-  SignInResponse,
   TotpEnrolment,
 } from '@helpdock/schemas';
-import { oauthProviderSchema, signInResponseSchema } from '@helpdock/schemas';
+import {
+  oauthProviderSchema,
+  signInResponseSchema,
+  toWireSignInResponse,
+  type WireSignInResponse,
+} from '@helpdock/schemas';
 import {
   Body,
   Controller,
@@ -147,7 +151,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(SignInRequestDto)) body: SignInRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     const outcome = await this.#auth.signIn({
       email: body.email,
       password: body.password,
@@ -165,7 +169,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(TotpRequestDto)) body: TotpRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     const { issued, trustedDeviceCookie } = await this.#auth.verifyTotp({
       ip: request.ip,
       challengeId: body.challengeId,
@@ -187,7 +191,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(RecoveryCodeRequestDto)) body: RecoveryCodeRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     const issued = await this.#auth.useRecoveryCode({
       ip: request.ip,
       challengeId: body.challengeId,
@@ -224,7 +228,7 @@ export class AuthController {
     body: PasskeySecondFactorVerifyRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     const { issued, trustedDeviceCookie } = await this.#auth.verifyPasskeySecondFactor({
       ip: request.ip,
       challengeId: body.challengeId,
@@ -355,7 +359,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(MagicLinkTokenRequestDto)) { token }: MagicLinkTokenRequestDto,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<SignInResponse> {
+  ): Promise<WireSignInResponse> {
     const outcome = await this.#auth.consumeMagicLink({
       token,
       ip: request.ip,
@@ -640,19 +644,21 @@ export class AuthController {
    * declared. Everything the routes answer still goes through the schema, which
    * is the property that matters (ARCHITECTURE §6, step 5).
    */
-  #answer(outcome: SignInOutcome, reply: FastifyReply): SignInResponse {
+  #answer(outcome: SignInOutcome, reply: FastifyReply): WireSignInResponse {
     if (outcome.kind !== 'session') {
-      return signInResponseSchema.parse(outcome);
+      return toWireSignInResponse(signInResponseSchema.parse(outcome));
     }
 
     this.#setRefreshCookie(reply, outcome.issued);
 
-    return signInResponseSchema.parse({
-      kind: 'session',
-      accessToken: outcome.issued.accessToken,
-      expiresInSeconds: outcome.issued.expiresInSeconds,
-      session: outcome.issued.session,
-    });
+    return toWireSignInResponse(
+      signInResponseSchema.parse({
+        kind: 'session',
+        accessToken: outcome.issued.accessToken,
+        expiresInSeconds: outcome.issued.expiresInSeconds,
+        session: outcome.issued.session,
+      }),
+    );
   }
 
   /**

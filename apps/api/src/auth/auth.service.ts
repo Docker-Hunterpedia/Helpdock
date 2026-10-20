@@ -417,7 +417,12 @@ export class AuthService {
     readonly challengeId: string;
     readonly ip: string;
   }): Promise<PasskeyStepUpOptions> {
-    const { user, attempt } = await this.#signInChallenge(challengeId, 'second-factor', ip);
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
+    await this.#assertPasskeyAllowed(challenge);
     await this.#spendCeremonyOptions(user.id);
 
     const held = await this.#parts.passkeys.ofUser(user.id);
@@ -463,9 +468,7 @@ export class AuthService {
       ip,
     );
 
-    // A local second factor opens no session under SSO enforcement (break-glass
-    // takes a code until ADR 0053), so it is refused before it costs an attempt.
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#assertPasskeyAllowed(challenge);
     const reserved = await this.#reserveAttempt(challengeId, challenge);
 
     const check = await this.#checkAssertion(user, ceremonyId, challengeId, response);
@@ -502,7 +505,7 @@ export class AuthService {
    * lock themselves out by scanning a code that did not save.
    */
   async enrolTotp(userId: string, tx?: Queryable): Promise<TotpEnrolment> {
-    return this.#stageSecret(await this.#requireUser(userId, tx), tx);
+    return this.#stageSecret(await this.#requireUser(userId, tx), 'unavailable', tx);
   }
 
   /** Enables the second factor and hands over the recovery codes, once. */
@@ -531,8 +534,11 @@ export class AuthService {
    */
   async startEnrolment(challengeId: string): Promise<TotpEnrolment> {
     const { user } = await this.#requireChallenge(challengeId, 'enrolment');
+    // A challenge stands in for a session only while the account has no second
+    // factor. One handed out earlier must not stage over a factor set since.
+    if (await this.hasSecondFactor(user)) throw new AuthFailure('challenge-expired');
 
-    return this.#stageSecret(user);
+    return this.#stageSecret(user, 'challenge-expired');
   }
 
   /**
@@ -559,7 +565,22 @@ export class AuthService {
     }
 
     await this.#consumeChallenge(challengeId, user.id);
-    const { recoveryCodes } = await this.#enableSecondFactor(user);
+    const { recoveryCodes } = await this.#parts.passkeys.transaction(async (tx) => {
+      // The lock passkey add and remove take, with the check under it: a
+      // challenge handed out before the account set a factor of its own must
+      // not turn that factor off or add a second one beside it.
+      await this.#parts.passkeys.lockAccount(user.id, tx);
+      const current = await this.#parts.staff.findById(user.id, tx);
+      if (
+        current === undefined ||
+        !this.#isUsable(current) ||
+        (await this.hasSecondFactor(current, tx))
+      ) {
+        throw new AuthFailure('challenge-expired');
+      }
+      return this.#enableSecondFactor(current, tx, { notify: false });
+    });
+    await this.#notifySecurityChange(user.id, 'twoFactorEnabled');
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
@@ -576,8 +597,8 @@ export class AuthService {
    * first factor and is not spent here: the authenticator has yet to answer.
    */
   async startPasskeyEnrolment(challengeId: string): Promise<PasskeyRegistrationOptions> {
-    const { user } = await this.#requireChallenge(challengeId, 'enrolment');
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const { challenge, user } = await this.#requireChallenge(challengeId, 'enrolment');
+    await this.#assertPasskeyAllowed(challenge);
     await this.#spendCeremonyOptions(user.id);
 
     const existing = await this.#parts.passkeys.ofUser(user.id);
@@ -619,7 +640,7 @@ export class AuthService {
     readonly userAgent: string | undefined;
   }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
     const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#assertPasskeyAllowed(challenge);
     const reserved = await this.#reserveAttempt(challengeId, challenge);
 
     let registered: Awaited<ReturnType<WebAuthnService['verifyRegistration']>>;
@@ -754,6 +775,9 @@ export class AuthService {
     code: string,
     tx?: DbTransaction,
   ): Promise<RecoveryCodes> {
+    // The lock disableTotp and the passkey redraw take: the codes belong to the
+    // factors, so they are not redrawn while one is being removed.
+    if (tx !== undefined) await this.#parts.passkeys.lockAccount(userId, tx);
     return this.#redrawRecoveryCodes(await this.#requireLiveCode(userId, code, tx), 'code', tx);
   }
 
@@ -1765,6 +1789,21 @@ export class AuthService {
     return { ok: false };
   }
 
+  /**
+   * Under SSO enforcement a passkey is a local factor and opens no session of
+   * its own (break-glass takes a code until ADR 0053), so it is refused before
+   * it costs an attempt or mints a ceremony. A challenge that followed an SSO
+   * assertion is not a local sign-in: there the IdP is the first factor, and a
+   * passkey is a fair second one.
+   */
+  async #assertPasskeyAllowed(
+    found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+  ): Promise<void> {
+    if (firstFactorOf(found) !== 'sso' && (await this.#parts.ssoPolicy.enforced())) {
+      throw new AuthFailure('sso-required');
+    }
+  }
+
   async #spendCeremonyOptions(userId: string): Promise<void> {
     if (!(await this.#parts.limiter.consume(PASSKEY_CEREMONY_OPTIONS_RULE, userId))) {
       throw new AuthFailure('rate-limited');
@@ -1772,14 +1811,25 @@ export class AuthService {
   }
 
   /** Stages a fresh secret, for both ways into enrolment. */
-  async #stageSecret(user: StaffUser, tx?: Queryable): Promise<TotpEnrolment> {
+  async #stageSecret(
+    user: StaffUser,
+    refusal: 'unavailable' | 'challenge-expired',
+    tx?: Queryable,
+  ): Promise<TotpEnrolment> {
     const secret = newTotpSecret();
 
-    await this.#parts.staff.stageTotpSecret(
-      user.id,
-      encryptSecret(secret, this.#parts.keyring),
-      tx,
-    );
+    // An authenticator that is on is never replaced from here. Changing it is a
+    // step-up the plan does not define, so it is refused: turn it off (with a
+    // live code), then enrol again.
+    if (
+      !(await this.#parts.staff.stageTotpSecret(
+        user.id,
+        encryptSecret(secret, this.#parts.keyring),
+        tx,
+      ))
+    ) {
+      throw new AuthFailure(refusal);
+    }
 
     return {
       secret,
@@ -1787,7 +1837,11 @@ export class AuthService {
     };
   }
 
-  async #enableSecondFactor(user: StaffUser, tx?: DbTransaction): Promise<RecoveryCodes> {
+  async #enableSecondFactor(
+    user: StaffUser,
+    tx?: DbTransaction,
+    { notify = true }: { readonly notify?: boolean } = {},
+  ): Promise<RecoveryCodes> {
     // One set of codes per account, drawn with its first second factor of either
     // kind. An app added beside a passkey keeps the set the passkey brought.
     const hasPasskey = (await this.#parts.passkeys.count(user.id, tx)) > 0;
@@ -1802,7 +1856,7 @@ export class AuthService {
     await this.#parts.challenges.clearLock(user.id);
     this.#parts.logger.info({ userId: user.id }, 'Enabled the second factor for a staff account');
     await this.#audit('auth.second_factor.enabled', user.id, 'staff');
-    await this.#notifySecurityChange(user.id, 'twoFactorEnabled', tx);
+    if (notify) await this.#notifySecurityChange(user.id, 'twoFactorEnabled', tx);
 
     return { recoveryCodes };
   }

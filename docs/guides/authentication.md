@@ -202,9 +202,15 @@ next sign-in, as is somebody invited as an Admin.
    returns **ten recovery codes, once**.
 
 Before a session exists, the same two steps take the **enrolment challenge**
-that sign-in answered with (`second-factor-enrolment-required`; the earlier name,
-`totp-enrolment-required`, is still read as the same answer for one release)
-instead:
+that sign-in answered with instead. Its name is `second-factor-enrolment-required`
+in this documentation and in the code, but for one release the api still **sends**
+`totp-enrolment-required` on the wire, so an admin bundle cached from before 1.1
+keeps working; every reader accepts both, and the new name goes on the wire in the
+release after. The challenge is honoured only while the account has no second
+factor: if an app or a passkey was set since it was handed out, `enrolment/start`,
+`enrolment/confirm` and the passkey routes answer `challenge-expired`, and the
+check and the enabling run under the account-row lock.
+
 `POST /api/auth/enrolment/start` stages the secret, and
 `POST /api/auth/enrolment/confirm` with a live code turns it on, spends the
 challenge, sets the refresh cookie and answers the recovery codes together with
@@ -228,8 +234,9 @@ one of the challenge's three attempts and answers `401 passkey-invalid` with
 registration is checked before the challenge is spent, and the challenge is spent
 before anything is stored, so a challenge enrols once. The first successful
 registration pins the RP ID, as it does from the security page. Under SSO
-enforcement the route answers `403 sso-required`, because a local second factor
-opens no session there.
+enforcement the route answers `403 sso-required` for a challenge that followed a
+local first factor, because a local second factor opens no session there; one
+that followed an SSO assertion is honoured.
 
 The screen that draws the QR code is `/sign-in/enrol`, which sign-in sends an
 account that must have an authenticator and has none to. It stages the
@@ -238,6 +245,10 @@ recovery codes behind a checkbox that says they have been saved. The QR is drawn
 in the browser as SVG, because the `otpauth://` URI is a credential and asking a
 server to draw it would put it in a second place. [Staff and
 roles](staff-and-roles.md#two-factor-enrolment) walks through it.
+
+`POST /api/auth/totp/enrol` never replaces an authenticator that is on (`unavailable`):
+changing one is not a step-up the plan defines, so the way is to turn it off with a
+live code and enrol again.
 
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed
@@ -311,8 +322,10 @@ reason goes to the audit trail as `auth.second_factor.failed` with `meta.factor`
 `secondFactor: passkey`, and records the use (`last_used_at`, the counter).
 
 "Trust this browser" applies to whichever factor succeeded. Under SSO
-enforcement a passkey second factor answers `403 sso-required`, as a recovery
-code does; break-glass with a passkey is
+enforcement a passkey second factor after a local first factor answers `403
+sso-required` (from `options` too, so no ceremony is minted for it), as a recovery
+code does; after an SSO assertion that does not vouch for IdP MFA it is a valid
+second factor. Break-glass with a passkey is
 [ADR 0053](../decisions/0053-break-glass-with-a-passkey.md).
 
 ### Trusting a browser

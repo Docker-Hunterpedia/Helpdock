@@ -134,8 +134,10 @@ class FakeStaffRepository {
     this.#patch(userId, { passwordHash });
   }
 
-  async stageTotpSecret(userId: string, totpSecretEncrypted: string): Promise<void> {
-    this.#patch(userId, { totpSecretEncrypted, totpEnabled: false });
+  async stageTotpSecret(userId: string, totpSecretEncrypted: string): Promise<boolean> {
+    if (this.users.get(userId)?.totpEnabled) return false;
+    this.#patch(userId, { totpSecretEncrypted });
+    return true;
   }
 
   async enableTotp(userId: string, recoveryCodesHashed: string[]): Promise<void> {
@@ -2794,6 +2796,158 @@ describe('a passkey as the second factor (M18-03)', () => {
     });
   });
 
+  describe('a stale enrolment challenge (it must not replace a factor set since)', () => {
+    const IPV = '203.0.113.9';
+    const staleChallenge = async (): Promise<{ challengeId: string; user: StaffUser }> => {
+      const user = staff.add(await newUser(), 'admin');
+      const started = await signIn();
+      if (started.kind !== 'second-factor-enrolment-required')
+        throw new Error('expected enrolment');
+      return { challengeId: started.challengeId, user };
+    };
+
+    it('does not stage over an authenticator the account turned on meanwhile', async () => {
+      const { challengeId, user } = await staleChallenge();
+      const secret = newTotpSecret();
+      staff.users.set(user.id, {
+        ...user,
+        totpEnabled: true,
+        totpSecretEncrypted: encryptSecret(
+          secret,
+          createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
+        ),
+      });
+      const before = staff.users.get(user.id)?.totpSecretEncrypted;
+
+      await expect(codeOf(service.startEnrolment(challengeId))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+
+      expect(staff.users.get(user.id)).toMatchObject({
+        totpEnabled: true,
+        totpSecretEncrypted: before,
+      });
+    });
+
+    it('does not stage beside a passkey the account added meanwhile', async () => {
+      const { challengeId, user } = await staleChallenge();
+      passkeyCounts.set(user.id, 1);
+
+      await expect(codeOf(service.startEnrolment(challengeId))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+      expect(staff.users.get(user.id)?.totpSecretEncrypted).toBeNull();
+    });
+
+    it('does not turn a factor on when the code is right but the account got one first', async () => {
+      const { challengeId, user } = await staleChallenge();
+      const { secret } = await service.startEnrolment(challengeId);
+      passkeyCounts.set(user.id, 1);
+
+      await expect(
+        codeOf(
+          service.completeEnrolment({
+            ip: IPV,
+            challengeId,
+            code: await generate({ secret }),
+            userAgent: undefined,
+          }),
+        ),
+      ).resolves.toEqual({ code: 'challenge-expired' });
+
+      expect(staff.users.get(user.id)?.totpEnabled).toBe(false);
+      expect(audit.actions()).not.toContain('auth.sign_in.succeeded');
+    });
+
+    it('takes the account lock before it checks, as passkey add and remove do', async () => {
+      const { challengeId } = await staleChallenge();
+      const { secret } = await service.startEnrolment(challengeId);
+      passkeyRows.calls.length = 0;
+
+      await service.completeEnrolment({
+        ip: IPV,
+        challengeId,
+        code: await generate({ secret }),
+        userAgent: undefined,
+      });
+
+      expect(passkeyRows.calls.slice(0, 2)).toEqual(['lock', 'count']);
+    });
+
+    it('does not let a bare session replace the authenticator that is on', async () => {
+      const { user, secret } = await withTotp();
+      staff.add(user, 'admin');
+      const before = staff.users.get(user.id)?.totpSecretEncrypted;
+
+      await expect(codeOf(service.enrolTotp(user.id))).resolves.toEqual({ code: 'unavailable' });
+
+      expect(staff.users.get(user.id)).toMatchObject({
+        totpEnabled: true,
+        totpSecretEncrypted: before,
+      });
+      expect(secret).toBeTruthy();
+    });
+
+    it('still lets a session stage the first authenticator, or one beside a passkey', async () => {
+      const user = staff.add(await newUser());
+      passkeyCounts.set(user.id, 1);
+
+      await expect(service.enrolTotp(user.id)).resolves.toMatchObject({
+        secret: expect.any(String),
+      });
+    });
+  });
+
+  describe('under SSO enforcement', () => {
+    const asSso = async (): Promise<{
+      challengeId: string;
+      authenticator: SoftwareAuthenticator;
+    }> => {
+      const user = staff.add(await newUser(), 'admin');
+      const authenticator = new SoftwareAuthenticator();
+      passkeyRows.rows.push(
+        credentialRow(user.id, 'Key', authenticator.credentialId, authenticator.cosePublicKey),
+      );
+      const challengeId = await new TotpChallengeStore(stub.asRedis()).create({
+        userId: user.id,
+        kind: 'second-factor',
+        firstFactor: 'sso',
+        ssoConnectionId: uuidv7(),
+      });
+      vi.spyOn(SsoIdentityService.prototype, 'assertLinked').mockResolvedValue(undefined);
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      return { challengeId, authenticator };
+    };
+
+    it('lets a passkey answer the second factor after an SSO assertion that does not vouch for MFA', async () => {
+      const { challengeId, authenticator } = await asSso();
+
+      const { issued } = await verify(challengeId, await assertWith(authenticator, challengeId));
+
+      expect(issued.session.user.email).toBe('lina@helpdock.com');
+      expect(audit.entries.at(-1)?.meta).toMatchObject({ method: 'sso', secondFactor: 'passkey' });
+    });
+
+    it('refuses a local first factor before it mints a ceremony or costs an attempt', async () => {
+      const { challengeId } = await start();
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+
+      await expect(codeOf(optionsFor(challengeId))).resolves.toEqual({ code: 'sso-required' });
+      await expect(
+        codeOf(
+          service.verifyPasskeySecondFactor({
+            challengeId,
+            ip: IP,
+            ceremonyId: 'A'.repeat(43),
+            response: {} as never,
+            trustDevice: false,
+            userAgent: undefined,
+          }),
+        ),
+      ).resolves.toEqual({ code: 'sso-required' });
+    });
+  });
+
   describe('having a factor', () => {
     it('counts a passkey as a second factor', async () => {
       const user = await newUser();
@@ -2854,6 +3008,19 @@ describe('a passkey as the second factor (M18-03)', () => {
       expect(recoveryCodes).toEqual([]);
       expect(staff.users.get(user.id)?.recoveryCodesHashed).toEqual(['hash-1']);
       expect(passkeyRows.calls.slice(0, 1)).toEqual(['lock']);
+    });
+
+    it('takes the account lock before it redraws with a code, as turning the app off does', async () => {
+      const { user, secret } = await withTotp();
+      staff.add(user, 'admin');
+
+      await service.regenerateRecoveryCodes(
+        user.id,
+        await generate({ secret }),
+        {} as DbTransaction,
+      );
+
+      expect(passkeyRows.calls[0]).toBe('lock');
     });
 
     it('redraws the codes after a passkey assertion, and only for an account with a factor', async () => {

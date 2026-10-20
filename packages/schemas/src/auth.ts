@@ -325,8 +325,8 @@ const secondFactorChallengeSchema = z.object({
 
 /**
  * `totp-enrolment-required` was renamed `second-factor-enrolment-required` when
- * a passkey became a way to enrol (M18-03). The old name is read as the new one
- * for one release, so a client or a saved fixture that still uses it works.
+ * a passkey became a way to enrol (M18-03). Both are read as the new one; the
+ * api sends the old one for one release ({@link toWireSignInResponse}).
  */
 function aliasEnrolmentKind(value: unknown): unknown {
   if (
@@ -357,6 +357,24 @@ export const signInResponseSchema = z.preprocess(
   ]),
 );
 export type SignInResponse = z.infer<typeof signInResponseSchema>;
+
+/** What the api still sends for the enrolment challenge: an admin bundle cached from before M18-03 only knows this name. */
+export const LEGACY_ENROLMENT_KIND = 'totp-enrolment-required';
+
+export type WireSignInResponse =
+  | Exclude<SignInResponse, { kind: 'second-factor-enrolment-required' }>
+  | { readonly kind: typeof LEGACY_ENROLMENT_KIND; readonly challengeId: string };
+
+/**
+ * The answer as it goes out. For one release the enrolment challenge keeps its
+ * old name on the wire, so a browser still running an older admin bundle works;
+ * every reader here accepts both. The new name is sent from the release after,
+ * when the cached bundles have gone.
+ */
+export const toWireSignInResponse = (response: SignInResponse): WireSignInResponse =>
+  response.kind === 'second-factor-enrolment-required'
+    ? { kind: LEGACY_ENROLMENT_KIND, challengeId: response.challengeId }
+    : response;
 
 /**
  * The same three outcomes as the admin's `AuthApi` reports them. The access

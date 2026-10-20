@@ -599,6 +599,15 @@ Backlog or never:
     "Your new recovery codes" block rather than a new dialog.
   - The security emails' "can now sign you in" wording waits for M18-04, as
     planned.
+  - **Alias direction.** The enrolment challenge is `second-factor-enrolment-required`
+    everywhere in code, but the api still sends `totp-enrolment-required` on the
+    wire for one release so a cached admin bundle works; readers accept both.
+    The wire name flips in the release after (remove `toWireSignInResponse`).
+  - **Changing an enabled authenticator** needs a step-up the plan does not
+    define, so it is refused: `POST /api/auth/totp/enrol` and the sign-in
+    enrolment never stage over an app that is on (turn it off with a live code,
+    then enrol again). An enrolment challenge is honoured only while the account
+    has no second factor.
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom

@@ -5,6 +5,7 @@
 ### Patch Changes
 
 - Security: fixes a flaw that let someone holding a staff password replace that person's authenticator app. Enrolling an authenticator now refuses to run while one is already turned on; an account that may turn its app off can do so with a current code and set it up again, but an account that must keep one (Admins and accounts required to use two-factor) cannot replace it in 1.1.x, so keep your recovery codes safe. A replace-authenticator flow is tracked in #373. Sign-in enrolment links issued before an authenticator was set up now expire instead of replacing it.
+- Updates build tooling dependencies with security fixes.
 
 ## 1.1.0
 

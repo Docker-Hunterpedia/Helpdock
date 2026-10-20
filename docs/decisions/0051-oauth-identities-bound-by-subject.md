@@ -1,10 +1,12 @@
 # 0051 OAuth sign-in identities bound by subject, and Microsoft as a third provider
 
-Status: proposed
+Status: accepted
 Date: 2026-10-20
 
-Being implemented ahead of M18 as a 1.0.1 security fix (separate pull request);
-this record stays proposed until accepted with that fix or with M18.
+Accepted with the 1.0.1 security fix, which implements the binding for Google
+and GitHub (see "Implementation" below). The Microsoft provider, the
+allow-lists, passkey step-up and invitation binding are still to be built in
+M18 (M18-07, M18-08).
 
 ## Context
 
@@ -25,9 +27,6 @@ the class of weakness #219 fixed for SSO, and it is wider here:
 
 Teams also ask for a Microsoft button beside Google and GitHub. Entra ID as an
 organisation is already an SSO connection (M11).
-
-Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
-(M18-07, M18-08).
 
 ## Decision
 
@@ -76,3 +75,31 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
 - **Fold the buttons into SSO connections:** GitHub is not OIDC, and small teams
   would get JIT semantics they do not want.
 - **Multi-tenant Microsoft:** reopens the templated-issuer and nOAuth questions.
+
+## Implementation (2026-10-20, 1.0.1)
+
+Decisions 1, 2 and 6 for Google and GitHub, and decision 3 except the passkey,
+the invitation and the security page control:
+
+- `user_oauth_identities` (migration `0056_oauth_identities`): `provider`
+  (`google` | `github`), `provider_subject`, `user_id`, `email_at_link`,
+  `created_at`; unique `(provider, provider_subject)` and `(user_id, provider)`.
+  It has no `issuer` column: each of the two providers has one fixed issuer, so
+  the provider names it. Microsoft adds one with its tenant.
+- `api/auth/oauth/oauth-linking.ts` decides: the subject first, then a first
+  link only for an authoritative address and an account with no identity of
+  that provider (`oauth-identity-conflict` otherwise), and
+  `oauth-link-required` for every non-authoritative address, held or not.
+  GitHub's subject is its numeric user id; it is never authoritative.
+- Connect and disconnect are `POST /api/auth/oauth/:provider/connect` and
+  `…/disconnect`, behind the current password or a live code and the step-up
+  rate limit; the connect flow's state carries the account id. Each writes
+  `auth.oauth.linked` / `.unlinked` (`.link_refused` on a conflict) and a
+  `securityChange` email through the outbox. A first link at sign-in is audited
+  and emailed the same way.
+- The second-factor check after OAuth is unchanged.
+
+Left for M18: Microsoft (decision 5), the allow-lists (decision 4), a passkey
+as step-up, binding at invitation acceptance (the invitation form has no
+provider option yet), and the Security › Sign-in methods control, which needs
+its artboard first.

@@ -44,3 +44,16 @@ it('exchanges an SSO completion code once when React replays effects', async () 
   expect(await screen.findByRole('heading', { name: 'Desk opened' })).toBeVisible();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+it('tells a person whose provider cannot make the first link to connect it from a session', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-link-required&provider=github'] },
+  );
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'This account is not connected here yet. Sign in another way once, then connect it from your security page.',
+  );
+});

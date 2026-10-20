@@ -58,7 +58,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0048](0048-translations-through-hosted-weblate.md) | Translations through Hosted Weblate | accepted |
 | [0049](0049-installable-admin-before-native-agent-apps.md) | An installable admin (PWA) before native agent apps, and no push relay | proposed |
 | [0050](0050-passkeys-for-staff-over-webauthn.md) | Passkeys for staff over WebAuthn | proposed |
-| [0051](0051-oauth-identities-bound-by-subject.md) | OAuth sign-in identities bound by subject, and Microsoft as a third provider | proposed |
+| [0051](0051-oauth-identities-bound-by-subject.md) | OAuth sign-in identities bound by subject, and Microsoft as a third provider | accepted |
 | [0052](0052-built-in-proof-of-work-captcha.md) | A built-in proof-of-work CAPTCHA provider (amends 0003) | accepted |
 | [0053](0053-break-glass-with-a-passkey.md) | Break-glass may use a passkey (amends 0026) | accepted |
 | [0054](0054-several-widgets-per-brand.md) | Several widgets per brand, with an optional widget id in the protocol | accepted |
@@ -66,7 +66,7 @@ The decisions listed as open in [ARCHITECTURE.md §19](../planning/ARCHITECTURE.
 | [0056](0056-public-npm-packages-for-client-sdks.md) | Public npm packages for the widget client and the React Native SDK | accepted |
 | [0057](0057-desktop-shell-on-electron.md) | The desktop shell on Electron | proposed |
 
-ADRs 0028 to 0057 were written on 2026-10-20 with the plans of [PRD Phase 5](../planning/PRD.md#phase-5--1x), one milestone after another (M12: 0028–0031, M13: 0032–0034, M14: 0035–0038, M15: 0039–0044, M16: 0045–0046, M17: 0047–0049, M18: 0050–0053, M19: 0054–0055, M20: 0056–0057). Each stays proposed until its milestone builds it, except 0032, 0033, 0040, 0048, 0052, 0053, 0054, 0055 and 0056, which the owner accepted on 2026-10-20 ([decisions](../planning/decisions-1-x.md)). 0051 is being implemented ahead of M18 as a 1.0.1 security fix. 0045, 0052 and 0053 amend accepted or earlier records (0027, 0003, 0026) without editing them.
+ADRs 0028 to 0057 were written on 2026-10-20 with the plans of [PRD Phase 5](../planning/PRD.md#phase-5--1x), one milestone after another (M12: 0028–0031, M13: 0032–0034, M14: 0035–0038, M15: 0039–0044, M16: 0045–0046, M17: 0047–0049, M18: 0050–0053, M19: 0054–0055, M20: 0056–0057). Each stays proposed until its milestone builds it, except 0032, 0033, 0040, 0048, 0052, 0053, 0054, 0055 and 0056, which the owner accepted on 2026-10-20 ([decisions](../planning/decisions-1-x.md)). 0051 was accepted and its OAuth binding built ahead of M18, as a 1.0.1 security fix; Microsoft remains M18 work. 0045, 0052 and 0053 amend accepted or earlier records (0027, 0003, 0026) without editing them.
 
 ## Template
 

@@ -91,6 +91,8 @@ export const SECURITY_CHANGES = [
   'twoFactorEnabled',
   'twoFactorDisabled',
   'recoveryCodes',
+  'oauthConnected',
+  'oauthDisconnected',
 ] as const;
 export type SecurityChange = (typeof SECURITY_CHANGES)[number];
 

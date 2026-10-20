@@ -1,12 +1,15 @@
 # Contributing to Helpdock
 
-Thanks for your interest. Helpdock is early and moving fast, so please read this before opening a pull request.
+Thanks for your interest. Helpdock 1.0.0 was released on 2026-10-20, and the work after it is planned in the open as the 1.x releases: [Phase 5 of the PRD](docs/planning/PRD.md#phase-5--1x) lists the milestones and their deliverables, and [the 1.x decisions](docs/planning/decisions-1-x.md) record what the owner has decided. Please read this before opening a pull request.
+
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md). For help using Helpdock rather than changing it, see [SUPPORT.md](SUPPORT.md).
 
 ## Before you start
 
 - Read [REQUIREMENTS.md](docs/planning/REQUIREMENTS.md) and [ARCHITECTURE.md](docs/planning/ARCHITECTURE.md). They are the source of truth for scope and stack.
-- For anything larger than a small fix, open an issue first so we can agree on the approach.
-- Features listed under v1.1 or non-goals will not be merged into v1.
+- For anything larger than a small fix, open an issue first so we can agree on the approach. Use the [issue forms](https://github.com/Docker-Hunterpedia/Helpdock/issues/new/choose): bug report, feature request, accessibility barrier, translation or documentation. Questions and early ideas go to [GitHub Discussions](https://github.com/Docker-Hunterpedia/Helpdock/discussions).
+- Work maps to a deliverable in the PRD. An item on the [post-1.0 backlog](docs/planning/PRD.md#5-post-10-backlog-v11) is not scheduled and needs its own PRD section before it is built, and the [non-goals for 1.x](docs/planning/PRD.md#non-goals-for-1x) will not be merged.
+- Translations are pull requests to `packages/i18n/locales/` for now; Hosted Weblate is planned ([D-47](docs/planning/decisions-1-x.md#m17-apps-and-languages)).
 
 ## Workflow
 

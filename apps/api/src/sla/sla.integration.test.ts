@@ -1029,7 +1029,7 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
             {
               tx,
               brandId: seeded.brandId,
-              actor: { actorType: 'staff', actorId: ada.id, via: 'web' },
+              actor: { actorType: 'staff', actorId: ada.id, via: 'ui' },
               now: new Date(),
             },
             statusId,

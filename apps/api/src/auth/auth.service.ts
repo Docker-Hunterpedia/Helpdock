@@ -308,6 +308,7 @@ export class AuthService {
       secondFactor: 'totp',
     });
     await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
 
     return {
       issued,
@@ -358,6 +359,7 @@ export class AuthService {
       secondFactor: 'recovery-code',
     });
     await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
     return issued;
   }
 
@@ -430,6 +432,7 @@ export class AuthService {
       secondFactor: 'totp',
     });
     await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
 
     return { recoveryCodes, issued };
   }
@@ -1395,10 +1398,13 @@ export class AuthService {
    * A second-factor step spends the IP budget only, never the address one. The
    * address bucket guards the password: charging it here would let anyone who
    * knows a staff address lock that person out of an SSO, magic-link or OAuth
-   * sign-in with junk passwords. Guesses at the code are bounded by the
-   * challenge's three attempts and the account lock. The returned attempt
-   * carries the address solely so that a completed sign-in clears the address
-   * bucket; the attempt was never added to it.
+   * sign-in with junk passwords. Guesses at the code are bounded per
+   * account, not per address: each wrong value also counts on the user's own
+   * counter, across challenges, and three of them set the 15-minute lock
+   * (TotpChallengeStore.spendAttempt). Only someone holding a live challenge,
+   * who has proved the first factor, can spend it. The returned attempt carries
+   * the address solely so that a completed sign-in clears the address bucket;
+   * the attempt was never added to it.
    */
   async #signInChallenge(challengeId: string, kind: 'second-factor' | 'enrolment', ip: string) {
     let resolved: { challenge: Awaited<ReturnType<TotpChallengeStore['read']>>; user: StaffUser };
@@ -1456,6 +1462,7 @@ export class AuthService {
     }
 
     const outcome = await this.#parts.challenges.spendAttempt(challengeId, found.challenge);
+    if (outcome.status === 'expired') return new AuthFailure('challenge-expired');
     if (outcome.status === 'locked') {
       this.#parts.logger.warn(
         { userId: found.challenge.userId },

@@ -6,6 +6,7 @@ import {
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
   users,
+  uuidv7,
   withTenant,
 } from '@helpdock/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -29,8 +30,15 @@ import { dockerAvailable } from '../testing/docker-available.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { RateLimiter, SIGN_IN_EMAIL_RULE, SIGN_IN_IP_RULE } from './rate-limit.js';
-import { hashSubject, PRINCIPAL_REVOKED_CHANNEL, rateLimitKey } from './redis-keys.js';
+import {
+  hashSubject,
+  PRINCIPAL_REVOKED_CHANNEL,
+  rateLimitKey,
+  totpChallengeKey,
+  totpLockKey,
+} from './redis-keys.js';
 import { oauthNonceCookie, refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
+import { TotpChallengeStore } from './totp/challenge-store.js';
 
 /**
  * The whole of M0-05 over HTTP, against a real Postgres and a real Redis: the
@@ -441,30 +449,63 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(cookieOf(second, REFRESH_COOKIE)).toEqual(expect.any(String));
     });
 
-    it('never lets bad TOTP codes spend the address budget, so rounds of them do not lock the password step (#343)', async () => {
+    it('locks the account once wrong codes across challenges reach the per-user limit (#343)', async () => {
       const badCode = (await totpCode()) === '000000' ? '111111' : '000000';
-      for (let round = 1; round <= 6; round++) {
+      const start = async (): Promise<string> => {
         const first = await post('/api/auth/sign-in', {
           email: seeded.email,
           password: seeded.password,
         });
         expect(first.statusCode).toBe(201);
         expect(first.json().kind).toBe('totp-required');
-        const challengeId = first.json().challengeId as string;
-        for (let guess = 0; guess < 2; guess++) {
-          const response = await post('/api/auth/totp', {
-            challengeId,
-            code: badCode,
-            trustDevice: false,
-          });
-          expect(response.statusCode).toBe(401);
-          expect(response.json().error.auth).toEqual({
-            code: 'totp-mismatch',
-            attemptsLeft: 2 - guess,
-          });
-        }
-      }
-      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
+        return first.json().challengeId as string;
+      };
+      const guess = (challengeId: string) =>
+        post('/api/auth/totp', { challengeId, code: badCode, trustDevice: false });
+
+      const first = await start();
+      expect((await guess(first)).json().error.auth).toEqual({
+        code: 'totp-mismatch',
+        attemptsLeft: 2,
+      });
+      expect((await guess(first)).json().error.auth).toEqual({
+        code: 'totp-mismatch',
+        attemptsLeft: 1,
+      });
+
+      // A fresh challenge does not reset the account's count: its first wrong
+      // code is the third failure.
+      const second = await start();
+      expect((await guess(second)).json().error.auth).toEqual({ code: 'totp-locked' });
+
+      const locked = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      expect(locked.statusCode).toBe(429);
+      expect(locked.json().error.auth).toEqual({ code: 'totp-locked' });
+      // Only the refused password step is on the address budget, not the codes.
+      const [addressKey = ''] = await runtime.redis.keys('auth:rate:signin-email:*');
+      expect(await runtime.redis.zcard(addressKey)).toBe(1);
+    });
+
+    it('charges at most three of many parallel wrong guesses on one challenge (#347)', async () => {
+      const store = new TotpChallengeStore(runtime.redis);
+      const userId = uuidv7();
+      const challengeId = await store.create({ userId, kind: 'second-factor' });
+      const found = await store.read(challengeId);
+      if (found.status !== 'ok') throw new Error('expected an open challenge');
+
+      const outcomes = await Promise.all(
+        Array.from({ length: 12 }, () => store.spendAttempt(challengeId, found.challenge)),
+      );
+
+      expect(outcomes.filter((o) => o.status === 'remaining')).toHaveLength(2);
+      expect(outcomes.filter((o) => o.status === 'locked')).toHaveLength(1);
+      expect(outcomes.filter((o) => o.status === 'expired')).toHaveLength(9);
+      expect(await store.isLocked(userId)).toBe(true);
+      expect(await runtime.redis.ttl(totpLockKey(userId))).toBeGreaterThan(890);
+      expect(await runtime.redis.get(totpChallengeKey(challengeId))).toBeNull();
     });
 
     it('keeps TOTP guessing capped at three per challenge when the address budget is spent (#343)', async () => {

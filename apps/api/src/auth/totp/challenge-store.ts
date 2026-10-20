@@ -1,7 +1,7 @@
 import { uuidv7 } from '@helpdock/db';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
-import { totpChallengeKey, totpLockKey } from '../redis-keys.js';
+import { totpChallengeKey, totpFailuresKey, totpLockKey } from '../redis-keys.js';
 
 /**
  * The state between "the password was right" and "the code was right".
@@ -50,7 +50,44 @@ export type ChallengeCheck =
 
 export type AttemptOutcome =
   | { readonly status: 'remaining'; readonly attemptsLeft: number }
-  | { readonly status: 'locked' };
+  | { readonly status: 'locked' }
+  | { readonly status: 'expired' };
+
+/**
+ * Charges one wrong value in a single step, so parallel guesses cannot read the
+ * same count and overwrite each other. Two budgets are spent together: the
+ * challenge's own (KEYS[1]) and the account's (KEYS[3]), which survives the
+ * challenge. Without the second, someone holding the first factor could start a
+ * fresh challenge for every two wrong codes and never reach the lock.
+ *
+ * The challenge is never recreated (a consumed or expired one answers -1), the
+ * account is bound to the stored record rather than the caller's copy, and the
+ * TTL is kept, not extended. ARGV: user id, limit, lock seconds.
+ * Returns {status, attemptsLeft}: 1 remaining, 0 locked, -1 expired.
+ */
+export const SPEND_ATTEMPT_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {-1, 0} end
+local challenge = cjson.decode(raw)
+if challenge.userId ~= ARGV[1] then return {-1, 0} end
+local limit = tonumber(ARGV[2])
+local lock = tonumber(ARGV[3])
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  redis.call('DEL', KEYS[1])
+  return {0, 0}
+end
+local attempts = challenge.attempts + 1
+local failures = redis.call('INCR', KEYS[3])
+if failures == 1 then redis.call('EXPIRE', KEYS[3], lock) end
+if attempts >= limit or failures >= limit then
+  redis.call('DEL', KEYS[1], KEYS[3])
+  redis.call('SET', KEYS[2], '1', 'EX', lock)
+  return {0, 0}
+end
+challenge.attempts = attempts
+redis.call('SET', KEYS[1], cjson.encode(challenge), 'KEEPTTL')
+return {1, limit - math.max(attempts, failures)}
+`;
 
 export class TotpChallengeStore {
   readonly #redis: Redis;
@@ -116,31 +153,27 @@ export class TotpChallengeStore {
    * Charges one attempt, whichever field the wrong value was typed into. A
    * recovery code and an authenticator code share the budget on purpose: the
    * lock would be trivially avoidable if switching forms bought three more
-   * tries.
+   * tries. The count the caller read is ignored; the stored one is the truth.
    */
   async spendAttempt(challengeId: string, challenge: TotpChallenge): Promise<AttemptOutcome> {
-    const attempts = challenge.attempts + 1;
-    const attemptsLeft = TOTP_MAX_ATTEMPTS - attempts;
-
-    if (attemptsLeft <= 0) {
-      await this.#redis
-        .multi()
-        .del(totpChallengeKey(challengeId))
-        .set(totpLockKey(challenge.userId), '1', 'EX', TOTP_LOCK_SECONDS)
-        .exec();
-
-      return { status: 'locked' };
-    }
-
-    // The TTL is kept, not extended: wrong answers must not be a way to hold a
-    // challenge open indefinitely.
-    await this.#redis.set(
+    const [status, attemptsLeft] = (await this.#redis.eval(
+      SPEND_ATTEMPT_SCRIPT,
+      3,
       totpChallengeKey(challengeId),
-      JSON.stringify({ ...challenge, attempts }),
-      'KEEPTTL',
-    );
+      totpLockKey(challenge.userId),
+      totpFailuresKey(challenge.userId),
+      challenge.userId,
+      String(TOTP_MAX_ATTEMPTS),
+      String(TOTP_LOCK_SECONDS),
+    )) as [number, number];
 
-    return { status: 'remaining', attemptsLeft };
+    if (status === 1) return { status: 'remaining', attemptsLeft };
+    return { status: status === 0 ? 'locked' : 'expired' };
+  }
+
+  /** A completed sign-in forgives earlier wrong codes; only proof of every factor does. */
+  async clearFailures(userId: string): Promise<void> {
+    await this.#redis.del(totpFailuresKey(userId));
   }
 
   /** The challenge is spent the moment it succeeds, so one code opens one session. */

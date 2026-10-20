@@ -5,6 +5,7 @@ import {
   RESERVE_SIGN_IN_SCRIPT,
 } from '../auth/rate-limit.js';
 import { REGISTER_SESSION_SCRIPT, ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
+import { SPEND_ATTEMPT_SCRIPT } from '../auth/totp/challenge-store.js';
 import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
 
@@ -102,6 +103,30 @@ export const authRedisStub = (): RedisStub =>
       await stub.pexpire(counterKey, Number(windowMs));
 
       return 1;
+    })
+    .defineScript(SPEND_ATTEMPT_SCRIPT, async (stub, keys, args) => {
+      const [challengeKey = '', lockKey = '', failuresKey = ''] = keys;
+      const [userId = '', limitText = '0', lockText = '0'] = args;
+      const raw = await stub.get(challengeKey);
+      if (raw === null) return [-1, 0];
+      const challenge = JSON.parse(raw) as { userId: string; attempts: number };
+      if (challenge.userId !== userId) return [-1, 0];
+      if (await stub.exists(lockKey)) {
+        await stub.del(challengeKey);
+        return [0, 0];
+      }
+      const limit = Number(limitText);
+      const lock = Number(lockText);
+      const attempts = challenge.attempts + 1;
+      const failures = await stub.incr(failuresKey);
+      if (failures === 1) await stub.expire(failuresKey, lock);
+      if (attempts >= limit || failures >= limit) {
+        await stub.del(challengeKey, failuresKey);
+        await stub.set(lockKey, '1', 'EX', lock);
+        return [0, 0];
+      }
+      await stub.set(challengeKey, JSON.stringify({ ...challenge, attempts }), 'KEEPTTL');
+      return [1, limit - Math.max(attempts, failures)];
     })
     .defineScript(CLAIM_STEP_SCRIPT, async (stub, keys, args) => {
       const [stepKey = ''] = keys;

@@ -734,9 +734,13 @@ The per-address bucket guards the password and is spent only by the password
 step. The per-IP bucket is spent by the password step and by every second-factor
 step (TOTP, recovery code, sign-in enrolment). A second-factor step never spends
 or is blocked by the per-address bucket, so junk passwords sent for a known
-address cannot lock that person out of an SSO, magic-link or OAuth sign-in; guesses
-at a code are bounded by the challenge's three attempts and the fifteen-minute
-account lock. In-flight verification reserves a slot atomically so parallel
+address cannot lock that person out of an SSO, magic-link or OAuth sign-in. Guesses
+at a code are bounded per account: every wrong authenticator or recovery code
+counts atomically on its challenge (three attempts) and on a per-user counter
+that outlives the challenge, so starting a new challenge does not buy new tries.
+The third wrong code within fifteen minutes, on any mix of challenges, locks the
+account for fifteen minutes (`totp-locked`). Only someone holding a live
+challenge can spend the counter, and a completed sign-in clears it. In-flight verification reserves a slot atomically so parallel
 guesses cannot exceed the limit. A proved password that issues a TOTP or
 required-enrolment challenge atomically removes only its own reservation from
 both buckets, preserving earlier failures. Abandoning a challenge adds no

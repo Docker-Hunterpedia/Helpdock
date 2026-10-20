@@ -2,7 +2,7 @@ import { uuidv7 } from '@helpdock/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { authRedis } from '../../testing/auth-redis.js';
 import type { RedisStub } from '../../testing/redis-stub.js';
-import { totpChallengeKey, totpLockKey } from '../redis-keys.js';
+import { totpChallengeKey, totpFailuresKey, totpLockKey } from '../redis-keys.js';
 import {
   TOTP_CHALLENGE_TTL_SECONDS,
   TOTP_LOCK_SECONDS,
@@ -94,11 +94,66 @@ describe('spendAttempt', () => {
       throw new Error('expected the challenge to still be open');
     }
 
-    await store.spendAttempt(challengeId, { ...found.challenge, attempts: 2 });
+    for (let attempt = 0; attempt < TOTP_MAX_ATTEMPTS; attempt += 1) {
+      await store.spendAttempt(challengeId, found.challenge);
+    }
 
     await expect(stub.get(totpChallengeKey(challengeId))).resolves.toBeNull();
     await expect(store.isLocked(USER_ID)).resolves.toBe(true);
     expect(stub.ttlOf(totpLockKey(USER_ID))).toBe(TOTP_LOCK_SECONDS);
+  });
+
+  it('trusts the stored count, not the copy the caller read', async () => {
+    const challengeId = await start();
+    const found = await store.read(challengeId);
+    if (found.status !== 'ok') throw new Error('expected an open challenge');
+
+    await store.spendAttempt(challengeId, found.challenge);
+    await expect(store.spendAttempt(challengeId, found.challenge)).resolves.toEqual({
+      status: 'remaining',
+      attemptsLeft: 1,
+    });
+  });
+
+  it('counts wrong values across challenges and locks at the limit', async () => {
+    const outcomes: unknown[] = [];
+    for (let round = 0; round < TOTP_MAX_ATTEMPTS; round += 1) {
+      const challengeId = await start();
+      const found = await store.read(challengeId);
+      if (found.status !== 'ok') throw new Error('expected an open challenge');
+      outcomes.push(await store.spendAttempt(challengeId, found.challenge));
+    }
+
+    expect(outcomes).toEqual([
+      { status: 'remaining', attemptsLeft: 2 },
+      { status: 'remaining', attemptsLeft: 1 },
+      { status: 'locked' },
+    ]);
+    await expect(store.isLocked(USER_ID)).resolves.toBe(true);
+    await expect(stub.get(totpFailuresKey(USER_ID))).resolves.toBeNull();
+  });
+
+  it('forgives the counter only when told a sign-in completed', async () => {
+    const challengeId = await start();
+    const found = await store.read(challengeId);
+    if (found.status !== 'ok') throw new Error('expected an open challenge');
+    await store.spendAttempt(challengeId, found.challenge);
+
+    await store.clearFailures(USER_ID);
+
+    await expect(stub.get(totpFailuresKey(USER_ID))).resolves.toBeNull();
+  });
+
+  it('never recreates a consumed or expired challenge', async () => {
+    const challengeId = await start();
+    const found = await store.read(challengeId);
+    if (found.status !== 'ok') throw new Error('expected an open challenge');
+    await store.consume(challengeId);
+
+    await expect(store.spendAttempt(challengeId, found.challenge)).resolves.toEqual({
+      status: 'expired',
+    });
+    await expect(stub.get(totpChallengeKey(challengeId))).resolves.toBeNull();
   });
 
   it('does not extend the challenge when an attempt is spent', async () => {

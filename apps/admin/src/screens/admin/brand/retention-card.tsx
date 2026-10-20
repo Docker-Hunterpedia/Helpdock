@@ -5,6 +5,7 @@ import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { latinNumbering } from '../../../ui/format.js';
 import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import {
   type DayField,
@@ -392,9 +393,10 @@ function LastRun({ overview }: { readonly overview: RetentionOverview }): ReactN
     overview.lastRun === null
       ? t('brand:retention.neverRun')
       : t('brand:retention.lastRun', {
-          time: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
-            new Date(overview.lastRun.at),
-          ),
+          time: new Intl.DateTimeFormat(latinNumbering(locale), {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }).format(new Date(overview.lastRun.at)),
           count: overview.lastRun.total,
         });
 

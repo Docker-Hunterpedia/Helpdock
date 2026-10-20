@@ -7,6 +7,8 @@ import {
   identityLabel,
   initialsOf,
   isAnonymousVisitor,
+  knownChannel,
+  languageName,
   pageRange,
   shortVisitorId,
 } from './format.js';
@@ -136,5 +138,28 @@ describe('pageRange', () => {
 
   it('says zero of zero rather than one of zero on an empty list', () => {
     expect(pageRange(0, 0, 0)).toEqual({ from: 0, to: 0, total: 0 });
+  });
+});
+
+describe('knownChannel', () => {
+  it('recognises a ticket channel, so the screen can name it', () => {
+    expect(knownChannel('email')).toBe('email');
+    expect(knownChannel('whatsapp')).toBe('whatsapp');
+  });
+
+  it('gives up on a channel it does not know rather than invent a name', () => {
+    expect(knownChannel('carrier-pigeon')).toBeNull();
+  });
+});
+
+describe('languageName', () => {
+  it('names the language in the reader’s language', () => {
+    expect(languageName('en', 'en')).toBe('English');
+    expect(languageName('en', 'ar')).toBe('الإنجليزية');
+    expect(languageName('ar', 'en')).toBe('Arabic');
+  });
+
+  it('prints a code Intl cannot read as it is', () => {
+    expect(languageName('not a code', 'en')).toBe('not a code');
   });
 });

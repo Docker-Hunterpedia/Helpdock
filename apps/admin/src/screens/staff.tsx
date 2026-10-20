@@ -30,12 +30,14 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../app/i18n.js';
+import { usePreferences } from '../app/providers.tsx';
 import { useSemanticTokens } from '../app/tokens.js';
 import { isAuthError } from '../auth/api.js';
 import { currentBrand, useSession, useStaffApi } from '../auth/session.tsx';
 import { PageHeader } from '../shell/page-header.tsx';
 import { isStaffError } from '../staff/api.js';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
+import { formatDay } from '../ui/format.js';
 import { useToast } from '../ui/toasts.tsx';
 import { InviteDialog, RoleDialog } from './staff-dialogs.tsx';
 
@@ -65,6 +67,7 @@ type RowAction = 'deactivate' | 'remove' | 'revoke';
 
 export function StaffScreen(): ReactNode {
   const t = useT();
+  const { locale } = usePreferences();
   const api = useStaffApi();
   const session = useSession();
   const tokens = useSemanticTokens();
@@ -349,7 +352,7 @@ export function StaffScreen(): ReactNode {
                 <TableCell>
                   {member.lastActiveAt === null
                     ? t('staff:lastActive.never')
-                    : new Date(member.lastActiveAt).toLocaleDateString()}
+                    : formatDay(member.lastActiveAt, locale)}
                 </TableCell>
                 <TableCell align="right">
                   {member.self ? null : (

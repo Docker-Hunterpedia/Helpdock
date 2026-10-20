@@ -9,6 +9,7 @@ import {
 } from '../../contacts/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
+import { MOCK_STATUS_OPEN } from '../../tickets/mock-api.js';
 
 /**
  * `Admin/Contact` against the fixture, and the two things this screen exists to
@@ -51,11 +52,19 @@ describe('the contact header', () => {
   it('names the account and every identifier with its state', async () => {
     await renderContact();
 
-    const caption = await screen.findByText(/mona@example\.com verified/);
+    const caption = (await screen.findByText('Acme GmbH', { selector: 'bdi' })).closest('p');
 
-    expect(caption).toHaveTextContent('Acme GmbH');
+    expect(caption).toHaveTextContent('mona@example.com verified');
     expect(caption).toHaveTextContent('+49301234567 unverified');
     expect(caption).toHaveTextContent('linked');
+  });
+
+  it('sets every identifier left to right, so a phone number keeps its plus in Arabic', async () => {
+    await renderContact();
+
+    const caption = (await screen.findByText('Acme GmbH', { selector: 'bdi' })).closest('p');
+
+    expect(within(caption as HTMLElement).getByText('+49301234567')).toHaveAttribute('dir', 'ltr');
   });
 
   it('shows the tag the brand put on them', async () => {
@@ -98,12 +107,56 @@ describe('the timeline', () => {
     expect(screen.getByText('2 tickets are hidden from your role.')).toBeInTheDocument();
   });
 
+  it('names each ticket’s channel, status and assignee in words', async () => {
+    await renderContact({
+      contactsApi: new MockContactsApi(() => ({
+        items: [
+          {
+            id: '0192c3f0-1a2b-7c3d-8e4f-000000001042',
+            reference: 'HD-1042',
+            subject: 'Refund for order 42 has not arrived',
+            status: 'Open',
+            statusId: MOCK_STATUS_OPEN,
+            channel: 'email',
+            departmentName: 'Support',
+            assigneeName: null,
+            createdAt: '2026-09-10T09:00:00.000Z',
+          },
+          {
+            id: '0192c3f0-1a2b-7c3d-8e4f-000000001043',
+            reference: 'HD-1043',
+            subject: 'Sent by a channel this screen has never heard of',
+            status: 'Open',
+            statusId: MOCK_STATUS_OPEN,
+            channel: 'carrier-pigeon',
+            departmentName: null,
+            assigneeName: 'Omar Nasser',
+            createdAt: '2026-09-11T09:00:00.000Z',
+          },
+        ],
+        visibleCount: 2,
+        hiddenCount: 0,
+      })),
+    });
+
+    const known = (await screen.findByText('Refund for order 42 has not arrived')).closest('li');
+    const unknown = screen
+      .getByText('Sent by a channel this screen has never heard of')
+      .closest('li');
+
+    expect(known).toHaveTextContent('HD-1042 · Email · Support · Unassigned');
+    expect(known).toHaveTextContent('Open');
+    expect(unknown).toHaveTextContent('HD-1043 · carrier-pigeon · Omar Nasser');
+  });
+
   it('shows the notes inline, with who wrote them', async () => {
     await renderContact();
 
     const body = await screen.findByText('Prefers a call before any billing change.');
 
     expect(body.parentElement).toHaveTextContent('Lina Haddad');
+    // The app's own date format, never the browser's: `16 Sept 2026`.
+    expect(body.parentElement).toHaveTextContent(/Lina Haddad · \d{1,2} [A-Z][a-z]{2,3} \d{4}/);
   });
 
   it('adds a note from the composer and says it saved', async () => {
@@ -178,6 +231,7 @@ describe('the details card', () => {
     const card = await screen.findByRole('region', { name: 'Details' });
 
     expect(within(card).getByText('CUST-10492')).toBeInTheDocument();
+    expect(within(card).getByText('English')).toBeInTheDocument();
     expect(within(card).getByText('Europe/Berlin')).toBeInTheDocument();
   });
 

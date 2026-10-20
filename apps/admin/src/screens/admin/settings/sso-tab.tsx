@@ -28,6 +28,7 @@ import { EmptyState } from '../../../shell/empty-state.js';
 import { ssoKeys } from '../../../sso/api.js';
 import { useSsoApi } from '../../../sso/context.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
+import { latinNumbering } from '../../../ui/format.js';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
 import { SsoPublicValue } from './sso-public-value.tsx';
@@ -105,13 +106,15 @@ export function SsoTab() {
                         <bdi dir="ltr">{connection.emailDomains.join(', ')}</bdi>
                       </TableCell>
                       <TableCell>
-                        {new Intl.NumberFormat(locale).format(connection.peopleCount)}
+                        {new Intl.NumberFormat(latinNumbering(locale)).format(
+                          connection.peopleCount,
+                        )}
                       </TableCell>
                       <TableCell>
                         {connection.lastSignInAt
-                          ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-                              new Date(connection.lastSignInAt),
-                            )
+                          ? new Intl.DateTimeFormat(latinNumbering(locale), {
+                              dateStyle: 'medium',
+                            }).format(new Date(connection.lastSignInAt))
                           : t('sso:never')}
                       </TableCell>
                       <TableCell>

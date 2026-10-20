@@ -1342,6 +1342,11 @@ caret in the composer, `n` does the same in note mode, and `Esc` closes a
 drawer or a dialog. A single letter is only a shortcut while nobody is writing:
 anything typed into a field is left alone, as is anything carrying a modifier.
 
+The letters are the ones a Latin layout types, so on Dvorak `j` is still `j`.
+A layout that types no Latin letter, such as Arabic, uses the same physical
+keys as QWERTY: the key that types `ت` is `j`. There is no setting to turn the
+single-letter shortcuts off yet.
+
 ### Tags and custom fields in the workspace
 
 The details panel edits both (artboard `Admin/Ticket-Tags`). A Viewer, who has

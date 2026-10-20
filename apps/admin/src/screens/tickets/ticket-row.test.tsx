@@ -38,6 +38,23 @@ const captionsOnRow = (ai: TicketAiState | undefined): string[] => {
   return CAPTIONS.filter((caption) => screen.queryByText(caption) !== null);
 };
 
+describe('the subject on a ticket row', () => {
+  it('takes its own direction, so an English subject in the Arabic admin keeps its punctuation', () => {
+    renderApp(
+      <ul>
+        <TicketRow
+          ticket={testTicket({ subject: 'Do you ship to Ireland?' })}
+          selected={false}
+          now={NOW}
+          search=""
+        />
+      </ul>,
+    );
+
+    expect(screen.getByText('Do you ship to Ireland?')).toHaveAttribute('dir', 'auto');
+  });
+});
+
 describe('the assistant on a ticket row', () => {
   it.each([
     ['a handed-off conversation is marked "AI paused", not answered', PAUSED, ['AI paused']],

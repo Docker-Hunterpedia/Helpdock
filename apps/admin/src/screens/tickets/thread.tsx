@@ -472,7 +472,6 @@ function SentMessage({
       meta={metaOf(message, names, locale, now, telegram, meta)}
       {...(label === undefined ? {} : { label })}
       {...(content === undefined ? {} : { before: content.before })}
-      {...(meta === undefined ? {} : { bodyDir: 'auto' as const })}
       bodyHtml={located?.html ?? html}
       body={assist?.bodyFor(message)}
       facts={assist?.factsFor(message)}

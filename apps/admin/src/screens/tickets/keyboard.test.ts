@@ -37,6 +37,24 @@ describe('shortcutFor', () => {
     expect(shortcutFor({ key: 'n' })).toBe('note');
   });
 
+  it('answers the same physical keys on an Arabic layout', () => {
+    expect(shortcutFor({ key: 'ت', code: 'KeyJ' })).toBe('next');
+    expect(shortcutFor({ key: 'ن', code: 'KeyK' })).toBe('previous');
+    expect(shortcutFor({ key: 'ق', code: 'KeyR' })).toBe('reply');
+    expect(shortcutFor({ key: 'ى', code: 'KeyN' })).toBe('note');
+  });
+
+  it('follows the letter, not the key position, on a Latin layout', () => {
+    // Dvorak: the key in QWERTY's J position types `h`, and `j` is elsewhere.
+    expect(shortcutFor({ key: 'h', code: 'KeyJ' })).toBeNull();
+    expect(shortcutFor({ key: 'j', code: 'KeyC' })).toBe('next');
+  });
+
+  it('ignores an Arabic letter while somebody is writing', () => {
+    expect(shortcutFor({ key: 'ق', code: 'KeyR', target: element('textarea') })).toBeNull();
+    expect(shortcutFor({ key: 'ق', code: 'KeyR', ctrlKey: true })).toBeNull();
+  });
+
   it('answers a capital the same way', () => {
     expect(shortcutFor({ key: 'R' })).toBe('reply');
   });

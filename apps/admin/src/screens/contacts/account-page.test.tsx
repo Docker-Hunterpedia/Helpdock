@@ -68,7 +68,9 @@ describe('the create form', () => {
       await screen.findByRole('heading', { name: 'Rami Saleh', level: 1 }),
     ).toBeInTheDocument();
     // Normalised on the way in, so the same address typed two ways is one row.
-    expect(screen.getByText(/rami@example\.com unverified/)).toBeInTheDocument();
+    expect(
+      screen.getAllByText('rami@example.com', { selector: 'bdi' })[0]?.parentElement,
+    ).toHaveTextContent('rami@example.com unverified');
   });
 
   it('refuses an identifier another contact already holds, in words', async () => {

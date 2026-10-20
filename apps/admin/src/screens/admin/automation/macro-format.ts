@@ -1,4 +1,5 @@
 import { splitName } from '@helpdock/schemas';
+import { latinNumbering } from '../../../ui/format.js';
 
 /**
  * Wording helpers for the Macros tab (M3-06). Pure, so they are tested on
@@ -31,7 +32,10 @@ export const lastUsedLabel = (
     return t('macros:list.justNow');
   }
 
-  const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto', style: 'short' });
+  const relative = new Intl.RelativeTimeFormat(latinNumbering(locale), {
+    numeric: 'auto',
+    style: 'short',
+  });
   if (ago < HOUR) {
     return relative.format(-Math.floor(ago / MINUTE), 'minute');
   }

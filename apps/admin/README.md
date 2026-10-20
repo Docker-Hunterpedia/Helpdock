@@ -102,6 +102,21 @@ Imports reach `@helpdock/ui`, `@helpdock/i18n` and `@helpdock/schemas` only
 through their package entry points, and no app imports another app
 (`pnpm check:boundaries`).
 
+Two rules from DESIGN §7 hold on every screen:
+
+- **Text people wrote decides its own direction.** A subject, a message or
+  note body, a contact or account name and an article title carry
+  `dir="auto"`, so an English subject in the Arabic admin keeps its question
+  mark at its end and truncates from its own end. An identifier — an email
+  address, a phone number, a visitor id, a domain — is a `<bdi dir="ltr">`:
+  `+4930…` has no letter for an auto-isolate to go by.
+- **Dates go through the app's formatters** (`src/ui/format.ts`, or a screen's
+  own `format.ts`), never a bare `toLocaleDateString()`, which follows the
+  browser rather than the app's language and prints Arabic-Indic digits under
+  an Arabic browser. A formatter built on the reader's locale passes it through
+  `latinNumbering` (`ar` becomes `ar-u-nu-latn`), so the digits stay Latin in
+  both languages until v1.1 makes them a setting.
+
 ### The first-run wizard
 
 `src/screens/setup/` is M0-08: admin account, first brand, outgoing email, done.
@@ -230,6 +245,13 @@ scanner reads it.
   timeline shows how many tickets the viewer's departments exclude. That count
   drives the caption under the heading and the lock row in the list, and it is
   the only thing the screen says about those tickets.
+
+Each ticket on the timeline (`timeline-ticket.tsx`) names its channel in the
+reader's language, its department, and its assignee or "Unassigned", with the
+brand's StatusBadge at the inline end; a channel the screen does not know is
+printed as the api sent it. The Details card names the contact's language
+("English", "الإنجليزية") through `Intl.DisplayNames` rather than printing its
+code.
 
 M1-13 adds merging, from panels 1, 2 and 4 of `Admin/Contact dialogs`: the
 duplicate rows (`duplicate-suggestions.tsx`), the merge dialog

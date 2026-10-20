@@ -27,6 +27,7 @@ import {
 } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { latinNumbering } from '../../../ui/format.js';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
 import { useTicketingAction, useTicketingReport } from '../ticketing/use-ticketing-action.js';
 import { draftOf, duplicateOf, emptyDraft, type MacroDraft, requestOf } from './macro-draft.js';
@@ -147,9 +148,10 @@ export function MacrosTab(): ReactNode {
       macro.updatedById === session.user.id
         ? session.user.name
         : workspace.staff.find((person) => person.userId === macro.updatedById)?.name;
-    const when = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(
-      new Date(macro.updatedAt),
-    );
+    const when = new Intl.DateTimeFormat(latinNumbering(locale), {
+      month: 'short',
+      day: 'numeric',
+    }).format(new Date(macro.updatedAt));
 
     return who === undefined
       ? t('macros:editor.editedOn', { date: when })

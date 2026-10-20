@@ -31,6 +31,18 @@ test.describe('the contact list', () => {
     ).toBeVisible();
   });
 
+  test('dates the last ticket in Latin digits, in Arabic too', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    await signIn(page, locale);
+    await openContacts(page, locale);
+
+    const mona = page.getByRole('row').filter({ hasText: 'Mona Khalil' }).first();
+    await expect(mona).toContainText('2026');
+    await expect(mona).not.toContainText(/[٠-٩]/);
+  });
+
   test('marks the anonymous visitor as one', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);
@@ -155,6 +167,55 @@ test.describe('one contact', () => {
     // HD-1042 and HD-1030 are hers.
     await expect(page.getByText(t('contacts:detail.visibleTickets', { count: 2 }))).toBeVisible();
     await expect(page.getByRole('region', { name: t('contacts:identities.title') })).toBeVisible();
+  });
+
+  test('says each ticket’s channel, status and assignee in words, and the language by name', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+
+    const ticket = page.getByRole('listitem').filter({ hasText: 'HD-1042' });
+    await expect(ticket).toContainText(t('tickets:channel.email'));
+    await expect(ticket).toContainText(t('tickets:list.unassigned'));
+    await expect(ticket).toContainText(locale === 'ar' ? 'مفتوحة' : 'Open');
+    await expect(ticket.getByText('Refund for order 42 has not arrived')).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+
+    const english = await page.evaluate(
+      (reader) => new Intl.DisplayNames([reader], { type: 'language' }).of('en') ?? 'en',
+      locale,
+    );
+    await expect(
+      page.getByRole('region', { name: t('contacts:details.title') }).getByText(english),
+    ).toBeVisible();
+  });
+
+  test('sets identifiers left to right and dates in Latin digits (DESIGN §7)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openContact(page, locale, 'Mona Khalil');
+
+    const identities = page.getByRole('region', { name: t('contacts:identities.title') });
+    await expect(identities.locator('bdi', { hasText: '+49301234567' })).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+    // The page header's line of identifiers isolates them the same way.
+    await expect(
+      page.getByRole('main').locator('p bdi[dir="ltr"]', { hasText: '+49301234567' }).first(),
+    ).toBeVisible();
+
+    const note = page.getByRole('listitem').filter({ hasText: 'Prefers a call' });
+    await expect(note).toContainText('2026');
+    await expect(note).not.toContainText(/[٠-٩]/);
   });
 
   test('adds a note and shows it in the timeline', async ({ page, appLocale: locale }) => {

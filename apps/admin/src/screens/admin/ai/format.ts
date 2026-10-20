@@ -1,6 +1,7 @@
 import type { AiRefusal } from '@helpdock/schemas';
 import { isAiError } from '../../../ai/api.js';
 import type { useT } from '../../../app/i18n.js';
+import { latinNumbering } from '../../../ui/format.js';
 
 type T = ReturnType<typeof useT>;
 
@@ -37,13 +38,19 @@ export const refusalMessage = (t: T, reason: AiRefusal): string =>
 
 /** "16:52", in the reader's language. */
 export const timeOf = (iso: string, locale: string): string =>
-  new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hour12: false }).format(
-    new Date(iso),
-  );
+  new Intl.DateTimeFormat(latinNumbering(locale), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
 
 /** "1 Nov", in the reader's language. */
 export const dayOf = (date: Date, locale: string): string =>
-  new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
+  new Intl.DateTimeFormat(latinNumbering(locale), {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(date);
 
 /** The first instant of the next UTC day or month: when a spent window opens again. */
 export const nextWindow = (period: 'day' | 'month', now: Date): Date =>

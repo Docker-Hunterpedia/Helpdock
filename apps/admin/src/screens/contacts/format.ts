@@ -1,4 +1,10 @@
-import type { ContactIdentity, ContactSummary } from '@helpdock/schemas';
+import type { Locale } from '@helpdock/i18n';
+import {
+  type ContactIdentity,
+  type ContactSummary,
+  type TicketChannel,
+  ticketChannelSchema,
+} from '@helpdock/schemas';
 
 /**
  * The small decisions the contact screens make about what to print. They are
@@ -82,3 +88,31 @@ export const pageRange = (
   to: offset + shown,
   total,
 });
+
+/**
+ * The timeline sends a ticket's channel as a plain string. A known one is a
+ * key of `tickets:channel`, so the screen can say "Email" or "البريد"; anything
+ * else is printed as it came rather than as a missing translation.
+ */
+export const knownChannel = (channel: string): TicketChannel | null => {
+  const parsed = ticketChannelSchema.safeParse(channel);
+
+  return parsed.success ? parsed.data : null;
+};
+
+/**
+ * A contact's language by name in the reader's language: `en` reads "English"
+ * in the English admin and "الإنجليزية" in the Arabic one. A code `Intl` cannot
+ * name is printed as it is.
+ */
+export const languageName = (code: string, locale: Locale): string => {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code;
+  } catch (error) {
+    // `of` throws a RangeError for a string that is not a language code.
+    if (error instanceof RangeError) {
+      return code;
+    }
+    throw error;
+  }
+};

@@ -6,6 +6,14 @@ import type { Locale } from '@helpdock/i18n';
  */
 const dateLocale = (locale: Locale): string => (locale === 'ar' ? 'ar-u-nu-latn' : 'en-GB');
 
+/**
+ * The reader's locale with Latin digits forced, for a formatter that keeps the
+ * locale's own word order and month names (DESIGN §7: Arabic-Indic digits are
+ * a v1.1 setting).
+ */
+export const latinNumbering = (locale: string): string =>
+  locale === 'ar' ? 'ar-u-nu-latn' : locale;
+
 /** `5 Sep 2026`. */
 export const formatDay = (iso: string, locale: Locale, timeZone?: string): string =>
   new Intl.DateTimeFormat(dateLocale(locale), {
@@ -26,6 +34,17 @@ export const formatDayMonth = (iso: string, locale: Locale, timeZone?: string): 
 /** `04:00`, in the reader's clock. */
 export const formatClock = (iso: string, locale: Locale): string =>
   new Intl.DateTimeFormat(dateLocale(locale), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(iso));
+
+/** `5 Sep 2026, 04:00`: a moment a person may need to place, such as a session's last use. */
+export const formatDayTime = (iso: string, locale: Locale): string =>
+  new Intl.DateTimeFormat(dateLocale(locale), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',

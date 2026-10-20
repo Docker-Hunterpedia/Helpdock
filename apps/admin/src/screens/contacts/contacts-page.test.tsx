@@ -53,6 +53,13 @@ describe('the contact list', () => {
     expect(within(gmail).getByText(/unverified/)).toBeInTheDocument();
   });
 
+  it('dates the last ticket in the app’s day format, not the browser’s', async () => {
+    await renderContacts();
+    const mona = await rowFor('Mona Khalil');
+
+    expect(within(mona).getByText(/^18 Sept? 2026$/)).toBeInTheDocument();
+  });
+
   it('marks an anonymous visitor as one, and shortens their id', async () => {
     await renderContacts();
     const row = await rowFor('Visitor 7f3a…c2');

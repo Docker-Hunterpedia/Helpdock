@@ -35,6 +35,7 @@ import { MockMetaApi } from '../meta/mock-api.js';
 import type { NotificationsApi } from '../notifications/api.js';
 import { type BrowserPush, MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { MockQuickSearchApi, type QuickSearchApi } from '../palette/api.js';
 import type { ReportsApi } from '../reports/api.js';
 import { fakeSystemApi } from '../screens/admin/system/fixtures.js';
 import type { SystemApi } from '../screens/admin/system/system-api.js';
@@ -84,6 +85,8 @@ export interface RenderAppOptions {
   readonly assistApi?: AssistApi;
   readonly developersApi?: DevelopersApi;
   readonly keyboardApi?: KeyboardApi;
+  /** Defaults to a fixture reading the tickets, contacts and help center above. */
+  readonly quickSearchApi?: QuickSearchApi;
   readonly initialEntries?: readonly string[];
 }
 
@@ -112,6 +115,7 @@ export interface RenderedApp extends RenderResult {
   readonly assistApi: AssistApi;
   readonly developersApi: DevelopersApi;
   readonly keyboardApi: KeyboardApi;
+  readonly quickSearchApi: QuickSearchApi;
 }
 
 /**
@@ -149,6 +153,13 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
   const keyboardApi =
     options.keyboardApi ??
     new MockKeyboardApi(authApi instanceof MockAuthApi ? authApi : undefined);
+  const quickSearchApi =
+    options.quickSearchApi ??
+    new MockQuickSearchApi({
+      tickets: ticketsApi,
+      contacts: contactsApi,
+      helpCenter: helpCenterApi,
+    });
   const initialEntries = [...(options.initialEntries ?? ['/'])];
   const queryClient = createAdminQueryClient();
 
@@ -179,6 +190,7 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
       assistApi={assistApi}
       developersApi={developersApi}
       keyboardApi={keyboardApi}
+      quickSearchApi={quickSearchApi}
       queryClient={queryClient}
       router={({ children }) => (
         <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
@@ -216,5 +228,6 @@ export function renderApp(ui: ReactNode, options: RenderAppOptions = {}): Render
     assistApi,
     developersApi,
     keyboardApi,
+    quickSearchApi,
   };
 }

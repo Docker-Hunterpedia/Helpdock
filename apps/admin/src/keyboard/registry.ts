@@ -15,9 +15,9 @@ import type { KeyStroke } from './keys.js';
  * why every composer shortcut but `/` carries a modifier. A sequence (`g`
  * then a letter) is a global shortcut, drawn in the sheet's "Go to" group.
  *
- * Not here yet, because what they act on does not exist: `⌘K` the command
- * palette (M14-05), `x` and `Shift`+`x` selection and `Esc` to clear it
- * (M14-04), `{{` the placeholder picker (M14-14) and
+ * Not here yet, because what they act on does not exist: `x` and `Shift`+`x`
+ * selection and `Esc` to clear it (M14-04), `{{` the placeholder picker
+ * (M14-14) and
  * `Enter` on a focused row, which needs the focus model of M14-04.
  */
 
@@ -50,6 +50,9 @@ export const SHORTCUTS = [
     alternates: [[MOD('\\')]],
   },
   { id: 'general.shortcuts', scope: 'global', keys: [KEY('?')] },
+  // M14-05. A modifier chord, so it works with the single-key switch off and
+  // in a field; the sidebar's Search opens it too.
+  { id: 'general.palette', scope: 'global', keys: [MOD('k')] },
   // Go to
   { id: 'goTo.myOpen', scope: 'global', keys: [KEY('g'), KEY('i')] },
   { id: 'goTo.unassigned', scope: 'global', keys: [KEY('g'), KEY('u')] },

@@ -37,6 +37,7 @@ navigation only, and the api refuses a change whatever the keys do.
 | `c` | New ticket | everyone but a Viewer |
 | `b`, or `⌘`/`Ctrl` + `\` | Toggle the sidebar | everyone |
 | `?` | All shortcuts | everyone |
+| `⌘`/`Ctrl` + `k` | Command palette | everyone |
 
 ### Go to
 

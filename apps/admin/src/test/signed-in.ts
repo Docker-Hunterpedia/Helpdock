@@ -16,6 +16,7 @@ import { MockAttachmentUploader } from '../media/mock-uploader.js';
 import { MockMetaApi } from '../meta/mock-api.js';
 import { MockBrowserPush } from '../notifications/browser-push.js';
 import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { MockQuickSearchApi } from '../palette/api.js';
 import { HttpReportsApi } from '../reports/api.js';
 import { HttpSystemApi } from '../screens/admin/system/system-api.js';
 import { MockSettingsApi } from '../settings/mock-api.js';
@@ -51,19 +52,23 @@ export async function signedInMockApis(): Promise<AdminApis> {
   const blockList = new MockBlockList();
   const ticketing = new MockTicketingApi(blockList);
 
+  const contacts = new MockContactsApi();
+  const tickets = new MockTicketsApi(undefined, Date.now(), blockList, undefined, ticketing);
+  const helpCenter = new MockHelpCenterApi();
+
   return {
     imports: new MockImportsApi('happy', { ticketing, staff }),
     sso: new MockSsoApi(auth),
     auth,
     staff,
-    contacts: new MockContactsApi(),
+    contacts,
     ticketing,
-    tickets: new MockTicketsApi(undefined, Date.now(), blockList, undefined, ticketing),
+    tickets,
     uploader: new MockAttachmentUploader(),
     email: new MockEmailApi(),
     channels: new MockChannelsApi(),
     automation: new MockAutomationApi(),
-    helpCenter: new MockHelpCenterApi(),
+    helpCenter,
     notifications: new MockNotificationsApi(),
     browserPush: new MockBrowserPush(),
     domains: new MockDomainsApi(),
@@ -77,6 +82,7 @@ export async function signedInMockApis(): Promise<AdminApis> {
     assist: new MockAssistApi(),
     developers: new MockDevelopersApi(),
     keyboard: new MockKeyboardApi(auth),
+    quickSearch: new MockQuickSearchApi({ tickets, contacts, helpCenter }),
   };
 }
 

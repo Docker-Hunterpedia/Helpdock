@@ -126,7 +126,12 @@ describe('the ? sheet', () => {
       within(within(dialog).getByRole('region', { name: group }))
         .getAllByRole('term')
         .map((term) => term.textContent);
-    expect(terms('General')).toEqual(['Search the list', 'Toggle the sidebar', 'All shortcuts']);
+    expect(terms('General')).toEqual([
+      'Search the list',
+      'Toggle the sidebar',
+      'All shortcuts',
+      'Command palette',
+    ]);
     expect(terms('Go to')).not.toContain('Settings');
     expect(terms('Go to')).toContain('Reports');
     expect(terms('List')).toEqual(['Next ticket', 'Previous ticket']);

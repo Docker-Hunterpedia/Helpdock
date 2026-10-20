@@ -103,6 +103,42 @@ describe('HttpTransport on a 401', () => {
   });
 });
 
+describe('cancelling a request', () => {
+  it("hands the caller's signal to fetch, and again to the repeat after a refresh", async () => {
+    const controller = new AbortController();
+    fetchMock
+      .mockResolvedValueOnce(tokenRefused())
+      .mockResolvedValueOnce(fresh())
+      .mockResolvedValueOnce(json({ ok: true }));
+
+    await signedIn().request('GET', '/auth/me', undefined, { signal: controller.signal });
+
+    const signals = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).signal);
+    expect(signals[0]).toBe(controller.signal);
+    expect(signals[2]).toBe(controller.signal);
+  });
+
+  it('sends no signal when the caller gave none', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: true }));
+
+    await signedIn().request('GET', '/auth/me');
+
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('signal');
+  });
+
+  it('rejects with the abort when the signal has fired', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    fetchMock.mockImplementationOnce((_url: string, init: RequestInit) =>
+      Promise.reject(init.signal?.reason),
+    );
+
+    await expect(
+      signedIn().request('GET', '/auth/me', undefined, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
 describe('429 sign-in refusals', () => {
   it.each([true, false])('carries Retry-After with an auth envelope: %s', async (envelope) => {
     const response = new Response(

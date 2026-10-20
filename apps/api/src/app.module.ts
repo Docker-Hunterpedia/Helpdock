@@ -39,6 +39,7 @@ import { AllExceptionsFilter } from './http/exception.filter.js';
 import { ImportsModule, type ImportsModuleOverrides } from './imports/imports.module.js';
 import { InstallModule } from './install/install.module.js';
 import { KeyboardModule } from './keyboard/keyboard.module.js';
+import { QuickSearchModule } from './quick-search/quick-search.module.js';
 import { KnowledgeModule, type KnowledgeOverrides } from './knowledge/knowledge.module.js';
 import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
@@ -301,6 +302,8 @@ export class AppModule implements NestModule {
         NotificationsModule.forRoot(),
         // M14-01: the single-key shortcuts switch.
         KeyboardModule.forRoot(),
+        // M14-05: the command palette's quick search.
+        QuickSearchModule.forRoot({ tickets, contacts, helpCenter, redis: options.redis }),
         // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
         DomainsModule.forRoot({ env: options.env, hostResolver }),
         // M4: Channels › Widget, the widget's routes, its SSE stream and the

@@ -40,6 +40,7 @@ export * from './import-zoho.js';
 export * from './install.js';
 export * from './install-settings.js';
 export * from './keyboard.js';
+export * from './quick-search.js';
 export * from './knowledge.js';
 export * from './macros.js';
 export * from './media.js';

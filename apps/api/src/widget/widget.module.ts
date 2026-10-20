@@ -160,6 +160,7 @@ export class WidgetModule {
     const captcha = new CaptchaVerifier(
       captchaKeys,
       options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS),
+      logger,
     );
 
     return {

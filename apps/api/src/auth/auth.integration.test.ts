@@ -860,6 +860,26 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       const metrics = await get('/metrics', { authorization: `Bearer ${METRICS_TOKEN}` });
       expect(metrics.body).toMatch(/rate_limit_refusals_total\{bucket="signin-email"\} [1-9]/);
     });
+
+    it('limits link and reset requests per IP in their own bucket (M18-11)', async () => {
+      const fromOneIp = (path: string, address: string) =>
+        app.inject({
+          method: 'POST',
+          url: path,
+          headers: { 'content-type': 'application/json' },
+          payload: JSON.stringify({ email: address }),
+          remoteAddress: '198.51.100.77',
+        });
+
+      for (let attempt = 0; attempt < 31; attempt += 1) {
+        const path = attempt % 2 === 0 ? '/api/auth/magic-link' : '/api/auth/password/forgot';
+        // The same answer either side of the limit, so it tells nobody it was hit.
+        expect((await fromOneIp(path, `walker-${attempt}@example.com`)).statusCode).toBe(204);
+      }
+
+      const metrics = await get('/metrics', { authorization: `Bearer ${METRICS_TOKEN}` });
+      expect(metrics.body).toMatch(/rate_limit_refusals_total\{bucket="email-dispatch-ip"\} 1\b/);
+    });
   });
 
   /** Re-hashes with the same parameters the service uses, for the reset test's cleanup. */

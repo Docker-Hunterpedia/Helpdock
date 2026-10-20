@@ -123,6 +123,12 @@ export interface HelpCenterSiteDependencies {
   readonly imageSources: readonly string[];
   /** Keys the hash a visitor without a cookie is known by. */
   readonly visitorSecret: string;
+  /**
+   * The per-IP budget on "Was this helpful?" posts (M18-11): true when one
+   * more is allowed and has been counted. The per-visitor dedupe stops one
+   * cookie voting twice; this stops one source minting cookies to vote again.
+   */
+  readonly feedbackBudget: (brandId: string, ip: string) => Promise<boolean>;
   readonly log: { warn(fields: Record<string, unknown>, message: string): void };
 }
 
@@ -535,6 +541,9 @@ export class HelpCenterSite {
     }
     if (path !== '/_hd/feedback') {
       return plain(404, 'Not found');
+    }
+    if (!(await this.#deps.feedbackBudget(where.brandId, request.ip))) {
+      return plain(429, 'Too many requests');
     }
 
     const body = hcFeedbackFormSchema.safeParse(request.body);

@@ -1,9 +1,10 @@
-import { Box, Button, ListSubheader, Menu, MenuItem, Tooltip, Typography } from '@mui/material';
+import { Box, Button, ListSubheader, Menu, MenuItem, Typography } from '@mui/material';
 import { ArrowDownUp, Check } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import type { WorkspaceFilters } from '../../tickets/views.js';
 import { SORT_CHOICES, sortChoice, withSortChoice } from '../admin/ticketing/view-draft.js';
+import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
 
 const MENU_LABELS = {
   'updatedAt:desc': 'tickets:sort.menu.updatedAt',
@@ -24,19 +25,10 @@ export function SortMenu({
   const t = useT();
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
-  const [tooltipFocusDisabled, setTooltipFocusDisabled] = useState(false);
 
   return (
     <>
-      <Tooltip
-        title={t('tickets:sort.action')}
-        disableInteractive
-        disableFocusListener={tooltipFocusDisabled}
-        open={tooltipOpen && anchor === null}
-        onOpen={() => setTooltipOpen(true)}
-        onClose={() => setTooltipOpen(false)}
-      >
+      <MenuTriggerTooltip title={t('tickets:sort.action')} menuOpen={anchor !== null}>
         <Button
           id={id}
           variant="outlined"
@@ -46,20 +38,11 @@ export function SortMenu({
           aria-haspopup="menu"
           aria-expanded={anchor !== null}
           aria-controls={anchor === null ? undefined : `${id}-menu`}
-          onBlur={() => {
-            setTooltipOpen(false);
-            if (anchor === null) setTooltipFocusDisabled(false);
-          }}
-          onClick={(event) => {
-            // Restoring focus from the menu must not reopen a tooltip over the list.
-            setTooltipFocusDisabled(true);
-            setTooltipOpen(false);
-            setAnchor(event.currentTarget);
-          }}
+          onClick={(event) => setAnchor(event.currentTarget)}
         >
           <ArrowDownUp size={14} aria-hidden="true" />
         </Button>
-      </Tooltip>
+      </MenuTriggerTooltip>
       <Menu
         id={`${id}-menu`}
         anchorEl={anchor}

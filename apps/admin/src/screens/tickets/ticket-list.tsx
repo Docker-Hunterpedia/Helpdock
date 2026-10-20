@@ -1,5 +1,5 @@
 import type { Department, TagSummary, Ticket, TicketStatus } from '@helpdock/schemas';
-import { Box, Button, Chip, InputAdornment, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, InputAdornment, TextField, Typography } from '@mui/material';
 import { ListFilter, Search, TicketIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
@@ -10,6 +10,7 @@ import { EmptyState } from '../../shell/empty-state.tsx';
 import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
+import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
 import { SortMenu } from './sort-menu.tsx';
 import { TicketRow } from './ticket-row.tsx';
 import { TicketListSkeleton } from './ticket-skeletons.tsx';
@@ -104,8 +105,6 @@ export function TicketList({
   const newTicketKeys = useAriaKeyShortcuts('general.newTicket');
   const searchKeys = useAriaKeyShortcuts('general.search');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [tooltipOpen, setTooltipOpen] = useState(false);
-  const [tooltipFocusDisabled, setTooltipFocusDisabled] = useState(false);
   const active = activeFilterCount(filters);
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
@@ -114,8 +113,6 @@ export function TicketList({
 
   useEffect(() => {
     if (openFiltersToken !== null) {
-      setTooltipFocusDisabled(true);
-      setTooltipOpen(false);
       setFiltersOpen(true);
     }
   }, [openFiltersToken]);
@@ -149,14 +146,7 @@ export function TicketList({
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
             <SortMenu filters={filters} onChange={onFiltersChange} />
-            <Tooltip
-              title={filterLabel}
-              disableInteractive
-              disableFocusListener={tooltipFocusDisabled}
-              open={tooltipOpen && !filtersOpen}
-              onOpen={() => setTooltipOpen(true)}
-              onClose={() => setTooltipOpen(false)}
-            >
+            <MenuTriggerTooltip title={filterLabel} menuOpen={filtersOpen}>
               <Button
                 ref={filterButton}
                 variant="outlined"
@@ -165,21 +155,12 @@ export function TicketList({
                 sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0, overflow: 'visible' }}
                 aria-expanded={filtersOpen}
                 aria-haspopup="dialog"
-                onBlur={() => {
-                  setTooltipOpen(false);
-                  if (!filtersOpen) setTooltipFocusDisabled(false);
-                }}
-                onClick={() => {
-                  // Keep the restored focus without reopening a tooltip over Save as new.
-                  setTooltipFocusDisabled(true);
-                  setTooltipOpen(false);
-                  setFiltersOpen(true);
-                }}
+                onClick={() => setFiltersOpen(true)}
               >
                 <ListFilter size={14} aria-hidden="true" />
                 {active > 0 ? <CountBadge count={active} offset={-6} /> : null}
               </Button>
-            </Tooltip>
+            </MenuTriggerTooltip>
             <Button
               variant="contained"
               size="small"

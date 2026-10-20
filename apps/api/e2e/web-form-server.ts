@@ -13,7 +13,10 @@
  * |---|---|
  * | `/contact/<OPEN_BRAND>` | Helpdock, form on, two custom fields |
  * | `/contact/<CLOSED_BRAND>` | Closed Co, form off |
+ * | `/contact/<POW_BRAND>` | Helpdock with the built-in check (ADR 0052) |
+ * | `/contact/<BROKEN_POW_BRAND>` | The same, whose first challenge has no solution |
  */
+import { createPowChallenge, verifyPowSolution } from '@helpdock/channels';
 import { contentPolicySchema } from '@helpdock/schemas';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import {
@@ -26,7 +29,14 @@ import { WEB_FORM_ROUTE } from '../dist/web-form/web-form-page.controller.js';
 import { readFormBody, WebFormPage } from '../dist/web-form/web-form-page.js';
 import { attachmentsFor, pageLocale } from '../dist/web-form/web-form-public.service.js';
 
-import { CLOSED_BRAND, OPEN_BRAND, PORT, REFERENCE } from './fixtures.ts';
+import {
+  BROKEN_POW_BRAND,
+  CLOSED_BRAND,
+  OPEN_BRAND,
+  PORT,
+  POW_BRAND,
+  REFERENCE,
+} from './fixtures.ts';
 
 const policy = contentPolicySchema.parse({});
 
@@ -35,8 +45,22 @@ const labels = {
   ar: { name: 'الاسم', email: 'البريد الإلكتروني', subject: 'الموضوع', message: 'الرسالة' },
 } as const;
 
-const loadForm = (brandId: string, lang: string | undefined) => {
-  if (brandId !== OPEN_BRAND && brandId !== CLOSED_BRAND) {
+const POW_KEY = Buffer.alloc(32, 3);
+const POW_BRANDS = [POW_BRAND, BROKEN_POW_BRAND];
+/** A brand's built-in check; the broken brand's first one names a hash nothing solves. */
+const powCaptcha = (brandId: string, fresh: boolean) => {
+  const challenge = createPowChallenge({ key: POW_KEY, difficulty: 'low', surface: 'web-form' });
+  return {
+    provider: 'pow',
+    challenge:
+      brandId === BROKEN_POW_BRAND && !fresh
+        ? { ...challenge, challenge: '0'.repeat(64) }
+        : challenge,
+  };
+};
+
+const loadForm = (brandId: string, lang: string | undefined, fresh = false) => {
+  if (brandId !== OPEN_BRAND && brandId !== CLOSED_BRAND && !POW_BRANDS.includes(brandId)) {
     return null;
   }
   const locale = pageLocale(lang, 'en');
@@ -62,7 +86,7 @@ const loadForm = (brandId: string, lang: string | undefined) => {
       contentPolicy: {},
     },
     locale,
-    state: brandId === OPEN_BRAND ? 'open' : 'closed',
+    state: brandId === CLOSED_BRAND ? 'closed' : 'open',
     fields: [
       builtin('name', 'name', true),
       builtin('email', 'email', true),
@@ -84,14 +108,14 @@ const loadForm = (brandId: string, lang: string | undefined) => {
       builtin('message', 'long_text', true),
     ],
     attachments: attachmentsFor(policy, locale),
-    captcha: null,
+    captcha: POW_BRANDS.includes(brandId) ? powCaptcha(brandId, fresh) : null,
     thankYou:
       locale === 'ar'
         ? 'شكراً، وصلتنا رسالتك. رقم طلبك {{ticket.number}}، وسنرد عليك بالبريد الإلكتروني خلال يوم عادةً.'
         : 'Thanks, we have your message. Your reference is {{ticket.number}}; we reply by email, usually within a day.',
     departmentId: null,
     policy,
-    keys: null,
+    keys: POW_BRANDS.includes(brandId) ? { provider: 'pow', difficulty: 'low' } : null,
     captchaHostnames: [],
   };
 };
@@ -100,12 +124,24 @@ const page = new WebFormPage({
   resolveHost: async () => null,
   log: { error: (fields, message) => process.stderr.write(`${message} ${String(fields.err)}\n`) },
   forms: {
-    load: async (brandId, lang) => loadForm(brandId, lang) as never,
+    allowChallenge: async () => true,
+    // A "Try again" asks without a language; the broken brand's next challenge is a good one.
+    load: async (brandId, lang) => loadForm(brandId, lang, lang === undefined) as never,
     submit: async (form, post) => {
       const read = readSubmission(form.fields, post.fields, post.files, form.policy);
-      return read.ok
+      if (!read.ok) {
+        return { kind: 'invalid', errors: read.errors };
+      }
+      const solved =
+        form.keys?.provider !== 'pow' ||
+        verifyPowSolution({
+          key: POW_KEY,
+          token: post.fields.get('hd_pow')?.[0] ?? '',
+          surface: 'web-form',
+        }).success;
+      return solved
         ? { kind: 'created', reference: REFERENCE }
-        : { kind: 'invalid', errors: read.errors };
+        : { kind: 'refused', error: 'captcha' };
     },
   },
 });
@@ -145,6 +181,11 @@ const handle = async (request: FastifyRequest, reply: FastifyReply, withBody: bo
     .send(response.html);
 };
 
+server.get('/contact/:brandId/challenge', async (request, reply) => {
+  const { brandId } = request.params as { brandId: string };
+  const answer = await page.challenge({ host: undefined, brandId, ip: request.ip });
+  return answer.status === 200 ? reply.send(answer.challenge) : reply.code(answer.status).send();
+});
 server.get('/contact/:brandId', (request, reply) => handle(request, reply, false));
 server.post('/contact/:brandId', (request, reply) => handle(request, reply, true));
 

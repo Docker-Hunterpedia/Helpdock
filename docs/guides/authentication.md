@@ -5,7 +5,7 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05 and M11-01–06.
+Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01.
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
@@ -30,7 +30,8 @@ with `auth.require2fa` on — is sent to enrolment instead of being given a
 session ([Who must have a second factor](#who-must-have-a-second-factor)).
 
 `GET /api/auth/methods` reports which of them this install offers. The sign-in
-screen calls it and draws only the buttons that would work.
+screen calls it and draws only the buttons that would work. From 1.1 it also
+reports `passkey` and `passkeysPaused` ([Passkeys](#passkeys)).
 
 ## The session
 
@@ -244,6 +245,116 @@ out: without the MAC, anyone who can list Redis keys could mint one; without
 Redis, it could not be revoked. "Log out everywhere" forgets every trusted
 browser.
 
+## Passkeys
+
+Staff passkeys (WebAuthn) arrive in 1.1 with M18
+([ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). M18-01
+lays the foundation described here; adding and removing passkeys (M18-02),
+using one as a second factor (M18-03) or on its own (M18-04), break-glass
+(M18-05) and the screens (M18-06) build on it. Until they land, no route
+registers or accepts a passkey.
+
+### Where passkeys work
+
+A passkey is bound to a relying party, and this install is one: its **RP ID**
+is the host name of `APP_URL`, and the only origin an answer may come from is
+`APP_URL`'s origin. Both come from `APP_URL` alone, never from the `Host` or
+`Origin` header of a request, so nothing a proxy or a client sends can change
+them. Brand help-center domains play no part: staff never sign in there.
+
+Browsers run WebAuthn only in a secure context, and an RP ID has to be a
+domain. So passkeys are available when `APP_URL` is `https://` on a host
+name, or `http://localhost` while developing. On any other plain-http install,
+or one reached by IP address, `GET /api/auth/methods` reports
+`passkey: false` and a ceremony answers `passkeys-unavailable`.
+
+### The RP ID is pinned
+
+The first successful passkey registration writes the RP ID into the install
+setting `auth.webauthn.rpId`, once, and records `auth.passkey.rp_pinned` in the
+audit trail. Nothing else writes it: until a passkey exists, ceremonies run
+against `APP_URL`'s host and leave no trace, so an install first opened on
+`localhost` or a staging host is not pinned there by a sign-in page that only
+offered passkeys. Every ceremony after the pin compares `APP_URL`'s host with
+it. Two replicas finishing the first registration at the same moment agree on
+one value: the write is a single statement that does nothing if a value is
+already there, and the registration that lost to another host is refused with
+`passkeys-rp-changed`.
+
+If an operator later moves `APP_URL` to another host, every passkey the
+install holds stops working, because each was made for the old host. Helpdock
+does not orphan them silently:
+
+- passkey ceremonies are refused with `passkeys-rp-changed`, including one
+  begun before the change;
+- `GET /api/auth/methods` reports `passkey: false, passkeysPaused: true`, so the
+  sign-in screen can say so instead of drawing the button;
+- password, sign-in links, TOTP, OAuth and SSO keep working.
+
+Moving the passkeys to the new host means re-pinning the setting, after which
+staff add their passkeys again. Settings › Authentication is planned to offer
+that to install admins with the passkey screens (M18-06). `HD_AUTH_WEBAUTHN_RP_ID`
+also sets the pin: while it is set, the environment value is the pin and
+nothing is written to the database.
+
+### Ceremonies
+
+Each ceremony (handing the browser its options, then checking what the
+authenticator signed) is a record in Redis under `auth:webauthn:<hash>`:
+
+- it is addressed by a 256-bit random id, of which Redis holds only the
+  SHA-256;
+- its challenge is 32 random bytes;
+- it lives five minutes, the same as the browser prompt's `timeout`;
+- it is spent with `GETDEL` before anything is checked, so it works once,
+  whether the answer passes or fails;
+- it names its purpose (`register`, `second-factor`, `passwordless`,
+  `step-up`, `break-glass`) and the person it belongs to, and for a
+  registration the browser session too. Passwordless sign-in is the one
+  purpose that names nobody; every other one must, so only that person's
+  passkey can answer it. A challenge minted for one purpose, person or
+  session cannot complete another; it answers `challenge-expired`.
+
+The options fix what the install has an opinion on: EdDSA, ES256 and RS256
+only; attestation `none`, with no metadata service; a discoverable credential preferred, with the
+`credProps` extension so the api knows whether it got one. User verification
+(a PIN or a biometric) is **required** for passwordless sign-in and break-glass,
+where one assertion stands for two factors, and only **preferred** elsewhere, so
+a security key without a PIN still works as a second factor.
+
+Two kinds of answer are refused before the library parses them. A
+registration's attestation statement must be `none`, or a `packed`
+self-attestation (signed with the new credential's own key, which some
+authenticators send whatever was asked); a statement that names a
+certificate chain is refused, so no vendor chain is ever walked and no
+revocation list fetched. And client data that says it was made inside a
+frame (`crossOrigin: true`) is refused: the admin is never framed.
+
+The user handle an authenticator stores is 32 random bytes per account
+(`users.webauthn_user_handle`), not the account id, whose UUIDv7 carries the
+time the account was made. The name sent with it is cut to 64 bytes on a
+character boundary, which keeps about 30 Arabic letters whole.
+
+A credential's signature counter is compared only once either side is above
+zero, because synced passkeys always report zero; after that it has to grow,
+and it is checked only after the signature is: a forged assertion cannot raise
+a counter alarm.
+
+### Storage
+
+`webauthn_credentials` holds one row per passkey: the credential id, the COSE
+public key (the private key never leaves the authenticator), its algorithm,
+the counter, transports, the authenticator's AAGUID when the browser reports
+one (for display, never for policy), whether it is discoverable, its backup
+flags, a name and when it was made and last used. Deleting an account deletes
+its passkeys.
+
+Like `users`, the table is install-wide and in `GLOBAL_TABLES`, with no
+`brand_id`: a passwordless sign-in looks a credential up before any brand is
+known, and one key belongs to one person in every brand they work in. Only
+the sign-in path, by credential id, and a person's own `/api/me/*` routes,
+filtered to their own id, will reach it.
+
 ## The sign-in link and the password reset
 
 Both are 256 bits of randomness, stored in Redis as a hash with the user id and
@@ -366,6 +477,7 @@ ASVS 7.1.3, 7.2.1):
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
 | `auth.oauth.linked` / `.unlinked` | A Google or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
+| `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
 
 The rows are written by the `auth` system principal in a transaction of their
 own, so a refused attempt is recorded although the request fails, and carry the
@@ -598,6 +710,7 @@ is never editable.
 | `auth.magicLinkTtlMinutes` | `10` | Lifetime of a sign-in link |
 | `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned ([staff and roles](staff-and-roles.md#the-viewer-toggle)) |
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
+| `auth.webauthn.rpId` | empty | The passkey RP ID, written by the first passkey registration and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
 

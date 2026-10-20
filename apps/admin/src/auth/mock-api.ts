@@ -123,6 +123,8 @@ export class MockAuthApi implements AuthApi {
       password: true,
       magicLink: true,
       oauth: { google: true, github: true },
+      passkey: false,
+      passkeysPaused: false,
     };
   }
 

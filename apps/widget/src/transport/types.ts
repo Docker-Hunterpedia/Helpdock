@@ -123,8 +123,20 @@ export interface ArticleDetail extends ArticleSummary {
 }
 
 export interface CaptchaConfig {
-  readonly provider: 'turnstile' | 'hcaptcha';
+  /** `pow`: the built-in proof-of-work check (ADR 0052), which has no site key. */
+  readonly provider: 'pow' | 'turnstile' | 'hcaptcha';
   readonly site_key: string;
+}
+
+/** The built-in check's work, in the ALTCHA challenge shape (ADR 0052). */
+export interface CaptchaChallenge {
+  readonly algorithm: 'SHA-256';
+  readonly challenge: string;
+  readonly maxnumber: number;
+  readonly salt: string;
+  readonly signature: string;
+  /** Seconds it stays good, from when it arrived. */
+  readonly expiresIn: number;
 }
 
 /** `GET /widget/:brand/config?locale=` — public, cached, ETag (A §12). */
@@ -339,6 +351,8 @@ export class TransportError extends Error {
 
 export interface WidgetTransport {
   getConfig(locale: WidgetLocale): Promise<WidgetConfig>;
+  /** `GET …/captcha/challenge`: new work for the built-in check, each time. */
+  captchaChallenge(): Promise<CaptchaChallenge>;
   /** Issues or resumes `{visitor_id, visitor_secret}`; the secret stays inside the transport. */
   startSession(identity: SignedIdentity | null): Promise<VisitorSession>;
   startConversation(input: StartConversationInput): Promise<ConversationSummary>;

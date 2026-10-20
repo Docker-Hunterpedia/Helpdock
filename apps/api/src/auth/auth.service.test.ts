@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SsoIdentityService } from '../sso/identity.service.js';
 import { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import { authRedis } from '../testing/auth-redis.js';
+import { MemoryRpIdPin } from '../testing/memory-rp-id-pin.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { AuthService } from './auth.service.js';
@@ -35,6 +36,8 @@ import { TotpChallengeStore } from './totp/challenge-store.js';
 import { newTotpSecret } from './totp/totp.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
 import { TotpStepStore } from './totp/used-steps.js';
+import { WebAuthnCeremonyStore } from './webauthn/ceremony-store.js';
+import { WebAuthnService } from './webauthn/webauthn.service.js';
 
 /**
  * The service on its own, with the database replaced by a handful of rows and
@@ -255,6 +258,7 @@ let settings: Settings;
 let service: AuthService;
 let hasher: PasswordHasher;
 let sessions: SessionService;
+let rpIdPin: MemoryRpIdPin;
 
 const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> => ({
   id: uuidv7(),
@@ -272,6 +276,7 @@ const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> =
   deactivatedAt: null,
   signatureEn: null,
   signatureAr: null,
+  webauthnUserHandle: null,
   ...overrides,
 });
 
@@ -310,6 +315,7 @@ beforeEach(async () => {
   mail = new CollectingAuthMail();
   audit = new RecordingAudit();
   hasher = new PasswordHasher(MASTER_KEY);
+  rpIdPin = new MemoryRpIdPin();
 
   settings = createSettings({
     env: {},
@@ -363,6 +369,11 @@ beforeEach(async () => {
     limiter: new RateLimiter(created.redis),
     oauth: oauth as unknown as OauthService,
     oauthIdentities: oauthIdentities as unknown as OauthIdentityRepository,
+    webauthn: new WebAuthnService({
+      appUrl: APP_URL,
+      ceremonies: new WebAuthnCeremonyStore(created.redis),
+      pin: rpIdPin,
+    }),
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
     mail,
@@ -380,6 +391,17 @@ describe('methods', () => {
       password: true,
       magicLink: true,
       oauth: { google: false, github: false },
+      passkey: true,
+      passkeysPaused: false,
+    });
+  });
+
+  it('reports passkeys as paused, not offered, once APP_URL has moved host', async () => {
+    rpIdPin.pinned = { rpId: 'old-desk.example.com', pinnedAt: new Date() };
+
+    await expect(service.methods()).resolves.toMatchObject({
+      passkey: false,
+      passkeysPaused: true,
     });
   });
 

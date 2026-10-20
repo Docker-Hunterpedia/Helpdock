@@ -25,7 +25,7 @@ Companion to `REQUIREMENTS.md` and `DOMAIN-RULES.md` (same folder). Behavioural 
 | AI | @mariozechner/pi-ai + pi-agent-core | 0.73 | Multi-provider, API key **or** OAuth/subscription, cost tracking |
 | Images | sharp | 0.35 | WebP conversion, thumbnails, EXIF strip |
 | Audio/video | ffmpeg (static binary in image) | — | Voice-note normalization, video posters |
-| Auth | argon2 + jose + otplib | 0.45 / 6.2 / 13.5 | Hand-wired, auditable (passport was listed here but never installed) |
+| Auth | argon2 + jose + otplib + @simplewebauthn/server | 0.45 / 6.2 / 13.5 / 14.0 | Hand-wired, auditable (passport was listed here but never installed). WebAuthn for staff passkeys, attestation `none`, EdDSA/ES256/RS256 only ([ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)) |
 | Staff SSO (M11) | openid-client + @node-saml/node-saml + @peculiar/x509 | 6.8 / 5.1 / 2.1 | OIDC and SAML 2.0 for staff, all IdP HTTP through `safeFetch` ([ADR 0026](../decisions/0026-staff-sso-over-saml-and-oidc.md), accepted) |
 | Imports (M11, in development) | csv-parse + yauzl, vendor APIs over `packages/net` | 7.0.3 / 3.4.0 | Streaming CSV and zip for the manual mapper; connectors behind one interface in `@helpdock/importers` ([ADR 0027](../decisions/0027-imports-through-one-normalised-record-engine.md), accepted) |
 | Storage | @aws-sdk/client-s3 | 3.x | S3 / MinIO / R2 — S3-only in v1 |
@@ -184,6 +184,7 @@ Search: `tickets.search` and the help center index `hc_search_documents.search` 
 ## 7. Auth design
 
 - **Staff:** email+password (argon2id, pepper from master key) · magic link (single-use, 10 min) · Google/GitHub OAuth (passport strategies) · TOTP (otplib) with recovery codes; admin can enforce 2FA install-wide.
+  Passkeys (WebAuthn, `@simplewebauthn/server`, 1.1/M18): one relying party per install, its RP ID the host of `APP_URL` and pinned in `auth.webauthn.rpId` by the first successful registration; credentials in the install-scope `webauthn_credentials`; ceremonies single-use and purpose-bound in Redis ([ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)).
   Session = access JWT (jose, ES256, 10 min) in memory + refresh token (opaque, rotating, 30 days) in `httpOnly; Secure; SameSite=Lax` cookie; refresh family stored in Redis → revocation on logout/"log out everywhere"/password change. Reuse of a rotated refresh token kills the family.
 - **Visitors (widget):** `visitor_id` (UUIDv7) plus a server-issued `visitor_secret` (hashed at rest) on first load, stored in localStorage for the brand and sent as the credential on REST and the socket handshake; a visitor reaches only conversations created with their `visitor_id`. Optional signed identity `{user_id, email, name, ts}` + HMAC-SHA256 with brand secret, ts ≤ 5 min, links a verified `external_id` (DOMAIN-RULES §4.1–4.2). Origin allow-list enforced on the token issue endpoint and on Socket.IO handshake.
 - **API keys:** `hd_live_<random>` shown once; stored as SHA-256 hash; scopes; per-key throttle; brand-bound.

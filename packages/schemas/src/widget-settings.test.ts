@@ -76,4 +76,17 @@ describe('widgetAccessSchema', () => {
       }).allowedOrigins,
     ).toEqual(['https://a.example.com']);
   });
+
+  it('takes the built-in check, at low difficulty when a client names none (ADR 0052)', () => {
+    const access = { allowedOrigins: [], captchaEnabled: true, captchaSiteKey: '' };
+
+    expect(widgetAccessSchema.parse({ ...access, captchaProvider: 'pow' })).toMatchObject({
+      captchaProvider: 'pow',
+      captchaDifficulty: 'low',
+    });
+    expect(
+      widgetAccessSchema.safeParse({ ...access, captchaProvider: 'pow', captchaDifficulty: 'hard' })
+        .success,
+    ).toBe(false);
+  });
 });

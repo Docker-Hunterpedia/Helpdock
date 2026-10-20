@@ -1,4 +1,4 @@
-import { type CaptchaRenderConfig, escapeHtml } from '@helpdock/channels';
+import { type CaptchaRenderConfig, escapeHtml, type PowChallenge } from '@helpdock/channels';
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
 import {
   WEB_FORM_REFERENCE_PLACEHOLDER,
@@ -6,6 +6,7 @@ import {
   type WebFormFormError,
 } from '@helpdock/schemas';
 import { ATTACHMENTS_FIELD } from '../submission.js';
+import { POW_SCRIPT } from './pow-script.js';
 import { pageStylesheet } from './styles.js';
 
 /**
@@ -38,6 +39,15 @@ export interface PageAttachments {
   readonly hint: string;
 }
 
+/** The built-in check on the page (ADR 0052): a challenge the page's own script solves. */
+export interface PowFormCaptcha {
+  readonly provider: 'pow';
+  readonly challenge: PowChallenge;
+}
+
+/** A third-party provider's box, or the built-in check. */
+export type FormCaptcha = CaptchaRenderConfig | PowFormCaptcha;
+
 export type PageState =
   | {
       readonly kind: 'form';
@@ -47,7 +57,7 @@ export type PageState =
       readonly formError: WebFormFormError | null;
       readonly submissionId: string;
       readonly attachments: PageAttachments | null;
-      readonly captcha: CaptchaRenderConfig | null;
+      readonly captcha: FormCaptcha | null;
       /** M5-08: the help center article "Still need help?" came from, carried to the post. */
       readonly articleId?: string | null;
     }
@@ -74,6 +84,10 @@ export const SUBMISSION_FIELD = 'hd_submission';
 export const LANG_FIELD = 'lang';
 /** M5-08: the article id, from `?article=` on the page to the hidden field of the post. */
 export const ARTICLE_FIELD = 'hd_article';
+/** The built-in check's solution, filled in by {@link POW_SCRIPT}. */
+export const POW_FIELD = 'hd_pow';
+/** Where "Try again" asks for a new challenge, below the form's own path. */
+export const POW_CHALLENGE_PATH = '/challenge';
 
 /** A DOM id for a field reference: `custom:order_number` → `wf-custom-order_number`. */
 export const fieldId = (field: string): string => `wf-${field.replace(/[^a-z0-9_-]/gi, '-')}`;
@@ -85,6 +99,19 @@ const ALERT_ICON =
 const SMALL_ALERT_ICON = ALERT_ICON.replaceAll('"16"', '"14"');
 const CHECK_ICON =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const svg20 = (paths: string, className: string): string =>
+  `<svg class="${className}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+/** Lucide `LoaderCircle`, `ShieldCheck` and `CircleAlert`, one shown per state. */
+const POW_ICONS =
+  svg20('<path d="M21 12a9 9 0 1 1-6.219-8.56"/>', 'hd-pow-spin') +
+  svg20(
+    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+    'hd-pow-ok',
+  ) +
+  svg20('<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>', 'hd-pow-alert');
+/** Lucide `RotateCcw`. */
+const RETRY_ICON =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -239,7 +266,9 @@ const formBody = (
   const captcha =
     state.captcha === null
       ? '<span></span>'
-      : `<div class="hd-captcha" role="group" aria-label="${escapeHtml(t('captcha.label'))}"><div class="${escapeHtml(state.captcha.widgetClass)}" data-sitekey="${escapeHtml(state.captcha.siteKey)}"${state.captcha.action === null ? '' : ` data-action="${escapeHtml(state.captcha.action)}"`}${state.captcha.cdata === null ? '' : ` data-cdata="${escapeHtml(state.captcha.cdata)}"`} data-language="${view.locale}"></div></div>`;
+      : state.captcha.provider === 'pow'
+        ? powStrip(view, state.captcha, t)
+        : `<div class="hd-captcha" role="group" aria-label="${escapeHtml(t('captcha.label'))}"><div class="${escapeHtml(state.captcha.widgetClass)}" data-sitekey="${escapeHtml(state.captcha.siteKey)}"${state.captcha.action === null ? '' : ` data-action="${escapeHtml(state.captcha.action)}"`}${state.captcha.cdata === null ? '' : ` data-cdata="${escapeHtml(state.captcha.cdata)}"`} data-language="${view.locale}"></div></div>`;
 
   return `<form class="hd-card" method="post" action="${escapeHtml(view.path)}" enctype="multipart/form-data" novalidate aria-labelledby="wf-heading">
 <div class="hd-intro"><h1 id="wf-heading">${escapeHtml(t('heading'))}</h1><p class="hd-lead">${escapeHtml(t('intro'))}</p></div>
@@ -253,6 +282,18 @@ ${attachments}
 </div>
 <div class="hd-actions">${captcha}<button class="hd-button" type="submit">${escapeHtml(t('submit'))}</button></div>
 </form>`;
+};
+
+/**
+ * The built-in check's strip (artboard `HelpCenter/WebForm-Verify`). Drawn in
+ * its no-script state; {@link POW_SCRIPT} moves it to checking, verified or
+ * failed with the words it carries.
+ */
+const powStrip = (view: PageView, captcha: PowFormCaptcha, t: Translate): string => {
+  const words = (['checking', 'verified', 'failed'] as const)
+    .map((state) => ` data-${state}="${escapeHtml(t(`captcha.${state}`))}"`)
+    .join('');
+  return `<div class="hd-captcha hd-pow" id="wf-pow" role="status" aria-live="polite" aria-label="${escapeHtml(t('captcha.label'))}" data-state="noscript" data-challenge="${escapeHtml(JSON.stringify(captcha.challenge))}" data-refresh="${escapeHtml(`${view.path}${POW_CHALLENGE_PATH}`)}"${words}>${POW_ICONS}<span class="hd-pow-text">${escapeHtml(t('captcha.needsScript'))}</span><span class="hd-pow-caption">${escapeHtml(t('captcha.builtIn'))}</span><button class="hd-pow-retry" type="button" hidden>${RETRY_ICON}${escapeHtml(t('captcha.retry'))}</button><input type="hidden" name="${POW_FIELD}" value=""></div>`;
 };
 
 const successBody = (
@@ -297,9 +338,16 @@ const bodyFor = (view: PageView, t: Translate): string => {
   }
 };
 
+/** A third-party provider's script, in the head. */
 const captchaScript = (view: PageView): string =>
-  view.state.kind === 'form' && view.state.captcha !== null
+  view.state.kind === 'form' && view.state.captcha !== null && view.state.captcha.provider !== 'pow'
     ? `<script src="${escapeHtml(view.state.captcha.scriptUrl)}" async defer nonce="${view.nonce}"></script>`
+    : '';
+
+/** The built-in check's own script, after the strip it drives. */
+const powScript = (view: PageView): string =>
+  view.state.kind === 'form' && view.state.captcha?.provider === 'pow'
+    ? `<script nonce="${view.nonce}">${POW_SCRIPT}</script>`
     : '';
 
 export const renderWebFormPage = (view: PageView): string => {
@@ -326,6 +374,7 @@ ${view.brandName === null ? '' : header(view, t)}
 <main class="hd-main">
 ${main}
 </main>
+${powScript(view)}
 </body>
 </html>`;
 };

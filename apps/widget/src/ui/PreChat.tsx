@@ -17,6 +17,8 @@ export function PreChat() {
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const onToken = useCallback((value: string | null) => setToken(value), []);
+  // A token is single-use: a new box after a failed send asks for a new one.
+  const [captchaRound, setCaptchaRound] = useState(0);
   const Captcha = useLazy(loadCaptcha, Boolean(config?.captcha));
 
   if (!config) {
@@ -60,6 +62,11 @@ export function PreChat() {
       });
       controller.send(message);
     } catch (error) {
+      // The api may have spent the token before the failure: ask for a new one.
+      if (token) {
+        setToken(null);
+        setCaptchaRound((round) => round + 1);
+      }
       setFormError(
         error instanceof TransportError && error.code === 'rate_limited'
           ? t('prechat.rateLimited')
@@ -120,7 +127,7 @@ export function PreChat() {
         error={errors.message ?? null}
       />
       {config.captcha && Captcha ? (
-        <Captcha config={config.captcha} onToken={onToken} t={t} />
+        <Captcha key={captchaRound} config={config.captcha} onToken={onToken} t={t} />
       ) : null}
       {formError ? (
         <p class="hd-alert hd-alert-danger" role="alert">

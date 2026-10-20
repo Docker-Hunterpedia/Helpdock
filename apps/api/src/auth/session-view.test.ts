@@ -25,6 +25,7 @@ const user: StaffUser = {
   deactivatedAt: null,
   signatureEn: null,
   signatureAr: null,
+  webauthnUserHandle: null,
 };
 
 const brand = (id: string, name: string, prefix: string): Brand => ({

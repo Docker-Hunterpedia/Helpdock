@@ -452,9 +452,11 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_AUTH_REQUIRE2FA` | `auth.require2fa` | install | no | `false` | Require TOTP for every staff account on this install. |
 | `HD_AUTH_JWT_SIGNING_KEY` | `auth.jwtSigningKey` | install | yes | — | ES256 key pair the api signs access tokens with, as JSON. Generated at first boot and shared by every replica; never set by hand. Rotating it signs every session out (ARCHITECTURE §7). |
 | `HD_AUTH_MAGIC_LINK_TTL_MINUTES` | `auth.magicLinkTtlMinutes` | install | no | `10` | Lifetime of a single-use magic link, in minutes (DOMAIN-RULES §4.6). |
+| `HD_AUTH_WEBAUTHN_RP_ID` | `auth.webauthn.rpId` | install | no | — | Passkey relying party id: the host of APP_URL, written by the first successful passkey registration; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050). |
 | `HD_ROLES_VIEWER_ENABLED` | `roles.viewerEnabled` | install | no | `true` | Whether the optional read-only Viewer role can be assigned (REQUIREMENTS §2). |
 | `HD_CONTACTS_DEFAULT_CALLING_CODE` | `contacts.defaultCallingCode` | brand | no | — | Country calling code prefixed to phone numbers typed without one, for example 49. Empty refuses them instead (ADR 0008). |
-| `HD_CAPTCHA_PROVIDER` | `captcha.provider` | brand | no | `none` | CAPTCHA for visitor-facing forms. Off by default; Turnstile is the recommended provider (ADR 0003). |
+| `HD_CAPTCHA_PROVIDER` | `captcha.provider` | brand | no | `none` | CAPTCHA for visitor-facing forms. Off by default; a brand that turns it on starts with the built-in proof-of-work check, `pow`, which sends nothing to a third party (ADR 0052). Turnstile is the stronger bot detection (ADR 0003). |
+| — (not pinnable) | `captcha.difficulty` | brand | no | `low` | How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Channels › Widget. |
 | `HD_CAPTCHA_SITE_KEY` | `captcha.siteKey` | brand | no | — | Public CAPTCHA site key, rendered by the widget and the web form. |
 | `HD_CAPTCHA_SECRET` | `captcha.secret` | brand | yes | — | CAPTCHA secret used server-side to verify a challenge token. |
 | `HD_PUSH_VAPID_PUBLIC_KEY` | `push.vapidPublicKey` | install | no | — | VAPID public key served to the admin app as applicationServerKey (ADR 0002). |

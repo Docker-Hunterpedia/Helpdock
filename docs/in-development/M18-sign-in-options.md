@@ -7,7 +7,7 @@ Depends on: M0 (auth, settings, outbox, SSRF-safe client), M4 (CAPTCHA interface
 Effort: about 32.5 working days for one person, 5–7 weeks (see [Effort summary](#effort-summary))
 PRD: [Phase 5 · M18](../planning/PRD.md#m18-sign-in-options)
 Owner decisions: D-50 to D-55 in [decisions-1-x.md](../planning/decisions-1-x.md#m18-sign-in-options)
-ADRs (proposed): [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md), [0051](../decisions/0051-oauth-identities-bound-by-subject.md), [0052](../decisions/0052-built-in-proof-of-work-captcha.md), [0053](../decisions/0053-break-glass-with-a-passkey.md)
+ADRs: [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md) (accepted with M18-01), [0051](../decisions/0051-oauth-identities-bound-by-subject.md), [0052](../decisions/0052-built-in-proof-of-work-captcha.md), [0053](../decisions/0053-break-glass-with-a-passkey.md)
 
 Staff passkeys as a second factor and on their own, Google and GitHub sign-in bound by subject with Microsoft added, and a CAPTCHA that sends nothing to a third party.
 
@@ -149,7 +149,7 @@ Recheck with Context7 at the PR, per CLAUDE.md.
 - Related Origin Requests (`/.well-known/webauthn`) cap a credential at five
   distinct registrable-domain labels. That is no basis for a multi-brand
   product, and it is not needed for staff.
-- **Pin the RP ID** in a setting, `auth.webauthn.rpId`, written at first use.
+- **Pin the RP ID** in a setting, `auth.webauthn.rpId`, written by the first successful passkey registration.
   If `APP_URL`'s host later differs:
   - passkey ceremonies are refused, with `passkeys-rp-changed`;
   - the System page and Settings › Authentication show a warning Banner;
@@ -449,7 +449,7 @@ Backlog or never:
 
 | Id | Deliverable | Spec | Effort (d) | Depends on |
 |---|---|---|---|---|
-| M18-01 | **WebAuthn foundation.** `webauthn_credentials` table (install scope, `GLOBAL_TABLES`); `users.webauthn_user_handle`; `auth.webauthn.rpId` pinned at first use and the `passkeys-rp-changed` refusal; a Redis ceremony store (`GETDEL`, 5 min, purpose-bound); a thin `WebAuthnService` over `@simplewebauthn/server` 14.0.3 (RP from `APP_URL`, algorithms `[-8,-7,-257]`, attestation `none`); `methods().passkey`; ADR 0050; ARCHITECTURE §1 Auth row | A §1, §7; D §1.5; ADR 0050 | 3 | — |
+| M18-01 | **WebAuthn foundation.** `webauthn_credentials` table (install scope, `GLOBAL_TABLES`); `users.webauthn_user_handle`; `auth.webauthn.rpId` pinned by the first successful registration and the `passkeys-rp-changed` refusal; a Redis ceremony store (`GETDEL`, 5 min, purpose-bound); a thin `WebAuthnService` over `@simplewebauthn/server` 14.0.3 (RP from `APP_URL`, algorithms `[-8,-7,-257]`, attestation `none`); `methods().passkey`; ADR 0050; ARCHITECTURE §1 Auth row | A §1, §7; D §1.5; ADR 0050 | 3 | — |
 | M18-02 | **Register and manage passkeys.** `GET/POST/PATCH/DELETE /api/me/passkeys` (begin/finish, rename, remove) with step-up (password, TOTP or existing passkey; 5-per-15-min budget), at most 10 per account, `excludeCredentials`, last-factor refusal, audit `auth.passkey.added/.renamed/.removed`, `securityChange` email (en/ar) | ASVS 2.2.3, 2.5.5, 3.7.1 | 2.5 | M18-01 |
 | M18-03 | **Passkey as a second factor.** The challenge answers `POST /api/auth/passkey/second-factor/{options,verify}` beside TOTP and recovery codes, sharing the three-attempt budget and lock; the enrolment challenge accepts a passkey (`second-factor-enrolment-required`, old code aliased); `isSecondFactorRequired` / "has a factor" = TOTP OR passkey; recovery codes issued with the first factor of either kind; redraw by TOTP or passkey; admin "reset second factor" removes passkeys too | ASVS 4.3.1, 2.5.7, 2.6.1 | 3 | M18-01, M18-02 |
 | M18-04 | **Passwordless sign-in.** `POST /api/auth/passkey/{options,verify}`: discoverable, UV required, no `allowCredentials`, same refusal (`invalid-credentials`) for unknown credential, bad signature, deactivated or no-brand account; per-IP budget shared with sign-in; counter check; `last_used_at`; audit `method: passkey, secondFactor: passkey-uv`; refused under SSO enforcement (`sso-required`) | ASVS 2.2.1, 3.2.1; D §1.6 | 2.5 | M18-01, M18-03 |
@@ -465,6 +465,24 @@ Backlog or never:
 
 ### Progress
 
+- [x] **M18-01** WebAuthn foundation ([#275](https://github.com/Docker-Hunterpedia/Helpdock/issues/275)).
+  Migration `0058_webauthn_credentials` (the table, with checks on the
+  credential id length and the algorithm, and the 32-byte
+  `users.webauthn_user_handle`); `auth.webauthn.rpId` pinned by the first
+  successful registration, in one insert-unless-present statement
+  (`apps/api/src/auth/webauthn/rp-id-pin.ts`), rather than by any ceremony, so
+  an install opened on a temporary host is not pinned with no passkeys;
+  a person bound to every ceremony but passwordless; attestation limited to
+  `none` or a packed self-attestation, and framed answers refused;
+  the ceremony store (`ceremony-store.ts`); `WebAuthnService` over
+  `@simplewebauthn/server` 14.0.3 (`webauthn.service.ts`); `passkey` and
+  `passkeysPaused` in `GET /api/auth/methods`; the auth codes
+  `passkeys-unavailable` and `passkeys-rp-changed`. A software authenticator
+  for tests (`apps/api/src/testing/software-authenticator.ts`) signs with
+  `node:crypto` P-256 keys. Left for M18-06: the Settings › Authentication
+  passkeys card can read `WebAuthnService.status()` (state, current and pinned
+  RP ID, pin date); the "in use" count and the route that serves the card are
+  not built yet.
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom
@@ -859,6 +877,11 @@ DESIGN.md changes in the same PRs:
 7. (D-01) **Release vehicle:** does M18 ship in 1.1 or 1.2? The OAuth binding
    change (M18-07) alters behaviour for existing users and wants a minor version
    with a release note. Proposed: 1.1, with the binding itself in 1.0.1.
+8. **Known gap, found in M18-10:** the `HD_CAPTCHA_*` environment pins in
+   the configuration reference do not reach the widget or the web form, which
+   read the brand's `captcha.*` rows directly. `captcha.difficulty` is
+   therefore registered without an `HD_` pin (`envKey: null`, listed as "not
+   pinnable" in the configuration reference) until that is fixed.
 
 ## Build order
 
@@ -925,3 +948,11 @@ screens.
   (30 per 15 minutes per IP and brand on "Was this helpful?", answered 429),
   and the full list of `rate_limit_refusals_total` bucket labels in the
   operations guide.
+- **M18-10 Proof-of-work CAPTCHA provider** (#284): in review. `pow` in
+  `CAPTCHA_PROVIDERS` and `captcha.provider`; `captcha.difficulty` (`low`
+  50,000 / `medium` 200,000); a per-brand HKDF key, the surface and expiry in
+  the salt, single spend by `SET NX`; `GET /api/widget/:brandId/captcha/challenge`
+  and `/contact[/<brandId>]/challenge`; the solver in the widget's lazy CAPTCHA
+  chunk and inline in the web form; D-51 as a default for brands with no saved
+  provider; ADR 0052 updated; artboards `Widget/PreChat-Verify`,
+  `HelpCenter/WebForm-Verify`, `Admin/Channels-Widget-BotProtection`.

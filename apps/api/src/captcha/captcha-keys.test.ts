@@ -1,6 +1,7 @@
 import type { CaptchaTransport } from '@helpdock/channels';
 import { describe, expect, it, vi } from 'vitest';
 import { type BrandCaptchaKeys, CaptchaVerifier, safeCaptchaTransport } from './captcha-keys.js';
+import type { PowCaptcha } from './pow-captcha.js';
 
 const { safeFetch } = vi.hoisted(() => ({ safeFetch: vi.fn() }));
 vi.mock('@helpdock/net', async (original) => ({
@@ -11,11 +12,19 @@ vi.mock('@helpdock/net', async (original) => ({
 const BRAND = '0192c3f0-1a2b-7c3d-8e4f-0000000000b1';
 const KEYS: BrandCaptchaKeys = { provider: 'turnstile', siteKey: 'site', secret: 's3cret' };
 
+/** The built-in check's spend, answering what a test tells it to. */
+const powSpending = (success: boolean) => ({
+  spend: vi.fn(async () =>
+    success ? { success: true as const } : { success: false as const, errorCodes: ['x'] },
+  ),
+});
+
 const verifierWith = (
   keys: BrandCaptchaKeys | null,
   transport: CaptchaTransport,
-  log = { warn: vi.fn() },
-) => new CaptchaVerifier({ forBrand: async () => keys }, transport, log);
+  { pow = powSpending(true), log = { warn: vi.fn() } } = {},
+) =>
+  new CaptchaVerifier({ forBrand: async () => keys }, transport, pow as unknown as PowCaptcha, log);
 
 const HOSTS = ['support.example.com'];
 const SURFACE = 'widget-first-message';
@@ -83,7 +92,7 @@ describe('CaptchaVerifier', () => {
     };
 
     expect(
-      await verifierWith(KEYS, transport, log).verify({
+      await verifierWith(KEYS, transport, { log }).verify({
         brandId: BRAND,
         token: 'the-token',
         remoteIp: null,
@@ -112,6 +121,24 @@ describe('CaptchaVerifier', () => {
         surface: SURFACE,
       }),
     ).toBe('failed');
+  });
+
+  it('spends a built-in solution for the surface asking, and never calls out (ADR 0052)', async () => {
+    const transport = answering(true);
+    const pow = powSpending(false);
+    const verifier = verifierWith({ provider: 'pow', difficulty: 'low' }, transport, { pow });
+
+    expect(
+      await verifier.verify({
+        brandId: BRAND,
+        token: 'solution',
+        remoteIp: null,
+        hostnames: HOSTS,
+        surface: 'widget-first-message',
+      }),
+    ).toBe('failed');
+    expect(pow.spend).toHaveBeenCalledWith(BRAND, 'solution', 'widget-first-message');
+    expect(transport.postForm).not.toHaveBeenCalled();
   });
 
   it('says so when the brand has no keys', async () => {

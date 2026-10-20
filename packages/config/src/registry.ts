@@ -20,8 +20,12 @@ export interface SettingDefinition<
   readonly secret: boolean;
   readonly scope: SettingScope;
   readonly description: string;
-  /** The environment variable that overrides and locks this setting. */
-  readonly envKey: string;
+  /**
+   * The environment variable that overrides and locks this setting, or null
+   * for a setting no variable may pin: one whose readers do not consult the
+   * pins yet, so a variable would be documented and do nothing.
+   */
+  readonly envKey: string | null;
 }
 
 /** `smtp.host` becomes `HD_SMTP_HOST`, `oauth.google.clientId` becomes `HD_OAUTH_GOOGLE_CLIENT_ID`. */
@@ -38,10 +42,10 @@ const defineSetting = <TKey extends string, TSchema extends z.ZodType>(definitio
   readonly secret: boolean;
   readonly scope: SettingScope;
   readonly description: string;
-  readonly envKey?: string;
+  readonly envKey?: string | null;
 }): SettingDefinition<TKey, TSchema> => ({
   ...definition,
-  envKey: definition.envKey ?? toEnvKey(definition.key),
+  envKey: definition.envKey === undefined ? toEnvKey(definition.key) : definition.envKey,
 });
 
 const PORT = z.int().min(1).max(65_535);
@@ -204,6 +208,20 @@ export const SETTING_DEFINITIONS = [
     description: 'Lifetime of a single-use magic link, in minutes (DOMAIN-RULES §4.6).',
   }),
   defineSetting({
+    key: 'auth.webauthn.rpId',
+    // A lower-case host name as `new URL(APP_URL).hostname` spells it, or empty
+    // while no passkey ceremony has run yet.
+    schema: z
+      .string()
+      .max(253)
+      .regex(/^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*)?$/),
+    default: '',
+    secret: false,
+    scope: 'install',
+    description:
+      'Passkey relying party id: the host of APP_URL, written by the first successful passkey registration; not set by hand. If APP_URL later names another host, passkey ceremonies are refused with passkeys-rp-changed and every other sign-in method keeps working (ADR 0050).',
+  }),
+  defineSetting({
     key: 'roles.viewerEnabled',
     schema: z.boolean(),
     default: true,
@@ -225,12 +243,24 @@ export const SETTING_DEFINITIONS = [
   }),
   defineSetting({
     key: 'captcha.provider',
-    schema: z.enum(['turnstile', 'hcaptcha', 'none']),
+    schema: z.enum(['pow', 'turnstile', 'hcaptcha', 'none']),
     default: 'none',
     secret: false,
     scope: 'brand',
     description:
-      'CAPTCHA for visitor-facing forms. Off by default; Turnstile is the recommended provider (ADR 0003).',
+      'CAPTCHA for visitor-facing forms. Off by default; a brand that turns it on starts with the built-in proof-of-work check, `pow`, which sends nothing to a third party (ADR 0052). Turnstile is the stronger bot detection (ADR 0003).',
+  }),
+  defineSetting({
+    key: 'captcha.difficulty',
+    schema: z.enum(['low', 'medium']),
+    default: 'low',
+    secret: false,
+    scope: 'brand',
+    description:
+      'How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Channels › Widget.',
+    // The widget and the web form read the brand's `captcha.*` rows directly,
+    // so an `HD_` pin would not reach them (M18 plan, open item 8).
+    envKey: null,
   }),
   defineSetting({
     key: 'captcha.siteKey',

@@ -13,6 +13,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { CaptchaVerifier, DbCaptchaKeys, safeCaptchaTransport } from '../captcha/captcha-keys.js';
+import { PowCaptcha } from '../captcha/pow-captcha.js';
 import { CsatRepository } from '../csat/csat.repository.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { OutboundEmailService } from '../email/outbound-email.service.js';
@@ -157,11 +158,8 @@ export class WidgetModule {
     const businessHours = new BusinessHoursService(slaRepository, new SlaService(slaRepository));
     const media = new MediaRepository();
     const captchaKeys = new DbCaptchaKeys(db, keyring);
-    const captcha = new CaptchaVerifier(
-      captchaKeys,
-      options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS),
-      logger,
-    );
+    const captchaTransport =
+      options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS);
 
     return {
       module: WidgetModule,
@@ -200,9 +198,19 @@ export class WidgetModule {
           useFactory: (redis: Redis) => new WidgetHub(redis, logger),
         },
         {
+          provide: PowCaptcha,
+          inject: [REDIS],
+          useFactory: (redis: Redis) => new PowCaptcha(keyring, redis),
+        },
+        {
           provide: WidgetConfigService,
-          inject: [WidgetGate, PresenceService, HELP_CENTER_FEEDBACK],
-          useFactory: (gate: WidgetGate, presence: PresenceService, feedback: HelpCenterFeedback) =>
+          inject: [WidgetGate, PresenceService, HELP_CENTER_FEEDBACK, PowCaptcha],
+          useFactory: (
+            gate: WidgetGate,
+            presence: PresenceService,
+            feedback: HelpCenterFeedback,
+            pow: PowCaptcha,
+          ) =>
             new WidgetConfigService({
               gate,
               businessHours,
@@ -213,6 +221,7 @@ export class WidgetModule {
                 widget,
               }),
               captcha: captchaKeys,
+              pow,
               assetOrigin: env.APP_URL,
               popular: feedback,
             }),
@@ -231,8 +240,8 @@ export class WidgetModule {
         },
         {
           provide: WidgetConversationsService,
-          inject: [WidgetGate],
-          useFactory: (gate: WidgetGate) =>
+          inject: [WidgetGate, PowCaptcha],
+          useFactory: (gate: WidgetGate, pow: PowCaptcha) =>
             new WidgetConversationsService({
               gate,
               widget,
@@ -245,7 +254,7 @@ export class WidgetModule {
               lifecycleReads,
               assignment: new AssignmentRepository(),
               media,
-              captcha,
+              captcha: new CaptchaVerifier(captchaKeys, captchaTransport, pow, logger),
               businessHours,
             }),
         },

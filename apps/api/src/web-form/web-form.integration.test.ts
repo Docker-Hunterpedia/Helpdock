@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -101,6 +102,21 @@ interface Posted {
   readonly html: string;
   readonly csp: string;
 }
+
+/** The customer's browser: the ALTCHA solution of a built-in challenge (ADR 0052). */
+const solvePow = (work: { salt: string; challenge: string }): string => {
+  let number = 0;
+  // 200,000 is `medium`'s whole range: past it, the challenge has no solution.
+  while (
+    number <= 200_000 &&
+    createHash('sha256')
+      .update(`${work.salt}${String(number)}`)
+      .digest('hex') !== work.challenge
+  ) {
+    number += 1;
+  }
+  return Buffer.from(JSON.stringify({ ...work, number })).toString('base64');
+};
 
 describe.skipIf(!hasDocker)('the hosted web form', () => {
   let postgres: StartedPostgreSqlContainer;
@@ -366,7 +382,8 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
       enabled: false,
       publicUrl: `${APP_URL}/contact/${seeded.brandId}`,
       departmentId: null,
-      captcha: { enabled: false, ready: false, provider: null },
+      // A brand that never chose a provider starts on the built-in check (D-51).
+      captcha: { enabled: false, ready: true, provider: 'pow' },
     });
     expect(settings.body.fields.map((field) => field.field)).toEqual([
       'name',
@@ -739,6 +756,8 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
   };
 
   it('enforces the CAPTCHA when it is on, with the keys of the Widget tab, and takes nothing without them', async () => {
+    // Turnstile chosen without keys; a brand that never chose starts on the built-in check (D-51).
+    await saveCaptchaKeys('');
     await saveForm({ captchaEnabled: true });
     const noKeys = await app.inject({ method: 'GET', url: formPath() });
     expect(noKeys.statusCode).toBe(503);
@@ -831,6 +850,52 @@ describe.skipIf(!hasDocker)('the hosted web form', () => {
       tx.delete(brandDomains).where(eq(brandDomains.domain, HELP_HOST)),
     );
     await saveForm({ captchaEnabled: false });
+    await saveCaptchaKeys('');
+  });
+
+  it('asks for the built-in check, takes a solution once, and calls nobody (ADR 0052)', async () => {
+    const calledOut = verified.length;
+    const chosen = await api('PUT', `/api/brands/${seeded.brandId}/widget/access`, {
+      allowedOrigins: [],
+      captchaEnabled: false,
+      captchaProvider: 'pow',
+      captchaSiteKey: '',
+      captchaDifficulty: 'low',
+    });
+    expect(chosen.status).toBe(200);
+    await saveForm({ enabled: true, captchaEnabled: true });
+    expect((await api<WebFormSettings>('GET', settingsPath())).body.captcha).toEqual({
+      enabled: true,
+      ready: true,
+      provider: 'pow',
+    });
+
+    const page = await app.inject({ method: 'GET', url: formPath() });
+    expect(page.statusCode).toBe(200);
+    expect(page.headers['content-security-policy']).toContain("connect-src 'self'");
+    expect(page.headers['content-security-policy']).not.toContain('https://');
+    const inline = /data-challenge="([^"]+)"/.exec(page.body)?.[1] ?? '';
+    const work = JSON.parse(inline.replaceAll('&quot;', '"').replaceAll('&amp;', '&'));
+    expect(work).toMatchObject({ algorithm: 'SHA-256', maxnumber: 50_000 });
+    const fields = { email: 'pow@example.com', name: 'P', message: 'Hi', 'custom:product': 'Desk' };
+
+    const unsolved = await post({ ...fields, hd_pow: 'not a solution' });
+    const solved = await post({ ...fields, hd_pow: solvePow(work) });
+    const replayed = await post({ ...fields, hd_pow: solvePow(work) });
+
+    expect(unsolved.status).toBe(422);
+    expect(solved.status).toBe(200);
+    expect(replayed.status).toBe(422);
+    const fresh = await app.inject({ method: 'GET', url: `${formPath()}/challenge` });
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.headers['cache-control']).toBe('no-store');
+    expect((await post({ ...fields, hd_pow: solvePow(fresh.json()) })).status).toBe(200);
+    expect(verified.length).toBe(calledOut);
+
+    await saveForm({ captchaEnabled: false });
+    expect((await app.inject({ method: 'GET', url: `${formPath()}/challenge` })).statusCode).toBe(
+      404,
+    );
     await saveCaptchaKeys('');
   });
 

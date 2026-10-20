@@ -1,4 +1,5 @@
 import {
+  captchaChallengeSchema,
   type WebFormPageParam,
   type WebFormPageQuery,
   webFormPageParamSchema,
@@ -10,6 +11,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { Public } from '../auth/route-declaration.js';
 import type { FormBodyRoute } from '../channels/inbound/inbound-parse-body.js';
 import {
+  type ChallengeAnswer,
   readFormBody,
   WEB_FORM_BODY_LIMIT,
   WEB_FORM_PATH,
@@ -76,6 +78,30 @@ export class WebFormPageController {
     );
   }
 
+  /** ADR 0052: a new built-in challenge for "Try again", on the help center host. */
+  @Get('challenge')
+  @Public()
+  async challenge(@Req() request: FastifyRequest, @Res() reply: FastifyReply): Promise<void> {
+    await sendChallenge(
+      reply,
+      await this.#page.challenge({ host: request.headers.host, ip: request.ip }),
+    );
+  }
+
+  /** The same on the install's own host, `/contact/<brandId>/challenge`. */
+  @Get(':brandId/challenge')
+  @Public()
+  async challengeForBrand(
+    @Param(new ZodValidationPipe(webFormPageParamSchema)) { brandId }: WebFormPageParam,
+    @Req() request: FastifyRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    await sendChallenge(
+      reply,
+      await this.#page.challenge({ host: request.headers.host, brandId, ip: request.ip }),
+    );
+  }
+
   @Get(':brandId')
   @Public()
   async showForBrand(
@@ -131,4 +157,21 @@ const send = async (reply: FastifyReply, response: WebFormPageResponse): Promise
     .header('cache-control', 'no-store')
     .type('text/html; charset=utf-8')
     .send(response.html);
+};
+
+const CHALLENGE_REFUSALS = {
+  404: 'No built-in check here',
+  429: 'Too many challenges from here; wait a few minutes',
+} as const;
+
+/** Through the output schema, like every JSON answer (AGENTS.md: no internal field leaks). */
+const sendChallenge = async (reply: FastifyReply, answer: ChallengeAnswer): Promise<void> => {
+  await reply
+    .code(answer.status)
+    .header('cache-control', 'no-store')
+    .send(
+      answer.status === 200
+        ? captchaChallengeSchema.parse(answer.challenge)
+        : { statusCode: answer.status, message: CHALLENGE_REFUSALS[answer.status] },
+    );
 };

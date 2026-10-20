@@ -159,6 +159,9 @@ describe('Channels › Widget', () => {
     expect(within(access).getByText('https://app.helpdock.com')).toBeVisible();
 
     await user.click(within(access).getByRole('checkbox', { name: /Check for bots/ }));
+    await user.click(within(access).getByRole('combobox', { name: 'Provider' }));
+    await user.click(await screen.findByRole('option', { name: 'Cloudflare Turnstile' }));
+    expect(within(access).getByText(/Turnstile sends visitor signals to Cloudflare/)).toBeVisible();
     await user.click(within(access).getByRole('button', { name: 'Save changes' }));
     expect(within(access).getByText(/Enter a site key and a secret key/)).toBeVisible();
 
@@ -171,6 +174,29 @@ describe('Channels › Widget', () => {
     expect(saved?.allowedOrigins).toContain('https://app.helpdock.com');
     expect(saved?.captchaEnabled).toBe(true);
     expect(saved?.captchaSecret).not.toBeNull();
+  });
+
+  it('turns on the built-in check with no keys, at the difficulty chosen (ADR 0052)', async () => {
+    const { user, channelsApi } = await renderWidget();
+    const access = card('Where the widget may run');
+
+    await user.click(within(access).getByRole('checkbox', { name: /Check for bots/ }));
+    expect(within(access).getByRole('combobox', { name: 'Provider' })).toHaveTextContent(
+      'Built-in (no third party)',
+    );
+    expect(within(access).queryByLabelText('Site key')).toBeNull();
+    expect(within(access).getByText(/The built-in check sends nothing to anyone/)).toBeVisible();
+    expect(within(access).getByRole('radio', { name: /^Low/ })).toBeChecked();
+    await user.click(within(access).getByRole('radio', { name: /^Medium/ }));
+    await user.click(within(access).getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText('Access settings saved')).toBeVisible();
+    const saved = (await channelsApi.widgetSettings()).access;
+    expect(saved).toMatchObject({
+      captchaEnabled: true,
+      captchaProvider: 'pow',
+      captchaDifficulty: 'medium',
+    });
   });
 
   it('shows a new signing secret once, and forgets it when told', async () => {

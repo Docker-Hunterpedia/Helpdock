@@ -71,6 +71,11 @@ export const NOT_ENVELOPE_COLUMNS: readonly (EnvelopeColumn & { readonly reason:
       'which kind of token access_token is (system user, Page, Instagram user), not the token',
   },
   {
+    table: 'webauthn_credentials',
+    column: 'credential_id',
+    reason: 'the authenticator names it in every assertion; an identifier, not a secret',
+  },
+  {
     table: 'settings',
     column: 'value',
     reason: 'holds JSON for most keys; rotated by its own pass, which picks out the envelopes',

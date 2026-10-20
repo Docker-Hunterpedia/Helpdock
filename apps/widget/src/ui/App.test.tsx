@@ -275,6 +275,71 @@ describe('CAPTCHA before the first message (ADR 0003)', () => {
   });
 });
 
+describe('the built-in check before the first message (ADR 0052, Widget/PreChat-Verify)', () => {
+  const VERIFIED = { timeout: 5_000 };
+
+  it('checks in the background, then sends the solution with Start chat', async () => {
+    const { mock } = await renderWidget({ preChat: true, captcha: 'pow' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open support chat' }));
+    const start = (await screen.findByRole('button', { name: 'Start chat' })) as HTMLButtonElement;
+
+    expect(await screen.findByRole('group', { name: 'Security check' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+    expect(screen.getByText('Built-in')).toBeTruthy();
+    expect(start.disabled).toBe(false);
+
+    type('Name', 'Omar');
+    type('Email', 'omar@example.com');
+    type('How can we help?', 'Help');
+    fireEvent.click(start);
+
+    await waitFor(() => {
+      const input = mock.calls.find((call) => call.method === 'startConversation')?.args[0] as
+        | { captcha_token?: string }
+        | undefined;
+      expect(JSON.parse(atob(input?.captcha_token ?? 'e30='))).toMatchObject({
+        algorithm: 'SHA-256',
+      });
+    });
+  });
+
+  it('asks for new work after a start that failed, since the api may have spent the token', async () => {
+    const { mock } = await renderWidget({ preChat: true, captcha: 'pow' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open support chat' }));
+    const start = (await screen.findByRole('button', { name: 'Start chat' })) as HTMLButtonElement;
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+
+    type('Name', 'Omar');
+    type('Email', 'omar@example.com');
+    type('How can we help?', 'Help');
+    act(() => mock.dropConnection());
+    fireEvent.click(start);
+
+    await waitFor(() =>
+      expect(mock.calls.filter((call) => call.method === 'captchaChallenge')).toHaveLength(2),
+    );
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+  });
+
+  it('says when the check could not run, keeps Start chat off, and tries again', async () => {
+    const { mock } = await renderWidget({ preChat: true, captcha: 'pow' });
+    mock.failNextChallenges(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Open support chat' }));
+    const start = (await screen.findByRole('button', { name: 'Start chat' })) as HTMLButtonElement;
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      "We couldn't check your connection.",
+    );
+    expect(start.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Verified'), VERIFIED);
+    expect(start.disabled).toBe(false);
+    expect(mock.calls.filter((call) => call.method === 'captchaChallenge')).toHaveLength(2);
+  });
+});
+
 describe('ended conversation (WidgetStatesEN column 6)', () => {
   it('sends the transcript to the prefilled address and starts a new conversation', async () => {
     const { controller, mock } = await renderWidget();

@@ -111,7 +111,7 @@ Plan: [M18-sign-in-options.md](../in-development/M18-sign-in-options.md).
 | Id | Question | Recommendation | Source | Answer |
 |---|---|---|---|---|
 | D-50 | May a fresh passkey assertion replace a fresh TOTP code for break-glass under SSO enforcement (ADR 0053, amending ADR 0026)? | Yes. | M18 Q1 | Yes. (2026-10-20) |
-| D-51 | Should the built-in proof-of-work provider become the default when an admin turns CAPTCHA on, with Turnstile as the stronger option (ADR 0052, amending ADR 0003)? | Yes, for new brands only. | M18 Q2 | Yes, for new brands only. (2026-10-20) |
+| D-51 | Should the built-in proof-of-work provider become the default when an admin turns CAPTCHA on, with Turnstile as the stronger option (ADR 0052, amending ADR 0003)? | Yes, for new brands only. | M18 Q2 | Yes, for new brands only. (2026-10-20) The one exception, a 1.0 brand that turned the check on without saving a provider and so had a non-working check, moves to `pow` with no migration: accepted by the owner on 2026-10-20 (ADR 0052). |
 | D-52 | Allow personal Microsoft accounts (`allowConsumers`) at all? | Off by default. | M18 Q3 | Accepted as recommended. (2026-10-20) |
 | D-53 | GitHub organisation restriction (`read:org` scope) in M18 or later? | Later. | M18 Q4 | Accepted as recommended. (2026-10-20) |
 | D-54 | Allow a passkey instead of a password at invitation acceptance (fully passwordless accounts from day one), +1 day in M18-04? | Owner's call. | M18 Q5 | Not now; password at invitation, passkey added after. (2026-10-20) |

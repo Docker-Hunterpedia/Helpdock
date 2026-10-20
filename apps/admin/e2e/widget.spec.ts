@@ -82,6 +82,53 @@ test.describe('Channels › Widget', () => {
     ).toBeVisible();
   });
 
+  test('turns on the built-in bot check without keys (ADR 0052)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openWidget(page, locale);
+    const access = page.getByRole('region', { name: t('channels:widget.access.heading') });
+
+    await access.getByRole('checkbox', { name: t('channels:widget.access.captcha') }).check();
+    await expect(
+      access.getByRole('combobox', { name: t('channels:widget.access.provider') }),
+    ).toHaveText(t('channels:widget.access.providers.pow'));
+    await expect(access.getByText(t('channels:widget.access.builtInNotice'))).toBeVisible();
+    await access
+      .getByRole('radio', {
+        name: new RegExp(`^${t('channels:widget.access.difficulties.medium.label')}`),
+      })
+      .check();
+    expect(await violations(page)).toEqual([]);
+
+    await access.getByRole('button', { name: t('channels:widget.save') }).click();
+    await expect(
+      page.getByRole('status').filter({ hasText: t('channels:widget.access.saved') }),
+    ).toBeVisible();
+  });
+
+  test('asks for keys when a third-party provider is chosen', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openWidget(page, locale);
+    const access = page.getByRole('region', { name: t('channels:widget.access.heading') });
+
+    await access.getByRole('checkbox', { name: t('channels:widget.access.captcha') }).check();
+    await access.getByRole('combobox', { name: t('channels:widget.access.provider') }).click();
+    await page
+      .getByRole('option', { name: t('channels:widget.access.providers.turnstile') })
+      .click();
+    await expect(access.getByText(t('channels:widget.access.tradeOff.turnstile'))).toBeVisible();
+    await access.getByRole('button', { name: t('channels:widget.save') }).click();
+    await expect(access.getByText(t('channels:widget.access.needsKeys'))).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('shows a new signing secret once', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

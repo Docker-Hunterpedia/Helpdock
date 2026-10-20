@@ -1420,6 +1420,10 @@ typing too, and it is matched by the physical key, so it is the same key on an
 Arabic layout. The **Collapse sidebar** button above your name does the same.
 The browser remembers the choice; until you make one, the sidebar is expanded
 on a window 1280 px or wider and collapsed between 1024 and 1279 px.
+On short windows, scroll the navigation independently of the brand and account
+controls. A hairline at either edge means more items are available there;
+Tab brings each focused item fully into view. The rail shows its thin scrollbar
+on hover or keyboard focus.
 
 ### Tags and custom fields in the workspace
 

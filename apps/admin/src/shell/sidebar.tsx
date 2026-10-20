@@ -12,6 +12,7 @@ import { CountBadge } from './count-badge.tsx';
 import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { NotificationBell } from './notification-bell.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
+import { useSidebarScroll } from './sidebar-scroll.js';
 import { UserMenu } from './user-menu.tsx';
 
 export const SIDEBAR_WIDTH = 220;
@@ -331,6 +332,7 @@ export function Sidebar({
   const sidebarId = useId();
   const counts = session.navCounts ?? {};
   const collapsed = collapse?.collapsed === true;
+  const { navRef, contentRef, edges } = useSidebarScroll();
   // Chrome only: the api refuses the request whatever the sidebar draws.
   // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
   // is install-wide and is offered to an install admin alone.
@@ -365,6 +367,7 @@ export function Sidebar({
           flexDirection: collapsed ? 'column' : 'row',
           alignItems: 'center',
           gap: 1,
+          flexShrink: 0,
         }}
       >
         <Box sx={{ flex: collapsed ? 'none' : 1, minWidth: 0 }}>
@@ -376,82 +379,144 @@ export function Sidebar({
       {/* Scrolls on its own: a brand's views (M1-05) can make the groups taller
           than the window, and the Admin group must stay reachable under them. */}
       <Box
-        component="nav"
-        aria-label={t('admin:nav.label')}
-        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', alignSelf: 'stretch' }}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          alignSelf: 'stretch',
+          marginInline: collapsed ? -2 : 0,
+          position: 'relative',
+          '&::before, &::after': {
+            content: '""',
+            position: 'absolute',
+            insetInline: 0,
+            height: '1px',
+            backgroundColor: tokens['border.default'],
+            pointerEvents: 'none',
+            zIndex: 1,
+          },
+          '&::before': { insetBlockStart: 0, opacity: edges.top ? 1 : 0 },
+          '&::after': { insetBlockEnd: 0, opacity: edges.bottom ? 1 : 0 },
+        }}
       >
-        {collapsed ? (
+        <Box
+          ref={navRef}
+          component="nav"
+          aria-label={t('admin:nav.label')}
+          data-scroll-top={edges.top}
+          data-scroll-bottom={edges.bottom}
+          onFocus={(event) => event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })}
+          sx={{
+            height: '100%',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarGutter: 'stable',
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${collapsed ? 'transparent' : tokens['border.strong']} transparent`,
+            '&:hover, &:focus-within': { scrollbarColor: `${tokens['border.strong']} transparent` },
+            '&::-webkit-scrollbar': { width: '4px', height: 0 },
+            '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: collapsed ? 'transparent' : tokens['border.strong'],
+              borderRadius: '4px',
+            },
+            '&:hover::-webkit-scrollbar-thumb, &:focus-within::-webkit-scrollbar-thumb': {
+              backgroundColor: tokens['border.strong'],
+            },
+            '&::-webkit-scrollbar-button': { display: 'none', width: 0, height: 0 },
+            // Stable gutters keep the icons still while scrollbars are hidden during width changes.
+            animation: `${collapsed ? 'rail-scroll' : 'column-scroll'} 200ms step-end`,
+            '@keyframes rail-scroll': { from: { overflowY: 'hidden' }, to: { overflowY: 'auto' } },
+            '@keyframes column-scroll': {
+              from: { overflowY: 'hidden' },
+              to: { overflowY: 'auto' },
+            },
+            '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+          }}
+        >
           <Box
-            component="ul"
+            ref={contentRef}
             sx={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 1,
+              paddingBlock: 1,
+              width: collapsed ? 36 : 'auto',
+              marginInlineStart: collapsed ? 2 : 0,
             }}
           >
-            {primaryNav.map((item) => (
-              <Box component="li" key={item.key}>
-                <RailLink item={item} count={counts[item.key]} />
-              </Box>
-            ))}
-            <RailDivider />
-            <Box component="li">
-              <RailViews />
-            </Box>
-            <RailDivider />
-            {adminNav.map((item) => (
-              <Box component="li" key={item.key}>
-                <RailLink item={item} count={counts[item.key]} />
-              </Box>
-            ))}
-          </Box>
-        ) : (
-          <>
-            <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {primaryNav.map((item) => (
-                <Box component="li" key={item.key}>
-                  <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+            {collapsed ? (
+              <Box
+                component="ul"
+                sx={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                {primaryNav.map((item) => (
+                  <Box component="li" key={item.key}>
+                    <RailLink item={item} count={counts[item.key]} />
+                  </Box>
+                ))}
+                <RailDivider />
+                <Box component="li">
+                  <RailViews />
                 </Box>
-              ))}
-            </Box>
+                <RailDivider />
+                {adminNav.map((item) => (
+                  <Box component="li" key={item.key}>
+                    <RailLink item={item} count={counts[item.key]} />
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <>
+                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {primaryNav.map((item) => (
+                    <Box component="li" key={item.key}>
+                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                    </Box>
+                  ))}
+                </Box>
 
-            {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
+                {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
                 it is a set of ways into the destination above it (M1-15). */}
-            <TicketViewsNav onNavigate={onNavigate} />
+                <TicketViewsNav onNavigate={onNavigate} />
 
-            <Typography
-              component="p"
-              variant="caption"
-              sx={{
-                color: 'text.secondary',
-                paddingInline: 3,
-                marginBlock: '16px 4px',
-                fontSize: 11,
-                // DESIGN §3.2: uppercase section labels are regular case in Arabic.
-                textTransform: locale === 'ar' ? 'none' : 'uppercase',
-                letterSpacing: locale === 'ar' ? 0 : '0.06em',
-              }}
-            >
-              {t('admin:nav.adminGroup')}
-            </Typography>
+                <Typography
+                  component="p"
+                  variant="caption"
+                  sx={{
+                    color: 'text.secondary',
+                    paddingInline: 3,
+                    marginBlock: '16px 4px',
+                    fontSize: 11,
+                    // DESIGN §3.2: uppercase section labels are regular case in Arabic.
+                    textTransform: locale === 'ar' ? 'none' : 'uppercase',
+                    letterSpacing: locale === 'ar' ? 0 : '0.06em',
+                  }}
+                >
+                  {t('admin:nav.adminGroup')}
+                </Typography>
 
-            <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {adminNav.map((item) => (
-                <Box component="li" key={item.key}>
-                  <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {adminNav.map((item) => (
+                    <Box component="li" key={item.key}>
+                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                    </Box>
+                  ))}
                 </Box>
-              ))}
-            </Box>
-          </>
-        )}
+              </>
+            )}
+          </Box>
+        </Box>
       </Box>
 
       <Box
         sx={{
+          flexShrink: 0,
           display: 'flex',
           flexDirection: 'column',
           alignItems: collapsed ? 'center' : 'stretch',

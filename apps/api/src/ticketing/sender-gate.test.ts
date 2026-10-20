@@ -2,7 +2,7 @@ import type { BlockedSender as BlockedSenderRow, DbTransaction } from '@helpdock
 import { describe, expect, it, vi } from 'vitest';
 import type { BlockListRepository } from './block-list.repository.js';
 import type { SenderKey } from './block-rules.js';
-import { isSenderBlocked } from './sender-gate.js';
+import { findBlockingEntry, isSenderBlocked } from './sender-gate.js';
 
 /**
  * The gate's decisions, with the repository faked. That the lookup and the
@@ -135,5 +135,47 @@ describe('isSenderBlocked', () => {
 
     expect(result).toEqual({ blocked: false });
     expect(matching).not.toHaveBeenCalled();
+  });
+});
+
+describe('findBlockingEntry', () => {
+  it('finds the most specific row and charges nothing (Test routing, M14-09)', async () => {
+    const { repository, recordDrop } = repositoryHolding([
+      row('domain', 'domain', 'promo-deals.biz'),
+      row('address', 'email', 'spam@promo-deals.biz'),
+    ]);
+
+    const found = await findBlockingEntry(
+      tx,
+      BRAND,
+      { kind: 'email', value: 'Spam@Promo-Deals.biz' },
+      { repository },
+    );
+
+    expect(found?.id).toBe('address');
+    expect(recordDrop).not.toHaveBeenCalled();
+  });
+
+  it('answers nothing for a sender who is not listed or whose identifier does not normalise', async () => {
+    const { repository, matching } = repositoryHolding([
+      row('b1', 'email', 'spam@promo-deals.biz'),
+    ]);
+
+    const unlisted = await findBlockingEntry(
+      tx,
+      BRAND,
+      { kind: 'email', value: 'friend@example.com' },
+      { repository },
+    );
+    const malformed = await findBlockingEntry(
+      tx,
+      BRAND,
+      { kind: 'email', value: 'not an address' },
+      { repository },
+    );
+
+    expect(unlisted).toBeUndefined();
+    expect(malformed).toBeUndefined();
+    expect(matching).toHaveBeenCalledTimes(1);
   });
 });

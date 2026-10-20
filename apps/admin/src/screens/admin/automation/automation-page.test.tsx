@@ -165,7 +165,7 @@ describe('the Time-based and Macros tabs', () => {
 
     expect(await screen.findByRole('button', { name: /Refund issued/ }, LOAD)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Macros', selected: true })).toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(screen.queryByRole('button', { name: 'New rule' })).not.toBeInTheDocument();
   });
 });

@@ -57,6 +57,7 @@ import { DomainCheckController } from './routes/domain-check.controller.js';
 import { DomainCheckService } from './routes/domain-check.service.js';
 import { HealthController } from './routes/health.controller.js';
 import { MeController } from './routes/me.controller.js';
+import { RoutingModule } from './routing/routing.module.js';
 import { RulesModule } from './rules/rules.module.js';
 import { ConfigModule } from './runtime/config.module.js';
 import { DbModule } from './runtime/db.module.js';
@@ -291,6 +292,8 @@ export class AppModule implements NestModule {
         // M3-03 to M3-05: workflow rules, their log and the test run. The
         // engine runs in the worker.
         RulesModule.forRoot({ sla, macros }),
+        // M14-09: the Routing tab and Test routing, which read the rules' and the rotation's own code.
+        RoutingModule.forRoot({ sla }),
         // M3-06: macros and canned responses. M3-08: the audit log viewer.
         macros,
         AuditLogModule.forRoot(),

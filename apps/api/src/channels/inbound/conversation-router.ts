@@ -597,7 +597,7 @@ const lifecycleContext = (context: RouteContext, actor: ActivityActor): Lifecycl
 });
 
 /** A subject, or the brand language's "(no subject)"; `tickets.subject` is required. */
-const subjectOf = (subject: string, locale: Locale): string => {
+export const subjectOf = (subject: string, locale: Locale): string => {
   const trimmed = subject.trim().slice(0, 500);
   if (trimmed !== '') {
     return trimmed;

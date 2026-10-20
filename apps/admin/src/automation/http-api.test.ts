@@ -119,6 +119,34 @@ describe('HttpAutomationApi', () => {
     });
   });
 
+  it('reads the routing overview, and tests a sample without anything but a POST', async () => {
+    const overview = await fixture.routing(BRAND);
+    fetchMock.mockResolvedValue(json(overview));
+    await expect(api.routing(BRAND)).resolves.toEqual(overview);
+    expect(lastCall()).toMatchObject({ url: `/api/brands/${BRAND}/routing`, method: 'GET' });
+
+    const request = {
+      entry: 'widget' as const,
+      entryId: null,
+      from: 'rania@globex.com',
+      subject: 'Hello',
+    };
+    const result = await fixture.testRouting(BRAND, request);
+    fetchMock.mockResolvedValue(json(result));
+    await expect(api.testRouting(BRAND, request)).resolves.toEqual(result);
+    expect(lastCall()).toMatchObject({
+      url: `/api/brands/${BRAND}/routing/test`,
+      method: 'POST',
+      body: request,
+    });
+  });
+
+  it('refuses a routing answer that is not the declared shape', async () => {
+    fetchMock.mockResolvedValue(json({ entryPoints: 'none' }));
+
+    await expect(api.routing(BRAND)).rejects.toThrow();
+  });
+
   it('refuses an answer that is not the declared shape', async () => {
     fetchMock.mockResolvedValue(json({ rules: [{ id: 'nope' }] }));
 

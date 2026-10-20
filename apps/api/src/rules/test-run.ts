@@ -111,7 +111,22 @@ const previewOne = async (
       if (facts.teamId === team.id) {
         return UNCHANGED;
       }
-      sim.facts = { ...facts, teamId: team.id, departmentId: team.departmentId };
+      // As the engine's assignTeam: a move to another department takes off an
+      // assignee who cannot work there.
+      let assigneeId = facts.assigneeId;
+      if (team.departmentId !== facts.departmentId) {
+        sim.changes.add('department');
+        const member =
+          assigneeId === null ? undefined : await deps.assignment.member(tx, brandId, assigneeId);
+        if (
+          assigneeId !== null &&
+          (member === undefined || !canWorkDepartment(member, team.departmentId))
+        ) {
+          assigneeId = null;
+          sim.changes.add('assignee');
+        }
+      }
+      sim.facts = { ...facts, teamId: team.id, departmentId: team.departmentId, assigneeId };
       sim.changes.add('team');
       return CHANGED;
     }
@@ -128,9 +143,15 @@ const previewOne = async (
       return CHANGED;
     }
     case 'assign_round_robin':
-      return (await routesAutomatically(deps.assignment, tx, facts.departmentId))
-        ? CHANGED
-        : UNAVAILABLE;
+      if (!(await routesAutomatically(deps.assignment, tx, facts.departmentId))) {
+        return UNAVAILABLE;
+      }
+      // As the engine's assignRoundRobin: an assignee is taken off so the rotation picks.
+      if (facts.assigneeId !== null) {
+        sim.facts = { ...facts, assigneeId: null };
+        sim.changes.add('assignee');
+      }
+      return CHANGED;
     case 'add_tag':
     case 'remove_tag': {
       if (!(await deps.rules.tagExists(tx, action.tagId))) {

@@ -1,4 +1,7 @@
 import type {
+  RoutingOverview,
+  RoutingTestRequest,
+  RoutingTestResult,
   RuleBuilderOptions,
   RuleCreateRequest,
   RuleKind,
@@ -37,6 +40,10 @@ export interface AutomationApi {
   options(brandId: string): Promise<RuleBuilderOptions>;
   /** Changes, sends and logs nothing. */
   testRun(brandId: string, request: RuleTestRunRequest): Promise<RuleTestRunResult>;
+  /** M14-09: the Routing tab's four steps. */
+  routing(brandId: string): Promise<RoutingOverview>;
+  /** M14-09: Test routing. Nothing is created, sent or logged. */
+  testRouting(brandId: string, request: RoutingTestRequest): Promise<RoutingTestResult>;
 }
 
 /** Every cache key the automation screens use. */
@@ -45,4 +52,5 @@ export const automationKeys = {
   rules: (brandId: string) => ['automation', brandId, 'rules'] as const,
   runs: (brandId: string, query: RuleRunQuery) => ['automation', brandId, 'runs', query] as const,
   options: (brandId: string) => ['automation', brandId, 'options'] as const,
+  routing: (brandId: string) => ['automation', brandId, 'routing'] as const,
 };

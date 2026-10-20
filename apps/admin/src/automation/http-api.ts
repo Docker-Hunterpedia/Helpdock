@@ -1,4 +1,7 @@
 import type {
+  RoutingOverview,
+  RoutingTestRequest,
+  RoutingTestResult,
   RuleBuilderOptions,
   RuleCreateRequest,
   RuleKind,
@@ -11,6 +14,8 @@ import type {
   WorkflowRunList,
 } from '@helpdock/schemas';
 import {
+  routingOverviewSchema,
+  routingTestResultSchema,
   ruleBuilderOptionsSchema,
   ruleTestRunResultSchema,
   workflowRuleListSchema,
@@ -101,6 +106,22 @@ export class HttpAutomationApi implements AutomationApi {
     return ruleTestRunResultSchema.parse(
       await this.#transport.request('POST', `${this.#rules(brandId)}/test-run`, request),
     );
+  }
+
+  async routing(brandId: string): Promise<RoutingOverview> {
+    return routingOverviewSchema.parse(
+      await this.#transport.request('GET', this.#routing(brandId)),
+    );
+  }
+
+  async testRouting(brandId: string, request: RoutingTestRequest): Promise<RoutingTestResult> {
+    return routingTestResultSchema.parse(
+      await this.#transport.request('POST', `${this.#routing(brandId)}/test`, request),
+    );
+  }
+
+  #routing(brandId: string): string {
+    return `/brands/${encodeURIComponent(brandId)}/routing`;
   }
 
   #rules(brandId: string): string {

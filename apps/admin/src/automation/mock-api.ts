@@ -2,6 +2,9 @@ import {
   type ActionOutcome,
   evaluateConditions,
   firstFailedGroup,
+  type RoutingOverview,
+  type RoutingTestRequest,
+  type RoutingTestResult,
   type RuleAction,
   type RuleBuilderOptions,
   type RuleCreateRequest,
@@ -22,6 +25,7 @@ import {
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import type { AutomationApi } from './api.js';
+import { mockRoutingOverview, mockRoutingTest } from './mock-routing.js';
 
 /**
  * The fixture behind the mock admin: the `AdminAutomationRules` artboard's
@@ -185,7 +189,10 @@ const SEED_RULES: readonly RuleCreateRequest[] = [
       match: 'all',
       groups: [group('all', [{ field: 'channel', operator: 'is', values: ['telegram'] }])],
     },
-    actions: [{ type: 'assign_team', teamId: M.teams.sales }],
+    actions: [
+      { type: 'assign_team', teamId: M.teams.sales },
+      { type: 'ai_triage', mode: 'suggest', fields: ['tags'] },
+    ],
   },
   {
     name: 'Invoices to Returns',
@@ -613,6 +620,16 @@ export class MockAutomationApi implements AutomationApi {
         followOns,
       },
     };
+  }
+
+  async routing(_brandId: string): Promise<RoutingOverview> {
+    await Promise.resolve();
+    return mockRoutingOverview(this.#rules, OPTIONS);
+  }
+
+  async testRouting(_brandId: string, request: RoutingTestRequest): Promise<RoutingTestResult> {
+    await Promise.resolve();
+    return mockRoutingTest(this.#rules, OPTIONS, preview, request);
   }
 
   #require(ruleId: string): WorkflowRule {

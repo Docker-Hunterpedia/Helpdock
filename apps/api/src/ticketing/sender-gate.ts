@@ -1,4 +1,4 @@
-import type { DbTransaction } from '@helpdock/db';
+import type { BlockedSender as BlockedSenderRow, DbTransaction } from '@helpdock/db';
 import { type MetaPlatform, type NormaliseOptions, normaliseIdentity } from '@helpdock/schemas';
 import { BlockListRepository } from './block-list.repository.js';
 import { matchKeysFor, mostSpecific, type SenderKey } from './block-rules.js';
@@ -50,6 +50,26 @@ export interface SenderGateOptions extends NormaliseOptions {
   readonly repository?: BlockListRepository;
 }
 
+/**
+ * Whether the block list holds this sender, **without** counting a drop. The
+ * gate below is this plus the increment; Test routing (M14-09) asks only the
+ * question, so a dry run cannot move a counter.
+ */
+export const findBlockingEntry = async (
+  tx: DbTransaction,
+  brandId: string,
+  sender: InboundSender,
+  { repository = new BlockListRepository(), ...normalise }: Omit<SenderGateOptions, 'now'> = {},
+): Promise<BlockedSenderRow | undefined> => {
+  const normalised = normaliseIdentity(sender.kind, sender.value, normalise);
+  if (!normalised.ok) {
+    return undefined;
+  }
+
+  const keys = matchKeysFor({ kind: sender.kind, value: normalised.value } satisfies SenderKey);
+  return mostSpecific(keys, await repository.matching(tx, brandId, keys));
+};
+
 export const isSenderBlocked = async (
   tx: DbTransaction,
   brandId: string,
@@ -60,13 +80,7 @@ export const isSenderBlocked = async (
     ...normalise
   }: SenderGateOptions = {},
 ): Promise<SenderGateResult> => {
-  const normalised = normaliseIdentity(sender.kind, sender.value, normalise);
-  if (!normalised.ok) {
-    return { blocked: false };
-  }
-
-  const keys = matchKeysFor({ kind: sender.kind, value: normalised.value } satisfies SenderKey);
-  const match = mostSpecific(keys, await repository.matching(tx, brandId, keys));
+  const match = await findBlockingEntry(tx, brandId, sender, { repository, ...normalise });
   if (match === undefined) {
     return { blocked: false };
   }

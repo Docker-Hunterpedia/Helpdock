@@ -3,8 +3,9 @@
 How a brand acts on tickets without a person doing it: rules that run when
 something happens to a ticket, rules that run on a schedule over tickets that
 have waited too long, the depth guard that keeps rules from looping, the
-execution log, and the test run. The screen is **Admin → Automation**
-(M3-03, M3-04, M3-05; [REQUIREMENTS §4.3](../planning/REQUIREMENTS.md#43-automation)).
+execution log, the test run, and the Routing tab that explains how a new ticket
+is routed and tests it. The screen is **Admin → Automation**
+(M3-03, M3-04, M3-05, M14-09; [REQUIREMENTS §4.3](../planning/REQUIREMENTS.md#43-automation)).
 
 The **Macros** tab is M3-06's and has its own guide, [macros.md](macros.md).
 An Agent sees that tab alone.
@@ -17,6 +18,7 @@ An Agent sees that tab alone.
 | Read the execution log | yes | yes | runs on their departments' tickets | no |
 | Add, edit, reorder, switch on or off, delete a rule | yes | yes | no | no |
 | Test-run a draft | yes | yes | on tickets they can see | no |
+| Read the Routing tab and run Test routing | yes | yes | only the entry points and departments in their scope | no |
 
 Every route is `ticketing:manage`. A rule is **brand-wide** — a rule saved by
 the lead of Billing would act on Returns' tickets as well — so changing one is
@@ -179,6 +181,48 @@ rules its changes could set off one level on, with whether they would run.
 A reference that names no ticket the reader can see answers "no such ticket, or
 you cannot see it", without saying which.
 
+## Routing
+
+The **Routing** tab explains, in four numbered steps, what happens to a new ticket,
+and each step links to where it is edited:
+
+1. **Arrival.** Every entry point and the department it files into: each mailbox,
+   the chat widget, each Telegram bot and Meta account, the web form, and API
+   requests (which name their own department). The widget has no department of its
+   own and files into the brand's first department; a web form without one does the
+   same. The tab says so in words. A per-widget department comes with several
+   widgets per brand (M19-02).
+2. **Rules on “Ticket created”**, in the order they run, with what each does; a
+   switched-off rule reads “Off”.
+3. **AI triage**, which runs only when a rule queues it. The tab names the rules that do.
+4. **Assignment**, by each department's mode, with the people in its rotation and its cap.
+
+### Test routing
+
+**Test routing** takes a sample (channel and entry point, from, name, subject,
+message, language) and shows what a real message would do: the department; whether
+the sender is blocked or automated, in which case no ticket would be created; the
+contact it would match (the name only) or “a new contact”; each *Ticket created*
+rule with its conditions and actions; whether AI triage would be queued; the SLA
+policy and the first-response due time; and who the rotation would pick right now,
+or that nobody is online or eligible.
+
+**Nothing is created, sent or logged.** No ticket, contact, message, notification,
+audit row or rule run is written; no block-list counter, rule counter or rotation
+turn moves; AI is never called. Asking twice gives the same pick. See
+[DOMAIN-RULES §2.9](../planning/DOMAIN-RULES.md#29-test-routing) for the exact
+steps.
+
+Three things the sample cannot show: the rules a rule's changes could set off are listed with whether they would run, but their actions are not applied to the SLA and assignment shown; only the sender's address is judged for
+automated mail, so a real message can also be stopped by its headers
+(`Auto-Submitted`, `Precedence`); and a rule's conditions are judged on the ticket as
+it arrives, as the engine does, so a later rule's *conditions* do not see an earlier
+rule's changes (its *actions* do).
+
+A Team Leader whose scope is some departments sees and tests only the entry points
+that file into those departments. If a rule moves the sample to a department outside
+their scope, the result says so and does not show that department's rotation.
+
 ## API
 
 All under `/api/brands/:brandId/rules`, all `ticketing:manage`. Schemas are in
@@ -198,3 +242,13 @@ All under `/api/brands/:brandId/rules`, all `ticketing:manage`. Schemas are in
 
 Creating, changing, reordering and deleting a rule is written to `audit_log` as
 `workflow_rule.*`.
+
+The Routing tab uses two routes under `/api/brands/:brandId/routing`, both
+`ticketing:manage`; their schemas are in `packages/schemas/src/automation-routing.ts`.
+Like the other staff-session routes they are not part of the public `/api/v1`
+OpenAPI document, which describes the API-key surface only.
+
+| Route | Does |
+|---|---|
+| `GET /routing` | The entry points with their departments, the *Ticket created* rules in order, the rules that queue AI triage, and each department's assignment mode, in the reader's scope |
+| `POST /routing/test` | A sample: `{ entry, entryId, departmentId?, from, fromName, subject, message, language }`. `verdict` is `ticket`, `blocked` or `automated`; 404 for an entry point that does not exist or is outside the reader's scope. Writes nothing |

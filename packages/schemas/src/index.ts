@@ -6,6 +6,7 @@ export * from './assignment.js';
 export * from './assist.js';
 export * from './audit-log.js';
 export * from './auth.js';
+export * from './automation-routing.js';
 export * from './brand.js';
 export * from './business-hours.js';
 export * from './contact.js';

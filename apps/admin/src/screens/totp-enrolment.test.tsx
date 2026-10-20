@@ -147,3 +147,16 @@ it.each(['en', 'ar'] as const)(
     expect(await screen.findByText(t('signIn.rateLimited', { count: 2 }))).toBeInTheDocument();
   },
 );
+
+it.each(['en', 'ar'] as const)(
+  'says an authenticator is already on, rather than "unavailable", in %s',
+  async (locale) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    const t = createI18n({ lng: locale }).getFixedT(locale, 'auth');
+    const api = new MockAuthApi();
+    vi.spyOn(api, 'enrolTotp').mockRejectedValueOnce(new AuthError('totp-already-enabled'));
+    renderApp(<AppRoutes />, { authApi: api, initialEntries: ['/sign-in/enrol'] });
+
+    expect(await screen.findByText(t('enrolment.alreadyOn'))).toBeInTheDocument();
+  },
+);

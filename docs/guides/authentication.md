@@ -198,13 +198,26 @@ next sign-in, as is somebody invited as an Admin.
 2. `POST /api/auth/totp/confirm` with a live code enables the second factor and
    returns **ten recovery codes, once**.
 
+Enrolling never replaces an authenticator that is already on. While one is on,
+`POST /api/auth/totp/enrol` answers `409 totp-already-enabled`, whatever the
+session. An account that may turn its app off can do so with a current code
+(`POST /api/me/totp/disable`) and enrol again. An account that must keep a
+second factor (Admins, install admins and accounts under `auth.require2fa`) is
+refused by that endpoint too, so in 1.1.x it cannot replace its authenticator:
+keep the recovery codes safe. A replace-authenticator flow is tracked in #373. The check is part of the write
+that stages the secret, so two requests cannot slip past it together.
+
 Before a session exists, the same two steps take the **enrolment challenge**
 that sign-in answered with (`totp-enrolment-required`) instead:
 `POST /api/auth/enrolment/start` stages the secret, and
 `POST /api/auth/enrolment/confirm` with a live code turns it on, spends the
 challenge, sets the refresh cookie and answers the recovery codes together with
 the session. A wrong code costs one of the challenge's three attempts. The
-challenge lasts fifteen minutes.
+challenge lasts fifteen minutes. An enrolment challenge stands in for a session
+only while the account has no authenticator. If one was turned on after the
+challenge was issued, both calls answer `401 challenge-expired` and change
+nothing, and turning the factor on takes a row lock on the account so the check
+and the write cannot be split.
 
 The screen that draws the QR code is `/sign-in/enrol`, which sign-in sends an
 account that must have an authenticator and has none to. It stages the
@@ -827,7 +840,7 @@ From `.env`: `APP_MASTER_KEY`, and the two session limits in
 | `POST /api/auth/sign-out-everywhere` | `@Authenticated()` | Every browser |
 | `GET /api/install/settings/authentication` | `@Requires('install:admin')` | Authentication settings, environment locks and OAuth redirect URLs; no secret values |
 | `PUT /api/install/settings/authentication` | `@Requires('install:admin')` | Save 2FA, sign-in-link and OAuth app settings; omitted secrets stay unchanged |
-| `POST /api/auth/totp/enrol` | `@Authenticated()` | Stage a secret for a QR code |
+| `POST /api/auth/totp/enrol` | `@Authenticated()` | Stage a secret for a QR code; `409 totp-already-enabled` while an app is on |
 | `POST /api/auth/totp/confirm` | `@Authenticated()` | Enable it, return recovery codes |
 | `GET /api/auth/invites/:token` | `@Public()` | Read an invitation without spending it |
 | `POST /api/auth/invites/:token/accept` | `@Public()` | Spend it, and sign in |
@@ -853,7 +866,7 @@ screens need:
 
 Credential refusal codes include `rate-limited`, `invalid-credentials`, `totp-mismatch`,
 `totp-locked`, `challenge-expired`, `recovery-invalid`, `no-account`,
-`unavailable` or `password-breached`. The admin turns it into a translated sentence; no user-facing
+`unavailable`, `password-breached` or `totp-already-enabled` (HTTP 409). The admin turns it into a translated sentence; no user-facing
 English crosses that boundary.
 
 ## The development install

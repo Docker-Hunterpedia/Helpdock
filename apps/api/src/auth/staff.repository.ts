@@ -152,16 +152,37 @@ export class StaffRepository {
     await (tx ?? this.#db).update(users).set({ passwordHash }).where(eq(users.id, userId));
   }
 
-  /** Stores an enrolment that no live code has confirmed yet. */
+  /**
+   * Stores an enrolment that no live code has confirmed yet. It never replaces
+   * an authenticator that is on: that would switch the account's factor off
+   * with no proof, so `false` says nothing was staged.
+   */
   async stageTotpSecret(
     userId: string,
     totpSecretEncrypted: string,
     tx?: Queryable,
-  ): Promise<void> {
-    await (tx ?? this.#db)
+  ): Promise<boolean> {
+    const staged = await (tx ?? this.#db)
       .update(users)
-      .set({ totpSecretEncrypted, totpEnabled: false })
-      .where(eq(users.id, userId));
+      .set({ totpSecretEncrypted })
+      .where(and(eq(users.id, userId), eq(users.totpEnabled, false)))
+      .returning({ id: users.id });
+    return staged.length > 0;
+  }
+
+  /**
+   * Runs `work` in a transaction holding `SELECT … FOR UPDATE` on the account's
+   * row, with the row as it is under that lock. Anything that checks the
+   * account's second factor and then changes it takes its turn here.
+   */
+  withLockedUser<T>(
+    userId: string,
+    work: (tx: DbTransaction, user: StaffUser | undefined) => Promise<T>,
+  ): Promise<T> {
+    return this.#db.transaction(async (tx) => {
+      const rows = await tx.select().from(users).where(eq(users.id, userId)).for('update');
+      return work(tx, rows[0]);
+    });
   }
 
   async enableTotp(userId: string, recoveryCodesHashed: string[], tx?: Queryable): Promise<void> {

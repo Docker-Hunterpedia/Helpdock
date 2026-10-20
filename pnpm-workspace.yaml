@@ -41,3 +41,9 @@ overrides:
   'basic-ftp@<=6.2.0': '>=6.2.1'
   # high, via vitest > vite > postcss
   'source-map-js@<1.2.2': '>=1.2.2'
+  # high, direct (apps/admin, apps/widget) and via vitest
+  'vite@>=8.3.0 <8.3.3': '>=8.3.3'
+  # high, via @changesets/cli
+  'launch-editor@<2.14.2': '>=2.14.2'
+  # moderate and low, direct
+  'sanitize-html@<2.18.0': '>=2.18.0'

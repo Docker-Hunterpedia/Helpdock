@@ -39,7 +39,9 @@ const renderTickets = async (entry = '/tickets', ticketsApi?: MockTicketsApi) =>
     initialEntries: [entry],
   });
 
-  await screen.findByRole('region', { name: 'Ticket list' });
+  // `?intent=save` opens a modal over the list, which hides it from the
+  // accessibility tree; the list is still what has to have rendered.
+  await screen.findByRole('region', { name: 'Ticket list', hidden: true });
 
   return rendered;
 };

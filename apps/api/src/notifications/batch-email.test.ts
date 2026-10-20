@@ -5,19 +5,22 @@ import { type BatchItem, groupBatch } from './email-batch-content.js';
 const SINCE = new Date('2026-10-20T11:52:00.000Z');
 
 let sequence = 0;
-const item = (overrides: Partial<BatchItem>): BatchItem => ({
-  id: `n-${(sequence += 1)}`,
-  kind: 'replied',
-  ticketId: 'ticket-1042',
-  reference: 'HD-1042',
-  subject: 'Refund not received after 10 days',
-  contactName: 'Mona',
-  actorName: null,
-  detail: {},
-  createdAt: SINCE,
-  bulkOperationId: null,
-  ...overrides,
-});
+const item = (overrides: Partial<BatchItem>): BatchItem => {
+  sequence += 1;
+  return {
+    id: `n-${sequence}`,
+    kind: 'replied',
+    ticketId: 'ticket-1042',
+    reference: 'HD-1042',
+    subject: 'Refund not received after 10 days',
+    contactName: 'Mona',
+    actorName: null,
+    detail: {},
+    createdAt: SINCE,
+    bulkOperationId: null,
+    ...overrides,
+  };
+};
 
 const rows: readonly BatchItem[] = [
   item({

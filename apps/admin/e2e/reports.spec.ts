@@ -20,7 +20,7 @@ const isSummary = (url: URL): boolean => /\/api\/brands\/[^/]+\/reports$/.test(u
 const isExport = (url: URL): boolean =>
   /\/api\/brands\/[^/]+\/reports\/exports\/[a-z_]+$/.test(url.pathname);
 
-async function stubReports(page: Page, status = 200): Promise<void> {
+async function stubReports(page: Page, status = 200, exportStatus = 200): Promise<void> {
   await page.route(isSummary, async (route) => {
     const url = new URL(route.request().url());
     const query = {
@@ -37,16 +37,29 @@ async function stubReports(page: Page, status = 200): Promise<void> {
     });
   });
   await page.route(isExport, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/csv; charset=utf-8',
-      body: 'day,created,resolved\r\n2026-10-04,38,30\r\n',
-    });
+    await route.fulfill(
+      exportStatus === 200
+        ? {
+            status: 200,
+            contentType: 'text/csv; charset=utf-8',
+            body: 'day,created,resolved\r\n2026-10-04,38,30\r\n',
+          }
+        : {
+            status: exportStatus,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: { code: 'internal_error' } }),
+          },
+    );
   });
 }
 
-async function openReports(page: Page, locale: Locale, status = 200): Promise<void> {
-  await stubReports(page, status);
+async function openReports(
+  page: Page,
+  locale: Locale,
+  status = 200,
+  exportStatus = 200,
+): Promise<void> {
+  await stubReports(page, status, exportStatus);
   await signIn(page, locale);
   await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.reports')) }).click();
 }
@@ -82,6 +95,8 @@ test.describe('the Reports page', () => {
       'reports:sla.title',
       'reports:backlog.title',
       'reports:csat.title',
+      'reports:tags.title',
+      'reports:backlogStatus.title',
       'reports:agents.title',
       'reports:hours.title',
       'reports:searches.topTitle',
@@ -185,6 +200,84 @@ test.describe('the Reports page', () => {
     await expect(
       agents.getByRole('cell', { name: t('reports:agents.unassigned') }),
     ).not.toBeVisible();
+  });
+
+  test('ranks the tags in the reader’s language and exports them as CSV', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openReports(page, locale);
+    const tags = page.getByRole('region', { name: t('reports:tags.title') });
+    // The Arabic name where the brand wrote one; login has none.
+    const names =
+      locale === 'ar'
+        ? ['استرداد', 'الشحن', 'login', 'كبار العملاء']
+        : ['refund', 'shipping', 'login', 'vip'];
+    const figures = [182, 140, 96, 41].map((count, index) => `${names[index]} ${count}`);
+
+    await expect(
+      tags.getByRole('img', {
+        name: t('reports:tags.chartLabel', { figures: figures.join(', ') }),
+      }),
+    ).toBeVisible();
+    await tags
+      .getByRole('button', { name: t('reports:card.table', { chart: t('reports:tags.title') }) })
+      .click();
+    await expect(tags.getByRole('table').getByRole('row')).toHaveCount(5);
+
+    const download = page.waitForEvent('download');
+    await tags
+      .getByRole('button', { name: t('reports:card.export', { chart: t('reports:tags.title') }) })
+      .click();
+    expect((await download).suggestedFilename()).toMatch(
+      /^helpdock-volume-by-tag-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+  });
+
+  test('says so when the tag CSV cannot be downloaded', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await openReports(page, locale, 200, 500);
+    const tags = page.getByRole('region', { name: t('reports:tags.title') });
+
+    await tags
+      .getByRole('button', { name: t('reports:card.export', { chart: t('reports:tags.title') }) })
+      .click();
+
+    await expect(page.getByText(t('reports:exportFailed'))).toBeVisible();
+  });
+
+  test('counts the open tickets by status with the unassigned share', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openReports(page, locale);
+    const backlog = page.getByRole('region', { name: t('reports:backlogStatus.title') });
+
+    await expect(
+      backlog.getByText(
+        t('reports:backlogStatus.sentence', { unassigned: '14', open: '118', share: '11.9 %' }),
+      ),
+    ).toBeVisible();
+    await expect(
+      backlog.getByRole('button', {
+        name: t('reports:card.export', { chart: t('reports:backlogStatus.title') }),
+      }),
+    ).toHaveCount(0);
+    await backlog
+      .getByRole('button', {
+        name: t('reports:card.table', { chart: t('reports:backlogStatus.title') }),
+      })
+      .click();
+    const snoozed = backlog
+      .getByRole('row')
+      .filter({ hasText: locale === 'ar' ? 'مؤجّلة' : 'Snoozed' });
+    await expect(snoozed.getByRole('cell')).toHaveText([
+      locale === 'ar' ? 'مؤجّلة' : 'Snoozed',
+      '7',
+      '0',
+    ]);
   });
 
   test('says the reports could not be read when the api fails', async ({

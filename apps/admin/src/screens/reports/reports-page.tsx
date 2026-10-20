@@ -16,6 +16,7 @@ import { KpiTiles } from './kpi-tiles.js';
 import {
   AgentsCard,
   AiCards,
+  BacklogByStatusCard,
   BacklogCard,
   BusiestHoursCard,
   type CardProps,
@@ -23,6 +24,7 @@ import {
   ResponseTimesCard,
   SlaCard,
   TopSearchesCard,
+  VolumeByTagCard,
   VolumeCard,
   ZeroResultsCard,
 } from './report-cards.js';
@@ -177,6 +179,8 @@ export function ReportsPage(): ReactNode {
               <SlaCard summary={summary.data} {...cardProps} />
               <BacklogCard summary={summary.data} {...cardProps} />
               <CsatCard summary={summary.data} {...cardProps} />
+              <VolumeByTagCard summary={summary.data} {...cardProps} />
+              <BacklogByStatusCard summary={summary.data} {...cardProps} />
               <AgentsCard summary={summary.data} {...cardProps} />
               <BusiestHoursCard summary={summary.data} {...cardProps} />
               <TopSearchesCard summary={summary.data} {...cardProps} />

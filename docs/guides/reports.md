@@ -32,18 +32,25 @@ that hold `report:read`.
 - **Cards:** Ticket volume (created per day, stacked by Channel, Status or
   Priority, with each series' total beside it; a sixth series and beyond fold
   into "Other"), First response and resolution time, SLA compliance (by
-  priority and by clock), Backlog trend, Customer satisfaction, Agent workload
+  priority and by clock), Backlog trend, Customer satisfaction, Volume by tag
+  (tickets created in the range per tag, the 20 most used), Backlog by status
+  (the tickets open now per status, each with how many nobody is assigned, and
+  the unassigned share of them all; M14-29), Agent workload
   (per agent: open assigned, solved, replies, median first response, median
   resolution, SLA met and CSAT, then an "Unassigned" row with the open tickets
   nobody has, left out when the report is one agent's), Busiest hours (weekday
   by hour, in the brand's time zone), Help center top searches and Searches with
   no results. AI deflection rate and AI cost come from `ai_calls` and the
   auto-reply timestamps ([AI guide](ai.md#deflection)).
-- **Table and Export CSV** on every card: "Table" swaps the chart for the same
+- **Table and Export CSV**: "Table" on every card swaps the chart for the same
   numbers as a table, and "Export CSV" downloads that report's rows with the
   filters in force, named as below. The two search cards export the same
   `searches` file; Ticket volume exports `volume` for the Channel and Priority
-  breakdowns and `volume_by_status` for Status.
+  breakdowns and `volume_by_status` for Status; Volume by tag exports
+  `volume_by_tag`. Backlog by status and the two AI cards have no CSV: the
+  backlog's Table carries every figure.
+- Volume by tag and Backlog by status show a tag's or a status's Arabic name to
+  an Arabic reader where the brand wrote one, and its own name otherwise.
 - Charts are drawn as plain SVG (no charting library is in the stack). Each is
   one image with its figures in its accessible name, and follows the charting
   rules of [DESIGN §9](../../DESIGN.md#9-charts). In Arabic the page mirrors and
@@ -64,6 +71,8 @@ assignee's.
 |---|---|---|
 | Volume | Tickets created and resolved, by day, channel and priority, and created per day and channel or priority (the stacked columns) | Created on creation; resolved on `closed_at` |
 | By status | Tickets created in the range, by the status they are in now, in total and per day of creation | A current state, read from the tickets themselves |
+| Volume by tag | Tickets created in the range, per tag they carry now; a ticket with two tags counts under each, one with none in no row. The 20 most used, ties by name; the CSV has every tag. Only tickets that still exist count: a ticket deleted, or removed by retention, drops out of it while it stays in Ticket volume's rollups, so for an old range the two cards can differ | A current state, read from the tickets themselves |
+| Backlog by status | Tickets open now — in a status whose system state is not closed (so Snoozed, once M14-02 adds it, counts) — per status, with how many have no assignee, and the unassigned share of the total | Now, whatever the date range; under the department, channel and agent filters. One agent's report leaves the unassigned figures out |
 | First response time | Median and p90 | On the day of the response |
 | Resolution time | Median and p90 | On the day of the resolution |
 | SLA compliance | Response and resolution clocks met, over met plus breached; per priority, both clocks together | On the day the clock was satisfied or breached |
@@ -110,7 +119,7 @@ averaged from daily figures.
 
 | Filter | Applies to |
 |---|---|
-| `from`, `to` | Everything. Inclusive local days, at most 366 apart |
+| `from`, `to` | Everything but Backlog by status, which is the tickets open now. Inclusive local days, at most 366 apart |
 | `departmentId` | Every ticket report. Not help center searches, which have no department |
 | `channel` | Every ticket report. Not help center searches |
 | `agentId` | Every ticket report, by the ticket's assignee; Agent workload, by the agent. Not help center searches or AI cost, which have no agent |
@@ -141,6 +150,9 @@ rebuilds hourly, at seven minutes past, for every active brand:
   is purged (DOMAIN-RULES §11: "aggregates for reports kept").
 
 `computedAt` in the answer is when the oldest rollup in the range was written.
+By status, Volume by tag and Backlog by status are not rollups: they describe
+what tickets are now, so they are read from the tickets on each request and are
+as fresh as the page.
 
 The rollup tables are `report_daily` and `report_agent_daily`
 (department-scoped), and `report_search_daily` and `report_help_center_daily`
@@ -164,7 +176,7 @@ that ends before it starts, or runs past 366 days, is a 400.
 
 ## CSV export
 
-`:report` is one of `volume`, `volume_by_status`, `response_times`, `sla`,
+`:report` is one of `volume`, `volume_by_status`, `volume_by_tag`, `response_times`, `sla`,
 `backlog`, `csat`, `agents`, `busiest_hours` and `searches`. The file is UTF-8 with CRLF line
 ends, named `helpdock-<report>-<from>-<to>.csv`, with a header row of English
 column keys: a script reading the file should not break when the reader's
@@ -175,7 +187,9 @@ day, department, channel, priority and assignee (`agent_id`, `agent`; both
 empty for no assignee); `response_times` carries that slice's own percentiles,
 so SLA by priority and volume by channel or priority are sums over these rows.
 `volume_by_status` has one row per day of creation and current status
-(`day,status_id,status,created`). `agents` has every agent with replies,
+(`day,status_id,status,created`). `volume_by_tag` has one row per tag with
+tickets created in the range, most used first (`tag_id,tag,tag_ar,created`;
+`tag_ar` is empty where the brand wrote no Arabic name). `agents` has every agent with replies,
 resolutions, open assigned, first responses and their median, resolutions and
 their median, SLA met and breached, and CSAT responses and average, then one
 row with no agent whose `assigned_open` is the unassigned open tickets.

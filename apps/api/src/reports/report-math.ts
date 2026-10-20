@@ -1,5 +1,5 @@
 import type { ReportSummary, SlaOutcome } from '@helpdock/schemas';
-import type { AgentRow, DayRow } from './reports.repository.js';
+import type { AgentRow, DayRow, OpenStatusRow, TagRow } from './reports.repository.js';
 import { daysOf } from './rollup-window.js';
 
 /**
@@ -67,3 +67,34 @@ export const agentSummary = (row: AgentRow): ReportSummary['agents'][number] => 
     average: csatAverage(row.csatPoints, row.csatResponses),
   },
 });
+
+/** Locale-free, so the order does not depend on the server's ICU data. */
+const byCodePoint = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Tags most used first; a tie by name, then by id, so the order — and which
+ * tag the cut leaves out — is the same on every read. `limit` null keeps
+ * every tag (the CSV).
+ */
+export const rankTags = (rows: readonly TagRow[], limit: number | null): TagRow[] => {
+  const ranked = [...rows].sort(
+    (a, b) => b.tickets - a.tickets || byCodePoint(a.name, b.name) || byCodePoint(a.tagId, b.tagId),
+  );
+
+  return limit === null ? ranked : ranked.slice(0, limit);
+};
+
+/** The Backlog by status block: the per-status rows, their totals and the unassigned share. */
+export const backlogByStatus = (
+  rows: readonly OpenStatusRow[],
+): ReportSummary['backlogByStatus'] => {
+  const open = rows.reduce((sum, row) => sum + row.open, 0);
+  const unassigned = rows.reduce((sum, row) => sum + row.unassigned, 0);
+
+  return {
+    open,
+    unassigned,
+    unassignedShare: open === 0 ? null : unassigned / open,
+    byStatus: [...rows],
+  };
+};

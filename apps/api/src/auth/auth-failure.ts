@@ -27,12 +27,12 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'oauth-last-sign-in': HttpStatus.CONFLICT,
   'oauth-domain-not-allowed': HttpStatus.FORBIDDEN,
   'invite-expired': HttpStatus.GONE,
+  'rate-limited': HttpStatus.TOO_MANY_REQUESTS,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
   'totp-mismatch': HttpStatus.UNAUTHORIZED,
   'recovery-invalid': HttpStatus.UNAUTHORIZED,
   'challenge-expired': HttpStatus.UNAUTHORIZED,
-  // A lock and a rate limit are both "come back later", and both must read the
-  // same way from outside so that neither confirms an address exists.
+  // The challenge lock remains separate from the sliding-window refusal.
   'totp-locked': HttpStatus.TOO_MANY_REQUESTS,
   unavailable: HttpStatus.TOO_MANY_REQUESTS,
   'no-account': HttpStatus.FORBIDDEN,
@@ -57,6 +57,7 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'oauth-domain-not-allowed':
     'This install accepts Google accounts from its allowed Workspace domains only',
   'invite-expired': 'That invitation is no longer valid',
+  'rate-limited': 'Too many sign-in attempts',
   'invalid-credentials': 'That email and password do not match',
   'totp-mismatch': 'That authentication code does not match',
   'recovery-invalid': 'That recovery code is not valid or has already been used',
@@ -72,10 +73,15 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
 
 export class AuthFailure extends HttpException {
   readonly auth: AuthErrorBody;
+  readonly retryAfter: number | undefined;
 
-  constructor(code: AuthErrorCode, options: { readonly attemptsLeft?: number } = {}) {
+  constructor(
+    code: AuthErrorCode,
+    options: { readonly attemptsLeft?: number; readonly retryAfter?: number } = {},
+  ) {
     super(MESSAGE_BY_CODE[code], STATUS_BY_CODE[code]);
     this.name = 'AuthFailure';
+    this.retryAfter = options.retryAfter;
     this.auth = {
       code,
       ...(options.attemptsLeft === undefined ? {} : { attemptsLeft: options.attemptsLeft }),

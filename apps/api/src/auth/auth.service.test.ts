@@ -530,14 +530,14 @@ describe('signIn', () => {
     expect(staff.users.get(user.id)?.passwordHash).toContain('m=19456');
   });
 
-  it('answers "unavailable" once the per-address budget is spent', async () => {
+  it('answers "rate-limited" once the per-address budget is spent', async () => {
     staff.add(await newUser());
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
       await signIn({ password: 'nope' }).catch(() => undefined);
     }
 
-    await expect(signIn()).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+    await expect(signIn()).rejects.toMatchObject({ auth: { code: 'rate-limited' } });
   });
 
   it('gives the budget back to an address that signs in successfully', async () => {
@@ -562,6 +562,7 @@ describe('signIn', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await service
         .verifyTotp({
+          ip: '203.0.113.5',
           challengeId: started.challengeId,
           code: '000000',
           trustDevice: false,
@@ -593,6 +594,7 @@ describe('verifyTotp', () => {
     const { challengeId, secret } = await start();
 
     const { issued, trustedDeviceCookie } = await service.verifyTotp({
+      ip: '203.0.113.5',
       challengeId,
       code: await generate({ secret }),
       trustDevice: false,
@@ -607,6 +609,7 @@ describe('verifyTotp', () => {
     const { challengeId, secret } = await start();
 
     const { trustedDeviceCookie } = await service.verifyTotp({
+      ip: '203.0.113.5',
       challengeId,
       code: await generate({ secret }),
       trustDevice: true,
@@ -619,10 +622,22 @@ describe('verifyTotp', () => {
   it('spends the challenge, so one code opens one session', async () => {
     const { challengeId, secret } = await start();
     const code = await generate({ secret });
-    await service.verifyTotp({ challengeId, code, trustDevice: false, userAgent: undefined });
+    await service.verifyTotp({
+      ip: '203.0.113.5',
+      challengeId,
+      code,
+      trustDevice: false,
+      userAgent: undefined,
+    });
 
     await expect(
-      service.verifyTotp({ challengeId, code, trustDevice: false, userAgent: undefined }),
+      service.verifyTotp({
+        ip: '203.0.113.5',
+        challengeId,
+        code,
+        trustDevice: false,
+        userAgent: undefined,
+      }),
     ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
   });
 
@@ -632,7 +647,13 @@ describe('verifyTotp', () => {
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await service
-        .verifyTotp({ challengeId, code: '000000', trustDevice: false, userAgent: undefined })
+        .verifyTotp({
+          ip: '203.0.113.5',
+          challengeId,
+          code: '000000',
+          trustDevice: false,
+          userAgent: undefined,
+        })
         .catch((error: AuthFailure) => {
           codes.push(error.auth);
         });
@@ -648,6 +669,7 @@ describe('verifyTotp', () => {
   it('refuses a challenge that was never issued', async () => {
     await expect(
       service.verifyTotp({
+        ip: '203.0.113.5',
         challengeId: 'made-up',
         code: '000000',
         trustDevice: false,
@@ -666,6 +688,7 @@ describe('verifyTotp', () => {
 
     await expect(
       service.verifyTotp({
+        ip: '203.0.113.5',
         challengeId: started.challengeId,
         code: '000000',
         trustDevice: false,
@@ -688,6 +711,7 @@ describe('useRecoveryCode', () => {
     }
     await expect(
       service.useRecoveryCode({
+        ip: '203.0.113.5',
         challengeId: first.challengeId,
         code,
         userAgent: undefined,
@@ -699,7 +723,12 @@ describe('useRecoveryCode', () => {
       throw new Error('expected a challenge');
     }
     await expect(
-      service.useRecoveryCode({ challengeId: second.challengeId, code, userAgent: undefined }),
+      service.useRecoveryCode({
+        ip: '203.0.113.5',
+        challengeId: second.challengeId,
+        code,
+        userAgent: undefined,
+      }),
     ).rejects.toMatchObject({ auth: { code: 'recovery-invalid' } });
   });
 
@@ -713,6 +742,7 @@ describe('useRecoveryCode', () => {
 
     await service
       .useRecoveryCode({
+        ip: '203.0.113.5',
         challengeId: started.challengeId,
         code: 'RC-0000-0000',
         userAgent: undefined,
@@ -721,6 +751,7 @@ describe('useRecoveryCode', () => {
 
     await expect(
       service.verifyTotp({
+        ip: '203.0.113.5',
         challengeId: started.challengeId,
         code: '000000',
         trustDevice: false,
@@ -1436,6 +1467,7 @@ describe('me and signing out', () => {
       throw new Error('expected a challenge');
     }
     await service.verifyTotp({
+      ip: '203.0.113.5',
       challengeId: started.challengeId,
       code: await generate({ secret }),
       trustDevice: true,
@@ -1511,6 +1543,7 @@ describe('enrolment from a challenge', () => {
     const { secret } = await service.startEnrolment(challengeId);
 
     const { recoveryCodes, issued } = await service.completeEnrolment({
+      ip: '203.0.113.5',
       challengeId,
       code: await generate({ secret }),
       userAgent: 'Firefox',
@@ -1527,6 +1560,7 @@ describe('enrolment from a challenge', () => {
     const challengeId = await challenge();
     const { secret } = await service.startEnrolment(challengeId);
     await service.completeEnrolment({
+      ip: '203.0.113.5',
       challengeId,
       code: await generate({ secret }),
       userAgent: undefined,
@@ -1542,7 +1576,12 @@ describe('enrolment from a challenge', () => {
     await service.startEnrolment(challengeId);
 
     await expect(
-      service.completeEnrolment({ challengeId, code: '000000', userAgent: undefined }),
+      service.completeEnrolment({
+        ip: '203.0.113.5',
+        challengeId,
+        code: '000000',
+        userAgent: undefined,
+      }),
     ).rejects.toMatchObject({ auth: { code: 'totp-mismatch', attemptsLeft: 2 } });
   });
 
@@ -1571,6 +1610,7 @@ describe('a code is accepted once (ASVS 2.8.4, 2.8.5)', () => {
 
   const verify = async (code: string) =>
     service.verifyTotp({
+      ip: '203.0.113.5',
       challengeId: await challengeFor(),
       code,
       trustDevice: false,
@@ -1762,6 +1802,7 @@ describe('the audit trail of a sign-in (ASVS 7.1.3, 7.2.1)', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await service
         .verifyTotp({
+          ip: '203.0.113.5',
           challengeId: started.challengeId,
           code: '000000',
           trustDevice: false,

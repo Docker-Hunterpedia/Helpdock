@@ -34,8 +34,7 @@ import {
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
   type RateLimiter,
-  SIGN_IN_EMAIL_RULE,
-  SIGN_IN_IP_RULE,
+  type SignInAttempt,
   STEP_UP_RULE,
 } from './rate-limit.js';
 import type { SecurityChange } from './security-notice-email.js';
@@ -214,7 +213,7 @@ export class AuthService {
   // ------------------------------------------------------------------
 
   async signIn(input: SignInInput): Promise<SignInOutcome> {
-    await this.#assertSignInAllowed(input.email, input.ip);
+    const attempt = await this.#assertSignInAllowed(input.email, input.ip);
 
     await this.#parts.ssoPolicy.assertLocal(input.email, 'password');
     const user = await this.#parts.staff.findByEmail(input.email);
@@ -263,13 +262,13 @@ export class AuthService {
       );
     }
 
-    await this.#parts.limiter.reset(SIGN_IN_EMAIL_RULE, input.email);
-
-    return this.#afterFirstFactor(user, {
+    const outcome = await this.#afterFirstFactor(user, {
       method: 'password',
       userAgent: input.userAgent,
       trustedDeviceCookie: input.trustedDeviceCookie,
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    return outcome;
   }
 
   // ------------------------------------------------------------------
@@ -278,16 +277,22 @@ export class AuthService {
 
   async verifyTotp({
     challengeId,
+    ip,
     code,
     trustDevice,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly trustDevice: boolean;
     readonly userAgent: string | undefined;
   }): Promise<{ readonly issued: IssuedSession; readonly trustedDeviceCookie: string | null }> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
 
     if ((await this.#checkCode(user, code, 'sign-in')) !== 'accepted') {
       throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
@@ -298,6 +303,7 @@ export class AuthService {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
 
     return {
       issued,
@@ -307,14 +313,20 @@ export class AuthService {
 
   async useRecoveryCode({
     challengeId,
+    ip,
     code,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly userAgent: string | undefined;
   }): Promise<IssuedSession> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'second-factor');
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
 
     if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
@@ -337,10 +349,12 @@ export class AuthService {
       remaining: match.remaining.length,
     });
 
-    return this.#openSession(user, userAgent, {
+    const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'recovery-code',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    return issued;
   }
 
   // ------------------------------------------------------------------
@@ -390,14 +404,16 @@ export class AuthService {
    */
   async completeEnrolment({
     challengeId,
+    ip,
     code,
     userAgent,
   }: {
     readonly challengeId: string;
+    readonly ip: string;
     readonly code: string;
     readonly userAgent: string | undefined;
   }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
-    const { challenge, user } = await this.#requireChallenge(challengeId, 'enrolment');
+    const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
 
     if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
       throw await this.#spendAttempt(challengeId, challenge, 'totp-mismatch');
@@ -409,6 +425,7 @@ export class AuthService {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
     });
+    await this.#parts.limiter.signInSucceeded(attempt);
 
     return { recoveryCodes, issued };
   }
@@ -1334,16 +1351,10 @@ export class AuthService {
     return 'accepted';
   }
 
-  async #assertSignInAllowed(email: string, ip: string): Promise<void> {
-    const withinIpBudget = await this.#parts.limiter.consume(SIGN_IN_IP_RULE, ip);
-    const withinEmailBudget = await this.#parts.limiter.consume(SIGN_IN_EMAIL_RULE, email);
-
-    // Both are consumed before either is judged, so which limit was hit cannot
-    // be read off the response, and neither can the existence of the address.
-    if (!withinIpBudget || !withinEmailBudget) {
-      this.#parts.logger.warn({ ip }, 'A sign-in attempt was refused by the rate limit');
-      throw new AuthFailure('unavailable');
-    }
+  async #assertSignInAllowed(email: string | undefined, ip: string): Promise<SignInAttempt> {
+    const { attempt, retryAfter } = await this.#parts.limiter.reserveSignIn(ip, email);
+    if (retryAfter > 0) throw new AuthFailure('rate-limited', { retryAfter });
+    return attempt;
   }
 
   /**
@@ -1374,6 +1385,19 @@ export class AuthService {
     const withinIpBudget = await this.#parts.limiter.consume(EMAIL_DISPATCH_IP_RULE, ip);
 
     return withinEmailBudget && withinIpBudget;
+  }
+
+  /** Invalid/expired challenges have no trusted address, but still spend the IP budget. */
+  async #signInChallenge(challengeId: string, kind: 'second-factor' | 'enrolment', ip: string) {
+    let resolved: { challenge: Awaited<ReturnType<TotpChallengeStore['read']>>; user: StaffUser };
+    try {
+      resolved = await this.#requireChallenge(challengeId, kind);
+    } catch (error) {
+      if (error instanceof AuthFailure) await this.#assertSignInAllowed(undefined, ip);
+      throw error;
+    }
+    const attempt = await this.#assertSignInAllowed(resolved.user.email, ip);
+    return { ...resolved, attempt };
   }
 
   async #requireChallenge(

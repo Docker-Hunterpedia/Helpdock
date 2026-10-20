@@ -1,5 +1,6 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, Inject } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
+import { AuthFailure } from '../auth/auth-failure.js';
 import { currentRequestContext } from '../context/request-context.js';
 import { type Logger, requestLogger } from '../logging/logger.js';
 import { LOGGER } from '../runtime/tokens.js';
@@ -33,6 +34,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const reply = host.switchToHttp().getResponse<FastifyReply>();
+    if (error instanceof AuthFailure && error.retryAfter !== undefined) {
+      reply.header('Retry-After', String(error.retryAfter));
+    }
     void reply.status(mapped.status).send(errorBody(mapped, requestId));
   }
 }

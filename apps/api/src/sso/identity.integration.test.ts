@@ -526,6 +526,7 @@ describe.skipIf(!hasDocker)(
       if (outcome.kind !== 'totp-required') throw new Error('Expected emergency TOTP');
       await expect(
         auth.useRecoveryCode({
+          ip: '203.0.113.5',
           challengeId: outcome.challengeId,
           code: 'unused',
           userAgent: undefined,
@@ -534,6 +535,7 @@ describe.skipIf(!hasDocker)(
       const code = await generate({ secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' });
       await expect(
         auth.verifyTotp({
+          ip: '203.0.113.5',
           challengeId: outcome.challengeId,
           code,
           userAgent: undefined,
@@ -588,6 +590,7 @@ describe.skipIf(!hasDocker)(
       const code = await generate({ secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP' });
       await expect(
         auth.verifyTotp({
+          ip: '203.0.113.5',
           challengeId: outcome.challengeId,
           code,
           userAgent: undefined,
@@ -644,6 +647,7 @@ describe.skipIf(!hasDocker)(
         .where(eq(ssoConnections.id, CONNECTION));
       await expect(
         auth.verifyTotp({
+          ip: '203.0.113.5',
           challengeId: outcome.challengeId,
           code: '000000',
           userAgent: undefined,

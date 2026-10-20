@@ -350,12 +350,14 @@ const toError = async (
     return new SsoError(sso.reason, sso.domains);
   }
 
+  const retryAfter = Number(response.headers.get('Retry-After'));
+  const retryOptions = Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {};
   if (auth === undefined) {
-    return new AuthError('unavailable');
+    return new AuthError(response.status === 429 ? 'rate-limited' : 'unavailable', retryOptions);
   }
 
-  return new AuthError(
-    auth.code,
-    auth.attemptsLeft === undefined ? {} : { attemptsLeft: auth.attemptsLeft },
-  );
+  return new AuthError(auth.code, {
+    ...retryOptions,
+    ...(auth.attemptsLeft === undefined ? {} : { attemptsLeft: auth.attemptsLeft }),
+  });
 };

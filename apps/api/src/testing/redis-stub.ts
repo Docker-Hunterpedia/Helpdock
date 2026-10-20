@@ -272,6 +272,20 @@ export class RedisStub {
     return entry?.data.kind === 'zset' ? entry.data.value.size : 0;
   }
 
+  async zrem(key: string, member: string): Promise<number> {
+    const entry = this.#live(key);
+    return entry?.data.kind === 'zset' && entry.data.value.delete(member) ? 1 : 0;
+  }
+
+  async zrange(key: string, start: number, stop: number, _scores: 'WITHSCORES'): Promise<string[]> {
+    const entry = this.#live(key);
+    if (entry?.data.kind !== 'zset') return [];
+    return [...entry.data.value.entries()]
+      .sort((a, b) => a[1] - b[1])
+      .slice(start, stop + 1)
+      .flatMap(([member, score]) => [member, String(score)]);
+  }
+
   async zremrangebyscore(key: string, min: number | string, max: number | string): Promise<number> {
     const entry = this.#live(key);
     if (entry?.data.kind !== 'zset') {

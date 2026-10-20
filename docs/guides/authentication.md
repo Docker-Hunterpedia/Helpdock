@@ -717,17 +717,24 @@ whole budget at the end of one window and again at the start of the next.
 
 | Bucket | Limit |
 |---|---|
-| Sign-in, per address | 5 attempts per 15 minutes |
-| Sign-in, per IP | 20 attempts per 15 minutes |
+| Sign-in, per address | 10 failures per 15 minutes |
+| Sign-in, per IP | 100 failures per 15 minutes |
 | Sign-in link, password reset and staff invitation, per address | 5 per 15 minutes |
 | Sign-in link and password reset, per IP | 30 per 15 minutes |
 | Reading or accepting an invitation, per IP | 30 per 15 minutes |
 | Re-proving a credential from inside a session, per account | 5 per 15 minutes |
 
-Over the limit, the answer is `unavailable` — the same answer a lock gives, so
-neither confirms that an address exists. A successful sign-in gives that
-address its budget back. A sign-in link or reset request over its limit still
-answers 204 and sends nothing.
+Password, TOTP, recovery-code and sign-in enrolment failures count. In-flight
+verification reserves a slot atomically so parallel guesses cannot exceed the
+limit. Success removes its own IP reservation and clears the address failures.
+SSO discovery, starts and callbacks have separate named buckets.
+
+Over a sign-in limit, the answer is HTTP 429 with `error.auth.code` set to
+`rate-limited` and a `Retry-After` header in seconds, rounded up until the oldest
+counted failure expires (the larger wait if both buckets block). The body is
+the same for either bucket and for known and unknown addresses. The sign-in
+screen rounds this duration up to minutes. A sign-in link or reset request
+over its limit still answers 204 and sends nothing.
 
 The per-IP link and reset bucket is separate from the sign-in one, so somebody
 asking for many links from an office's address does not lock that office out
@@ -818,7 +825,7 @@ screens need:
 }
 ```
 
-`error.auth.code` is one of `invalid-credentials`, `totp-mismatch`,
+Credential refusal codes include `rate-limited`, `invalid-credentials`, `totp-mismatch`,
 `totp-locked`, `challenge-expired`, `recovery-invalid`, `no-account`,
 `unavailable` or `password-breached`. The admin turns it into a translated sentence; no user-facing
 English crosses that boundary.

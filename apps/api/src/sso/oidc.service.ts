@@ -5,7 +5,7 @@ import { ssoConnectionConfigSchema } from '@helpdock/schemas';
 import { eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import * as client from 'openid-client';
-import { RateLimiter } from '../auth/rate-limit.js';
+import { RateLimiter, SSO_CALLBACK_RULE, SSO_START_RULE } from '../auth/rate-limit.js';
 import type { Logger } from '../logging/logger.js';
 import {
   matchesBrowserNonce,
@@ -51,9 +51,7 @@ export class OidcService {
   }
 
   async start(input: { connectionId: string; returnTo: string; ip: string }) {
-    if (
-      !(await this.limiter.consume({ bucket: 'sso-start', limit: 20, windowSeconds: 60 }, input.ip))
-    )
+    if (!(await this.limiter.consume(SSO_START_RULE, input.ip)))
       throw new OidcFailure('sso-rate-limited');
     const returnTo = ssoReturnToSchema.parse(input.returnTo);
     const { row, config } = await this.connection(input.connectionId);
@@ -93,12 +91,7 @@ export class OidcService {
     browserNonce: string | undefined;
     ip: string;
   }) {
-    if (
-      !(await this.limiter.consume(
-        { bucket: 'sso-callback', limit: 40, windowSeconds: 60 },
-        input.ip,
-      ))
-    )
+    if (!(await this.limiter.consume(SSO_CALLBACK_RULE, input.ip)))
       throw new OidcFailure('sso-rate-limited');
     const record = await this.store.consume(input.query.state);
     if (

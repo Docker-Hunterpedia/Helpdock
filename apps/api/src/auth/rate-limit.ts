@@ -24,19 +24,85 @@ export interface RateLimitRule {
   readonly windowSeconds: number;
 }
 
-/** Per address: five attempts in fifteen minutes. */
+/** Ten failures allow ordinary typos while bounding guesses against one account. */
 export const SIGN_IN_EMAIL_RULE: RateLimitRule = {
   bucket: 'signin-email',
-  limit: 5,
+  limit: 10,
   windowSeconds: 15 * 60,
 };
 
-/** Per IP: twenty, because one office behind one address is a normal thing. */
+/** A spray guard: 100 failures, allowing a whole office to share an IP. */
 export const SIGN_IN_IP_RULE: RateLimitRule = {
   bucket: 'signin-ip',
-  limit: 20,
+  limit: 100,
   windowSeconds: 15 * 60,
 };
+
+/** SSO traffic never spends the local credential budget. */
+export const SSO_DISCOVERY_RULE: RateLimitRule = {
+  bucket: 'sso-discovery',
+  limit: 20,
+  windowSeconds: 60,
+};
+export const SSO_START_RULE: RateLimitRule = { bucket: 'sso-start', limit: 20, windowSeconds: 60 };
+export const SSO_CALLBACK_RULE: RateLimitRule = {
+  bucket: 'sso-callback',
+  limit: 40,
+  windowSeconds: 60,
+};
+export const SSO_SAML_ACS_RULE: RateLimitRule = {
+  bucket: 'sso-saml-acs',
+  limit: 40,
+  windowSeconds: 60,
+};
+export const SSO_SAML_COMPLETE_RULE: RateLimitRule = {
+  bucket: 'sso-saml-complete',
+  limit: 40,
+  windowSeconds: 60,
+};
+export const SSO_SAML_METADATA_RULE: RateLimitRule = {
+  bucket: 'sso-saml-metadata',
+  limit: 30,
+  windowSeconds: 60,
+};
+
+/** Seconds until the oldest entry expires; HTTP Retry-After must round up. */
+export const retryAfterSeconds = (retryAt: number, now: number): number =>
+  Math.max(1, Math.ceil((retryAt - now) / 1000));
+
+/**
+ * Reserve before verification: in-flight guesses occupy slots, so
+ * parallel requests cannot all verify below the limit. A success removes only
+ * its own IP member and resets the address; it cannot erase another IP failure.
+ * Both buckets are checked in one script before either is changed. A refusal
+ * therefore spends neither bucket and does identical work for every address.
+ */
+export const RESERVE_SIGN_IN_SCRIPT = `
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local retry = 0
+local blocked = {0, 0}
+for i = 1, #KEYS do
+  redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', now - window)
+  if redis.call('ZCARD', KEYS[i]) >= tonumber(ARGV[i + 2]) then
+    blocked[i] = 1
+    local oldest = redis.call('ZRANGE', KEYS[i], 0, 0, 'WITHSCORES')
+    retry = math.max(retry, tonumber(oldest[2]) + window)
+  end
+end
+if retry > 0 then return {retry, blocked[1], blocked[2]} end
+for i = 1, #KEYS do
+  redis.call('ZADD', KEYS[i], now, ARGV[5])
+  redis.call('PEXPIRE', KEYS[i], window)
+end
+return {0, 0, 0}
+`;
+
+export interface SignInAttempt {
+  readonly member: string;
+  readonly ip: string;
+  readonly email: string | undefined;
+}
 
 /** Per address, for anything that puts a message in somebody's inbox. */
 export const EMAIL_DISPATCH_RULE: RateLimitRule = {
@@ -124,6 +190,37 @@ export class RateLimiter {
 
   constructor(redis: Redis) {
     this.#redis = redis;
+  }
+
+  async reserveSignIn(
+    ip: string,
+    email?: string,
+  ): Promise<{ attempt: SignInAttempt; retryAfter: number }> {
+    const attempt = { member: randomUUID(), ip, email };
+    const keys = [rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject(ip))];
+    if (email !== undefined) keys.push(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashSubject(email)));
+    const now = Date.now();
+    const [retryAt, blockedIp, blockedEmail] = (await this.#redis.eval(
+      RESERVE_SIGN_IN_SCRIPT,
+      keys.length,
+      ...keys,
+      String(now),
+      String(SIGN_IN_IP_RULE.windowSeconds * 1000),
+      String(SIGN_IN_IP_RULE.limit),
+      String(SIGN_IN_EMAIL_RULE.limit),
+      attempt.member,
+    )) as [number, number, number];
+    if (blockedIp) rateLimitRefusals().record(SIGN_IN_IP_RULE.bucket);
+    if (blockedEmail) rateLimitRefusals().record(SIGN_IN_EMAIL_RULE.bucket);
+    return { attempt, retryAfter: retryAt > 0 ? retryAfterSeconds(retryAt, now) : 0 };
+  }
+
+  async signInSucceeded(attempt: SignInAttempt): Promise<void> {
+    await this.#redis.zrem(
+      rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject(attempt.ip)),
+      attempt.member,
+    );
+    if (attempt.email !== undefined) await this.reset(SIGN_IN_EMAIL_RULE, attempt.email);
   }
 
   /** True when the attempt is allowed and has been counted. */

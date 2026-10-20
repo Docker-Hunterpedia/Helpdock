@@ -7,8 +7,11 @@ import type { RedisStub } from '../testing/redis-stub.js';
 import {
   RateLimiter,
   type RateLimitRule,
+  retryAfterSeconds,
   SIGN_IN_EMAIL_RULE,
   SIGN_IN_IP_RULE,
+  SSO_DISCOVERY_RULE,
+  SSO_START_RULE,
 } from './rate-limit.js';
 import { rateLimitKey } from './redis-keys.js';
 
@@ -116,12 +119,55 @@ describe('RateLimiter', () => {
 });
 
 describe('the rules the sign-in form runs under', () => {
-  it('matches REQUIREMENTS §5.1: five per address and twenty per IP, each in fifteen minutes', () => {
-    expect(SIGN_IN_EMAIL_RULE).toMatchObject({ limit: 5, windowSeconds: 900 });
-    expect(SIGN_IN_IP_RULE).toMatchObject({ limit: 20, windowSeconds: 900 });
+  it('matches REQUIREMENTS §5.1: ten failures per address and one hundred per IP, each in fifteen minutes', () => {
+    expect(SIGN_IN_EMAIL_RULE).toMatchObject({ limit: 10, windowSeconds: 900 });
+    expect(SIGN_IN_IP_RULE).toMatchObject({ limit: 100, windowSeconds: 900 });
   });
 
   it('counts an address and an IP in different buckets', () => {
     expect(SIGN_IN_EMAIL_RULE.bucket).not.toBe(SIGN_IN_IP_RULE.bucket);
+  });
+});
+
+describe('sign-in reservations', () => {
+  it('rounds Retry-After up, including the expiry boundary', () => {
+    expect(retryAfterSeconds(910_000, 10_001)).toBe(900);
+    expect(retryAfterSeconds(910_000, 909_001)).toBe(1);
+    expect(retryAfterSeconds(910_000, 910_000)).toBe(1);
+  });
+
+  it('success refunds only its own IP entry and clears the address', async () => {
+    await limiter.reserveSignIn('office', 'typo@example.com');
+    const success = await limiter.reserveSignIn('office', 'person@example.com');
+    await limiter.signInSucceeded(success.attempt);
+    expect(await stub.zcard(rateLimitKey(SIGN_IN_IP_RULE.bucket, hashOf('office')))).toBe(1);
+    expect(
+      await stub.zcard(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashOf('person@example.com'))),
+    ).toBe(0);
+  });
+
+  it('uses the larger blocking wait and does not spend the other bucket on refusal', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    for (let i = 0; i < 100; i++) await limiter.reserveSignIn('office', `person-${i}@example.com`);
+    vi.setSystemTime(1_030_000);
+    for (let i = 0; i < 10; i++) await limiter.reserveSignIn('elsewhere', 'victim@example.com');
+    const refused = await limiter.reserveSignIn('office', 'victim@example.com');
+    expect(refused.retryAfter).toBe(900);
+    expect((await limiter.reserveSignIn('office', 'fresh@example.com')).retryAfter).toBe(870);
+    expect(
+      await stub.zcard(rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashOf('fresh@example.com'))),
+    ).toBe(0);
+  });
+
+  it('keeps SSO discovery and starts separate from credential attempts', () => {
+    expect(
+      new Set([
+        SSO_START_RULE.bucket,
+        SSO_DISCOVERY_RULE.bucket,
+        SIGN_IN_IP_RULE.bucket,
+        SIGN_IN_EMAIL_RULE.bucket,
+      ]).size,
+    ).toBe(4);
   });
 });

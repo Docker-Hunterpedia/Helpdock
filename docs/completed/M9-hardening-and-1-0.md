@@ -539,3 +539,7 @@ Closed, each with unit and integration tests and its guide updated (the last row
 - #236 chore: version packages: `1.0.0`, whose merge tagged `v1.0.0` and published the image (M9-09)
 - #240 docs: refresh the README for 1.0
 - #241 docs: mark M9 Hardening and 1.0 shipped: this record moves to `docs/completed/` with the release evidence (M9-09)
+
+## 1.0.x security follow-up
+
+M0-05 / M9-01, [#343](https://github.com/Docker-Hunterpedia/Helpdock/issues/343): staff sign-in limits count failures only (10 per address, 100 per IP, per 15 minutes), reserve verification slots atomically, isolate SSO traffic, and return HTTP 429 with `Retry-After`. The existing sign-in alert shows the wait in English and Arabic. Reverse-proxy misconfiguration produces one process warning; see [authentication](../guides/authentication.md#rate-limits) and [install](../guides/install.md#sign-in-limits-behind-a-reverse-proxy).

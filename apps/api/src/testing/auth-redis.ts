@@ -1,5 +1,5 @@
 import type { Redis } from 'ioredis';
-import { CONSUME_SCRIPT } from '../auth/rate-limit.js';
+import { CONSUME_SCRIPT, RESERVE_SIGN_IN_SCRIPT } from '../auth/rate-limit.js';
 import { REGISTER_SESSION_SCRIPT, ROTATE_SCRIPT } from '../auth/session/refresh-store.js';
 import { CLAIM_STEP_SCRIPT } from '../auth/totp/used-steps.js';
 import { RedisStub } from './redis-stub.js';
@@ -59,6 +59,26 @@ export const authRedisStub = (): RedisStub =>
       await stub.expire(familyKey, Math.min(Number(idle), remaining));
 
       return ['rotated', userId];
+    })
+    .defineScript(RESERVE_SIGN_IN_SCRIPT, async (stub, keys, args) => {
+      const now = Number(args[0]);
+      const windowMs = Number(args[1]);
+      let retry = 0;
+      const blocked = [0, 0];
+      for (const [index, key] of keys.entries()) {
+        await stub.zremrangebyscore(key, '-Infinity', now - windowMs);
+        if ((await stub.zcard(key)) >= Number(args[index + 2])) {
+          blocked[index] = 1;
+          const oldest = await stub.zrange(key, 0, 0, 'WITHSCORES');
+          retry = Math.max(retry, Number(oldest[1]) + windowMs);
+        }
+      }
+      if (retry > 0) return [retry, ...blocked];
+      for (const key of keys) {
+        await stub.zadd(key, now, args[4] ?? '');
+        await stub.pexpire(key, windowMs);
+      }
+      return [0, 0, 0];
     })
     .defineScript(CONSUME_SCRIPT, async (stub, keys, args) => {
       const [counterKey = ''] = keys;

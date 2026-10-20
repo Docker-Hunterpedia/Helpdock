@@ -65,6 +65,8 @@ import { startWorker } from './worker/start-worker.js';
  * 7. Listen, for `APP_ROLE=api`.
  */
 
+let warnedUntrustedForwarding = false;
+
 export interface Runtime {
   readonly env: Env;
   readonly db: Db;
@@ -251,6 +253,20 @@ export const createApiApp = async ({
     // switch (REQUIREMENTS §5.1). The address list is copied because Fastify
     // types it as mutable.
     trustProxy: typeof env.TRUST_PROXY === 'object' ? [...env.TRUST_PROXY] : env.TRUST_PROXY,
+  });
+
+  adapter.getInstance().addHook('onRequest', async (request) => {
+    if (
+      !warnedUntrustedForwarding &&
+      env.TRUST_PROXY === false &&
+      request.headers['x-forwarded-for'] !== undefined
+    ) {
+      warnedUntrustedForwarding = true;
+      logger.warn(
+        {},
+        'X-Forwarded-For received while TRUST_PROXY is off; sign-in limits use the proxy IP. Configure trusted proxy CIDRs.',
+      );
+    }
   });
 
   const app = await NestFactory.create<NestFastifyApplication>(

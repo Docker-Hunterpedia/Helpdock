@@ -82,6 +82,8 @@ export function SignIn(): ReactNode {
   const [errors, setErrors] = useState<SignInFormErrors>({});
   const [failure, setFailure] = useState<AuthErrorCode | null>(null);
 
+  const [retryMinutes, setRetryMinutes] = useState(15);
+
   const install = useMemo(() => readPublicInstallInfo(), []);
 
   const finishSignIn = useFinishSignIn(returnTo);
@@ -91,6 +93,9 @@ export function SignIn(): ReactNode {
     onSuccess: finishSignIn,
     onError: (error: unknown) => {
       setFailure(isAuthError(error) ? error.code : 'unavailable');
+      setRetryMinutes(
+        Math.max(1, Math.ceil((isAuthError(error) ? (error.retryAfter ?? 900) : 900) / 60)),
+      );
     },
   });
 
@@ -157,15 +162,17 @@ export function SignIn(): ReactNode {
   const passwordError = errors.password ? t('auth:signIn.passwordRequired') : undefined;
   const ssoFailure = ssoErrorKey(failure);
   const failureMessage =
-    failure === 'invalid-credentials'
-      ? t('auth:signIn.invalidCredentials')
-      : failure === 'no-account'
-        ? t('auth:noAccount')
-        : ssoFailure
-          ? t(ssoFailure)
-          : failure
-            ? t('auth:unavailable')
-            : undefined;
+    failure === 'rate-limited'
+      ? t('auth:signIn.rateLimited', { count: retryMinutes, minutes: retryMinutes })
+      : failure === 'invalid-credentials'
+        ? t('auth:signIn.invalidCredentials')
+        : failure === 'no-account'
+          ? t('auth:noAccount')
+          : ssoFailure
+            ? t(ssoFailure)
+            : failure
+              ? t('auth:unavailable')
+              : undefined;
 
   return (
     <AuthLayout

@@ -108,12 +108,17 @@ export interface AuthApi {
 export class AuthError extends Error {
   readonly code: AuthErrorCode;
   readonly attemptsLeft: number | undefined;
+  readonly retryAfter: number | undefined;
 
-  constructor(code: AuthErrorCode, options: { readonly attemptsLeft?: number } = {}) {
+  constructor(
+    code: AuthErrorCode,
+    options: { readonly attemptsLeft?: number; readonly retryAfter?: number } = {},
+  ) {
     super(`auth: ${code}`);
     this.name = 'AuthError';
     this.code = code;
     this.attemptsLeft = options.attemptsLeft;
+    this.retryAfter = options.retryAfter;
   }
 }
 

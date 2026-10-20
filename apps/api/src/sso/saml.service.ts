@@ -5,7 +5,14 @@ import { ssoConnectionConfigSchema } from '@helpdock/schemas';
 import { generateServiceProviderMetadata, SAML, ValidateInResponseTo } from '@node-saml/node-saml';
 import { and, eq } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
-import { RateLimiter } from '../auth/rate-limit.js';
+import {
+  RateLimiter,
+  type RateLimitRule,
+  SSO_SAML_ACS_RULE,
+  SSO_SAML_COMPLETE_RULE,
+  SSO_SAML_METADATA_RULE,
+  SSO_START_RULE,
+} from '../auth/rate-limit.js';
 import type { Logger } from '../logging/logger.js';
 import { matchesBrowserNonce, ssoHash, ssoReturnToSchema } from './oidc-contracts.js';
 import { validateSsoEndpoint } from './oidc-transport.js';
@@ -58,9 +65,8 @@ export class SamlService {
     this.limiter = new RateLimiter(options.redis);
   }
 
-  private async limit(bucket: string, ip: string, limit: number) {
-    if (!(await this.limiter.consume({ bucket, limit, windowSeconds: 60 }, ip)))
-      throw new SamlFailure('sso-rate-limited');
+  private async limit(rule: RateLimitRule, ip: string) {
+    if (!(await this.limiter.consume(rule, ip))) throw new SamlFailure('sso-rate-limited');
   }
   private acsUrl(id: string) {
     return new URL(`/api/auth/sso/${id}/saml/acs`, this.options.env.APP_URL).toString();
@@ -118,7 +124,7 @@ export class SamlService {
     ip: string;
     expectedSubject?: string;
   }) {
-    await this.limit('sso-start', input.ip, 20);
+    await this.limit(SSO_START_RULE, input.ip);
     const connection = await this.connection(input.connectionId);
     // Validate a front-channel endpoint with the same outbound destination policy.
     await validateSsoEndpoint(connection.config.idpSsoUrl, this.options.env.OUTBOUND_ALLOW_CIDRS);
@@ -184,7 +190,7 @@ export class SamlService {
     return identity;
   }
   async accept(input: { connectionId: string; body: unknown; ip: string }) {
-    await this.limit('sso-saml-acs', input.ip, 40);
+    await this.limit(SSO_SAML_ACS_RULE, input.ip);
     const body = samlAcsSchema.parse(input.body);
     const connection = await this.connection(input.connectionId);
     try {
@@ -243,7 +249,7 @@ export class SamlService {
     browserNonce: string | undefined;
     ip: string;
   }) {
-    await this.limit('sso-saml-complete', input.ip, 40);
+    await this.limit(SSO_SAML_COMPLETE_RULE, input.ip);
     const pending = await this.pending.consume(input.token);
     if (!pending || pending.connectionId !== input.connectionId)
       throw new SamlFailure('sso-request-invalid');
@@ -273,7 +279,7 @@ export class SamlService {
   }
 
   async metadata(ip: string) {
-    await this.limit('sso-saml-metadata', ip, 30);
+    await this.limit(SSO_SAML_METADATA_RULE, ip);
     const rows = await this.options.db
       .select({ id: ssoConnections.id })
       .from(ssoConnections)

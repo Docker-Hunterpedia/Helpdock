@@ -438,3 +438,7 @@ docker compose exec api node -e "fetch('http://127.0.0.1:3000/ready').then(r=>r.
   not read the database when it served the page, so it reported the install as
   configured rather than offering it to a stranger. `docker compose logs api`
   says what was wrong; the wizard appears on the next reload once it is fixed.
+
+### Sign-in limits behind a reverse proxy
+
+Configure `TRUST_PROXY` with the CIDRs of your trusted reverse proxies (Fastify `trustProxy`), and restrict direct API access to those proxies. With `TRUST_PROXY=false`, all users behind a proxy share its IP budget of 100 failed sign-ins per 15 minutes. The API logs one warning per process if it receives `X-Forwarded-For` while proxy trust is off; the header value is never logged. Do not enable trust for arbitrary internet clients.

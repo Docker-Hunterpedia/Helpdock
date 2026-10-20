@@ -24,6 +24,8 @@ Out of scope, as SECURITY.md says: services you connect (LLM providers, SMTP,
 Telegram), denial of service by resource exhaustion, and a compromised host or
 install admin account.
 
+Staff sign-in allows 10 failures per address and 100 per IP per 15 minutes. Success clears address failures and spends no IP budget; SSO uses separate buckets. A refusal returns HTTP 429 with `Retry-After` in seconds.
+
 ## Tenancy and row-level security
 
 Brand isolation is enforced by Postgres, not only by the api

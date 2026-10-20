@@ -17,11 +17,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
+import { OidcService } from '../sso/oidc.service.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
-import { PRINCIPAL_REVOKED_CHANNEL } from './redis-keys.js';
+import { RateLimiter, SIGN_IN_EMAIL_RULE, SIGN_IN_IP_RULE } from './rate-limit.js';
+import { hashSubject, PRINCIPAL_REVOKED_CHANNEL, rateLimitKey } from './redis-keys.js';
 import { oauthNonceCookie, refreshCookieOf, trustedDeviceCookie } from './session/cookies.js';
 
 /**
@@ -285,14 +287,17 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(unknown).toBeGreaterThan(5);
     });
 
-    it('answers "unavailable" once the per-address limit is spent', async () => {
+    it('answers "rate-limited" once the per-address limit is spent', async () => {
       const attempts = [];
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 11; attempt += 1) {
         attempts.push(await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' }));
       }
 
+      expect(attempts.slice(0, 10).every((response) => response.statusCode === 401)).toBe(true);
+      expect(Number(attempts.at(-1)?.headers['retry-after'])).toBeGreaterThan(0);
+      expect(Number(attempts.at(-1)?.headers['retry-after'])).toBeLessThanOrEqual(900);
       expect(attempts.at(-1)?.statusCode).toBe(429);
-      expect(attempts.at(-1)?.json()).toMatchObject({ error: { auth: { code: 'unavailable' } } });
+      expect(attempts.at(-1)?.json()).toMatchObject({ error: { auth: { code: 'rate-limited' } } });
     });
 
     it('refuses a body that is not a sign-in, naming the fields', async () => {
@@ -302,6 +307,172 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       expect(response.json()).toMatchObject({
         error: { code: 'validation_failed', fields: expect.any(Array) },
       });
+    });
+  });
+
+  describe('failures-only sign-in limits (#343)', () => {
+    it('allows 25 complete successful sign-ins from one IP without changing its budget', async () => {
+      for (let i = 0; i < 25; i++) await signIn();
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      for (const key of keys) expect(await runtime.redis.zcard(key)).toBe(0);
+    });
+
+    it('clears address failures after success but retains earlier IP failures', async () => {
+      for (let i = 0; i < 9; i++) {
+        expect(
+          (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
+        ).toBe(401);
+      }
+      await signIn();
+      for (let i = 0; i < 10; i++) {
+        expect(
+          (await post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' })).statusCode,
+        ).toBe(401);
+      }
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(keys).toHaveLength(1);
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(19);
+    });
+
+    it('locks the IP after 100 failures across addresses and gives the same refusal for known and unknown accounts', async () => {
+      for (let i = 0; i < 100; i++) {
+        expect(
+          (
+            await post('/api/auth/sign-in', {
+              email: `unknown-${i}@example.com`,
+              password: 'wrong',
+            })
+          ).statusCode,
+        ).toBe(401);
+      }
+      const known = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const unknown = await post('/api/auth/sign-in', {
+        email: 'another@example.com',
+        password: 'wrong',
+      });
+      for (const response of [known, unknown]) {
+        expect(response.statusCode).toBe(429);
+        expect(response.json().error.auth).toEqual({ code: 'rate-limited' });
+        expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+        expect(Number(response.headers['retry-after'])).toBeLessThanOrEqual(900);
+      }
+      const { requestId: _known, ...knownBody } = known.json().error;
+      const { requestId: _unknown, ...unknownBody } = unknown.json().error;
+      expect(knownBody).toEqual(unknownBody);
+    });
+
+    it('allows exactly ten parallel failed verifications and refuses the rest atomically', async () => {
+      const results = await Promise.all(
+        Array.from({ length: 30 }, () =>
+          post('/api/auth/sign-in', { email: seeded.email, password: 'wrong' }),
+        ),
+      );
+      expect(results.filter((result) => result.statusCode === 401)).toHaveLength(10);
+      expect(results.filter((result) => result.statusCode === 429)).toHaveLength(20);
+      const keys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(await runtime.redis.zcard(keys[0] ?? '')).toBe(10);
+    });
+
+    it('atomically bounds a parallel spray across addresses to 100 verifications', async () => {
+      const limiter = new RateLimiter(runtime.redis);
+      const attempts = await Promise.all(
+        Array.from({ length: 150 }, (_, index) =>
+          limiter.reserveSignIn('spray', `person-${index}@example.com`),
+        ),
+      );
+      expect(attempts.filter((attempt) => attempt.retryAfter === 0)).toHaveLength(100);
+      expect(attempts.filter((attempt) => attempt.retryAfter > 0)).toHaveLength(50);
+    });
+
+    it('returns the larger oldest-entry expiry from real Redis without extending the lock', async () => {
+      const now = Date.now();
+      const ipKey = rateLimitKey(SIGN_IN_IP_RULE.bucket, hashSubject('office'));
+      const emailKey = rateLimitKey(SIGN_IN_EMAIL_RULE.bucket, hashSubject('person@example.com'));
+      for (let i = 0; i < 100; i++) await runtime.redis.zadd(ipKey, now - 60_000, `ip-${i}`);
+      for (let i = 0; i < 10; i++) await runtime.redis.zadd(emailKey, now - 30_000, `email-${i}`);
+      const limiter = new RateLimiter(runtime.redis);
+      const refused = await limiter.reserveSignIn('office', 'person@example.com');
+      expect(refused.retryAfter).toBeGreaterThanOrEqual(869);
+      expect(refused.retryAfter).toBeLessThanOrEqual(870);
+      expect(await runtime.redis.zcard(ipKey)).toBe(100);
+      expect(await runtime.redis.zcard(emailKey)).toBe(10);
+    });
+
+    it('warns once when forwarded requests arrive with proxy trust off without logging the header', async () => {
+      for (let i = 0; i < 2; i++)
+        await get('/api/auth/methods', { 'x-forwarded-for': 'forwarded-header-marker' });
+      const warnings = logLines.filter((line) =>
+        line.includes('X-Forwarded-For received while TRUST_PROXY is off'),
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).not.toContain('forwarded-header-marker');
+    });
+
+    it('counts failed TOTP codes and refunds success without erasing earlier IP failures', async () => {
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const challengeId = (first.json() as { challengeId: string }).challengeId;
+      const goodCode = await totpCode();
+      const badCode = goodCode === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 2; i++) {
+        expect(
+          (await post('/api/auth/totp', { challengeId, code: badCode, trustDevice: false }))
+            .statusCode,
+        ).toBe(401);
+      }
+      expect(
+        (await post('/api/auth/totp', { challengeId, code: goodCode, trustDevice: false }))
+          .statusCode,
+      ).toBe(201);
+      const ipKeys = await runtime.redis.keys('auth:rate:signin-ip:*');
+      expect(await runtime.redis.zcard(ipKeys[0] ?? '')).toBe(2);
+      expect(await runtime.redis.keys('auth:rate:signin-email:*')).toEqual([]);
+    });
+
+    it.each(['/api/auth/totp', '/api/auth/recovery-code', '/api/auth/enrolment/confirm'])(
+      'counts expired challenges in the IP bucket on %s',
+      async (path) => {
+        const limiter = new RateLimiter(runtime.redis);
+        for (let i = 0; i < 99; i++) await limiter.reserveSignIn('127.0.0.1');
+        const body = {
+          challengeId: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
+          code: '000000',
+          trustDevice: false,
+        };
+        expect((await post(path, body)).statusCode).toBe(401);
+        const refused = await post(path, body);
+        expect(refused.statusCode).toBe(429);
+        expect(refused.json().error.auth).toEqual({ code: 'rate-limited' });
+      },
+    );
+
+    it('SSO discovery and OIDC starts never spend the password budget', async () => {
+      const oidc = new OidcService({
+        db: runtime.db,
+        redis: runtime.redis,
+        logger: runtime.logger,
+        keyring: createKeyring(envFor()),
+        env: envFor(),
+      });
+      for (let i = 0; i < 25; i++) {
+        await expect(
+          oidc.start({
+            connectionId: '0192c3f0-1a2b-7c3d-8e4f-000000000001',
+            returnTo: '/tickets',
+            ip: '127.0.0.1',
+          }),
+        ).rejects.toThrow(i < 20 ? 'sso-connection-disabled' : 'sso-rate-limited');
+        await post('/api/auth/sso/discover', { email: seeded.email });
+      }
+      expect(await runtime.redis.keys('auth:rate:signin-*')).toEqual([]);
+      const ssoKeys = await runtime.redis.keys('auth:rate:sso-*');
+      expect(ssoKeys.length).toBeGreaterThan(0);
+      await signIn();
     });
   });
 
@@ -853,7 +1024,7 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     });
 
     it('counts refusals in rate_limit_refusals_total', async () => {
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 11; attempt += 1) {
         await post('/api/auth/sign-in', { email: 'flood@example.com', password: 'whatever it is' });
       }
 

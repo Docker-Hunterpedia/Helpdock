@@ -359,7 +359,7 @@
       "context": "Context",
       "price": "In / out per 1M"
     },
-    "modelsShowing": "Showing {{shown}} of {{total}} · prices from pi-ai's model registry, used for cost in ai_calls",
+    "modelsShowing": "Showing {{shown}} of {{total}} · prices come from the model list and set the cost of each AI call",
     "showAll": "Show all",
     "remove": "Remove provider",
     "removeTitle": "Remove {{name}}?",
@@ -571,7 +571,7 @@
     "listLabel": "AI calls",
     "empty": "No AI calls yet.",
     "loadMore": "Load more",
-    "footer": "Each row is one ai_calls entry. Open the ticket to see the sources it used.",
+    "footer": "Each row is one call to the model. Open the ticket to see the sources it used.",
     "noModelCall": "no model call",
     "tokens": "{{in}} / {{out}} tok",
     "status": {

@@ -200,7 +200,7 @@
     "deflectionSentence": "{{deflected}} of {{eligible}} eligible conversations",
     "deflectionRule": "Counted when an auto-reply was sent, the visitor did not ask for a person, no staff replied, and the conversation closed or went quiet for 24 hours; divided by conversations where auto-reply was allowed.",
     "costTitle": "AI cost",
-    "costCaption": "Provider spend logged in ai_calls · tokens in and out",
+    "costCaption": "What the AI provider charged this period · tokens in and out",
     "costSentence": "{{calls}} calls · {{tokensIn}} tokens in · {{tokensOut}} out",
     "unavailable": "Not available until the AI assistant records its calls (M7)."
   }

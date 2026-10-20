@@ -62,7 +62,7 @@
   },
   "email": {
     "title": "Outgoing email",
-    "description": "Helpdock sends sign-in links, notifications and ticket replies through your own SMTP relay. You can change all of this later in Settings.",
+    "description": "Helpdock sends sign-in links, notifications and ticket replies through your own SMTP relay. You can change all of this later in Channels › Outgoing email.",
     "hostLabel": "SMTP server",
     "hostPlaceholder": "smtp.example.com",
     "portLabel": "Port",
@@ -122,7 +122,7 @@
   },
   "done": {
     "title": "Helpdock is ready",
-    "description": "Your install is set up. Everything below can be changed later in Settings.",
+    "description": "Your install is set up. Change the brand later in Brand, outgoing email in Channels and the AI provider in AI.",
     "adminLabel": "Admin account",
     "brandLabel": "Brand",
     "brandValue": "{{name}} · {{prefix}}",

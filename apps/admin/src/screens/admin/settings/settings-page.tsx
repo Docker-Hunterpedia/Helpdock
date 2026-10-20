@@ -31,6 +31,7 @@ import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { SecretField } from '../../../ui/secret-field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
+import { RedirectUrl } from './redirect-url.tsx';
 import { SsoTab } from './sso-tab.tsx';
 
 const MASKED_SECRET = '••••••••••••';
@@ -275,16 +276,8 @@ function AuthenticationSettingsForm({
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('settings:aside.redirectUrls.body')}
           </Typography>
-          {[settings.redirectUrls.google, settings.redirectUrls.github].map((url) => (
-            <Typography
-              key={url}
-              variant="mono"
-              dir="ltr"
-              sx={{ fontSize: 12, overflowWrap: 'anywhere' }}
-            >
-              {url}
-            </Typography>
-          ))}
+          <RedirectUrl provider="google" url={settings.redirectUrls.google} />
+          <RedirectUrl provider="github" url={settings.redirectUrls.github} />
         </AsideCard>
         <AsideCard title={t('settings:aside.live.title')}>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>

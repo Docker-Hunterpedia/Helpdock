@@ -136,7 +136,7 @@
     "saved": "Notification settings saved.",
     "failed": "That did not work. Nothing was changed.",
     "loadFailed": "Your notification settings could not be loaded. Try again in a moment.",
-    "note": "An SLA breach or escalation sent to a team reaches each member by their own settings. Deactivated staff get nothing. Every send goes through the outbox, so one event gives one email and one push per browser.",
+    "note": "An SLA breach or escalation sent to a team reaches each member by their own settings. Deactivated staff get nothing. One event sends one email and one push per browser, never more.",
     "push": {
       "heading": "Browser push on this browser",
       "notEnabled": "Not enabled",

@@ -384,7 +384,8 @@ export function Sidebar({
           minHeight: 0,
           minWidth: 0,
           alignSelf: 'stretch',
-          marginInline: collapsed ? -2 : 0,
+          marginInlineStart: collapsed ? -2 : -1,
+          marginInlineEnd: collapsed ? -2 : -3,
           position: 'relative',
           '&::before, &::after': {
             content: '""',
@@ -405,15 +406,28 @@ export function Sidebar({
           aria-label={t('admin:nav.label')}
           data-scroll-top={edges.top}
           data-scroll-bottom={edges.bottom}
-          onFocus={(event) => event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })}
+          onFocus={(event) => {
+            if (event.currentTarget.contains(event.target)) {
+              event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+          }}
           sx={{
             height: '100%',
             overflowY: 'auto',
             overflowX: 'hidden',
             scrollbarGutter: 'stable',
-            scrollbarWidth: 'thin',
-            scrollbarColor: `${collapsed ? 'transparent' : tokens['border.strong']} transparent`,
-            '&:hover, &:focus-within': { scrollbarColor: `${tokens['border.strong']} transparent` },
+            scrollPaddingBlock: '4px',
+            // Standard scrollbar properties override WebKit's width and button rules.
+            '@supports not selector(::-webkit-scrollbar)': {
+              scrollbarWidth: 'thin',
+              scrollbarColor: `${collapsed ? 'transparent' : tokens['border.strong']} transparent`,
+              '&:hover, &:focus-within': {
+                scrollbarColor: `${tokens['border.strong']} transparent`,
+              },
+            },
+            '& a:focus-visible, & button:focus-visible': {
+              outlineOffset: collapsed ? '-2px' : undefined,
+            },
             '&::-webkit-scrollbar': { width: '4px', height: 0 },
             '&::-webkit-scrollbar-track': { backgroundColor: 'transparent' },
             '&::-webkit-scrollbar-thumb': {
@@ -439,7 +453,10 @@ export function Sidebar({
             sx={{
               paddingBlock: 1,
               width: collapsed ? 36 : 'auto',
-              marginInlineStart: collapsed ? 2 : 0,
+              // Use the full rail's centre, independent of the reserved scrollbar gutter.
+              marginInlineStart: collapsed ? `${(RAIL_WIDTH - 1 - 36) / 2}px` : 0,
+              paddingInlineStart: collapsed ? 0 : 1,
+              paddingInlineEnd: collapsed ? 0 : 2,
             }}
           >
             {collapsed ? (

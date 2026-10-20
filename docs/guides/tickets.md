@@ -1422,8 +1422,9 @@ The browser remembers the choice; until you make one, the sidebar is expanded
 on a window 1280 px or wider and collapsed between 1024 and 1279 px.
 On short windows, scroll the navigation independently of the brand and account
 controls. A hairline at either edge means more items are available there;
-Tab brings each focused item fully into view. The rail shows its thin scrollbar
-on hover or keyboard focus.
+Tab brings each focused item and its focus ring fully into view. The rail uses
+an inset focus ring so the gutter cannot clip it. The rail shows its thin
+scrollbar on hover or keyboard focus.
 
 ### Tags and custom fields in the workspace
 

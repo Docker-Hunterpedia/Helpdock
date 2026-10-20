@@ -36,9 +36,9 @@ export interface NotifyEmailQueue {
 
 /**
  * The BullMQ adapter. A delayed job under the batch's id is moved with
- * `changeDelay`; a running one is left alone, because after it moves itself it re-reads
- * the batch and pulls itself earlier if a cut landed meanwhile; anything else under the id (finished,
- * failed, waiting) is replaced.
+ * `changeDelay`; a running one is left alone, because after it moves itself
+ * it re-reads the batch and pulls itself earlier if a cut landed meanwhile;
+ * anything else under the id (finished, failed, waiting) is replaced.
  */
 export const bullEmailQueue = (queue: Queue): NotifyEmailQueue => ({
   place: async (brandId, { batchId, at }, now) => {
@@ -155,11 +155,18 @@ export const createEmailJobProcessors = ({
         await job.moveToDelayed(outcome.at.getTime(), token);
         // An urgent cut that committed after the hold found this job active
         // and could not move it, so look again now that it is delayed.
-        const due = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
-          engine.dueAt(tx, batchId),
-        );
-        if (due !== null && due < outcome.at) {
-          await job.changeDelay(Math.max(0, due.getTime() - now().getTime()));
+        try {
+          const due = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
+            engine.dueAt(tx, batchId),
+          );
+          if (due !== null && due < outcome.at) {
+            await job.changeDelay(Math.max(0, due.getTime() - now().getTime()));
+          }
+        } catch (error) {
+          // The job is already delayed and its lock released: failing it here
+          // would only raise a spurious worker error. The hourly rebuild
+          // places the earlier time instead.
+          log.warn({ brandId, batchId, err: error }, 'Could not re-read the batch due time.');
         }
         throw new DelayedError();
       }

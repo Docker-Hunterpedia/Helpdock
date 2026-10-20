@@ -35,7 +35,7 @@ import {
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { DelayedError, type Job, Queue } from 'bullmq';
+import { DelayedError, type Job, Queue, Worker } from 'bullmq';
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -954,37 +954,57 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(moved).toEqual([at(3).getTime()]);
     });
 
-    it('pulls the delayed job earlier when an urgent cut landed while it was active', async () => {
+    it('pulls the real delayed job earlier when an urgent cut landed while it was active', async () => {
       const batchId = await opened(await notify());
       presence.set(sam.id, 'online');
       clock = at(2);
-      const moved: number[] = [];
-      const changed: number[] = [];
+      const queueAdapter = bullEmailQueue(queue);
       const processors = createEmailJobProcessors({
         db: runtime.db,
         engine,
-        queue: bullEmailQueue(queue),
+        queue: queueAdapter,
         log: silentLogger,
         now: () => clock,
       });
-      const job = {
-        id: notifyEmailBatchJobId(batchId),
-        name: 'notify.email_batch',
-        data: { brandId: seeded.brandId, batchId },
-        // The hold has committed; the mention's cut commits before the job is delayed.
-        moveToDelayed: async (timestamp: number) => {
-          moved.push(timestamp);
+      // Earlier tests leave jobs behind, and getNextJob takes the first waiting one.
+      await queue.obliterate({ force: true });
+      await queue.add(
+        'notify.email_batch',
+        { brandId: seeded.brandId, batchId },
+        { jobId: notifyEmailBatchJobId(batchId), attempts: 1 },
+      );
+      const worker = new Worker(QUEUE_NAMES.notify, null, { connection: redis });
+      try {
+        const job = await worker.getNextJob('token');
+        if (job === undefined) throw new Error('the batch job was not taken');
+        const moveToDelayed = job.moveToDelayed.bind(job);
+        const changeDelay = job.changeDelay.bind(job);
+        const delays: number[] = [];
+        job.changeDelay = async (delay) => {
+          delays.push(delay);
+          await changeDelay(delay);
+        };
+        // The hold has committed; the mention's cut commits and finds the job
+        // active before the job is delayed.
+        job.moveToDelayed = async (timestamp, token) => {
           const mention = await schedule(await notify({ kind: 'mentioned', actorId: ada.id }));
           expect(mention).toEqual({ batchId, at: at(2) });
-        },
-        changeDelay: async (delay: number) => void changed.push(delay),
-      } as unknown as Job;
+          await queueAdapter.place(seeded.brandId, { batchId, at: at(2) }, clock);
+          expect(await job.getState()).toBe('active');
+          await moveToDelayed(timestamp, token);
+        };
 
-      await expect(processors['notify.email_batch'](job, 'token')).rejects.toBeInstanceOf(
-        DelayedError,
-      );
-      expect(moved).toEqual([at(3).getTime()]);
-      expect(changed).toEqual([0]);
+        await expect(processors['notify.email_batch'](job, 'token')).rejects.toBeInstanceOf(
+          DelayedError,
+        );
+        const settled = await queue.getJob(notifyEmailBatchJobId(batchId));
+        expect(await settled?.getState()).toBe('delayed');
+        // The test clock is in the past, so BullMQ clamps both times to now and
+        // the score cannot tell them apart; the real call is what proves it.
+        expect(delays).toEqual([0]);
+      } finally {
+        await worker.close();
+      }
     });
   });
 

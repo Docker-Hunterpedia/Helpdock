@@ -860,11 +860,6 @@ The saved views of [Views](#views) are under the same prefix, every one
 
 ### Listing
 
-The ticket-list header uses icon-only **Sort** and **Filter** buttons so its
-360 px column fits in English and Arabic. Hover or keyboard focus shows their
-localized tooltips; Filter includes the active count in its tooltip and accessible
-name. **New ticket** keeps its text label.
-
 In 1.1, the list's **Sort** menu and the view editor offer **SLA due**:
 oldest breached running clock first, then the soonest due clock, then tickets
 without a running clock. Paused, satisfied and stopped clocks do not count.
@@ -1222,6 +1217,12 @@ up rather than guessing from a short page. A client that receives a socket frame
 with `seq > last_seq + 1`, or that reconnects, calls this.
 
 ## The admin workspace
+
+The ticket-list header uses icon-only **Sort** and **Filter** buttons so its
+360 px column fits in English and Arabic. Hover or keyboard focus shows their
+localized tooltips; Filter shows the active count in a badge, its tooltip and
+accessible name. Every counted filter has a removable chip, including Source.
+**New ticket** keeps its text label.
 
 `apps/admin/src/screens/tickets/` is the `Admin · ticket view` artboard: the
 list, the thread and the details panel, on one route. The boundary it reads

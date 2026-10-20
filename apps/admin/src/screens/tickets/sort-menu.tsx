@@ -27,7 +27,7 @@ export function SortMenu({
 
   return (
     <>
-      <Tooltip title={t('tickets:sort.action')} describeChild>
+      <Tooltip title={t('tickets:sort.action')}>
         <Button
           id={id}
           variant="outlined"

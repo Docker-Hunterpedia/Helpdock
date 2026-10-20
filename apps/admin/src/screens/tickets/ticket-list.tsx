@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
+import { CountBadge } from '../../shell/count-badge.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { activeFilterCount, type WorkspaceFilters } from '../../tickets/views.js';
 import { FilterPopover } from './filter-popover.tsx';
@@ -144,7 +145,7 @@ export function TicketList({
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
             <SortMenu filters={filters} onChange={onFiltersChange} />
-            <Tooltip title={filterLabel} describeChild>
+            <Tooltip title={filterLabel}>
               <Button
                 ref={filterButton}
                 variant="outlined"
@@ -158,6 +159,7 @@ export function TicketList({
                 }}
               >
                 <ListFilter size={14} aria-hidden="true" />
+                {active > 0 ? <CountBadge count={active} /> : null}
               </Button>
             </Tooltip>
             <Button

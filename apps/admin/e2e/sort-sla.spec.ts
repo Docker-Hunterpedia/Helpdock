@@ -116,9 +116,21 @@ test('ticket header fits its 360 px column with active filters', async ({
         Number.parseFloat(getComputedStyle(element).lineHeight),
     ),
   ).toBe(true);
-  await region
-    .getByRole('button', { name: t('tickets:list.filterActive', { count: 4 }), exact: true })
-    .click();
+  const sort = region.getByRole('button', { name: t('tickets:sort.action'), exact: true });
+  const filterLabel = t('tickets:list.filterActive', { count: 4 });
+  const filter = region.getByRole('button', { name: filterLabel, exact: true });
+  await expect(filter.getByText('4', { exact: true })).toHaveAttribute('aria-hidden', 'true');
+  await page.keyboard.press('Tab');
+  await sort.focus();
+  await expect(
+    page.getByRole('tooltip', { name: t('tickets:sort.action'), exact: true }),
+  ).toBeVisible();
+  await expect(sort).not.toHaveAttribute('title');
+  await page.keyboard.press('Tab');
+  await expect(filter).toBeFocused();
+  await expect(page.getByRole('tooltip', { name: filterLabel, exact: true })).toBeVisible();
+  await expect(filter).not.toHaveAttribute('title');
+  await filter.click();
   await expect(page.getByRole('region', { name: t('tickets:filters.title') })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(
@@ -126,4 +138,34 @@ test('ticket header fits its 360 px column with active filters', async ({
   ).toBeFocused();
   await region.getByRole('button', { name: t('tickets:newTicket.action'), exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('ticket header shows a removable Imported-only filter', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTickets(page, locale, 'all');
+  await page.getByRole('button', { name: t('tickets:list.filter'), exact: true }).click();
+  await page.getByRole('switch', { name: t('tickets:filters.imported'), exact: true }).click();
+  await page.keyboard.press('Escape');
+  const region = page.getByRole('region', { name: t('tickets:list.label') });
+  const filter = region.getByRole('button', {
+    name: t('tickets:list.filterActive', { count: 1 }),
+    exact: true,
+  });
+  await expect(filter.getByText('1', { exact: true })).toHaveAttribute('aria-hidden', 'true');
+  const chipLabel = t('tickets:summary.chip', {
+    field: t('tickets:filters.source'),
+    value: t('tickets:filters.imported'),
+  });
+  await region
+    .getByRole('button', { name: t('tickets:viewBar.remove', { filter: chipLabel }), exact: true })
+    .click();
+  await expect(
+    region.getByRole('button', { name: t('tickets:list.filter'), exact: true }),
+  ).toBeVisible();
+  await expect(filter.getByText('1', { exact: true })).toHaveCount(0);
+  await expect(page).not.toHaveURL(/imported=/);
 });

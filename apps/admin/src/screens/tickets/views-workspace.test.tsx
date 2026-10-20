@@ -64,6 +64,27 @@ describe('saved views in the workspace', () => {
     vi.unstubAllGlobals();
   });
 
+  it('shows the full active count on the filter icon', async () => {
+    await renderTickets();
+    const filter = await screen.findByRole('button', { name: 'Filter (4)' });
+    expect(within(filter).getByText('4')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it.each([
+    ['1', 'Imported'],
+    ['0', 'Created in Helpdock'],
+  ])('shows and removes a source-only filter (%s)', async (source, label) => {
+    const { user } = await renderTickets(`/tickets?view=all&imported=${source}`);
+    const filter = await screen.findByRole('button', { name: 'Filter (1)' });
+    expect(within(filter).getByText('1')).toHaveAttribute('aria-hidden', 'true');
+    await user.click(screen.getByRole('button', { name: `Remove Source: ${label}` }));
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeVisible();
+    expect(within(filter).queryByText('1')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: `Remove Source: ${label}` }),
+    ).not.toBeInTheDocument();
+  });
+
   it('lists shared views, then the reader\'s own under "Mine"', async () => {
     await renderTickets();
 

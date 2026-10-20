@@ -11,12 +11,18 @@ import { useSemanticTokens } from '../app/tokens.js';
 export function Switch({
   checked,
   label,
+  describedBy,
+  busy = false,
   disabled = false,
   onChange,
 }: {
   readonly checked: boolean;
   /** The accessible name, e.g. "Enable Refunds to Billing". */
   readonly label: string;
+  /** The id of a hint beside the switch that says what it does. */
+  readonly describedBy?: string | undefined;
+  /** A change is being saved: `aria-busy`, and the switch keeps its focus. */
+  readonly busy?: boolean;
   readonly disabled?: boolean;
   readonly onChange: (checked: boolean) => void;
 }): ReactNode {
@@ -29,6 +35,8 @@ export function Switch({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      aria-describedby={describedBy}
+      aria-busy={busy || undefined}
       disabled={disabled}
       onClick={() => {
         onChange(!checked);

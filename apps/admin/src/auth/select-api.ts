@@ -28,6 +28,7 @@ import { MockHelpCenterApi } from '../help-center/mock-api.js';
 import type { ImportsApi } from '../imports/api.js';
 import { HttpImportsApi } from '../imports/http-api.js';
 import { MockImportsApi } from '../imports/mock-api.js';
+import { HttpKeyboardApi, type KeyboardApi, MockKeyboardApi } from '../keyboard/api.js';
 import type { KnowledgeApi } from '../knowledge/api.js';
 import { HttpKnowledgeApi } from '../knowledge/http-api.js';
 import { MockKnowledgeApi } from '../knowledge/mock-api.js';
@@ -117,6 +118,8 @@ export interface AdminApis {
   readonly assist: AssistApi;
   /** M8-01, M8-03: the Developers page. */
   readonly developers: DevelopersApi;
+  /** M14-01: the single-key shortcuts switch. */
+  readonly keyboard: KeyboardApi;
 }
 
 /**
@@ -174,6 +177,7 @@ export function createApis(
       meta: new HttpMetaApi(transport),
       assist: new HttpAssistApi(transport),
       developers: new HttpDevelopersApi(transport),
+      keyboard: new HttpKeyboardApi(transport),
     };
   }
 
@@ -229,5 +233,6 @@ export function createApis(
     // files an approved proposal's draft in the help center fixture.
     assist: new MockAssistApi({ tickets, helpCenter }),
     developers: new MockDevelopersApi(),
+    keyboard: new MockKeyboardApi(auth),
   };
 }

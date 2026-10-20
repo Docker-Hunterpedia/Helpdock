@@ -81,6 +81,7 @@ const MIGRATION_TAGS = [
   '0060_notification_pacing',
   '0061_ticket_sla_next_due',
   '0062_webhook_note_opt_in',
+  '0063_single_key_shortcuts',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

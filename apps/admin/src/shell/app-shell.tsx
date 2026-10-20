@@ -5,6 +5,9 @@ import { Outlet } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
+import { useGlobalShortcuts } from '../keyboard/global-shortcuts.js';
+import { KeyboardProvider, useShortcutHandlers } from '../keyboard/keyboard-provider.tsx';
+import type { ShortcutId } from '../keyboard/registry.js';
 import { BrandMark } from '../ui/brand-mark.tsx';
 import { SIDEBAR_WIDTH, Sidebar } from './sidebar.tsx';
 import { useSidebarCollapse } from './sidebar-collapse.js';
@@ -13,6 +16,9 @@ import { useSidebarCollapse } from './sidebar-collapse.js';
 const SIDEBAR_BREAKPOINT = '(min-width:1024px)';
 
 const TOP_BAR_HEIGHT = 56;
+
+/** The shortcuts the shell itself answers; the rest of the global ones are `useGlobalShortcuts`'s. */
+export const SHELL_SHORTCUTS = ['general.sidebar'] as const satisfies readonly ShortcutId[];
 
 /**
  * The admin chrome: sidebar plus content area, both on `bg.canvas`. Everything
@@ -25,11 +31,26 @@ const TOP_BAR_HEIGHT = 56;
  * down the middle of a list.
  */
 export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): ReactNode {
+  // M14-01: every keyboard shortcut of the signed-in admin goes through it.
+  return (
+    <KeyboardProvider>
+      <ShellLayout flush={flush} />
+    </KeyboardProvider>
+  );
+}
+
+function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const session = useSession();
   const wide = useMediaQuery(SIDEBAR_BREAKPOINT, { noSsr: true });
-  const { collapsed, toggle } = useSidebarCollapse({ shortcut: wide });
+  const { collapsed, toggle } = useSidebarCollapse();
+  useGlobalShortcuts();
+  // Only where the sidebar is a column: a toggle nobody can see would
+  // silently change the remembered choice.
+  useShortcutHandlers<(typeof SHELL_SHORTCUTS)[number]>({
+    'general.sidebar': wide ? toggle : null,
+  });
   const brand = currentBrand(session);
   const [drawerOpen, setDrawerOpen] = useState(false);
 

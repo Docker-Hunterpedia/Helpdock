@@ -38,6 +38,7 @@ import { HelpCenterModule } from './help-center/help-center.module.js';
 import { AllExceptionsFilter } from './http/exception.filter.js';
 import { ImportsModule, type ImportsModuleOverrides } from './imports/imports.module.js';
 import { InstallModule } from './install/install.module.js';
+import { KeyboardModule } from './keyboard/keyboard.module.js';
 import { KnowledgeModule, type KnowledgeOverrides } from './knowledge/knowledge.module.js';
 import type { Logger } from './logging/logger.js';
 import { MacrosModule } from './macros/macros.module.js';
@@ -295,6 +296,8 @@ export class AppModule implements NestModule {
         AuditLogModule.forRoot(),
         // M3-07: the bell's panel and the Notifications tab. Delivery runs in the worker.
         NotificationsModule.forRoot(),
+        // M14-01: the single-key shortcuts switch.
+        KeyboardModule.forRoot(),
         // M5-07: Brand › Domains. The DNS and TLS check runs in the worker.
         DomainsModule.forRoot({ env: options.env, hostResolver }),
         // M4: Channels › Widget, the widget's routes, its SSE stream and the

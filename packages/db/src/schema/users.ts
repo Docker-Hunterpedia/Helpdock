@@ -58,6 +58,13 @@ export const users = pgTable(
      * time the account was made and the handle is stored on every authenticator.
      */
     webauthnUserHandle: bytea('webauthn_user_handle').unique('users_webauthn_user_handle_key'),
+    /**
+     * M14-01. Whether shortcuts without a modifier (`j`, `r`, `g` then `i`)
+     * answer for this person. On the account rather than in the browser
+     * because it is an accessibility setting (WCAG 2.1.4) that must follow
+     * them to another browser; on by default (owner decision D-32).
+     */
+    singleKeyShortcuts: boolean('single_key_shortcuts').notNull().default(true),
   },
   (table) => [
     // Addresses are compared case-insensitively. A unique index on `lower(email)`

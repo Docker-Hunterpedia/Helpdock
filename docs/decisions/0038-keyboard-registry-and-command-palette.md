@@ -27,9 +27,14 @@ owner decisions D-03 and D-32.
    and required permission. The `?` sheet, the palette's actions, each button's
    `aria-keyshortcuts` and the tooltips read it; a unit test fails when a
    registered shortcut has no handler or a handler has no entry.
-2. **Physical keys.** Letters match on `event.code` (`KeyJ`), so shortcuts work
-   on Arabic, French or Russian layouts; `?` matches both `?` and the Arabic
-   `؟` (U+061F). The sheet shows the Latin key with the Arabic letter beside it.
+2. **Physical keys.** A letter is the one a Latin layout types, and on a
+   layout that types no Latin letter (Arabic, Russian) the physical key
+   (`event.code`, `KeyJ`) decides, so shortcuts work on every layout and a
+   Dvorak or AZERTY user presses the key engraved with the letter the sheet
+   shows; `?` matches both `?` and the Arabic `؟` (U+061F). The sheet shows the
+   Latin letter, which bilingual keyboards engrave beside the Arabic one.
+   (Amended with M14-01: matching on `event.code` alone would have moved
+   Dvorak and AZERTY users' letters, which 1.0 already followed since #244.)
 3. **A single-key switch** (`users.single_key_shortcuts`, default on, stored on
    the server so it follows the person) turns off every shortcut without a
    modifier, which satisfies WCAG 2.1.4. Shortcuts never fire in a field, a

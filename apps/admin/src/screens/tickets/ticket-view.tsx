@@ -66,6 +66,7 @@ import { useTicketTelegram } from './telegram/use-ticket-telegram.tsx';
 import { Thread, type ThreadNames } from './thread.tsx';
 import type { TicketAction } from './ticket-actions-menu.tsx';
 import { TicketHeader } from './ticket-header.tsx';
+import { closeStatusOf, type DetailsRequest, useTicketShortcuts } from './ticket-shortcuts.js';
 import { TicketViewSkeleton } from './ticket-skeletons.tsx';
 import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
@@ -104,7 +105,6 @@ export function TicketView({
   now,
   detailsInDrawer,
   detailsOpen,
-  focusToken,
   onDetailsOpenChange,
   onGoToList,
   onOpenTicket,
@@ -116,8 +116,6 @@ export function TicketView({
   readonly now: number;
   readonly detailsInDrawer: boolean;
   readonly detailsOpen: boolean;
-  /** Changes when `r` or `n` was pressed, which is what moves the caret. */
-  readonly focusToken: { readonly mode: ComposerMode; readonly at: number } | null;
   onDetailsOpenChange(open: boolean): void;
   onGoToList(): void;
   /** M1-09: where a merge or a split sends the reader afterwards. */
@@ -151,6 +149,11 @@ export function TicketView({
   // M10-08: the files of each send, so a reply the platform's window refuses
   // goes back into the composer with its text instead of being lost.
   const filesBySend = useRef(new Map<string, readonly Attachment[]>());
+  // M14-01: the sends made with "Send and close" (`⌘⇧Enter`), by `clientId`.
+  const closeBySend = useRef(new Set<string>());
+  // Changes when `r` or `n` was pressed, which is what moves the caret.
+  const [focusSignal, setFocusSignal] = useState<number | undefined>(undefined);
+  const [detailsRequest, setDetailsRequest] = useState<DetailsRequest | null>(null);
 
   const detail = useQuery({
     queryKey: ticketKeys.detail(brandId, ticketId),
@@ -284,14 +287,6 @@ export function TicketView({
     }
   }, [pending, messages]);
 
-  // `r` and `n` both put the caret in the composer; `n` also switches it to a
-  // note first. The caret itself is the composer's to move (`focusSignal`).
-  useEffect(() => {
-    if (focusToken !== null) {
-      setMode(focusToken.mode);
-    }
-  }, [focusToken]);
-
   const send = useMutation({
     mutationFn: async (message: PendingMessage) => {
       const request: MessageCreateRequest = {
@@ -350,9 +345,13 @@ export function TicketView({
       // "Then set status" is applied after the send, never with it: a status
       // moved by a reply that never left would be a lie about what happened.
       // A macro's own status wins over "Then set status" (artboard
-      // `AdminComposerMacros`), so the second is not sent at all.
-      if (thenStatusId !== '' && !setsStatus(macro ?? null)) {
-        await update.mutateAsync({ statusId: thenStatusId });
+      // `AdminComposerMacros`), so the second is not sent at all. "Send and
+      // close" is "Then set status" with the close status (M14-01).
+      const after = closeBySend.current.delete(message.clientId)
+        ? (closeStatusOf(directory.statuses)?.id ?? '')
+        : thenStatusId;
+      if (after !== '' && !setsStatus(macro ?? null)) {
+        await update.mutateAsync({ statusId: after });
       }
       setThenStatusId('');
 
@@ -385,6 +384,7 @@ export function TicketView({
         }
         return;
       }
+      closeBySend.current.delete(message.clientId);
       dispatch({ type: 'failed', clientId: message.clientId });
       toast({
         tone: 'danger',
@@ -583,6 +583,34 @@ export function TicketView({
     departments: directory.departments,
     updateTicket: (patch) => update.mutateAsync(patch),
     setTags: (tagIds) => tags.mutateAsync([...tagIds]),
+  });
+
+  // M14-01. Attached before the returns below, as every hook is; with no
+  // ticket read yet there is nothing to act on, so nothing is attached.
+  const shortcutTicket = detail.data?.ticket;
+  const closeStatus = closeStatusOf(directory.statuses);
+  useTicketShortcuts({
+    writable:
+      canWrite && shortcutTicket !== undefined && (detail.data?.mergedInto ?? null) === null,
+    onCompose: (next) => {
+      setMode(next);
+      setFocusSignal(Date.now());
+    },
+    onDetails: (control) => {
+      if (detailsInDrawer) {
+        onDetailsOpenChange(true);
+      }
+      setDetailsRequest({ control, at: Date.now() });
+    },
+    onMacros: () => {
+      setPicking((open) => !open);
+    },
+    onClose:
+      closeStatus === null || shortcutTicket?.status.systemState === 'closed'
+        ? null
+        : () => {
+            update.mutate({ statusId: closeStatus.id });
+          },
   });
 
   if (detail.isError) {
@@ -802,6 +830,10 @@ export function TicketView({
         role === 'admin' || role === 'teamLeader',
       )}
       canWrite={canWrite}
+      request={detailsRequest}
+      onRequestHandled={() => {
+        setDetailsRequest(null);
+      }}
       onTagsChange={(tagIds) => {
         tags.mutate(tagIds);
       }}
@@ -814,7 +846,7 @@ export function TicketView({
     />
   );
 
-  const queueSend = (): void => {
+  const queueSend = ({ close = false }: { readonly close?: boolean } = {}): void => {
     const text = body.trim();
     if (text === '') {
       return;
@@ -841,6 +873,9 @@ export function TicketView({
     }
     if (attachments.length > 0) {
       filesBySend.current.set(message.clientId, attachments);
+    }
+    if (close) {
+      closeBySend.current.add(message.clientId);
     }
     dispatch({ type: 'queued', message });
     setBody('');
@@ -1085,7 +1120,7 @@ export function TicketView({
               // Until the brand read answers, the defaults are what the picker
               // measures against; the api is the one that decides either way.
               attachmentsEnabled={!brand.isPending || brand.isError}
-              focusSignal={focusToken?.at}
+              focusSignal={focusSignal}
               onModeChange={setMode}
               onBodyChange={setBody}
               onThenStatusChange={setThenStatusId}
@@ -1095,7 +1130,16 @@ export function TicketView({
               onRemoveAttachment={(attachmentId) => {
                 setAttachments((held) => held.filter((row) => row.id !== attachmentId));
               }}
-              onSend={queueSend}
+              onSend={() => {
+                queueSend();
+              }}
+              onSendAndClose={
+                closeStatus === null
+                  ? undefined
+                  : () => {
+                      queueSend({ close: true });
+                    }
+              }
               email={ticketEmail.composer}
               meta={ticketMeta.composer}
               telegram={

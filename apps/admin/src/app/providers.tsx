@@ -3,6 +3,8 @@ import { createI18n, dir, type Locale } from '@helpdock/i18n';
 import { createHelpdockTheme, createLtrCache, createRtlCache } from '@helpdock/ui';
 import type { ImportsApi } from '../imports/api.js';
 import { ImportsApiProvider } from '../imports/context.tsx';
+import type { KeyboardApi } from '../keyboard/api.js';
+import { KeyboardApiProvider } from '../keyboard/keyboard-provider.tsx';
 import type { SsoApi } from '../sso/api.js';
 import { SsoApiProvider } from '../sso/context.tsx';
 import '@helpdock/ui/fonts.css';
@@ -161,6 +163,8 @@ export interface AppProvidersProps {
   readonly assistApi?: AssistApi;
   /** Defaults to the matching adapter. Only the Developers page reads it (M8-01, M8-03). */
   readonly developersApi?: DevelopersApi;
+  /** Defaults to the matching adapter. The single-key shortcuts switch reads it (M14-01). */
+  readonly keyboardApi?: KeyboardApi;
   readonly queryClient?: QueryClient;
   /** Tests swap in `MemoryRouter`. */
   readonly router?: (props: { children: ReactNode }) => ReactNode;
@@ -205,6 +209,7 @@ export function AppProviders({
   metaApi,
   assistApi,
   developersApi,
+  keyboardApi,
   queryClient,
   router: Router = BrowserRouter,
 }: AppProvidersProps): ReactNode {
@@ -243,6 +248,7 @@ export function AppProviders({
   const meta = metaApi ?? fallback.meta;
   const assist = assistApi ?? fallback.assist;
   const developers = developersApi ?? fallback.developers;
+  const keyboard = keyboardApi ?? fallback.keyboard;
   const client = useMemo(() => queryClient ?? createAdminQueryClient(), [queryClient]);
   // One instance for the life of the app; a locale change goes through
   // `changeLanguage` below so `react-i18next` re-renders what it has to.
@@ -324,9 +330,11 @@ export function AppProviders({
                                         <ImportsApiProvider api={imports}>
                                           <SettingsApiProvider api={settings}>
                                             <NotificationsProvider api={notifications} push={push}>
-                                              <ToastProvider>
-                                                <Router>{children}</Router>
-                                              </ToastProvider>
+                                              <KeyboardApiProvider api={keyboard}>
+                                                <ToastProvider>
+                                                  <Router>{children}</Router>
+                                                </ToastProvider>
+                                              </KeyboardApiProvider>
                                             </NotificationsProvider>
                                           </SettingsApiProvider>
                                         </ImportsApiProvider>

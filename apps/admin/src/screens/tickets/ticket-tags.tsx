@@ -1,10 +1,11 @@
 import type { Tag, TagSummary } from '@helpdock/schemas';
 import { Box, Button, Popover, TextField, Typography } from '@mui/material';
 import { Check, Plus } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, type Ref, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { tagLabel, tagMatches, toggleTag } from '../../tickets/tags.js';
 import { TagChip } from '../admin/ticketing/tag-chip.tsx';
 import { tagTint } from '../admin/ticketing/tag-colours.js';
@@ -30,18 +31,22 @@ export function TicketTags({
   tags,
   brandTags,
   canWrite,
+  buttonRef,
   onChange,
 }: {
   /** What the ticket carries now, as drawn (optimistically, while a save is out). */
   readonly tags: readonly Tag[];
   readonly brandTags: readonly TagSummary[];
   readonly canWrite: boolean;
+  /** The Add button, so `t` can open the picker (M14-01). */
+  readonly buttonRef?: Ref<HTMLButtonElement> | undefined;
   onChange(tagIds: string[]): void;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
   const headingId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const keyShortcuts = useAriaKeyShortcuts('ticket.tags');
 
   const held = tags.map((tag) => tag.id);
 
@@ -58,8 +63,10 @@ export function TicketTags({
         </Typography>
         {canWrite ? (
           <Button
+            ref={buttonRef}
             variant="outlined"
             size="small"
+            aria-keyshortcuts={keyShortcuts}
             aria-label={t('tickets:details.tagPicker.open')}
             aria-haspopup="listbox"
             aria-expanded={anchor !== null}

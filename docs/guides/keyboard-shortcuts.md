@@ -228,7 +228,7 @@ this screen. The list of what you opened is kept in this browser as ids only, no
 subjects or names, and is checked against what you can still see each time the
 palette opens.
 
-If a section cannot be loaded (it errored or took longer than 300 ms), the
+If a section cannot be loaded (it errored, or one of its database statements took longer than 300 ms; the article search is limited to 300 ms as a whole), the
 palette says so under the results with a **Retry**, and the other sections are
 unaffected. Searches are limited to ten a second per person.
 

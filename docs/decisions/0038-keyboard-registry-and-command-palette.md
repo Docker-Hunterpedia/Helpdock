@@ -48,7 +48,9 @@ owner decisions D-03 and D-32.
    (Amended with M14-05: the one read answers each of the three sections as
    `ok`, `skipped` or `failed`, run one after another inside savepoints with a
    300 ms statement timeout so one section's failure never poisons the request
-   transaction; the palette's actions are the registry shortcuts a screen has
+   transaction (the 300 ms limit is per statement, not per section: a section
+   that runs several quick statements can take longer in total, while the
+   article search, on its own connection, is bounded as a whole); the palette's actions are the registry shortcuts a screen has
    attached at that moment, run through the same handler a key press would.)
 5. **The palette calls no model.** Its actions are a person's actions. The one
    AI hook is M12-13's: Tab hands the typed text to the read-only assistant

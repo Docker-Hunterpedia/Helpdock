@@ -453,7 +453,8 @@ differences:
   (an error, or over the 300 ms budget), which is what the board's "a section
   failed" panel is drawn from. The sections run one after another, each
   inside a nested transaction (a savepoint the driver tracks) with a 300 ms
-  `statement_timeout`: the database cancels a slow query, the section rolls
+  `statement_timeout` (300 ms per statement, not per section; the article search is
+  bounded as a whole): the database cancels a slow query, the section rolls
   back once it has settled, and the next still runs in the same request
   transaction. It takes a `locale` the articles are looked up in first.
 - **Articles** are the help-center search, full text only (`hc_search_documents`

@@ -872,7 +872,9 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         });
 
       it('publishes signed profile and locale changes once, including a newly attached email', async () => {
-        const visitor = await newVisitor();
+        // Keep this scenario outside the suite's shared loopback throttle budget.
+        const ip = '198.51.100.34';
+        const visitor = await newVisitor({}, ip);
         const payload = {
           user_id: 'profile-event-customer',
           ts: Math.floor(Date.now() / 1000),
@@ -899,6 +901,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         expect(await events()).toHaveLength(initial.length);
         await widget('POST', '/session', {
           visitor,
+          ip,
           payload: { identity: sign(payload, secret), locale: 'ar' },
         });
         const [contact] = await withSystem(runtime.db, seeded.brandId, (tx) =>
@@ -912,6 +915,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         expect(afterLocale).toHaveLength(initial.length + 1);
         await widget('POST', '/session', {
           visitor,
+          ip,
           payload: { identity: sign(payload, secret), locale: 'ar' },
         });
         expect(await events()).toHaveLength(afterLocale.length);

@@ -922,7 +922,9 @@ mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 
 ### M14-28 More webhook events
 
-Status: implemented for #315; PR #335 second-review fixes applied; pending independent re-review and CI. Migration regeneration waits for the owner after the earlier migration PRs merge.
+Rebase compatibility: SLA assignment notifications retain their automatic source in batched and digest emails, with English and Arabic labels. The notes opt-in migration is `0062_webhook_note_opt_in`, generated after `0061_ticket_sla_next_due`.
+
+Status: implemented for #315; PR #335 second-review fixes applied; pending independent re-review and CI. Migration regenerated as `0062_webhook_note_opt_in` after `0061_ticket_sla_next_due` at the owner's queue signal.
 
 - [x] Eight additional events, Zod source/output contracts, transactional producers, brand and department scope.
 - [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.

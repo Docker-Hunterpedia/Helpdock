@@ -277,6 +277,18 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
 
 ### 6.4 Overlays and feedback
 
+- **Ticket Sort menu** (`Admin/Tickets-SortSla`, M14-07): outlined small
+  `ArrowDownUp` button before Filter in the list header. The 300 px menu offers
+  Last updated, Created newest/oldest, Priority and SLA due. Each choice is a
+  keyboard-accessible radio menu item; the selected row uses the existing menu
+  selection treatment and a `Check`. SLA due has the caption "Breached first,
+  then soonest due" (also shown beneath the view editor's SLA sort). Escape
+  returns focus to Sort without changing the order. Labels and captions use
+  body and caption styles; spacing, surface and selection use existing tokens.
+  The same order is saved by the view editor; timers keep their existing row
+  treatment. Logical spacing and the localized label/caption apply in RTL.
+
+
 | Component | Anatomy |
 |---|---|
 | Dialog | elevation 3, radius lg, 16–24 px padding, h3 title, body 13–14 in `text.secondary`, actions end-aligned: ghost Cancel then primary (or solid danger for destructive). Max width 480 (confirm) or 720 (forms). Focus trapped, `Esc` closes unless destructive-in-progress. An irreversible action on a named thing (erasing a contact) asks for the name to be typed and keeps the danger button disabled until it matches exactly. |
@@ -471,3 +483,4 @@ Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line hei
 | 2026-10-20 | 1.32. M18-10, `Widget/PreChat-Verify`, `HelpCenter/WebForm-Verify`, `Admin/Channels-Widget-BotProtection`: §6.6 adds the CAPTCHA box's built-in variant. The widget's Try again is drawn at the md 36 of §6.1 rather than the artboard's 32, and its 56 px strip as 36 px of content inside the box's 8 px padding. The admin access card adds Built-in to the provider select, a Difficulty radio pair and a neutral `bg.muted` notice like PushCard's; the hCaptcha caption, which the board does not draw, follows Turnstile's wording. No token, size or radius is added. |
 | 2026-10-20 | 1.33. M18-07, `Admin/Login-Providers`, `Admin/Profile-Security-SignInMethods`, `Admin/Settings-Authentication`: §6.3 adds OauthRefusal for the callback screens and renames ProviderRow's card "Sign-in methods", whose last-way-in note moves under the list with an `Info` icon; §6.1 adds AllowedDomainsField for the allowed Workspace domains; ProviderRow's caption gains "last used"; `Admin/AcceptInvite-Providers` puts the configured provider buttons on the invite screen (outlined, one equal column each, under a body-strong label and above an "or choose a password" divider) and a mismatch state with a danger Banner, the buttons and "Choose a password instead". The artboard's 6 px step gap is drawn at 8. Built from the BrandMark, Button, Chip and the multi Combobox, so no token, size or radius is added. |
 | 2026-10-20 | 1.34. M14-08, `Admin/Ticket-Routing`: §6.3 adds RoutingTrail, "How it got here" in the DetailsPanel. Drawn at the nearest steps of §3–§5: the artboard's 14 px padding at 12, its 13 px heading and 13/18 step text at body-strong and body 14/20, and its 12 px step icons at 14. AI triage takes `sparkles`, the §5 AI icon, where the artboard drew a robot. No token, size or radius is added. |
+| 2026-10-20 | 1.35. M14-07, `Admin/Tickets-SortSla`: adds the Ticket Sort menu in §6.4 and SLA due in the view editor. Uses existing menu, button, caption and selection tokens; no new tokens. |

@@ -259,3 +259,25 @@ describe('summaryColumns', () => {
     expect(summaryColumns(waiting, high.id).resolutionDueAt).toBeNull();
   });
 });
+
+describe('M14-07 running-clock sort inputs', () => {
+  it('excludes satisfied response clocks and paused resolution clocks', () => {
+    expect(summaryColumns(replied, high.id).firstResponseDueAt).toBeNull();
+    expect(summaryColumns(replied, high.id).resolutionDueAt).not.toBeNull();
+    expect(summaryColumns(waiting, high.id)).toMatchObject({
+      firstResponseDueAt: null,
+      resolutionDueAt: null,
+    });
+    expect(summaryColumns(resumed, high.id).resolutionDueAt).not.toBeNull();
+  });
+  it('excludes satisfied resolution clocks and stopped clocks', () => {
+    const resolved = reconcile(replied, closed, high, ry('2026-10-04T10:00'));
+    const stopped = reconcile(created, { ...open, deleted: true }, high, ry('2026-10-04T10:00'));
+    for (const clocks of [resolved, stopped]) {
+      expect(summaryColumns(clocks, high.id)).toMatchObject({
+        firstResponseDueAt: null,
+        resolutionDueAt: null,
+      });
+    }
+  });
+});

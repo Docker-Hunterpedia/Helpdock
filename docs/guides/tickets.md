@@ -860,6 +860,21 @@ The saved views of [Views](#views) are under the same prefix, every one
 
 ### Listing
 
+In 1.1, the list's **Sort** menu and the view editor offer **SLA due**:
+oldest breached running clock first, then the soonest due clock, then tickets
+without a running clock. Paused, satisfied and stopped clocks do not count.
+`sort=slaDue` always uses this urgency order; `direction` does not reverse it.
+Equal due times and tickets without a clock use ascending ticket ID as a
+stable cursor tiebreaker. Changing the sort starts a fresh list; saved views
+retain it. Exact ticket-reference search matches still appear ahead of the
+view's filtered matches, as with the other sorts.
+
+The SLA engine maintains `first_response_due_at` and `resolution_due_at` only
+while clocks count. PostgreSQL stores their `least` in the generated column
+`sla_next_due_at`; one null leaves the other value, and two nulls produce null.
+The index is `(brand_id, department_id, sla_next_due_at)`. Its 50k-ticket p95
+under DOMAIN-RULES §14 has not been re-measured locally for M14-07.
+
 ```
 GET /api/brands/:brandId/tickets
   ?statusId=<uuid>            repeatable
@@ -871,7 +886,7 @@ GET /api/brands/:brandId/tickets
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the words, the contact's name, or a reference or original number (first, past the other filters)
   &overdue=true               only tickets whose SLA has run out (M1-05)
-  &sort=updatedAt             updatedAt | createdAt | number | priority
+  &sort=updatedAt             updatedAt | createdAt | number | priority | slaDue
   &direction=desc             asc | desc
   &limit=25                   1–100
   &cursor=<opaque>            from the previous page's `nextCursor`

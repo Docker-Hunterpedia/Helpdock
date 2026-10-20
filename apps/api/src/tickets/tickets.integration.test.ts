@@ -1217,6 +1217,75 @@ describe.skipIf(!hasDocker)('tickets', () => {
       ).toBe(200);
     });
 
+    it('M14-07 orders SLA due under department scope and pages tied due times and nulls', async () => {
+      const label = 'Slaordering';
+      const dueTimes = [
+        null,
+        '2026-10-20T11:00:00.000Z',
+        '2026-10-20T09:00:00.000Z',
+        '2026-10-20T09:00:00.000Z',
+        null,
+        '2026-10-21T09:00:00.000Z',
+      ];
+      const fixtures: { id: string; due: string | null }[] = [];
+      for (const [index, due] of dueTimes.entries()) {
+        const { ticket } = await createTicket(sam, { subject: label });
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(tickets)
+            .set({
+              firstResponseDueAt:
+                index === 1
+                  ? new Date('2027-01-01T00:00:00.000Z')
+                  : due === null
+                    ? null
+                    : new Date(due),
+              resolutionDueAt: index === 1 && due !== null ? new Date(due) : null,
+            })
+            .where(eq(tickets.id, ticket.id)),
+        );
+        fixtures.push({ id: ticket.id, due });
+      }
+      const hidden = await createTicket(bo, { subject: label, departmentId: billing });
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(tickets)
+          .set({
+            resolutionDueAt: new Date('2020-01-01T00:00:00.000Z'),
+          })
+          .where(eq(tickets.id, hidden.ticket.id)),
+      );
+      const expected = [...fixtures]
+        .sort(
+          (a, b) =>
+            (a.due === null
+              ? b.due === null
+                ? 0
+                : 1
+              : b.due === null
+                ? -1
+                : a.due.localeCompare(b.due)) || a.id.localeCompare(b.id),
+        )
+        .map((row) => row.id);
+      for (const direction of ['asc', 'desc']) {
+        const seen: string[] = [];
+        let cursor: string | null = null;
+        for (let page = 0; page < 10; page++) {
+          const answer: { status: number; body: TicketList } = await call<TicketList>(
+            'GET',
+            `${brandPath(seeded.brandId)}/tickets?q=${label}&sort=slaDue&direction=${direction}&limit=1${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`,
+            sam,
+          );
+          expect(answer.status).toBe(200);
+          seen.push(...answer.body.tickets.map((row) => row.id));
+          cursor = answer.body.nextCursor;
+          if (cursor === null) break;
+        }
+        expect(seen).toEqual(expected);
+        expect(seen).not.toContain(hidden.ticket.id);
+      }
+    });
+
     it('answers 400 for a cursor from another ordering', async () => {
       const page = await call<TicketList>(
         'GET',

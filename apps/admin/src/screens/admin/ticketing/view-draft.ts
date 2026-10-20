@@ -160,12 +160,18 @@ export const withPriorityChoice = (
 ): WorkspaceFilters =>
   choice === SAVED ? filters : { ...filters, priority: choice === 'any' ? [] : [choice] };
 
-/** The three orders the artboard offers, as `sort:direction`. */
-export const SORT_CHOICES = ['updatedAt:desc', 'createdAt:asc', 'priority:desc'] as const;
+/** The orders of Admin/Tickets-SortSla, shared by the list and view editor. */
+export const SORT_CHOICES = [
+  'updatedAt:desc',
+  'createdAt:desc',
+  'createdAt:asc',
+  'priority:desc',
+  'slaDue:asc',
+] as const;
 export type SortChoice = `${TicketSort}:${TicketSortDirection}`;
 
 export const sortChoice = (filters: WorkspaceFilters): SortChoice =>
-  `${filters.sort}:${filters.direction}`;
+  filters.sort === 'slaDue' ? 'slaDue:asc' : `${filters.sort}:${filters.direction}`;
 
 export const withSortChoice = (filters: WorkspaceFilters, choice: SortChoice): WorkspaceFilters => {
   const [sort, direction] = choice.split(':') as [TicketSort, TicketSortDirection];

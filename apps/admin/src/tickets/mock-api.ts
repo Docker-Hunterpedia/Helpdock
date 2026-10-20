@@ -2024,6 +2024,20 @@ const comparator =
     const descending = (query.direction ?? 'desc') === 'desc' ? -1 : 1;
 
     switch (query.sort ?? 'updatedAt') {
+      case 'slaDue': {
+        const due = (ticket: Ticket): string | null =>
+          ticket.status.pausesSla || ticket.status.systemState === 'closed'
+            ? null
+            : ([ticket.firstResponseDueAt, ticket.resolutionDueAt]
+                .filter((at): at is string => at !== null)
+                .sort()[0] ?? null);
+        const a = due(left);
+        const b = due(right);
+        return (
+          (a === null ? (b === null ? 0 : 1) : b === null ? -1 : a.localeCompare(b)) ||
+          left.id.localeCompare(right.id)
+        );
+      }
       case 'number':
         return (left.number - right.number) * descending;
       case 'priority':

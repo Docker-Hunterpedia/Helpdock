@@ -171,7 +171,7 @@ L 6 d.
 | M14-04 | Bulk edit UI: checkboxes, `x` / `Shift`+`x` / Shift-click, bulk bar, preview dialog, Undo toast | 4 d | M14-01, M14-03 |
 | M14-05 | Command palette: quick-search read, page and settings registry, actions, recents | 6 d | M14-01 |
 | M14-06 | Inbox empty states with keyboard hints, and the `Kbd` component | 1.5 d | M14-01 |
-| M14-07 | Sort by SLA due | 1.5 d | — |
+| M14-07 | Sort by SLA due — implemented, pending review (#294) | 1.5 d | — |
 | M14-08 | Routing trail: arrival recorded on every creation path, "How it got here" on the ticket | 4 d | — |
 | M14-09 | Routing page and Test routing dry run | 6 d | M14-08 |
 | M14-10 | Notification pacing engine: batching with back-off, digests, pause, read re-check, presence hold | 8 d | — |
@@ -425,6 +425,23 @@ tickets without a clock. A stored generated column `tickets.sla_next_due_at`
 `(brand_id, department_id, sla_next_due_at)`. Offered in the list's sort menu
 and the view editor. The 50k-ticket p95 under D §14 is re-measured for this
 sort.
+
+Implementation (M14-07, #294): complete, pending PR review. The engine's
+`summaryColumns` writes `first_response_due_at` and `resolution_due_at` only
+for counting clocks; PostgreSQL generates `sla_next_due_at` with `least` of
+those columns (one null leaves the other; both null produce null). The index
+is `(brand_id, department_id, sla_next_due_at)`. The API, list Sort menu and
+view editor accept `slaDue`. Urgency is always ascending, nulls last, with
+ascending ticket ID ties, regardless of `direction` (including its default).
+Nullable cursors cover both the transition into the no-clock tail and ties
+within it. Existing RLS and exact-reference search precedence still apply.
+
+Validation covers cursor encoding and predicates, saved-view schemas, clock
+exclusion, generated values through real SLA transitions, department-scoped
+ordering and pagination with ties, and the menu/list/view editor in `en` and
+`ar`. The 50k-ticket p95 measurement in DOMAIN-RULES §14 was **not re-run
+locally**; the performance gate remains to be measured on the constrained
+reference host. No new configuration or ADR is needed.
 
 ### M14-08 Routing trail
 

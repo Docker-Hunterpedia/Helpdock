@@ -833,6 +833,51 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       expect(Number(running.pausedTotalMs)).toBeGreaterThanOrEqual(0);
     });
 
+    it('M14-07 generated due follows reply, pause, resume, retarget and satisfaction', async () => {
+      expect(
+        (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
+          .status,
+      ).toBe(201);
+      const { ticket } = await createTicket({ priority: 'medium' });
+      const nextDue = async () =>
+        withSystem(runtime.db, seeded.brandId, async (tx) => {
+          const [row] = await tx
+            .select({ due: tickets.slaNextDueAt })
+            .from(tickets)
+            .where(eq(tickets.id, ticket.id));
+          return row?.due;
+        });
+      const response = await clockOf(ticket.id, 'first_response');
+      expect(await nextDue()).toEqual(response.dueAt);
+      expect(
+        (
+          await call('POST', `${brandPath()}/tickets/${ticket.id}/messages`, ada, {
+            kind: 'public',
+            bodyHtml: '<p>Checking.</p>',
+          })
+        ).status,
+      ).toBe(201);
+      expect(await nextDue()).toBeNull();
+      expect(
+        (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId: open }))
+          .status,
+      ).toBe(200);
+      expect(await nextDue()).toEqual((await clockOf(ticket.id, 'resolution')).dueAt);
+      const before = await nextDue();
+      expect(
+        (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { priority: 'urgent' }))
+          .status,
+      ).toBe(200);
+      const retargeted = await nextDue();
+      expect(retargeted).toEqual((await clockOf(ticket.id, 'resolution')).dueAt);
+      expect(retargeted?.getTime()).toBeLessThan(before?.getTime() ?? 0);
+      expect(
+        (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId: closed }))
+          .status,
+      ).toBe(200);
+      expect(await nextDue()).toBeNull();
+    });
+
     it('does not meet the response clock with an internal note', async () => {
       const { ticket } = await createTicket();
 

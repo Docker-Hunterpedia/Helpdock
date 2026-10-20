@@ -254,7 +254,7 @@ function SidebarToggle({
           backgroundColor: 'transparent',
           color: tokens['text.secondary'],
           font: 'inherit',
-          fontSize: 13,
+          fontSize: 12,
           cursor: 'pointer',
           '&:hover': { backgroundColor: tokens['bg.muted'] },
         }}
@@ -287,7 +287,7 @@ function SidebarToggle({
                   sx={{
                     fontFamily: 'var(--hd-font-mono, monospace)',
                     fontSize: 11,
-                    paddingInline: 1,
+                    paddingInline: '2px',
                     border: `1px solid ${tokens['border.strong']}`,
                     borderRadius: '4px',
                     backgroundColor: tokens['bg.surface'],

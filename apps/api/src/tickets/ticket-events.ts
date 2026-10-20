@@ -167,6 +167,8 @@ export const ticketAssignedPayloadSchema = z.object({
   assignedBy: z.enum(['person', 'rule', 'round_robin', 'skill_based', 'sla']),
   /** The person who chose, when a person did. */
   actorId: z.uuid().nullable(),
+  /** M14-03. The bulk edit this assignment was part of: the bell folds on it, an Undo withdraws it. */
+  bulkOperationId: z.uuid().optional(),
 });
 export type TicketAssignedPayload = z.infer<typeof ticketAssignedPayloadSchema>;
 

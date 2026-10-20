@@ -21,6 +21,7 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import type { RealtimeBroadcast } from '../realtime/broadcast.js';
+import { BULK_EVENTS, bulkUndonePayloadSchema } from '../tickets/bulk/bulk-events.js';
 import { SNOOZE_EVENTS, snoozeEndedPayloadSchema } from '../tickets/snooze/snooze-events.js';
 import {
   TICKET_ASSIGNED_EVENT,
@@ -121,6 +122,8 @@ export interface NotificationPlan {
   readonly messageId: string | null;
   readonly actorId: string | null;
   readonly detail: NotificationDetail;
+  /** M14-03. The bulk edit that caused it, if one did. */
+  readonly bulkOperationId?: string | null;
   /** Who might be told, before scope, activity and "not yourself" are applied. */
   candidates(input: CandidateInput): Promise<readonly string[]>;
 }
@@ -203,6 +206,7 @@ export const planFor = (
         messageId: null,
         actorId: parsed.actorId,
         detail: { assignedBy: parsed.assignedBy },
+        bulkOperationId: parsed.bulkOperationId ?? null,
         // The payload's assignee, not the ticket's current one: if it has
         // changed hands again since, the later event tells the later person.
         candidates: () => Promise.resolve([parsed.assigneeId]),
@@ -348,6 +352,15 @@ export const createFanOutHandler =
       return;
     }
 
+    // An Undo that put this assignment back before this event ran takes its
+    // notification with it (M14-03); the withdrawal only deletes rows that exist by then.
+    if (
+      plan.bulkOperationId != null &&
+      (await repository.bulkAssignmentReverted(tx, plan.bulkOperationId, plan.ticketId))
+    ) {
+      return;
+    }
+
     const ticket = await repository.ticket(tx, plan.ticketId);
     if (ticket === undefined) {
       // Deleted, or purged, since the event was written: nothing to point at.
@@ -398,6 +411,7 @@ export const createFanOutHandler =
           email: channels.email,
           push: channels.push,
           emailState: channels.email ? ('pending' as const) : null,
+          ...(plan.bulkOperationId == null ? {} : { bulkOperationId: plan.bulkOperationId }),
         },
       ];
     });
@@ -415,6 +429,18 @@ export const createFanOutHandler =
       { event, outboxId, brandId, kind: plan.kind, notified: ids.length },
       'notifications written',
     );
+  };
+
+/**
+ * `ticket.bulk_undone` (M14-03): takes back the notifications a bulk edit made.
+ * Idempotent: a redelivery finds nothing left to withdraw.
+ */
+export const createBulkUndoneHandler =
+  ({ repository }: Pick<FanOutDeps, 'repository'>): OutboxEventHandler =>
+  async ({ tx, brandId, payload, log }: OutboxEventContext): Promise<void> => {
+    const { operationId, ticketIds } = bulkUndonePayloadSchema.parse(payload);
+    const withdrawn = await repository.withdrawBulkOperation(tx, operationId, ticketIds);
+    log.info({ brandId, operationId, withdrawn }, 'bulk operation notifications withdrawn');
   };
 
 /** The note's author, when a member of staff wrote it: "Omar Nasser mentioned you". */
@@ -530,6 +556,7 @@ export const registerNotificationHandlers = (deps: FanOutDeps & DeliveryDeps): v
     registerEventHandler(event, fanOut, NOTIFICATIONS_SUBSCRIBER);
   }
 
+  registerEventHandler(BULK_EVENTS.undone, createBulkUndoneHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.read, createNotificationReadHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.created, createNotificationCreatedHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.pushTest, createPushTestHandler(deps));

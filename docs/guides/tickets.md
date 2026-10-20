@@ -824,6 +824,8 @@ which departments it reaches is the policies'.
 | `DELETE /tickets/:ticketId` | `brand:manage` | Soft-deletes it (§2.2). Admin only: hiding a ticket from the whole brand is not an edit |
 | `GET /tickets/:ticketId/activity` | `ticket:read` | Bounded activity pages; newest page by default, each page returned oldest first. `before=<entry UUID>` loads an older page; `limit` is 1–100 |
 | `GET /tickets/:ticketId/snooze-presets` | `ticket:read` | The Snooze menu's four times against the department calendar (M14-02) |
+| `POST /tickets/bulk` | `ticket:write`, then per ticket | Previews or applies one set of changes to up to 50 tickets (M14-03, [below](#bulk-edit)) |
+| `POST /tickets/bulk/:operationId/undo` | `ticket:write`, the actor only | Puts back a bulk edit within 60 seconds (M14-03) |
 | `GET /tickets/:ticketId/routing` | `ticket:read` | How it got here: the arrival and the automatic steps after it ([above](#arrival-and-the-routing-trail), M14-08) |
 | `GET /tickets/:ticketId/tags` | `ticket:read` | The chips on one ticket (M1-06) |
 | `PUT /tickets/:ticketId/tags` | `ticket:write` | Replaces the whole set (M1-06) |
@@ -1631,6 +1633,61 @@ The rows name their contact from the ticket itself: the list embeds
 contact being on the first page of `GET /contacts`, and the workspace no longer
 reads that page at all. The open ticket reads its one contact in full, for the
 details card and the thread's address line.
+
+## Bulk edit
+
+`POST /api/brands/:brandId/tickets/bulk` changes up to 50 tickets at once
+(M14-03, [DOMAIN-RULES §2.7](../planning/DOMAIN-RULES.md#27-bulk-changes),
+[ADR 0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md)).
+It is a staff-session route of the admin: it is not in the public API v1, which
+has no bulk route. The screen that drives it is M14-04.
+
+```http
+POST /api/brands/:brandId/tickets/bulk
+{ "ticketIds": ["…", "…"],
+  "changes": { "priority": "high", "assigneeId": "me", "addTagIds": ["…"] },
+  "mode": "preview" }
+```
+
+`changes` takes any of: `statusId` (anything but Snoozed), `close: true`,
+`priority`, `assigneeId` (a person, `"me"`, or `null` for nobody), `teamId`,
+`departmentId`, `addTagIds`, `removeTagIds`, `snoozedUntil` (an instant to
+snooze until, or `null` to wake), `spam: true` (it never blocks the sender) and
+`customField: { key, value }` (one value). `statusId`, `close`, `snoozedUntil`
+and `spam` are one at a time. Anything else (a reply, a note, a merge, a split, a
+delete) is refused as an unknown key. At least one change, 1 to 50 distinct
+ticket ids.
+
+Every ticket goes through the code a single edit uses, so the same rules answer:
+the transition table, the assignment ceiling, closed tickets refusing a snooze,
+the activity row (recorded `via: bulk`), the outbox events, the SLA effects, the
+rules and the webhooks, once per ticket.
+
+**Preview** (`"mode": "preview"`) writes nothing and answers, in the order the
+ids were sent, one result per ticket: `will_change` with the `fields` that move,
+`unchanged`, `refused` with the single edit's `code` (`ticket-closed`,
+`assignee-above-actor`, `snooze-requires-time`, `unknown-reference`, `invalid`,
+…), or `not_found`. A ticket in a department you cannot see is `not_found`,
+the same as one that does not exist.
+
+**Apply** (`"mode": "apply"`) must name `expect`, the ids the preview said would
+change. It runs in one transaction and is all or nothing: if the tickets that
+would now change are not exactly `expect`, nothing is written and the answer is
+**409** with `lifecycle: bulk-changed`; preview again. A successful apply that
+changed something answers the same results plus `operationId` and `undoUntil`
+(60 seconds on).
+
+**Undo** (`POST /tickets/bulk/:operationId/undo`) is the actor's alone and
+answers per ticket `reverted`, `partly_reverted`, `kept` or `not_found`, with the
+`reverted` and `kept` fields. A field somebody changed since is kept; tags are put
+back as a set. It answers 404 for another person's operation, 409
+`bulk-undo-expired` after the 60 seconds and 409 `bulk-already-undone` the second
+time. An Undo that closes a ticket again keeps the original close time and sends no survey. It withdraws the assignment notifications for the tickets whose assignee it put back, if nobody has read them; a
+webhook or push already sent, and an email already delivered, are not recalled.
+
+A bulk close asks for its satisfaction survey 60 seconds later, so an Undo inside
+the window sends none. Limits: 20 applies and undos a minute per person (429
+beyond), 60 previews. Operations are kept 7 days.
 
 ## Performance
 

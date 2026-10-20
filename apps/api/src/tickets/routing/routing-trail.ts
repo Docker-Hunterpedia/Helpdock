@@ -1,4 +1,5 @@
 import {
+  type ActivityVia,
   assignmentModeSchema,
   type ImportSource,
   ROUTING_STEPS_MAX,
@@ -36,7 +37,7 @@ export interface TrailRow {
   readonly action: string;
   readonly from: Readonly<Record<string, unknown>> | null;
   readonly to: Readonly<Record<string, unknown>> | null;
-  readonly via: 'ui' | 'rule' | 'api' | 'ai' | 'system';
+  readonly via: ActivityVia;
   readonly createdAt: Date;
 }
 

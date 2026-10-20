@@ -1,6 +1,8 @@
 import type { Settings } from '@helpdock/config';
 import { type DynamicModule, Module } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
+import { RateLimiter } from '../auth/rate-limit.js';
 import { CsatService } from '../csat/csat.service.js';
 import { EmailRepository } from '../email/email.repository.js';
 import { EmailReplyHook } from '../email/email-reply.hook.js';
@@ -13,7 +15,7 @@ import { OutboundMetaService } from '../meta/outbound-meta.service.js';
 import { ParticipantsMergeHook } from '../participants/merge-participants.hook.js';
 import { ParticipantsRepository } from '../participants/participants.repository.js';
 import { TicketParticipantsService } from '../participants/ticket-participants.service.js';
-import { SETTINGS } from '../runtime/tokens.js';
+import { REDIS, SETTINGS } from '../runtime/tokens.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
@@ -23,6 +25,10 @@ import { TelegramReplyHook } from '../telegram/telegram-reply.hook.js';
 import { BlockListService } from '../ticketing/block-list.service.js';
 import { TagsService } from '../ticketing/tags.service.js';
 import { TemplatesService } from '../ticketing/templates.service.js';
+import { TicketTagsService } from '../ticketing/ticket-tags.service.js';
+import { BulkController } from './bulk/bulk.controller.js';
+import { BulkRepository } from './bulk/bulk.repository.js';
+import { BulkService } from './bulk/bulk.service.js';
 import { TicketLifecycleHooks } from './lifecycle/hooks.js';
 import { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from './lifecycle/lifecycle.service.js';
@@ -84,6 +90,8 @@ export class TicketsModule {
       module: TicketsModule,
       imports: [ticketing, csat, sla],
       controllers: [
+        // Before `TicketsController`'s `tickets/:ticketId` routes, so `bulk` is never an id.
+        BulkController,
         TicketsController,
         TicketingSettingsController,
         TicketSpamController,
@@ -200,6 +208,36 @@ export class TicketsModule {
         MergeService,
         // M14-08's routing trail.
         TicketRoutingService,
+        // M14-03's bulk edit: the same services a single edit uses, plus a lock
+        // order, a savepoint per ticket and the operation log.
+        BulkRepository,
+        {
+          provide: BulkService,
+          inject: [
+            TicketsService,
+            TicketRepository,
+            TicketSpamService,
+            TicketTagsService,
+            BulkRepository,
+            REDIS,
+          ],
+          useFactory: (
+            ticketsService: TicketsService,
+            ticketReads: TicketRepository,
+            spam: TicketSpamService,
+            tags: TicketTagsService,
+            bulk: BulkRepository,
+            redis: Redis,
+          ): BulkService =>
+            new BulkService({
+              tickets: ticketsService,
+              ticketReads,
+              spam,
+              tags,
+              bulk,
+              limiter: new RateLimiter(redis),
+            }),
+        },
         // M14-02's Snooze menu. Both repositories are stateless: every method takes the tx.
         SnoozeService,
         { provide: SlaRepository, useFactory: () => new SlaRepository() },

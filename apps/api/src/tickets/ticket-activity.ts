@@ -96,10 +96,13 @@ export interface ActivityActor {
   readonly via: ActivityVia;
 }
 
-export const activityActorFor = (principal: Principal): ActivityActor => {
+export const activityActorFor = (
+  principal: Principal,
+  via?: Extract<ActivityVia, 'bulk' | 'bulk_undo'>,
+): ActivityActor => {
   switch (principal.type) {
     case 'staff':
-      return { actorType: 'staff', actorId: principal.id, via: 'ui' };
+      return { actorType: 'staff', actorId: principal.id, via: via ?? 'ui' };
     case 'apikey':
       return { actorType: 'apikey', actorId: principal.id, via: 'api' };
     case 'visitor':

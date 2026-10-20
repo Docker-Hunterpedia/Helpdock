@@ -336,6 +336,38 @@ wake). Public API v1 returns `snoozedUntil` on tickets and accepts it on
 
 ### M14-03 Bulk edit API
 
+**Status: built, in review** (issue #290). Built as below, with these
+differences. **Preview is the apply, rolled back:** each ticket runs through the
+single edit's methods inside a savepoint, and a preview rolls the savepoint
+back, so its answer cannot drift from what an apply does; the savepoint also
+keeps one ticket's refusal from aborting the transaction. **Lock order is ticket
+id**, not number: the batch takes `SELECT … FOR UPDATE` on its visible tickets in
+id order before changing any, and changes them in that order (ids are UUIDv7, so
+this is creation order). **Tags, spam and the update run in that order**, the
+update last, because an update may move a ticket into a department the actor
+cannot see, after which nothing else of theirs reaches it; the operation's item
+is then inserted inside the same widened window, follows the ticket out of
+sight with the department trigger, and an Undo reports that ticket as not found
+(`notFound` on the response). **An item records what moved, read back from the
+ticket** (so an assignee dropped by a department move is in it), and a snooze
+is recorded by its wake time and any other status change by the status, so an
+Undo has one thing to put back per field. **Undo is not itself an operation
+row**: it writes the single edit's activity `via: bulk_undo` and marks the
+operation undone, so it can be made once. **Notifications:** `ticket.assigned`
+carries `bulkOperationId`, the notification row is stamped with it, and an Undo
+publishes `ticket.bulk_undone`, whose handler (as the worker, because the rows
+are their recipients') marks a waiting email `withdrawn` and deletes the unread
+rows; a notification event that runs after the Undo makes nothing. **The CSAT
+delay** needed one thing the outbox lacked: a row may carry `deliverAfter` in
+its payload and the relay adds the job with that delay (`deliverAfter` and
+`deliveryDelayMs` in `@helpdock/jobs`). **Rate limits:** 20 applies and undos a
+minute per person, and 60 previews (the plan's 20 would let one edit use two).
+The activity row does not carry the operation id (`ticket_activity` has no
+column for it, and `via: bulk` plus the item rows say which operation made it).
+Not built here: the bell's and the batcher's folding of one operation into one
+line (the column and the stamp are in; the reading is M14-04), and the
+required-fields refusals (M14-17). Guide: [Tickets](../guides/tickets.md#bulk-edit).
+
 `POST /api/brands/:brandId/tickets/bulk` with `{ ticketIds (1–50, unique),
 changes, mode: 'preview' | 'apply', expect? }`.
 
@@ -631,8 +663,9 @@ written, and these differences: the schedule's Right away value is
 and `seen_online_at`, and pacing `last_urgent_at`, which the urgent interval
 and a resumable presence hold need; the hold's "away for 5 minutes" is
 measured from the last time the send found the person online, re-checked every
-minute; `bulk_operation_id` is left to M14-03, and the folding already groups
-by it; the daily digest's hour is read in the brand's time zone until M14-12
+minute; `bulk_operation_id` arrived with M14-03 (the column, stamped on an
+assignment a bulk edit made; the bell's and the batcher's folding on it is
+M14-04's); the daily digest's hour is read in the brand's time zone until M14-12
 adds `users.time_zone`; opening a ticket (`GET /tickets/:id` by a person)
 marks their notifications about it read; an install without SMTP marks rows
 `skipped_unconfigured` at scheduling rather than opening batches; the English
@@ -1027,7 +1060,7 @@ Status: implemented for #315; PR #335 second-review fixes applied; pending indep
 - [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.
 - [x] Merge undo publishes profile updates for the changed survivor and restored contact; identity transfers lock contact pairs in id order; the notes hint remains an accessible description outside the checkbox label.
 - [x] Focused unit, real Postgres/Redis integration and en/ar Playwright coverage; payload reference in `webhooks.md`, OpenAPI webhooks and API minor changeset.
-- [ ] Deferred to M14-03: bulk apply/undo status and assignee changes emit one event per ticket through the shared ticket mutation paths; implementation and acceptance coverage belong to M14-03.
+- [x] M14-03: bulk apply/undo status and assignee changes emit one event per ticket through the shared ticket mutation paths (acceptance coverage in `bulk.integration.test.ts`).
 
 `WEBHOOK_EVENTS` today holds `ticket.created`, `ticket.updated`,
 `ticket.replied`, `ticket.closed`, `contact.created`, `csat.received` and
@@ -1088,7 +1121,7 @@ Changed tables:
 |---|---|
 | `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, sla_next_due_at, id)`; GIN on `custom` |
 | `ticket_statuses` | built-in key `snoozed`, seeded for every brand by `seedBrandStatuses` (`packages/db/src/ticket-statuses.ts`) and backfilled by the migration; its state and flags fixed like the other system statuses |
-| `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (reserved for M14-03)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
+| `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (M14-03: an Undo takes back an email still waiting)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
 | `notification_prefs` (install scope, per person) | `email_schedule`, `digest_hour`, `paused_until`, `email_unsubscribed_at` |
 | `users` (install scope) | `public_name`, `job_title_en`, `job_title_ar`, `public_phone`, `photo_media_id`, `time_zone`, `single_key_shortcuts boolean default true` |
 | `canned_responses` (macros share it) | `shortcut text` unique per owner scope, `use_count int` |

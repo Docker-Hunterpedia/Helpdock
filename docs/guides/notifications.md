@@ -253,7 +253,8 @@ lost. A `notify.email` job left in Redis from 1.0 is let go with a log line.
 
 | Event consumed | Written by |
 |---|---|
-| `ticket.assigned` | `TicketsService` (a person), `autoAssign` (the rotation), a workflow rule (M3-03) |
+| `ticket.assigned` | `TicketsService` (a person), `autoAssign` (the rotation), a workflow rule (M3-03). A bulk edit's carries `bulkOperationId` (M14-03): the notification is stamped with it, and is not made at all once an Undo put that ticket's assignee back |
+| `ticket.bulk_undone` | An Undo of a bulk edit (M14-03): withdraws the unread notifications of the listed tickets, and marks a still-pending email `withdrawn` |
 | `ticket.replied`, `ticket.note_added` | `TicketsService.addMessage` (M1-03) |
 | `sla.warning`, `sla.breached` | the SLA engine (M3-02); a warning may name `userIds`, `teamIds` and `departmentLeads` |
 | `ticket.escalated` | an SLA escalation step (M3-02); may name `userIds`, `teamIds` and `departmentLeads` |
@@ -301,5 +302,5 @@ notifications can open a fresh batch.
   which also adds one-click unsubscribe and *Send me a test email*.
 - The daily digest uses the brand's time zone until M14-12 gives each person
   their own.
-- A batch folds per bulk operation only once M14-03 records the operation on
-  each notification; until then a bulk change folds per ticket.
+- A batch folds per bulk operation only once M14-04 reads the operation M14-03
+  now records on each notification; until then a bulk change folds per ticket.

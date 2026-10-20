@@ -139,7 +139,15 @@ export const messageAuthorTypeEnum = pgEnum('message_author_type', [
 export const cannedResponseKindEnum = pgEnum('canned_response_kind', ['canned', 'macro']);
 
 /** "Every state change with who/when/via what (UI, rule, API, AI)" — REQUIREMENTS §4.1. */
-export const activityViaEnum = pgEnum('activity_via', ['ui', 'rule', 'api', 'ai', 'system']);
+export const activityViaEnum = pgEnum('activity_via', [
+  'ui',
+  'rule',
+  'api',
+  'ai',
+  'system',
+  'bulk',
+  'bulk_undo',
+]);
 
 /**
  * The hue a status badge is drawn in: exactly the five status names of DESIGN

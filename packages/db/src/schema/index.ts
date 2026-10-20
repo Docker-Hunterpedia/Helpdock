@@ -43,6 +43,7 @@ export * from './team-members.js';
 export * from './teams.js';
 export * from './telegram.js';
 export * from './ticket-activity.js';
+export * from './ticket-bulk-operations.js';
 export * from './ticket-messages.js';
 export * from './ticket-participants.js';
 export * from './ticket-search-tokens.js';

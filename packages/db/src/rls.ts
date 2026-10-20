@@ -88,6 +88,10 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   { name: 'tickets', departmentScoped: true },
   { name: 'ticket_messages', departmentScoped: true },
   { name: 'ticket_activity', departmentScoped: true },
+  // M14-03. An applied bulk edit is its actor's alone (owner policy below); its
+  // per-ticket items follow the ticket's department like the activity does.
+  { name: 'ticket_bulk_operations', departmentScoped: false },
+  { name: 'ticket_bulk_operation_items', departmentScoped: true },
   // An attachment is a child of a ticket, so it is department-scoped like the
   // thread it hangs off. It is also what makes DOMAIN-RULES §4.5 structural: a
   // presigned URL is issued from a row, and a row in another department is not
@@ -256,6 +260,7 @@ export const OWNER_SCOPED_TABLES: readonly OwnerScopedTable[] = [
   { name: 'notifications', column: 'user_id', systemWrites: true },
   { name: 'notification_email_batches', column: 'user_id', systemWrites: true },
   { name: 'notification_email_pacing', column: 'user_id', systemWrites: true },
+  { name: 'ticket_bulk_operations', column: 'actor_id', systemWrites: true },
 ];
 
 /** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */

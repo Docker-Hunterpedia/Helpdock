@@ -76,6 +76,8 @@ export interface RetentionCutoffs {
   readonly deliveryLogs: Date;
   readonly idempotencyKeys: Date;
   readonly outbox: Date;
+  /** M14-03. Bulk operations and their items, with the Undo they allow long gone. */
+  readonly bulkOperations: Date;
 }
 
 /** The bell shows thirty days, and notifications are not a per-brand setting. */
@@ -104,6 +106,8 @@ export const retentionCutoffs = (settings: RetentionSettings, now: Date): Retent
   idempotencyKeys: new Date(now.getTime() - IDEMPOTENCY_WINDOW_HOURS * 3_600_000),
   // Fixed by DOMAIN-RULES §6, not by the brand.
   outbox: retentionCutoff(RETENTION_DAYS, now),
+  // Fixed by DOMAIN-RULES §11, like the outbox's.
+  bulkOperations: retentionCutoff(RETENTION_DAYS, now),
 });
 
 /**

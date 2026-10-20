@@ -531,6 +531,7 @@ export class EmailPacingRepository {
         reference: row.reference ?? '',
         subject: row.subject ?? '',
         detail: detail.success ? detail.data : {},
+        // M14-03 stores the operation; folding on it is deferred to M14-04.
         bulkOperationId: null,
       };
     });

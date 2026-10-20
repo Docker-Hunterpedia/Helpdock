@@ -1,5 +1,9 @@
 import {
   brandIdParamSchema,
+  bulkOperationParamSchema,
+  bulkRequestSchema,
+  bulkResponseSchema,
+  bulkUndoResponseSchema,
   messageCreateRequestSchema,
   messagePageQuerySchema,
   snoozePresetsQuerySchema,
@@ -53,3 +57,8 @@ export class TicketRoutingDto extends createZodDto(ticketRoutingSchema) {}
 /** M14-02's Snooze menu. */
 export class SnoozePresetsDto extends createZodDto(snoozePresetsSchema) {}
 export class SnoozePresetsQueryDto extends createZodDto(snoozePresetsQuerySchema) {}
+
+export class BulkRequestDto extends createZodDto(bulkRequestSchema) {}
+export class BulkResponseDto extends createZodDto(bulkResponseSchema) {}
+export class BulkUndoResponseDto extends createZodDto(bulkUndoResponseSchema) {}
+export class BulkOperationParamDto extends createZodDto(bulkOperationParamSchema) {}

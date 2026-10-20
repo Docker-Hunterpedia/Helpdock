@@ -38,6 +38,11 @@ export interface LifecycleHookEvent {
   readonly status: TicketStatusRow;
   /** The moment the transition is being recorded at, shared by every write in it. */
   readonly at: Date;
+  /**
+   * M14-03. How long a close's survey waits before it is asked for: a bulk
+   * edit's Undo window, so an undone close sends none. Absent for a single close.
+   */
+  readonly csatDelayMs?: number | undefined;
 }
 
 /** M3-02: a change that may move the clocks, and where the ticket was before it. */

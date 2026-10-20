@@ -362,18 +362,21 @@ export class AssignmentRepository {
     userId: string,
     departmentId?: string,
   ): Promise<AssignedTicket[]> {
-    return tx
-      .select({ id: tickets.id, departmentId: tickets.departmentId })
-      .from(tickets)
-      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
-      .where(
-        and(
-          eq(tickets.brandId, brandId),
-          eq(tickets.assigneeId, userId),
-          stillOpen,
-          departmentId === undefined ? undefined : eq(tickets.departmentId, departmentId),
-        ),
-      )
-      .orderBy(asc(tickets.createdAt));
+    return (
+      tx
+        .select({ id: tickets.id, departmentId: tickets.departmentId })
+        .from(tickets)
+        .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+        .where(
+          and(
+            eq(tickets.brandId, brandId),
+            eq(tickets.assigneeId, userId),
+            stillOpen,
+            departmentId === undefined ? undefined : eq(tickets.departmentId, departmentId),
+          ),
+        )
+        // By id, the order every multi-ticket writer locks in (a bulk edit, M14-03).
+        .orderBy(asc(tickets.id))
+    );
   }
 }

@@ -1,5 +1,5 @@
 import { contactIdentities, type DbTransaction, type Ticket as TicketRow } from '@helpdock/db';
-import type { SpamSenderIdentity, Ticket, TicketSpamSender } from '@helpdock/schemas';
+import type { ActivityVia, SpamSenderIdentity, Ticket, TicketSpamSender } from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { Principal } from '../auth/principal.js';
@@ -71,11 +71,12 @@ export class TicketSpamService {
     principal: Principal,
     ticketId: string,
     blocker: TicketingContext | null,
+    via?: Extract<ActivityVia, 'bulk' | 'bulk_undo'>,
   ): Promise<Ticket> {
     const tx = getTx();
     const found = await this.#require(tx, ticketId);
     const marked = await this.#lifecycle.markSpam(
-      { tx, brandId, actor: activityActorFor(principal), now: new Date() },
+      { tx, brandId, actor: activityActorFor(principal, via), now: new Date() },
       found.ticket,
       found.status,
     );

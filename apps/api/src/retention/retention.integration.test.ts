@@ -25,6 +25,8 @@ import {
   telegramBots,
   telegramChats,
   telegramDeliveries,
+  ticketBulkOperationItems,
+  ticketBulkOperations,
   ticketMessages,
   ticketStatuses,
   tickets,
@@ -625,6 +627,45 @@ describe.skipIf(!hasDocker)('data retention', () => {
         tx.select({ id: notificationEmailBatches.id }).from(notificationEmailBatches),
       );
       expect(left.map((row) => row.id).sort()).toEqual([recent.id, waiting.id].sort());
+    });
+
+    it('purges bulk operations and their items after seven days, and keeps a recent one (M14-03)', async () => {
+      const ticket = await seedTicket(brandA, { status: 'open' });
+      const operation = (createdAt: Date) => ({
+        id: uuidv7(),
+        brandId: brandA.id,
+        actorId: seeded.userId,
+        changes: { priority: 'high' },
+        ticketCount: 1,
+        undoUntil: createdAt,
+        createdAt,
+      });
+      const old = operation(daysAgo(8));
+      const recent = operation(daysAgo(1));
+      await withSystem(db(), brandA.id, async (tx) => {
+        await tx.insert(ticketBulkOperations).values([old, recent]);
+        await tx.insert(ticketBulkOperationItems).values(
+          [old, recent].map((row) => ({
+            brandId: brandA.id,
+            operationId: row.id,
+            ticketId: ticket.id,
+            departmentId: brandA.departmentId,
+            before: { priority: 'medium' },
+            after: { priority: 'high' },
+          })),
+        );
+      });
+
+      await runBrandRetention({ db: db(), brandId: brandA.id, jobId: 'job-bulk', batchSize: 1 });
+
+      const [operations, items] = await withSystem(db(), brandA.id, async (tx) => [
+        await tx.select({ id: ticketBulkOperations.id }).from(ticketBulkOperations),
+        await tx
+          .select({ id: ticketBulkOperationItems.operationId })
+          .from(ticketBulkOperationItems),
+      ]);
+      expect(operations).toEqual([{ id: recent.id }]);
+      expect(items).toEqual([{ id: recent.id }]);
     });
 
     it('nulls AI call bodies past the brand window and keeps their counts and cost (M7)', async () => {

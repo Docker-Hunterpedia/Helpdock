@@ -99,7 +99,7 @@ export class TicketingModule {
       // the reason the module comment gives.
       // M1-11: `TicketSpamService` blocks a sender through the same service the
       // Spam tab writes through.
-      exports: [TemplatesService, TagsService, BlockListService],
+      exports: [TemplatesService, TagsService, BlockListService, TicketTagsService],
     };
   }
 }

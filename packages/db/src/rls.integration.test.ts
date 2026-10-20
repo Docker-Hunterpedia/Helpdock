@@ -83,6 +83,8 @@ import {
   telegramChats,
   telegramDeliveries,
   ticketActivity,
+  ticketBulkOperationItems,
+  ticketBulkOperations,
   ticketFieldSuggestions,
   ticketMessages,
   ticketParticipants,
@@ -171,6 +173,7 @@ const knowledgeDocumentId = perBrand();
 const apiKeyId = perBrand();
 const webhookId = perBrand();
 const importRunId = perBrand();
+const bulkOperationId = perBrand();
 
 /** Unique per row for the columns that are unique inside a brand or a ticket. */
 let sequence = 0;
@@ -521,6 +524,35 @@ const fixtures = [
         actorId: 'test',
         action: 'ticket.created',
         via: 'system',
+      }),
+  },
+  {
+    name: 'ticket_bulk_operations',
+    // M14-03. Written by the actor; the owner rule that keeps one person's
+    // operations from another has its tests below.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketBulkOperations).values({
+        id: bulkOperationId[brandId] ?? '',
+        brandId,
+        actorId: userId,
+        changes: { priority: 'high' },
+        ticketCount: 1,
+        undoUntil: new Date(Date.now() + 60_000),
+      }),
+  },
+  {
+    name: 'ticket_bulk_operation_items',
+    // M14-03. A child of its ticket, refused the same way as the activity: the
+    // shared trigger finds no parent for a ticket the transaction cannot see.
+    refusal: /not visible in this transaction/i,
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(ticketBulkOperationItems).values({
+        brandId,
+        operationId: bulkOperationId[brandId] ?? '',
+        ticketId: ticketId[brandId] ?? '',
+        departmentId: departmentId[brandId] ?? '',
+        before: { priority: 'normal' },
+        after: { priority: 'high' },
       }),
   },
   {
@@ -1760,6 +1792,56 @@ describe.skipIf(!hasDocker)('row-level security', () => {
     it('cannot be written for somebody else by a member of staff', async () => {
       const rejection = await withTenant(db, as(userId), (tx) =>
         tx.insert(notificationEmailPacing).values({ brandId: brandA, userId: ownerId }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+  });
+
+  describe("a person's bulk operations (M14-03)", () => {
+    const actorId = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const actors = async (tx: DbTransaction): Promise<(string | null)[]> =>
+      (await tx.select({ actorId: ticketBulkOperations.actorId }).from(ticketBulkOperations)).map(
+        (row) => row.actorId,
+      );
+
+    beforeAll(async () => {
+      await db.insert(users).values({ id: actorId, email: 'bulk@example.com', name: 'Bulk' });
+      await withTenant(db, as(actorId), (tx) =>
+        tx.insert(ticketBulkOperations).values({
+          brandId: brandA,
+          actorId,
+          changes: { priority: 'urgent' },
+          ticketCount: 2,
+          undoUntil: new Date(Date.now() + 60_000),
+        }),
+      );
+    });
+
+    it('is its actor’s alone, an Admin of the brand included', async () => {
+      expect(await withTenant(db, as(actorId), actors)).toEqual([actorId]);
+      expect(await withTenant(db, as(userId), actors)).not.toContain(actorId);
+    });
+
+    it('cannot be written in somebody else’s name by a member of staff', async () => {
+      const rejection = await withTenant(db, as(userId), (tx) =>
+        tx.insert(ticketBulkOperations).values({
+          brandId: brandA,
+          actorId,
+          changes: {},
+          ticketCount: 1,
+          undoUntil: new Date(),
+        }),
       ).then(
         () => undefined,
         (error: unknown) => error as { cause?: { message?: string } },

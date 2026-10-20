@@ -1,6 +1,7 @@
 import type { DbTransaction } from '@helpdock/db';
 import { uuidv7 } from '@helpdock/db';
 import {
+  deliverAfter,
   enqueueOutbox,
   type OutboxEventContext,
   type OutboxEventHandler,
@@ -56,12 +57,17 @@ export const enqueueCsatRequested = (
   tx: DbTransaction,
   brandId: string,
   payload: CsatRequestedPayload,
-): Promise<string> =>
-  enqueueOutbox(tx, {
+  /** M14-03. A close made by a bulk edit waits out the Undo window before it asks. */
+  options: { readonly notBefore?: Date | undefined } = {},
+): Promise<string> => {
+  const parsed = csatRequestedPayloadSchema.parse(payload);
+
+  return enqueueOutbox(tx, {
     brandId,
     event: CSAT_EVENTS.requested,
-    payload: csatRequestedPayloadSchema.parse(payload),
+    payload: options.notBefore === undefined ? parsed : deliverAfter(parsed, options.notBefore),
   });
+};
 
 /**
  * An answer was recorded. `ticketId` is what the rules module reads of any

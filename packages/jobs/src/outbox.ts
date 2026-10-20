@@ -22,6 +22,36 @@ export const outboxEntrySchema = z.object({
 export type OutboxEntry = z.infer<typeof outboxEntrySchema>;
 
 /**
+ * The payload key that asks the relay to hold a job back until an instant
+ * (M14-03: a survey for a bulk close waits out the Undo window). Reserved: a
+ * handler's own schema strips it, and the relay turns it into the job's delay.
+ */
+export const OUTBOX_DELIVER_AFTER_KEY = 'deliverAfter';
+
+/** The payload with the reserved key set, for an entry that must not run before `at`. */
+export const deliverAfter = (
+  payload: Record<string, unknown>,
+  at: Date,
+): Record<string, unknown> => ({ ...payload, [OUTBOX_DELIVER_AFTER_KEY]: at.toISOString() });
+
+/**
+ * Milliseconds the relay holds a row's job back: zero for a row without the
+ * key, one whose instant has passed, or one that is not an instant.
+ */
+export const deliveryDelayMs = (
+  payload: Record<string, unknown>,
+  now: Date = new Date(),
+): number => {
+  const value = payload[OUTBOX_DELIVER_AFTER_KEY];
+  if (typeof value !== 'string') {
+    return 0;
+  }
+  const at = Date.parse(value);
+
+  return Number.isNaN(at) ? 0 : Math.max(0, at - now.getTime());
+};
+
+/**
  * Writes one outbox row through the caller's transaction and returns its id. The
  * id becomes the BullMQ job id, so it is also the handle the relay and the
  * consumers dedupe on.

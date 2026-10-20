@@ -14,7 +14,11 @@ const TICKET = '0199f4b2-2222-7000-8000-0000000000aa';
 const CLOSED_AT = new Date('2026-09-20T10:00:00.000Z');
 const LATER = new Date('2026-09-20T10:00:09.000Z');
 
-const fire = async (settings: BrandSettings | undefined, closedAt: Date | null = CLOSED_AT) => {
+const fire = async (
+  settings: BrandSettings | undefined,
+  closedAt: Date | null = CLOSED_AT,
+  csatDelayMs?: number,
+) => {
   const written: { event: string; payload: unknown }[] = [];
   const tx = {
     insert: () => ({
@@ -33,6 +37,7 @@ const fire = async (settings: BrandSettings | undefined, closedAt: Date | null =
     ticket: { id: TICKET, closedAt } as TicketRow,
     status: {} as TicketStatusRow,
     at: LATER,
+    ...(csatDelayMs === undefined ? {} : { csatDelayMs }),
   });
 
   return written;
@@ -54,6 +59,16 @@ describe('CsatLifecycleHooks', () => {
 
   it('asks for nothing when the brand has vanished under the request', async () => {
     expect(await fire(undefined)).toEqual([]);
+  });
+
+  it('holds the survey back for the delay a bulk close asks (M14-03)', async () => {
+    const [row] = await fire(defaultBrandSettings(), CLOSED_AT, 60_000);
+
+    expect(row?.payload).toEqual({
+      ticketId: TICKET,
+      closedAt: CLOSED_AT.toISOString(),
+      deliverAfter: new Date(LATER.getTime() + 60_000).toISOString(),
+    });
   });
 
   it('names the transition’s own moment when the row carries no close time', async () => {

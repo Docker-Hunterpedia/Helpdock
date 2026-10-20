@@ -11,6 +11,7 @@ import {
   notificationEmailPacing,
   notificationPrefs,
   notifications,
+  outbox,
   seedBrandStatuses,
   tickets,
   userBrandRoles,
@@ -43,10 +44,12 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { createNotifyProcessor } from './delivery.js';
 import { NotificationEmailEngine } from './email-engine.js';
 import { bullEmailQueue, createEmailJobProcessors } from './email-jobs.js';
 import { pacingConfigFromMinutes } from './email-pacing.js';
 import { EmailPacingRepository } from './email-pacing.repository.js';
+import { createNotificationReadHandler, NOTIFICATION_EVENTS } from './notification-events.js';
 import { NotificationsRepository } from './notifications.repository.js';
 
 /**
@@ -444,6 +447,149 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
     });
   });
 
+  describe('review regressions (#297)', () => {
+    it.each(['notify.email', 'notify.email_schedule'])(
+      'recovers only recent unsent legacy rows via %s',
+      async (name) => {
+        const queueAdapter = bullEmailQueue(queue);
+        const processors = createEmailJobProcessors({
+          db: runtime.db,
+          engine,
+          queue: queueAdapter,
+          log: silentLogger,
+          now: () => clock,
+        });
+        const processor = createNotifyProcessor(
+          {
+            repository: new NotificationsRepository(),
+            settings: { vapidKeys: async () => null },
+            push: { send: async () => 'sent' },
+          },
+          { db: runtime.db, email: processors },
+        );
+        const recent = await notify();
+        const old = await notify();
+        const alreadySent = await notify();
+        const disabled = await notify();
+        await withSystem(runtime.db, seeded.brandId, async (tx) => {
+          await tx
+            .update(notifications)
+            .set({ emailState: null })
+            .where(inArray(notifications.id, [recent, old, alreadySent, disabled]));
+          await tx
+            .update(notifications)
+            .set({ createdAt: at(-1441) })
+            .where(eq(notifications.id, old));
+          await tx
+            .update(notifications)
+            .set({ email: false })
+            .where(eq(notifications.id, disabled));
+          await tx.insert(jobReceipts).values({ key: `notify.email:${alreadySent}` });
+        });
+        for (const notificationId of [recent, old, alreadySent, disabled]) {
+          await processor({
+            name,
+            id: notificationId,
+            data: { brandId: seeded.brandId, notificationId },
+          } as Job);
+        }
+        const recovered = await row(recent);
+        expect(recovered?.emailBatchId).toBeTruthy();
+        for (const id of [old, alreadySent, disabled])
+          expect((await row(id))?.emailState).toBeNull();
+        clock = at(2);
+        await send(recovered?.emailBatchId ?? '');
+        expect((await row(recent))?.emailState).toBe('sent');
+        expect(sent).toHaveLength(1);
+      },
+    );
+
+    it('abandons a poisoned batch after five failures across rebuilds and frees its slot', async () => {
+      const warnings: string[] = [];
+      const poison = new NotificationEmailEngine({
+        repository: new EmailPacingRepository(),
+        notifications: new NotificationsRepository(),
+        config: async () => config,
+        presenceOf: async () => 'offline',
+        systemSender: async () => ({
+          send: async () => {
+            throw new Error('SMTP rejected');
+          },
+        }),
+        appUrl: APP_URL,
+        log: silentLogger,
+        now: () => clock,
+      });
+      const processors = createEmailJobProcessors({
+        db: runtime.db,
+        engine: poison,
+        queue: bullEmailQueue(queue),
+        log: { ...silentLogger, warn: (_fields, message) => void warnings.push(message) },
+        now: () => clock,
+      });
+      const id = await notify();
+      const batchId = await opened(id);
+      clock = at(2);
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        await withSystem(runtime.db, seeded.brandId, (tx) => poison.rebuild(tx, seeded.brandId));
+        const result = processors['notify.email_batch']({
+          id: batchId,
+          name: 'notify.email_batch',
+          data: { brandId: seeded.brandId, batchId },
+        } as Job);
+        if (attempt < 5) await expect(result).rejects.toThrow('SMTP rejected');
+        else await expect(result).resolves.toBeUndefined();
+        expect((await batch(batchId))?.sendFailures).toBe(attempt);
+      }
+      expect(await batch(batchId)).toMatchObject({ status: 'failed' });
+      expect((await row(id))?.emailState).toBe('skipped_failed');
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) => poison.rebuild(tx, seeded.brandId)),
+      ).toEqual([]);
+      await processors['notify.email_batch']({
+        id: batchId,
+        name: 'notify.email_batch',
+        data: { brandId: seeded.brandId, batchId },
+      } as Job);
+      expect(warnings).toHaveLength(1);
+      const next = await opened(await notify());
+      expect(next).not.toBe(batchId);
+      clock = at(4);
+      await send(next);
+      expect(sent).toHaveLength(1);
+    });
+
+    it('keeps a partial preference matrix untouched when only the schedule changes', async () => {
+      const preferences = { replied: { inApp: true, email: false, push: false } };
+      await setEmail({ preferences });
+      expect(
+        (await call('PUT', '/api/me/notification-preferences', sam, { emailSchedule: 'daily' }))
+          .status,
+      ).toBe(200);
+      const [stored] = await runtime.db
+        .select()
+        .from(notificationPrefs)
+        .where(eq(notificationPrefs.userId, sam.id));
+      expect(stored?.preferences).toEqual(preferences);
+    });
+
+    it('guards a delayed daily tick by its represented hour rather than creation time', async () => {
+      await setEmail({ emailSchedule: 'daily', digestHour: 8 });
+      await runtime.db.update(brands).set({ timezone: 'UTC' }).where(eq(brands.id, seeded.brandId));
+      const first = await notify();
+      clock = new Date('2026-10-20T15:00:00Z');
+      const [placement] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        engine.digestTick(tx, seeded.brandId, new Date('2026-10-20T08:00:00Z')),
+      );
+      expect(placement).toBeDefined();
+      await send(placement?.batchId ?? '');
+      expect((await row(first))?.emailState).toBe('sent');
+      await notify();
+      const nextDay = await tick(new Date('2026-10-21T08:00:00Z'));
+      expect(nextDay).toHaveLength(1);
+    });
+  });
+
   describe('the send-time re-check', () => {
     it('drops a row read in the app before its email, opening the ticket included', async () => {
       const id = await notify();
@@ -451,6 +597,30 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(
         (await call('GET', `/api/brands/${seeded.brandId}/tickets/${ticketId}`, sam)).status,
       ).toBe(200);
+      const [readEvent] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select().from(outbox).where(eq(outbox.event, NOTIFICATION_EVENTS.read)),
+      );
+      expect(readEvent?.payload).toMatchObject({ userId: sam.id, notificationId: id });
+      const frames: unknown[] = [];
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        createNotificationReadHandler({
+          broadcast: { emit: async (frame) => void frames.push(frame) },
+        })({
+          tx,
+          brandId: seeded.brandId,
+          payload: readEvent?.payload ?? {},
+          outboxId: readEvent?.id ?? '',
+          event: NOTIFICATION_EVENTS.read,
+          log: silentLogger,
+        }),
+      );
+      expect(frames).toMatchObject([
+        {
+          rooms: [`user:${sam.id}`],
+          event: 'notification:created',
+          data: { brandId: seeded.brandId, notificationId: id },
+        },
+      ]);
       clock = at(2);
 
       expect(await send(batchId)).toEqual({ kind: 'done', sent: false });
@@ -506,8 +676,18 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
           withoutSmtp.send(tx, seeded.brandId, batchId),
         ),
       ).toEqual({ kind: 'done', sent: false });
-      expect((await row(id))?.emailState).toBe('skipped_off');
+      expect((await row(id))?.emailState).toBe('skipped_unconfigured');
       expect((await batch(batchId))?.status).toBe('empty');
+      const fresh = await notify();
+      expect(
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          withoutSmtp.schedule(tx, seeded.brandId, fresh),
+        ),
+      ).toBeNull();
+      expect(await row(fresh)).toMatchObject({
+        emailState: 'skipped_unconfigured',
+        emailBatchId: null,
+      });
       expect(warnings).toEqual(['Notification email not sent: this install has no SMTP settings.']);
     });
 

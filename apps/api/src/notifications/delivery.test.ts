@@ -234,13 +234,22 @@ describe('createNotifyProcessor', () => {
     expect(reached).toEqual(['notify.email_batch:lock']);
   });
 
-  it('lets a retired notify.email job left in Redis go, rather than failing it (M14-10)', async () => {
+  it('routes a legacy notify.email job through the upgrade hand-off (M14-10)', async () => {
     const h = harness();
-    const processor = createNotifyProcessor(h.deps, { db: {} as Db, log: h.log });
+    let recovered = false;
+    const processor = createNotifyProcessor(h.deps, {
+      db: {} as Db,
+      log: h.log,
+      email: {
+        'notify.email': async () => {
+          recovered = true;
+        },
+      },
+    });
 
     await expect(
       processor({ name: 'notify.email', id: '1', data: {} } as Job),
     ).resolves.toBeUndefined();
-    expect(h.warnings).toEqual(['retired notification email job let go (M14-10)']);
+    expect(recovered).toBe(true);
   });
 });

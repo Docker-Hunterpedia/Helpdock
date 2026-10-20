@@ -113,7 +113,15 @@ export class NotificationEmailEngine {
     // Read again under the lock: a concurrent delivery may have placed it meanwhile.
     const pacing = await repository.lockPacing(tx, brandId, owner);
     const row = await repository.scheduleFacts(tx, notificationId);
-    if (row?.emailState !== 'pending') {
+    if (row?.emailState === null) {
+      if (!(await repository.recoverLegacy(tx, row, this.#now()))) {
+        this.#deps.log.info(
+          { notificationId },
+          'Legacy notification email dropped: sent, disabled, or older than 24 hours.',
+        );
+        return null;
+      }
+    } else if (row?.emailState !== 'pending') {
       return null;
     }
 
@@ -130,6 +138,10 @@ export class NotificationEmailEngine {
     }
     if (isPaused(preferences, now)) {
       await repository.markRows(tx, [row.id], 'skipped_paused');
+      return null;
+    }
+    if ((await this.#deps.systemSender()) === null) {
+      await repository.markRows(tx, [row.id], 'skipped_unconfigured');
       return null;
     }
     if (preferences.schedule !== 'immediate') {
@@ -311,12 +323,12 @@ export class NotificationEmailEngine {
     const sender = await this.#deps.systemSender();
     if (sender === null) {
       // As in 1.0: retrying cannot make an operator configure SMTP, so the
-      // rows are settled as "email off" for this install rather than kept.
+      // rows are settled as unconfigured rather than kept.
       log.warn(
         { job: notifyEmailBatchJob.name, batchId: batch.id },
         'Notification email not sent: this install has no SMTP settings.',
       );
-      await repository.markRows(tx, ids(sendable), 'skipped_off');
+      await repository.markRows(tx, ids(sendable), 'skipped_unconfigured');
       await repository.updateBatch(tx, batch.id, { status: 'empty' });
       return false;
     }
@@ -479,6 +491,7 @@ export class NotificationEmailEngine {
           userId,
           kind,
           scheduledFor: now,
+          digestTickAt: hour,
           urgent: false,
           createdAt: now,
         }));
@@ -487,6 +500,30 @@ export class NotificationEmailEngine {
     }
 
     return placements;
+  }
+
+  /** Runs in a fresh transaction after a failed send rolled back, including its receipt. */
+  async recordFailure(tx: DbTransaction, brandId: string, batchId: string): Promise<boolean> {
+    const { repository } = this.#deps;
+    const userId = await repository.batchOwner(tx, batchId);
+    if (userId === undefined) return false;
+    await repository.lockPacing(tx, brandId, userId);
+    const batch = await repository.lockBatch(tx, batchId);
+    if (batch?.status !== 'pending') return false;
+    const sendFailures = batch.sendFailures + 1;
+    const failed = sendFailures >= 5;
+    await repository.updateBatch(tx, batchId, {
+      sendFailures,
+      ...(failed ? { status: 'failed' } : {}),
+    });
+    if (failed) {
+      await repository.markRows(
+        tx,
+        ids(await repository.batchItems(tx, batchId)),
+        'skipped_failed',
+      );
+    }
+    return failed;
   }
 
   // -------------------------------------------------------------- rebuild

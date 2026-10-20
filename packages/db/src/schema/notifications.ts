@@ -201,6 +201,10 @@ export const notificationEmailBatches = pgTable(
     urgent: boolean('urgent').notNull().default(false),
     heldSince: timestamp('held_since', { withTimezone: true }),
     seenOnlineAt: timestamp('seen_online_at', { withTimezone: true }),
+    /** Send failures survive BullMQ retries and rebuilds. */
+    sendFailures: integer('send_failures').notNull().default(0),
+    /** Daily repeat guard uses the represented tick, not when its job ran. */
+    digestTickAt: timestamp('digest_tick_at', { withTimezone: true }),
     itemCount: integer('item_count').notNull().default(0),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -2,6 +2,7 @@ import {
   brands,
   contacts,
   type DbTransaction,
+  jobReceipts,
   notificationEmailBatches,
   notificationEmailPacing,
   notificationPrefs,
@@ -29,19 +30,23 @@ export type EmailState =
   | 'skipped_read'
   | 'skipped_paused'
   | 'skipped_off'
-  | 'skipped_scope';
+  | 'skipped_scope'
+  | 'skipped_failed'
+  | 'skipped_unconfigured';
 
 export interface BatchRow {
   readonly id: string;
   readonly brandId: string;
   readonly userId: string;
   readonly kind: BatchKind;
-  readonly status: 'pending' | 'sent' | 'empty';
+  readonly status: 'pending' | 'sent' | 'empty' | 'failed';
+  readonly sendFailures: number;
   readonly scheduledFor: Date;
   readonly urgent: boolean;
   readonly heldSince: Date | null;
   readonly seenOnlineAt: Date | null;
   readonly createdAt: Date;
+  readonly digestTickAt: Date | null;
 }
 
 export interface ScheduleFacts {
@@ -50,6 +55,8 @@ export interface ScheduleFacts {
   readonly kind: NotificationKind;
   readonly emailState: string | null;
   readonly emailBatchId: string | null;
+  readonly email: boolean;
+  readonly createdAt: Date;
 }
 
 export interface BatchItemRow extends BatchItem {
@@ -78,6 +85,8 @@ const batchColumns = {
   heldSince: notificationEmailBatches.heldSince,
   seenOnlineAt: notificationEmailBatches.seenOnlineAt,
   createdAt: notificationEmailBatches.createdAt,
+  digestTickAt: notificationEmailBatches.digestTickAt,
+  sendFailures: notificationEmailBatches.sendFailures,
 };
 
 const toPreferences = (
@@ -210,12 +219,35 @@ export class EmailPacingRepository {
         kind: notifications.kind,
         emailState: notifications.emailState,
         emailBatchId: notifications.emailBatchId,
+        email: notifications.email,
+        createdAt: notifications.createdAt,
       })
       .from(notifications)
       .where(eq(notifications.id, notificationId))
       .limit(1);
 
     return row;
+  }
+
+  /** 1.0 claimed this receipt in the send transaction, so absence proves no send. */
+  async recoverLegacy(tx: DbTransaction, row: ScheduleFacts, now: Date): Promise<boolean> {
+    const [receipt] = await tx
+      .select({ key: jobReceipts.key })
+      .from(jobReceipts)
+      .where(eq(jobReceipts.key, `notify.email:${row.id}`))
+      .limit(1);
+    if (
+      !row.email ||
+      row.createdAt.getTime() < now.getTime() - 86_400_000 ||
+      receipt !== undefined
+    ) {
+      return false;
+    }
+    await tx
+      .update(notifications)
+      .set({ emailState: 'pending' })
+      .where(and(eq(notifications.id, row.id), isNull(notifications.emailState)));
+    return true;
   }
 
   async markRows(
@@ -302,7 +334,7 @@ export class EmailPacingRepository {
           sql`coalesce(${notificationPrefs.emailSchedule}, 'immediate') NOT IN ('hourly', 'daily')`,
         ),
       )
-      .orderBy(asc(notifications.createdAt), asc(notifications.id));
+      .orderBy(asc(notifications.userId), asc(notifications.createdAt), asc(notifications.id));
 
     return rows.map((row) => row.id);
   }
@@ -360,8 +392,9 @@ export class EmailPacingRepository {
       readonly kind: BatchKind;
       readonly scheduledFor: Date;
       readonly urgent: boolean;
-      /** The engine's clock, so the daily repeat guard reads the same time it writes. */
+      /** Creation time from the engine's clock. */
       readonly createdAt: Date;
+      readonly digestTickAt?: Date;
     },
   ): Promise<BatchRow> {
     const [row] = await tx.insert(notificationEmailBatches).values(values).returning(batchColumns);
@@ -381,7 +414,8 @@ export class EmailPacingRepository {
       urgent: boolean;
       heldSince: Date | null;
       seenOnlineAt: Date | null;
-      status: 'pending' | 'sent' | 'empty';
+      status: 'pending' | 'sent' | 'empty' | 'failed';
+      sendFailures: number;
       sentAt: Date;
       itemCount: number;
     }>,
@@ -437,7 +471,7 @@ export class EmailPacingRepository {
       .orderBy(asc(notificationEmailBatches.scheduledFor));
   }
 
-  /** Whether a daily digest was opened for them since `since`: the guard for a repeated local hour. */
+  /** Guard repeated local hours by the tick represented, even if its job ran late. */
   async dailyOpenedSince(
     tx: DbTransaction,
     brandId: string,
@@ -453,7 +487,7 @@ export class EmailPacingRepository {
           eq(notificationEmailBatches.userId, userId),
           eq(notificationEmailBatches.kind, 'daily'),
           notInArray(notificationEmailBatches.status, ['empty']),
-          gte(notificationEmailBatches.createdAt, since),
+          gte(notificationEmailBatches.digestTickAt, since),
         ),
       )
       .limit(1);

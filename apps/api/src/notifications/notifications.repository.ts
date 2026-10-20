@@ -470,8 +470,8 @@ export class NotificationsRepository {
   async markTicketRead(
     tx: DbTransaction,
     { userId, ticketId, at }: { userId: string; ticketId: string; at: Date },
-  ): Promise<void> {
-    await tx
+  ): Promise<string[]> {
+    const rows = await tx
       .update(notifications)
       .set({ readAt: at })
       .where(
@@ -480,7 +480,9 @@ export class NotificationsRepository {
           eq(notifications.ticketId, ticketId),
           isNull(notifications.readAt),
         ),
-      );
+      )
+      .returning({ id: notifications.id });
+    return rows.map((row) => row.id);
   }
 
   async markAllRead(
@@ -536,7 +538,7 @@ export class NotificationsRepository {
   async savePreferences(
     tx: DbTransaction,
     userId: string,
-    preferences: NotificationPreferences,
+    preferences: NotificationPreferences | undefined,
     email: {
       readonly emailSchedule?: EmailSchedule | undefined;
       readonly digestHour?: number | undefined;
@@ -548,10 +550,14 @@ export class NotificationsRepository {
     ) as typeof email;
     await tx
       .insert(notificationPrefs)
-      .values({ userId, preferences, ...choices })
+      .values({ userId, preferences: preferences ?? {}, ...choices })
       .onConflictDoUpdate({
         target: notificationPrefs.userId,
-        set: { preferences, ...choices, updatedAt: sql`now()` },
+        set: {
+          ...(preferences === undefined ? {} : { preferences }),
+          ...choices,
+          updatedAt: sql`now()`,
+        },
       });
   }
 

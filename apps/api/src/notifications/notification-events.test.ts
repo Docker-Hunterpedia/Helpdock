@@ -19,6 +19,7 @@ import {
   CONSUMED_EVENTS,
   createFanOutHandler,
   createNotificationCreatedHandler,
+  createNotificationReadHandler,
   createPushTestHandler,
   NOTIFICATION_EVENTS,
   planFor,
@@ -584,5 +585,29 @@ describe('the push test handler', () => {
 
   it('pushes nothing to a browser that has changed hands since', async () => {
     expect(await press(LINA)).toEqual([]);
+  });
+});
+
+describe('ticket-read bell invalidation', () => {
+  it('refreshes the recipient bell on the existing realtime path', async () => {
+    const frames: RealtimeBroadcastInput[] = [];
+    await createNotificationReadHandler({
+      broadcast: { emit: async (frame) => void frames.push(frame) },
+    })({
+      outboxId: OUTBOX,
+      brandId: BRAND,
+      event: NOTIFICATION_EVENTS.read,
+      payload: { userId: OMAR, notificationId: NOTIFICATION },
+      tx: {} as DbTransaction,
+      log: silentLogger,
+    });
+    expect(frames).toEqual([
+      {
+        rooms: [userRoom(OMAR)],
+        event: REALTIME_EVENTS.notificationCreated,
+        data: { brandId: BRAND, notificationId: NOTIFICATION },
+        seq: null,
+      },
+    ]);
   });
 });

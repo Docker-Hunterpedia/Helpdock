@@ -1,3 +1,4 @@
+import { enqueueOutbox } from '@helpdock/jobs';
 import type {
   Ticket,
   TicketActivityList,
@@ -25,6 +26,7 @@ import { principalHasPermission } from '../auth/permissions.js';
 import { type Principal, principalIdOf } from '../auth/principal.js';
 import { Requires } from '../auth/route-declaration.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
+import { NOTIFICATION_EVENTS } from '../notifications/notification-events.js';
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import {
   MessageCreateRequestDto,
@@ -114,11 +116,18 @@ export class TicketsController {
     const principal = this.#principal();
     if (principal.type === 'staff') {
       // Opening it is reading it: its notifications drop out of a pending email (M14-10).
-      await notifications.markTicketRead(getTx(), {
+      const [notificationId] = await notifications.markTicketRead(getTx(), {
         userId: principal.id,
         ticketId,
         at: new Date(),
       });
+      if (notificationId !== undefined) {
+        await enqueueOutbox(getTx(), {
+          brandId,
+          event: NOTIFICATION_EVENTS.read,
+          payload: { userId: principal.id, notificationId },
+        });
+      }
     }
 
     return detail;

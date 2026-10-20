@@ -12,7 +12,7 @@ import {
 import { DelayedError, type Job, type Queue } from 'bullmq';
 import { ne } from 'drizzle-orm';
 import { withSystemJob } from '../tenant/system-job.js';
-import type { NotificationEmailEngine, Placement } from './email-engine.js';
+import type { NotificationEmailEngine, Placement, SendOutcome } from './email-engine.js';
 
 /**
  * The `notify` queue's four M14-10 jobs around {@link NotificationEmailEngine}:
@@ -108,20 +108,39 @@ export const createEmailJobProcessors = ({
   };
   const jobIdOf = (job: Job): string => job.id ?? job.name;
 
+  const schedule = async (job: Job): Promise<void> => {
+    const { brandId, notificationId } = parseJobPayloadOrFail(notifyEmailScheduleJob, job.data);
+    const placement = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
+      engine.schedule(tx, brandId, notificationId),
+    );
+    await placeAll(brandId, placement === null ? [] : [placement]);
+  };
+
   return {
-    [notifyEmailScheduleJob.name]: async (job: Job): Promise<void> => {
-      const { brandId, notificationId } = parseJobPayloadOrFail(notifyEmailScheduleJob, job.data);
-      const placement = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
-        engine.schedule(tx, brandId, notificationId),
-      );
-      await placeAll(brandId, placement === null ? [] : [placement]);
-    },
+    // Upgrade hand-off: the retired payload names the same brand and notification.
+    'notify.email': schedule,
+    [notifyEmailScheduleJob.name]: schedule,
 
     [notifyEmailBatchJob.name]: async (job: Job, token?: string): Promise<void> => {
       const { brandId, batchId } = parseJobPayloadOrFail(notifyEmailBatchJob, job.data);
-      const outcome = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
-        engine.send(tx, brandId, batchId),
-      );
+      let outcome: SendOutcome;
+      try {
+        outcome = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
+          engine.send(tx, brandId, batchId),
+        );
+      } catch (error) {
+        const failed = await withSystemJob(db, brandId, jobIdOf(job), (tx) =>
+          engine.recordFailure(tx, brandId, batchId),
+        );
+        if (failed) {
+          log.warn(
+            { brandId, batchId },
+            'Notification email batch failed after 5 send attempts; rows skipped.',
+          );
+          return;
+        }
+        throw error;
+      }
       if (outcome.kind === 'later') {
         // Early, over a cap, or held while its recipient is online: the
         // reason is committed with the batch, so the job only has to wait.

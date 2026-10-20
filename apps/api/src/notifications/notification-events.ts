@@ -62,6 +62,7 @@ import { channelsFor, eligibleRecipients, mentionedStaff, type StaffFacts } from
 
 export const NOTIFICATION_EVENTS = {
   created: 'notification.created',
+  read: 'notification.read',
   pushTest: 'notification.push_test',
 } as const;
 
@@ -476,6 +477,21 @@ export const createPushTestHandler =
     });
   };
 
+/** Reuses the bell's invalidation frame, without scheduling email or push again. */
+export const createNotificationReadHandler =
+  ({ broadcast }: Pick<DeliveryDeps, 'broadcast'>): OutboxEventHandler =>
+  async ({ brandId, payload }) => {
+    const { userId, notificationId } = z
+      .object({ userId: z.uuid(), notificationId: z.uuid() })
+      .parse(payload);
+    await broadcast.emit({
+      rooms: [userRoom(userId)],
+      event: REALTIME_EVENTS.notificationCreated,
+      data: { brandId, notificationId },
+      seq: null,
+    });
+  };
+
 /**
  * Called by the worker's start-up, after the tickets module has registered its
  * own handlers, so on the events both handle the socket frame goes first.
@@ -491,6 +507,7 @@ export const registerNotificationHandlers = (deps: FanOutDeps & DeliveryDeps): v
     registerEventHandler(event, fanOut, NOTIFICATIONS_SUBSCRIBER);
   }
 
+  registerEventHandler(NOTIFICATION_EVENTS.read, createNotificationReadHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.created, createNotificationCreatedHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.pushTest, createPushTestHandler(deps));
 };

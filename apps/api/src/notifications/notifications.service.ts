@@ -162,11 +162,7 @@ export class NotificationsService {
       update.pausedUntil === undefined || update.pausedUntil === null
         ? update.pausedUntil
         : this.#pauseEnd(update.pausedUntil);
-    const preferences =
-      update.preferences ??
-      resolveNotificationPreferences(await this.#repository.storedPreferences(tx, userId));
-
-    await this.#repository.savePreferences(tx, userId, preferences, {
+    await this.#repository.savePreferences(tx, userId, update.preferences, {
       emailSchedule: update.emailSchedule,
       digestHour: update.digestHour,
       pausedUntil,

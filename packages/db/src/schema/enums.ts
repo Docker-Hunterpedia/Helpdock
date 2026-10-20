@@ -392,7 +392,7 @@ export const notificationKindEnum = pgEnum('notification_kind', [
 /**
  * M14-10. Where one notification's email is (DOMAIN-RULES §20). Null on a row
  * made without email, and on rows from before M14-10. A `skipped_*` row is
- * never sent later; `withdrawn` is for an undone bulk change (M14-03).
+ * never sent later; `withdrawn` is reserved for M14-03 (an undone bulk change).
  */
 export const notificationEmailStateEnum = pgEnum('notification_email_state', [
   'pending',
@@ -401,6 +401,8 @@ export const notificationEmailStateEnum = pgEnum('notification_email_state', [
   'skipped_paused',
   'skipped_off',
   'skipped_scope',
+  'skipped_failed',
+  'skipped_unconfigured',
   'withdrawn',
 ]);
 
@@ -424,6 +426,7 @@ export const notificationEmailBatchStatusEnum = pgEnum('notification_email_batch
   'pending',
   'sent',
   'empty',
+  'failed',
 ]);
 
 /** M5-01. Where one language of an article is in its life (REQUIREMENTS §4.5). */

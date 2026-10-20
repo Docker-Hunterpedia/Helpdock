@@ -44,7 +44,7 @@ interface Calls {
   since?: Date;
   unreadOnly?: boolean;
   outbox: { event: string; payload: unknown }[];
-  saved?: NotificationPreferences;
+  saved?: NotificationPreferences | undefined;
   email: Record<string, unknown>;
 }
 
@@ -74,7 +74,7 @@ const service = ({
     savePreferences: async (
       _tx: DbTransaction,
       _user: string,
-      saved: NotificationPreferences,
+      saved: NotificationPreferences | undefined,
       email: Record<string, unknown>,
     ) => {
       calls.saved = saved;
@@ -231,7 +231,7 @@ describe('NotificationsService — preferences', () => {
 
     await notifications.updatePreferences(tx, ME, { emailSchedule: 'daily', digestHour: 7 });
 
-    expect(calls.saved).toEqual(NOTIFICATION_PREFERENCE_DEFAULTS);
+    expect(calls.saved).toBeUndefined();
     expect(calls.email).toEqual({ emailSchedule: 'daily', digestHour: 7, pausedUntil: undefined });
   });
 

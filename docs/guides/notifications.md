@@ -124,6 +124,13 @@ own, it is the brand's time zone. On the day summer time ends, an hour that
 happens twice sends one digest; on the day it starts, an hour that does not
 exist sends none, and its rows wait for the next day's.
 
+Daily digests over a cap at their tick wait for the next day's tick. A missed
+cron hour skips that day's daily digest; pending rows wait for the next day.
+The cron runs at UTC hour boundaries. In half-hour or quarter-hour zones,
+08:00 means the tick in local hour 08 (for example, 08:30 in Asia/Kolkata),
+rather than exactly 08:00 local time. The repeat guard records the tick hour,
+even when its queued job runs late.
+
 ### What an email says
 
 Following the `Email/NotificationBatch` artboard:
@@ -154,10 +161,12 @@ again when the email is sent. It is left out, for good, when:
 | Their schedule is Off, they unsubscribed (M14-11), or the row was made with email off | `skipped_off` |
 | They are paused | `skipped_paused` |
 
-A batch whose every row is left out sends nothing. An install without SMTP
-settings sends nothing either: the job logs "Notification email not sent: this
-install has no SMTP settings.", marks the rows `skipped_off` and finishes rather
-than retrying.
+A batch whose every row is left out sends nothing. Missing SMTP is
+`skipped_unconfigured`, distinct from the person's Off choice. Scheduling
+checks SMTP before opening a batch, so an unconfigured install does not churn
+batch or presence-hold jobs. If SMTP is removed after scheduling, send time
+also marks rows `skipped_unconfigured`, logs a warning and finishes without
+retrying.
 
 ### Pause
 
@@ -265,6 +274,21 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 | `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour` and `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and keeps the rest |
 | `POST /api/me/push-subscriptions` | signed in | `PushSubscription.toJSON()` plus a label; `https` endpoints only |
 | `DELETE /api/me/push-subscriptions/:id` | signed in | Removes one of the caller's browsers |
+
+## Upgrade and failed batches
+
+A leftover 1.0 `notify.email` job and a delayed `notification.created` event
+both recover a row whose `email_state` is null only if its email flag is on,
+it is at most 24 hours old, and `job_receipts` has no `notify.email:<id>` receipt.
+The old sender claimed that receipt in the send transaction. Older, disabled,
+or already-sent legacy rows are dropped with an info log.
+
+Send failures (including rendering failures) are counted durably on the batch
+across BullMQ retries and rebuilds. After five failed attempts, its remaining
+rows become `skipped_failed`, the batch becomes `failed`, and its pending slot
+is released. The worker logs that terminal transition once at warn; new
+notifications can open a fresh batch.
+
 
 ## Known gaps
 

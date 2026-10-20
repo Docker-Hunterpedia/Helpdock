@@ -24,9 +24,6 @@ import type { PushPayload, PushSender, VapidKeys } from './push.js';
  * because retrying it cannot make an operator configure push.
  */
 
-/** 1.0's one email per notification, retired by M14-10; a job left in Redis from before is let go. */
-const RETIRED_EMAIL_JOB = 'notify.email';
-
 /** What push reads from the install's settings, as late as possible. */
 export interface DeliverySettings {
   vapidKeys(): Promise<VapidKeys | null>;
@@ -165,10 +162,6 @@ export const createNotifyProcessor = (
   return async (job, token) => {
     if (job.name === notifyPushJob.name) {
       return pushJob(job);
-    }
-    if (job.name === RETIRED_EMAIL_JOB) {
-      log.info({ job: job.name, jobId: job.id }, 'retired notification email job let go (M14-10)');
-      return;
     }
     const emailJob = email[job.name];
     if (emailJob === undefined) {

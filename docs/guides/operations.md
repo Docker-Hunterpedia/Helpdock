@@ -555,6 +555,18 @@ the migrations it runs at boot.
 Migrations are forward-only and run when the api boots, so an upgrade is a new
 image tag and a restart.
 
+**Inbound parse webhooks on 1.0.x (#345).** The original 1.0.0 Caddyfiles block
+these webhooks with a 404. Existing installs need the corrected
+`docker/caddy/Caddyfile` (or `Caddyfile.cloudflare` when selected by `CADDYFILE`)
+from a release containing this fix; changing the application image alone does
+not update the bind-mounted configuration. If you maintain a custom Caddyfile,
+add a `handle /internal/inbound-parse/*` that reverse-proxies to `api:3000`
+before the `/internal/*` 404 on the API and admin hosts, preserving the existing
+proxy headers. Keep every other internal path blocked, and keep all internal
+paths blocked on brand help-center hosts. After updating the selected file,
+run `docker compose restart caddy` from `docker/`. Providers should use the
+[API-host URL and shared secret](email.md#inbound-parse-webhooks).
+
 1. Read the release notes. They flag any migration a restore cannot undo; none
    is planned for 1.x.
 2. Take a dump ([Backups](#backups)).

@@ -34,6 +34,12 @@ Point both hostnames at the server's public address:
 the chat widget and its WebSocket endpoint. They can be any two names you
 control — they are what you put in `ADMIN_HOST` and `API_HOST` below.
 
+Point email parse providers at `https://<API_HOST>/internal/inbound-parse/<provider>`
+([receiving mail](email.md#inbound-parse-webhooks)). The bundled Caddyfiles allow
+that path on the API and admin hosts, while blocking other `/internal/*` paths.
+Brand help-center hosts block all internal paths. Existing 1.0.x installs need
+the [Caddy routing fix](operations.md#upgrading) to receive parse webhooks.
+
 A brand's help center gets its own domain later, in admin, and needs no
 configuration here: Caddy issues a certificate for it the first time a browser
 asks, after the api has confirmed the domain was verified (see

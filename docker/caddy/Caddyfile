@@ -27,24 +27,35 @@
 	}
 }
 
-# Everything the api is allowed to be asked from the outside. `/internal/*` is
-# not: those routes exist for Caddy and for other containers on this network
-# (ARCHITECTURE §7), and `ask` above reaches them without passing through here.
+# Preserve the same forwarding headers for normal requests and parse webhooks.
+(helpdock_proxy) {
+	reverse_proxy api:3000 {
+		# Overwritten, never merged: the request id an operator greps for
+		# must be one Caddy chose, not one a client sent (apps/api/README).
+		header_up X-Request-Id {http.request.uuid}
+		# X-Forwarded-For, -Proto and -Host are set by reverse_proxy itself,
+		# replacing what a client sent unless the peer is a trusted proxy;
+		# the api believes them only under TRUST_PROXY (docker-compose.yml).
+		header_up X-Forwarded-Host {host}
+	}
+}
+
+# Parse providers use the API hosts; brand hosts keep internal routes blocked.
+(helpdock_inbound_parse) {
+	handle /internal/inbound-parse/* {
+		import helpdock_proxy
+	}
+}
+
+# Block internal routes except the explicit parse handler on the API hosts.
+# The TLS `ask` above reaches domain-check directly on the container network.
 (helpdock_upstream) {
 	handle /internal/* {
 		respond "Not found" 404
 	}
 
 	handle {
-		reverse_proxy api:3000 {
-			# Overwritten, never merged: the request id an operator greps for
-			# must be one Caddy chose, not one a client sent (apps/api/README).
-			header_up X-Request-Id {http.request.uuid}
-			# X-Forwarded-For, -Proto and -Host are set by reverse_proxy itself,
-			# replacing what a client sent unless the peer is a trusted proxy;
-			# the api believes them only under TRUST_PROXY (docker-compose.yml).
-			header_up X-Forwarded-Host {host}
-		}
+		import helpdock_proxy
 	}
 }
 
@@ -59,11 +70,13 @@
 
 {$ADMIN_HOST} {
 	import helpdock_hsts
+	import helpdock_inbound_parse
 	import helpdock_upstream
 }
 
 {$API_HOST} {
 	import helpdock_hsts
+	import helpdock_inbound_parse
 	import helpdock_upstream
 }
 

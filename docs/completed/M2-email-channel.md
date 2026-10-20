@@ -101,6 +101,13 @@ All four tables are in `TENANT_TABLES` and the RLS negative suite.
 
 ## Gaps and follow-ups
 
+M2-03 follow-up #345 corrects both bundled Caddyfiles to proxy
+`/internal/inbound-parse/*` on the API and admin hosts before the internal 404.
+Brand help-center hosts still block every internal path. The regression suite
+`scripts/caddy.test.ts` checks the route order with the real `caddy adapt`;
+existing 1.0.x installs must update their selected Caddyfile and restart Caddy
+([upgrade note](../guides/operations.md#upgrading)).
+
 Written down and carried forward. None of them blocks M4, M5, M6 or M8.
 
 | Gap | Why it was accepted | Where it is written down |

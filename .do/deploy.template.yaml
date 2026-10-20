@@ -1,0 +1,106 @@
+# Reference template only: the DO button cannot deploy workers + managed Valkey.
+# Import .do/app.yaml manually; see docs/guides/deploy.md#digitalocean.
+spec:
+  # Full App Platform spec for manual import, NOT supported by the DO deploy button.
+  # Create managed PostgreSQL/Valkey first; replace cluster names below.
+  # Fill all empty env values before applying. See docs/guides/deploy.md#digitalocean.
+  name: helpdock
+  region: fra
+  services:
+    - name: api
+      image:
+        registry_type: GHCR
+        registry: docker-hunterpedia
+        repository: helpdock
+        tag: 1.0.3
+      http_port: 3000
+      instance_count: 1
+      instance_size_slug: apps-s-1vcpu-2gb
+      health_check:
+        http_path: /ready
+        initial_delay_seconds: 60
+      envs:
+        - key: APP_ROLE
+          value: api
+        - key: TRUST_PROXY
+          value: uniquelocal
+  workers:
+    - name: worker
+      image:
+        registry_type: GHCR
+        registry: docker-hunterpedia
+        repository: helpdock
+        tag: 1.0.3
+      instance_count: 1
+      instance_size_slug: apps-s-1vcpu-2gb
+      envs:
+        - key: APP_ROLE
+          value: worker
+  # Managed databases must already exist. The runtime URL must name helpdock_app,
+  # not doadmin. Keep both URLs on the same database, with sslmode=require.
+  databases:
+    - name: postgres
+      engine: PG
+      production: true
+      cluster_name: replace-with-postgres-cluster
+      db_name: helpdock
+      db_user: doadmin
+    - name: redis
+      engine: VALKEY
+      production: true
+      cluster_name: replace-with-valkey-cluster
+  # HTTP and WebSocket upgrade requests use the same port and unchanged paths.
+  ingress:
+    rules:
+      - component:
+          name: api
+        match:
+          path:
+            prefix: /
+  envs:
+    - key: NODE_ENV
+      value: production
+      scope: RUN_TIME
+    - key: APP_URL
+      value: ${APP_URL}
+      scope: RUN_TIME
+    - key: APP_MASTER_KEY
+      value: ''
+      type: SECRET
+      scope: RUN_TIME
+    - key: HD_SETUP_TOKEN
+      value: ''
+      type: SECRET
+      scope: RUN_TIME
+    - key: DATABASE_URL
+      value: ''
+      type: SECRET
+      scope: RUN_TIME
+    - key: DATABASE_MIGRATION_URL
+      value: ${postgres.DATABASE_URL}
+      type: SECRET
+      scope: RUN_TIME
+    - key: REDIS_URL
+      value: ${redis.DATABASE_URL}
+      type: SECRET
+      scope: RUN_TIME
+    - key: S3_ENDPOINT
+      value: ''
+      scope: RUN_TIME
+    - key: S3_REGION
+      value: ''
+      scope: RUN_TIME
+    - key: S3_BUCKET
+      value: ''
+      scope: RUN_TIME
+    - key: S3_ACCESS_KEY_ID
+      value: ''
+      type: SECRET
+      scope: RUN_TIME
+    - key: S3_SECRET_ACCESS_KEY
+      value: ''
+      type: SECRET
+      scope: RUN_TIME
+    - key: S3_FORCE_PATH_STYLE
+      value: 'false'
+      scope: RUN_TIME

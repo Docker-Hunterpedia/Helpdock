@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# Provision, then set DATABASE_URL for helpdock_app using the new DB's internal
+# host. See docs/guides/deploy.md#render before pressing Deploy.
+services:
+  - type: web
+    name: helpdock-api
+    runtime: image
+    image:
+      url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
+    plan: standard
+    region: frankfurt
+    autoDeployTrigger: off
+    healthCheckPath: /ready
+    envVars:
+      - key: APP_ROLE
+        value: api
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '3000'
+      - key: TRUST_PROXY
+        value: uniquelocal
+      - key: APP_URL
+        sync: false
+      - key: APP_MASTER_KEY
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: HD_SETUP_TOKEN
+        generateValue: true
+      # Retain this generated password when composing DATABASE_URL after provisioning.
+      - key: HELPDOCK_APP_PASSWORD
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_MIGRATION_URL
+        fromDatabase:
+          name: helpdock-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: helpdock-redis
+          property: connectionString
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: 'false'
+  - type: worker
+    name: helpdock-worker
+    runtime: image
+    image:
+      url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
+    plan: standard
+    region: frankfurt
+    autoDeployTrigger: off
+    envVars:
+      - key: APP_ROLE
+        value: worker
+      - key: NODE_ENV
+        value: production
+      - key: APP_URL
+        fromService: {type: web, name: helpdock-api, envVarKey: APP_URL}
+      - key: APP_MASTER_KEY
+        fromService: {type: web, name: helpdock-api, envVarKey: APP_MASTER_KEY}
+      - key: DATABASE_URL
+        fromService: {type: web, name: helpdock-api, envVarKey: DATABASE_URL}
+      - key: DATABASE_MIGRATION_URL
+        fromService: {type: web, name: helpdock-api, envVarKey: DATABASE_MIGRATION_URL}
+      - key: REDIS_URL
+        fromService: {type: web, name: helpdock-api, envVarKey: REDIS_URL}
+      - key: S3_ENDPOINT
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_ENDPOINT}
+      - key: S3_REGION
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_REGION}
+      - key: S3_BUCKET
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_BUCKET}
+      - key: S3_ACCESS_KEY_ID
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_ACCESS_KEY_ID}
+      - key: S3_SECRET_ACCESS_KEY
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_SECRET_ACCESS_KEY}
+      - key: S3_FORCE_PATH_STYLE
+        fromService: {type: web, name: helpdock-api, envVarKey: S3_FORCE_PATH_STYLE}
+  - type: keyvalue
+    name: helpdock-redis
+    region: frankfurt
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+databases:
+  - name: helpdock-postgres
+    region: frankfurt
+    plan: basic-1gb
+    postgresMajorVersion: '17'
+    databaseName: helpdock
+    user: helpdock_owner
+    ipAllowList: []

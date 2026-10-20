@@ -1,5 +1,9 @@
 # Install
 
+For Dokploy, Coolify, Render, DigitalOcean App Platform or an existing reverse
+proxy, use the [deploy paths guide](deploy.md). Managed platforms have additional
+provisioning steps and no on-demand TLS for brand domains.
+
 How to run Helpdock on your own server with Docker Compose. Developers building
 the project instead want [the development guide](development.md).
 

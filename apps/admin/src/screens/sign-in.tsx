@@ -27,6 +27,7 @@ const EMAIL_ERROR_KEYS = {
 
 const OAUTH_PROVIDERS = [
   { provider: 'google', labelKey: 'auth:signIn.google' },
+  { provider: 'microsoft', labelKey: 'auth:signIn.microsoft' },
   { provider: 'github', labelKey: 'auth:signIn.github' },
 ] as const satisfies readonly { provider: OauthProvider; labelKey: string }[];
 
@@ -51,7 +52,14 @@ function ProviderButtons({ api }: { readonly api: AuthApi }): ReactNode {
   }
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+    <Box
+      sx={{
+        display: 'grid',
+        // Equal columns for one, two or three providers (`Admin/Login-Providers`).
+        gridTemplateColumns: `repeat(${enabled.length}, minmax(0, 1fr))`,
+        gap: 3,
+      }}
+    >
       {enabled.map(({ provider, labelKey }) => (
         <Button
           key={provider}

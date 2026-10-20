@@ -69,6 +69,27 @@ test.describe('accepting an invitation', () => {
     ).toBeVisible();
   });
 
+  test('offers Microsoft between Google and GitHub, and accepts with it', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.goto(`/invite/${MOCK_INVITE_TOKEN}`);
+
+    const group = page.getByRole('group', { name: t('auth:invite.providers.label') });
+    await expect(group.getByRole('button')).toHaveText([
+      t('auth:signIn.google'),
+      t('auth:signIn.microsoft'),
+      t('auth:signIn.github'),
+    ]);
+    await page.getByLabel(t('auth:invite.nameLabel')).fill('Karim Aziz');
+    await group.getByRole('button', { name: t('auth:signIn.microsoft') }).click();
+
+    await expect(
+      page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
+    ).toBeVisible();
+  });
+
   test('comes back with the mismatch when the provider account is another address', async ({
     page,
     appLocale: locale,

@@ -1,7 +1,18 @@
-import { type Db, type UserOauthIdentity, userOauthIdentities } from '@helpdock/db';
+import {
+  auditLog,
+  type Db,
+  type DbTransaction,
+  INSTALL_SCOPE_BRAND_ID,
+  type UserOauthIdentity,
+  userOauthIdentities,
+  withTenant,
+} from '@helpdock/db';
 import type { OauthProvider } from '@helpdock/schemas';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq, notInArray, sql } from 'drizzle-orm';
 import type { Queryable } from '../staff.repository.js';
+
+/** Thrown inside the replacement transaction so it rolls back whole. */
+class ReplacementRefused extends Error {}
 
 export interface OauthLink {
   readonly userId: string;
@@ -101,6 +112,118 @@ export class OauthIdentityRepository {
           eq(userOauthIdentities.providerSubject, subject),
         ),
       );
+  }
+
+  /**
+   * Replaces a person's Microsoft identity that names a tenant the install no
+   * longer accepts with a new link, and everything that must go with it, in one
+   * transaction scoped to `brandId` (and to the install scope for the audit row):
+   * a failure anywhere leaves the old row, no audit row and no email.
+   *
+   * `none` when they have no Microsoft identity, so the caller links normally;
+   * `conflict` when the one they have is still accepted, or the new subject is
+   * bound to somebody else. A stranded row cannot sign anyone in, so leaving it
+   * until its holder reconnects costs nothing, and deleting it for them would
+   * remove a sign-in method behind the last-way-in guard's back.
+   */
+  async replaceStrandedMicrosoft({
+    link,
+    acceptedTenants,
+    brandId,
+    afterReplace,
+  }: {
+    readonly link: OauthLink;
+    readonly acceptedTenants: readonly string[];
+    readonly brandId: string;
+    afterReplace(tx: DbTransaction): Promise<void>;
+  }): Promise<'replaced' | 'none' | 'conflict'> {
+    const tenantOf = (subject: string): string => subject.slice(0, subject.indexOf(':'));
+    try {
+      return await withTenant(
+        this.#db,
+        {
+          brandIds: [brandId, INSTALL_SCOPE_BRAND_ID],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'auth',
+        },
+        async (tx) => {
+          const [existing] = await tx
+            .select()
+            .from(userOauthIdentities)
+            .where(
+              and(
+                eq(userOauthIdentities.userId, link.userId),
+                eq(userOauthIdentities.provider, 'microsoft'),
+              ),
+            );
+          if (existing === undefined) {
+            return 'none';
+          }
+          if (acceptedTenants.includes(tenantOf(existing.providerSubject))) {
+            return 'conflict';
+          }
+
+          await tx.delete(userOauthIdentities).where(eq(userOauthIdentities.id, existing.id));
+          const inserted = await tx
+            .insert(userOauthIdentities)
+            .values({
+              userId: link.userId,
+              provider: 'microsoft',
+              providerSubject: link.subject,
+              emailAtLink: link.email,
+              linkedVia: link.via,
+              lastUsedAt: link.via === 'connect' ? null : new Date(),
+            })
+            .onConflictDoNothing()
+            .returning({ id: userOauthIdentities.id });
+          if (inserted.length === 0) {
+            throw new ReplacementRefused();
+          }
+          await tx.insert(auditLog).values({
+            brandId: INSTALL_SCOPE_BRAND_ID,
+            actorType: link.via === 'connect' ? 'staff' : 'system',
+            actorId: link.via === 'connect' ? link.userId : 'auth',
+            action: 'auth.oauth.identity_replaced',
+            targetType: 'user',
+            targetId: link.userId,
+            meta: {
+              provider: 'microsoft',
+              via: link.via,
+              fromTenant: tenantOf(existing.providerSubject),
+              toTenant: tenantOf(link.subject),
+            },
+          });
+          await afterReplace(tx);
+
+          return 'replaced';
+        },
+      );
+    } catch (error) {
+      if (error instanceof ReplacementRefused) {
+        return 'conflict';
+      }
+      throw error;
+    }
+  }
+
+  /** How many Microsoft identities name a tenant outside `acceptedTenants`: for a boot-time warning, never a write. */
+  async countMicrosoftOutside(acceptedTenants: readonly string[], tx?: Queryable): Promise<number> {
+    if (acceptedTenants.length === 0) {
+      return 0;
+    }
+    const [row] = await (tx ?? this.#db)
+      .select({ total: count() })
+      .from(userOauthIdentities)
+      .where(
+        and(
+          eq(userOauthIdentities.provider, 'microsoft'),
+          notInArray(sql`split_part(${userOauthIdentities.providerSubject}, ':', 1)`, [
+            ...acceptedTenants,
+          ]),
+        ),
+      );
+    return row?.total ?? 0;
   }
 
   /** The address the removed link was made with, or undefined when there was none to remove. */

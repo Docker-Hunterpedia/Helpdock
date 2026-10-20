@@ -5,8 +5,8 @@ Date: 2026-10-20
 
 Accepted with the 1.0.1 security fix, which implements the binding for Google
 and GitHub (see "Implementation" below). M18-07 adds the Google allow-list and
-binding at invitation acceptance; the Microsoft provider and passkey step-up
-are still to be built in M18 (M18-08 and the passkey deliverables).
+binding at invitation acceptance; M18-08 adds the Microsoft provider; passkey
+step-up is still to be built in M18 (the passkey deliverables).
 
 ## Context
 
@@ -99,10 +99,27 @@ the invitation and the security page control:
   and emailed the same way.
 - The second-factor check after OAuth is unchanged.
 
-Left for M18: Microsoft (decision 5), the allow-lists (decision 4), a passkey
+Left for M18: Microsoft (decision 5, built in M18-08), the allow-lists (decision 4), a passkey
 as step-up, binding at invitation acceptance (the invitation form has no
 provider option yet), and the Security › Sign-in methods control, which needs
 its artboard first.
+
+## Implementation (M18-08, Microsoft)
+
+Decisions 4 and 5 for Microsoft. `oauth_provider` gains `microsoft`
+(`0064_oauth_microsoft_provider`); the subject stored is `<tid>:<oid>`, which
+is why the table still needs no issuer column (one tenant per install). The
+issuer is `https://login.microsoftonline.com/<tenantId>/v2.0`, and `tid` must
+equal `oauth.microsoft.tenantId`, a GUID: `common`, `organizations`,
+`consumers` and the personal-accounts tenant are refused by the setting's
+schema. A first link needs `email`, `xms_edov: true` and `acct: 0`, through the
+same predicate the SSO OIDC preset uses; a guest is never authoritative.
+`oauth.microsoft.allowConsumers` (D-52, off by default) accepts the consumers
+tenant as a second exact issuer; a personal account only connects from a
+session, never links by address. Changing the tenant strands the identities of
+tenants no longer accepted; none is deleted (a stranded row cannot sign in, and
+deleting it would bypass the last-way-in guard). Each is replaced when its
+holder links again, in one transaction with an audit row and the email.
 
 ## Implementation (1.0.2)
 

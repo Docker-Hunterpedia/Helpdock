@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createKeyring } from './crypto.js';
 import { ENV_KEYS } from './env.js';
 import {
   isSettingKey,
@@ -8,6 +9,7 @@ import {
   settingsSchema,
   toEnvKey,
 } from './registry.js';
+import { createSettings, InMemorySettingsStore } from './settings.js';
 
 describe('toEnvKey', () => {
   it('prefixes HD_ and turns dots and camel case into underscores', () => {
@@ -58,6 +60,7 @@ describe('the settings registry', () => {
     expect(secrets).toEqual([
       'smtp.password',
       'oauth.google.clientSecret',
+      'oauth.microsoft.clientSecret',
       'oauth.github.clientSecret',
       'sso.spPrivateKey',
       'auth.jwtSigningKey',
@@ -155,5 +158,56 @@ describe('the Meta app settings (M10-01)', () => {
     expect(settingsSchema['meta.appId'].safeParse('').success).toBe(true);
     expect(settingsSchema['meta.appId'].safeParse('app-123').success).toBe(false);
     expect(settingsSchema['meta.appId'].safeParse('1'.repeat(26)).success).toBe(false);
+  });
+});
+
+describe('oauth.microsoft.tenantId', () => {
+  const TENANT = '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+  const definition = SETTING_DEFINITIONS.find(({ key }) => key === 'oauth.microsoft.tenantId');
+
+  it('lower-cases a GUID pasted as Entra shows it, so an upper-case pin boots', () => {
+    expect(definition?.schema.parse(TENANT.toUpperCase())).toBe(TENANT);
+    expect(definition?.schema.parse('')).toBe('');
+  });
+
+  it.each([['common'], ['organizations'], ['consumers'], ['9188040D-6C67-4C5B-B112-36A304B66DAD']])(
+    'refuses %s',
+    (value) => {
+      expect(definition?.schema.safeParse(value).success).toBe(false);
+    },
+  );
+
+  it('reaches the reader lower-cased from HD_OAUTH_MICROSOFT_TENANT_ID', async () => {
+    const settings = createSettings({
+      env: { HD_OAUTH_MICROSOFT_TENANT_ID: TENANT.toUpperCase() },
+      store: new InMemorySettingsStore(),
+      keyring: createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64') }),
+      invalidation: {
+        subscribe: () => () => {},
+        publish: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+      },
+    });
+
+    await expect(settings.get('oauth.microsoft.tenantId')).resolves.toBe(TENANT);
+    expect(settings.isLockedByEnv('oauth.microsoft.tenantId')).toBe(true);
+  });
+
+  it('keeps personal accounts off by default and pinnable', async () => {
+    const settings = createSettings({
+      env: { HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS: 'true' },
+      store: new InMemorySettingsStore(),
+      keyring: createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 7).toString('base64') }),
+      invalidation: {
+        subscribe: () => () => {},
+        publish: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+      },
+    });
+
+    expect(
+      SETTING_DEFINITIONS.find(({ key }) => key === 'oauth.microsoft.allowConsumers')?.default,
+    ).toBe(false);
+    await expect(settings.get('oauth.microsoft.allowConsumers')).resolves.toBe(true);
   });
 });

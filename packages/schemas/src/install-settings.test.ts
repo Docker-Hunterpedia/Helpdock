@@ -22,6 +22,17 @@ describe('install authentication settings', () => {
         allowedDomainsLocked: false,
         clientSecret: 'must-not-leak',
       },
+      microsoft: {
+        clientId: '',
+        clientIdLocked: false,
+        clientSecretConfigured: false,
+        clientSecretLocked: false,
+        enabled: false,
+        tenantId: '',
+        tenantIdLocked: false,
+        allowConsumers: false,
+        allowConsumersLocked: false,
+      },
       github: {
         clientId: '',
         clientIdLocked: false,
@@ -31,6 +42,7 @@ describe('install authentication settings', () => {
       },
       redirectUrls: {
         google: 'https://support.example.com/api/auth/oauth/google/callback',
+        microsoft: 'https://support.example.com/api/auth/oauth/microsoft/callback',
         github: 'https://support.example.com/api/auth/oauth/github/callback',
       },
     });
@@ -44,6 +56,7 @@ describe('install authentication settings', () => {
         requireTwoFactor: false,
         magicLinkValidityMinutes: 10,
         google: { clientId: 'google-id' },
+        microsoft: { clientId: '', tenantId: '' },
         github: { clientId: '', clientSecret: 'new-secret' },
       }).success,
     ).toBe(true);
@@ -53,9 +66,40 @@ describe('install authentication settings', () => {
         requireTwoFactor: false,
         magicLinkValidityMinutes: 61,
         google: { clientId: '' },
+        microsoft: { clientId: '', tenantId: '' },
         github: { clientId: '' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('the Microsoft tenant', () => {
+  const update = (tenantId: unknown) =>
+    installAuthenticationSettingsUpdateSchema.safeParse({
+      requireTwoFactor: false,
+      magicLinkValidityMinutes: 10,
+      google: { clientId: '' },
+      microsoft: { clientId: 'app-id', tenantId },
+      github: { clientId: '' },
+    });
+  const GUID = '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+
+  it('takes a GUID, trimmed and lower-cased, or empty to turn the provider off', () => {
+    const parsed = update(` ${GUID.toUpperCase()} `);
+
+    expect(parsed.success && parsed.data.microsoft.tenantId).toBe(GUID);
+    expect(update('').success).toBe(true);
+  });
+
+  it.each([
+    ['common'],
+    ['organizations'],
+    ['consumers'],
+    ['contoso.onmicrosoft.com'],
+    [`${GUID}0`],
+    ['9188040d-6c67-4c5b-b112-36a304b66dad'],
+  ])('refuses %s, which is not one work tenant', (tenantId) => {
+    expect(update(tenantId).success).toBe(false);
   });
 });
 
@@ -65,6 +109,7 @@ describe('the allowed Workspace domains', () => {
       requireTwoFactor: false,
       magicLinkValidityMinutes: 10,
       google: { clientId: '', allowedDomains },
+      microsoft: { clientId: '', tenantId: '' },
       github: { clientId: '' },
     });
 

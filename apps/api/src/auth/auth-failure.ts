@@ -26,6 +26,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'oauth-identity-conflict': HttpStatus.FORBIDDEN,
   'oauth-last-sign-in': HttpStatus.CONFLICT,
   'oauth-domain-not-allowed': HttpStatus.FORBIDDEN,
+  'oauth-tenant-mismatch': HttpStatus.FORBIDDEN,
   'invite-expired': HttpStatus.GONE,
   'rate-limited': HttpStatus.TOO_MANY_REQUESTS,
   'invalid-credentials': HttpStatus.UNAUTHORIZED,
@@ -59,6 +60,8 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
     'This provider account is the only way to sign in; set a password or connect another first',
   'oauth-domain-not-allowed':
     'This install accepts Google accounts from its allowed Workspace domains only',
+  'oauth-tenant-mismatch':
+    'This Microsoft account belongs to a different organisation than the one this install trusts',
   'invite-expired': 'That invitation is no longer valid',
   'rate-limited': 'Too many sign-in attempts',
   'invalid-credentials': 'That email and password do not match',

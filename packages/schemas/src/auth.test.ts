@@ -140,7 +140,7 @@ describe('authMethodsSchema', () => {
       authMethodsSchema.parse({
         password: true,
         magicLink: true,
-        oauth: { google: true, github: false },
+        oauth: { google: true, microsoft: false, github: false },
       }).oauth.github,
     ).toBe(false);
   });

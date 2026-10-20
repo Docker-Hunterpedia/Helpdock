@@ -249,7 +249,7 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
       const methods = await auth.authMethods();
       asked = vi.spyOn(auth, 'authMethods').mockResolvedValue({
         ...methods,
-        oauth: { google: false, github: false },
+        oauth: { google: false, microsoft: false, github: false },
       });
     });
 

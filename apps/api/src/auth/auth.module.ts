@@ -3,6 +3,7 @@ import { createKeyring, decodeMasterKey } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import type { CustomFetch } from 'openid-client';
 import type { Logger } from '../logging/logger.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { SsoIdentityService } from '../sso/identity.service.js';
@@ -51,6 +52,8 @@ export interface AuthModuleOptions {
    * module cannot see, and because boot has it in hand already.
    */
   readonly logger: Logger;
+  /** Stands in for Entra in suites; boot leaves it out and the SSRF-safe transport is used. */
+  readonly oauthTransport?: CustomFetch;
 }
 
 export interface AuthRuntime {
@@ -76,6 +79,7 @@ export const createAuthRuntime = ({
   logger,
   signingKeys,
   keyring = createKeyring(env),
+  oauthTransport,
 }: {
   readonly env: Env;
   readonly db: Db;
@@ -84,6 +88,8 @@ export const createAuthRuntime = ({
   readonly logger: Logger;
   readonly signingKeys: SigningKeys;
   readonly keyring?: Keyring;
+  /** Replaces the SSRF-safe transport of Microsoft's flow. Tests only: they stand in for Entra. */
+  readonly oauthTransport?: CustomFetch;
 }): AuthRuntime => {
   const masterKey = decodeMasterKey(env.APP_MASTER_KEY);
   /* c8 ignore next 3 -- `loadEnv` has already refused anything that is not a 32-byte key. */
@@ -132,7 +138,13 @@ export const createAuthRuntime = ({
     tokens: new EmailTokenStore(redis),
     exchanges: new ExchangeStore(redis),
     limiter,
-    oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
+    oauth: new OauthService({
+      settings,
+      redis,
+      logger,
+      appUrl: env.APP_URL,
+      ...(oauthTransport === undefined ? {} : { transport: oauthTransport }),
+    }),
     oauthIdentities: new OauthIdentityRepository({ db }),
     webauthn,
     passkeys: passkeyRows,
@@ -197,6 +209,9 @@ export class AuthModule {
               settings,
               logger: options.logger,
               signingKeys: options.signingKeys,
+              ...(options.oauthTransport === undefined
+                ? {}
+                : { oauthTransport: options.oauthTransport }),
             }),
         },
         {

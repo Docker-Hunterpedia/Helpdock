@@ -383,6 +383,7 @@ test.describe('accessibility', () => {
     for (const [code, provider] of [
       ['oauth-link-required', 'github'],
       ['oauth-domain-not-allowed', 'google'],
+      ['oauth-tenant-mismatch', 'microsoft'],
     ] as const) {
       await page.goto(`/oauth/callback?error=${code}&provider=${provider}`);
       await page
@@ -412,6 +413,12 @@ test.describe('accessibility', () => {
     await domains.fill('lina@gmail.com');
     await domains.press('Enter');
     await page.getByText(t('settings:oauth.allowedDomainsInvalid')).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByLabel(t('settings:oauth.tenantId')).fill('common');
+    await page.getByRole('button', { name: t('common:actions.save') }).click();
+    await page.getByText(t('settings:oauth.tenantIdInvalid')).waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

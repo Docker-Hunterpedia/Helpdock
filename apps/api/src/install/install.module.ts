@@ -1,7 +1,9 @@
 import type { Env, Settings } from '@helpdock/config';
 import type { Db } from '@helpdock/db';
-import { type DynamicModule, Module } from '@nestjs/common';
+import { MICROSOFT_CONSUMERS_TENANT_ID } from '@helpdock/schemas';
+import { type DynamicModule, Module, type OnApplicationBootstrap } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { OauthIdentityRepository } from '../auth/oauth/oauth-identity.repository.js';
 import { PasswordHasher } from '../auth/password.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { SessionService } from '../auth/session/session.service.js';
@@ -36,6 +38,42 @@ export interface InstallModuleOptions {
   readonly logger: Logger;
 }
 
+/**
+ * Counts, at boot, Microsoft identities bound to a tenant the install no longer
+ * accepts, and logs one warning. It writes nothing and emails nobody: such rows
+ * cannot sign anyone in, and each is replaced when its holder connects Microsoft
+ * again or first-links at sign-in. A failure here is logged and never stops boot.
+ */
+class StrandedMicrosoftIdentityNotice implements OnApplicationBootstrap {
+  constructor(
+    private readonly settings: Settings,
+    private readonly identities: OauthIdentityRepository,
+    private readonly logger: Logger,
+  ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const [tenantId, allowConsumers] = await Promise.all([
+        this.settings.get('oauth.microsoft.tenantId'),
+        this.settings.get('oauth.microsoft.allowConsumers'),
+      ]);
+      const stranded = await this.identities.countMicrosoftOutside(
+        tenantId === ''
+          ? []
+          : [tenantId, ...(allowConsumers ? [MICROSOFT_CONSUMERS_TENANT_ID] : [])],
+      );
+      if (stranded > 0) {
+        this.logger.warn(
+          { stranded },
+          'Microsoft sign-in accounts are bound to a tenant this install no longer accepts; each is replaced when its holder connects Microsoft again',
+        );
+      }
+    } catch (error) {
+      this.logger.error({ err: error }, 'Could not count stranded Microsoft identities at boot');
+    }
+  }
+}
+
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class InstallModule {
@@ -50,6 +88,16 @@ export class InstallModule {
           inject: [SETTINGS, ENV],
           useFactory: (settings: Settings, env: Env): InstallSettingsService =>
             new InstallSettingsService(settings, env),
+        },
+        {
+          provide: StrandedMicrosoftIdentityNotice,
+          inject: [SETTINGS, DB],
+          useFactory: (settings: Settings, db: Db) =>
+            new StrandedMicrosoftIdentityNotice(
+              settings,
+              new OauthIdentityRepository({ db }),
+              logger,
+            ),
         },
         {
           provide: SetupService,

@@ -60,6 +60,49 @@ test.describe('signing in', () => {
     await expect(page).toHaveURL(/\/sign-in$/);
   });
 
+  test('offers the three providers in one row, Google then Microsoft then GitHub', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await page.goto('/sign-in');
+
+    const links = page.getByRole('link', {
+      name: new RegExp(
+        `^(${t('auth:signIn.google')}|${t('auth:signIn.microsoft')}|${t('auth:signIn.github')})$`,
+      ),
+    });
+
+    await expect(links).toHaveText([
+      t('auth:signIn.google'),
+      t('auth:signIn.microsoft'),
+      t('auth:signIn.github'),
+    ]);
+    await expect(links.nth(1)).toHaveAttribute('href', /provider=microsoft/);
+  });
+
+  test('a Microsoft account from another tenant is turned away', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const provider = t('auth:signIn.microsoft');
+
+    await page.goto('/oauth/callback?error=oauth-tenant-mismatch&provider=microsoft');
+
+    await expect(
+      page.getByRole('heading', {
+        level: 1,
+        name: t('auth:oauth.refusals.oauth-tenant-mismatch.title', { provider }),
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(t('auth:oauth.refusals.oauth-tenant-mismatch.body', { provider })),
+    ).toBeVisible();
+    await page.getByRole('link', { name: t('auth:backToSignIn') }).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+  });
+
   test('a Google account outside the allowed domains is turned away', async ({
     page,
     appLocale: locale,

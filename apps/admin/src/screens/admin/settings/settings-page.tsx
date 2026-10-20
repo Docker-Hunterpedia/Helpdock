@@ -1,6 +1,7 @@
-import type {
-  InstallAuthenticationSettings,
-  InstallAuthenticationSettingsUpdate,
+import {
+  type InstallAuthenticationSettings,
+  type InstallAuthenticationSettingsUpdate,
+  microsoftTenantIdSchema,
 } from '@helpdock/schemas';
 import {
   Box,
@@ -98,6 +99,10 @@ function AuthenticationSettingsForm({
   );
   const [googleClientId, setGoogleClientId] = useState(settings.google.clientId);
   const [githubClientId, setGithubClientId] = useState(settings.github.clientId);
+  const [microsoftClientId, setMicrosoftClientId] = useState(settings.microsoft.clientId);
+  const [tenantId, setTenantId] = useState(settings.microsoft.tenantId);
+  const [allowConsumers, setAllowConsumers] = useState(settings.microsoft.allowConsumers);
+  const [tenantError, setTenantError] = useState<string | undefined>();
   const [allowedDomains, setAllowedDomains] = useState<readonly string[]>(
     settings.google.allowedDomains,
   );
@@ -106,6 +111,9 @@ function AuthenticationSettingsForm({
   );
   const [githubSecret, setGithubSecret] = useState<string | null>(
     settings.github.clientSecretConfigured ? null : '',
+  );
+  const [microsoftSecret, setMicrosoftSecret] = useState<string | null>(
+    settings.microsoft.clientSecretConfigured ? null : '',
   );
   const [magicLinkError, setMagicLinkError] = useState<string | undefined>();
 
@@ -125,9 +133,14 @@ function AuthenticationSettingsForm({
     setMagicLinkValidity(String(settings.magicLinkValidityMinutes));
     setGoogleClientId(settings.google.clientId);
     setGithubClientId(settings.github.clientId);
+    setMicrosoftClientId(settings.microsoft.clientId);
+    setTenantId(settings.microsoft.tenantId);
+    setAllowConsumers(settings.microsoft.allowConsumers);
+    setTenantError(undefined);
     setAllowedDomains(settings.google.allowedDomains);
     setGoogleSecret(settings.google.clientSecretConfigured ? null : '');
     setGithubSecret(settings.github.clientSecretConfigured ? null : '');
+    setMicrosoftSecret(settings.microsoft.clientSecretConfigured ? null : '');
     setMagicLinkError(undefined);
   };
 
@@ -139,7 +152,14 @@ function AuthenticationSettingsForm({
       return;
     }
 
+    const tenant = tenantId.trim();
+    if (tenant !== '' && !microsoftTenantIdSchema.safeParse(tenant).success) {
+      setTenantError(t('settings:oauth.tenantIdInvalid'));
+      return;
+    }
+
     setMagicLinkError(undefined);
+    setTenantError(undefined);
     save.mutate({
       requireTwoFactor,
       magicLinkValidityMinutes: minutes,
@@ -147,6 +167,14 @@ function AuthenticationSettingsForm({
         clientId: googleClientId.trim(),
         ...(googleSecret === null || googleSecret === '' ? {} : { clientSecret: googleSecret }),
         ...(settings.google.allowedDomainsLocked ? {} : { allowedDomains: [...allowedDomains] }),
+      },
+      microsoft: {
+        clientId: microsoftClientId.trim(),
+        tenantId: tenant,
+        ...(settings.microsoft.allowConsumersLocked ? {} : { allowConsumers }),
+        ...(microsoftSecret === null || microsoftSecret === ''
+          ? {}
+          : { clientSecret: microsoftSecret }),
       },
       github: {
         clientId: githubClientId.trim(),
@@ -160,9 +188,13 @@ function AuthenticationSettingsForm({
     magicLinkValidity !== String(settings.magicLinkValidityMinutes) ||
     googleClientId !== settings.google.clientId ||
     githubClientId !== settings.github.clientId ||
+    microsoftClientId !== settings.microsoft.clientId ||
+    tenantId !== settings.microsoft.tenantId ||
+    allowConsumers !== settings.microsoft.allowConsumers ||
     allowedDomains.join(' ') !== settings.google.allowedDomains.join(' ') ||
     (googleSecret !== null && googleSecret !== '') ||
-    (githubSecret !== null && githubSecret !== '');
+    (githubSecret !== null && githubSecret !== '') ||
+    (microsoftSecret !== null && microsoftSecret !== '');
 
   return (
     <Box
@@ -280,6 +312,50 @@ function AuthenticationSettingsForm({
           />
         </OAuthProviderFields>
         <OAuthProviderFields
+          id={`${id}-microsoft`}
+          provider="microsoft"
+          settings={settings.microsoft}
+          clientId={microsoftClientId}
+          secret={microsoftSecret}
+          onClientIdChange={setMicrosoftClientId}
+          onSecretChange={setMicrosoftSecret}
+          leading={
+            <TenantIdField
+              id={`${id}-microsoft-tenant`}
+              value={tenantId}
+              locked={settings.microsoft.tenantIdLocked}
+              error={tenantError}
+              onChange={setTenantId}
+            />
+          }
+        >
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={allowConsumers}
+                disabled={settings.microsoft.allowConsumersLocked}
+                onChange={(event) => {
+                  setAllowConsumers(event.target.checked);
+                }}
+              />
+            }
+            label={
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <Typography variant="bodyStrong">{t('settings:oauth.allowConsumers')}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {settings.microsoft.allowConsumersLocked
+                    ? t('settings:lock.hint', {
+                        envKey: 'HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS',
+                        envFile: '.env',
+                      })
+                    : t('settings:oauth.allowConsumersHint')}
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: 'flex-start', margin: 0 }}
+          />
+        </OAuthProviderFields>
+        <OAuthProviderFields
           id={`${id}-github`}
           provider="github"
           settings={settings.github}
@@ -296,6 +372,7 @@ function AuthenticationSettingsForm({
             {t('settings:aside.redirectUrls.body')}
           </Typography>
           <RedirectUrl provider="google" url={settings.redirectUrls.google} />
+          <RedirectUrl provider="microsoft" url={settings.redirectUrls.microsoft} />
           <RedirectUrl provider="github" url={settings.redirectUrls.github} />
         </AsideCard>
         <AsideCard title={t('settings:aside.live.title')}>
@@ -321,11 +398,14 @@ function OAuthProviderFields({
   secret,
   onClientIdChange,
   onSecretChange,
+  leading,
   children,
 }: {
   readonly id: string;
-  readonly provider: 'google' | 'github';
+  readonly provider: 'google' | 'microsoft' | 'github';
   readonly settings: InstallAuthenticationSettings['github'];
+  /** Fields only this provider has, above its credentials. */
+  readonly leading?: ReactNode;
   /** Fields only this provider has, under its credentials. */
   readonly children?: ReactNode;
   readonly clientId: string;
@@ -335,6 +415,7 @@ function OAuthProviderFields({
 }): ReactNode {
   const t = useT();
   const providerName = t(`settings:oauth.${provider}`);
+  const isMicrosoft = provider === 'microsoft';
   const clientIdHint = settings.clientIdLocked
     ? t('settings:lock.hint', {
         envKey: `HD_OAUTH_${provider.toUpperCase()}_CLIENT_ID`,
@@ -348,7 +429,9 @@ function OAuthProviderFields({
       })
     : settings.clientSecretConfigured
       ? t('settings:oauth.secretKept')
-      : undefined;
+      : isMicrosoft
+        ? t('settings:oauth.microsoftSecretHint')
+        : undefined;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -362,6 +445,7 @@ function OAuthProviderFields({
           }
         />
       </Box>
+      {leading}
       <Box
         sx={{
           display: 'grid',
@@ -371,7 +455,7 @@ function OAuthProviderFields({
       >
         <Field
           id={`${id}-client-id`}
-          label={t('settings:oauth.clientId')}
+          label={t(isMicrosoft ? 'settings:oauth.microsoftClientId' : 'settings:oauth.clientId')}
           hint={clientIdHint}
           action={settings.clientIdLocked ? <EnvironmentLock /> : undefined}
         >
@@ -400,7 +484,9 @@ function OAuthProviderFields({
         {settings.clientSecretLocked ? (
           <Field
             id={`${id}-client-secret`}
-            label={t('settings:oauth.clientSecret')}
+            label={t(
+              isMicrosoft ? 'settings:oauth.microsoftClientSecret' : 'settings:oauth.clientSecret',
+            )}
             hint={secretHint}
             action={<EnvironmentLock />}
           >
@@ -422,7 +508,9 @@ function OAuthProviderFields({
         ) : (
           <SecretField
             id={`${id}-client-secret`}
-            label={t('settings:oauth.clientSecret')}
+            label={t(
+              isMicrosoft ? 'settings:oauth.microsoftClientSecret' : 'settings:oauth.clientSecret',
+            )}
             stored={settings.clientSecretConfigured}
             value={secret}
             hint={secretHint}
@@ -433,6 +521,52 @@ function OAuthProviderFields({
       </Box>
       {children}
     </Box>
+  );
+}
+
+function TenantIdField({
+  id,
+  value,
+  locked,
+  error,
+  onChange,
+}: {
+  readonly id: string;
+  readonly value: string;
+  readonly locked: boolean;
+  readonly error: string | undefined;
+  onChange(value: string): void;
+}): ReactNode {
+  const t = useT();
+  const hint = locked
+    ? t('settings:lock.hint', { envKey: 'HD_OAUTH_MICROSOFT_TENANT_ID', envFile: '.env' })
+    : t('settings:oauth.tenantIdHint');
+
+  return (
+    <Field
+      id={id}
+      label={t('settings:oauth.tenantId')}
+      hint={hint}
+      error={error}
+      action={locked ? <EnvironmentLock /> : undefined}
+    >
+      <TextField
+        id={id}
+        value={value}
+        error={error !== undefined}
+        onChange={(event) => {
+          onChange(event.target.value);
+        }}
+        slotProps={{
+          htmlInput: {
+            readOnly: locked,
+            dir: 'ltr',
+            maxLength: 64,
+            'aria-describedby': fieldDescribedBy(id, { hint, error }),
+          },
+        }}
+      />
+    </Field>
   );
 }
 

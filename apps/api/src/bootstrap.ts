@@ -207,6 +207,8 @@ export interface CreateApiAppOptions {
   readonly objectStorage?: AppModuleOptions['objectStorage'];
   /** M2's IMAP connection and image fetcher, for suites. */
   readonly channels?: AppModuleOptions['channels'];
+  /** Microsoft sign-in's HTTP transport (M18-08): a stand-in for Entra, for suites. */
+  readonly oauthTransport?: NonNullable<AppModuleOptions['auth']['oauthTransport']>;
   /** M6's Bot API, for suites. */
   readonly telegram?: AppModuleOptions['telegram'];
   /** M10's Graph client and inbound services, for suites. */
@@ -230,6 +232,7 @@ export const createApiApp = async ({
   brandResolver,
   objectStorage,
   channels,
+  oauthTransport,
   telegram,
   meta,
   imports,
@@ -288,7 +291,11 @@ export const createApiApp = async ({
       redis: runtime.redis,
       logger,
       bootFacts: runtime.bootFacts,
-      auth: { signingKeys: runtime.signingKeys, logger },
+      auth: {
+        signingKeys: runtime.signingKeys,
+        logger,
+        ...(oauthTransport === undefined ? {} : { oauthTransport }),
+      },
       realtime: { sessionResolver, revocations: refreshStore },
       // M8-01: `hd_live_…` bearers are API keys; anything else is the session's.
       principalResolver: new ApiKeyPrincipalResolver({

@@ -71,7 +71,7 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'passkeys-rp-changed':
     "Passkeys are paused: APP_URL's host is not the one this install's passkeys were made for",
   'totp-already-enabled':
-    'An authenticator app is already on; turn it off with a live code before enrolling another',
+    'An authenticator app is already on and cannot be replaced from here; an account that may turn it off can do so with a live code first',
 };
 
 export class AuthFailure extends HttpException {

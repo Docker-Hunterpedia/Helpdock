@@ -200,8 +200,11 @@ next sign-in, as is somebody invited as an Admin.
 
 Enrolling never replaces an authenticator that is already on. While one is on,
 `POST /api/auth/totp/enrol` answers `409 totp-already-enabled`, whatever the
-session: to change the app, turn it off with a live code
-(`POST /api/me/totp/disable`) and enrol again. The check is part of the write
+session. An account that may turn its app off can do so with a current code
+(`POST /api/me/totp/disable`) and enrol again. An account that must keep a
+second factor (Admins, install admins and accounts under `auth.require2fa`) is
+refused by that endpoint too, so in 1.1.x it cannot replace its authenticator:
+keep the recovery codes safe. A replace-authenticator flow is tracked in #373. The check is part of the write
 that stages the secret, so two requests cannot slip past it together.
 
 Before a session exists, the same two steps take the **enrolment challenge**

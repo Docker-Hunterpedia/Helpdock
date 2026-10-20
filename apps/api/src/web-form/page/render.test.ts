@@ -152,6 +152,32 @@ describe('renderWebFormPage', () => {
     );
   });
 
+  it('draws the built-in check in its no-script state, with its words and its script (ADR 0052)', () => {
+    const challenge = {
+      algorithm: 'SHA-256',
+      challenge: 'c'.repeat(64),
+      maxnumber: 50_000,
+      salt: 'abc?expires=1&surface=web-form&',
+      signature: 's'.repeat(64),
+      expiresIn: 900,
+    } as const;
+    const html = renderWebFormPage(view({ ...FORM, captcha: { provider: 'pow', challenge } }));
+
+    expect(html).toContain(
+      'id="wf-pow" role="status" aria-live="polite" aria-label="Security check"',
+    );
+    expect(html).toContain('data-state="noscript"');
+    expect(html).toContain(
+      `data-challenge="${JSON.stringify(challenge).replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`,
+    );
+    expect(html).toContain('data-refresh="/contact/brand-1/challenge"');
+    expect(html).toContain('data-failed="We couldn&#39;t check your connection."');
+    expect(html).toContain('This form needs JavaScript to send.');
+    expect(html).toContain('<input type="hidden" name="hd_pow" value="">');
+    expect(html).toContain('<script nonce="n0nce">(() => {');
+    expect(html).not.toContain('<script src=');
+  });
+
   it('shows the reference and the brand’s message, and links the help center it came from', () => {
     const html = renderWebFormPage(
       view(

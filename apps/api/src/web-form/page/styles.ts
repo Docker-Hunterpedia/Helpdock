@@ -80,12 +80,35 @@ select.hd-input { appearance: auto; }
 }
 .hd-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .hd-captcha { min-block-size: 64px; }
+.hd-pow {
+  inline-size: 360px; max-inline-size: 100%; padding-inline: 12px; display: flex; align-items: center; gap: 12px;
+  border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong); background: var(--hd-bg-canvas);
+  font-size: 14px; line-height: 20px; color: var(--hd-text-primary);
+}
+.hd-pow svg { flex-shrink: 0; display: none; color: var(--hd-text-secondary); }
+.hd-pow-text { flex-grow: 1; }
+.hd-pow-caption { font-size: 12px; line-height: 16px; color: var(--hd-text-secondary); }
+.hd-pow-retry {
+  block-size: 44px; padding-inline: 16px; border-radius: var(--hd-radius-md); border: 1px solid var(--hd-border-strong);
+  background: var(--hd-bg-surface); color: var(--hd-text-primary); font: inherit; font-size: 14px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;
+}
+.hd-pow-retry[hidden] { display: none; }
+.hd-pow-retry svg { display: inline; color: inherit; }
+.hd-pow[data-state="checking"] .hd-pow-spin { display: inline; animation: hd-spin 1s linear infinite; }
+.hd-pow[data-state="verified"] .hd-pow-ok { display: inline; color: var(--hd-status-success-text); }
+.hd-pow[data-state="failed"] { border-color: var(--hd-status-danger); }
+.hd-pow[data-state="failed"] .hd-pow-alert { display: inline; color: var(--hd-status-danger-text); }
+.hd-pow[data-state="failed"] .hd-pow-caption { display: none; }
+@keyframes hd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .hd-pow[data-state="checking"] .hd-pow-spin { animation: none; } }
 .hd-button {
   block-size: 44px; padding-inline: 24px; border-radius: var(--hd-radius-md); border: 0; cursor: pointer;
   background: var(--hd-action-primary); color: var(--hd-action-primary-text); font: inherit; font-size: 16px; font-weight: 500;
   margin-inline-start: auto; transition: background-color var(--hd-duration-fast) var(--hd-ease-out);
 }
 .hd-button:hover { background: var(--hd-action-primary-hover); }
+.hd-button:disabled { background: var(--hd-bg-muted); color: var(--hd-text-disabled); cursor: not-allowed; }
 .hd-button:active { background: var(--hd-action-primary-active); }
 .hd-links { display: flex; gap: 16px; flex-wrap: wrap; }
 .hd-links a { min-block-size: 44px; display: inline-flex; align-items: center; font-size: 14px; }

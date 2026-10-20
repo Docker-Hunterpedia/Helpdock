@@ -207,6 +207,8 @@ export interface SampleOptions {
   readonly transcript?: boolean;
   readonly scheme?: 'light' | 'dark' | 'auto';
   readonly policy?: ContentPolicy;
+  /** `pow`: the brand asks for the built-in check before the first message (ADR 0052). */
+  readonly captcha?: 'pow';
 }
 
 export function sampleConfig(locale: WidgetLocale, options: SampleOptions = {}): WidgetConfig {
@@ -237,7 +239,7 @@ export function sampleConfig(locale: WidgetLocale, options: SampleOptions = {}):
     },
     content_policy: options.policy ?? samplePolicy,
     transcript_enabled: options.transcript ?? true,
-    captcha: null,
+    captcha: options.captcha === 'pow' ? { provider: 'pow', site_key: '' } : null,
     popular_articles: ARTICLES[locale]
       .slice(0, POPULAR)
       .map(({ body_html, updated_at, reading_minutes, ...summary }) => summary),

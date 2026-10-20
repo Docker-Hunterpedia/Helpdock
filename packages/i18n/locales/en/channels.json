@@ -506,8 +506,25 @@
       "captchaHint": "Visitors pass one challenge per conversation. The provider's script is loaded only while this is on.",
       "provider": "Provider",
       "providers": {
+        "pow": "Built-in (no third party)",
         "turnstile": "Cloudflare Turnstile",
         "hcaptcha": "hCaptcha"
+      },
+      "difficulty": "Difficulty",
+      "difficulties": {
+        "low": {
+          "label": "Low",
+          "hint": "About half a second on a mid-range phone. Stops naive floods."
+        },
+        "medium": {
+          "label": "Medium",
+          "hint": "About two seconds on the same phone. Use it while you are being flooded."
+        }
+      },
+      "builtInNotice": "The built-in check sends nothing to anyone: the visitor's browser does a little work that is cheap for one person and expensive for a bot. It slows simple floods; it does not stop a determined attacker. Choose Turnstile for stronger bot detection.",
+      "tradeOff": {
+        "turnstile": "Turnstile sends visitor signals to Cloudflare and may challenge visitors on VPNs more often.",
+        "hcaptcha": "hCaptcha sends visitor signals to hCaptcha and may show visitors a puzzle more often."
       },
       "siteKey": "Site key",
       "secretKey": "Secret key",
@@ -602,8 +619,8 @@
     },
     "captcha": {
       "label": "Check for bots before sending",
-      "hint": "Cloudflare Turnstile, with the keys set on the Widget tab. A failed check creates nothing.",
-      "missingKeys": "No CAPTCHA keys are set on the Widget tab yet. While this is on, the form takes no messages."
+      "hint": "The check chosen on the Widget tab: the built-in one, Turnstile or hCaptcha. A failed check creates nothing.",
+      "missingKeys": "Turnstile or hCaptcha is chosen on the Widget tab without its keys. While this is on, the form takes no messages."
     },
     "thankYou": {
       "en": "Thank-you message · English",

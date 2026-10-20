@@ -352,8 +352,12 @@ export class RedisStub {
   }
 
   #secondsIn(flags: string[], options: unknown[]): number | undefined {
-    const index = flags.indexOf('EX');
-    return index === -1 ? undefined : Number(options[index + 1]);
+    const seconds = flags.indexOf('EX');
+    if (seconds !== -1) {
+      return Number(options[seconds + 1]);
+    }
+    const millis = flags.indexOf('PX');
+    return millis === -1 ? undefined : Number(options[millis + 1]) / 1000;
   }
 }
 

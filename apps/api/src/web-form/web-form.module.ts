@@ -6,6 +6,7 @@ import type { Redis } from 'ioredis';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { DbCaptchaKeys, safeCaptchaTransport } from '../captcha/captcha-keys.js';
+import { PowCaptcha } from '../captcha/pow-captcha.js';
 import { StorageAttachmentSink } from '../channels/inbound/attachment-sink.js';
 import type { BrandResolver } from '../context/brand-resolver.js';
 import type { Logger } from '../logging/logger.js';
@@ -53,7 +54,8 @@ export class WebFormModule {
     const { env, db, logger } = options;
     const storage = options.storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET);
     // The brand's one set of keys, edited on Channels › Widget (ADR 0003).
-    const captchaKeys = new DbCaptchaKeys(db, createKeyring(env));
+    const keyring = createKeyring(env);
+    const captchaKeys = new DbCaptchaKeys(db, keyring);
     const repository = new WebFormRepository();
     const lifecycleReads = new TicketLifecycleRepository();
     const tickets = new TicketRepository();
@@ -73,6 +75,7 @@ export class WebFormModule {
       }),
       captchaKeys,
       captchaTransport: options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS),
+      pow: new PowCaptcha(keyring, options.redis),
       appHost: new URL(env.APP_URL).hostname,
       limiter: new RateLimiter(options.redis),
       sink: () => new StorageAttachmentSink(storage, media),

@@ -1,3 +1,4 @@
+import { sha256 } from '../captcha/sha256.js';
 import {
   type AgentSummary,
   type AiFeedback,
@@ -6,6 +7,7 @@ import {
   type Attachment,
   type AttachmentKind,
   type Availability,
+  type CaptchaChallenge,
   type ConnectionState,
   type ConversationHours,
   type ConversationSummary,
@@ -56,6 +58,7 @@ export class MockTransport implements WidgetTransport {
   #tickets = 1042;
   #csat: CsatCard | null;
   #failRating = false;
+  #failChallenges = 0;
   /** Every call a test may want to assert on, in order. */
   readonly calls: { readonly method: string; readonly args: readonly unknown[] }[] = [];
 
@@ -93,6 +96,26 @@ export class MockTransport implements WidgetTransport {
   async getConfig(locale: WidgetLocale): Promise<WidgetConfig> {
     this.#record('getConfig', locale);
     return this.#options.config(locale);
+  }
+
+  /**
+   * A small challenge the real solver can answer, signed with nothing: the
+   * mock checks no signature. `failNextChallenges` makes it unreachable.
+   */
+  async captchaChallenge(): Promise<CaptchaChallenge> {
+    this.#record('captchaChallenge');
+    if (this.#failChallenges > 0) {
+      this.#failChallenges -= 1;
+      throw new TransportError('network');
+    }
+    const maxnumber = 1_000;
+    const salt = `mock-${String(this.calls.length)}?expires=${String(Math.floor(Date.now() / 1000) + 900)}&`;
+    // The plain digest, so the harness also plays a page without `crypto.subtle`.
+    const digest = sha256(
+      new TextEncoder().encode(`${salt}${String(Math.floor(Math.random() * maxnumber))}`),
+    );
+    const challenge = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { algorithm: 'SHA-256', challenge, maxnumber, salt, signature: 'mock', expiresIn: 900 };
   }
 
   async startSession(identity: SignedIdentity | null) {
@@ -421,6 +444,11 @@ export class MockTransport implements WidgetTransport {
   restoreConnection(): void {
     this.#online = true;
     this.#connection('online');
+  }
+
+  /** The next `count` built-in challenges cannot be fetched, as an unreachable api would. */
+  failNextChallenges(count: number): void {
+    this.#failChallenges = count;
   }
 
   /** The next `count` sends fail with a network error, as a flaky link would. */

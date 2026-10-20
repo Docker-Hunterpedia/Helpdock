@@ -35,6 +35,7 @@ export function createTransport(
 
   return {
     getConfig: (locale) => remote().then((t) => t.getConfig(locale)),
+    captchaChallenge: () => remote().then((t) => t.captchaChallenge()),
     startSession: (identity) => remote().then((t) => t.startSession(identity)),
     startConversation: (input) => remote().then((t) => t.startConversation(input)),
     sendMessage: (id, input) => remote().then((t) => t.sendMessage(id, input)),

@@ -39,7 +39,9 @@ describe('the settings registry', () => {
   });
 
   it('derives a unique HD_ override name that cannot collide with a bootstrap key', () => {
-    const envKeys = SETTING_DEFINITIONS.map((definition) => definition.envKey);
+    const envKeys = SETTING_DEFINITIONS.flatMap((definition) =>
+      definition.envKey === null ? [] : [definition.envKey],
+    );
 
     expect(new Set(envKeys).size).toBe(envKeys.length);
     for (const envKey of envKeys) {
@@ -98,6 +100,7 @@ describe('the schemas the registry declares', () => {
   });
 
   it('accepts only the CAPTCHA providers that have an adapter', () => {
+    expect(settingsSchema['captcha.provider'].safeParse('pow').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('turnstile').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('hcaptcha').success).toBe(true);
     expect(settingsSchema['captcha.provider'].safeParse('none').success).toBe(true);

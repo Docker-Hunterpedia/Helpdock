@@ -131,7 +131,7 @@ describe('Channels › Web form', () => {
     });
     await renderWebForm(channelsApi);
 
-    expect(screen.getByText(/No CAPTCHA keys are set on the Widget tab yet/)).toBeVisible();
+    expect(screen.getByText(/chosen on the Widget tab without its keys/)).toBeVisible();
   });
 
   it('says so when the settings cannot be loaded', async () => {

@@ -622,6 +622,20 @@ describe('the remote transport', () => {
     expect(api.calls[0]?.body).toMatchObject({ articleId: ARTICLE });
   });
 
+  it('fetches the built-in check’s work (ADR 0052)', async () => {
+    const work = { algorithm: 'SHA-256', challenge: 'c', maxnumber: 10, salt: 's', signature: 'x' };
+    const api = fakeApi({ 'GET /captcha/challenge': () => work });
+    const transport = createRemoteTransport({
+      apiOrigin: API,
+      brand: BRAND,
+      storage: memoryStore(),
+      fetch: api.fetch,
+      network: null,
+    });
+
+    await expect(transport.captchaChallenge()).resolves.toEqual(work);
+  });
+
   it('hands a conversation to the team and records feedback over REST (M7-06)', async () => {
     const api = fakeApi({
       'POST /conversations': () => ({ conversation: conversation(), message: null }),

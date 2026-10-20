@@ -28,6 +28,7 @@ export interface WidgetBrand {
 /** The `captcha.*` settings rows of a brand (ADR 0003), as stored. */
 export interface StoredCaptcha {
   readonly provider: string | undefined;
+  readonly difficulty: string | undefined;
   readonly siteKey: string | undefined;
   /** The `v1.…` envelope, never decrypted here. */
   readonly secret: string | undefined;
@@ -37,6 +38,7 @@ export interface StoredCaptcha {
 
 export const CAPTCHA_KEYS = {
   provider: 'captcha.provider',
+  difficulty: 'captcha.difficulty',
   siteKey: 'captcha.siteKey',
   secret: 'captcha.secret',
 } as const;
@@ -123,6 +125,7 @@ export class WidgetSettingsRepository {
 
     return {
       provider: byKey.get(CAPTCHA_KEYS.provider)?.value,
+      difficulty: byKey.get(CAPTCHA_KEYS.difficulty)?.value,
       siteKey: byKey.get(CAPTCHA_KEYS.siteKey)?.value,
       secret: secret?.value,
       secretSetAt: secret?.updatedAt ?? null,

@@ -12,7 +12,7 @@ import type { WidgetLocale, WidgetMode } from '../src/transport/types.js';
 /**
  * The widget on an otherwise empty page, wired to the mock transport and
  * configured from the query string, e.g.
- * `/?locale=ar&mode=chat_articles&availability=closed&prechat=1`. The mock is
+ * `/?locale=ar&mode=chat_articles&availability=closed&prechat=1&captcha=pow`. The mock is
  * exposed as `window.helpdock` so a Playwright test can play the agent side
  * and the network.
  */
@@ -27,6 +27,7 @@ const options: SampleOptions = {
   preChat: params.get('prechat') === '1',
   transcript: params.get('transcript') !== '0',
   scheme: (params.get('scheme') as SampleOptions['scheme']) ?? 'light',
+  ...(params.get('captcha') === 'pow' ? { captcha: 'pow' as const } : {}),
 };
 
 // `hours=never`: the team is away and its calendar never opens. `hours=absent`:

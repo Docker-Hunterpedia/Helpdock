@@ -3,6 +3,7 @@ import {
   attachmentPresignRequestSchema,
   attachmentPresignResponseSchema,
   brandIdParamSchema,
+  captchaChallengeSchema,
   contentPolicySchema,
   widgetAccessUpdateSchema,
   widgetAppearanceSchema,
@@ -64,6 +65,7 @@ export class WidgetAttachmentParamDto extends createZodDto(widgetAttachmentParam
 export class WidgetConfigDto extends createZodDto(widgetConfigSchema) {}
 export class WidgetConfigQueryDto extends createZodDto(widgetConfigQuerySchema) {}
 export class WidgetAvailabilityDto extends createZodDto(widgetAvailabilitySchema) {}
+export class CaptchaChallengeDto extends createZodDto(captchaChallengeSchema) {}
 export class WidgetSessionRequestDto extends createZodDto(widgetSessionRequestSchema) {}
 export class WidgetSessionDto extends createZodDto(widgetSessionSchema) {}
 export class WidgetConversationDto extends createZodDto(widgetConversationSchema) {}

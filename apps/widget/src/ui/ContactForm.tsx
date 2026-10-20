@@ -26,6 +26,8 @@ export function ContactForm() {
   const [sent, setSent] = useState<{ ref: string; email: string } | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const onToken = useCallback((value: string | null) => setToken(value), []);
+  // A token is single-use: a new box after a failed send asks for a new one.
+  const [captchaRound, setCaptchaRound] = useState(0);
   const picker = useRef<HTMLInputElement>(null);
   const another = useRef<HTMLButtonElement>(null);
   const Captcha = useLazy(loadCaptcha, Boolean(config?.captcha));
@@ -117,6 +119,11 @@ export function ContactForm() {
       setSent({ ref: result.ticket_ref, email: email.trim() });
       requestAnimationFrame(() => another.current?.focus());
     } catch (error) {
+      // The api may have spent the token before the failure: ask for a new one.
+      if (token) {
+        setToken(null);
+        setCaptchaRound((round) => round + 1);
+      }
       setFormError(
         error instanceof TransportError && error.code === 'rate_limited'
           ? t('prechat.rateLimited')
@@ -195,7 +202,7 @@ export function ContactForm() {
         </p>
       ) : null}
       {config.captcha && Captcha ? (
-        <Captcha config={config.captcha} onToken={onToken} t={t} />
+        <Captcha key={captchaRound} config={config.captcha} onToken={onToken} t={t} />
       ) : null}
       {formError ? (
         <p class="hd-alert hd-alert-danger" role="alert">

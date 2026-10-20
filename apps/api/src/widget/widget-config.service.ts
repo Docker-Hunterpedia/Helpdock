@@ -1,5 +1,6 @@
 import { brandDomains, customFieldDefs, type DbTransaction } from '@helpdock/db';
 import type {
+  CaptchaChallenge,
   WidgetAvailability,
   WidgetConfig,
   WidgetLocale,
@@ -7,13 +8,15 @@ import type {
   WidgetPresence,
 } from '@helpdock/schemas';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
-import type { CaptchaKeysReader } from '../captcha/captcha-keys.js';
+import type { BrandCaptchaKeys, CaptchaKeysReader } from '../captcha/captcha-keys.js';
+import type { PowCaptcha } from '../captcha/pow-captcha.js';
 import type { HelpCenterFeedback } from '../help-center/ports.js';
 import { readContentPolicy } from '../media/content-policy.js';
 import type { BusinessHoursService } from '../sla/business-hours.service.js';
 import { popularSummaries, WIDGET_POPULAR_ARTICLES } from './article-view.js';
 import type { OnlineAgents } from './online-agents.js';
 import type { ResolvedWidgetSettings } from './resolved-settings.js';
+import { WidgetFailure } from './widget-failure.js';
 import type { WidgetGate, WidgetRequestFacts, WidgetScope } from './widget-gate.js';
 import { calendarHours } from './widget-hours.js';
 import { greetingIn, widgetThemeOf } from './widget-theme.js';
@@ -36,6 +39,7 @@ export class WidgetConfigService {
   readonly #businessHours: Pick<BusinessHoursService, 'calendarFor'>;
   readonly #online: Pick<OnlineAgents, 'presence' | 'presenceIn'>;
   readonly #captcha: CaptchaKeysReader;
+  readonly #pow: Pick<PowCaptcha, 'issue'>;
   readonly #assetOrigin: string;
   readonly #popular: Pick<HelpCenterFeedback, 'popular'>;
 
@@ -44,6 +48,8 @@ export class WidgetConfigService {
     readonly businessHours: Pick<BusinessHoursService, 'calendarFor'>;
     readonly online: Pick<OnlineAgents, 'presence' | 'presenceIn'>;
     readonly captcha: CaptchaKeysReader;
+    /** Issues the built-in check's challenges (ADR 0052). */
+    readonly pow: Pick<PowCaptcha, 'issue'>;
     /** `APP_URL`: where the api serves `widget.js` and the widget's fonts. */
     readonly assetOrigin: string;
     /** M5-10: the help center's popular list. */
@@ -53,6 +59,7 @@ export class WidgetConfigService {
     this.#businessHours = deps.businessHours;
     this.#online = deps.online;
     this.#captcha = deps.captcha;
+    this.#pow = deps.pow;
     this.#assetOrigin = deps.assetOrigin;
     this.#popular = deps.popular;
   }
@@ -105,7 +112,7 @@ export class WidgetConfigService {
         whenUnavailable: settings.conversation.whenUnavailable,
         transcriptEnabled: settings.conversation.transcriptEnabled,
         contentPolicy: readContentPolicy(brand.contentPolicy),
-        captcha: keys === null ? null : { provider: keys.provider, siteKey: keys.siteKey },
+        captcha: keys === null ? null : captchaView(keys),
         signedIdentity: settings.signedIdentityEnabled,
         availability: await this.availabilityIn(scope, now),
         // Filled in by `config` once the gate has passed.
@@ -115,6 +122,21 @@ export class WidgetConfigService {
         // no switch yet, so every brand shows it.
         showPoweredBy: true,
       };
+    });
+  }
+
+  /**
+   * The built-in check's work before a first message (ADR 0052): only for a
+   * brand that turned the check on with `pow`, from an allowed origin. Each
+   * call is a new challenge, so "Try again" and an expiring one both ask here.
+   */
+  challenge(brandId: string, facts: WidgetRequestFacts): Promise<CaptchaChallenge> {
+    return this.#gate.brand(brandId, facts, async ({ tx, settings }) => {
+      const keys = settings.captchaEnabled ? await this.#captcha.forBrand(brandId, tx) : null;
+      if (keys?.provider !== 'pow') {
+        throw new WidgetFailure('not_found', 'This brand does not ask for the built-in check');
+      }
+      return this.#pow.issue(brandId, keys.difficulty, 'widget-first-message');
     });
   }
 
@@ -207,3 +229,9 @@ export const helpCenterUrlOf = async (tx: DbTransaction): Promise<string | null>
     .limit(1);
   return primary === undefined ? null : `https://${primary.domain}`;
 };
+
+/** What the widget needs to draw the check: the built-in one has no site key. */
+const captchaView = (keys: BrandCaptchaKeys): NonNullable<WidgetConfig['captcha']> =>
+  keys.provider === 'pow'
+    ? { provider: 'pow', siteKey: '' }
+    : { provider: keys.provider, siteKey: keys.siteKey };

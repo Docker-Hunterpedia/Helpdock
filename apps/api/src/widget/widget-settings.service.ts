@@ -88,6 +88,7 @@ export class WidgetSettingsService {
         captchaEnabled: settings.captchaEnabled,
         captchaProvider: captcha.provider,
         captchaSiteKey: captcha.siteKey,
+        captchaDifficulty: captcha.difficulty,
         captchaSecret: await this.#stamp(tx, captcha.secretSetAt, captcha.secretSetBy),
       },
       signedIdentity: {
@@ -153,6 +154,13 @@ export class WidgetSettingsService {
       JSON.stringify(access.captchaSiteKey),
       actorId,
     );
+    await this.#repository.writeSetting(
+      tx,
+      brandId,
+      CAPTCHA_KEYS.difficulty,
+      JSON.stringify(access.captchaDifficulty),
+      actorId,
+    );
     const secretChanged = access.captchaSecret !== undefined && access.captchaSecret !== '';
     if (secretChanged) {
       await this.#repository.writeSetting(
@@ -169,6 +177,7 @@ export class WidgetSettingsService {
       captchaEnabled: access.captchaEnabled,
       captchaProvider: access.captchaProvider,
       captchaSiteKey: access.captchaSiteKey,
+      captchaDifficulty: access.captchaDifficulty,
       captchaSecret: secretChanged ? 'changed' : 'unchanged',
     });
     return this.view(context);

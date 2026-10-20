@@ -859,6 +859,11 @@ DESIGN.md changes in the same PRs:
 7. (D-01) **Release vehicle:** does M18 ship in 1.1 or 1.2? The OAuth binding
    change (M18-07) alters behaviour for existing users and wants a minor version
    with a release note. Proposed: 1.1, with the binding itself in 1.0.1.
+8. **Known gap, found in M18-10:** the `HD_CAPTCHA_*` environment pins in
+   the configuration reference do not reach the widget or the web form, which
+   read the brand's `captcha.*` rows directly. `captcha.difficulty` is
+   therefore registered without an `HD_` pin (`envKey: null`, listed as "not
+   pinnable" in the configuration reference) until that is fixed.
 
 ## Build order
 
@@ -925,3 +930,11 @@ screens.
   (30 per 15 minutes per IP and brand on "Was this helpful?", answered 429),
   and the full list of `rate_limit_refusals_total` bucket labels in the
   operations guide.
+- **M18-10 Proof-of-work CAPTCHA provider** (#284): in review. `pow` in
+  `CAPTCHA_PROVIDERS` and `captcha.provider`; `captcha.difficulty` (`low`
+  50,000 / `medium` 200,000); a per-brand HKDF key, the surface and expiry in
+  the salt, single spend by `SET NX`; `GET /api/widget/:brandId/captcha/challenge`
+  and `/contact[/<brandId>]/challenge`; the solver in the widget's lazy CAPTCHA
+  chunk and inline in the web form; D-51 as a default for brands with no saved
+  provider; ADR 0052 updated; artboards `Widget/PreChat-Verify`,
+  `HelpCenter/WebForm-Verify`, `Admin/Channels-Widget-BotProtection`.

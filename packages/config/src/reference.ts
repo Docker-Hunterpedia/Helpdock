@@ -158,7 +158,7 @@ const renderSettings = (): string =>
     '|---|---|---|---|---|---|',
     ...SETTING_DEFINITIONS.map(
       (definition) =>
-        `| \`${definition.envKey}\` | \`${definition.key}\` | ${definition.scope} | ${definition.secret ? 'yes' : 'no'} | ${cell(settingDefault(definition.default))} | ${cell(definition.description)} |`,
+        `| ${definition.envKey === null ? '— (not pinnable)' : `\`${definition.envKey}\``} | \`${definition.key}\` | ${definition.scope} | ${definition.secret ? 'yes' : 'no'} | ${cell(settingDefault(definition.default))} | ${cell(definition.description)} |`,
     ),
   ].join('\n');
 

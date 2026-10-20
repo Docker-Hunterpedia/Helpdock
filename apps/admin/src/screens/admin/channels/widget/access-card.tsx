@@ -1,11 +1,21 @@
 import type {
+  CaptchaDifficulty,
   CaptchaProvider,
   WidgetAccess,
   WidgetAccessUpdate,
   WidgetSettings,
 } from '@helpdock/schemas';
-import { Box, Button, IconButton, MenuItem, Select, TextField, Typography } from '@mui/material';
-import { Globe, Plus, ShieldCheck, X } from 'lucide-react';
+import {
+  Box,
+  Button,
+  IconButton,
+  MenuItem,
+  Radio,
+  Select,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { Globe, Info, Plus, ShieldCheck, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
@@ -24,6 +34,7 @@ interface AccessDraft {
   captchaEnabled: boolean;
   captchaProvider: CaptchaProvider;
   captchaSiteKey: string;
+  captchaDifficulty: CaptchaDifficulty;
   /** Null keeps the saved secret; a string replaces it. */
   captchaSecret: string | null;
 }
@@ -33,14 +44,24 @@ const draftOf = (access: Access): AccessDraft => ({
   captchaEnabled: access.captchaEnabled,
   captchaProvider: access.captchaProvider,
   captchaSiteKey: access.captchaSiteKey,
+  captchaDifficulty: access.captchaDifficulty,
   captchaSecret: null,
 });
+
+/** The built-in check first (ADR 0052): it needs no keys and sends nothing to anyone. */
+const PROVIDERS: readonly CaptchaProvider[] = ['pow', 'turnstile', 'hcaptcha'];
+const DIFFICULTIES: readonly CaptchaDifficulty[] = ['low', 'medium'];
 
 /**
  * "Where the widget may run" (M4-03; artboard `AdminWidget`), Admins only:
  * the allowed origins (DESIGN §6.3 OriginList) and the bot check before the
  * first message (ADR 0003). The CAPTCHA keys are the brand's, shared with the
  * web form; the secret is a SecretField — never shown, only replaced.
+ *
+ * The built-in check (ADR 0052, artboard `Admin/Channels-Widget-BotProtection`)
+ * replaces the keys with a difficulty and a plain statement of what it does
+ * and does not do; the third-party providers keep their keys and say what
+ * they send.
  */
 export function AccessCard({
   brandId,
@@ -88,7 +109,9 @@ export function AccessCard({
       draft.captchaSecret !== null
         ? draft.captchaSecret.trim() !== ''
         : access.captchaSecret !== null;
-    if (draft.captchaEnabled && (draft.captchaSiteKey.trim() === '' || !hasSecret)) {
+    const keysMissing = draft.captchaSiteKey.trim() === '' || !hasSecret;
+    // The built-in check has no keys to miss (ADR 0052).
+    if (draft.captchaEnabled && draft.captchaProvider !== 'pow' && keysMissing) {
       setNeedsKeys(true);
       return;
     }
@@ -98,6 +121,7 @@ export function AccessCard({
       captchaEnabled: draft.captchaEnabled,
       captchaProvider: draft.captchaProvider,
       captchaSiteKey: draft.captchaSiteKey.trim(),
+      captchaDifficulty: draft.captchaDifficulty,
       ...(draft.captchaSecret === null ? {} : { captchaSecret: draft.captchaSecret.trim() }),
     };
     save.mutate(request);
@@ -276,74 +300,166 @@ export function AccessCard({
                 }))
               }
             >
-              <MenuItem value="turnstile">
-                {t('channels:widget.access.providers.turnstile')}
-              </MenuItem>
-              <MenuItem value="hcaptcha">{t('channels:widget.access.providers.hcaptcha')}</MenuItem>
+              {PROVIDERS.map((provider) => (
+                <MenuItem key={provider} value={provider}>
+                  {t(`channels:widget.access.providers.${provider}`)}
+                </MenuItem>
+              ))}
             </Select>
           </Field>
-          <Field id={`${id}-site-key`} label={t('channels:widget.access.siteKey')}>
-            <TextField
-              id={`${id}-site-key`}
-              size="small"
-              value={draft.captchaSiteKey}
-              onChange={(event) =>
-                setDraft((held) => ({ ...held, captchaSiteKey: event.target.value }))
-              }
-              slotProps={{ htmlInput: { dir: 'ltr', spellCheck: false } }}
+          {draft.captchaProvider === 'pow' ? (
+            <BuiltInCheck
+              id={id}
+              difficulty={draft.captchaDifficulty}
+              onChange={(captchaDifficulty) => setDraft((held) => ({ ...held, captchaDifficulty }))}
             />
-          </Field>
-          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
-            <Field
-              id={`${id}-secret`}
-              label={t('channels:widget.access.secretKey')}
-              hint={secretHint}
-              {...(needsKeys ? { error: t('channels:widget.access.needsKeys') } : {})}
-            >
-              <Box sx={{ display: 'flex', gap: 2 }}>
+          ) : (
+            <>
+              <Field id={`${id}-site-key`} label={t('channels:widget.access.siteKey')}>
                 <TextField
-                  id={`${id}-secret`}
+                  id={`${id}-site-key`}
                   size="small"
-                  type="password"
-                  fullWidth
-                  value={draft.captchaSecret ?? (stamp === null ? '' : '••••••••••••••••')}
-                  error={needsKeys}
+                  value={draft.captchaSiteKey}
                   onChange={(event) =>
-                    setDraft((held) => ({ ...held, captchaSecret: event.target.value }))
+                    setDraft((held) => ({ ...held, captchaSiteKey: event.target.value }))
                   }
-                  slotProps={{
-                    htmlInput: {
-                      dir: 'ltr',
-                      autoComplete: 'off',
-                      readOnly: draft.captchaSecret === null && stamp !== null,
-                      'aria-describedby': fieldDescribedBy(`${id}-secret`, {
-                        hint: secretHint,
-                        ...(needsKeys ? { error: t('channels:widget.access.needsKeys') } : {}),
-                      }),
-                    },
-                  }}
+                  slotProps={{ htmlInput: { dir: 'ltr', spellCheck: false } }}
                 />
-                {stamp === null ? null : (
-                  <Button
-                    variant="outlined"
-                    onClick={() =>
-                      setDraft((held) => ({
-                        ...held,
-                        captchaSecret: held.captchaSecret === null ? '' : null,
-                      }))
-                    }
-                  >
-                    {draft.captchaSecret === null
-                      ? t('channels:widget.access.replace')
-                      : t('channels:widget.access.keepSecret')}
-                  </Button>
-                )}
+              </Field>
+              <Box sx={{ gridColumn: { md: '1 / -1' } }}>
+                <Field
+                  id={`${id}-secret`}
+                  label={t('channels:widget.access.secretKey')}
+                  hint={secretHint}
+                  {...(needsKeys ? { error: t('channels:widget.access.needsKeys') } : {})}
+                >
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      id={`${id}-secret`}
+                      size="small"
+                      type="password"
+                      fullWidth
+                      value={draft.captchaSecret ?? (stamp === null ? '' : '••••••••••••••••')}
+                      error={needsKeys}
+                      onChange={(event) =>
+                        setDraft((held) => ({ ...held, captchaSecret: event.target.value }))
+                      }
+                      slotProps={{
+                        htmlInput: {
+                          dir: 'ltr',
+                          autoComplete: 'off',
+                          readOnly: draft.captchaSecret === null && stamp !== null,
+                          'aria-describedby': fieldDescribedBy(`${id}-secret`, {
+                            hint: secretHint,
+                            ...(needsKeys ? { error: t('channels:widget.access.needsKeys') } : {}),
+                          }),
+                        },
+                      }}
+                    />
+                    {stamp === null ? null : (
+                      <Button
+                        variant="outlined"
+                        onClick={() =>
+                          setDraft((held) => ({
+                            ...held,
+                            captchaSecret: held.captchaSecret === null ? '' : null,
+                          }))
+                        }
+                      >
+                        {draft.captchaSecret === null
+                          ? t('channels:widget.access.replace')
+                          : t('channels:widget.access.keepSecret')}
+                      </Button>
+                    )}
+                  </Box>
+                </Field>
               </Box>
-            </Field>
-          </Box>
+              <Typography
+                variant="caption"
+                sx={{ gridColumn: { md: '1 / -1' }, color: 'text.secondary' }}
+              >
+                {t(`channels:widget.access.tradeOff.${draft.captchaProvider}`)}
+              </Typography>
+            </>
+          )}
         </Box>
       </Box>
     </SectionCard>
+  );
+}
+
+/**
+ * The built-in check's settings: a difficulty instead of keys, and a neutral
+ * notice (DESIGN §6, as PushCard's) of what it does and does not do.
+ */
+function BuiltInCheck({
+  id,
+  difficulty,
+  onChange,
+}: {
+  readonly id: string;
+  readonly difficulty: CaptchaDifficulty;
+  readonly onChange: (difficulty: CaptchaDifficulty) => void;
+}): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+  return (
+    <Box sx={{ gridColumn: { md: '1 / -1' }, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Box component="fieldset" sx={{ margin: 0, padding: 0, border: 0, minWidth: 0 }}>
+        <Typography component="legend" sx={{ fontSize: 13, fontWeight: 500, marginBlockEnd: 2 }}>
+          {t('channels:widget.access.difficulty')}
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {DIFFICULTIES.map((level) => {
+            const inputId = `${id}-difficulty-${level}`;
+            return (
+              <Box
+                key={level}
+                component="label"
+                htmlFor={inputId}
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, cursor: 'pointer' }}
+              >
+                <Radio
+                  id={inputId}
+                  size="small"
+                  name={`${id}-difficulty`}
+                  value={level}
+                  checked={difficulty === level}
+                  onChange={() => onChange(level)}
+                  sx={{ padding: 0, marginBlockStart: '2px' }}
+                  slotProps={{ input: { 'aria-describedby': `${inputId}-hint` } }}
+                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+                    {t(`channels:widget.access.difficulties.${level}.label`)}
+                  </Typography>
+                  <Typography
+                    id={`${inputId}-hint`}
+                    variant="caption"
+                    sx={{ fontSize: 13, color: 'text.secondary' }}
+                  >
+                    {t(`channels:widget.access.difficulties.${level}.hint`)}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 2,
+          alignItems: 'flex-start',
+          padding: '12px 16px',
+          borderRadius: '6px',
+          backgroundColor: tokens['bg.muted'],
+        }}
+      >
+        <Info size={16} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 2 }} />
+        <Typography variant="body2">{t('channels:widget.access.builtInNotice')}</Typography>
+      </Box>
+    </Box>
   );
 }
 

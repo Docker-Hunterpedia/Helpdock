@@ -274,6 +274,15 @@ export class WidgetConversationsService {
         return replay;
       }
 
+      // Everything that can be refused for what was typed is checked before
+      // the CAPTCHA: a token, the built-in one above all, is spent once, and a
+      // visitor fixing a message should not have to solve another.
+      this.#checkText(scope, body.text);
+      // The pre-chat form's answers, or the contact form's, which asks the
+      // same fields: both are unverified (§4.1), whichever form sent them.
+      const prechat =
+        body.prechat === undefined ? undefined : widgetPrechatAnswersSchema.parse(body.prechat);
+
       if (settings.captchaEnabled) {
         const check = await this.#deps.captcha.verify({
           brandId,
@@ -288,12 +297,6 @@ export class WidgetConversationsService {
           throw new WidgetFailure('captcha_required');
         }
       }
-      this.#checkText(scope, body.text);
-
-      // The pre-chat form's answers, or the contact form's, which asks the
-      // same fields: both are unverified (§4.1), whichever form sent them.
-      const prechat =
-        body.prechat === undefined ? undefined : widgetPrechatAnswersSchema.parse(body.prechat);
       const contactId = await this.#contactFor(scope, prechat);
       const actor = actorFor(visitor);
       const context: LifecycleContext = { tx, brandId, actor, now };

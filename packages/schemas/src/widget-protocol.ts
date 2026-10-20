@@ -309,7 +309,11 @@ export const widgetConfigSchema = z.object({
   transcriptEnabled: z.boolean(),
   /** What the composer offers; the api enforces the same policy on upload. */
   contentPolicy: contentPolicySchema,
-  /** Present when the brand wants a challenge before the first message (ADR 0003). */
+  /**
+   * Present when the brand wants a challenge before the first message (ADR
+   * 0003). `pow` has no site key (empty): the widget asks
+   * `GET …/captcha/challenge` for its work instead (ADR 0052).
+   */
   captcha: z.object({ provider: captchaProviderSchema, siteKey: z.string() }).nullable(),
   /** Whether the brand accepts a signed identity from its site (§4.2). */
   signedIdentity: z.boolean(),
@@ -322,6 +326,25 @@ export const widgetConfigSchema = z.object({
   showPoweredBy: z.boolean(),
 });
 export type WidgetConfig = z.infer<typeof widgetConfigSchema>;
+
+/**
+ * `GET /api/widget/:brandId/captcha/challenge` and the web form's
+ * `…/challenge`: the built-in check's work (ADR 0052), in the ALTCHA challenge
+ * shape. The client finds the `number` for which `SHA-256(salt + number)` is
+ * `challenge` and sends the base64 JSON of
+ * `{ algorithm, challenge, number, salt, signature }` as its token.
+ * `expiresIn` is the seconds it stays good, counted from when the answer
+ * arrived, so a client with a wrong clock still refreshes in time.
+ */
+export const captchaChallengeSchema = z.object({
+  algorithm: z.literal('SHA-256'),
+  challenge: z.string(),
+  maxnumber: z.number().int(),
+  salt: z.string(),
+  signature: z.string(),
+  expiresIn: z.number().int().positive(),
+});
+export type CaptchaChallenge = z.infer<typeof captchaChallengeSchema>;
 
 // --------------------------------------------------------------- session
 

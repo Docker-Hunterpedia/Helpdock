@@ -1,5 +1,6 @@
 import type {
   AssignmentAgent,
+  AssignmentAgentList,
   AssignmentAgentUpdateRequest,
   DepartmentAssignment,
   DepartmentAssignmentUpdateRequest,
@@ -15,7 +16,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, Pencil, Route } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
@@ -23,6 +24,8 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { tagsForIds } from '../../../tickets/tags.js';
+import { useToast } from '../../../ui/toasts.tsx';
 import { AssignmentAgents } from './assignment-agents.tsx';
 import { AssignmentEditor } from './assignment-editor.tsx';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
@@ -51,6 +54,7 @@ export function AssignmentTab(): ReactNode {
   const { locale } = usePreferences();
   const queryClient = useQueryClient();
   const report = useTicketingReport();
+  const toast = useToast();
 
   const brand = currentBrand(session);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -62,8 +66,9 @@ export function AssignmentTab(): ReactNode {
   const rows = departments.data?.departments ?? [];
   const selected = rows.find((row) => row.departmentId === selectedId) ?? rows[0] ?? null;
 
+  const agentKey = ['assignment', brand.id, 'agents', selected?.departmentId];
   const agents = useQuery({
-    queryKey: ['assignment', brand.id, 'agents', selected?.departmentId],
+    queryKey: agentKey,
     queryFn: () => api.assignmentAgents(brand.id, selected?.departmentId ?? ''),
     enabled: selected !== null,
   });
@@ -81,18 +86,51 @@ export function AssignmentTab(): ReactNode {
     report,
   );
 
-  const changeAgent = useTicketingAction(
-    (input: { agent: AssignmentAgent; request: AssignmentAgentUpdateRequest }) =>
+  const changeAgent = useMutation({
+    mutationFn: (input: { agent: AssignmentAgent; request: AssignmentAgentUpdateRequest }) =>
       api.updateAssignmentAgent(
         brand.id,
         selected?.departmentId ?? '',
         input.agent.userId,
         input.request,
       ),
-    (input) => t('ticketing:toast.agentUpdated', { name: input.agent.name }),
-    refresh,
-    report,
-  );
+    onMutate: async ({ agent, request }) => {
+      // A read landing mid-save must not overwrite the optimistic choice.
+      await queryClient.cancelQueries({ queryKey: agentKey });
+      const previous = queryClient.getQueryData<AssignmentAgentList>(agentKey);
+      if (previous !== undefined) {
+        queryClient.setQueryData<AssignmentAgentList>(agentKey, {
+          ...previous,
+          agents: previous.agents.map((held) =>
+            held.userId === agent.userId
+              ? {
+                  ...held,
+                  inRotation: request.inRotation ?? held.inRotation,
+                  skills:
+                    request.skillTagIds === undefined
+                      ? held.skills
+                      : tagsForIds(request.skillTagIds, held.skills, tags.data?.tags ?? []),
+                }
+              : held,
+          ),
+        });
+      }
+      return { previous, key: agentKey };
+    },
+    onSuccess: (_agent, input) => {
+      toast({
+        tone: 'success',
+        message: t('ticketing:toast.agentUpdated', { name: input.agent.name }),
+      });
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(context.key, context.previous);
+      }
+      report(error);
+    },
+    onSettled: refresh,
+  });
 
   const busy = save.isPending || changeAgent.isPending;
 

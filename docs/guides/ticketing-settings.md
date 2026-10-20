@@ -632,6 +632,10 @@ edits the skills that matter where they lead. A Team Leader changes Agents'
 rows only; an Admin's or another Team Leader's row is shown with its controls
 disabled.
 
+Rotation and skill edits appear immediately while saving. If a save fails, the
+previous values return and an error toast explains the refusal. The tab reads
+the assignment data again after each save attempt.
+
 ### Assigning by hand
 
 The **Assignee** picker in a ticket's details panel lists everybody who can work

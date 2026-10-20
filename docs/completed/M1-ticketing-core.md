@@ -196,6 +196,7 @@ Migration `0015_assignment`: departments gain `assignment_mode`, `load_cap`,
 tenant tables `assignment_agents` and `assignment_skills`. Guide:
 [ticketing settings › Assignment](../guides/ticketing-settings.md#assignment).
 
+- **Admin follow-up (#350)**: rotation and skill edits update the cached agent optimistically, restore the previous list with the existing error toast on failure, and invalidate assignment queries after either outcome.
 - **Rotation** (round-robin, skill-based) runs in the worker from `assignment.requested`, written in the same transaction as a ticket created or moved unassigned into a routing department. Eligible = can work the department, in rotation, online, under the cap; longest waiting first. Skills match among the eligible, falling back to everyone eligible. A per-brand `pg_advisory_xact_lock` makes concurrent picks cap-safe.
 - **Manual assignment** is held to the ticket's department and to DOMAIN-RULES §1.2's ceiling: only an Admin assigns to an Admin (`assignee-above-actor`, 403). The cap never refuses a person. A move the assignee cannot follow clears the assignee.
 - **Assignable read** for the picker: `GET /brands/:id/assignment/:departmentId/assignable` under `ticket:write`.

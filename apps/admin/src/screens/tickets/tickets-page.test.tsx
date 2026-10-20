@@ -86,12 +86,14 @@ describe('the ticket list', () => {
     expect(row).toHaveTextContent('Mona Khalil');
   });
 
-  it('says what an empty view means, without pretending a search failed', async () => {
+  it('says the changed filters exclude everything, without pretending a search failed', async () => {
     await renderTickets(
       `/tickets?view=${MOCK_VIEW_ESCALATED}&custom=1&state=escalated&priority=low`,
     );
 
-    expect(await screen.findByText('Nothing in this view')).toBeVisible();
+    expect(await screen.findByText('No tickets match this view')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Edit filters' })).toBeVisible();
+    expect(screen.queryByText('No tickets match “zzzz”')).not.toBeInTheDocument();
   });
 
   it('searches the api rather than filtering what is already drawn', async () => {

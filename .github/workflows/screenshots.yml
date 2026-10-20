@@ -71,7 +71,7 @@ jobs:
         run: pnpm --filter @helpdock/admin exec playwright install --with-deps chromium
 
       - name: Render the baselines
-        run: pnpm --filter @helpdock/admin e2e:screenshots --update-snapshots
+        run: pnpm --filter @helpdock/admin e2e:screenshots --update-snapshots=all
 
       # Unpacks straight over `apps/admin/e2e/__screenshots__/`, so committing
       # them is `gh run download` in the repository root and then `git add`.

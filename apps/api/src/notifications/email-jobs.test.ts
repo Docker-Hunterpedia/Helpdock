@@ -1,7 +1,7 @@
 import type { Db } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
-import type { Job, Queue } from 'bullmq';
-import { describe, expect, it } from 'vitest';
+import { DelayedError, type Job, type Queue } from 'bullmq';
+import { describe, expect, it, vi } from 'vitest';
 import type { NotificationEmailEngine } from './email-engine.js';
 import {
   bullEmailQueue,
@@ -9,6 +9,11 @@ import {
   type NotifyEmailQueue,
   topOfHour,
 } from './email-jobs.js';
+
+vi.mock('../tenant/system-job.js', () => ({
+  withSystemJob: async (_db: unknown, _brand: string, _job: string, fn: (tx: unknown) => unknown) =>
+    fn({}),
+}));
 
 const BRAND_A = '0199f4b2-0000-7000-8000-0000000000a1';
 const BRAND_B = '0199f4b2-0000-7000-8000-0000000000b1';
@@ -138,5 +143,58 @@ describe('bullEmailQueue', () => {
       'remove',
       `add notify.email_batch {"brandId":"${BRAND_A}","batchId":"${BATCH}"} notify.batch.${BATCH} 0`,
     ]);
+  });
+
+  describe('after the batch job moved itself', () => {
+    const LATER = new Date(NOW.getTime() + 3_600_000);
+    const EARLIER = new Date(NOW.getTime() + 60_000);
+    const run = async (
+      engine: Partial<NotificationEmailEngine>,
+      changeDelay: () => Promise<void>,
+    ) => {
+      const warnings: unknown[] = [];
+      const p = createEmailJobProcessors({
+        db,
+        queue: recorder().queue,
+        engine: {
+          send: async () => ({ kind: 'later', at: LATER }),
+          ...engine,
+        } as unknown as NotificationEmailEngine,
+        log: { ...silentLogger, warn: (...args: unknown[]) => void warnings.push(args) },
+        now: () => NOW,
+      });
+      const job = {
+        id: `notify.batch.${BATCH}`,
+        name: 'notify.email_batch',
+        data: { brandId: BRAND_A, batchId: BATCH },
+        attemptsMade: 0,
+        opts: {},
+        moveToDelayed: async () => undefined,
+        changeDelay,
+      } as unknown as Job;
+      await expect(p['notify.email_batch'](job, 't')).rejects.toBeInstanceOf(DelayedError);
+      return warnings;
+    };
+
+    it('still ends delayed, with a warning, when changeDelay throws', async () => {
+      const warnings = await run({ dueAt: async () => EARLIER }, async () => {
+        throw new Error('JobNotInState');
+      });
+      expect(warnings).toHaveLength(1);
+    });
+
+    it('still ends delayed, with a warning, when the re-read throws', async () => {
+      const changed: boolean[] = [];
+      const warnings = await run(
+        {
+          dueAt: async () => {
+            throw new Error('connection lost');
+          },
+        },
+        async () => void changed.push(true),
+      );
+      expect(warnings).toHaveLength(1);
+      expect(changed).toEqual([]);
+    });
   });
 });

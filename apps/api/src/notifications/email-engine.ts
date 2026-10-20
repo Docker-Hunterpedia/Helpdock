@@ -202,6 +202,12 @@ export class NotificationEmailEngine {
 
   // ----------------------------------------------------------------- send
 
+  /** The time a still-pending batch is due, read fresh; null once it is settled or gone. */
+  async dueAt(tx: DbTransaction, batchId: string): Promise<Date | null> {
+    const batch = await this.#deps.repository.lockBatch(tx, batchId);
+    return batch?.status === 'pending' ? batch.scheduledFor : null;
+  }
+
   /**
    * `notify.email_batch`. Everything that can make the email wait is asked
    * before the receipt is claimed, and written, so "later" commits its

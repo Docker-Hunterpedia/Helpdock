@@ -63,9 +63,13 @@ import { BusinessHoursService } from './business-hours.service.js';
 import { fireSlaTimer } from './escalation.js';
 import { SlaRepository } from './sla.repository.js';
 import { SlaService } from './sla.service.js';
-import { SLA_SCHEDULE_EVENT } from './sla-events.js';
+import { SLA_SCHEDULE_EVENT, SLA_STATUS_RESYNC_EVENT } from './sla-events.js';
 import { bullTimerQueue } from './sla-timers.js';
-import { createSlaScheduleHandler, type SlaWorkerDeps } from './sla-worker.js';
+import {
+  createSlaScheduleHandler,
+  createSlaStatusResyncHandler,
+  type SlaWorkerDeps,
+} from './sla-worker.js';
 
 /**
  * M3-01 and M3-02 against a real Postgres and a real Redis, over real
@@ -876,6 +880,113 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
           .status,
       ).toBe(200);
       expect(await nextDue()).toBeNull();
+    });
+
+    it('re-syncs the tickets already in a status when its pauses-SLA flag changes (#336)', async () => {
+      expect(
+        (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
+          .status,
+      ).toBe(201);
+      const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+        name: 'On hold with vendor',
+        systemState: 'open',
+        pausesSla: false,
+        color: 'info',
+      });
+      expect(created.status).toBe(201);
+      const statusId = created.body.id;
+      const inStatus: string[] = [];
+      for (let index = 0; index < 3; index += 1) {
+        const { ticket } = await createTicket();
+        expect(
+          (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId })).status,
+        ).toBe(200);
+        inStatus.push(ticket.id);
+      }
+      const elsewhere = (await createTicket()).ticket.id;
+      const columns = (ticketId: string) =>
+        withSystem(runtime.db, seeded.brandId, async (tx) => {
+          const [row] = await tx
+            .select({
+              first: tickets.firstResponseDueAt,
+              resolution: tickets.resolutionDueAt,
+              next: tickets.slaNextDueAt,
+            })
+            .from(tickets)
+            .where(eq(tickets.id, ticketId));
+          return row;
+        });
+      // What the worker does with the `sla.status_resync` rows, one batch of two at a time.
+      const handler = createSlaStatusResyncHandler({ ...slaDeps(), statusResyncBatch: 2 });
+      const handled = new Set<string>();
+      const drain = async () => {
+        for (;;) {
+          const rows = (
+            await withSystem(runtime.db, seeded.brandId, (tx) =>
+              tx
+                .select()
+                .from(outbox)
+                .where(eq(outbox.event, SLA_STATUS_RESYNC_EVENT))
+                .orderBy(asc(outbox.id)),
+            )
+          ).filter((row) => !handled.has(row.id) && row.payload.statusId === statusId);
+          const row = rows[0];
+          if (row === undefined) {
+            return handled.size;
+          }
+          handled.add(row.id);
+          await withSystem(runtime.db, seeded.brandId, (tx) =>
+            handler({
+              outboxId: row.id,
+              brandId: row.brandId,
+              event: row.event,
+              payload: row.payload,
+              tx,
+              log: silentLogger,
+            }),
+          );
+        }
+      };
+
+      for (const id of inStatus) {
+        expect((await columns(id))?.resolution).not.toBeNull();
+      }
+
+      const pause = await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
+        pausesSla: true,
+      });
+      expect(pause.status).toBe(200);
+      expect(await drain()).toBe(2);
+
+      for (const id of inStatus) {
+        expect((await clockOf(id, 'resolution')).pausedAt).not.toBeNull();
+        expect(await columns(id)).toEqual({ first: null, resolution: null, next: null });
+      }
+      expect((await columns(elsewhere))?.resolution).not.toBeNull();
+
+      // A PATCH that leaves the flag as it is writes nothing.
+      expect(
+        (
+          await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
+            pausesSla: true,
+          })
+        ).status,
+      ).toBe(200);
+      expect(await drain()).toBe(2);
+
+      const resume = await call('PATCH', `${brandPath()}/ticket-statuses/${statusId}`, ada, {
+        pausesSla: false,
+      });
+      expect(resume.status).toBe(200);
+      expect(await drain()).toBe(4);
+
+      for (const id of inStatus) {
+        const clock = await clockOf(id, 'resolution');
+        expect(clock.pausedAt).toBeNull();
+        const stored = await columns(id);
+        expect(stored?.resolution).toEqual(clock.dueAt);
+        expect(stored?.next).not.toBeNull();
+      }
     });
 
     it('does not meet the response clock with an internal note', async () => {

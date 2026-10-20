@@ -14,6 +14,7 @@ import type {
 import { MAX_TICKET_STATUSES_PER_BRAND, parseBrandSettings } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../../brands/ticketing-failure.js';
+import { enqueueSlaStatusResync } from '../../sla/sla-events.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -121,6 +122,12 @@ export class TicketingSettingsService {
     /* c8 ignore next 3 -- the read above proved the row is this brand's. */
     if (updated === undefined) {
       throw new NotFoundException('No such status');
+    }
+
+    // Tickets already in the status keep their stored clocks until each next
+    // syncs, so the worker re-syncs them (§3.2), a batch at a time.
+    if (request.pausesSla !== undefined && request.pausesSla !== status.pausesSla) {
+      await enqueueSlaStatusResync(context.tx, context.brandId, { statusId, at: context.now });
     }
 
     await this.#audit(context, 'ticket_status.updated', statusId, {

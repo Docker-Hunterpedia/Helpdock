@@ -391,6 +391,32 @@ export class SlaRepository {
     return rows.map((row) => row.id);
   }
 
+  /**
+   * One batch of the open tickets in a status, in id order after `afterId`:
+   * what a change to the status's `pauses_sla` has to re-sync.
+   */
+  async openTicketIdsInStatus(
+    tx: DbTransaction,
+    statusId: string,
+    afterId: string | undefined,
+    limit: number,
+  ): Promise<string[]> {
+    const rows = await tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+      .where(
+        and(
+          openTicket,
+          eq(tickets.statusId, statusId),
+          afterId === undefined ? undefined : gt(tickets.id, afterId),
+        ),
+      )
+      .orderBy(asc(tickets.id))
+      .limit(limit);
+    return rows.map((row) => row.id);
+  }
+
   /** Tickets with a current clock still counting or paused: what `sla.rebuild` visits. */
   async runningTicketIds(tx: DbTransaction): Promise<string[]> {
     const rows = await tx

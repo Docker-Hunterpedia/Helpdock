@@ -327,14 +327,14 @@ tenant transaction.
 | `POST /contacts` | `contact:write` | Creates one, with any identifiers given. 409 if one is taken. |
 | `GET /contacts/:contactId` | `contact:read` | The contact, its identifiers, account, notes, duplicate suggestions and stats. |
 | `PATCH /contacts/:contactId` | `contact:write` | Name, account, language, timezone, customer id. |
-| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, visibleCount, hiddenCount }`: the newest 50 tickets the caller may see, deleted ones left out, each with its status name and `statusId`; how many they may see in all; and how many are hidden from them. |
+| `GET /contacts/:contactId/timeline` | `contact:read` | `{ items, notes, visibleCount, hiddenCount }`: the newest 50 tickets the caller may see, deleted and spam ones left out, each with its status name and `statusId`; how many they may see in all; and how many are hidden from them. |
 | `POST /contacts/:contactId/identities` | `contact:write` | Adds one, normalised. |
 | `DELETE /contacts/:contactId/identities/:identityId` | `contact:write` | Removes one, never the last. |
 | `POST /contacts/:contactId/notes` | `contact:write` | Adds a staff-only note. |
 | `POST /contacts/:contactId/duplicates/:suggestionId/dismiss` | `contact:write` | "Not the same". |
 | `GET /contacts/:contactId/export` | `contact:read` + Admin | The export above, as a download. |
 | `POST /contacts/:contactId/anonymise` | `contact:write` + Admin | The erasure above. |
-| `GET /contacts/:contactId/merge-preview?otherContactId=` | `contact:read` | Both sides with their ticket counts (hidden ones included) and the identifiers after a merge. |
+| `GET /contacts/:contactId/merge-preview?otherContactId=` | `contact:read` | Both sides with their ticket counts (hidden ones included, deleted and spam ones left out) and the identifiers after a merge. |
 | `POST /contacts/:contactId/merge` | `contact:write` | `{ mergedContactId, suggestionId? }`: folds that contact into this one. Answers this contact. |
 | `POST /contacts/:contactId/merges/:mergeId/undo` | `contact:write` | Takes the merge back within 24 hours. |
 | `GET /accounts` | `contact:read` | The companies, with contact counts. |
@@ -386,7 +386,7 @@ M1-04 shipped first and its implementations answered "none yet". M1-02
 implements both in `apps/api/src/tickets/contact-providers.ts` and passes them
 to `ContactsModule.forRoot`; nothing in `contacts/` changed.
 
-Three things are worth knowing about the real ones:
+Four things are worth knowing about the real ones:
 
 - **Both read through the request's own transaction**, so the timeline and the
   counts are department-scoped like everything else: "an agent viewing a contact
@@ -395,9 +395,11 @@ Three things are worth knowing about the real ones:
   ticket from all views, so the timeline's items, `visibleCount` and
   `hiddenCount`, the contact list's open and total counts, its CSAT and the
   "Has open tickets" filter all skip it (fixed in 1.0.1; 1.0.0 counted it).
-  Merged and spam tickets stay: they are still tickets a viewer can open, as
-  they are in the ticket list, and each is listed with its Merged or Spam
-  status.
+- **Nor is spam.** A ticket marked as spam is not something the contact asked,
+  so the same reads skip a ticket whose status is the brand's Spam (since
+  1.0.2; 1.0.1 listed it). Marking it "Not spam" brings it back. The ticket
+  list still shows spam under its Spam status. A merged ticket stays: it is
+  part of the contact's history, listed with its Merged status.
 - **`hiddenCount` cannot come from a scoped read** — a row the policy hides is a
   row no scoped query can count. It comes from `helpdock_contact_ticket_count`,
   which turns `app.all_departments` on for the duration of one call and leaves

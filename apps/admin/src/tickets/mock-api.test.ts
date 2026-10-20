@@ -71,6 +71,15 @@ describe('MockTicketsApi', () => {
     });
   });
 
+  it('leaves a contact’s spam out of its timeline, as the api does', async () => {
+    await api.markSpam(BRAND, MOCK_TICKET_REFUND, { blockSender: false });
+
+    const history = api.contactHistory(MOCK_CONTACT_MONA);
+
+    expect(history.items.map((item) => item.id)).toEqual([MOCK_TICKET_CLOSED]);
+    expect(history.visibleCount).toBe(1);
+  });
+
   it('seeds the six statuses every brand is created with', async () => {
     const { statuses } = await api.statuses(BRAND);
 

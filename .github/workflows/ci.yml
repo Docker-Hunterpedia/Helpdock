@@ -369,7 +369,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
+        # The runner image ships Microsoft's package repository, which sometimes
+        # answers 403 and fails the whole update. ffmpeg comes from Ubuntu's own
+        # archive, so that list is dropped before updating.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -513,7 +518,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
+        # The runner image ships Microsoft's package repository, which sometimes
+        # answers 403 and fails the whole update. ffmpeg comes from Ubuntu's own
+        # archive, so that list is dropped before updating.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update && sudo apt-get install --no-install-recommends --yes ffmpeg
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

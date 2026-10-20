@@ -17,7 +17,7 @@ Upgrade to the newest patch of the latest minor release to receive fixes. [Upgra
 
 **Do not open a public issue for security problems.**
 
-Report privately through [GitHub private vulnerability reporting](https://github.com/Docker-Hunterpedia/Helpdock/security/advisories/new).
+Report privately through [GitHub private vulnerability reporting](https://github.com/Docker-Hunterpedia/Helpdock/security/advisories/new), or by email to the security contact, [contact@oday-bakkour.com](mailto:contact@oday-bakkour.com).
 
 Please include:
 

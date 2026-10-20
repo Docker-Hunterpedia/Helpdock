@@ -146,3 +146,19 @@ any CycloneDX-aware scanner, for example:
 gh release download v1.0.0 --pattern '*.cdx.json'
 grype sbom:helpdock-1.0.0.cdx.json
 ```
+
+## Anthropic's OSS Scanner
+
+[`.oss-scanner/`](../../.oss-scanner/) holds what [Anthropic's OSS
+Scanner](https://red.anthropic.com/oss-scanner/) reads when it scans a project:
+`Dockerfile` builds an audit image with the checkout at `/src`, its dependencies
+installed and every workspace built, because the scan itself runs with no
+network; `Dockerfile.dockerignore` keeps the docs and tests in that image, which
+the root `.dockerignore` leaves out of the production one; `threat_model.md`
+tells the scanner what is in scope, how to rate severity and how to report.
+Enrolment is a separate pull request to
+[anthropics/oss-scanner](https://github.com/anthropics/oss-scanner) naming these
+paths; until it merges, nothing scans Helpdock. Reports go to the email contact
+in [SECURITY.md](../../SECURITY.md#reporting-a-vulnerability) and are handled
+like any private report. Change `threat_model.md` when the trust boundaries or
+the severity rules change; the scanner reads the repository's copy at each scan.

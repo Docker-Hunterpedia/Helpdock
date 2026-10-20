@@ -1,1053 +1,1358 @@
 {
-  "v": 3,
-  "attachments": {},
-  "boards": {
-    "AdminAcceptInvite.dc.html": {
-      "h": 800,
-      "title": "Admin/AcceptInvite",
-      "w": 1280,
-      "x": 2720,
-      "y": 4600
-    },
-    "AdminBrand.dc.html": {
-      "h": 900,
-      "title": "Admin/Brand",
-      "w": 1440,
-      "x": 0,
-      "y": 6900
-    },
-    "AdminBrandDanger.dc.html": {
-      "h": 900,
-      "title": "Admin/Brand-Danger",
-      "w": 1440,
-      "x": 0,
-      "y": 7920
-    },
-    "AdminContact.dc.html": {
-      "h": 900,
-      "title": "Admin/Contact",
-      "w": 1440,
-      "x": 1520,
-      "y": 5880
-    },
-    "AdminContactDialogs.dc.html": {
-      "h": 1000,
-      "title": "Admin/Contact-Dialogs",
-      "w": 1574,
-      "x": 1520,
-      "y": 10220
-    },
-    "AdminContacts.dc.html": {
-      "h": 900,
-      "title": "Admin/Contacts",
-      "w": 1440,
-      "x": 0,
-      "y": 5880
-    },
-    "AdminEnrol2FA.dc.html": {
-      "h": 640,
-      "title": "Admin/Enrol2FA",
-      "w": 1120,
-      "x": 1520,
-      "y": 4600
-    },
-    "AdminLogin.dc.html": {
-      "h": 800,
-      "title": "Admin/Login",
-      "w": 1280,
-      "x": 0,
-      "y": 2660
-    },
-    "AdminLoginAR.dc.html": {
-      "h": 800,
-      "title": "Admin/Login-AR",
-      "w": 1280,
-      "x": 1360,
-      "y": 2660
-    },
-    "AdminSettings.dc.html": {
-      "h": 900,
-      "title": "Admin/Settings",
-      "w": 1440,
-      "x": 1360,
-      "y": 3580
-    },
-    "AdminStaff.dc.html": {
-      "h": 900,
-      "title": "Admin/Staff",
-      "w": 1440,
-      "x": 2880,
-      "y": 3580
-    },
-    "AdminSystem.dc.html": {
-      "h": 900,
-      "title": "Admin/System",
-      "w": 1440,
-      "x": 0,
-      "y": 4600
-    },
-    "AdminTicket.dc.html": {
-      "h": 900,
-      "title": "Admin · ticket view",
-      "w": 1440,
-      "x": 0,
-      "y": 1360
-    },
-    "AdminTicketDialogs.dc.html": {
-      "h": 1480,
-      "title": "Admin/Ticket-Dialogs",
-      "w": 1440,
-      "x": 0,
-      "y": 10220
-    },
-    "AdminTicketing.dc.html": {
-      "h": 900,
-      "title": "Admin/Ticketing",
-      "w": 1440,
-      "x": 3040,
-      "y": 5880
-    },
-    "AdminTicketingAssignment.dc.html": {
-      "h": 900,
-      "title": "Admin/Ticketing-Assignment",
-      "w": 1440,
-      "x": 0,
-      "y": 9200
-    },
-    "AdminTicketingFeedback.dc.html": {
-      "h": 900,
-      "title": "Admin/Ticketing-Feedback",
-      "w": 1440,
-      "x": 3040,
-      "y": 9200
-    },
-    "AdminTicketingSpam.dc.html": {
-      "h": 900,
-      "title": "Admin/Ticketing-Spam",
-      "w": 1440,
-      "x": 1520,
-      "y": 9200
-    },
-    "AdminTotp.dc.html": {
-      "h": 560,
-      "title": "Admin/TOTP",
-      "w": 520,
-      "x": 2720,
-      "y": 2660
-    },
-    "AdminWizard.dc.html": {
-      "h": 800,
-      "title": "Admin/Wizard",
-      "w": 1280,
-      "x": 0,
-      "y": 3580
-    },
-    "Components.dc.html": {
-      "h": 1000,
-      "title": "03 Components",
-      "w": 1200,
-      "x": 2560,
-      "y": 0
-    },
-    "CsatAR.dc.html": {
-      "h": 760,
-      "title": "Public/CSAT-AR",
-      "w": 1200,
-      "x": 2800,
-      "y": 6900
-    },
-    "CsatEN.dc.html": {
-      "h": 760,
-      "title": "Public/CSAT-EN",
-      "w": 1200,
-      "x": 1520,
-      "y": 6900
-    },
-    "HelpCenter.dc.html": {
-      "h": 900,
-      "title": "Help center · article",
-      "w": 1280,
-      "x": 2560,
-      "y": 1360
-    },
-    "Main.dc.html": {
-      "h": 760,
-      "title": "01 Color",
-      "w": 1200,
-      "x": 0,
-      "y": 0
-    },
-    "Typography.dc.html": {
-      "h": 760,
-      "title": "02 Typography",
-      "w": 1200,
-      "x": 1280,
-      "y": 0
-    },
-    "WidgetAR.dc.html": {
-      "h": 760,
-      "title": "Widget · AR (RTL)",
-      "w": 440,
-      "x": 2040,
-      "y": 1360
-    },
-    "WidgetEN.dc.html": {
-      "h": 760,
-      "title": "Widget · EN",
-      "w": 440,
-      "x": 1520,
-      "y": 1360
-    },
-    "AdminTicketingViews.dc.html": {
-      "x": 0,
-      "y": 12080,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Ticketing-Views"
-    },
-    "AdminViewDialogs.dc.html": {
-      "x": 1520,
-      "y": 12080,
-      "w": 1440,
-      "h": 1160,
-      "title": "Admin/View-Dialogs"
-    },
-    "AdminTicketTags.dc.html": {
-      "x": 3040,
-      "y": 12080,
-      "w": 1200,
-      "h": 760,
-      "title": "Admin/Ticket-Tags"
-    },
-    "AdminWizardSetupKey.dc.html": {
-      "x": 4400,
-      "y": 3580,
-      "w": 1280,
-      "h": 800,
-      "title": "Admin/Wizard-SetupKey"
-    },
-    "AdminEmail.dc.html": {
-      "x": 0,
-      "y": 13720,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Email"
-    },
-    "AdminEmailOutgoing.dc.html": {
-      "x": 1520,
-      "y": 13720,
-      "w": 1440,
-      "h": 1640,
-      "title": "Admin/Email-Outgoing"
-    },
-    "AdminEmailMailbox.dc.html": {
-      "x": 3040,
-      "y": 13720,
-      "w": 1440,
-      "h": 1240,
-      "title": "Admin/Email-Mailbox"
-    },
-    "AdminTicketEmail.dc.html": {
-      "x": 4560,
-      "y": 13720,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Ticket-Email"
-    },
-    "EmailCustomer.dc.html": {
-      "x": 0,
-      "y": 15480,
-      "w": 1280,
-      "h": 1340,
-      "title": "Email/Customer-EN-AR"
-    },
-    "AdminSignature.dc.html": {
-      "x": 1360,
-      "y": 15480,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Profile-Signature"
-    },
-    "AdminTicketingBusinessHours.dc.html": {
-      "x": 0,
-      "y": 17300,
-      "w": 1440,
-      "h": 1240,
-      "title": "Admin/Ticketing-BusinessHours"
-    },
-    "AdminTicketingSLAs.dc.html": {
-      "x": 1520,
-      "y": 17300,
-      "w": 1440,
-      "h": 1420,
-      "title": "Admin/Ticketing-SLAs"
-    },
-    "AdminTicketSLA.dc.html": {
-      "x": 3040,
-      "y": 17300,
-      "w": 1200,
-      "h": 960,
-      "title": "Admin/Ticket-SLA"
-    },
-    "AdminAutomationRules.dc.html": {
-      "x": 0,
-      "y": 18840,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Automation-Rules"
-    },
-    "AdminRuleBuilder.dc.html": {
-      "x": 1520,
-      "y": 18840,
-      "w": 1440,
-      "h": 1400,
-      "title": "Admin/Rule-Builder"
-    },
-    "AdminAutomationMacros.dc.html": {
-      "x": 3040,
-      "y": 18840,
-      "w": 1440,
-      "h": 960,
-      "title": "Admin/Automation-Macros"
-    },
-    "AdminComposerMacros.dc.html": {
-      "x": 4560,
-      "y": 18840,
-      "w": 1200,
-      "h": 760,
-      "title": "Admin/Composer-Macros"
-    },
-    "AdminNotifications.dc.html": {
-      "x": 0,
-      "y": 20360,
-      "w": 1440,
-      "h": 1880,
-      "title": "Admin/Notifications"
-    },
-    "EmailStaffNotification.dc.html": {
-      "x": 1520,
-      "y": 20360,
-      "w": 1280,
-      "h": 1400,
-      "title": "Email/Staff-Notification"
-    },
-    "AdminAuditLog.dc.html": {
-      "x": 2880,
-      "y": 20360,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Audit-Log"
-    },
-    "WidgetStatesEN.dc.html": {
-      "x": 0,
-      "y": 22720,
-      "w": 2464,
-      "h": 1040,
-      "title": "Widget/States-EN"
-    },
-    "WidgetStatesAR.dc.html": {
-      "x": 2544,
-      "y": 22720,
-      "w": 2464,
-      "h": 1040,
-      "title": "Widget/States-AR"
-    },
-    "WidgetModesEN.dc.html": {
-      "x": 0,
-      "y": 23880,
-      "w": 1268,
-      "h": 1860,
-      "title": "Widget/Modes-EN"
-    },
-    "WidgetModesAR.dc.html": {
-      "x": 1348,
-      "y": 23880,
-      "w": 1268,
-      "h": 1860,
-      "title": "Widget/Modes-AR"
-    },
-    "WebFormEN.dc.html": {
-      "x": 2696,
-      "y": 23880,
-      "w": 1280,
-      "h": 900,
-      "title": "Public/WebForm-EN"
-    },
-    "WebFormAR.dc.html": {
-      "x": 4056,
-      "y": 23880,
-      "w": 1280,
-      "h": 900,
-      "title": "Public/WebForm-AR"
-    },
-    "AdminWidget.dc.html": {
-      "x": 0,
-      "y": 25860,
-      "w": 1440,
-      "h": 2880,
-      "title": "Admin/Channels-Widget"
-    },
-    "AdminWebForm.dc.html": {
-      "x": 1520,
-      "y": 25860,
-      "w": 1440,
-      "h": 1040,
-      "title": "Admin/Channels-WebForm"
-    },
-    "HelpCenterHomeEN.dc.html": {
-      "x": 0,
-      "y": 29340,
-      "w": 1280,
-      "h": 1440,
-      "title": "HelpCenter/Home-EN"
-    },
-    "HelpCenterHomeAR.dc.html": {
-      "x": 1360,
-      "y": 29340,
-      "w": 1280,
-      "h": 1440,
-      "title": "HelpCenter/Home-AR"
-    },
-    "HelpCenterCategoryEN.dc.html": {
-      "x": 2720,
-      "y": 29340,
-      "w": 1280,
-      "h": 1020,
-      "title": "HelpCenter/Category-EN"
-    },
-    "HelpCenterCategoryAR.dc.html": {
-      "x": 4080,
-      "y": 29340,
-      "w": 1280,
-      "h": 1020,
-      "title": "HelpCenter/Category-AR"
-    },
-    "HelpCenterArticleAR.dc.html": {
-      "x": 0,
-      "y": 30900,
-      "w": 1280,
-      "h": 1480,
-      "title": "HelpCenter/Article-AR"
-    },
-    "HelpCenterSearchEN.dc.html": {
-      "x": 1360,
-      "y": 30900,
-      "w": 1280,
-      "h": 1600,
-      "title": "HelpCenter/Search-EN"
-    },
-    "HelpCenterSearchAR.dc.html": {
-      "x": 2720,
-      "y": 30900,
-      "w": 1280,
-      "h": 1520,
-      "title": "HelpCenter/Search-AR"
-    },
-    "HelpCenterStatesEN.dc.html": {
-      "x": 4080,
-      "y": 30900,
-      "w": 1280,
-      "h": 1980,
-      "title": "HelpCenter/States-EN"
-    },
-    "AdminHelpCenter.dc.html": {
-      "x": 0,
-      "y": 33000,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/HelpCenter"
-    },
-    "AdminArticleEditor.dc.html": {
-      "x": 1520,
-      "y": 33000,
-      "w": 1440,
-      "h": 1880,
-      "title": "Admin/HelpCenter-Editor"
-    },
-    "AdminHelpCenterSettings.dc.html": {
-      "x": 3040,
-      "y": 33000,
-      "w": 1440,
-      "h": 2580,
-      "title": "Admin/HelpCenter-Settings"
-    },
-    "AdminBrandDomains.dc.html": {
-      "x": 4560,
-      "y": 33000,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Brand-Domains"
-    },
-    "AdminChannelsTelegram.dc.html": {
-      "x": 0,
-      "y": 36160,
-      "w": 1440,
-      "h": 2700,
-      "title": "Admin/Channels-Telegram"
-    },
-    "AdminTicketTelegram.dc.html": {
-      "x": 1520,
-      "y": 36160,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Ticket-Telegram"
-    },
-    "TelegramChatEN.dc.html": {
-      "x": 3040,
-      "y": 36160,
-      "w": 1280,
-      "h": 1240,
-      "title": "Telegram/Chat-EN"
-    },
-    "TelegramChatAR.dc.html": {
-      "x": 4400,
-      "y": 36160,
-      "w": 1280,
-      "h": 1240,
-      "title": "Telegram/Chat-AR"
-    },
-    "AdminAIProviders.dc.html": {
-      "x": 0,
-      "y": 39500,
-      "w": 1440,
-      "h": 2620,
-      "title": "Admin/AI-Providers"
-    },
-    "AdminAIKnowledge.dc.html": {
-      "x": 1520,
-      "y": 39500,
-      "w": 1440,
-      "h": 1820,
-      "title": "Admin/AI-Knowledge"
-    },
-    "AdminAIAssistant.dc.html": {
-      "x": 3040,
-      "y": 39500,
-      "w": 1440,
-      "h": 2140,
-      "title": "Admin/AI-Assistant"
-    },
-    "AdminWizardAI.dc.html": {
-      "x": 4560,
-      "y": 39500,
-      "w": 1280,
-      "h": 800,
-      "title": "Admin/Wizard-AI"
-    },
-    "AdminTicketAI.dc.html": {
-      "x": 0,
-      "y": 42500,
-      "w": 1440,
-      "h": 3280,
-      "title": "Admin/Ticket-AI"
-    },
-    "WidgetAIEN.dc.html": {
-      "x": 1520,
-      "y": 42500,
-      "w": 2060,
-      "h": 1840,
-      "title": "Widget/AI-EN"
-    },
-    "WidgetAIAR.dc.html": {
-      "x": 3660,
-      "y": 42500,
-      "w": 2060,
-      "h": 1840,
-      "title": "Widget/AI-AR"
-    },
-    "AdminArticleApproval.dc.html": {
-      "x": 1520,
-      "y": 44460,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/HelpCenter-ArticleApproval"
-    },
-    "AdminDevelopersApiKeys.dc.html": {
-      "x": 0,
-      "y": 46400,
-      "w": 1440,
-      "h": 1760,
-      "title": "Admin/Developers-ApiKeys"
-    },
-    "AdminDevelopersWebhooks.dc.html": {
-      "x": 1520,
-      "y": 46400,
-      "w": 1440,
-      "h": 2560,
-      "title": "Admin/Developers-Webhooks"
-    },
-    "AdminReports.dc.html": {
-      "x": 3040,
-      "y": 46400,
-      "w": 1440,
-      "h": 3320,
-      "title": "Admin/Reports"
-    },
-    "AdminSystemV1.dc.html": {
-      "x": 4560,
-      "y": 46400,
-      "w": 1440,
-      "h": 1840,
-      "title": "Admin/System-1.0"
-    },
-    "EmailCsat.dc.html": {
-      "x": 6080,
-      "y": 46400,
-      "w": 1280,
-      "h": 1280,
-      "title": "Email/CSAT-EN-AR"
-    },
-    "WidgetCsatEN.dc.html": {
-      "x": 6080,
-      "y": 47800,
-      "w": 1312,
-      "h": 944,
-      "title": "Widget/CSAT-EN"
-    },
-    "WidgetCsatAR.dc.html": {
-      "x": 6080,
-      "y": 48864,
-      "w": 1312,
-      "h": 944,
-      "title": "Widget/CSAT-AR"
-    },
-    "AdminPasswordField.dc.html": {
-      "x": 4080,
-      "y": 4600,
-      "w": 1280,
-      "h": 760,
-      "title": "Admin/PasswordField"
-    },
-    "AdminChannelsMeta.dc.html": {
-      "h": 2840,
-      "title": "Admin/Channels-Meta",
-      "w": 1440,
-      "x": 0,
-      "y": 49928
-    },
-    "AdminChannelsMetaAccount.dc.html": {
-      "h": 3200,
-      "title": "Admin/Channels-Meta-Account",
-      "w": 1440,
-      "x": 1520,
-      "y": 49928
-    },
-    "AdminTicketMeta.dc.html": {
-      "h": 3080,
-      "title": "Admin/Ticket-Meta",
-      "w": 1440,
-      "x": 3040,
-      "y": 49928
-    },
-    "MetaChatEN.dc.html": {
-      "h": 1800,
-      "title": "Meta/Chat-EN",
-      "w": 1280,
-      "x": 4560,
-      "y": 49928
-    },
-    "MetaChatAR.dc.html": {
-      "h": 1800,
-      "title": "Meta/Chat-AR",
-      "w": 1280,
-      "x": 5920,
-      "y": 49928
-    },
-    "AdminSettingsSSO.dc.html": {
-      "x": 0,
-      "y": 53620,
-      "w": 1440,
-      "h": 1300,
-      "title": "Admin/Settings-SSO"
-    },
-    "AdminSettingsSSOConnection.dc.html": {
-      "x": 1520,
-      "y": 53620,
-      "w": 1440,
-      "h": 2360,
-      "title": "Admin/Settings-SSO-Connection"
-    },
-    "AdminLoginSSO.dc.html": {
-      "x": 3040,
-      "y": 53620,
-      "w": 3840,
-      "h": 840,
-      "title": "Admin/Login-SSO"
-    },
-    "AdminLoginSSOAR.dc.html": {
-      "x": 3040,
-      "y": 54580,
-      "w": 3840,
-      "h": 840,
-      "title": "Admin/Login-SSO-AR"
-    },
-    "AdminImport.dc.html": {
-      "x": 0,
-      "y": 56240,
-      "w": 1440,
-      "h": 1240,
-      "title": "Admin/Import"
-    },
-    "AdminImportWizard.dc.html": {
-      "x": 1520,
-      "y": 56240,
-      "w": 1440,
-      "h": 3640,
-      "title": "Admin/Import-Wizard"
-    },
-    "AdminImportRun.dc.html": {
-      "x": 3040,
-      "y": 56240,
-      "w": 1440,
-      "h": 1960,
-      "title": "Admin/Import-Run"
-    },
-    "AdminImportFileMapper.dc.html": {
-      "x": 4560,
-      "y": 56240,
-      "w": 1440,
-      "h": 2120,
-      "title": "Admin/Import-FileMapper"
-    },
-    "AdminTicketImported.dc.html": {
-      "x": 6080,
-      "y": 56240,
-      "w": 1440,
-      "h": 900,
-      "title": "Admin/Ticket-Imported"
-    },
-    "AdminMagicLink.dc.html": {
-      "x": 0,
-      "y": 60280,
-      "w": 1280,
-      "h": 800,
-      "title": "Admin/SignIn-MagicLink"
-    },
-    "AdminShellSidebarCollapse.dc.html": {
-      "x": 0,
-      "y": 62960,
-      "w": 1760,
-      "h": 740,
-      "title": "Admin/Shell-SidebarCollapse"
-    },
-    "AdminMagicLinkAR.dc.html": {
-      "x": 1360,
-      "y": 60280,
-      "w": 1280,
-      "h": 800,
-      "title": "Admin/SignIn-MagicLink-AR"
-    },
-    "AdminTicketContactHistory.dc.html": {
-      "x": 0,
-      "y": 61400,
-      "w": 1340,
-      "h": 720,
-      "title": "Admin/Ticket-ContactHistory"
-    },
-    "AdminMeSignInProviders.dc.html": {
-      "x": 0,
-      "y": 62240,
-      "w": 1880,
-      "h": 640,
-      "title": "Admin/Me-SignInProviders"
-    }
+ "v": 3,
+ "attachments": {},
+ "boards": {
+  "AdminAIAssistant.dc.html": {
+   "h": 2140,
+   "title": "Admin/AI-Assistant",
+   "w": 1440,
+   "x": 3040,
+   "y": 39500
   },
-  "createdOnFiles": {
-    "at": "2026-09-18T10:00:00Z",
-    "v": 1
+  "AdminAIKnowledge.dc.html": {
+   "h": 1820,
+   "title": "Admin/AI-Knowledge",
+   "w": 1440,
+   "x": 1520,
+   "y": 39500
   },
-  "designSystems": [],
-  "launch": {
-    "view": "canvas"
+  "AdminAIProviders.dc.html": {
+   "h": 2620,
+   "title": "Admin/AI-Providers",
+   "w": 1440,
+   "x": 0,
+   "y": 39500
   },
-  "notes": {
-    "applications": {
-      "kind": "title1",
-      "maxW": 3840,
-      "text": "Applications — admin, widget, help center",
-      "w": 240,
-      "x": 0,
-      "y": 1100
-    },
-    "brand-note": {
-      "color": "teal",
-      "text": "The accent tweak on the widget and help center artboards is what a brand can change. Everything else is fixed by the system so every brand still reads as Helpdock underneath.",
-      "w": 420,
-      "x": 1520,
-      "y": 1000
-    },
-    "foundations": {
-      "kind": "title1",
-      "maxW": 3760,
-      "text": "Foundations — Quiet desk",
-      "w": 240,
-      "x": 0,
-      "y": -260
-    },
-    "m0": {
-      "kind": "title1",
-      "maxW": 4320,
-      "text": "M0 Skeleton — auth, wizard, settings, staff",
-      "w": 240,
-      "x": 0,
-      "y": 2400
-    },
-    "m0-note": {
-      "color": "teal",
-      "text": "Deliverables: M0-05 auth (Login, Login-AR, TOTP), M0-08 wizard, M0-02 settings page with env-locked keys, M0-06 staff and roles with the invite dialog, M0-10/M0-11 System page (health, queues, channels, storage, AI spend, audit). Implementing agents build from these and DESIGN.md.",
-      "w": 460,
-      "x": 3300,
-      "y": 2660
-    },
-    "m1": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "M1 Ticketing core — contacts, ticketing settings (ticket view above)",
-      "w": 240,
-      "x": 0,
-      "y": 5620
-    },
-    "m1b": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "M1 Ticketing core — assignment, spam, feedback, merge and split, contact identity",
-      "w": 240,
-      "x": 0,
-      "y": 8940
-    },
-    "m1c": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "M1 Ticketing core — views, and the workspace remainder (M1-05, M1-15 part 2)",
-      "w": 240,
-      "x": 0,
-      "y": 11820
-    },
-    "m2": {
-      "kind": "title1",
-      "maxW": 6000,
-      "text": "M2 Email channel — mailboxes, outgoing email, the email thread, customer emails",
-      "w": 240,
-      "x": 0,
-      "y": 13480
-    },
-    "m3": {
-      "kind": "title1",
-      "maxW": 6000,
-      "text": "M3 Automation and SLAs — business hours, SLAs, rules, macros, notifications, audit log",
-      "w": 240,
-      "x": 0,
-      "y": 17060
-    },
-    "m23-nav": {
-      "color": "teal",
-      "text": "Admin sidebar once M2 and M3 both land: Brand, Settings, Ticketing, Automation, Channels, Staff and roles, System, with the notification bell in the brand row. M2 boards show Channels without Automation and M3 boards the reverse; build the combined order.",
-      "w": 460,
-      "x": 4560,
-      "y": 15480
-    },
-    "m4": {
-      "kind": "title1",
-      "maxW": 5200,
-      "text": "M4 Widget and realtime — widget states and modes, web form, widget settings",
-      "w": 240,
-      "x": 0,
-      "y": 22480
-    },
-    "m5": {
-      "kind": "title1",
-      "maxW": 6000,
-      "text": "M5 Help center — public pages, content admin, editor, settings, domains",
-      "w": 240,
-      "x": 0,
-      "y": 29100
-    },
-    "m45-note": {
-      "color": "teal",
-      "text": "M4/M5 decisions: widget origins live on Channels › Widget (not Brand › Domains); Brand tabs are General · Domains · Danger zone (theming moves to the Widget and Help center pages); Team Leaders see widget appearance and content policy, Admins only see origins and signed identity; \"chat + suggested articles\" is available from M5-10 via help center search (M7 upgrades it) — not disabled; article history is Activity only (versioning is v1.1). Size caps and domain values on these boards are sample values.",
-      "w": 520,
-      "x": 3040,
-      "y": 25860
-    },
-    "m6": {
-      "kind": "title1",
-      "maxW": 5680,
-      "text": "M6 Telegram — bots, Telegram tickets, the chat",
-      "w": 240,
-      "x": 0,
-      "y": 35900
-    },
-    "m7": {
-      "kind": "title1",
-      "maxW": 5840,
-      "text": "M7 AI — providers, knowledge, assistant settings, wizard step",
-      "w": 240,
-      "x": 0,
-      "y": 39240
-    },
-    "m7b": {
-      "kind": "title1",
-      "maxW": 5720,
-      "text": "M7 AI — agent assist, auto-reply in the widget, article approval",
-      "w": 240,
-      "x": 0,
-      "y": 42260
-    },
-    "m8": {
-      "kind": "title1",
-      "maxW": 7400,
-      "text": "M8 API, webhooks, reports, System 1.0, CSAT delivery",
-      "w": 240,
-      "x": 0,
-      "y": 46140
-    },
-    "m8-note": {
-      "color": "teal",
-      "text": "M8 decisions: webhook events, signature header and retry schedule follow docs/guides/webhooks.md (the boards show sample values). CSAT email links only open the rating page with the score preselected; nothing is recorded until Send, so mail scanners cannot rate. Telegram buttons record in one tap.",
-      "w": 460,
-      "x": 7480,
-      "y": 46400
-    },
-    "m11": {
-      "x": 0,
-      "y": 53340,
-      "text": "M11 SSO and migration — single sign-on for staff",
-      "kind": "title1",
-      "maxW": 6880,
-      "w": 240
-    },
-    "m11b": {
-      "x": 0,
-      "y": 55960,
-      "text": "M11 SSO and migration — import from Zendesk, Freshdesk, Zoho Desk and files",
-      "kind": "title1",
-      "maxW": 7520,
-      "w": 240
-    },
-    "m11-note": {
-      "x": 6960,
-      "y": 55480,
-      "w": 520,
-      "maxH": 420,
-      "text": "M11 decisions (proposed, docs/in-development/M11-sso-and-migration.md): SSO connections are install-wide (Settings › Single sign-on); groups map to brand roles and only SSO-sourced roles are synced. Imports live under Brand › Import, one brand at a time; nothing is sent to customers while importing; new HD numbers by default, the old number on the chip; no SLA timers until the admin starts them. Names, counts and URLs on these boards are sample values."
-    },
-    "m9": {
-      "x": 0,
-      "y": 59980,
-      "text": "M9 Hardening — magic-link confirm (F6)",
-      "kind": "title1",
-      "maxW": 2640
-    }
+  "AdminAcceptInvite.dc.html": {
+   "h": 800,
+   "title": "Admin/AcceptInvite",
+   "w": 1280,
+   "x": 2720,
+   "y": 4600
   },
-  "order": [
-    "Main.dc.html",
-    "Typography.dc.html",
-    "Components.dc.html",
-    "AdminTicket.dc.html",
-    "WidgetEN.dc.html",
-    "WidgetAR.dc.html",
-    "HelpCenter.dc.html",
-    "AdminLogin.dc.html",
-    "AdminLoginAR.dc.html",
-    "AdminTotp.dc.html",
-    "AdminWizard.dc.html",
-    "AdminSettings.dc.html",
-    "AdminStaff.dc.html",
-    "AdminSystem.dc.html",
-    "AdminEnrol2FA.dc.html",
-    "AdminAcceptInvite.dc.html",
-    "AdminContacts.dc.html",
-    "AdminContact.dc.html",
-    "AdminTicketing.dc.html",
-    "AdminBrand.dc.html",
-    "CsatEN.dc.html",
-    "CsatAR.dc.html",
-    "AdminBrandDanger.dc.html",
-    "AdminTicketingAssignment.dc.html",
-    "AdminTicketingSpam.dc.html",
-    "AdminTicketingFeedback.dc.html",
-    "AdminTicketDialogs.dc.html",
-    "AdminContactDialogs.dc.html",
-    "AdminTicketingViews.dc.html",
-    "AdminViewDialogs.dc.html",
-    "AdminTicketTags.dc.html",
-    "AdminWizardSetupKey.dc.html",
-    "AdminEmail.dc.html",
-    "AdminEmailOutgoing.dc.html",
-    "AdminEmailMailbox.dc.html",
-    "AdminTicketEmail.dc.html",
-    "EmailCustomer.dc.html",
-    "AdminSignature.dc.html",
-    "AdminTicketingBusinessHours.dc.html",
-    "AdminTicketingSLAs.dc.html",
-    "AdminTicketSLA.dc.html",
-    "AdminAutomationRules.dc.html",
-    "AdminRuleBuilder.dc.html",
-    "AdminAutomationMacros.dc.html",
-    "AdminComposerMacros.dc.html",
-    "AdminNotifications.dc.html",
-    "EmailStaffNotification.dc.html",
-    "AdminAuditLog.dc.html",
-    "WidgetStatesEN.dc.html",
-    "WidgetStatesAR.dc.html",
-    "WidgetModesEN.dc.html",
-    "WidgetModesAR.dc.html",
-    "WebFormEN.dc.html",
-    "WebFormAR.dc.html",
-    "AdminWidget.dc.html",
-    "AdminWebForm.dc.html",
-    "HelpCenterHomeEN.dc.html",
-    "HelpCenterHomeAR.dc.html",
-    "HelpCenterCategoryEN.dc.html",
-    "HelpCenterCategoryAR.dc.html",
-    "HelpCenterArticleAR.dc.html",
-    "HelpCenterSearchEN.dc.html",
-    "HelpCenterSearchAR.dc.html",
-    "HelpCenterStatesEN.dc.html",
-    "AdminHelpCenter.dc.html",
-    "AdminArticleEditor.dc.html",
-    "AdminHelpCenterSettings.dc.html",
-    "AdminBrandDomains.dc.html",
-    "AdminChannelsTelegram.dc.html",
-    "AdminTicketTelegram.dc.html",
-    "TelegramChatEN.dc.html",
-    "TelegramChatAR.dc.html",
-    "AdminAIProviders.dc.html",
-    "AdminAIKnowledge.dc.html",
-    "AdminAIAssistant.dc.html",
-    "AdminWizardAI.dc.html",
-    "AdminTicketAI.dc.html",
-    "WidgetAIEN.dc.html",
-    "WidgetAIAR.dc.html",
-    "AdminArticleApproval.dc.html",
-    "AdminDevelopersApiKeys.dc.html",
-    "AdminDevelopersWebhooks.dc.html",
-    "AdminReports.dc.html",
-    "AdminSystemV1.dc.html",
-    "EmailCsat.dc.html",
-    "WidgetCsatEN.dc.html",
-    "WidgetCsatAR.dc.html",
-    "AdminPasswordField.dc.html",
-    "AdminChannelsMeta.dc.html",
-    "AdminChannelsMetaAccount.dc.html",
-    "AdminTicketMeta.dc.html",
-    "MetaChatEN.dc.html",
-    "MetaChatAR.dc.html",
-    "AdminSettingsSSO.dc.html",
-    "AdminSettingsSSOConnection.dc.html",
-    "AdminLoginSSO.dc.html",
-    "AdminLoginSSOAR.dc.html",
-    "AdminImport.dc.html",
-    "AdminImportWizard.dc.html",
-    "AdminImportRun.dc.html",
-    "AdminImportFileMapper.dc.html",
-    "AdminTicketImported.dc.html",
-    "AdminMagicLink.dc.html",
-    "AdminShellSidebarCollapse.dc.html",
-    "AdminMagicLinkAR.dc.html",
-    "AdminTicketContactHistory.dc.html",
-    "AdminMeSignInProviders.dc.html"
-  ],
-  "pages": [],
-  "title": "Helpdock Design System"
+  "AdminArticleApproval.dc.html": {
+   "h": 900,
+   "title": "Admin/HelpCenter-ArticleApproval",
+   "w": 1440,
+   "x": 1520,
+   "y": 44460
+  },
+  "AdminArticleEditor.dc.html": {
+   "h": 1880,
+   "title": "Admin/HelpCenter-Editor",
+   "w": 1440,
+   "x": 1520,
+   "y": 33000
+  },
+  "AdminAuditLog.dc.html": {
+   "h": 900,
+   "title": "Admin/Audit-Log",
+   "w": 1440,
+   "x": 2880,
+   "y": 20360
+  },
+  "AdminAutomationMacros.dc.html": {
+   "h": 960,
+   "title": "Admin/Automation-Macros",
+   "w": 1440,
+   "x": 3040,
+   "y": 18840
+  },
+  "AdminAutomationRules.dc.html": {
+   "h": 900,
+   "title": "Admin/Automation-Rules",
+   "w": 1440,
+   "x": 0,
+   "y": 18840
+  },
+  "AdminBrand.dc.html": {
+   "h": 900,
+   "title": "Admin/Brand",
+   "w": 1440,
+   "x": 0,
+   "y": 6900
+  },
+  "AdminBrandDanger.dc.html": {
+   "h": 900,
+   "title": "Admin/Brand-Danger",
+   "w": 1440,
+   "x": 0,
+   "y": 7920
+  },
+  "AdminBrandDomains.dc.html": {
+   "h": 900,
+   "title": "Admin/Brand-Domains",
+   "w": 1440,
+   "x": 4560,
+   "y": 33000
+  },
+  "AdminChannelsMeta.dc.html": {
+   "h": 2840,
+   "title": "Admin/Channels-Meta",
+   "w": 1440,
+   "x": 0,
+   "y": 49928
+  },
+  "AdminChannelsMetaAccount.dc.html": {
+   "h": 3200,
+   "title": "Admin/Channels-Meta-Account",
+   "w": 1440,
+   "x": 1520,
+   "y": 49928
+  },
+  "AdminChannelsTelegram.dc.html": {
+   "h": 2700,
+   "title": "Admin/Channels-Telegram",
+   "w": 1440,
+   "x": 0,
+   "y": 36160
+  },
+  "AdminComposerMacros.dc.html": {
+   "h": 760,
+   "title": "Admin/Composer-Macros",
+   "w": 1200,
+   "x": 4560,
+   "y": 18840
+  },
+  "AdminContact.dc.html": {
+   "h": 900,
+   "title": "Admin/Contact",
+   "w": 1440,
+   "x": 1520,
+   "y": 5880
+  },
+  "AdminContactDialogs.dc.html": {
+   "h": 1000,
+   "title": "Admin/Contact-Dialogs",
+   "w": 1574,
+   "x": 1520,
+   "y": 10220
+  },
+  "AdminContacts.dc.html": {
+   "h": 900,
+   "title": "Admin/Contacts",
+   "w": 1440,
+   "x": 0,
+   "y": 5880
+  },
+  "AdminDevelopersApiKeys.dc.html": {
+   "h": 1760,
+   "title": "Admin/Developers-ApiKeys",
+   "w": 1440,
+   "x": 0,
+   "y": 46400
+  },
+  "AdminDevelopersWebhooks.dc.html": {
+   "h": 2560,
+   "title": "Admin/Developers-Webhooks",
+   "w": 1440,
+   "x": 1520,
+   "y": 46400
+  },
+  "AdminEmail.dc.html": {
+   "h": 900,
+   "title": "Admin/Email",
+   "w": 1440,
+   "x": 0,
+   "y": 13720
+  },
+  "AdminEmailMailbox.dc.html": {
+   "h": 1240,
+   "title": "Admin/Email-Mailbox",
+   "w": 1440,
+   "x": 3040,
+   "y": 13720
+  },
+  "AdminEmailOutgoing.dc.html": {
+   "h": 1640,
+   "title": "Admin/Email-Outgoing",
+   "w": 1440,
+   "x": 1520,
+   "y": 13720
+  },
+  "AdminEnrol2FA.dc.html": {
+   "h": 640,
+   "title": "Admin/Enrol2FA",
+   "w": 1120,
+   "x": 1520,
+   "y": 4600
+  },
+  "AdminHelpCenter.dc.html": {
+   "h": 900,
+   "title": "Admin/HelpCenter",
+   "w": 1440,
+   "x": 0,
+   "y": 33000
+  },
+  "AdminHelpCenterSettings.dc.html": {
+   "h": 2580,
+   "title": "Admin/HelpCenter-Settings",
+   "w": 1440,
+   "x": 3040,
+   "y": 33000
+  },
+  "AdminImport.dc.html": {
+   "h": 1240,
+   "title": "Admin/Import",
+   "w": 1440,
+   "x": 0,
+   "y": 56240
+  },
+  "AdminImportFileMapper.dc.html": {
+   "h": 2120,
+   "title": "Admin/Import-FileMapper",
+   "w": 1440,
+   "x": 4560,
+   "y": 56240
+  },
+  "AdminImportRun.dc.html": {
+   "h": 1960,
+   "title": "Admin/Import-Run",
+   "w": 1440,
+   "x": 3040,
+   "y": 56240
+  },
+  "AdminImportWizard.dc.html": {
+   "h": 3640,
+   "title": "Admin/Import-Wizard",
+   "w": 1440,
+   "x": 1520,
+   "y": 56240
+  },
+  "AdminLogin.dc.html": {
+   "h": 800,
+   "title": "Admin/Login",
+   "w": 1280,
+   "x": 0,
+   "y": 2660
+  },
+  "AdminLoginAR.dc.html": {
+   "h": 800,
+   "title": "Admin/Login-AR",
+   "w": 1280,
+   "x": 1360,
+   "y": 2660
+  },
+  "AdminLoginSSO.dc.html": {
+   "h": 840,
+   "title": "Admin/Login-SSO",
+   "w": 3840,
+   "x": 3040,
+   "y": 53620
+  },
+  "AdminLoginSSOAR.dc.html": {
+   "h": 840,
+   "title": "Admin/Login-SSO-AR",
+   "w": 3840,
+   "x": 3040,
+   "y": 54580
+  },
+  "AdminMagicLink.dc.html": {
+   "h": 800,
+   "title": "Admin/SignIn-MagicLink",
+   "w": 1280,
+   "x": 0,
+   "y": 60280
+  },
+  "AdminMagicLinkAR.dc.html": {
+   "h": 800,
+   "title": "Admin/SignIn-MagicLink-AR",
+   "w": 1280,
+   "x": 1360,
+   "y": 60280
+  },
+  "AdminNotifications.dc.html": {
+   "h": 1880,
+   "title": "Admin/Notifications",
+   "w": 1440,
+   "x": 0,
+   "y": 20360
+  },
+  "AdminPasswordField.dc.html": {
+   "h": 760,
+   "title": "Admin/PasswordField",
+   "w": 1280,
+   "x": 4080,
+   "y": 4600
+  },
+  "AdminReports.dc.html": {
+   "h": 3320,
+   "title": "Admin/Reports",
+   "w": 1440,
+   "x": 3040,
+   "y": 46400
+  },
+  "AdminRuleBuilder.dc.html": {
+   "h": 1400,
+   "title": "Admin/Rule-Builder",
+   "w": 1440,
+   "x": 1520,
+   "y": 18840
+  },
+  "AdminSettings.dc.html": {
+   "h": 900,
+   "title": "Admin/Settings",
+   "w": 1440,
+   "x": 1360,
+   "y": 3580
+  },
+  "AdminSettingsSSO.dc.html": {
+   "h": 1300,
+   "title": "Admin/Settings-SSO",
+   "w": 1440,
+   "x": 0,
+   "y": 53620
+  },
+  "AdminSettingsSSOConnection.dc.html": {
+   "h": 2360,
+   "title": "Admin/Settings-SSO-Connection",
+   "w": 1440,
+   "x": 1520,
+   "y": 53620
+  },
+  "AdminSignature.dc.html": {
+   "h": 900,
+   "title": "Admin/Profile-Signature",
+   "w": 1440,
+   "x": 1360,
+   "y": 15480
+  },
+  "AdminStaff.dc.html": {
+   "h": 900,
+   "title": "Admin/Staff",
+   "w": 1440,
+   "x": 2880,
+   "y": 3580
+  },
+  "AdminSystem.dc.html": {
+   "h": 900,
+   "title": "Admin/System",
+   "w": 1440,
+   "x": 0,
+   "y": 4600
+  },
+  "AdminSystemV1.dc.html": {
+   "h": 1840,
+   "title": "Admin/System-1.0",
+   "w": 1440,
+   "x": 4560,
+   "y": 46400
+  },
+  "AdminTicket.dc.html": {
+   "h": 900,
+   "title": "Admin · ticket view",
+   "w": 1440,
+   "x": 0,
+   "y": 1360
+  },
+  "AdminTicketAI.dc.html": {
+   "h": 3280,
+   "title": "Admin/Ticket-AI",
+   "w": 1440,
+   "x": 0,
+   "y": 42500
+  },
+  "AdminTicketDialogs.dc.html": {
+   "h": 1480,
+   "title": "Admin/Ticket-Dialogs",
+   "w": 1440,
+   "x": 0,
+   "y": 10220
+  },
+  "AdminTicketEmail.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticket-Email",
+   "w": 1440,
+   "x": 4560,
+   "y": 13720
+  },
+  "AdminTicketImported.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticket-Imported",
+   "w": 1440,
+   "x": 6080,
+   "y": 56240
+  },
+  "AdminTicketMeta.dc.html": {
+   "h": 3080,
+   "title": "Admin/Ticket-Meta",
+   "w": 1440,
+   "x": 3040,
+   "y": 49928
+  },
+  "AdminTicketSLA.dc.html": {
+   "h": 960,
+   "title": "Admin/Ticket-SLA",
+   "w": 1200,
+   "x": 3040,
+   "y": 17300
+  },
+  "AdminTicketTags.dc.html": {
+   "h": 760,
+   "title": "Admin/Ticket-Tags",
+   "w": 1200,
+   "x": 3040,
+   "y": 12080
+  },
+  "AdminTicketTelegram.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticket-Telegram",
+   "w": 1440,
+   "x": 1520,
+   "y": 36160
+  },
+  "AdminTicketing.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticketing",
+   "w": 1440,
+   "x": 3040,
+   "y": 5880
+  },
+  "AdminTicketingAssignment.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticketing-Assignment",
+   "w": 1440,
+   "x": 0,
+   "y": 9200
+  },
+  "AdminTicketingBusinessHours.dc.html": {
+   "h": 1240,
+   "title": "Admin/Ticketing-BusinessHours",
+   "w": 1440,
+   "x": 0,
+   "y": 17300
+  },
+  "AdminTicketingFeedback.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticketing-Feedback",
+   "w": 1440,
+   "x": 3040,
+   "y": 9200
+  },
+  "AdminTicketingSLAs.dc.html": {
+   "h": 1420,
+   "title": "Admin/Ticketing-SLAs",
+   "w": 1440,
+   "x": 1520,
+   "y": 17300
+  },
+  "AdminTicketingSpam.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticketing-Spam",
+   "w": 1440,
+   "x": 1520,
+   "y": 9200
+  },
+  "AdminTicketingViews.dc.html": {
+   "h": 900,
+   "title": "Admin/Ticketing-Views",
+   "w": 1440,
+   "x": 0,
+   "y": 12080
+  },
+  "AdminTotp.dc.html": {
+   "h": 560,
+   "title": "Admin/TOTP",
+   "w": 520,
+   "x": 2720,
+   "y": 2660
+  },
+  "AdminViewDialogs.dc.html": {
+   "h": 1160,
+   "title": "Admin/View-Dialogs",
+   "w": 1440,
+   "x": 1520,
+   "y": 12080
+  },
+  "AdminWebForm.dc.html": {
+   "h": 1040,
+   "title": "Admin/Channels-WebForm",
+   "w": 1440,
+   "x": 1520,
+   "y": 25860
+  },
+  "AdminWidget.dc.html": {
+   "h": 2880,
+   "title": "Admin/Channels-Widget",
+   "w": 1440,
+   "x": 0,
+   "y": 25860
+  },
+  "AdminWizard.dc.html": {
+   "h": 800,
+   "title": "Admin/Wizard",
+   "w": 1280,
+   "x": 0,
+   "y": 3580
+  },
+  "AdminWizardAI.dc.html": {
+   "h": 800,
+   "title": "Admin/Wizard-AI",
+   "w": 1280,
+   "x": 4560,
+   "y": 39500
+  },
+  "AdminWizardSetupKey.dc.html": {
+   "h": 800,
+   "title": "Admin/Wizard-SetupKey",
+   "w": 1280,
+   "x": 4400,
+   "y": 3580
+  },
+  "Components.dc.html": {
+   "h": 1000,
+   "title": "03 Components",
+   "w": 1200,
+   "x": 2560,
+   "y": 0
+  },
+  "CsatAR.dc.html": {
+   "h": 760,
+   "title": "Public/CSAT-AR",
+   "w": 1200,
+   "x": 2800,
+   "y": 6900
+  },
+  "CsatEN.dc.html": {
+   "h": 760,
+   "title": "Public/CSAT-EN",
+   "w": 1200,
+   "x": 1520,
+   "y": 6900
+  },
+  "EmailCsat.dc.html": {
+   "h": 1280,
+   "title": "Email/CSAT-EN-AR",
+   "w": 1280,
+   "x": 6080,
+   "y": 46400
+  },
+  "EmailCustomer.dc.html": {
+   "h": 1340,
+   "title": "Email/Customer-EN-AR",
+   "w": 1280,
+   "x": 0,
+   "y": 15480
+  },
+  "EmailStaffNotification.dc.html": {
+   "h": 1400,
+   "title": "Email/Staff-Notification",
+   "w": 1280,
+   "x": 1520,
+   "y": 20360
+  },
+  "HelpCenter.dc.html": {
+   "h": 900,
+   "title": "Help center · article",
+   "w": 1280,
+   "x": 2560,
+   "y": 1360
+  },
+  "HelpCenterArticleAR.dc.html": {
+   "h": 1480,
+   "title": "HelpCenter/Article-AR",
+   "w": 1280,
+   "x": 0,
+   "y": 30900
+  },
+  "HelpCenterCategoryAR.dc.html": {
+   "h": 1020,
+   "title": "HelpCenter/Category-AR",
+   "w": 1280,
+   "x": 4080,
+   "y": 29340
+  },
+  "HelpCenterCategoryEN.dc.html": {
+   "h": 1020,
+   "title": "HelpCenter/Category-EN",
+   "w": 1280,
+   "x": 2720,
+   "y": 29340
+  },
+  "HelpCenterHomeAR.dc.html": {
+   "h": 1440,
+   "title": "HelpCenter/Home-AR",
+   "w": 1280,
+   "x": 1360,
+   "y": 29340
+  },
+  "HelpCenterHomeEN.dc.html": {
+   "h": 1440,
+   "title": "HelpCenter/Home-EN",
+   "w": 1280,
+   "x": 0,
+   "y": 29340
+  },
+  "HelpCenterSearchAR.dc.html": {
+   "h": 1520,
+   "title": "HelpCenter/Search-AR",
+   "w": 1280,
+   "x": 2720,
+   "y": 30900
+  },
+  "HelpCenterSearchEN.dc.html": {
+   "h": 1600,
+   "title": "HelpCenter/Search-EN",
+   "w": 1280,
+   "x": 1360,
+   "y": 30900
+  },
+  "HelpCenterStatesEN.dc.html": {
+   "h": 1980,
+   "title": "HelpCenter/States-EN",
+   "w": 1280,
+   "x": 4080,
+   "y": 30900
+  },
+  "Main.dc.html": {
+   "h": 760,
+   "title": "01 Color",
+   "w": 1200,
+   "x": 0,
+   "y": 0
+  },
+  "MetaChatAR.dc.html": {
+   "h": 1800,
+   "title": "Meta/Chat-AR",
+   "w": 1280,
+   "x": 5920,
+   "y": 49928
+  },
+  "MetaChatEN.dc.html": {
+   "h": 1800,
+   "title": "Meta/Chat-EN",
+   "w": 1280,
+   "x": 4560,
+   "y": 49928
+  },
+  "TelegramChatAR.dc.html": {
+   "h": 1240,
+   "title": "Telegram/Chat-AR",
+   "w": 1280,
+   "x": 4400,
+   "y": 36160
+  },
+  "TelegramChatEN.dc.html": {
+   "h": 1240,
+   "title": "Telegram/Chat-EN",
+   "w": 1280,
+   "x": 3040,
+   "y": 36160
+  },
+  "Typography.dc.html": {
+   "h": 760,
+   "title": "02 Typography",
+   "w": 1200,
+   "x": 1280,
+   "y": 0
+  },
+  "WebFormAR.dc.html": {
+   "h": 900,
+   "title": "Public/WebForm-AR",
+   "w": 1280,
+   "x": 4056,
+   "y": 23880
+  },
+  "WebFormEN.dc.html": {
+   "h": 900,
+   "title": "Public/WebForm-EN",
+   "w": 1280,
+   "x": 2696,
+   "y": 23880
+  },
+  "WidgetAIAR.dc.html": {
+   "h": 1840,
+   "title": "Widget/AI-AR",
+   "w": 2060,
+   "x": 3660,
+   "y": 42500
+  },
+  "WidgetAIEN.dc.html": {
+   "h": 1840,
+   "title": "Widget/AI-EN",
+   "w": 2060,
+   "x": 1520,
+   "y": 42500
+  },
+  "WidgetAR.dc.html": {
+   "h": 760,
+   "title": "Widget · AR (RTL)",
+   "w": 440,
+   "x": 2040,
+   "y": 1360
+  },
+  "WidgetCsatAR.dc.html": {
+   "h": 944,
+   "title": "Widget/CSAT-AR",
+   "w": 1312,
+   "x": 6080,
+   "y": 48864
+  },
+  "WidgetCsatEN.dc.html": {
+   "h": 944,
+   "title": "Widget/CSAT-EN",
+   "w": 1312,
+   "x": 6080,
+   "y": 47800
+  },
+  "WidgetEN.dc.html": {
+   "h": 760,
+   "title": "Widget · EN",
+   "w": 440,
+   "x": 1520,
+   "y": 1360
+  },
+  "WidgetModesAR.dc.html": {
+   "h": 1860,
+   "title": "Widget/Modes-AR",
+   "w": 1268,
+   "x": 1348,
+   "y": 23880
+  },
+  "WidgetModesEN.dc.html": {
+   "h": 1860,
+   "title": "Widget/Modes-EN",
+   "w": 1268,
+   "x": 0,
+   "y": 23880
+  },
+  "WidgetStatesAR.dc.html": {
+   "h": 1040,
+   "title": "Widget/States-AR",
+   "w": 2464,
+   "x": 2544,
+   "y": 22720
+  },
+  "WidgetStatesEN.dc.html": {
+   "h": 1040,
+   "title": "Widget/States-EN",
+   "w": 2464,
+   "x": 0,
+   "y": 22720
+  },
+  "AdminTicketContactHistory.dc.html": {
+   "h": 720,
+   "title": "Admin/Ticket-ContactHistory",
+   "w": 1340,
+   "x": 0,
+   "y": 61400
+  },
+  "AdminMeSignInProviders.dc.html": {
+   "h": 640,
+   "title": "Admin/Me-SignInProviders",
+   "w": 1880,
+   "x": 0,
+   "y": 62240
+  },
+  "AdminShellSidebarCollapse.dc.html": {
+   "h": 740,
+   "title": "Admin/Shell-SidebarCollapse",
+   "w": 1760,
+   "x": 0,
+   "y": 62960
+  },
+  "AdminLoginPasskey.dc.html": {
+   "h": 1140,
+   "title": "Admin/Login-Passkey",
+   "w": 1860,
+   "x": 0,
+   "y": 64300
+  },
+  "AdminLoginProviders.dc.html": {
+   "h": 900,
+   "title": "Admin/Login-Providers",
+   "w": 1820,
+   "x": 1940,
+   "y": 64300
+  },
+  "AdminSecondFactor.dc.html": {
+   "h": 560,
+   "title": "Admin/SecondFactor",
+   "w": 1840,
+   "x": 3840,
+   "y": 64300
+  },
+  "AdminEnrol2FAChoose.dc.html": {
+   "h": 600,
+   "title": "Admin/Enrol2FA-Choose",
+   "w": 2160,
+   "x": 0,
+   "y": 65560
+  },
+  "AdminProfileSecurityPasskeys.dc.html": {
+   "h": 1420,
+   "title": "Admin/Profile-Security-Passkeys",
+   "w": 2400,
+   "x": 2240,
+   "y": 65560
+  },
+  "AdminProfileSecuritySignInMethods.dc.html": {
+   "h": 1000,
+   "title": "Admin/Profile-Security-SignInMethods",
+   "w": 1860,
+   "x": 4720,
+   "y": 65560
+  },
+  "AdminSettingsAuthenticationM18.dc.html": {
+   "h": 1660,
+   "title": "Admin/Settings-Authentication",
+   "w": 2000,
+   "x": 0,
+   "y": 67100
+  },
+  "AdminSettingsSSOM18.dc.html": {
+   "h": 1240,
+   "title": "Admin/Settings-SSO-M18",
+   "w": 1300,
+   "x": 2080,
+   "y": 67100
+  },
+  "EmailSecurityChangeM18.dc.html": {
+   "h": 1640,
+   "title": "Email/SecurityChange-M18",
+   "w": 1840,
+   "x": 3460,
+   "y": 67100
+  },
+  "WidgetPreChatVerify.dc.html": {
+   "h": 640,
+   "title": "Widget/PreChat-Verify",
+   "w": 2600,
+   "x": 0,
+   "y": 68880
+  },
+  "HelpCenterWebFormVerify.dc.html": {
+   "h": 960,
+   "title": "HelpCenter/WebForm-Verify",
+   "w": 1600,
+   "x": 2680,
+   "y": 68880
+  },
+  "AdminChannelsWidgetBotProtection.dc.html": {
+   "h": 700,
+   "title": "Admin/Channels-Widget-BotProtection",
+   "w": 2000,
+   "x": 4360,
+   "y": 68880
+  },
+  "AdminShortcutSheet.dc.html": {
+   "h": 2460,
+   "title": "Admin/ShortcutSheet",
+   "w": 1400,
+   "x": 0,
+   "y": 70440
+  },
+  "AdminTicketSnooze.dc.html": {
+   "h": 1600,
+   "title": "Admin/Ticket-Snooze",
+   "w": 1900,
+   "x": 1480,
+   "y": 70440
+  },
+  "AdminTicketsBulk.dc.html": {
+   "h": 1020,
+   "title": "Admin/Tickets-Bulk",
+   "w": 2000,
+   "x": 3460,
+   "y": 70440
+  },
+  "AdminCommandPalette.dc.html": {
+   "h": 1400,
+   "title": "Admin/CommandPalette",
+   "w": 2100,
+   "x": 0,
+   "y": 73020
+  },
+  "AdminTicketsEmpty.dc.html": {
+   "h": 1260,
+   "title": "Admin/Tickets-Empty",
+   "w": 1640,
+   "x": 2180,
+   "y": 73020
+  },
+  "AdminTicketsSortSla.dc.html": {
+   "h": 580,
+   "title": "Admin/Tickets-SortSla",
+   "w": 1300,
+   "x": 3900,
+   "y": 73020
+  },
+  "AdminTicketRouting.dc.html": {
+   "h": 420,
+   "title": "Admin/Ticket-Routing",
+   "w": 2100,
+   "x": 0,
+   "y": 74540
+  },
+  "AdminTicketCompactComposer.dc.html": {
+   "h": 2000,
+   "title": "Admin/Ticket-CompactComposer",
+   "w": 1800,
+   "x": 2180,
+   "y": 74540
+  },
+  "AdminTicketRow360.dc.html": {
+   "h": 880,
+   "title": "Admin/TicketRow-360",
+   "w": 1900,
+   "x": 4060,
+   "y": 74540
+  },
+  "AdminTicketsNarrow.dc.html": {
+   "h": 1660,
+   "title": "Admin/Tickets-Narrow",
+   "w": 2900,
+   "x": 0,
+   "y": 76660
+  },
+  "AdminAutomationRouting.dc.html": {
+   "h": 1140,
+   "title": "Admin/Automation-Routing",
+   "w": 1900,
+   "x": 2980,
+   "y": 76660
+  },
+  "AdminAccountNotificationsSchedule.dc.html": {
+   "h": 2080,
+   "title": "Admin/Account-Notifications-Schedule",
+   "w": 1600,
+   "x": 4960,
+   "y": 76660
+  },
+  "EmailNotificationBatch.dc.html": {
+   "h": 1300,
+   "title": "Email/NotificationBatch",
+   "w": 1840,
+   "x": 0,
+   "y": 78860
+  },
+  "PublicUnsubscribe.dc.html": {
+   "h": 760,
+   "title": "Public/Unsubscribe",
+   "w": 2000,
+   "x": 1920,
+   "y": 78860
+  },
+  "AdminAccountProfile.dc.html": {
+   "h": 1680,
+   "title": "Admin/Account-Profile",
+   "w": 1440,
+   "x": 4000,
+   "y": 78860
+  },
+  "AdminSetupChecklist.dc.html": {
+   "h": 900,
+   "title": "Admin/SetupChecklist",
+   "w": 2200,
+   "x": 0,
+   "y": 80660
+  },
+  "AdminComposerShortcuts.dc.html": {
+   "h": 1240,
+   "title": "Admin/Composer-Shortcuts",
+   "w": 1900,
+   "x": 2280,
+   "y": 80660
+  },
+  "AdminTicketingFieldFilters.dc.html": {
+   "h": 980,
+   "title": "Admin/Ticketing-FieldFilters",
+   "w": 1700,
+   "x": 4260,
+   "y": 80660
+  },
+  "AdminTicketingAssignmentIdle.dc.html": {
+   "h": 460,
+   "title": "Admin/Ticketing-Assignment-Idle",
+   "w": 1700,
+   "x": 0,
+   "y": 82020
+  },
+  "AdminM14Amendments.dc.html": {
+   "h": 740,
+   "title": "Admin/M14-Amendments",
+   "w": 2300,
+   "x": 1780,
+   "y": 82020
+  },
+  "AdminSettingsShell.dc.html": {
+   "h": 3520,
+   "title": "Admin/Settings-Shell",
+   "w": 2700,
+   "x": 4160,
+   "y": 82020
+  },
+  "AdminEmptyStates.dc.html": {
+   "h": 1120,
+   "title": "Admin/Empty-States",
+   "w": 1500,
+   "x": 0,
+   "y": 85660
+  },
+  "AdminAcceptInviteProviders.dc.html": {
+   "h": 740,
+   "title": "Admin/AcceptInvite-Providers",
+   "w": 2000,
+   "x": 5760,
+   "y": 64300
+  }
+ },
+ "createdOnFiles": {
+  "at": "2026-09-18T10:00:00Z",
+  "v": 1
+ },
+ "designSystems": [],
+ "launch": {
+  "view": "canvas"
+ },
+ "notes": {
+  "applications": {
+   "kind": "title1",
+   "maxW": 3840,
+   "text": "Applications — admin, widget, help center",
+   "w": 240,
+   "x": 0,
+   "y": 1100
+  },
+  "brand-note": {
+   "color": "teal",
+   "text": "The accent tweak on the widget and help center artboards is what a brand can change. Everything else is fixed by the system so every brand still reads as Helpdock underneath.",
+   "w": 420,
+   "x": 1520,
+   "y": 1000
+  },
+  "foundations": {
+   "kind": "title1",
+   "maxW": 3760,
+   "text": "Foundations — Quiet desk",
+   "w": 240,
+   "x": 0,
+   "y": -260
+  },
+  "m0": {
+   "kind": "title1",
+   "maxW": 4320,
+   "text": "M0 Skeleton — auth, wizard, settings, staff",
+   "w": 240,
+   "x": 0,
+   "y": 2400
+  },
+  "m0-note": {
+   "color": "teal",
+   "text": "Deliverables: M0-05 auth (Login, Login-AR, TOTP), M0-08 wizard, M0-02 settings page with env-locked keys, M0-06 staff and roles with the invite dialog, M0-10/M0-11 System page (health, queues, channels, storage, AI spend, audit). Implementing agents build from these and DESIGN.md.",
+   "w": 460,
+   "x": 3300,
+   "y": 2660
+  },
+  "m1": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "M1 Ticketing core — contacts, ticketing settings (ticket view above)",
+   "w": 240,
+   "x": 0,
+   "y": 5620
+  },
+  "m11": {
+   "kind": "title1",
+   "maxW": 6880,
+   "text": "M11 SSO and migration — single sign-on for staff",
+   "w": 240,
+   "x": 0,
+   "y": 53340
+  },
+  "m11-note": {
+   "maxH": 420,
+   "text": "M11 decisions (proposed, docs/in-development/M11-sso-and-migration.md): SSO connections are install-wide (Settings › Single sign-on); groups map to brand roles and only SSO-sourced roles are synced. Imports live under Brand › Import, one brand at a time; nothing is sent to customers while importing; new HD numbers by default, the old number on the chip; no SLA timers until the admin starts them. Names, counts and URLs on these boards are sample values.",
+   "w": 520,
+   "x": 6960,
+   "y": 55480
+  },
+  "m11b": {
+   "kind": "title1",
+   "maxW": 7520,
+   "text": "M11 SSO and migration — import from Zendesk, Freshdesk, Zoho Desk and files",
+   "w": 240,
+   "x": 0,
+   "y": 55960
+  },
+  "m1b": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "M1 Ticketing core — assignment, spam, feedback, merge and split, contact identity",
+   "w": 240,
+   "x": 0,
+   "y": 8940
+  },
+  "m1c": {
+   "kind": "title1",
+   "maxW": 4480,
+   "text": "M1 Ticketing core — views, and the workspace remainder (M1-05, M1-15 part 2)",
+   "w": 240,
+   "x": 0,
+   "y": 11820
+  },
+  "m2": {
+   "kind": "title1",
+   "maxW": 6000,
+   "text": "M2 Email channel — mailboxes, outgoing email, the email thread, customer emails",
+   "w": 240,
+   "x": 0,
+   "y": 13480
+  },
+  "m23-nav": {
+   "color": "teal",
+   "text": "Admin sidebar once M2 and M3 both land: Brand, Settings, Ticketing, Automation, Channels, Staff and roles, System, with the notification bell in the brand row. M2 boards show Channels without Automation and M3 boards the reverse; build the combined order.",
+   "w": 460,
+   "x": 4560,
+   "y": 15480
+  },
+  "m3": {
+   "kind": "title1",
+   "maxW": 6000,
+   "text": "M3 Automation and SLAs — business hours, SLAs, rules, macros, notifications, audit log",
+   "w": 240,
+   "x": 0,
+   "y": 17060
+  },
+  "m4": {
+   "kind": "title1",
+   "maxW": 5200,
+   "text": "M4 Widget and realtime — widget states and modes, web form, widget settings",
+   "w": 240,
+   "x": 0,
+   "y": 22480
+  },
+  "m45-note": {
+   "color": "teal",
+   "text": "M4/M5 decisions: widget origins live on Channels › Widget (not Brand › Domains); Brand tabs are General · Domains · Danger zone (theming moves to the Widget and Help center pages); Team Leaders see widget appearance and content policy, Admins only see origins and signed identity; \"chat + suggested articles\" is available from M5-10 via help center search (M7 upgrades it) — not disabled; article history is Activity only (versioning is v1.1). Size caps and domain values on these boards are sample values.",
+   "w": 520,
+   "x": 3040,
+   "y": 25860
+  },
+  "m5": {
+   "kind": "title1",
+   "maxW": 6000,
+   "text": "M5 Help center — public pages, content admin, editor, settings, domains",
+   "w": 240,
+   "x": 0,
+   "y": 29100
+  },
+  "m6": {
+   "kind": "title1",
+   "maxW": 5680,
+   "text": "M6 Telegram — bots, Telegram tickets, the chat",
+   "w": 240,
+   "x": 0,
+   "y": 35900
+  },
+  "m7": {
+   "kind": "title1",
+   "maxW": 5840,
+   "text": "M7 AI — providers, knowledge, assistant settings, wizard step",
+   "w": 240,
+   "x": 0,
+   "y": 39240
+  },
+  "m7b": {
+   "kind": "title1",
+   "maxW": 5720,
+   "text": "M7 AI — agent assist, auto-reply in the widget, article approval",
+   "w": 240,
+   "x": 0,
+   "y": 42260
+  },
+  "m8": {
+   "kind": "title1",
+   "maxW": 7400,
+   "text": "M8 API, webhooks, reports, System 1.0, CSAT delivery",
+   "w": 240,
+   "x": 0,
+   "y": 46140
+  },
+  "m8-note": {
+   "color": "teal",
+   "text": "M8 decisions: webhook events, signature header and retry schedule follow docs/guides/webhooks.md (the boards show sample values). CSAT email links only open the rating page with the score preselected; nothing is recorded until Send, so mail scanners cannot rate. Telegram buttons record in one tap.",
+   "w": 460,
+   "x": 7480,
+   "y": 46400
+  },
+  "m9": {
+   "kind": "title1",
+   "maxW": 2640,
+   "text": "M9 Hardening — magic-link confirm (F6)",
+   "w": 240,
+   "x": 0,
+   "y": 59980
+  },
+  "m18": {
+   "kind": "title1",
+   "maxW": 4320,
+   "text": "M18 Sign-in options — passkeys, OAuth binding, Microsoft, built-in CAPTCHA (1.1)",
+   "w": 240,
+   "x": 0,
+   "y": 64100
+  },
+  "m14": {
+   "kind": "title1",
+   "maxW": 7000,
+   "text": "M14 Inbox productivity — keyboard, snooze, bulk, palette, routing, notifications, profile, settings shell (1.1)",
+   "w": 240,
+   "x": 0,
+   "y": 70240
+  },
+  "m10": {
+   "kind": "title1",
+   "maxW": 6000,
+   "text": "M10 Meta channels — WhatsApp, Messenger and Instagram",
+   "w": 240,
+   "x": 0,
+   "y": 49836
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Typography.dc.html",
+  "Components.dc.html",
+  "AdminTicket.dc.html",
+  "WidgetEN.dc.html",
+  "WidgetAR.dc.html",
+  "HelpCenter.dc.html",
+  "AdminLogin.dc.html",
+  "AdminLoginAR.dc.html",
+  "AdminTotp.dc.html",
+  "AdminWizard.dc.html",
+  "AdminSettings.dc.html",
+  "AdminStaff.dc.html",
+  "AdminSystem.dc.html",
+  "AdminEnrol2FA.dc.html",
+  "AdminAcceptInvite.dc.html",
+  "AdminContacts.dc.html",
+  "AdminContact.dc.html",
+  "AdminTicketing.dc.html",
+  "AdminBrand.dc.html",
+  "CsatEN.dc.html",
+  "CsatAR.dc.html",
+  "AdminBrandDanger.dc.html",
+  "AdminTicketingAssignment.dc.html",
+  "AdminTicketingSpam.dc.html",
+  "AdminTicketingFeedback.dc.html",
+  "AdminTicketDialogs.dc.html",
+  "AdminContactDialogs.dc.html",
+  "AdminTicketingViews.dc.html",
+  "AdminViewDialogs.dc.html",
+  "AdminTicketTags.dc.html",
+  "AdminWizardSetupKey.dc.html",
+  "AdminEmail.dc.html",
+  "AdminEmailOutgoing.dc.html",
+  "AdminEmailMailbox.dc.html",
+  "AdminTicketEmail.dc.html",
+  "EmailCustomer.dc.html",
+  "AdminSignature.dc.html",
+  "AdminTicketingBusinessHours.dc.html",
+  "AdminTicketingSLAs.dc.html",
+  "AdminTicketSLA.dc.html",
+  "AdminAutomationRules.dc.html",
+  "AdminRuleBuilder.dc.html",
+  "AdminAutomationMacros.dc.html",
+  "AdminComposerMacros.dc.html",
+  "AdminNotifications.dc.html",
+  "EmailStaffNotification.dc.html",
+  "AdminAuditLog.dc.html",
+  "WidgetStatesEN.dc.html",
+  "WidgetStatesAR.dc.html",
+  "WidgetModesEN.dc.html",
+  "WidgetModesAR.dc.html",
+  "WebFormEN.dc.html",
+  "WebFormAR.dc.html",
+  "AdminWidget.dc.html",
+  "AdminWebForm.dc.html",
+  "HelpCenterHomeEN.dc.html",
+  "HelpCenterHomeAR.dc.html",
+  "HelpCenterCategoryEN.dc.html",
+  "HelpCenterCategoryAR.dc.html",
+  "HelpCenterArticleAR.dc.html",
+  "HelpCenterSearchEN.dc.html",
+  "HelpCenterSearchAR.dc.html",
+  "HelpCenterStatesEN.dc.html",
+  "AdminHelpCenter.dc.html",
+  "AdminArticleEditor.dc.html",
+  "AdminHelpCenterSettings.dc.html",
+  "AdminBrandDomains.dc.html",
+  "AdminChannelsTelegram.dc.html",
+  "AdminTicketTelegram.dc.html",
+  "TelegramChatEN.dc.html",
+  "TelegramChatAR.dc.html",
+  "AdminAIProviders.dc.html",
+  "AdminAIKnowledge.dc.html",
+  "AdminAIAssistant.dc.html",
+  "AdminWizardAI.dc.html",
+  "AdminTicketAI.dc.html",
+  "WidgetAIEN.dc.html",
+  "WidgetAIAR.dc.html",
+  "AdminArticleApproval.dc.html",
+  "AdminDevelopersApiKeys.dc.html",
+  "AdminDevelopersWebhooks.dc.html",
+  "AdminReports.dc.html",
+  "AdminSystemV1.dc.html",
+  "EmailCsat.dc.html",
+  "WidgetCsatEN.dc.html",
+  "WidgetCsatAR.dc.html",
+  "AdminPasswordField.dc.html",
+  "AdminChannelsMeta.dc.html",
+  "AdminChannelsMetaAccount.dc.html",
+  "AdminTicketMeta.dc.html",
+  "MetaChatEN.dc.html",
+  "MetaChatAR.dc.html",
+  "AdminSettingsSSO.dc.html",
+  "AdminSettingsSSOConnection.dc.html",
+  "AdminLoginSSO.dc.html",
+  "AdminLoginSSOAR.dc.html",
+  "AdminImport.dc.html",
+  "AdminImportWizard.dc.html",
+  "AdminImportRun.dc.html",
+  "AdminImportFileMapper.dc.html",
+  "AdminTicketImported.dc.html",
+  "AdminMagicLink.dc.html",
+  "AdminMagicLinkAR.dc.html",
+  "AdminTicketContactHistory.dc.html",
+  "AdminMeSignInProviders.dc.html",
+  "AdminShellSidebarCollapse.dc.html",
+  "AdminLoginPasskey.dc.html",
+  "AdminLoginProviders.dc.html",
+  "AdminSecondFactor.dc.html",
+  "AdminEnrol2FAChoose.dc.html",
+  "AdminProfileSecurityPasskeys.dc.html",
+  "AdminProfileSecuritySignInMethods.dc.html",
+  "AdminSettingsAuthenticationM18.dc.html",
+  "AdminSettingsSSOM18.dc.html",
+  "EmailSecurityChangeM18.dc.html",
+  "WidgetPreChatVerify.dc.html",
+  "HelpCenterWebFormVerify.dc.html",
+  "AdminChannelsWidgetBotProtection.dc.html",
+  "AdminShortcutSheet.dc.html",
+  "AdminTicketSnooze.dc.html",
+  "AdminTicketsBulk.dc.html",
+  "AdminCommandPalette.dc.html",
+  "AdminTicketsEmpty.dc.html",
+  "AdminTicketsSortSla.dc.html",
+  "AdminTicketRouting.dc.html",
+  "AdminTicketCompactComposer.dc.html",
+  "AdminTicketRow360.dc.html",
+  "AdminTicketsNarrow.dc.html",
+  "AdminAutomationRouting.dc.html",
+  "AdminAccountNotificationsSchedule.dc.html",
+  "EmailNotificationBatch.dc.html",
+  "PublicUnsubscribe.dc.html",
+  "AdminAccountProfile.dc.html",
+  "AdminSetupChecklist.dc.html",
+  "AdminComposerShortcuts.dc.html",
+  "AdminTicketingFieldFilters.dc.html",
+  "AdminTicketingAssignmentIdle.dc.html",
+  "AdminM14Amendments.dc.html",
+  "AdminSettingsShell.dc.html",
+  "AdminEmptyStates.dc.html",
+  "AdminAcceptInviteProviders.dc.html"
+ ],
+ "pages": [],
+ "title": "Helpdock Design System"
 }

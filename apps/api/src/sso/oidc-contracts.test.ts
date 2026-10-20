@@ -10,6 +10,7 @@ import {
 
 const input = {
   connectionId: uuidv7(),
+  issuer: 'https://idp.example.com',
   claims: {
     sub: 'subject',
     email: 'ada@example.com',
@@ -70,6 +71,79 @@ describe('OIDC claim boundaries', () => {
     expect(matchesBrowserNonce('browser', ssoHash('browser'))).toBe(true);
     expect(matchesBrowserNonce(undefined, ssoHash('browser'))).toBe(false);
     expect(matchesBrowserNonce('wrong', ssoHash('browser'))).toBe(false);
+  });
+});
+
+describe('Entra ID email verification by xms_edov (M18-09)', () => {
+  const tenant = '0b6f6c1e-2f3c-4f63-9a7f-1d2c3b4a5e6f';
+  const issuer = `https://login.microsoftonline.com/${tenant}/v2.0`;
+  const entra = {
+    ...input,
+    issuer,
+    claims: {
+      sub: 'entra-subject',
+      iss: issuer,
+      tid: tenant,
+      acct: 0,
+      email: 'ada@example.com',
+      xms_edov: true,
+      name: 'Ada',
+      groups: ['Support'],
+    },
+  };
+  const consumer = 'https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0';
+
+  it('vouches for the email of a tenant member when issuer, tid, acct 0 and xms_edov agree', () => {
+    expect(oidcAssertion(entra)).toMatchObject({ email: 'ada@example.com', emailVerified: true });
+  });
+
+  it.each([
+    ['xms_edov is missing', { claims: { ...entra.claims, xms_edov: undefined } }],
+    ['xms_edov is false', { claims: { ...entra.claims, xms_edov: false } }],
+    ['xms_edov is a string', { claims: { ...entra.claims, xms_edov: 'true' } }],
+    ['acct is missing', { claims: { ...entra.claims, acct: undefined } }],
+    ['the account is a guest (acct 1)', { claims: { ...entra.claims, acct: 1 } }],
+    ['acct is a string', { claims: { ...entra.claims, acct: '0' } }],
+    ['the token names another tenant', { claims: { ...entra.claims, tid: uuidv7() } }],
+    [
+      'the token has another issuer',
+      { claims: { ...entra.claims, iss: 'https://idp.example.com' } },
+    ],
+    ...['common', 'organizations', 'consumers'].map(
+      (alias) =>
+        [
+          `the issuer is the ${alias} endpoint`,
+          {
+            issuer: `https://login.microsoftonline.com/${alias}/v2.0`,
+            claims: {
+              ...entra.claims,
+              iss: `https://login.microsoftonline.com/${alias}/v2.0`,
+              tid: alias,
+            },
+          },
+        ] as const,
+    ),
+    [
+      'the issuer is the personal-account tenant',
+      {
+        issuer: consumer,
+        claims: { ...entra.claims, iss: consumer, tid: '9188040d-6c67-4c5b-b112-36a304b66dad' },
+      },
+    ],
+    ['the issuer is not Entra', { issuer: 'https://idp.example.com' }],
+    [
+      'the issuer is a national cloud',
+      {
+        issuer: `https://login.microsoftonline.us/${tenant}/v2.0`,
+        claims: { ...entra.claims, iss: `https://login.microsoftonline.us/${tenant}/v2.0` },
+      },
+    ],
+    [
+      'the email comes from another claim',
+      { emailClaim: 'upn', claims: { ...entra.claims, upn: 'ada@example.com' } },
+    ],
+  ] as const)('refuses the address when %s', (_case, overrides) => {
+    expect(oidcAssertion({ ...entra, ...overrides }).emailVerified).toBe(false);
   });
 });
 

@@ -7,6 +7,12 @@ import type {
   OauthIdentityList,
   OauthProvider,
   OauthStepUpRequest,
+  Passkey,
+  PasskeyFinishRequest,
+  PasskeyList,
+  PasskeyProof,
+  PasskeyRegistrationOptions,
+  PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -14,7 +20,7 @@ import type {
   SignInResult,
   TotpEnrolment,
 } from '@helpdock/schemas';
-import { isLastSignInMethod } from '@helpdock/schemas';
+import { isLastSignInMethod, MAX_PASSKEYS_PER_ACCOUNT } from '@helpdock/schemas';
 import {
   assertNotMockBreached,
   MOCK_ENROLMENT_CODE,
@@ -93,6 +99,46 @@ const seededSingleKeyShortcuts = (): false | undefined => {
   }
 };
 
+/**
+ * Set to JSON before the app loads, it seeds the fixture's passkeys (M18-02):
+ * `{"count": 10}` starts with ten, `{"onlyFactor": true}` makes the account one
+ * that must have a second factor and has no authenticator app, and
+ * `{"state": "paused"}` or `"unavailable"` changes what the card may do.
+ */
+export const MOCK_PASSKEYS_STORAGE = 'helpdock.mock.passkeys';
+
+export interface SeededPasskeys {
+  readonly count?: number;
+  readonly onlyFactor?: boolean;
+  readonly state?: PasskeyList['state'];
+}
+
+const seededPasskeys = (): SeededPasskeys => {
+  try {
+    const raw = globalThis.localStorage?.getItem(MOCK_PASSKEYS_STORAGE);
+    return raw === null || raw === undefined ? {} : (JSON.parse(raw) as SeededPasskeys);
+  } catch {
+    return {};
+  }
+};
+
+/** Wrong step-ups the fixture allows before it locks, like the api's budget. */
+const MOCK_STEP_UP_ATTEMPTS = 5;
+
+const base64Url = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+};
+
+const randomChallenge = (): string => base64Url(crypto.getRandomValues(new Uint8Array(32)));
+
+interface MockPasskey {
+  readonly passkey: Passkey;
+  /** The credential id a virtual authenticator made, so a later step-up can name it. */
+  readonly credentialId: string | null;
+}
+
 const MOCK_SESSION: Session = {
   user: MOCK_USER,
   brands: [...MOCK_BRANDS],
@@ -133,9 +179,25 @@ export class MockAuthApi implements AuthApi {
   #identities: OauthIdentity[] = [];
   /** Off for the account whose only way in is a provider. */
   passwordSet = true;
+  #passkeys: MockPasskey[] = [];
+  #passkeyState: PasskeyList['state'] = 'available';
+  /** An account that must have a second factor, with no authenticator app. */
+  #onlySecondFactor = false;
+  #ceremonies = new Set<string>();
+  #stepUpFailures = 0;
 
   constructor(staff?: MockStaffApi) {
     this.#staff = staff;
+    this.seedPasskeys(seededPasskeys());
+  }
+
+  /** Sets the account's passkeys up as a test or a stored seed asks (see {@link MOCK_PASSKEYS_STORAGE}). */
+  seedPasskeys(seed: SeededPasskeys): void {
+    this.#passkeyState = seed.state ?? 'available';
+    this.#onlySecondFactor = seed.onlyFactor === true;
+    this.#passkeys = Array.from({ length: seed.count ?? 0 }, (_unused, index) =>
+      this.#mockPasskey(index === 0 ? 'MacBook Air · Touch ID' : `YubiKey ${index}`, null),
+    );
   }
 
   /** Every method is on: the fixture exists to exercise every screen. */
@@ -283,6 +345,100 @@ export class MockAuthApi implements AuthApi {
     }
     this.#assertStepUp(proof);
     this.#identities = this.#identities.filter((identity) => identity.provider !== provider);
+  }
+
+  async passkeys(): Promise<PasskeyList> {
+    return {
+      passkeys: this.#passkeys.map((entry) => entry.passkey),
+      limit: MAX_PASSKEYS_PER_ACCOUNT,
+      state: this.#passkeyState,
+      removalBlocked: this.#onlySecondFactor && this.#passkeys.length === 1,
+      authenticatorApp: !this.#onlySecondFactor,
+    };
+  }
+
+  async passkeyStepUpOptions(): Promise<PasskeyStepUpOptions> {
+    if (this.#passkeys.length === 0) {
+      throw new AuthError('invalid-credentials');
+    }
+    const ceremonyId = randomChallenge();
+    this.#ceremonies.add(ceremonyId);
+    return {
+      ceremonyId,
+      options: {
+        rpId: globalThis.location?.hostname ?? 'localhost',
+        challenge: randomChallenge(),
+        timeout: 300_000,
+        userVerification: 'preferred',
+        allowCredentials: this.#passkeys
+          .flatMap((entry) => (entry.credentialId === null ? [] : [entry.credentialId]))
+          .map((id) => ({ id, type: 'public-key' })),
+      },
+    };
+  }
+
+  async beginPasskey(proof: PasskeyProof): Promise<PasskeyRegistrationOptions> {
+    if (this.#passkeys.length >= MAX_PASSKEYS_PER_ACCOUNT) {
+      throw new AuthError('passkey-limit');
+    }
+    this.#assertPasskeyProof(proof);
+    const ceremonyId = randomChallenge();
+    this.#ceremonies.add(ceremonyId);
+    return {
+      ceremonyId,
+      options: {
+        rp: { id: globalThis.location?.hostname ?? 'localhost', name: 'Helpdock' },
+        user: {
+          id: randomChallenge(),
+          name: MOCK_EMAIL,
+          displayName: MOCK_USER.name,
+        },
+        challenge: randomChallenge(),
+        pubKeyCredParams: [-8, -7, -257].map((alg) => ({ type: 'public-key', alg })),
+        timeout: 300_000,
+        attestation: 'none',
+        excludeCredentials: this.#passkeys
+          .flatMap((entry) => (entry.credentialId === null ? [] : [entry.credentialId]))
+          .map((id) => ({ id, type: 'public-key' })),
+        authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+        extensions: { credProps: true },
+      },
+    };
+  }
+
+  async finishPasskey(request: PasskeyFinishRequest): Promise<Passkey> {
+    if (!this.#ceremonies.delete(request.ceremonyId)) {
+      throw new AuthError('challenge-expired');
+    }
+    if (this.#passkeys.length >= MAX_PASSKEYS_PER_ACCOUNT) {
+      throw new AuthError('passkey-limit');
+    }
+    const entry = this.#mockPasskey(request.name, request.response.rawId);
+    this.#passkeys.push(entry);
+    return entry.passkey;
+  }
+
+  async renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey> {
+    const index = this.#passkeys.findIndex((entry) => entry.passkey.id === id);
+    const entry = this.#passkeys[index];
+    if (entry === undefined) {
+      throw new AuthError('no-account');
+    }
+    this.#assertPasskeyProof(proof);
+    const renamed = { ...entry, passkey: { ...entry.passkey, name } };
+    this.#passkeys[index] = renamed;
+    return renamed.passkey;
+  }
+
+  async removePasskey(id: string, proof: PasskeyProof): Promise<void> {
+    if (!this.#passkeys.some((entry) => entry.passkey.id === id)) {
+      throw new AuthError('no-account');
+    }
+    if (this.#onlySecondFactor && this.#passkeys.length === 1) {
+      throw new AuthError('second-factor-required');
+    }
+    this.#assertPasskeyProof(proof);
+    this.#passkeys = this.#passkeys.filter((entry) => entry.passkey.id !== id);
   }
 
   /**
@@ -459,6 +615,40 @@ export class MockAuthApi implements AuthApi {
     }
 
     return new AuthError(code, { attemptsLeft: challenge.attemptsLeft });
+  }
+
+  #mockPasskey(name: string, credentialId: string | null): MockPasskey {
+    return {
+      credentialId,
+      passkey: {
+        id: crypto.randomUUID(),
+        name,
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+        synced: name.startsWith('MacBook'),
+      },
+    };
+  }
+
+  /**
+   * The api's step-up for a passkey change: the password, a live code, or an
+   * assertion for a ceremony the fixture issued. Five wrong tries lock it, as
+   * the api's shared budget does.
+   */
+  #assertPasskeyProof(proof: PasskeyProof): void {
+    if (this.#stepUpFailures >= MOCK_STEP_UP_ATTEMPTS) {
+      throw new AuthError('totp-locked');
+    }
+    try {
+      if (proof.passkey === undefined) {
+        this.#assertStepUp(proof);
+      } else if (!this.#ceremonies.delete(proof.passkey.ceremonyId)) {
+        throw new AuthError('challenge-expired');
+      }
+    } catch (failure) {
+      this.#stepUpFailures += 1;
+      throw failure;
+    }
   }
 
   /** The api's step-up: the current password, or a live authenticator code. */

@@ -391,6 +391,12 @@ const authErrorCodes = [
   'passkeys-unavailable',
   /** `APP_URL`'s host is no longer the RP ID the install's passkeys were made for; they are paused (M18-01). */
   'passkeys-rp-changed',
+  /** Removing this passkey would leave an account that must have a second factor with none (M18-02). */
+  'second-factor-required',
+  /** The account already holds the most passkeys it may (M18-02). */
+  'passkey-limit',
+  /** This authenticator is already registered for the account (M18-02). */
+  'passkey-duplicate',
 ] as const;
 export const authErrorCodeSchema = z.enum(authErrorCodes);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;

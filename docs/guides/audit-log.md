@@ -9,7 +9,7 @@ default, never under 90 days, DOMAIN-RULES §11).
 
 Every authentication decision — sign-ins that succeeded or failed, locks,
 refused step-ups, replayed codes, reused refresh tokens, and every change to a
-password, second factor or recovery codes — is an `auth.*` row in install
+password, second factor, recovery codes or passkey — is an `auth.*` row in install
 scope (**Brand: install**), written by the `auth` system principal with the
 client address and user agent. [Authentication › The audit
 trail](authentication.md#the-audit-trail) lists them.

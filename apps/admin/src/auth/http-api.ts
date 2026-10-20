@@ -6,6 +6,12 @@ import type {
   OauthIdentityList,
   OauthProvider,
   OauthStepUpRequest,
+  Passkey,
+  PasskeyFinishRequest,
+  PasskeyList,
+  PasskeyProof,
+  PasskeyRegistrationOptions,
+  PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -19,6 +25,10 @@ import {
   magicLinkPreviewSchema,
   oauthConnectStartSchema,
   oauthIdentityListSchema,
+  passkeyListSchema,
+  passkeyRegistrationOptionsSchema,
+  passkeySchema,
+  passkeyStepUpOptionsSchema,
   publicInviteSchema,
   recoveryCodesSchema,
   sessionSchema,
@@ -127,6 +137,41 @@ export class HttpAuthApi implements AuthApi {
 
   async disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void> {
     await this.#transport.request('POST', `/auth/oauth/${provider}/disconnect`, proof);
+  }
+
+  async passkeys(): Promise<PasskeyList> {
+    return passkeyListSchema.parse(await this.#transport.request('GET', '/me/passkeys'));
+  }
+
+  async passkeyStepUpOptions(): Promise<PasskeyStepUpOptions> {
+    return passkeyStepUpOptionsSchema.parse(
+      await this.#transport.request('POST', '/me/passkeys/step-up/options'),
+    );
+  }
+
+  async beginPasskey(proof: PasskeyProof): Promise<PasskeyRegistrationOptions> {
+    return passkeyRegistrationOptionsSchema.parse(
+      await this.#transport.request('POST', '/me/passkeys/begin', { proof }),
+    );
+  }
+
+  async finishPasskey(request: PasskeyFinishRequest): Promise<Passkey> {
+    return passkeySchema.parse(
+      await this.#transport.request('POST', '/me/passkeys/finish', request),
+    );
+  }
+
+  async renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey> {
+    return passkeySchema.parse(
+      await this.#transport.request('PATCH', `/me/passkeys/${encodeURIComponent(id)}`, {
+        name,
+        proof,
+      }),
+    );
+  }
+
+  async removePasskey(id: string, proof: PasskeyProof): Promise<void> {
+    await this.#transport.request('DELETE', `/me/passkeys/${encodeURIComponent(id)}`, { proof });
   }
 
   async exchange(code: string): Promise<Session> {

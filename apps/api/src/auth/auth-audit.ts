@@ -45,7 +45,11 @@ export type AuthAuditAction =
   | 'auth.recovery_code.used'
   | 'auth.oauth.linked'
   | 'auth.oauth.unlinked'
-  | 'auth.oauth.link_refused';
+  | 'auth.oauth.link_refused'
+  | 'auth.passkey.added'
+  | 'auth.passkey.renamed'
+  | 'auth.passkey.removed'
+  | 'auth.passkey.counter_regressed';
 
 export type SignInMethod = 'password' | 'magic-link' | 'oauth' | 'sso' | 'invite' | 'second-factor';
 

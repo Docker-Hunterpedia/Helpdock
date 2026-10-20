@@ -21,7 +21,12 @@ const notice = (
 
 describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
   it.each(SECURITY_CHANGES)('words every change in both languages: %s', (change) => {
-    const values = { change, provider: 'GitHub', account: 'lina@users.noreply.github.com' };
+    const values = {
+      change,
+      provider: 'GitHub',
+      account: 'lina@users.noreply.github.com',
+      passkey: 'MacBook Air',
+    };
     const en = notice(values);
     const ar = notice(values, 'ar');
 
@@ -101,6 +106,89 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
 
     expect(en.html).toContain('<bdi dir="ltr">x.lina@helpdock.com</bdi> is connected');
     expect(en.html).not.toContain('<bdi dir="ltr"><bdi');
+  });
+
+  describe('passkeys (M18-02, Email/SecurityChange-M18)', () => {
+    const added = {
+      change: 'passkeyAdded',
+      passkey: 'MacBook Air · Touch ID',
+      occurredAt: OCCURRED_AT,
+      browser: 'Chrome',
+      os: 'macOS',
+      ip: '85.12.x.x',
+    };
+
+    it('names the passkey that was added, when, and where from', () => {
+      const en = notice(added, 'en', 'Asia/Riyadh');
+
+      expect(en.subject).toBe('A passkey was added to your account');
+      expect(en.text).toContain('A passkey was added');
+      expect(en.text).toContain('“MacBook Air · Touch ID” was saved to your Helpdock account.');
+      expect(en.text).toContain('When: 21 Oct 2026, 09:14 (Asia/Riyadh)');
+      expect(en.text).toContain('From: Chrome on macOS · 85.12.x.x');
+      expect(en.text).toContain("If this wasn't you, remove it now and change your password.");
+      expect(en.text).toContain(`Review your passkeys: ${SECURITY_PAGE}`);
+    });
+
+    it('says it in Arabic, with the name isolated from the sentence', () => {
+      const ar = notice(added, 'ar', 'Asia/Riyadh');
+
+      expect(ar.subject).toBe('أُضيف مفتاح مرور إلى حسابك');
+      expect(ar.text).toContain('Chrome على macOS · 85.12.x.x');
+      expect(ar.html).toContain('<bdi>MacBook Air · Touch ID</bdi>');
+    });
+
+    it('leaves the From row out when the request told us nothing', () => {
+      const en = notice({ change: 'passkeyAdded', passkey: 'Key', occurredAt: OCCURRED_AT });
+
+      expect(en.text).not.toContain('From:');
+    });
+
+    it('escapes a name that carries markup, and keeps it out of the subject’s markup', () => {
+      const en = notice({ change: 'passkeyAdded', passkey: '<img src=x onerror=alert(1)>' });
+
+      expect(en.html).not.toContain('<img');
+      expect(en.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+
+    it.each([
+      [{ remaining: '2', totp: '1' }, 'You still have 2 passkeys and an authenticator app.'],
+      [{ remaining: '1', totp: '1' }, 'You still have 1 passkey and an authenticator app.'],
+      [{ remaining: '1', totp: '0' }, 'You still have 1 passkey.'],
+      [{ remaining: '0', totp: '1' }, 'You still have an authenticator app.'],
+    ])('tells what still protects the account after a removal: %j', (rest, sentence) => {
+      const en = notice({ change: 'passkeyRemoved', passkey: 'YubiKey 5C', ...rest });
+
+      expect(en.subject).toBe('A passkey was removed from your account');
+      expect(en.text).toContain(`“YubiKey 5C” was removed from your account. ${sentence}`);
+      expect(en.text).toContain(`Open your security page: ${SECURITY_PAGE}`);
+    });
+
+    it('adds no sentence about what remains when nothing does', () => {
+      const en = notice({ change: 'passkeyRemoved', passkey: 'Key', remaining: '0', totp: '0' });
+
+      expect(en.text).toContain('“Key” was removed from your account.\n');
+      expect(en.text).not.toContain('You still have');
+    });
+
+    it('counts the passkeys a reset kept, in both languages, and leaves out the warning', () => {
+      const en = notice({ change: 'passwordReset', passkeys: '2' });
+      const ar = notice({ change: 'passwordReset', passkeys: '2' }, 'ar');
+
+      expect(en.subject).toBe('Your password was reset');
+      expect(en.text).toContain('Your 2 passkeys were kept');
+      expect(en.text).toContain(`Review your passkeys: ${SECURITY_PAGE}`);
+      expect(en.text).not.toContain("wasn't you");
+      expect(en.text).not.toContain('If it was not you');
+      expect(ar.text).toContain('أُبقي على مفتاحَي المرور لديك');
+    });
+
+    it('uses the plain reset notice when the account holds no passkey', () => {
+      const en = notice({ change: 'passwordReset', passkeys: '0' });
+
+      expect(en.text).toContain('If it was not you, reset your password now');
+      expect(en.text).not.toContain('passkey');
+    });
   });
 
   it('refuses a change it has no sentence for, rather than sending a blank one', () => {

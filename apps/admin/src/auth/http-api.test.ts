@@ -297,4 +297,106 @@ describe('HttpAuthApi', () => {
       expect(await new HttpAuthApi().accessToken()).toBeNull();
     });
   });
+
+  describe('passkeys (M18-02)', () => {
+    const CEREMONY = 'A'.repeat(43);
+    const passkey = {
+      id: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1',
+      name: 'MacBook',
+      createdAt: '2026-10-20T10:00:00.000Z',
+      lastUsedAt: null,
+      synced: true,
+    };
+
+    it('reads the list', async () => {
+      fetchMock.mockResolvedValueOnce(
+        json({
+          passkeys: [passkey],
+          limit: 10,
+          state: 'available',
+          removalBlocked: false,
+          authenticatorApp: true,
+        }),
+      );
+
+      const list = await new HttpAuthApi().passkeys();
+
+      expect(list.passkeys).toEqual([passkey]);
+      expect(calls()[0]?.url).toBe('/api/me/passkeys');
+    });
+
+    it('sends the proof with begin, and the answer and name with finish', async () => {
+      fetchMock
+        .mockResolvedValueOnce(json({ ceremonyId: CEREMONY, options: { challenge: 'x' } }))
+        .mockResolvedValueOnce(json(passkey, 201));
+      const api = new HttpAuthApi();
+
+      await api.beginPasskey({ currentPassword: 'a password' });
+      await api.finishPasskey({
+        ceremonyId: CEREMONY,
+        name: 'MacBook',
+        response: {
+          id: 'AQID',
+          rawId: 'AQID',
+          type: 'public-key',
+          response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+          clientExtensionResults: {},
+        },
+      });
+
+      expect(calls().map(({ url, init }) => [init.method, url])).toEqual([
+        ['POST', '/api/me/passkeys/begin'],
+        ['POST', '/api/me/passkeys/finish'],
+      ]);
+      expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({
+        proof: { currentPassword: 'a password' },
+      });
+    });
+
+    it('renames with PATCH and removes with DELETE, each carrying its proof in the body', async () => {
+      fetchMock
+        .mockResolvedValueOnce(json({ ...passkey, name: 'Desk' }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const api = new HttpAuthApi();
+
+      await api.renamePasskey(passkey.id, 'Desk', { code: '123456' });
+      await api.removePasskey(passkey.id, { code: '123456' });
+
+      expect(calls().map(({ url, init }) => [init.method, url])).toEqual([
+        ['PATCH', `/api/me/passkeys/${passkey.id}`],
+        ['DELETE', `/api/me/passkeys/${passkey.id}`],
+      ]);
+      expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({
+        name: 'Desk',
+        proof: { code: '123456' },
+      });
+      expect(JSON.parse(String(calls()[1]?.init.body))).toEqual({ proof: { code: '123456' } });
+    });
+
+    it('does not retry a refused proof as an expired token', async () => {
+      fetchMock.mockResolvedValue(authFailure('invalid-credentials'));
+      const api = new HttpAuthApi();
+
+      await expect(
+        api.removePasskey(passkey.id, { currentPassword: 'wrong' }),
+      ).rejects.toMatchObject({
+        code: 'invalid-credentials',
+      });
+      expect(calls()).toHaveLength(1);
+    });
+
+    it('carries the api’s refusal code for the last second factor', async () => {
+      fetchMock.mockResolvedValueOnce(authFailure('second-factor-required', 409));
+
+      await expect(
+        new HttpAuthApi().removePasskey(passkey.id, { currentPassword: 'a password' }),
+      ).rejects.toMatchObject({ code: 'second-factor-required' });
+    });
+
+    it('refuses a list that is not the contract', async () => {
+      fetchMock.mockResolvedValueOnce(json({ passkeys: 'none' }));
+
+      await expect(new HttpAuthApi().passkeys()).rejects.toThrow();
+    });
+  });
 });

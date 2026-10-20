@@ -15,6 +15,9 @@ import { EmailTokenStore } from './email-token.store.js';
 import { ExchangeStore } from './exchange.store.js';
 import { OauthService } from './oauth/oauth.service.js';
 import { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
+import { PasskeyRepository } from './passkeys/passkey.repository.js';
+import { PasskeyService } from './passkeys/passkey.service.js';
+import { PasskeysController } from './passkeys/passkeys.controller.js';
 import { PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
 import { sessionLifetime } from './session/lifetime.js';
@@ -55,6 +58,7 @@ export interface AuthRuntime {
   readonly auth: AuthService;
   readonly sso: SsoIdentityService;
   readonly ssoPolicy: SsoSignInPolicy;
+  readonly passkeys: PasskeyService;
   /**
    * Exported because the first-run wizard hashes the install admin's password
    * (M0-08). One instance per process holds the pepper, so a second hasher
@@ -109,6 +113,13 @@ export const createAuthRuntime = ({
 
   const sso = new SsoIdentityService({ db, sessions, redis, settings });
   const ssoPolicy = new SsoSignInPolicy({ db, settings, keyring });
+  const limiter = new RateLimiter(redis);
+  const webauthn = new WebAuthnService({
+    appUrl: env.APP_URL,
+    ceremonies: new WebAuthnCeremonyStore(redis),
+    pin: new RpIdPinStore({ db, settings }),
+  });
+  const passkeyRows = new PasskeyRepository({ db });
   const auth = new AuthService({
     sso,
     ssoPolicy,
@@ -120,14 +131,11 @@ export const createAuthRuntime = ({
     trustedDevices: new TrustedDeviceStore({ redis, masterKey }),
     tokens: new EmailTokenStore(redis),
     exchanges: new ExchangeStore(redis),
-    limiter: new RateLimiter(redis),
+    limiter,
     oauth: new OauthService({ settings, redis, logger, appUrl: env.APP_URL }),
     oauthIdentities: new OauthIdentityRepository({ db }),
-    webauthn: new WebAuthnService({
-      appUrl: env.APP_URL,
-      ceremonies: new WebAuthnCeremonyStore(redis),
-      pin: new RpIdPinStore({ db, settings }),
-    }),
+    webauthn,
+    passkeys: passkeyRows,
     settings,
     keyring,
     mail: new OutboxAuthMail({ db, keyring, staff }),
@@ -136,7 +144,16 @@ export const createAuthRuntime = ({
     appUrl: env.APP_URL,
   });
 
-  return { sessions, auth, hasher, sso, ssoPolicy };
+  const passkeys = new PasskeyService({
+    auth,
+    webauthn,
+    passkeys: passkeyRows,
+    limiter,
+    signingKeys,
+    logger,
+  });
+
+  return { sessions, auth, hasher, sso, ssoPolicy, passkeys };
 };
 
 /** The whole graph, built once per process and shared by both providers below. */
@@ -157,7 +174,7 @@ export class AuthModule {
        * a second call would silently produce that second graph.
        */
       global: true,
-      controllers: [AuthController],
+      controllers: [AuthController, PasskeysController],
       providers: [
         {
           provide: SsoIdentityService,
@@ -186,6 +203,11 @@ export class AuthModule {
           provide: AuthService,
           inject: [AUTH_RUNTIME],
           useFactory: (runtime: AuthRuntime): AuthService => runtime.auth,
+        },
+        {
+          provide: PasskeyService,
+          inject: [AUTH_RUNTIME],
+          useFactory: (runtime: AuthRuntime): PasskeyService => runtime.passkeys,
         },
         {
           provide: SessionService,

@@ -39,6 +39,9 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'password-breached': HttpStatus.BAD_REQUEST,
   'passkeys-unavailable': HttpStatus.FORBIDDEN,
   'passkeys-rp-changed': HttpStatus.CONFLICT,
+  'second-factor-required': HttpStatus.CONFLICT,
+  'passkey-limit': HttpStatus.CONFLICT,
+  'passkey-duplicate': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
@@ -69,6 +72,10 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'passkeys-unavailable': 'Passkeys need APP_URL to be https, or http://localhost',
   'passkeys-rp-changed':
     "Passkeys are paused: APP_URL's host is not the one this install's passkeys were made for",
+  'second-factor-required':
+    'This account must keep a second factor; add another passkey or an authenticator app first',
+  'passkey-limit': 'An account can hold at most 10 passkeys; remove one first',
+  'passkey-duplicate': 'This authenticator is already registered for this account',
 };
 
 export class AuthFailure extends HttpException {

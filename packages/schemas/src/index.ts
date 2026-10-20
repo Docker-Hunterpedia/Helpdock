@@ -46,6 +46,7 @@ export * from './merge.js';
 export * from './meta.js';
 export * from './notifications.js';
 export * from './participants.js';
+export * from './passkeys.js';
 export * from './placeholders.js';
 export * from './principal.js';
 export * from './realtime.js';

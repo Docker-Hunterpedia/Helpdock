@@ -17,6 +17,7 @@ import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
 import { AccountCard } from './account/account-card.tsx';
+import { PasskeysCard } from './account/passkeys-card.tsx';
 import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
 /**
@@ -384,6 +385,8 @@ export function SecurityScreen(): ReactNode {
             </Box>
           )}
         </AccountCard>
+
+        <PasskeysCard />
 
         <SignInProvidersCard />
 

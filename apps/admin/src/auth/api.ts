@@ -7,6 +7,12 @@ import type {
   OauthIdentityList,
   OauthProvider,
   OauthStepUpRequest,
+  Passkey,
+  PasskeyFinishRequest,
+  PasskeyList,
+  PasskeyProof,
+  PasskeyRegistrationOptions,
+  PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
   Session,
@@ -52,6 +58,17 @@ export interface AuthApi {
   connectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<string>;
   /** Behind the same step-up. Refused with `oauth-last-sign-in` for the last way in. */
   disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void>;
+  /** The caller's passkeys, for the security page's card (M18-02). */
+  passkeys(): Promise<PasskeyList>;
+  /** Options for answering a step-up with a passkey the account holds. */
+  passkeyStepUpOptions(): Promise<PasskeyStepUpOptions>;
+  /** Behind a step-up, the browser's creation options for a new passkey. */
+  beginPasskey(proof: PasskeyProof): Promise<PasskeyRegistrationOptions>;
+  /** Stores what the authenticator made, under the person's name for it. */
+  finishPasskey(request: PasskeyFinishRequest): Promise<Passkey>;
+  renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey>;
+  /** Refused with `second-factor-required` for the last second factor of an account that needs one. */
+  removePasskey(id: string, proof: PasskeyProof): Promise<void>;
   /** Turns the one-time code a redirect carried into a session. */
   exchange(code: string): Promise<Session>;
   /** Always resolves, whether or not the address belongs to an account. */

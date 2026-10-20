@@ -485,6 +485,34 @@ Backlog or never:
   passkeys card can read `WebAuthnService.status()` (state, current and pinned
   RP ID, pin date); the "in use" count and the route that serves the card are
   not built yet.
+- [x] **M18-02** Register and manage passkeys ([#276](https://github.com/Docker-Hunterpedia/Helpdock/issues/276)).
+  `GET /api/me/passkeys`, `POST /api/me/passkeys/step-up/options`, `/begin`,
+  `/finish`, `PATCH` and `DELETE /api/me/passkeys/:id`
+  (`apps/api/src/auth/passkeys/`): a step-up (password, live code or an assertion
+  from a passkey the account holds) from the one step-up budget on every add,
+  rename and remove; at most 10, checked before the proof and again under a
+  lock on the account row; `excludeCredentials`; the registration ceremony
+  bound to the person and to the browser session (the `fam` claim); the
+  last-factor refusal `second-factor-required` for an account that must have
+  one and has no authenticator app; audit `auth.passkey.added/.renamed/.removed`
+  with values (a rename records old and new name and nothing when the name
+  did not change), `auth.step_up.refused` with the passkey reason and
+  `auth.passkey.counter_regressed`; the `securityChange` email for an addition
+  (with a "From" row: browser, system, truncated address) and a removal (what
+  still protects the account), and the password-reset notice naming the
+  passkeys kept (`Email/SecurityChange-M18`, en and ar); the Passkeys card on
+  `/me/security` with its step-up, prompt, name, rename, remove and limit
+  dialogs (`Admin/Profile-Security-Passkeys`, en and ar), built on
+  `@simplewebauthn/browser` 14.0.0 in the admin bundle only. Three differences
+  from the plan and the board, all small: a rename is audited but not emailed
+  (it changes no way in), so the card's footer says "we email you when one is
+  added or removed" where the board says "adding, renaming or removing"; the
+  list also carries `authenticatorApp` for the remove dialog's "what still
+  protects you" line; and the board's sentences that a passkey "counts as your second factor" and "can sign you in" are softened because they are not true until M18-03, which
+  lands before 1.1; until then the card's caption and the notice emails say only that the passkey is saved and can confirm changes on this page, and M18-03 restores the wording about second factor and sign-in. Left for the other deliverables: recovery codes drawn with a
+  first passkey (M18-03), the enrolment chooser and the sign-in and
+  second-factor screens (M18-03, M18-06), and the Settings › Authentication
+  card (M18-06).
 - [x] **M18-09** SSO presets ([#283](https://github.com/Docker-Hunterpedia/Helpdock/issues/283)).
   A "Start from" select on a new OIDC connection
   (`apps/admin/src/screens/admin/settings/sso-preset-picker.tsx`) with Custom

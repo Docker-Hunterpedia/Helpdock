@@ -5,7 +5,7 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01.
+Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01 and adding and managing passkeys by M18-02.
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
@@ -249,10 +249,11 @@ browser.
 
 Staff passkeys (WebAuthn) arrive in 1.1 with M18
 ([ADR 0050](../decisions/0050-passkeys-for-staff-over-webauthn.md)). M18-01
-lays the foundation described here; adding and removing passkeys (M18-02),
-using one as a second factor (M18-03) or on its own (M18-04), break-glass
-(M18-05) and the screens (M18-06) build on it. Until they land, no route
-registers or accepts a passkey.
+lays the foundation described here and M18-02 adds
+[registering and managing them](#adding-renaming-and-removing-passkeys); using
+one as a second factor (M18-03) or on its own (M18-04), break-glass (M18-05)
+and the sign-in screens (M18-06) build on it. Until they land, a passkey is
+stored and listed but no sign-in path accepts one yet.
 
 ### Where passkeys work
 
@@ -340,6 +341,76 @@ zero, because synced passkeys always report zero; after that it has to grow,
 and it is checked only after the signature is: a forged assertion cannot raise
 a counter alarm.
 
+### Adding, renaming and removing passkeys
+
+A person manages their own passkeys on **Security** (`/me/security`, the
+Passkeys card), through `/api/me/passkeys`. Every route is `@Authenticated()`,
+names no user, and treats a passkey that is not the caller's exactly like one
+that does not exist (`404`).
+
+| Route | |
+|---|---|
+| `GET /api/me/passkeys` | The caller's passkeys (name, when added, last used, "synced" when the platform backs it up), the limit, the install's passkey state (`available`, `paused`, `unavailable`), `removalBlocked` and `authenticatorApp` |
+| `POST /api/me/passkeys/step-up/options` | Options for answering a step-up with a passkey the account holds |
+| `POST /api/me/passkeys/begin` | `{ proof }`; answers `{ ceremonyId, options }` for `navigator.credentials.create()` |
+| `POST /api/me/passkeys/finish` | `{ ceremonyId, response, name }`; stores the credential and answers it |
+| `PATCH /api/me/passkeys/:id` | `{ name, proof }` |
+| `DELETE /api/me/passkeys/:id` | `{ proof }` |
+
+**Every change needs a proof** (ASVS 3.7.1): the current password, a live
+authenticator code, or an assertion from a passkey the account already holds
+(`{ passkey: { ceremonyId, response } }`, answering the ceremony from
+`step-up/options`). Exactly one. The three share the step-up budget of five in
+fifteen minutes that Connect and Disconnect on a provider use: a refused
+attempt spends one, so does an accepted one, and the sixth answers `429
+totp-locked` until the window slides. Minting options has a budget of its own
+(30 in fifteen minutes) so it cannot spend the owner's step-up attempts. The
+ten-passkey limit and the last-factor refusal are checked before the proof, so
+they spend no attempt.
+
+**Registering** is two calls so the browser's prompt sits between them.
+`begin` checks the proof, draws the account's 32-byte user handle on its first
+registration, and lists the account's existing passkeys in `excludeCredentials`
+so one authenticator is not added twice. The ceremony it opens is bound to the
+person and to the browser session (the `fam` claim of the access token), so
+another tab, another browser or another person cannot finish it. `finish` takes
+what the authenticator made and the name the person chose (1 to 64
+characters, no control characters), and spends the ceremony before it checks
+anything:
+
+| Answer | Why |
+|---|---|
+| `401 challenge-expired` | The ceremony is spent, expired (five minutes), of another purpose, or another person's or session's. A replay ends here |
+| `401 invalid-credentials` | The answer is for another origin or RP ID, is framed, has an attestation this install does not take, or does not verify |
+| `409 passkey-limit` | The account holds ten. `begin` says so before the proof; `finish` says it again under a lock on the account row, so two parallel registrations cannot both take the last place |
+| `409 passkey-duplicate` | This authenticator's credential id is already stored |
+| `409 passkeys-rp-changed` / `403 passkeys-unavailable` | See [The RP ID is pinned](#the-rp-id-is-pinned) |
+
+**Removing** the account's last passkey is refused with `409
+second-factor-required` when the account must have a second factor (an Admin,
+an install admin, or any account while `auth.require2fa` is on) and has no
+authenticator app. Another passkey, or an app, is enough; `GET` reports
+`removalBlocked` so the card disables the button instead of letting the person
+find out. Removal stays available while passkeys are paused after an `APP_URL`
+change: nobody is stuck with passkeys that cannot sign.
+
+Each change writes an audit row in install scope, actor `staff`:
+
+| Action | `meta` |
+|---|---|
+| `auth.passkey.added` | `passkey` (id), `name`, `synced` |
+| `auth.passkey.renamed` | `passkey`, `from`, `to`. Nothing when the name did not change |
+| `auth.passkey.removed` | `passkey`, `name` |
+
+and a refused proof by passkey writes `auth.step_up.refused` with `meta.reason`
+`passkey-unknown-credential`, `passkey-wrong-user`, `passkey-bad-assertion` or
+`passkey-counter-regressed`; the last also writes `auth.passkey.counter_regressed`.
+The caller sees `invalid-credentials` for all of them. An addition or a removal
+also emails the holder ([When a credential changes](#when-a-credential-changes));
+a rename does not, because it changes no way in. A password reset keeps every
+passkey (it proves the mailbox, not the person), and its notice says how many
+were kept so they can be checked.
+
 ### Storage
 
 `webauthn_credentials` holds one row per passkey: the credential id, the COSE
@@ -352,8 +423,8 @@ its passkeys.
 Like `users`, the table is install-wide and in `GLOBAL_TABLES`, with no
 `brand_id`: a passwordless sign-in looks a credential up before any brand is
 known, and one key belongs to one person in every brand they work in. Only
-the sign-in path, by credential id, and a person's own `/api/me/*` routes,
-filtered to their own id, will reach it.
+the sign-in path, by credential id, and a person's own `/api/me/passkeys`
+routes, filtered to their own id, reach it.
 
 ## The sign-in link and the password reset
 
@@ -452,10 +523,15 @@ in the recipient's own language, right to left for Arabic.
 
 The account holder is told by email whenever their password is changed or
 reset, their second factor is turned on or off, their recovery codes are
-redrawn, or a Google or GitHub account is connected to or disconnected from
-their account (ASVS 2.2.3, 2.5.5) — a `securityChange` auth email naming which one,
-when it happened, what to do if it was not them, and a link to their security
-page. "When" is told in the time zone of the brand the email is routed
+redrawn, a Google or GitHub account is connected to or disconnected from their
+account, or a passkey is added or removed (ASVS 2.2.3, 2.5.5) — a `securityChange`
+auth email naming which one, when it happened, what to do if it was not them,
+and a link to their security page. A passkey notice names the passkey, and an
+addition also says where it came from (the browser and system the user agent
+names, and the address cut to its network part: `Chrome on macOS · 85.12.x.x`);
+a removal says what still protects the account. The reset notice of an account
+that holds passkeys says how many were kept and to remove any it does not
+recognise. "When" is told in the time zone of the brand the email is routed
 through, because a staff account has no zone of its own. A provider notice
 also names the provider account by its address ("The GitHub account
 lina@example.com is connected."). Security emails ignore notification
@@ -477,12 +553,14 @@ ASVS 7.1.3, 7.2.1):
 | `auth.sign_in.failed` | A first factor was refused. `meta.reason`: `wrong-password`, `unknown-account`, `unusable-account`, `locked`, `no-brand-role`, `invalid-link` for a sign-in link that was dead, used or never issued, and for OAuth `link-required` or `identity-conflict` (see [Which account a provider signs in as](#which-account-a-provider-signs-in-as)) |
 | `auth.second_factor.failed` / `.replayed` | A wrong authenticator or recovery code; a code used twice |
 | `auth.account.locked` | A challenge spent its last attempt |
-| `auth.step_up.refused` | A security-page check refused: wrong password, or the rate limit |
+| `auth.step_up.refused` | A security-page check refused: wrong password, a wrong or replayed code, a passkey assertion that did not verify, or the rate limit |
 | `auth.refresh_token.reused` | A rotated refresh token came back; the family was revoked |
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated`, `auth.recovery_code.used` | A credential changed |
 | `auth.oauth.linked` / `.unlinked` | A Google or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
 | `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
+| `auth.passkey.added` / `.renamed` / `.removed` | A passkey was registered, renamed or removed from the person's session ([Adding, renaming and removing passkeys](#adding-renaming-and-removing-passkeys)) |
+| `auth.passkey.counter_regressed` | A passkey presented a counter that did not grow, after its signature verified. Written by the system |
 
 The rows are written by the `auth` system principal in a transaction of their
 own, so a refused attempt is recorded although the request fails, and carry the

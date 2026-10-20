@@ -151,6 +151,17 @@ export const STEP_UP_RULE: RateLimitRule = {
 };
 
 /**
+ * Options for a passkey second factor or a passkey enrolment, per account.
+ * Minting them evaluates no guess, so they sit outside the three-attempt
+ * budget; this only stops a holder of a live challenge from filling Redis.
+ */
+export const PASSKEY_CEREMONY_OPTIONS_RULE: RateLimitRule = {
+  bucket: 'passkey-ceremony-options',
+  limit: 30,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Per IP, for the two public invite routes. An invite token is 256 bits, so
  * guessing one is not the threat; what this bounds is somebody walking the
  * endpoint to find out whether a token they already hold is still live, and the

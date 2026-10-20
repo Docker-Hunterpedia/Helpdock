@@ -6,7 +6,7 @@ import {
   InMemorySettingsStore,
   type Settings,
 } from '@helpdock/config';
-import type { Brand, Db, DbTransaction } from '@helpdock/db';
+import type { Brand, Db, DbTransaction, WebauthnCredential } from '@helpdock/db';
 import { uuidv7 } from '@helpdock/db';
 import argon2 from 'argon2';
 import { generateKeyPair } from 'jose';
@@ -18,6 +18,7 @@ import { authRedis } from '../testing/auth-redis.js';
 import { MemoryRpIdPin } from '../testing/memory-rp-id-pin.js';
 import type { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
+import { SoftwareAuthenticator } from '../testing/software-authenticator.js';
 import { AuthService, type OauthInviteAcceptor } from './auth.service.js';
 import type { AuthAuditEntry, AuthAuditTrail } from './auth-audit.js';
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
@@ -32,8 +33,10 @@ import type {
 } from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
 import type { OauthIdentityRepository, OauthLink } from './oauth/oauth-identity.repository.js';
+import type { PasskeyRepository } from './passkeys/passkey.repository.js';
 import { derivePepper, PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
+import { totpLockKey } from './redis-keys.js';
 import { RefreshStore } from './session/refresh-store.js';
 import { SessionService } from './session/session.service.js';
 import type { StaffMembership, StaffRepository, StaffUser } from './staff.repository.js';
@@ -143,8 +146,16 @@ class FakeStaffRepository {
     this.#patch(userId, { recoveryCodesHashed });
   }
 
-  async disableTotp(userId: string): Promise<void> {
-    this.#patch(userId, { totpEnabled: false, totpSecretEncrypted: null, recoveryCodesHashed: [] });
+  async disableTotp(
+    userId: string,
+    _tx?: unknown,
+    options: { readonly keepRecoveryCodes?: boolean } = {},
+  ): Promise<void> {
+    this.#patch(userId, {
+      totpEnabled: false,
+      totpSecretEncrypted: null,
+      ...(options.keepRecoveryCodes ? {} : { recoveryCodesHashed: [] }),
+    });
   }
 
   async markActive(userId: string): Promise<void> {
@@ -318,9 +329,73 @@ let hasher: PasswordHasher;
 let sessions: SessionService;
 let rpIdPin: MemoryRpIdPin;
 let passkeyCounts: Map<string, number>;
-const passkeyCount = {
-  count: (userId: string): Promise<number> => Promise.resolve(passkeyCounts.get(userId) ?? 0),
-};
+let passkeyRows: FakePasskeys;
+
+/**
+ * `webauthn_credentials` in memory. A count set by hand (`passkeyCounts`) stands
+ * for passkeys the test never signs with; `rows` are the ones it does.
+ */
+class FakePasskeys {
+  rows: WebauthnCredential[] = [];
+  /** What the repository was asked, in order, to prove the lock comes first. */
+  readonly calls: string[] = [];
+
+  count = (userId: string): Promise<number> => {
+    this.calls.push('count');
+    return Promise.resolve(
+      (passkeyCounts.get(userId) ?? 0) + this.rows.filter((row) => row.userId === userId).length,
+    );
+  };
+  ofUser = (userId: string) => Promise.resolve(this.rows.filter((row) => row.userId === userId));
+  byCredentialId = (credentialId: Uint8Array) =>
+    Promise.resolve(
+      this.rows.find((row) => Buffer.from(row.credentialId).equals(Buffer.from(credentialId))),
+    );
+  lockAccount = () => {
+    this.calls.push('lock');
+    return Promise.resolve();
+  };
+  userHandle = () => Promise.resolve(new Uint8Array(randomBytes(32)));
+  transaction = <T>(run: (tx: DbTransaction) => Promise<T>) => run({} as DbTransaction);
+  markUsed = (credentialId: Uint8Array, signCount: number, backedUp: boolean) => {
+    const row = this.rows.find((found) =>
+      Buffer.from(found.credentialId).equals(Buffer.from(credentialId)),
+    );
+    if (row) Object.assign(row, { signCount, backedUp, lastUsedAt: new Date() });
+    return Promise.resolve();
+  };
+  add = (
+    userId: string,
+    name: string,
+    passkey: { credentialId: Uint8Array; publicKey: Uint8Array },
+  ) => {
+    const row = credentialRow(userId, name, passkey.credentialId, passkey.publicKey);
+    this.rows.push(row);
+    return Promise.resolve(row);
+  };
+}
+
+const credentialRow = (
+  userId: string,
+  name: string,
+  credentialId: Uint8Array,
+  publicKey: Uint8Array,
+): WebauthnCredential => ({
+  id: uuidv7(),
+  userId,
+  credentialId,
+  publicKey,
+  algorithm: -7,
+  signCount: 0,
+  transports: ['internal'],
+  aaguid: null,
+  discoverable: true,
+  backupEligible: false,
+  backedUp: false,
+  name,
+  createdAt: new Date(),
+  lastUsedAt: null,
+});
 
 const newUser = async (overrides: Partial<StaffUser> = {}): Promise<StaffUser> => ({
   id: uuidv7(),
@@ -380,6 +455,7 @@ beforeEach(async () => {
   hasher = new PasswordHasher(MASTER_KEY);
   rpIdPin = new MemoryRpIdPin();
   passkeyCounts = new Map();
+  passkeyRows = new FakePasskeys();
 
   settings = createSettings({
     env: {},
@@ -438,7 +514,7 @@ beforeEach(async () => {
       ceremonies: new WebAuthnCeremonyStore(created.redis),
       pin: rpIdPin,
     }),
-    passkeys: passkeyCount,
+    passkeys: passkeyRows as unknown as PasskeyRepository,
     settings,
     keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
     mail,
@@ -500,7 +576,7 @@ describe('signIn', () => {
     staff.add(await newUser());
     await settings.set('auth.require2fa', true, { updatedBy: 'test' });
 
-    await expect(signIn()).resolves.toMatchObject({ kind: 'totp-enrolment-required' });
+    await expect(signIn()).resolves.toMatchObject({ kind: 'second-factor-enrolment-required' });
   });
 
   it('skips the second factor on a browser that was trusted', async () => {
@@ -1740,13 +1816,13 @@ describe('a second factor for administrators (ASVS 4.3.1)', () => {
   it('sends an Admin with no authenticator to enrolment, whatever the setting', async () => {
     staff.add(await newUser(), 'admin');
 
-    await expect(signIn()).resolves.toMatchObject({ kind: 'totp-enrolment-required' });
+    await expect(signIn()).resolves.toMatchObject({ kind: 'second-factor-enrolment-required' });
   });
 
   it('does the same for an install admin who is only an agent in their brand', async () => {
     staff.add(await newUser({ installAdmin: true }), 'agent');
 
-    await expect(signIn()).resolves.toMatchObject({ kind: 'totp-enrolment-required' });
+    await expect(signIn()).resolves.toMatchObject({ kind: 'second-factor-enrolment-required' });
   });
 
   it('leaves an agent to choose, while the install does not require it', async () => {
@@ -1778,7 +1854,7 @@ describe('enrolment from a challenge', () => {
   const challenge = async (): Promise<string> => {
     staff.add(await newUser(), 'admin');
     const started = await signIn();
-    if (started.kind !== 'totp-enrolment-required') {
+    if (started.kind !== 'second-factor-enrolment-required') {
       throw new Error('expected an enrolment challenge');
     }
     return started.challengeId;
@@ -2101,3 +2177,702 @@ const resetTokenIn = (text: string): string => {
   const line = text.split('\n').find((candidate) => candidate.includes('/sign-in/reset')) ?? '';
   return new URL(line, APP_URL).searchParams.get('token') ?? '';
 };
+
+describe('a passkey as the second factor (M18-03)', () => {
+  const IP = '203.0.113.5';
+
+  type Challenge = { challengeId: string; user: StaffUser; authenticator: SoftwareAuthenticator };
+
+  /** Signs in with the password and holds the challenge a passkey (and, if asked, an app) can answer. */
+  const start = async (
+    options: { totp?: boolean; role?: StaffMembership['role']; email?: string } = {},
+  ): Promise<Challenge & { secret: string | null }> => {
+    const made = options.totp
+      ? await withTotp({ email: options.email ?? 'lina@helpdock.com' })
+      : { user: await newUser({ email: options.email ?? 'lina@helpdock.com' }), secret: null };
+    staff.add(made.user, options.role ?? 'agent');
+    const authenticator = new SoftwareAuthenticator();
+    passkeyRows.rows.push(
+      credentialRow(made.user.id, 'Key', authenticator.credentialId, authenticator.cosePublicKey),
+    );
+    const started = await signIn({ email: made.user.email });
+    if (started.kind !== 'totp-required') throw new Error('expected a challenge');
+
+    return {
+      challengeId: started.challengeId,
+      user: made.user,
+      authenticator,
+      secret: made.secret,
+    };
+  };
+
+  const optionsFor = (challengeId: string) =>
+    service.passkeySecondFactorOptions({ challengeId, ip: IP });
+
+  const assertWith = async (
+    authenticator: SoftwareAuthenticator,
+    challengeId: string,
+    overrides: { origin?: string; challenge?: string; signCount?: number } = {},
+  ) => {
+    const { ceremonyId, options } = await optionsFor(challengeId);
+    return {
+      ceremonyId,
+      response: authenticator.assert(options as never, {
+        origin: overrides.origin ?? APP_URL,
+        ...(overrides.challenge === undefined ? {} : { challenge: overrides.challenge }),
+        ...(overrides.signCount === undefined ? {} : { signCount: overrides.signCount }),
+      }) as never,
+    };
+  };
+
+  const verify = (
+    challengeId: string,
+    assertion: { ceremonyId: string; response: never },
+    trustDevice = false,
+  ) =>
+    service.verifyPasskeySecondFactor({
+      challengeId,
+      ip: IP,
+      ceremonyId: assertion.ceremonyId,
+      response: assertion.response,
+      trustDevice,
+      userAgent: 'Firefox',
+    });
+
+  const codeOf = async (promise: Promise<unknown>): Promise<unknown> => {
+    try {
+      await promise;
+      return undefined;
+    } catch (error) {
+      return (error as AuthFailure).auth;
+    }
+  };
+
+  /**
+   * The lock ends the challenge and refuses a fresh password sign-in: the
+   * account stays locked for 15 minutes, and a stolen challenge id is worth nothing.
+   */
+  const expectLockedOut = async (challengeId: string, email: string): Promise<void> => {
+    await expect(codeOf(optionsFor(challengeId))).resolves.toEqual({ code: 'challenge-expired' });
+    await expect(signIn({ email })).rejects.toMatchObject({ auth: { code: 'totp-locked' } });
+  };
+
+  const failuresAudited = (): number =>
+    audit.entries.filter((entry) => entry.action === 'auth.second_factor.failed').length;
+
+  describe('the challenge', () => {
+    it('offers a passkey-only account the passkey and no code', async () => {
+      const user = staff.add(await newUser());
+      passkeyCounts.set(user.id, 1);
+
+      await expect(signIn()).resolves.toMatchObject({
+        kind: 'totp-required',
+        factors: { totp: false, passkey: true },
+      });
+    });
+
+    it('offers an account with both, and one with an app alone as before', async () => {
+      const both = await start({ totp: true });
+      const appOnly = await withTotp({ email: 'sami@helpdock.com' });
+      staff.add(appOnly.user);
+
+      await expect(signIn({ email: both.user.email })).resolves.toMatchObject({
+        factors: { totp: true, passkey: true },
+      });
+      await expect(signIn({ email: 'sami@helpdock.com' })).resolves.toMatchObject({
+        factors: { totp: true, passkey: false },
+      });
+    });
+
+    it('hides a passkey the install cannot use from an account that has an app, and keeps it for one that has not', async () => {
+      const both = await start({ totp: true });
+      const only = await start({ email: 'sami@helpdock.com' });
+      rpIdPin.pinned = { rpId: 'old-desk.example.com', pinnedAt: new Date() };
+
+      await expect(signIn({ email: both.user.email })).resolves.toMatchObject({
+        factors: { totp: true, passkey: false },
+      });
+      await expect(signIn({ email: only.user.email })).resolves.toMatchObject({
+        factors: { totp: false, passkey: true },
+      });
+    });
+
+    it('is not skipped for a passkey-only account by a trusted browser that is not theirs', async () => {
+      const { user } = await start();
+      const trustedDeviceCookie = await new TrustedDeviceStore({
+        redis: stub.asRedis(),
+        masterKey: MASTER_KEY,
+      }).trust(uuidv7());
+
+      await expect(signIn({ email: user.email, trustedDeviceCookie })).resolves.toMatchObject({
+        kind: 'totp-required',
+      });
+    });
+  });
+
+  describe('options', () => {
+    it('names only the account’s credentials and spends no attempt', async () => {
+      const { challengeId, authenticator } = await start();
+      const stranger = new SoftwareAuthenticator();
+      passkeyRows.rows.push(
+        credentialRow(uuidv7(), 'Theirs', stranger.credentialId, stranger.cosePublicKey),
+      );
+
+      const { options } = await optionsFor(challengeId);
+      for (let minted = 0; minted < 5; minted += 1) await optionsFor(challengeId);
+
+      expect((options as { allowCredentials: { id: string }[] }).allowCredentials).toEqual([
+        expect.objectContaining({
+          id: Buffer.from(authenticator.credentialId).toString('base64url'),
+        }),
+      ]);
+      const wrong = await assertWith(new SoftwareAuthenticator(), challengeId);
+      await expect(codeOf(verify(challengeId, wrong))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+    });
+
+    it('is refused for an unknown challenge and for an enrolment challenge', async () => {
+      await expect(codeOf(optionsFor('no-such-challenge'))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+
+      staff.add(await newUser(), 'admin');
+      const enrolling = await signIn();
+      if (enrolling.kind !== 'second-factor-enrolment-required')
+        throw new Error('expected enrolment');
+      await expect(codeOf(optionsFor(enrolling.challengeId))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+    });
+
+    it('is refused for a challenge whose account holds no passkey', async () => {
+      const { user } = await withTotp();
+      staff.add(user);
+      const started = await signIn();
+      if (started.kind !== 'totp-required') throw new Error('expected a challenge');
+
+      await expect(codeOf(optionsFor(started.challengeId))).resolves.toEqual({
+        code: 'invalid-credentials',
+      });
+    });
+
+    it('is refused once the account is locked', async () => {
+      const { challengeId, user } = await start();
+      for (let tries = 0; tries < 3; tries += 1) {
+        await verify(challengeId, await assertWith(new SoftwareAuthenticator(), challengeId)).catch(
+          () => undefined,
+        );
+      }
+
+      await expectLockedOut(challengeId, user.email);
+    });
+  });
+
+  describe('verify', () => {
+    it('opens a session, records the use and spends the challenge', async () => {
+      const { challengeId, user, authenticator } = await start();
+      authenticator.signCount = 4;
+
+      const spare = await assertWith(authenticator, challengeId);
+      const { issued, trustedDeviceCookie } = await verify(
+        challengeId,
+        await assertWith(authenticator, challengeId),
+      );
+
+      expect(issued.session.user.email).toBe(user.email);
+      expect(trustedDeviceCookie).toBeNull();
+      expect(passkeyRows.rows[0]).toMatchObject({ signCount: 5, lastUsedAt: expect.any(Date) });
+      expect(audit.entries.at(-1)).toMatchObject({
+        action: 'auth.sign_in.succeeded',
+        meta: { method: 'password', secondFactor: 'passkey' },
+      });
+      await expect(codeOf(verify(challengeId, spare))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+    });
+
+    it('accepts an assertion without user verification: presence is enough after a first factor', async () => {
+      const { challengeId, authenticator } = await start();
+      const { ceremonyId, options } = await optionsFor(challengeId);
+      const response = authenticator.assert(options as never, {
+        origin: APP_URL,
+        userVerified: false,
+      }) as never;
+
+      await expect(verify(challengeId, { ceremonyId, response })).resolves.toMatchObject({
+        issued: expect.anything(),
+      });
+    });
+
+    it('trusts the browser only when asked, whichever factor succeeded', async () => {
+      const { challengeId, authenticator } = await start();
+
+      const { trustedDeviceCookie } = await verify(
+        challengeId,
+        await assertWith(authenticator, challengeId),
+        true,
+      );
+
+      expect(trustedDeviceCookie).toMatch(/^[0-9a-f-]+\..+\..+$/);
+    });
+
+    it('refuses a replayed assertion, and the replay costs an attempt', async () => {
+      const first = await start();
+      const assertion = await assertWith(first.authenticator, first.challengeId);
+      await verify(first.challengeId, assertion);
+      // The same person signs in again; the captured answer is offered to the new challenge.
+      const again = await signIn({ email: first.user.email });
+      if (again.kind !== 'totp-required') throw new Error('expected a challenge');
+
+      await expect(codeOf(verify(again.challengeId, assertion))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({
+          action: 'auth.second_factor.failed',
+          meta: { factor: 'passkey', reason: 'ceremony-gone' },
+        }),
+      );
+    });
+
+    it('refuses a ceremony minted for another challenge of the same person', async () => {
+      const first = await start();
+      const second = await signIn({ email: first.user.email });
+      if (second.kind !== 'totp-required') throw new Error('expected a challenge');
+      const assertion = await assertWith(first.authenticator, first.challengeId);
+
+      await expect(codeOf(verify(second.challengeId, assertion))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+    });
+
+    it('refuses another person’s passkey, signed over this challenge’s options', async () => {
+      const mine = await start();
+      const theirs = new SoftwareAuthenticator();
+      passkeyRows.rows.push(
+        credentialRow(uuidv7(), 'Theirs', theirs.credentialId, theirs.cosePublicKey),
+      );
+
+      const assertion = await assertWith(theirs, mine.challengeId);
+
+      await expect(codeOf(verify(mine.challengeId, assertion))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({
+          action: 'auth.second_factor.failed',
+          meta: { factor: 'passkey', reason: 'wrong-user' },
+        }),
+      );
+    });
+
+    it('refuses a credential nobody holds', async () => {
+      const { challengeId } = await start();
+
+      await expect(
+        codeOf(verify(challengeId, await assertWith(new SoftwareAuthenticator(), challengeId))),
+      ).resolves.toEqual({ code: 'passkey-invalid', attemptsLeft: 2 });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({ meta: { factor: 'passkey', reason: 'unknown-credential' } }),
+      );
+    });
+
+    it.each([
+      ['the wrong challenge', { challenge: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }],
+      ['another origin', { origin: 'https://evil.example' }],
+    ])('refuses an assertion made over %s', async (_label, overrides) => {
+      const { challengeId, authenticator } = await start();
+
+      await expect(
+        codeOf(verify(challengeId, await assertWith(authenticator, challengeId, overrides))),
+      ).resolves.toEqual({ code: 'passkey-invalid', attemptsLeft: 2 });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({ meta: { factor: 'passkey', reason: 'bad-assertion' } }),
+      );
+    });
+
+    it('refuses a counter that went backwards and audits it', async () => {
+      const { challengeId, authenticator } = await start();
+      const [held] = passkeyRows.rows;
+      if (held) held.signCount = 9;
+
+      await expect(
+        codeOf(verify(challengeId, await assertWith(authenticator, challengeId, { signCount: 2 }))),
+      ).resolves.toEqual({ code: 'passkey-invalid', attemptsLeft: 2 });
+      expect(audit.actions()).toContain('auth.passkey.counter_regressed');
+      expect(passkeyRows.rows[0]?.signCount).toBe(9);
+    });
+
+    it('will not take an enrolment challenge', async () => {
+      staff.add(await newUser(), 'admin');
+      const enrolling = await signIn();
+      if (enrolling.kind !== 'second-factor-enrolment-required')
+        throw new Error('expected enrolment');
+
+      await expect(
+        codeOf(
+          service.verifyPasskeySecondFactor({
+            challengeId: enrolling.challengeId,
+            ip: IP,
+            ceremonyId: 'x'.repeat(43),
+            response: {} as never,
+            trustDevice: false,
+            userAgent: undefined,
+          }),
+        ),
+      ).resolves.toEqual({ code: 'challenge-expired' });
+    });
+  });
+
+  describe('the budget and the lock shared with codes', () => {
+    it('counts two wrong codes and a wrong passkey as the third, then locks', async () => {
+      const { challengeId, user } = await start({ totp: true });
+      const wrongCode = () =>
+        codeOf(
+          service.verifyTotp({
+            ip: IP,
+            challengeId,
+            code: '000000',
+            trustDevice: false,
+            userAgent: undefined,
+          }),
+        );
+
+      await expect(wrongCode()).resolves.toEqual({ code: 'totp-mismatch', attemptsLeft: 2 });
+      await expect(wrongCode()).resolves.toEqual({ code: 'totp-mismatch', attemptsLeft: 1 });
+      const wrongPasskey = await assertWith(new SoftwareAuthenticator(), challengeId);
+      await expect(codeOf(verify(challengeId, wrongPasskey))).resolves.toEqual({
+        code: 'totp-locked',
+      });
+
+      await expectLockedOut(challengeId, user.email);
+    });
+
+    it('lets the third attempt be a correct passkey after two wrong codes', async () => {
+      const { challengeId, authenticator } = await start({ totp: true });
+      for (let tries = 0; tries < 2; tries += 1) {
+        await service
+          .verifyTotp({
+            ip: IP,
+            challengeId,
+            code: '000000',
+            trustDevice: false,
+            userAgent: undefined,
+          })
+          .catch(() => undefined);
+      }
+
+      await expect(
+        verify(challengeId, await assertWith(authenticator, challengeId)),
+      ).resolves.toMatchObject({ issued: expect.anything() });
+    });
+
+    it('counts wrong passkeys against a recovery code too, and the lock holds for both', async () => {
+      const { challengeId, user } = await start({ totp: true });
+      for (let tries = 0; tries < 3; tries += 1) {
+        await verify(challengeId, await assertWith(new SoftwareAuthenticator(), challengeId)).catch(
+          () => undefined,
+        );
+      }
+
+      await expect(
+        codeOf(
+          service.useRecoveryCode({ ip: IP, challengeId, code: 'AAAA-AAAA', userAgent: undefined }),
+        ),
+      ).resolves.toEqual({ code: 'challenge-expired' });
+      await expectLockedOut(challengeId, user.email);
+    });
+
+    it('evaluates no more than three guesses in a parallel burst of codes and passkeys', async () => {
+      const { challengeId, user } = await start({ totp: true });
+      const wrong = await Promise.all(
+        Array.from({ length: 4 }, () => assertWith(new SoftwareAuthenticator(), challengeId)),
+      );
+
+      const results = await Promise.allSettled([
+        ...wrong.map((assertion) => verify(challengeId, assertion)),
+        ...Array.from({ length: 4 }, () =>
+          service.verifyTotp({
+            ip: IP,
+            challengeId,
+            code: '000000',
+            trustDevice: false,
+            userAgent: undefined,
+          }),
+        ),
+      ]);
+
+      expect(results.every((result) => result.status === 'rejected')).toBe(true);
+      expect(failuresAudited()).toBe(3);
+      await expectLockedOut(challengeId, user.email);
+    });
+
+    it('does not let a correct passkey open a session once the lock has landed', async () => {
+      const { challengeId, authenticator, user } = await start();
+      const ready = await assertWith(authenticator, challengeId);
+      for (let tries = 0; tries < 3; tries += 1) {
+        await verify(challengeId, await assertWith(new SoftwareAuthenticator(), challengeId)).catch(
+          () => undefined,
+        );
+      }
+
+      await expect(codeOf(verify(challengeId, ready))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+      await expectLockedOut(challengeId, user.email);
+    });
+
+    it('does not open a session when the lock lands while the assertion is being checked', async () => {
+      const { challengeId, authenticator, user } = await start();
+      const ready = await assertWith(authenticator, challengeId);
+      const lookUp = passkeyRows.byCredentialId;
+      passkeyRows.byCredentialId = async (credentialId) => {
+        await stub.asRedis().set(totpLockKey(user.id), '1');
+        return lookUp(credentialId);
+      };
+
+      await expect(codeOf(verify(challengeId, ready))).resolves.toEqual({ code: 'totp-locked' });
+      expect(audit.actions()).not.toContain('auth.sign_in.succeeded');
+      expect(passkeyRows.rows[0]?.lastUsedAt).toBeNull();
+    });
+  });
+
+  describe('enrolment from a challenge', () => {
+    const enrolment = async (): Promise<{ challengeId: string; user: StaffUser }> => {
+      const user = staff.add(await newUser(), 'admin');
+      const started = await signIn();
+      if (started.kind !== 'second-factor-enrolment-required')
+        throw new Error('expected enrolment');
+      return { challengeId: started.challengeId, user };
+    };
+
+    const register = async (
+      challengeId: string,
+      authenticator: SoftwareAuthenticator,
+      overrides: { origin?: string } = {},
+    ) => {
+      const { ceremonyId, options } = await service.startPasskeyEnrolment(challengeId);
+      return {
+        ceremonyId,
+        response: authenticator.register(options as never, {
+          origin: overrides.origin ?? APP_URL,
+        }) as never,
+      };
+    };
+
+    const complete = (
+      challengeId: string,
+      registration: { ceremonyId: string; response: never },
+      name = 'MacBook',
+    ) =>
+      service.completePasskeyEnrolment({
+        challengeId,
+        ip: IP,
+        ceremonyId: registration.ceremonyId,
+        response: registration.response,
+        name,
+        userAgent: 'Firefox',
+      });
+
+    it('stores the passkey, draws the recovery codes and opens the session', async () => {
+      const { challengeId, user } = await enrolment();
+
+      const { recoveryCodes, issued } = await complete(
+        challengeId,
+        await register(challengeId, new SoftwareAuthenticator()),
+      );
+
+      expect(recoveryCodes).toHaveLength(10);
+      expect(issued.session.user.email).toBe(user.email);
+      expect(passkeyRows.rows).toMatchObject([{ userId: user.id, name: 'MacBook' }]);
+      expect(staff.users.get(user.id)?.recoveryCodesHashed).toHaveLength(10);
+      expect(audit.actions()).toEqual(['auth.passkey.added', 'auth.sign_in.succeeded']);
+      expect(audit.entries[1]?.meta).toMatchObject({ method: 'password', secondFactor: 'passkey' });
+      expect(mail.sent.map((message) => message.kind)).toEqual(['securityChange']);
+      expect(mail.sent[0]?.values).toMatchObject({ change: 'passkeyAdded', passkey: 'MacBook' });
+      expect(rpIdPin.pinned?.rpId).toBe('support.example.com');
+    });
+
+    it('spends the challenge: it cannot enrol twice', async () => {
+      const { challengeId } = await enrolment();
+      const registration = await register(challengeId, new SoftwareAuthenticator());
+      await complete(challengeId, registration);
+
+      await expect(codeOf(complete(challengeId, registration))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+      expect(passkeyRows.rows).toHaveLength(1);
+    });
+
+    it('charges a registration that does not verify an attempt, and stores nothing', async () => {
+      const { challengeId } = await enrolment();
+
+      await expect(
+        codeOf(
+          complete(
+            challengeId,
+            await register(challengeId, new SoftwareAuthenticator(), {
+              origin: 'https://evil.example',
+            }),
+          ),
+        ),
+      ).resolves.toEqual({ code: 'passkey-invalid', attemptsLeft: 2 });
+      expect(passkeyRows.rows).toEqual([]);
+    });
+
+    it('refuses a ceremony begun for another challenge, as a replay would be', async () => {
+      const first = await enrolment();
+      const second = await signIn();
+      if (second.kind !== 'second-factor-enrolment-required') throw new Error('expected enrolment');
+      const registration = await register(first.challengeId, new SoftwareAuthenticator());
+
+      await expect(codeOf(complete(second.challengeId, registration))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+    });
+
+    it('locks after three failures shared with codes', async () => {
+      const { challengeId } = await enrolment();
+      await service.startEnrolment(challengeId);
+      await service
+        .completeEnrolment({ ip: IP, challengeId, code: '000000', userAgent: undefined })
+        .catch(() => undefined);
+      const bad = await register(challengeId, new SoftwareAuthenticator(), {
+        origin: 'https://evil.example',
+      });
+      await complete(challengeId, bad).catch(() => undefined);
+
+      await expect(
+        codeOf(
+          complete(
+            challengeId,
+            await register(challengeId, new SoftwareAuthenticator(), {
+              origin: 'https://evil.example',
+            }),
+          ),
+        ),
+      ).resolves.toEqual({ code: 'totp-locked' });
+    });
+
+    it('will not take a second-factor challenge for an enrolment', async () => {
+      const { challengeId } = await start();
+
+      await expect(codeOf(service.startPasskeyEnrolment(challengeId))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+    });
+
+    it('refuses a stale enrolment challenge once the account has a second factor', async () => {
+      const { challengeId, user } = await enrolment();
+      const registration = await register(challengeId, new SoftwareAuthenticator());
+      passkeyCounts.set(user.id, 1);
+
+      await expect(codeOf(complete(challengeId, registration))).resolves.toEqual({
+        code: 'challenge-expired',
+      });
+      expect(passkeyRows.rows).toEqual([]);
+    });
+
+    it('refuses the eleventh passkey', async () => {
+      const { challengeId, user } = await enrolment();
+      for (let held = 0; held < 10; held += 1) {
+        const key = new SoftwareAuthenticator();
+        passkeyRows.rows.push(
+          credentialRow(user.id, `Key ${held}`, key.credentialId, key.cosePublicKey),
+        );
+      }
+
+      await expect(codeOf(service.startPasskeyEnrolment(challengeId))).resolves.toEqual({
+        code: 'passkey-limit',
+      });
+    });
+  });
+
+  describe('having a factor', () => {
+    it('counts a passkey as a second factor', async () => {
+      const user = await newUser();
+      staff.add(user);
+      await expect(service.hasSecondFactor(user)).resolves.toBe(false);
+
+      passkeyCounts.set(user.id, 1);
+
+      await expect(service.hasSecondFactor(user)).resolves.toBe(true);
+      await expect(service.hasSecondFactor({ ...user, totpEnabled: true })).resolves.toBe(true);
+    });
+
+    it('lets an Admin turn the app off while a passkey remains, keeping the recovery codes, under the account lock', async () => {
+      const { user, secret } = await withTotp({ recoveryCodesHashed: ['hash-1', 'hash-2'] });
+      staff.add(user, 'admin');
+      passkeyCounts.set(user.id, 1);
+
+      await service.disableTotp(user.id, await generate({ secret }), {} as DbTransaction);
+
+      expect(staff.users.get(user.id)).toMatchObject({
+        totpEnabled: false,
+        recoveryCodesHashed: ['hash-1', 'hash-2'],
+      });
+      expect(passkeyRows.calls.slice(0, 2)).toEqual(['lock', 'count']);
+    });
+
+    it('still refuses an Admin whose app is the only factor, and takes the lock first', async () => {
+      const { user, secret } = await withTotp();
+      staff.add(user, 'admin');
+
+      await expect(
+        service.disableTotp(user.id, await generate({ secret }), {} as DbTransaction),
+      ).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+      expect(passkeyRows.calls.slice(0, 2)).toEqual(['lock', 'count']);
+      expect(staff.users.get(user.id)?.totpEnabled).toBe(true);
+    });
+
+    it('forgets the recovery codes when the app was the last factor of an account that may go without', async () => {
+      const { user, secret } = await withTotp({ recoveryCodesHashed: ['hash-1'] });
+      staff.add(user, 'agent');
+
+      await service.disableTotp(user.id, await generate({ secret }), {} as DbTransaction);
+
+      expect(staff.users.get(user.id)?.recoveryCodesHashed).toEqual([]);
+    });
+
+    it('does not draw new recovery codes for an app added beside a passkey', async () => {
+      const user = staff.add(await newUser({ recoveryCodesHashed: ['hash-1'] }));
+      passkeyCounts.set(user.id, 1);
+      const staged = await service.enrolTotp(user.id);
+
+      const { recoveryCodes } = await service.confirmTotp(
+        user.id,
+        await generate({ secret: staged.secret }),
+        {} as DbTransaction,
+      );
+
+      expect(recoveryCodes).toEqual([]);
+      expect(staff.users.get(user.id)?.recoveryCodesHashed).toEqual(['hash-1']);
+      expect(passkeyRows.calls.slice(0, 1)).toEqual(['lock']);
+    });
+
+    it('redraws the codes after a passkey assertion, and only for an account with a factor', async () => {
+      const user = staff.add(await newUser());
+      await expect(
+        service.regenerateRecoveryCodesAfterPasskey(user.id, {} as DbTransaction),
+      ).rejects.toMatchObject({ auth: { code: 'unavailable' } });
+
+      passkeyCounts.set(user.id, 1);
+      const { recoveryCodes } = await service.regenerateRecoveryCodesAfterPasskey(
+        user.id,
+        {} as DbTransaction,
+      );
+
+      expect(recoveryCodes).toHaveLength(10);
+      expect(audit.entries.at(-1)).toMatchObject({
+        action: 'auth.recovery_codes.regenerated',
+        meta: { proof: 'passkey' },
+      });
+    });
+  });
+});

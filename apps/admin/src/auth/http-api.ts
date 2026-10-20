@@ -7,10 +7,13 @@ import type {
   OauthProvider,
   OauthStepUpRequest,
   Passkey,
+  PasskeyAdded,
+  PasskeyEnrolmentRequest,
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
   PasskeyRegistrationOptions,
+  PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
@@ -25,6 +28,7 @@ import {
   magicLinkPreviewSchema,
   oauthConnectStartSchema,
   oauthIdentityListSchema,
+  passkeyAddedSchema,
   passkeyListSchema,
   passkeyRegistrationOptionsSchema,
   passkeySchema,
@@ -117,6 +121,33 @@ export class HttpAuthApi implements AuthApi {
     return this.#requireSession(result);
   }
 
+  async passkeySecondFactorOptions(challengeId: string): Promise<PasskeyStepUpOptions> {
+    return passkeyStepUpOptionsSchema.parse(
+      await this.#transport.request('POST', '/auth/passkey/second-factor/options', {
+        challengeId,
+      }),
+    );
+  }
+
+  async verifyPasskey(
+    challengeId: string,
+    answer: PasskeySecondFactorAnswer,
+    { trustDevice }: { readonly trustDevice: boolean },
+  ): Promise<Session> {
+    const result = this.#keepSession(
+      signInResponseSchema.parse(
+        await this.#transport.request('POST', '/auth/passkey/second-factor/verify', {
+          challengeId,
+          ceremonyId: answer.ceremonyId,
+          response: answer.response,
+          trustDevice,
+        }),
+      ),
+    );
+
+    return this.#requireSession(result);
+  }
+
   oauthStartUrl(provider: OauthProvider): string {
     return `${this.#transport.baseUrl}/auth/oauth/${provider}/start`;
   }
@@ -155,8 +186,8 @@ export class HttpAuthApi implements AuthApi {
     );
   }
 
-  async finishPasskey(request: PasskeyFinishRequest): Promise<Passkey> {
-    return passkeySchema.parse(
+  async finishPasskey(request: PasskeyFinishRequest): Promise<PasskeyAdded> {
+    return passkeyAddedSchema.parse(
       await this.#transport.request('POST', '/me/passkeys/finish', request),
     );
   }
@@ -222,6 +253,27 @@ export class HttpAuthApi implements AuthApi {
   ): Promise<RecoveryCodes & { readonly session: Session }> {
     const response = enrolmentCompleteResponseSchema.parse(
       await this.#transport.request('POST', '/auth/enrolment/confirm', { challengeId, code }),
+    );
+    this.#transport.keepSession(response);
+
+    return { recoveryCodes: response.recoveryCodes, session: response.session };
+  }
+
+  async startPasskeyEnrolment(challengeId: string): Promise<PasskeyRegistrationOptions> {
+    return passkeyRegistrationOptionsSchema.parse(
+      await this.#transport.request('POST', '/auth/enrolment/passkey/options', { challengeId }),
+    );
+  }
+
+  async completePasskeyEnrolment(
+    challengeId: string,
+    request: PasskeyEnrolmentRequest,
+  ): Promise<RecoveryCodes & { readonly session: Session }> {
+    const response = enrolmentCompleteResponseSchema.parse(
+      await this.#transport.request('POST', '/auth/enrolment/passkey/confirm', {
+        challengeId,
+        ...request,
+      }),
     );
     this.#transport.keepSession(response);
 

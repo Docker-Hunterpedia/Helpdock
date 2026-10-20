@@ -22,7 +22,7 @@ export function useFinishSignIn(returnTo: string): (result: SignInResult) => voi
         return;
       }
 
-      if (result.kind === 'totp-enrolment-required') {
+      if (result.kind === 'second-factor-enrolment-required') {
         void navigate(ROUTES.totpEnrolment, {
           replace: true,
           state: { challengeId: result.challengeId },
@@ -31,7 +31,12 @@ export function useFinishSignIn(returnTo: string): (result: SignInResult) => voi
       }
 
       void navigate(ROUTES.totp, {
-        state: { challengeId: result.challengeId, email: result.email, returnTo },
+        state: {
+          challengeId: result.challengeId,
+          email: result.email,
+          factors: result.factors,
+          returnTo,
+        },
       });
     },
     [navigate, returnTo, setSession],

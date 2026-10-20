@@ -1,8 +1,10 @@
 import type {
   Passkey,
+  PasskeyAdded,
   PasskeyList,
   PasskeyRegistrationOptions,
   PasskeyStepUpOptions,
+  RecoveryCodes,
 } from '@helpdock/schemas';
 import {
   Body,
@@ -19,14 +21,17 @@ import {
 } from '@nestjs/common';
 import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { getTx, requireRequestContext } from '../../context/request-context.js';
+import { RecoveryCodesDto } from '../dto.js';
 import { requireStaffPrincipalId } from '../principal.js';
 import { Authenticated } from '../route-declaration.js';
 import {
+  PasskeyAddedDto,
   PasskeyBeginRequestDto,
   PasskeyDto,
   PasskeyFinishRequestDto,
   PasskeyIdParamDto,
   PasskeyListDto,
+  PasskeyRecoveryRedrawRequestDto,
   PasskeyRegistrationOptionsDto,
   PasskeyRemoveRequestDto,
   PasskeyRenameRequestDto,
@@ -82,12 +87,25 @@ export class PasskeysController {
 
   @Post('finish')
   @Authenticated()
-  @ZodSerializerDto(PasskeyDto)
+  @ZodSerializerDto(PasskeyAddedDto)
   async finish(
     @Body(new ZodValidationPipe(PasskeyFinishRequestDto)) body: PasskeyFinishRequestDto,
     @Headers('authorization') authorization: string | undefined,
-  ): Promise<Passkey> {
+  ): Promise<PasskeyAdded> {
     return this.#passkeys.finishRegistration(await this.#session(authorization), body);
+  }
+
+  /** Ten new recovery codes, behind an assertion from a passkey the account holds. */
+  @Post('recovery-codes')
+  @Authenticated()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(RecoveryCodesDto)
+  async regenerateRecoveryCodes(
+    @Body(new ZodValidationPipe(PasskeyRecoveryRedrawRequestDto))
+    body: PasskeyRecoveryRedrawRequestDto,
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<RecoveryCodes> {
+    return this.#passkeys.regenerateRecoveryCodes(await this.#session(authorization), body);
   }
 
   @Patch(':id')

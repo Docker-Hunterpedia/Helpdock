@@ -386,7 +386,7 @@ export function SecurityScreen(): ReactNode {
           )}
         </AccountCard>
 
-        <PasskeysCard />
+        <PasskeysCard onRecoveryCodes={setNewCodes} />
 
         <SignInProvidersCard />
 

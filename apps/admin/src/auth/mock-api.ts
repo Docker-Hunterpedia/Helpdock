@@ -8,10 +8,13 @@ import type {
   OauthProvider,
   OauthStepUpRequest,
   Passkey,
+  PasskeyAdded,
+  PasskeyEnrolmentRequest,
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
   PasskeyRegistrationOptions,
+  PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
@@ -103,7 +106,12 @@ const seededSingleKeyShortcuts = (): false | undefined => {
  * Set to JSON before the app loads, it seeds the fixture's passkeys (M18-02):
  * `{"count": 10}` starts with ten, `{"onlyFactor": true}` makes the account one
  * that must have a second factor and has no authenticator app, and
- * `{"state": "paused"}` or `"unavailable"` changes what the card may do.
+ * `{"state": "paused"}` or `"unavailable"` changes what the card may do, and
+ * `{"enrol": true}` makes the account one that must have a second factor and
+ * has none, so a password sign-in ends in the enrolment chooser, and
+ * `{"noApp": true}` takes the authenticator app away: with a passkey the second
+ * step offers the passkey alone, and with none the account signs in with a
+ * password and its first passkey draws the recovery codes (M18-03).
  */
 export const MOCK_PASSKEYS_STORAGE = 'helpdock.mock.passkeys';
 
@@ -111,6 +119,8 @@ export interface SeededPasskeys {
   readonly count?: number;
   readonly onlyFactor?: boolean;
   readonly state?: PasskeyList['state'];
+  readonly enrol?: boolean;
+  readonly noApp?: boolean;
 }
 
 const seededPasskeys = (): SeededPasskeys => {
@@ -138,6 +148,12 @@ interface MockPasskey {
   /** The credential id a virtual authenticator made, so a later step-up can name it. */
   readonly credentialId: string | null;
 }
+
+/** Drawn with an account's first second factor of either kind. */
+const MOCK_RECOVERY_CODES: string[] = Array.from(
+  { length: 10 },
+  (_unused, index) => `RC-AB${index}-${1000 + index * 7}`,
+);
 
 const MOCK_SESSION: Session = {
   user: MOCK_USER,
@@ -183,6 +199,10 @@ export class MockAuthApi implements AuthApi {
   #passkeyState: PasskeyList['state'] = 'available';
   /** An account that must have a second factor, with no authenticator app. */
   #onlySecondFactor = false;
+  /** The account has no second factor yet and must enrol one before it gets a session. */
+  #enrolmentRequired = false;
+  /** Whether an authenticator app is on; it is for everyone but the accounts seeded without one. */
+  #appOn = true;
   #ceremonies = new Set<string>();
   #stepUpFailures = 0;
 
@@ -195,6 +215,8 @@ export class MockAuthApi implements AuthApi {
   seedPasskeys(seed: SeededPasskeys): void {
     this.#passkeyState = seed.state ?? 'available';
     this.#onlySecondFactor = seed.onlyFactor === true;
+    this.#enrolmentRequired = seed.enrol === true;
+    this.#appOn = seed.noApp !== true;
     this.#passkeys = Array.from({ length: seed.count ?? 0 }, (_unused, index) =>
       this.#mockPasskey(index === 0 ? 'MacBook Air · Touch ID' : `YubiKey ${index}`, null),
     );
@@ -208,8 +230,8 @@ export class MockAuthApi implements AuthApi {
       password: true,
       magicLink: true,
       oauth: { google: true, microsoft: true, github: true },
-      passkey: false,
-      passkeysPaused: false,
+      passkey: !this.ssoEnforced && this.#passkeyState === 'available',
+      passkeysPaused: !this.ssoEnforced && this.#passkeyState === 'paused',
     };
   }
 
@@ -271,6 +293,19 @@ export class MockAuthApi implements AuthApi {
       return { kind: 'session', session };
     }
 
+    const noFactor = !this.#appOn && this.#passkeys.length === 0;
+    if (noFactor && !this.#enrolmentRequired) {
+      return { kind: 'session', session: this.#signIn() };
+    }
+
+    if (this.#enrolmentRequired) {
+      this.#challengeCounter += 1;
+      return {
+        kind: 'second-factor-enrolment-required',
+        challengeId: `mock-enrol-${this.#challengeCounter}`,
+      };
+    }
+
     this.#challengeCounter += 1;
     const challengeId = `mock-challenge-${this.#challengeCounter}`;
     this.#challenges.set(challengeId, {
@@ -279,7 +314,15 @@ export class MockAuthApi implements AuthApi {
       locked: false,
     });
 
-    return { kind: 'totp-required', challengeId, email: MOCK_EMAIL };
+    return {
+      kind: 'totp-required',
+      challengeId,
+      email: MOCK_EMAIL,
+      factors: {
+        totp: this.#appOn,
+        passkey: this.#passkeys.length > 0 && this.#passkeyState === 'available',
+      },
+    };
   }
 
   async verifyTotp(
@@ -307,6 +350,37 @@ export class MockAuthApi implements AuthApi {
 
     this.#recoveryCodeUsed = true;
     this.#challenges.delete(challengeId);
+    return this.#signIn();
+  }
+
+  async passkeySecondFactorOptions(challengeId: string): Promise<PasskeyStepUpOptions> {
+    this.#requireChallenge(challengeId);
+    return this.passkeyStepUpOptions();
+  }
+
+  /**
+   * Accepts the assertion of a credential the fixture knows, for a ceremony it
+   * issued. A cancelled browser prompt never reaches here, so the counter is
+   * only ever spent by an answer that arrived, as the api's is.
+   */
+  async verifyPasskey(
+    challengeId: string,
+    answer: PasskeySecondFactorAnswer,
+    { trustDevice }: { readonly trustDevice: boolean },
+  ): Promise<Session> {
+    const challenge = this.#requireChallenge(challengeId);
+    // A seeded passkey records no credential id: it stands for whatever the
+    // browser's authenticator holds, so any answer to an issued ceremony counts.
+    const known = this.#passkeys.some(
+      (entry) => entry.credentialId === null || entry.credentialId === answer.response.rawId,
+    );
+
+    if (!this.#ceremonies.delete(answer.ceremonyId) || !known) {
+      throw this.#spendAttempt(challenge, 'passkey-invalid');
+    }
+
+    this.#challenges.delete(challengeId);
+    this.#trustedDevice = trustDevice;
     return this.#signIn();
   }
 
@@ -353,7 +427,7 @@ export class MockAuthApi implements AuthApi {
       limit: MAX_PASSKEYS_PER_ACCOUNT,
       state: this.#passkeyState,
       removalBlocked: this.#onlySecondFactor && this.#passkeys.length === 1,
-      authenticatorApp: !this.#onlySecondFactor,
+      authenticatorApp: this.#appOn && !this.#onlySecondFactor,
     };
   }
 
@@ -382,6 +456,10 @@ export class MockAuthApi implements AuthApi {
       throw new AuthError('passkey-limit');
     }
     this.#assertPasskeyProof(proof);
+    return this.#registrationOptions();
+  }
+
+  #registrationOptions(): PasskeyRegistrationOptions {
     const ceremonyId = randomChallenge();
     this.#ceremonies.add(ceremonyId);
     return {
@@ -406,16 +484,18 @@ export class MockAuthApi implements AuthApi {
     };
   }
 
-  async finishPasskey(request: PasskeyFinishRequest): Promise<Passkey> {
+  async finishPasskey(request: PasskeyFinishRequest): Promise<PasskeyAdded> {
     if (!this.#ceremonies.delete(request.ceremonyId)) {
       throw new AuthError('challenge-expired');
     }
     if (this.#passkeys.length >= MAX_PASSKEYS_PER_ACCOUNT) {
       throw new AuthError('passkey-limit');
     }
+    // Recovery codes come with the account's first second factor of either kind.
+    const first = (!this.#appOn || this.#onlySecondFactor) && this.#passkeys.length === 0;
     const entry = this.#mockPasskey(request.name, request.response.rawId);
     this.#passkeys.push(entry);
-    return entry.passkey;
+    return first ? { ...entry.passkey, recoveryCodes: MOCK_RECOVERY_CODES } : entry.passkey;
   }
 
   async renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey> {
@@ -499,9 +579,38 @@ export class MockAuthApi implements AuthApi {
   ): Promise<RecoveryCodes & { readonly session: Session }> {
     await this.startEnrolment(challengeId);
     const { recoveryCodes } = await this.confirmTotp(code);
+    this.#enrolmentRequired = false;
     const session = this.#signIn();
 
     return { recoveryCodes, session };
+  }
+
+  async startPasskeyEnrolment(challengeId: string): Promise<PasskeyRegistrationOptions> {
+    if (!challengeId.startsWith('mock-enrol-')) {
+      throw new AuthError('challenge-expired');
+    }
+    if (this.#passkeyState !== 'available') {
+      throw new AuthError(
+        this.#passkeyState === 'paused' ? 'passkeys-rp-changed' : 'passkeys-unavailable',
+      );
+    }
+    return this.#registrationOptions();
+  }
+
+  async completePasskeyEnrolment(
+    challengeId: string,
+    request: PasskeyEnrolmentRequest,
+  ): Promise<RecoveryCodes & { readonly session: Session }> {
+    if (!challengeId.startsWith('mock-enrol-')) {
+      throw new AuthError('challenge-expired');
+    }
+    if (!this.#ceremonies.delete(request.ceremonyId)) {
+      throw new AuthError('passkey-invalid', { attemptsLeft: MOCK_TOTP_ATTEMPTS - 1 });
+    }
+    this.#passkeys.push(this.#mockPasskey(request.name, request.response.rawId));
+    this.#enrolmentRequired = false;
+
+    return { recoveryCodes: MOCK_RECOVERY_CODES, session: this.#signIn() };
   }
 
   async previewInvite(token: string): Promise<PublicInvite> {
@@ -526,7 +635,10 @@ export class MockAuthApi implements AuthApi {
     // the path the enrolment screen exists for.
     this.#challengeCounter += 1;
 
-    return { kind: 'totp-enrolment-required', challengeId: `mock-enrol-${this.#challengeCounter}` };
+    return {
+      kind: 'second-factor-enrolment-required',
+      challengeId: `mock-enrol-${this.#challengeCounter}`,
+    };
   }
 
   /**
@@ -606,7 +718,10 @@ export class MockAuthApi implements AuthApi {
    * A wrong code costs one try whichever field it was typed into, so a lock
    * cannot be dodged by switching to the recovery form.
    */
-  #spendAttempt(challenge: Challenge, code: 'totp-mismatch' | 'recovery-invalid'): AuthError {
+  #spendAttempt(
+    challenge: Challenge,
+    code: 'totp-mismatch' | 'recovery-invalid' | 'passkey-invalid',
+  ): AuthError {
     challenge.attemptsLeft -= 1;
 
     if (challenge.attemptsLeft <= 0) {

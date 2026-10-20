@@ -184,10 +184,18 @@ export class StaffRepository {
    * secret would mean a later "turn it back on" silently re-enrolled the old
    * authenticator, including one the person meant to walk away from.
    */
-  async disableTotp(userId: string, tx?: Queryable): Promise<void> {
+  async disableTotp(
+    userId: string,
+    tx?: Queryable,
+    { keepRecoveryCodes = false }: { readonly keepRecoveryCodes?: boolean } = {},
+  ): Promise<void> {
     await (tx ?? this.#db)
       .update(users)
-      .set({ totpEnabled: false, totpSecretEncrypted: null, recoveryCodesHashed: [] })
+      .set({
+        totpEnabled: false,
+        totpSecretEncrypted: null,
+        ...(keepRecoveryCodes ? {} : { recoveryCodesHashed: [] }),
+      })
       .where(eq(users.id, userId));
   }
 

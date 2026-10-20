@@ -3,6 +3,7 @@ import {
   authSessionResponseSchema,
   enrolmentCompleteResponseSchema,
   enrolmentConfirmRequestSchema,
+  enrolmentPasskeyConfirmRequestSchema,
   enrolmentStartRequestSchema,
   exchangeRequestSchema,
   magicLinkPreviewSchema,
@@ -14,6 +15,10 @@ import {
   oauthIdentityListSchema,
   oauthProviderParamSchema,
   oauthStepUpRequestSchema,
+  passkeyRegistrationOptionsSchema,
+  passkeySecondFactorOptionsRequestSchema,
+  passkeySecondFactorVerifyRequestSchema,
+  passkeyStepUpOptionsSchema,
   passwordForgotRequestSchema,
   passwordResetRequestSchema,
   recoveryCodeRequestSchema,
@@ -52,6 +57,17 @@ export class OauthConnectStartDto extends createZodDto(oauthConnectStartSchema) 
 export class OauthIdentityListDto extends createZodDto(oauthIdentityListSchema) {}
 export class TotpRequestDto extends createZodDto(totpRequestSchema) {}
 export class TotpConfirmRequestDto extends createZodDto(totpConfirmRequestSchema) {}
+export class PasskeySecondFactorOptionsRequestDto extends createZodDto(
+  passkeySecondFactorOptionsRequestSchema,
+) {}
+export class PasskeySecondFactorVerifyRequestDto extends createZodDto(
+  passkeySecondFactorVerifyRequestSchema,
+) {}
+export class PasskeyCeremonyOptionsDto extends createZodDto(passkeyStepUpOptionsSchema) {}
+export class EnrolmentPasskeyOptionsDto extends createZodDto(passkeyRegistrationOptionsSchema) {}
+export class EnrolmentPasskeyConfirmRequestDto extends createZodDto(
+  enrolmentPasskeyConfirmRequestSchema,
+) {}
 export class RecoveryCodeRequestDto extends createZodDto(recoveryCodeRequestSchema) {}
 export class ExchangeRequestDto extends createZodDto(exchangeRequestSchema) {}
 export class PasswordForgotRequestDto extends createZodDto(passwordForgotRequestSchema) {}

@@ -101,7 +101,7 @@ export const signInResponseForTest = async (
     return sessionFrom(first, 'sign-in');
   }
 
-  if (outcome.kind === 'totp-enrolment-required') {
+  if (outcome.kind === 'second-factor-enrolment-required') {
     const staged = await post(app, '/api/auth/enrolment/start', {
       challengeId: outcome.challengeId,
     });

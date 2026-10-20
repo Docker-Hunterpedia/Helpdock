@@ -402,5 +402,133 @@ describe('HttpAuthApi', () => {
 
       await expect(new HttpAuthApi().passkeys()).rejects.toThrow();
     });
+
+    it('hands the recovery codes drawn with a first passkey to the card', async () => {
+      fetchMock.mockResolvedValueOnce(json({ ...passkey, recoveryCodes: ['AAAA-1111'] }, 201));
+
+      const added = await new HttpAuthApi().finishPasskey({
+        ceremonyId: CEREMONY,
+        name: 'MacBook',
+        response: {
+          id: 'AQID',
+          rawId: 'AQID',
+          type: 'public-key',
+          response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+          clientExtensionResults: {},
+        },
+      });
+
+      expect(added.recoveryCodes).toEqual(['AAAA-1111']);
+    });
+  });
+
+  describe('a passkey as the second factor (M18-03)', () => {
+    const CEREMONY = 'A'.repeat(43);
+    const assertion = {
+      id: 'AQID',
+      rawId: 'AQID',
+      type: 'public-key' as const,
+      response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+      clientExtensionResults: {},
+    };
+
+    it('asks for options with the challenge, and answers it with the ceremony, the assertion and the trust choice', async () => {
+      fetchMock
+        .mockResolvedValueOnce(json({ ceremonyId: CEREMONY, options: { challenge: 'x' } }))
+        .mockResolvedValueOnce(
+          json({ kind: 'session', session, accessToken: 'a.b.c', expiresInSeconds: 600 }, 201),
+        );
+      const api = new HttpAuthApi();
+
+      const options = await api.passkeySecondFactorOptions('c1');
+      const signedIn = await api.verifyPasskey(
+        'c1',
+        { ceremonyId: options.ceremonyId, response: assertion },
+        { trustDevice: true },
+      );
+
+      expect(signedIn.user.email).toBe('lina@helpdock.com');
+      expect(calls().map(({ init, url }) => [init.method, url])).toEqual([
+        ['POST', '/api/auth/passkey/second-factor/options'],
+        ['POST', '/api/auth/passkey/second-factor/verify'],
+      ]);
+      expect(JSON.parse(String(calls()[0]?.init.body))).toEqual({ challengeId: 'c1' });
+      expect(JSON.parse(String(calls()[1]?.init.body))).toEqual({
+        challengeId: 'c1',
+        ceremonyId: CEREMONY,
+        response: assertion,
+        trustDevice: true,
+      });
+    });
+
+    it('carries the attempts left when the api refuses the passkey', async () => {
+      fetchMock.mockResolvedValueOnce(authFailure('passkey-invalid', 401, 2));
+
+      const refusal = (await new HttpAuthApi()
+        .verifyPasskey('c1', { ceremonyId: CEREMONY, response: assertion }, { trustDevice: false })
+        .catch((error: unknown) => error)) as AuthError;
+
+      expect(refusal).toMatchObject({ code: 'passkey-invalid', attemptsLeft: 2 });
+    });
+
+    it('enrols a passkey from an enrolment challenge and keeps the session it opens', async () => {
+      fetchMock
+        .mockResolvedValueOnce(json({ ceremonyId: CEREMONY, options: { challenge: 'x' } }))
+        .mockResolvedValueOnce(
+          json(
+            {
+              recoveryCodes: ['AAAA-1111'],
+              session,
+              accessToken: 'a.b.c',
+              expiresInSeconds: 600,
+            },
+            201,
+          ),
+        );
+      const api = new HttpAuthApi();
+
+      await api.startPasskeyEnrolment('e1');
+      const done = await api.completePasskeyEnrolment('e1', {
+        ceremonyId: CEREMONY,
+        name: 'MacBook',
+        response: {
+          id: 'AQID',
+          rawId: 'AQID',
+          type: 'public-key',
+          response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+          clientExtensionResults: {},
+        },
+      });
+
+      expect(done.recoveryCodes).toEqual(['AAAA-1111']);
+      expect(done.session.user.email).toBe('lina@helpdock.com');
+      expect(calls().map(({ url }) => url)).toEqual([
+        '/api/auth/enrolment/passkey/options',
+        '/api/auth/enrolment/passkey/confirm',
+      ]);
+      expect(await api.accessToken()).toBe('a.b.c');
+    });
+
+    it('reads a challenge that names its factors, and the old enrolment name', async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          json({
+            kind: 'totp-required',
+            challengeId: 'c1',
+            email: 'lina@helpdock.com',
+            factors: { totp: false, passkey: true },
+          }),
+        )
+        .mockResolvedValueOnce(json({ kind: 'totp-enrolment-required', challengeId: 'e1' }));
+      const api = new HttpAuthApi();
+
+      await expect(api.signInWithPassword('lina@helpdock.com', 'x')).resolves.toMatchObject({
+        factors: { totp: false, passkey: true },
+      });
+      await expect(api.signInWithPassword('lina@helpdock.com', 'x')).resolves.toEqual({
+        kind: 'second-factor-enrolment-required',
+        challengeId: 'e1',
+      });
+    });
   });
 });

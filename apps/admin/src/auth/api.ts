@@ -8,10 +8,13 @@ import type {
   OauthProvider,
   OauthStepUpRequest,
   Passkey,
+  PasskeyAdded,
+  PasskeyEnrolmentRequest,
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
   PasskeyRegistrationOptions,
+  PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
   PublicInvite,
   RecoveryCodes,
@@ -46,6 +49,14 @@ export interface AuthApi {
     options: { readonly trustDevice: boolean },
   ): Promise<Session>;
   useRecoveryCode(challengeId: string, code: string): Promise<Session>;
+  /** The options for answering a second-factor challenge with a passkey (M18-03). */
+  passkeySecondFactorOptions(challengeId: string): Promise<PasskeyStepUpOptions>;
+  /** Answers the challenge with what the authenticator signed; shares the attempts of a code. */
+  verifyPasskey(
+    challengeId: string,
+    answer: PasskeySecondFactorAnswer,
+    options: { readonly trustDevice: boolean },
+  ): Promise<Session>;
   /** Where the browser goes to start the provider's consent flow. */
   oauthStartUrl(provider: OauthProvider): string;
   /** The provider accounts that sign in as this person, and whether they have a password. */
@@ -65,7 +76,7 @@ export interface AuthApi {
   /** Behind a step-up, the browser's creation options for a new passkey. */
   beginPasskey(proof: PasskeyProof): Promise<PasskeyRegistrationOptions>;
   /** Stores what the authenticator made, under the person's name for it. */
-  finishPasskey(request: PasskeyFinishRequest): Promise<Passkey>;
+  finishPasskey(request: PasskeyFinishRequest): Promise<PasskeyAdded>;
   renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey>;
   /** Refused with `second-factor-required` for the last second factor of an account that needs one. */
   removePasskey(id: string, proof: PasskeyProof): Promise<void>;
@@ -87,6 +98,13 @@ export interface AuthApi {
   completeEnrolment(
     challengeId: string,
     code: string,
+  ): Promise<RecoveryCodes & { readonly session: Session }>;
+  /** The browser's creation options for enrolling a passkey from an enrolment challenge (M18-03). */
+  startPasskeyEnrolment(challengeId: string): Promise<PasskeyRegistrationOptions>;
+  /** What the authenticator made turns the factor on; answers like {@link completeEnrolment}. */
+  completePasskeyEnrolment(
+    challengeId: string,
+    request: PasskeyEnrolmentRequest,
   ): Promise<RecoveryCodes & { readonly session: Session }>;
   /** Reads an invitation without spending it, so a refresh costs nothing. */
   previewInvite(token: string): Promise<PublicInvite>;

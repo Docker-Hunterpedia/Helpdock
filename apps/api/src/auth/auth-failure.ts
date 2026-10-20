@@ -43,6 +43,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'second-factor-required': HttpStatus.CONFLICT,
   'passkey-limit': HttpStatus.CONFLICT,
   'passkey-duplicate': HttpStatus.CONFLICT,
+  'passkey-invalid': HttpStatus.UNAUTHORIZED,
 };
 
 const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
@@ -79,6 +80,7 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
     'This account must keep a second factor; add another passkey or an authenticator app first',
   'passkey-limit': 'An account can hold at most 10 passkeys; remove one first',
   'passkey-duplicate': 'This authenticator is already registered for this account',
+  'passkey-invalid': 'That passkey did not verify',
 };
 
 export class AuthFailure extends HttpException {

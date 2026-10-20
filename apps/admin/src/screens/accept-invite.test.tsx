@@ -76,7 +76,7 @@ describe('a live invitation', () => {
     expect(await screen.findByText(/At least 12 characters\. Strong\./)).toBeInTheDocument();
   });
 
-  it('lands on two-factor enrolment once the account is created', async () => {
+  it('lands on the second-factor chooser once the account is created', async () => {
     const { user } = renderInvite(MOCK_INVITE_TOKEN);
 
     await user.type(await screen.findByLabelText('Your name'), 'Karim Aziz');
@@ -84,7 +84,7 @@ describe('a live invitation', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Turn on two-factor', level: 1 }),
+      await screen.findByRole('heading', { name: 'Set up a second factor', level: 1 }),
     ).toBeInTheDocument();
   });
 
@@ -98,6 +98,8 @@ describe('a live invitation', () => {
     await user.type(await screen.findByLabelText('Your name'), 'Karim Aziz');
     await user.type(screen.getByLabelText('Choose a password'), 'a long enough password');
     await user.click(screen.getByRole('button', { name: 'Create account' }));
+    await user.click(await screen.findByRole('radio', { name: /Use an authenticator app/ }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.type(await screen.findByLabelText('Authentication code'), MOCK_ENROLMENT_CODE);
     await user.click(screen.getByRole('button', { name: 'Turn on two-factor' }));
     await screen.findByRole('heading', { name: 'Save your recovery codes', level: 1 });

@@ -2,6 +2,7 @@ import type { Keyring, Settings } from '@helpdock/config';
 import { decryptSecret, encryptSecret } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
 import type {
+  AuthenticationResponse,
   AuthMethods,
   AuthSessionResponse,
   EmailTokenPayload,
@@ -9,15 +10,21 @@ import type {
   OauthIdentityList,
   OauthProvider,
   OauthStepUpRequest,
+  PasskeyRegistrationOptions,
+  PasskeyStepUpOptions,
   RecoveryCodes,
+  RegistrationResponse,
+  SecondFactorOptions,
   Session,
   TotpEnrolment,
 } from '@helpdock/schemas';
 import {
   isLastSignInMethod,
+  MAX_PASSKEYS_PER_ACCOUNT,
   MICROSOFT_CONSUMERS_TENANT_ID,
   OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS,
 } from '@helpdock/schemas';
+import { currentRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
 import type { SsoIdentityService } from '../sso/identity.service.js';
 import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
@@ -26,6 +33,7 @@ import type { AuthAuditAction, AuthAuditTrail, SignInMethod } from './auth-audit
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
 import { assertNotBreached } from './breached/breached-passwords.js';
+import { describeClient } from './client-description.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
 import type { OauthIdentity, OauthInviteState, OauthService } from './oauth/oauth.service.js';
@@ -33,11 +41,13 @@ import { OauthError } from './oauth/oauth.service.js';
 import type { OauthIdentityRepository, OauthLinkedVia } from './oauth/oauth-identity.repository.js';
 import { decideOauthSignIn, googleDomainAllowed } from './oauth/oauth-linking.js';
 import type { PasskeyRepository } from './passkeys/passkey.repository.js';
+import { toAuthenticationJson, toRegistrationJson, toStored } from './passkeys/webauthn-json.js';
 import type { PasswordHasher } from './password.js';
 import {
   EMAIL_DISPATCH_IP_RULE,
   EMAIL_DISPATCH_RULE,
   MAGIC_LINK_LOOKUP_RULE,
+  PASSKEY_CEREMONY_OPTIONS_RULE,
   type RateLimiter,
   type SignInAttempt,
   STEP_UP_RULE,
@@ -50,7 +60,7 @@ import { hashRecoveryCodes, newRecoveryCodes, spendRecoveryCode } from './totp/r
 import { matchTotpStep, newTotpSecret, totpUri } from './totp/totp.js';
 import type { TrustedDeviceStore } from './totp/trusted-device.js';
 import type { TotpStepStore } from './totp/used-steps.js';
-import type { WebAuthnService } from './webauthn/webauthn.service.js';
+import type { AssertionCheck, WebAuthnService } from './webauthn/webauthn.service.js';
 
 /**
  * Every way into this install, in one service.
@@ -97,8 +107,13 @@ type CodeCheck = 'accepted' | 'mismatch' | 'replayed';
 
 export type SignInOutcome =
   | { readonly kind: 'session'; readonly issued: IssuedSession }
-  | { readonly kind: 'totp-required'; readonly challengeId: string; readonly email: string }
-  | { readonly kind: 'totp-enrolment-required'; readonly challengeId: string };
+  | {
+      readonly kind: 'totp-required';
+      readonly challengeId: string;
+      readonly email: string;
+      readonly factors: SecondFactorOptions;
+    }
+  | { readonly kind: 'second-factor-enrolment-required'; readonly challengeId: string };
 
 /**
  * An OAuth callback ends a sign-in, connects a provider to the account that
@@ -171,8 +186,21 @@ export interface AuthServiceOptions {
   readonly oauthIdentities: OauthIdentityRepository;
   /** Passkeys (M18-01): the relying party, its pin and the ceremonies. */
   readonly webauthn: WebAuthnService;
-  /** The passkeys an account holds, for the count a password-reset notice names (M18-02). */
-  readonly passkeys: Pick<PasskeyRepository, 'count'>;
+  /**
+   * The passkeys an account holds: the count a password-reset notice names
+   * (M18-02), and a second factor's credentials and their counters (M18-03).
+   */
+  readonly passkeys: Pick<
+    PasskeyRepository,
+    | 'add'
+    | 'byCredentialId'
+    | 'count'
+    | 'lockAccount'
+    | 'markUsed'
+    | 'ofUser'
+    | 'transaction'
+    | 'userHandle'
+  >;
   readonly settings: Settings;
   readonly keyring: Keyring;
   /** Queues auth email through the outbox; the worker sends it (`auth-email.job.ts`). */
@@ -375,6 +403,95 @@ export class AuthService {
     return issued;
   }
 
+  /**
+   * Options for answering a second-factor challenge with one of the account's
+   * passkeys (M18-03). The challenge id is the credential, as it is for
+   * `/totp`. Only now, with the first factor proved, are the account's
+   * credentials named in `allowCredentials`; minting options evaluates no
+   * guess, so it spends no attempt and gives its IP slot back.
+   */
+  async passkeySecondFactorOptions({
+    challengeId,
+    ip,
+  }: {
+    readonly challengeId: string;
+    readonly ip: string;
+  }): Promise<PasskeyStepUpOptions> {
+    const { user, attempt } = await this.#signInChallenge(challengeId, 'second-factor', ip);
+    await this.#spendCeremonyOptions(user.id);
+
+    const held = await this.#parts.passkeys.ofUser(user.id);
+    if (held.length === 0) {
+      throw new AuthFailure('invalid-credentials');
+    }
+    const { ceremonyId, options } = await this.#parts.webauthn.authenticationOptions({
+      purpose: 'second-factor',
+      binding: { userId: user.id, familyId: challengeId },
+      allow: held,
+    });
+    await this.#parts.limiter.refundSignInIp(attempt);
+
+    return { ceremonyId, options: { ...options } };
+  }
+
+  /**
+   * A passkey as the second factor. It follows the code path to the letter: an
+   * attempt is reserved on the challenge and on the account's own counter
+   * before the assertion is looked at, so a passkey, a code and a recovery code
+   * share one budget and one lock, and the challenge is spent atomically only
+   * once the assertion verified. The ceremony is spent when it is checked, so
+   * a replayed assertion is a refusal that costs an attempt.
+   */
+  async verifyPasskeySecondFactor({
+    challengeId,
+    ip,
+    ceremonyId,
+    response,
+    trustDevice,
+    userAgent,
+  }: {
+    readonly challengeId: string;
+    readonly ip: string;
+    readonly ceremonyId: string;
+    readonly response: AuthenticationResponse;
+    readonly trustDevice: boolean;
+    readonly userAgent: string | undefined;
+  }): Promise<{ readonly issued: IssuedSession; readonly trustedDeviceCookie: string | null }> {
+    const { challenge, user, attempt } = await this.#signInChallenge(
+      challengeId,
+      'second-factor',
+      ip,
+    );
+
+    // A local second factor opens no session under SSO enforcement (break-glass
+    // takes a code until ADR 0053), so it is refused before it costs an attempt.
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
+
+    const check = await this.#checkAssertion(user, ceremonyId, challengeId, response);
+    if (!check.ok) {
+      throw await this.#failAttempt(challengeId, challenge, reserved, 'passkey-invalid');
+    }
+
+    await this.#consumeChallenge(challengeId, user.id);
+    await this.#parts.passkeys.markUsed(
+      check.credential.credentialId,
+      check.newSignCount,
+      check.backedUp,
+    );
+    const issued = await this.#openSession(user, userAgent, {
+      method: firstFactorOf(challenge),
+      secondFactor: 'passkey',
+    });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
+
+    return {
+      issued,
+      trustedDeviceCookie: trustDevice ? await this.#parts.trustedDevices.trust(user.id) : null,
+    };
+  }
+
   // ------------------------------------------------------------------
   // Enrolment, for the signed-in account itself
   // ------------------------------------------------------------------
@@ -390,6 +507,9 @@ export class AuthService {
 
   /** Enables the second factor and hands over the recovery codes, once. */
   async confirmTotp(userId: string, code: string, tx?: DbTransaction): Promise<RecoveryCodes> {
+    // The lock passkey add and remove take: whether this is the account's first
+    // second factor must not change while the codes are decided.
+    if (tx !== undefined) await this.#parts.passkeys.lockAccount(userId, tx);
     const user = await this.#requireUser(userId, tx);
 
     if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
@@ -405,7 +525,7 @@ export class AuthService {
 
   /**
    * The first half of enrolment for an account that was handed a
-   * `totp-enrolment-required` challenge instead of a session. The challenge
+   * `second-factor-enrolment-required` challenge instead of a session. The challenge
    * proves the first factor, as the session does for {@link enrolTotp}; it is
    * not spent here, because the code has yet to be typed.
    */
@@ -451,6 +571,128 @@ export class AuthService {
   }
 
   /**
+   * The browser's creation options for a passkey, for an account that holds an
+   * enrolment challenge instead of a session (M18-03). The challenge proves the
+   * first factor and is not spent here: the authenticator has yet to answer.
+   */
+  async startPasskeyEnrolment(challengeId: string): Promise<PasskeyRegistrationOptions> {
+    const { user } = await this.#requireChallenge(challengeId, 'enrolment');
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#spendCeremonyOptions(user.id);
+
+    const existing = await this.#parts.passkeys.ofUser(user.id);
+    if (existing.length >= MAX_PASSKEYS_PER_ACCOUNT) throw new AuthFailure('passkey-limit');
+
+    const { ceremonyId, options } = await this.#parts.webauthn.registrationOptions({
+      user: {
+        handle: await this.#parts.passkeys.userHandle(user.id),
+        email: user.email,
+        name: user.name,
+      },
+      existing,
+      binding: { userId: user.id, familyId: challengeId },
+    });
+
+    return { ceremonyId, options: { ...options } };
+  }
+
+  /**
+   * The passkey half of {@link completeEnrolment}: what the authenticator made
+   * turns the factor on, the challenge is spent, the recovery codes are drawn
+   * (this is the account's first second factor) and the session the challenge
+   * stood in for opens. A registration that does not verify costs an attempt
+   * from the same budget as a wrong code.
+   */
+  async completePasskeyEnrolment({
+    challengeId,
+    ip,
+    ceremonyId,
+    response,
+    name,
+    userAgent,
+  }: {
+    readonly challengeId: string;
+    readonly ip: string;
+    readonly ceremonyId: string;
+    readonly response: RegistrationResponse;
+    readonly name: string;
+    readonly userAgent: string | undefined;
+  }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
+    const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    const reserved = await this.#reserveAttempt(challengeId, challenge);
+
+    let registered: Awaited<ReturnType<WebAuthnService['verifyRegistration']>>;
+    try {
+      registered = await this.#parts.webauthn.verifyRegistration({
+        ceremonyId,
+        binding: { userId: user.id, familyId: challengeId },
+        response: toRegistrationJson(response),
+      });
+    } catch (error) {
+      if (
+        error instanceof AuthFailure &&
+        (error.auth.code === 'challenge-expired' || error.auth.code === 'invalid-credentials')
+      ) {
+        await this.#audit('auth.second_factor.failed', user.id, 'system', {
+          factor: 'passkey',
+          during: 'enrolment',
+          reason: error.auth.code,
+        });
+        throw await this.#failAttempt(challengeId, challenge, reserved, 'passkey-invalid');
+      }
+      throw error;
+    }
+
+    await this.#consumeChallenge(challengeId, user.id);
+    const drawn = newRecoveryCodes();
+    const hashes = await hashRecoveryCodes(drawn, this.#parts.hasher);
+    const { passkeys, staff } = this.#parts;
+    const stored = await passkeys.transaction(async (tx) => {
+      // The same lock the security page's add and remove take.
+      await passkeys.lockAccount(user.id, tx);
+      const current = await staff.findById(user.id, tx);
+      if (current === undefined || !this.#isUsable(current)) {
+        throw new AuthFailure('challenge-expired');
+      }
+      const held = await passkeys.count(user.id, tx);
+      // An enrolment challenge stands in for a session only while the account
+      // has no second factor. One that was handed out earlier must not let a
+      // first factor alone add a passkey beside a factor that has since been set.
+      if (current.totpEnabled || held > 0) throw new AuthFailure('challenge-expired');
+
+      const row = await passkeys.add(user.id, name, registered, tx);
+      if (row === 'duplicate') throw new AuthFailure('passkey-duplicate');
+
+      await staff.replaceRecoveryCodes(user.id, hashes, tx);
+      return { row, recoveryCodes: drawn };
+    });
+
+    await this.#parts.challenges.clearLock(user.id);
+    this.#parts.logger.info({ userId: user.id }, 'Enrolled a passkey as the second factor');
+    await this.#audit('auth.passkey.added', user.id, 'staff', {
+      passkey: stored.row.id,
+      name: stored.row.name,
+      synced: stored.row.backedUp,
+      during: 'enrolment',
+    });
+    const client = currentRequestContext()?.client;
+    await this.#notifySecurityChange(user.id, 'passkeyAdded', undefined, {
+      passkey: stored.row.name,
+      ...describeClient(client?.userAgent, client?.ip),
+    });
+
+    const issued = await this.#openSession(user, userAgent, {
+      method: firstFactorOf(challenge),
+      secondFactor: 'passkey',
+    });
+    await this.#parts.limiter.signInSucceeded(attempt);
+    await this.#parts.challenges.clearFailures(user.id);
+
+    return { recoveryCodes: stored.recoveryCodes, issued };
+  }
+
+  /**
    * Whether this account may be without a second factor. Never, for an Admin
    * of any brand or an install admin, whatever `auth.require2fa` says: their
    * session can change who else works here (ASVS 4.3.1, DOMAIN-RULES §12).
@@ -475,16 +717,27 @@ export class AuthService {
    * without this they could remove the factor that would have stopped them.
    *
    * Refused while `auth.require2fa` is on, or for an account that must keep a
-   * second factor anyway, because those cannot be without one (DOMAIN-RULES §12).
+   * second factor anyway, unless a passkey remains to be that factor
+   * (DOMAIN-RULES §12, §12.1).
    */
   async disableTotp(userId: string, code: string, tx?: DbTransaction): Promise<void> {
-    if (await this.isSecondFactorRequired(await this.#requireUser(userId, tx), tx)) {
+    // The lock passkey add and remove take. Without it, "remove the last
+    // passkey" and "turn the app off" could each see the other factor still
+    // there and leave an Admin with none.
+    if (tx !== undefined) await this.#parts.passkeys.lockAccount(userId, tx);
+    const passkeys = await this.#parts.passkeys.count(userId, tx);
+    if (
+      passkeys === 0 &&
+      (await this.isSecondFactorRequired(await this.#requireUser(userId, tx), tx))
+    ) {
       throw new AuthFailure('unavailable');
     }
 
     const user = await this.#requireLiveCode(userId, code, tx);
 
-    await this.#parts.staff.disableTotp(user.id, tx);
+    // The recovery codes belong to the account's second factor, not to the app:
+    // while a passkey remains they still answer a challenge.
+    await this.#parts.staff.disableTotp(user.id, tx, { keepRecoveryCodes: passkeys > 0 });
     await this.#parts.trustedDevices.revokeAll(user.id);
     this.#parts.logger.warn({ userId: user.id }, 'Disabled the second factor for a staff account');
     await this.#audit('auth.second_factor.disabled', user.id, 'staff');
@@ -501,7 +754,29 @@ export class AuthService {
     code: string,
     tx?: DbTransaction,
   ): Promise<RecoveryCodes> {
-    const user = await this.#requireLiveCode(userId, code, tx);
+    return this.#redrawRecoveryCodes(await this.#requireLiveCode(userId, code, tx), 'code', tx);
+  }
+
+  /**
+   * The other proof that may redraw the codes: an assertion from a passkey the
+   * account holds, which the caller (`PasskeyService`) has verified against the
+   * step-up ceremony of this session (M18-03).
+   */
+  async regenerateRecoveryCodesAfterPasskey(
+    userId: string,
+    tx: DbTransaction,
+  ): Promise<RecoveryCodes> {
+    return this.#redrawRecoveryCodes(await this.#requireUser(userId, tx), 'passkey', tx);
+  }
+
+  async #redrawRecoveryCodes(
+    user: StaffUser,
+    proof: 'code' | 'passkey',
+    tx?: DbTransaction,
+  ): Promise<RecoveryCodes> {
+    if (!(await this.hasSecondFactor(user, tx))) {
+      throw new AuthFailure('unavailable');
+    }
     const recoveryCodes = newRecoveryCodes();
 
     await this.#parts.staff.replaceRecoveryCodes(
@@ -510,10 +785,34 @@ export class AuthService {
       tx,
     );
     this.#parts.logger.info({ userId: user.id }, 'Redrew the recovery codes of a staff account');
-    await this.#audit('auth.recovery_codes.regenerated', user.id, 'staff');
+    await this.#audit('auth.recovery_codes.regenerated', user.id, 'staff', { proof });
     await this.#notifySecurityChange(user.id, 'recoveryCodes', tx);
 
     return { recoveryCodes };
+  }
+
+  /** Forgets the codes of an account whose last second factor has just gone. */
+  async clearRecoveryCodes(userId: string, tx: DbTransaction): Promise<void> {
+    await this.#parts.staff.replaceRecoveryCodes(userId, [], tx);
+  }
+
+  /** TOTP enabled, or at least one passkey (DOMAIN-RULES §12.1 rule 2). */
+  async hasSecondFactor(user: StaffUser, tx?: Queryable): Promise<boolean> {
+    return user.totpEnabled || (await this.#parts.passkeys.count(user.id, tx)) > 0;
+  }
+
+  /**
+   * Ten recovery codes for the account's first second factor, stored and handed
+   * back once. The caller holds the account's lock and decides it is the first.
+   */
+  async issueRecoveryCodes(userId: string, tx: DbTransaction): Promise<string[]> {
+    const recoveryCodes = newRecoveryCodes();
+    await this.#parts.staff.replaceRecoveryCodes(
+      userId,
+      await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
+      tx,
+    );
+    return recoveryCodes;
   }
 
   /**
@@ -1326,7 +1625,8 @@ export class AuthService {
     },
   ): Promise<SignInOutcome> {
     if (method !== 'sso') await this.#parts.ssoPolicy.assertLocal(user.email, method);
-    if (user.totpEnabled) {
+    const passkeyCount = await this.#parts.passkeys.count(user.id);
+    if (user.totpEnabled || passkeyCount > 0) {
       if (
         !(await this.#parts.ssoPolicy.enforced()) &&
         (await this.#parts.trustedDevices.isTrusted(user.id, trustedDeviceCookie))
@@ -1349,14 +1649,15 @@ export class AuthService {
           ...(ssoConnectionId === undefined ? {} : { ssoConnectionId }),
         }),
         email: user.email,
+        factors: await this.#factorsOf(user, passkeyCount),
       };
     }
 
-    // An Admin who had no authenticator before the rule existed lands here at
+    // An Admin who had no second factor before the rule existed lands here at
     // their next sign-in, and enrols before they get a session.
     if (await this.isSecondFactorRequired(user)) {
       return {
-        kind: 'totp-enrolment-required',
+        kind: 'second-factor-enrolment-required',
         challengeId: await this.#parts.challenges.create({
           userId: user.id,
           kind: 'enrolment',
@@ -1412,6 +1713,64 @@ export class AuthService {
     return issued;
   }
 
+  /** What a second-factor screen may offer this account right now. */
+  async #factorsOf(user: StaffUser, passkeyCount: number): Promise<SecondFactorOptions> {
+    // A passkey the install cannot use at the moment (its address moved) is
+    // hidden only where an authenticator app can stand in for it.
+    const usable = !user.totpEnabled || (await this.#parts.webauthn.status()).state === 'available';
+    return { totp: user.totpEnabled, passkey: passkeyCount > 0 && usable };
+  }
+
+  /**
+   * Checks a second-factor assertion, auditing every refusal under one reason
+   * of its own. A ceremony that is gone (spent, expired, or minted for another
+   * challenge) is a refusal here, not an expired challenge: the person can ask
+   * for fresh options, and a replay must cost an attempt.
+   */
+  async #checkAssertion(
+    user: StaffUser,
+    ceremonyId: string,
+    challengeId: string,
+    response: AuthenticationResponse,
+  ): Promise<Extract<AssertionCheck, { ok: true }> | { readonly ok: false }> {
+    let presented: string | undefined;
+    let check: AssertionCheck | { readonly ok: false; readonly reason: 'ceremony-gone' };
+    try {
+      check = await this.#parts.webauthn.verifyAuthentication({
+        purpose: 'second-factor',
+        binding: { userId: user.id, familyId: challengeId },
+        ceremonyId,
+        response: toAuthenticationJson(response),
+        findCredential: async (credentialId) => {
+          const row = await this.#parts.passkeys.byCredentialId(credentialId);
+          presented = row?.id;
+          return row === undefined ? undefined : toStored(row);
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof AuthFailure) || error.auth.code !== 'challenge-expired') throw error;
+      check = { ok: false, reason: 'ceremony-gone' };
+    }
+
+    if (check.ok) return check;
+    await this.#audit('auth.second_factor.failed', user.id, 'system', {
+      factor: 'passkey',
+      reason: check.reason,
+    });
+    if (check.reason === 'counter-regressed') {
+      await this.#audit('auth.passkey.counter_regressed', user.id, 'system', {
+        passkey: presented,
+      });
+    }
+    return { ok: false };
+  }
+
+  async #spendCeremonyOptions(userId: string): Promise<void> {
+    if (!(await this.#parts.limiter.consume(PASSKEY_CEREMONY_OPTIONS_RULE, userId))) {
+      throw new AuthFailure('rate-limited');
+    }
+  }
+
   /** Stages a fresh secret, for both ways into enrolment. */
   async #stageSecret(user: StaffUser, tx?: Queryable): Promise<TotpEnrolment> {
     const secret = newTotpSecret();
@@ -1429,10 +1788,15 @@ export class AuthService {
   }
 
   async #enableSecondFactor(user: StaffUser, tx?: DbTransaction): Promise<RecoveryCodes> {
-    const recoveryCodes = newRecoveryCodes();
+    // One set of codes per account, drawn with its first second factor of either
+    // kind. An app added beside a passkey keeps the set the passkey brought.
+    const hasPasskey = (await this.#parts.passkeys.count(user.id, tx)) > 0;
+    const recoveryCodes = hasPasskey ? [] : newRecoveryCodes();
     await this.#parts.staff.enableTotp(
       user.id,
-      await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
+      hasPasskey
+        ? user.recoveryCodesHashed
+        : await hashRecoveryCodes(recoveryCodes, this.#parts.hasher),
       tx,
     );
     await this.#parts.challenges.clearLock(user.id);
@@ -1595,7 +1959,7 @@ export class AuthService {
     challengeId: string,
     found: Awaited<ReturnType<TotpChallengeStore['read']>>,
     attemptsLeft: number,
-    code: 'totp-mismatch' | 'recovery-invalid',
+    code: 'totp-mismatch' | 'recovery-invalid' | 'passkey-invalid',
   ): Promise<AuthFailure> {
     /* c8 ignore next 3 -- `#requireChallenge` only ever hands over an `ok`. */
     if (found.status !== 'ok') {

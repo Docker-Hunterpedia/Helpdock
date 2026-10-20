@@ -7,6 +7,8 @@ import type {
   OauthConnectStart,
   OauthIdentityList,
   OauthProvider,
+  PasskeyRegistrationOptions,
+  PasskeyStepUpOptions,
   RecoveryCodes,
   Session,
   SignInResponse,
@@ -42,6 +44,8 @@ import {
   AuthSessionResponseDto,
   EnrolmentCompleteResponseDto,
   EnrolmentConfirmRequestDto,
+  EnrolmentPasskeyConfirmRequestDto,
+  EnrolmentPasskeyOptionsDto,
   EnrolmentStartRequestDto,
   ExchangeRequestDto,
   MagicLinkPreviewDto,
@@ -53,6 +57,9 @@ import {
   OauthIdentityListDto,
   OauthProviderParamDto,
   OauthStepUpRequestDto,
+  PasskeyCeremonyOptionsDto,
+  PasskeySecondFactorOptionsRequestDto,
+  PasskeySecondFactorVerifyRequestDto,
   PasswordForgotRequestDto,
   PasswordResetRequestDto,
   RecoveryCodeRequestDto,
@@ -65,6 +72,7 @@ import {
 } from './dto.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { Authenticated, Public } from './route-declaration.js';
+import { factorsParams } from './second-factor-redirect.js';
 import {
   type CookieSpec,
   decodeRefreshCookie,
@@ -191,8 +199,51 @@ export class AuthController {
   }
 
   /**
+   * A passkey as the second factor (M18-03). The challenge is the credential,
+   * and the same three-attempt budget and lock apply as for a code.
+   */
+  @Post('passkey/second-factor/options')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(PasskeyCeremonyOptionsDto)
+  passkeySecondFactorOptions(
+    @Body(new ZodValidationPipe(PasskeySecondFactorOptionsRequestDto))
+    body: PasskeySecondFactorOptionsRequestDto,
+    @Req() request: FastifyRequest,
+  ): Promise<PasskeyStepUpOptions> {
+    return this.#auth.passkeySecondFactorOptions({
+      challengeId: body.challengeId,
+      ip: request.ip,
+    });
+  }
+
+  @Post('passkey/second-factor/verify')
+  @Public()
+  async passkeySecondFactorVerify(
+    @Body(new ZodValidationPipe(PasskeySecondFactorVerifyRequestDto))
+    body: PasskeySecondFactorVerifyRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SignInResponse> {
+    const { issued, trustedDeviceCookie } = await this.#auth.verifyPasskeySecondFactor({
+      ip: request.ip,
+      challengeId: body.challengeId,
+      ceremonyId: body.ceremonyId,
+      response: body.response,
+      trustDevice: body.trustDevice,
+      userAgent: request.headers['user-agent'],
+    });
+
+    if (trustedDeviceCookie !== null) {
+      reply.setCookie(this.#trustCookie.name, trustedDeviceCookie, this.#trustCookie.attributes);
+    }
+
+    return this.#answer({ kind: 'session', issued }, reply);
+  }
+
+  /**
    * Enrolment for an account that must have a second factor and was handed a
-   * challenge instead of a session (`totp-enrolment-required`). The challenge
+   * challenge instead of a session (`second-factor-enrolment-required`). The challenge
    * is the credential, as it is for `/totp`.
    */
   @Post('enrolment/start')
@@ -202,6 +253,45 @@ export class AuthController {
     @Body(new ZodValidationPipe(EnrolmentStartRequestDto)) body: EnrolmentStartRequestDto,
   ): Promise<TotpEnrolment> {
     return this.#auth.startEnrolment(body.challengeId);
+  }
+
+  /** The browser's creation options for enrolling a passkey instead of an app (M18-03). */
+  @Post('enrolment/passkey/options')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(EnrolmentPasskeyOptionsDto)
+  startPasskeyEnrolment(
+    @Body(new ZodValidationPipe(EnrolmentStartRequestDto)) body: EnrolmentStartRequestDto,
+  ): Promise<PasskeyRegistrationOptions> {
+    return this.#auth.startPasskeyEnrolment(body.challengeId);
+  }
+
+  /** What the authenticator made turns the factor on and opens the session, like a code does. */
+  @Post('enrolment/passkey/confirm')
+  @Public()
+  @ZodSerializerDto(EnrolmentCompleteResponseDto)
+  async confirmPasskeyEnrolment(
+    @Body(new ZodValidationPipe(EnrolmentPasskeyConfirmRequestDto))
+    body: EnrolmentPasskeyConfirmRequestDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<EnrolmentCompleteResponse> {
+    const { recoveryCodes, issued } = await this.#auth.completePasskeyEnrolment({
+      ip: request.ip,
+      challengeId: body.challengeId,
+      ceremonyId: body.ceremonyId,
+      response: body.response,
+      name: body.name,
+      userAgent: request.headers['user-agent'],
+    });
+    this.#setRefreshCookie(reply, issued);
+
+    return {
+      recoveryCodes,
+      accessToken: issued.accessToken,
+      expiresInSeconds: issued.expiresInSeconds,
+      session: issued.session,
+    };
   }
 
   /** A live code turns the factor on and opens the session the challenge stood in for. */
@@ -581,11 +671,12 @@ export class AuthController {
         ...extra,
         challenge: outcome.challengeId,
         email: outcome.email,
+        ...factorsParams(outcome.factors),
       });
       return;
     }
 
-    if (outcome.kind === 'totp-enrolment-required') {
+    if (outcome.kind === 'second-factor-enrolment-required') {
       await this.#redirect(reply, path, { ...extra, enrol: outcome.challengeId });
       return;
     }

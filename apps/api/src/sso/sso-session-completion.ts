@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { AuthService } from '../auth/auth.service.js';
 import { isAuthFailure } from '../auth/auth-failure.js';
+import { factorsParams } from '../auth/second-factor-redirect.js';
 import { encodeRefreshCookie, refreshCookieOf } from '../auth/session/cookies.js';
 import { ENV } from '../runtime/tokens.js';
 import { OidcFailure, type SsoAssertion } from './oidc-contracts.js';
@@ -33,9 +34,10 @@ export class SsoSessionCompletion {
       return this.redirect(reply, {
         challenge: outcome.challengeId,
         email: outcome.email,
+        ...factorsParams(outcome.factors),
         returnTo: flow.returnTo,
       });
-    if (outcome.kind === 'totp-enrolment-required')
+    if (outcome.kind === 'second-factor-enrolment-required')
       return this.redirect(reply, { enrol: outcome.challengeId, returnTo: flow.returnTo });
     const refresh = refreshCookieOf(this.env);
     reply.setCookie(

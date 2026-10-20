@@ -284,3 +284,126 @@ describe('MockAuthApi passkeys (M18-02)', () => {
     });
   });
 });
+
+describe('MockAuthApi passkey as the second factor (M18-03)', () => {
+  const answer = (id = 'AQID') => ({
+    ceremonyId: 'unset',
+    response: {
+      id,
+      rawId: id,
+      type: 'public-key' as const,
+      response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+      clientExtensionResults: {},
+    },
+  });
+  const created = (id = 'AQID') => ({
+    id,
+    rawId: id,
+    type: 'public-key' as const,
+    response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+    clientExtensionResults: {},
+  });
+
+  it('names the factors of the account in the challenge', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+
+    await expect(api.signInWithPassword(MOCK_EMAIL, MOCK_PASSWORD)).resolves.toMatchObject({
+      factors: { totp: true, passkey: true },
+    });
+  });
+
+  it('signs in with a passkey for a ceremony it issued, once', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    const challengeId = await startChallenge(api);
+    const { ceremonyId } = await api.passkeySecondFactorOptions(challengeId);
+
+    await expect(
+      api.verifyPasskey(challengeId, { ...answer(), ceremonyId }, { trustDevice: false }),
+    ).resolves.toMatchObject({ user: { email: MOCK_EMAIL } });
+    await expect(
+      api.verifyPasskey(challengeId, { ...answer(), ceremonyId }, { trustDevice: false }),
+    ).rejects.toMatchObject({ code: 'challenge-expired' });
+  });
+
+  it('counts a ceremony it never issued against the same three attempts as a code', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ count: 1 });
+    const challengeId = await startChallenge(api);
+    const codes: (string | undefined)[] = [];
+
+    await api
+      .verifyTotp(challengeId, '000000', { trustDevice: false })
+      .catch((error: AuthError) => {
+        codes.push(error.code);
+      });
+    await api
+      .verifyPasskey(challengeId, answer(), { trustDevice: false })
+      .catch((error: AuthError) => {
+        codes.push(`${error.code}:${error.attemptsLeft}`);
+      });
+    await api.useRecoveryCode(challengeId, 'nope').catch((error: AuthError) => {
+      codes.push(error.code);
+    });
+
+    expect(codes).toEqual(['totp-mismatch', 'passkey-invalid:1', 'totp-locked']);
+  });
+
+  it('sends an account that must have a second factor to the chooser, once, and enrols a passkey', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ enrol: true });
+    const started = await api.signInWithPassword(MOCK_EMAIL, MOCK_PASSWORD);
+    if (started.kind !== 'second-factor-enrolment-required') throw new Error('expected enrolment');
+
+    const { ceremonyId } = await api.startPasskeyEnrolment(started.challengeId);
+    const done = await api.completePasskeyEnrolment(started.challengeId, {
+      response: created('cred-1'),
+      ceremonyId,
+      name: 'Laptop',
+    });
+
+    expect(done.recoveryCodes).toHaveLength(10);
+    expect((await api.passkeys()).passkeys.map((entry) => entry.name)).toEqual(['Laptop']);
+    await api.signOut();
+    await expect(api.signInWithPassword(MOCK_EMAIL, MOCK_PASSWORD)).resolves.toMatchObject({
+      kind: 'totp-required',
+      factors: { passkey: true },
+    });
+  });
+
+  it('refuses an enrolment answer for a ceremony it never issued', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ enrol: true });
+    const started = await api.signInWithPassword(MOCK_EMAIL, MOCK_PASSWORD);
+    if (started.kind !== 'second-factor-enrolment-required') throw new Error('expected enrolment');
+
+    await expect(
+      api.completePasskeyEnrolment(started.challengeId, {
+        ceremonyId: 'unset',
+        response: created(),
+        name: 'Laptop',
+      }),
+    ).rejects.toMatchObject({ code: 'passkey-invalid' });
+  });
+
+  it('draws recovery codes with a first passkey only', async () => {
+    const api = new MockAuthApi();
+    api.seedPasskeys({ onlyFactor: true });
+    const first = await api.beginPasskey({ currentPassword: MOCK_PASSWORD });
+    const added = await api.finishPasskey({
+      ceremonyId: first.ceremonyId,
+      response: answer('a').response as never,
+      name: 'One',
+    });
+    const second = await api.beginPasskey({ currentPassword: MOCK_PASSWORD });
+    const next = await api.finishPasskey({
+      ceremonyId: second.ceremonyId,
+      response: answer('b').response as never,
+      name: 'Two',
+    });
+
+    expect(added.recoveryCodes).toHaveLength(10);
+    expect(next.recoveryCodes).toBeUndefined();
+  });
+});

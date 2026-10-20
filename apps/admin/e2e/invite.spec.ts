@@ -49,7 +49,7 @@ test.describe('accepting an invitation', () => {
     await page.getByRole('button', { name: t('auth:invite.submit') }).click();
 
     await expect(
-      page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
+      page.getByRole('heading', { name: t('auth:enrolment.choose.title'), level: 1 }),
     ).toBeVisible();
   });
 
@@ -65,7 +65,7 @@ test.describe('accepting an invitation', () => {
     await page.getByRole('button', { name: t('auth:signIn.google') }).click();
 
     await expect(
-      page.getByRole('heading', { name: t('auth:enrolment.title'), level: 1 }),
+      page.getByRole('heading', { name: t('auth:enrolment.choose.title'), level: 1 }),
     ).toBeVisible();
   });
 

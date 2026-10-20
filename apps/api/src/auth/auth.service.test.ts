@@ -131,8 +131,18 @@ class FakeStaffRepository {
     this.#patch(userId, { passwordHash });
   }
 
-  async stageTotpSecret(userId: string, totpSecretEncrypted: string): Promise<void> {
-    this.#patch(userId, { totpSecretEncrypted, totpEnabled: false });
+  async stageTotpSecret(userId: string, totpSecretEncrypted: string): Promise<boolean> {
+    if (this.users.get(userId)?.totpEnabled !== false) return false;
+    this.#patch(userId, { totpSecretEncrypted });
+    return true;
+  }
+
+  async withLockedUser<T>(
+    userId: string,
+    work: (tx: DbTransaction, user: StaffUser | undefined) => Promise<T>,
+  ): Promise<T> {
+    // The fake has no concurrency to serialise; the row lock is proved against Postgres.
+    return work(undefined as never, this.users.get(userId));
   }
 
   async enableTotp(userId: string, recoveryCodesHashed: string[]): Promise<void> {
@@ -854,6 +864,20 @@ describe('enrolTotp and confirmTotp', () => {
     await expect(service.enrolTotp(uuidv7())).rejects.toMatchObject({
       auth: { code: 'no-account' },
     });
+  });
+
+  it('will not stage over an authenticator that is on', async () => {
+    const user = staff.add(await newUser());
+    const enrolment = await service.enrolTotp(user.id);
+    await service.confirmTotp(user.id, await generate({ secret: enrolment.secret }));
+    const before = staff.users.get(user.id);
+
+    await expect(service.enrolTotp(user.id)).rejects.toMatchObject({
+      auth: { code: 'totp-already-enabled' },
+    });
+
+    expect(staff.users.get(user.id)?.totpEnabled).toBe(true);
+    expect(staff.users.get(user.id)?.totpSecretEncrypted).toBe(before?.totpSecretEncrypted);
   });
 });
 
@@ -1628,6 +1652,67 @@ describe('enrolment from a challenge', () => {
         userAgent: undefined,
       }),
     ).rejects.toMatchObject({ auth: { code: 'totp-mismatch', attemptsLeft: 2 } });
+  });
+
+  describe('after the account set up an authenticator of its own', () => {
+    const staleChallenge = async () => {
+      const challengeId = await challenge();
+      const user = [...staff.users.values()][0];
+      if (user === undefined) throw new Error('expected a user');
+      const enrolment = await service.enrolTotp(user.id);
+      await service.confirmTotp(user.id, await generate({ secret: enrolment.secret }));
+      return { challengeId, user, secret: enrolment.secret };
+    };
+
+    it('refuses to start, and leaves the live secret alone', async () => {
+      const { challengeId, user } = await staleChallenge();
+      const before = staff.users.get(user.id)?.totpSecretEncrypted;
+
+      await expect(service.startEnrolment(challengeId)).rejects.toMatchObject({
+        auth: { code: 'challenge-expired' },
+      });
+
+      expect(staff.users.get(user.id)?.totpEnabled).toBe(true);
+      expect(staff.users.get(user.id)?.totpSecretEncrypted).toBe(before);
+    });
+
+    it('refuses to complete, even with a valid code, and opens no session', async () => {
+      const { challengeId, user, secret } = await staleChallenge();
+      const actionsBefore = audit.actions();
+
+      await expect(
+        service.completeEnrolment({
+          ip: '203.0.113.5',
+          challengeId,
+          code: await generate({ secret }),
+          userAgent: undefined,
+        }),
+      ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+
+      expect(audit.actions()).toEqual(actionsBefore);
+      expect(staff.users.get(user.id)?.totpEnabled).toBe(true);
+    });
+
+    it('refuses to complete when the factor appears after the code was checked', async () => {
+      const challengeId = await challenge();
+      const user = [...staff.users.values()][0];
+      if (user === undefined) throw new Error('expected a user');
+      const { secret } = await service.startEnrolment(challengeId);
+      const code = await generate({ secret });
+      // The race the row lock closes: the check inside the transaction sees the new row.
+      vi.spyOn(staff, 'withLockedUser').mockImplementationOnce(async (_id, work) =>
+        work(undefined as never, { ...user, totpEnabled: true }),
+      );
+
+      await expect(
+        service.completeEnrolment({
+          ip: '203.0.113.5',
+          challengeId,
+          code,
+          userAgent: undefined,
+        }),
+      ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+    });
   });
 
   it('will not take a second-factor challenge in place of an enrolment one', async () => {

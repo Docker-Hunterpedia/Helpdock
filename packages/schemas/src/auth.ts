@@ -391,6 +391,8 @@ const authErrorCodes = [
   'passkeys-unavailable',
   /** `APP_URL`'s host is no longer the RP ID the install's passkeys were made for; they are paused (M18-01). */
   'passkeys-rp-changed',
+  /** Staging an authenticator over one that is already on is refused; turn it off with a live code first. */
+  'totp-already-enabled',
 ] as const;
 export const authErrorCodeSchema = z.enum(authErrorCodes);
 export type AuthErrorCode = z.infer<typeof authErrorCodeSchema>;

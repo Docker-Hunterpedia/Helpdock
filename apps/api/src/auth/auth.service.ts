@@ -377,7 +377,7 @@ export class AuthService {
    * lock themselves out by scanning a code that did not save.
    */
   async enrolTotp(userId: string, tx?: Queryable): Promise<TotpEnrolment> {
-    return this.#stageSecret(await this.#requireUser(userId, tx), tx);
+    return this.#stageSecret(await this.#requireUser(userId, tx), 'totp-already-enabled', tx);
   }
 
   /** Enables the second factor and hands over the recovery codes, once. */
@@ -403,8 +403,11 @@ export class AuthService {
    */
   async startEnrolment(challengeId: string): Promise<TotpEnrolment> {
     const { user } = await this.#requireChallenge(challengeId, 'enrolment');
+    // A challenge stands in for a session only while the account has no second
+    // factor. One handed out earlier must not stage over an app set up since.
+    if (user.totpEnabled) throw new AuthFailure('challenge-expired');
 
-    return this.#stageSecret(user);
+    return this.#stageSecret(user, 'challenge-expired');
   }
 
   /**
@@ -424,6 +427,7 @@ export class AuthService {
     readonly userAgent: string | undefined;
   }): Promise<{ readonly recoveryCodes: string[]; readonly issued: IssuedSession }> {
     const { challenge, user, attempt } = await this.#signInChallenge(challengeId, 'enrolment', ip);
+    if (user.totpEnabled) throw new AuthFailure('challenge-expired');
 
     const reserved = await this.#reserveAttempt(challengeId, challenge);
     if ((await this.#checkCode(user, code, 'enrolment')) !== 'accepted') {
@@ -431,7 +435,14 @@ export class AuthService {
     }
 
     await this.#consumeChallenge(challengeId, user.id);
-    const { recoveryCodes } = await this.#enableSecondFactor(user);
+    const { recoveryCodes } = await this.#parts.staff.withLockedUser(user.id, (tx, current) => {
+      // The row lock makes the check and the enable one step: a challenge handed
+      // out before the account set up an app of its own must not replace it.
+      if (current === undefined || !this.#isUsable(current) || current.totpEnabled) {
+        throw new AuthFailure('challenge-expired');
+      }
+      return this.#enableSecondFactor(current, tx);
+    });
     const issued = await this.#openSession(user, userAgent, {
       method: firstFactorOf(challenge),
       secondFactor: 'totp',
@@ -1303,14 +1314,25 @@ export class AuthService {
   }
 
   /** Stages a fresh secret, for both ways into enrolment. */
-  async #stageSecret(user: StaffUser, tx?: Queryable): Promise<TotpEnrolment> {
+  async #stageSecret(
+    user: StaffUser,
+    refusal: 'totp-already-enabled' | 'challenge-expired',
+    tx?: Queryable,
+  ): Promise<TotpEnrolment> {
     const secret = newTotpSecret();
 
-    await this.#parts.staff.stageTotpSecret(
-      user.id,
-      encryptSecret(secret, this.#parts.keyring),
-      tx,
-    );
+    // An authenticator that is on is never replaced from here. Changing it is a
+    // step-up the plan does not define, so it is refused: turn it off (with a
+    // live code), then enrol again.
+    if (
+      !(await this.#parts.staff.stageTotpSecret(
+        user.id,
+        encryptSecret(secret, this.#parts.keyring),
+        tx,
+      ))
+    ) {
+      throw new AuthFailure(refusal);
+    }
 
     return {
       secret,

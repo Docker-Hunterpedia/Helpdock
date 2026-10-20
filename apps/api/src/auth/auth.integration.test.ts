@@ -5,6 +5,7 @@ import {
   createDb,
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
+  userBrandRoles,
   users,
   uuidv7,
   withTenant,
@@ -761,6 +762,119 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       );
 
       expect(again.json()).toMatchObject({ kind: 'session' });
+    });
+  });
+
+  describe('enrolment cannot replace an authenticator that is on', () => {
+    /** An Admin with no second factor yet: install admins must have one, so sign-in answers an enrolment challenge. */
+    const accountWithoutFactor = async (): Promise<{ id: string; email: string }> => {
+      const [source] = await runtime.db
+        .select({ passwordHash: users.passwordHash })
+        .from(users)
+        .where(eq(users.id, seeded.userId));
+      const email = `enrol-${uuidv7()}@helpdock.test`;
+      const [created] = await runtime.db
+        .insert(users)
+        .values({
+          email,
+          name: 'Enrolling admin',
+          passwordHash: source?.passwordHash ?? null,
+          status: 'active',
+          installAdmin: true,
+        })
+        .returning({ id: users.id });
+      const id = created?.id ?? '';
+      await withTenant(
+        runtime.db,
+        {
+          brandIds: [seeded.brandId],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'test',
+        },
+        (tx) =>
+          tx.insert(userBrandRoles).values({ userId: id, brandId: seeded.brandId, role: 'admin' }),
+      );
+      return { id, email };
+    };
+
+    const enrolmentChallenge = async (email: string): Promise<string> => {
+      const started = await post('/api/auth/sign-in', { email, password: seeded.password });
+      expect(started.json()).toMatchObject({ kind: 'totp-enrolment-required' });
+      return (started.json() as { challengeId: string }).challengeId;
+    };
+
+    const rowOf = async (id: string) => {
+      const [row] = await runtime.db
+        .select({ enabled: users.totpEnabled, secret: users.totpSecretEncrypted })
+        .from(users)
+        .where(eq(users.id, id));
+      return row;
+    };
+
+    /** The victim enrols properly and holds a session. */
+    const victimEnrols = async (email: string) => {
+      const challengeId = await enrolmentChallenge(email);
+      const staged = await post('/api/auth/enrolment/start', { challengeId });
+      expect(staged.statusCode).toBe(201);
+      const { secret } = staged.json() as { secret: string };
+      const confirmed = await post('/api/auth/enrolment/confirm', {
+        challengeId,
+        code: await generate({ secret, period: 30 }),
+      });
+      expect(confirmed.statusCode).toBe(201);
+      return { secret, accessToken: (confirmed.json() as { accessToken: string }).accessToken };
+    };
+
+    it('refuses a challenge handed out before the account enrolled, on both halves', async () => {
+      const { id, email } = await accountWithoutFactor();
+      const staleChallenge = await enrolmentChallenge(email);
+      const victim = await victimEnrols(email);
+      const before = await rowOf(id);
+      expect(before?.enabled).toBe(true);
+
+      const start = await post('/api/auth/enrolment/start', { challengeId: staleChallenge });
+      expect(start.statusCode).toBe(401);
+      expect(start.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+
+      // Even a live code for the victim's own secret opens nothing through it.
+      await forgetUsedTotpSteps(runtime.redis);
+      const confirm = await post('/api/auth/enrolment/confirm', {
+        challengeId: staleChallenge,
+        code: await generate({ secret: victim.secret, period: 30 }),
+      });
+      expect(confirm.statusCode).toBe(401);
+      expect(confirm.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+      expect(cookieOf(confirm, REFRESH_COOKIE)).toBeUndefined();
+
+      expect(await rowOf(id)).toEqual(before);
+      await forgetUsedTotpSteps(runtime.redis);
+      const next = await post('/api/auth/sign-in', { email, password: seeded.password });
+      expect(next.json()).toMatchObject({ kind: 'totp-required' });
+    });
+
+    it('refuses a signed-in session that tries to stage over an enabled authenticator', async () => {
+      const { id, email } = await accountWithoutFactor();
+      const victim = await victimEnrols(email);
+      const before = await rowOf(id);
+
+      const overwrite = await post('/api/auth/totp/enrol', undefined, bearer(victim.accessToken));
+
+      expect(overwrite.statusCode).toBe(409);
+      expect(overwrite.json()).toMatchObject({ error: { auth: { code: 'totp-already-enabled' } } });
+      expect(await rowOf(id)).toEqual(before);
+    });
+
+    it('still lets an account with no factor enrol from a session and from a challenge', async () => {
+      const { id, email } = await accountWithoutFactor();
+      const challengeId = await enrolmentChallenge(email);
+
+      const staged = await post('/api/auth/enrolment/start', { challengeId });
+      const restaged = await post('/api/auth/enrolment/start', { challengeId });
+
+      expect(staged.statusCode).toBe(201);
+      expect(restaged.statusCode).toBe(201);
+      expect((await rowOf(id))?.enabled).toBe(false);
     });
   });
 

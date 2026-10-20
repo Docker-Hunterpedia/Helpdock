@@ -1,5 +1,11 @@
 # @helpdock/api
 
+## 1.1.1
+
+### Patch Changes
+
+- Security: fixes a flaw that let someone holding a staff password replace that person's authenticator app. Enrolling an authenticator now refuses to run while one is already turned on; to change it, turn it off with a live code and enrol again. Sign-in enrolment links issued before an authenticator was set up now expire instead of replacing it.
+
 ## 1.1.0
 
 ### Minor Changes

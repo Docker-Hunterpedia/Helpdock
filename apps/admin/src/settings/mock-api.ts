@@ -15,6 +15,8 @@ export const MOCK_AUTHENTICATION_SETTINGS: InstallAuthenticationSettings = {
     clientSecretConfigured: true,
     clientSecretLocked: false,
     enabled: true,
+    allowedDomains: [],
+    allowedDomainsLocked: false,
   },
   github: {
     clientId: '',
@@ -43,7 +45,10 @@ export class MockSettingsApi implements SettingsApi {
       ...this.#authentication,
       requireTwoFactor: request.requireTwoFactor,
       magicLinkValidityMinutes: request.magicLinkValidityMinutes,
-      google: updatedProvider(this.#authentication.google, request.google),
+      google: {
+        ...updatedProvider(this.#authentication.google, request.google),
+        allowedDomains: request.google.allowedDomains ?? this.#authentication.google.allowedDomains,
+      },
       github: updatedProvider(this.#authentication.github, request.github),
     };
 
@@ -51,10 +56,10 @@ export class MockSettingsApi implements SettingsApi {
   }
 }
 
-const updatedProvider = (
-  current: InstallAuthenticationSettings['google'],
-  update: InstallAuthenticationSettingsUpdate['google'],
-): InstallAuthenticationSettings['google'] => {
+const updatedProvider = <TProvider extends InstallAuthenticationSettings['github']>(
+  current: TProvider,
+  update: InstallAuthenticationSettingsUpdate['github'],
+): TProvider => {
   const clientSecretConfigured =
     update.clientSecret === undefined ? current.clientSecretConfigured : true;
 

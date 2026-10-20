@@ -41,10 +41,43 @@ test.describe('signing in', () => {
   }) => {
     const t = strings(locale);
 
+    const provider = t('auth:signIn.github');
+
     await page.goto('/oauth/callback?error=oauth-link-required&provider=github');
 
-    await expect(page.getByRole('alert')).toHaveText(t('auth:oauth.errors.oauth-link-required'));
-    await expect(page.getByRole('link', { name: t('auth:backToSignIn') })).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        level: 1,
+        name: t('auth:oauth.refusals.oauth-link-required.title', { provider }),
+      }),
+    ).toBeVisible();
+    await expect(page.getByRole('listitem')).toHaveText([
+      t('auth:oauth.refusals.oauth-link-required.steps.signIn'),
+      t('auth:oauth.refusals.oauth-link-required.steps.open'),
+      t('auth:oauth.refusals.oauth-link-required.steps.connect', { provider }),
+    ]);
+    await page.getByRole('link', { name: t('auth:backToSignIn') }).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+  });
+
+  test('a Google account outside the allowed domains is turned away', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const provider = t('auth:signIn.google');
+
+    await page.goto('/oauth/callback?error=oauth-domain-not-allowed&provider=google');
+
+    await expect(
+      page.getByRole('heading', {
+        level: 1,
+        name: t('auth:oauth.refusals.oauth-domain-not-allowed.title', { provider }),
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(t('auth:oauth.refusals.oauth-domain-not-allowed.body', { provider })),
+    ).toBeVisible();
   });
 
   test('the sign-in link confirms where it was sent and can be sent again', async ({

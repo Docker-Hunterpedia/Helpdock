@@ -6,10 +6,12 @@ import { Navigate, Link as RouterLink, useSearchParams } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { ROUTES, safeReturnTo } from '../app/route-paths.js';
 import { oauthErrorKey } from '../auth/oauth-error.js';
+import { PROVIDER_NAME_KEYS } from '../auth/provider-names.js';
 import { useAuthApi, useSetSession } from '../auth/session.tsx';
 import { ssoErrorKey } from '../auth/sso-error.js';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { AuthLayout } from './auth-layout.tsx';
+import { isOauthRefusal, OauthRefusal } from './oauth-refusal.tsx';
 
 /**
  * Where an SSO sign-in and an OAuth callback land. The api has already done the
@@ -20,16 +22,11 @@ import { AuthLayout } from './auth-layout.tsx';
  * | `code` | A one-time code to exchange for the session. The access token never travels in a URL (DOMAIN-RULES §4.6). |
  * | `challenge` | The second factor still has to be answered, so this hands over to the code screen. |
  * | `enrol` | The install requires 2FA and this account has none yet. |
- * | `error` | Nothing worked; say so and offer the way back. |
+ * | `error` | Nothing worked; say so and offer the way back. An OAuth refusal with something to explain (`oauth-link-required`, `oauth-domain-not-allowed`) gets the `Admin/Login-Providers` card instead. |
  *
  * One screen for both routes because the four cases are identical either way;
  * the provider's name is only ever used to word the caption.
  */
-
-const PROVIDER_LABELS = {
-  google: 'auth:signIn.google',
-  github: 'auth:signIn.github',
-} as const;
 
 export function AuthComplete(): ReactNode {
   const t = useT();
@@ -89,11 +86,15 @@ export function AuthComplete(): ReactNode {
     );
   }
 
+  if (isOauthRefusal(failure) && provider.success) {
+    return <OauthRefusal code={failure} provider={provider.data} />;
+  }
+
   const ssoFailure = ssoErrorKey(failure);
   const oauthFailure = oauthErrorKey(failure);
   const failed = failure !== null || exchange.isError;
   const subtitle = provider.success
-    ? t('auth:oauth.body', { provider: t(PROVIDER_LABELS[provider.data]) })
+    ? t('auth:oauth.body', { provider: t(PROVIDER_NAME_KEYS[provider.data]) })
     : t('auth:completing.body');
 
   return (

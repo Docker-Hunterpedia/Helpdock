@@ -198,13 +198,13 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
 
   it('explains the 1.0.1 change while nothing is linked, and connects after a step-up', async () => {
     const { user } = await renderWith();
-    const card = await screen.findByRole('region', { name: 'Sign-in providers' });
+    const card = await screen.findByRole('region', { name: 'Sign-in methods' });
 
     expect(within(card).getByRole('status')).toHaveTextContent(/Since 1\.0\.1/);
     await user.click(within(card).getByRole('button', { name: 'Connect GitHub' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByLabelText('Password or 6-digit code'), MOCK_TOTP_CODE);
-    await user.click(within(dialog).getByRole('button', { name: 'Continue to GitHub' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
 
     expect(
       await screen.findByText('GitHub is connected. You can sign in with it now.'),
@@ -221,7 +221,7 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
     await user.click(await screen.findByRole('button', { name: 'Connect Google' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByLabelText('Password or 6-digit code'), 'not the password');
-    await user.click(within(dialog).getByRole('button', { name: 'Continue to Google' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
 
     expect(
       await within(dialog).findByText('That password or code did not match.'),
@@ -237,7 +237,9 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
     const disconnect = await screen.findByRole('button', { name: 'Disconnect Google' });
 
     expect(disconnect).toBeDisabled();
-    expect(disconnect).toHaveAccessibleDescription(/This is your only way to sign in/);
+    expect(disconnect).toHaveAccessibleDescription(
+      'Google is your only way to sign in. Set a password or connect another provider before you disconnect it.',
+    );
   });
 
   it('is not drawn when the install has no provider configured', async () => {
@@ -257,6 +259,6 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
     await act(async () => {
       await asked?.mock.results[0]?.value;
     });
-    expect(screen.queryByRole('heading', { name: 'Sign-in providers' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sign-in methods' })).not.toBeInTheDocument();
   });
 });

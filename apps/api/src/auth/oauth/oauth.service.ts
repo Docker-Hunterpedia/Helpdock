@@ -81,6 +81,8 @@ export interface OauthIdentity {
   readonly name: string | undefined;
   /** Whether the provider controls `email`, which is what may make a first link. */
   readonly authoritative: boolean;
+  /** Google's `hd` claim: the Workspace domain of a managed account. Absent otherwise. */
+  readonly hostedDomain: string | undefined;
 }
 
 export interface OauthCompletion {
@@ -328,6 +330,7 @@ export class OauthService {
         emailVerified,
         hostedDomain: claims.hd,
       }),
+      hostedDomain: claims.hd,
     };
   }
 
@@ -352,6 +355,7 @@ export class OauthService {
       // A GitHub address stays "verified" after its owner loses the mailbox, so
       // GitHub never vouches for one: it links from inside a session only.
       authoritative: false,
+      hostedDomain: undefined,
     };
   }
 

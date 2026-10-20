@@ -22,13 +22,12 @@ import type { AuthAuditAction, AuthAuditTrail, SignInMethod } from './auth-audit
 import type { AuthEmailRequest, AuthMail } from './auth-email.js';
 import { AuthFailure } from './auth-failure.js';
 import { assertNotBreached } from './breached/breached-passwords.js';
-import type { SecurityChange } from './email-templates.js';
 import type { EmailTokenStore } from './email-token.store.js';
 import type { ExchangeStore } from './exchange.store.js';
 import type { OauthIdentity, OauthService } from './oauth/oauth.service.js';
 import { OauthError } from './oauth/oauth.service.js';
 import type { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
-import { decideOauthSignIn } from './oauth/oauth-linking.js';
+import { decideOauthSignIn, googleDomainAllowed } from './oauth/oauth-linking.js';
 import type { PasswordHasher } from './password.js';
 import {
   EMAIL_DISPATCH_IP_RULE,
@@ -39,6 +38,7 @@ import {
   SIGN_IN_IP_RULE,
   STEP_UP_RULE,
 } from './rate-limit.js';
+import type { SecurityChange } from './security-notice-email.js';
 import type { IssuedSession, SessionService } from './session/session.service.js';
 import type { Queryable, StaffRepository, StaffUser } from './staff.repository.js';
 import type { TotpChallengeStore } from './totp/challenge-store.js';
@@ -825,13 +825,15 @@ export class AuthService {
       throw new AuthFailure('oauth-last-sign-in');
     }
     await this.#requireStepUp(userId, proof, tx);
-    if (!(await this.#parts.oauthIdentities.unlink(userId, provider, tx))) {
+    const removed = await this.#parts.oauthIdentities.unlink(userId, provider, tx);
+    if (removed === undefined) {
       return;
     }
     this.#parts.logger.info({ userId, provider }, 'Disconnected a sign-in provider account');
     await this.#audit('auth.oauth.unlinked', userId, 'staff', { provider });
     await this.#notifySecurityChange(userId, 'oauthDisconnected', tx, {
       provider: PROVIDER_NAMES[provider],
+      account: removed.emailAtLink,
     });
   }
 
@@ -842,6 +844,14 @@ export class AuthService {
     const { provider } = identity;
     await this.#parts.ssoPolicy.assertLocal(identity.email, 'oauth');
     const linkedUserId = await this.#parts.oauthIdentities.userFor(provider, identity.subject);
+    if (!(await this.#domainAllowed(identity))) {
+      await this.#audit('auth.sign_in.failed', linkedUserId ?? null, 'system', {
+        method: 'oauth',
+        provider,
+        reason: 'domain-not-allowed',
+      });
+      throw new AuthFailure('oauth-domain-not-allowed');
+    }
     const decision = decideOauthSignIn({
       linkedUserId,
       authoritative: identity.authoritative,
@@ -897,7 +907,26 @@ export class AuthService {
   async #connectOauth(userId: string, identity: OauthIdentity): Promise<void> {
     if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const user = await this.#requireUser(userId);
+    if (!(await this.#domainAllowed(identity))) {
+      await this.#audit('auth.oauth.link_refused', user.id, 'staff', {
+        provider: identity.provider,
+        via: 'connect',
+        reason: 'domain-not-allowed',
+      });
+      throw new AuthFailure('oauth-domain-not-allowed');
+    }
     await this.#linkOauth(user.id, identity, 'connect');
+  }
+
+  /** `oauth.google.allowedDomains` (ADR 0051); the other providers have no such list. */
+  async #domainAllowed(identity: OauthIdentity): Promise<boolean> {
+    if (identity.provider !== 'google') {
+      return true;
+    }
+    return googleDomainAllowed({
+      hostedDomain: identity.hostedDomain,
+      allowedDomains: await this.#parts.settings.get('oauth.google.allowedDomains'),
+    });
   }
 
   /**
@@ -928,6 +957,7 @@ export class AuthService {
     });
     await this.#notifySecurityChange(userId, 'oauthConnected', undefined, {
       provider: PROVIDER_NAMES[provider],
+      account: identity.email,
     });
   }
 
@@ -1415,7 +1445,7 @@ export class AuthService {
       kind: 'securityChange',
       userId,
       url: new URL('/me/security', this.#parts.appUrl).toString(),
-      values: { ...values, change },
+      values: { ...values, change, occurredAt: new Date().toISOString() },
     };
 
     const [brandId] =

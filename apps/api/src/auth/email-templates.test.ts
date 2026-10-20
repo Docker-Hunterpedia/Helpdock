@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { magicLinkScreenUrl } from './auth.service.js';
-import { escapeHtml, renderAuthEmail, SECURITY_CHANGES } from './email-templates.js';
+import { escapeHtml, renderAuthEmail } from './email-templates.js';
 
 const URL_WITH_TOKEN = 'https://support.example.com/api/auth/magic-link/abc-123?a=1&b=2';
 
@@ -134,52 +134,5 @@ describe('renderAuthEmail', () => {
       expect(message.text).not.toContain('passwordReset.');
       expect(message.subject).not.toContain('.subject');
     }
-  });
-});
-
-describe('the security notice (ASVS 2.2.3)', () => {
-  const notice = (change: string, locale: 'en' | 'ar' = 'en') =>
-    renderAuthEmail({
-      kind: 'securityChange',
-      to: 'lina@helpdock.com',
-      url: 'https://support.example.com/me/security',
-      locale,
-      values: { change },
-    });
-
-  it.each(SECURITY_CHANGES)('says which credential changed: %s', (change) => {
-    const en = notice(change);
-    const ar = notice(change, 'ar');
-
-    expect(en.subject).toBe('Your Helpdock sign-in details changed');
-    expect(en.text).toContain('lina@helpdock.com');
-    expect(en.text).toContain('https://support.example.com/me/security');
-    expect(en.text).not.toContain('expires');
-    expect(ar.html).toContain('dir="rtl"');
-    expect(ar.text).not.toBe(en.text);
-  });
-
-  it('names the provider a connection notice is about (1.0.1)', () => {
-    const connected = renderAuthEmail({
-      kind: 'securityChange',
-      to: 'lina@helpdock.com',
-      url: 'https://support.example.com/me/security',
-      locale: 'en',
-      values: { change: 'oauthConnected', provider: 'GitHub' },
-    });
-
-    expect(connected.text).toContain(
-      'A GitHub account was connected to lina@helpdock.com. It can now be used to sign in.',
-    );
-  });
-
-  it('tells a person who did not make the change what to do', () => {
-    expect(notice('password').text).toContain(
-      'If it was not you, reset your password now and tell your administrator.',
-    );
-  });
-
-  it('refuses a change it has no sentence for, rather than sending a blank one', () => {
-    expect(() => notice('somethingElse')).toThrow(TypeError);
   });
 });

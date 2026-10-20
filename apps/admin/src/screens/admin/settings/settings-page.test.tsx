@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { MockSettingsApi } from '../../../settings/mock-api.js';
+import { MOCK_AUTHENTICATION_SETTINGS, MockSettingsApi } from '../../../settings/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
 import { SettingsPage } from './settings-page.tsx';
 
@@ -69,5 +69,48 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('Enter a whole number from 1 to 60.')).toBeVisible();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('adds allowed Workspace domains as chips, refuses an address, and saves the list', async () => {
+    const api = new MockSettingsApi();
+    const save = vi.spyOn(api, 'saveAuthentication');
+    const { user } = renderApp(<SettingsPage />, { settingsApi: api });
+    const domains = await screen.findByLabelText('Allowed Workspace domains');
+
+    await user.type(domains, 'lina@gmail.com{Enter}');
+    expect(screen.getByText('Enter a domain like example.com, without @.')).toBeVisible();
+    expect(domains).toHaveAccessibleDescription('Enter a domain like example.com, without @.');
+
+    await user.clear(domains);
+    await user.type(domains, ' Helpdock.COM{Enter}@helpdock.sa{Enter}');
+    expect(screen.getByText('helpdock.com')).toBeVisible();
+    expect(screen.getByText('helpdock.sa')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          google: expect.objectContaining({ allowedDomains: ['helpdock.com', 'helpdock.sa'] }),
+        }),
+      );
+    });
+  });
+
+  it('shows domains pinned by the environment as read-only', async () => {
+    const api = new MockSettingsApi();
+    vi.spyOn(api, 'authentication').mockResolvedValue({
+      ...MOCK_AUTHENTICATION_SETTINGS,
+      google: {
+        ...MOCK_AUTHENTICATION_SETTINGS.google,
+        allowedDomains: ['helpdock.com'],
+        allowedDomainsLocked: true,
+      },
+    });
+    renderApp(<SettingsPage />, { settingsApi: api });
+
+    const domains = await screen.findByLabelText('Allowed Workspace domains');
+    expect(domains).toHaveAttribute('readonly');
+    expect(domains).toHaveAccessibleDescription(/HD_OAUTH_GOOGLE_ALLOWED_DOMAINS/);
+    expect(screen.getByText('helpdock.com')).toBeVisible();
   });
 });

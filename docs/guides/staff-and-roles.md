@@ -257,7 +257,7 @@ a second place.
 | Your details | Name and interface language. The sign-in address is read-only; an administrator changes it. |
 | Password | Current password, then a new one of at least twelve characters. Changing it signs out **every other** browser and forgets every browser this account trusted. |
 | Two-factor | Status, how many recovery codes are left, and — unless the account must have one (an Admin, an install admin, or `auth.require2fa` on) — turning it off. Turning it off and redrawing the codes each ask for a live authenticator code, because a session proves somebody signed in, not that the person at the keyboard now is the account holder. |
-| Sign-in providers | Since 1.0.2, and only when the install has Google or GitHub configured: each provider, connected or not, with Connect and Disconnect behind the password or a live code. Disconnecting the account's last way in is refused ([authentication › Connecting and disconnecting a provider](authentication.md#connecting-and-disconnecting-a-provider)). |
+| Sign-in methods | Since 1.0.2 (called "Sign-in providers" until 1.1), and only when the install has Google or GitHub configured: each provider, connected or not, with Connect and Disconnect behind the password or a live code. Disconnecting the account's last way in is refused ([authentication › Connecting and disconnecting a provider](authentication.md#connecting-and-disconnecting-a-provider)). |
 | Active sessions | Every browser this account is signed in on, with the current one marked. Sign one out, or sign out everywhere. |
 
 Each change is audited in install scope by the `auth` system principal — a

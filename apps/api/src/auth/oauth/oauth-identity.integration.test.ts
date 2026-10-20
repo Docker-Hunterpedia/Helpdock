@@ -220,7 +220,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
   const securityNotices = async (address: string) =>
     (await email.all()).filter(
       (message) =>
-        message.to.address === address && message.subject.includes('sign-in details changed'),
+        message.to.address === address && message.text.includes(`${APP_URL}/me/security`),
     );
 
   beforeAll(async () => {
@@ -282,7 +282,9 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         meta: { provider: 'google', via: 'sign-in' },
       });
       const [notice] = await securityNotices(lina.email);
-      expect(notice?.text).toContain('A Google account was connected to lina@acme.test.');
+      expect(notice?.subject).toBe('Google was connected to your account');
+      expect(notice?.text).toContain('The Google account lina@acme.test is connected.');
+      expect(notice?.text).toMatch(/When: \d{1,2} \w{3} \d{4}, \d{2}:\d{2} \(/);
     });
 
     it('binds a Gmail address', async () => {
@@ -366,6 +368,51 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
     });
   });
 
+  describe('the allowed Workspace domains (oauth.google.allowedDomains)', () => {
+    const allow = (domains: string[]) =>
+      runtime.settings.set('oauth.google.allowedDomains', domains, { updatedBy: 'test' });
+
+    afterEach(async () => {
+      await allow([]);
+    });
+
+    it('signs in a listed domain and refuses Gmail with its own code', async () => {
+      const kamal = await addAgent('kamal@listed.test');
+      const lama = await addAgent('lama.helpdock@gmail.com');
+      await allow(['listed.test']);
+
+      const listed = await buttonSignIn(
+        'google',
+        await googleAs({ sub: 'g-kamal', email: kamal.email, hd: 'listed.test' }),
+      );
+      const gmail = await buttonSignIn(
+        'google',
+        await googleAs({ sub: 'g-lama', email: lama.email }),
+      );
+
+      expect(listed.searchParams.get('code')).not.toBeNull();
+      expect(gmail.pathname).toBe('/oauth/callback');
+      expect(gmail.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+      expect(await identitiesOf(lama.id)).toEqual([]);
+    });
+
+    it('turns away an account bound before its domain left the list', async () => {
+      const majd = await addAgent('majd@listed.test');
+      const majdGoogle = await googleAs({ sub: 'g-majd', email: majd.email, hd: 'listed.test' });
+      await buttonSignIn('google', majdGoogle);
+      await allow(['other.test']);
+
+      const landed = await buttonSignIn('google', majdGoogle);
+
+      expect(landed.searchParams.get('error')).toBe('oauth-domain-not-allowed');
+      expect(await authRowsOf(majd.id)).toContainEqual({
+        action: 'auth.sign_in.failed',
+        actorType: 'system',
+        meta: { method: 'oauth', provider: 'google', reason: 'domain-not-allowed' },
+      });
+    });
+  });
+
   describe('connecting from a session', () => {
     it('reconnects GitHub behind a step-up, signs in by it, and disconnects it again', async () => {
       const dina = await addAgent('dina@acme.test');
@@ -416,8 +463,8 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
         meta: { provider: 'github', via: 'connect' },
       });
       expect((await securityNotices(dina.email)).map((notice) => notice.text)).toEqual([
-        expect.stringContaining('A GitHub account was connected to dina@acme.test.'),
-        expect.stringContaining('The GitHub account was disconnected from dina@acme.test.'),
+        expect.stringContaining('The GitHub account dina-old@acme.test is connected.'),
+        expect.stringContaining('The GitHub account dina-old@acme.test is no longer connected.'),
       ]);
     });
 

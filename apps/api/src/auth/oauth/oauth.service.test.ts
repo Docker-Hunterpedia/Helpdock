@@ -242,7 +242,7 @@ describe('complete', () => {
     ['a Gmail address', {}, 'lina@gmail.com', true],
     ['an unverified Gmail address', { email_verified: false }, 'lina@gmail.com', false],
   ])(
-    'binds Google by subject and says whether it controls %s',
+    'binds Google by subject and says whether it controls %s, with its hd',
     async (_case, extra, email, authoritative) => {
       await configure('google');
       const google = await createFakeGoogle();
@@ -260,6 +260,8 @@ describe('complete', () => {
       });
 
       expect(identity).toMatchObject({ provider: 'google', subject: '1049', email, authoritative });
+      // The Workspace domain travels with the identity, for oauth.google.allowedDomains.
+      expect(identity.hostedDomain).toBe('hd' in extra ? extra.hd : undefined);
     },
   );
 

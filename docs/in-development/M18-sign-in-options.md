@@ -12,11 +12,13 @@ ADRs: [0050](../decisions/0050-passkeys-for-staff-over-webauthn.md) (accepted wi
 Staff passkeys as a second factor and on their own, Google and GitHub sign-in bound by subject with Microsoft added, and a CAPTCHA that sends nothing to a third party.
 
 **Note on M18-07.** The subject binding of OAuth identities (M18-07,
-[ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)) is being
-implemented ahead of this milestone as a 1.0.1 security fix in a separate pull
-request. M18-07 keeps whatever that fix leaves (connect and disconnect from the
-security page, the Google domain allow-list, the Microsoft provider) and is
-reconciled with it when the fix merges.
+[ADR 0051](../decisions/0051-oauth-identities-bound-by-subject.md)) shipped
+ahead of this milestone: 1.0.1 (#249) brought `user_oauth_identities`
+(migration `0056`), the first-link rules per provider, `oauth-link-required`,
+the connect and disconnect API with step-up, the `auth.oauth.*` audit and the
+`securityChange` email; 1.0.2 (#269) brought the security page's card and the
+`oauth-last-sign-in` refusal. M18-07 itself (#281) adds what was left: see
+[Task status](#task-status).
 
 ---
 
@@ -518,6 +520,12 @@ Backlog or never:
 
   The break-glass copy stays as it is until M18-05 (see its row).
 - [ ] The other deliverables.
+
+## Task status
+
+| Id | Status | Notes |
+|---|---|---|
+| M18-07 | in review (#281) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in and connect, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input); the `Admin/Login-Providers` callback screens for `oauth-link-required` and `oauth-domain-not-allowed`; the card renamed Sign-in methods per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout for every security notice, with the provider account and "When". Not done: binding at invitation acceptance (no artboard for provider buttons on the invitation screen); the `issuer`, `linked_via` and `last_used_at` columns of the data model below (1.0.1 keys by `(provider, provider_subject)`; nothing reads the other two yet); passkey step-up and passkey-as-first-factor (with M18-02/M18-06); Microsoft (M18-08). |
 
 ## Data model
 

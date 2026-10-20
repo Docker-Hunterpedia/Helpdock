@@ -194,6 +194,8 @@ class RecordingAudit implements AuthAuditTrail {
 class FakeOauthService {
   enabled = false;
   identity: OauthIdentity | Error = new OauthError('nope');
+  /** Set to finish a connect flow that this account started, instead of a sign-in. */
+  linkUserId: string | undefined;
 
   isEnabled(): Promise<boolean> {
     return Promise.resolve(this.enabled);
@@ -213,7 +215,7 @@ class FakeOauthService {
     if (this.identity instanceof Error) {
       return Promise.reject(this.identity);
     }
-    return Promise.resolve({ identity: this.identity, linkUserId: undefined });
+    return Promise.resolve({ identity: this.identity, linkUserId: this.linkUserId });
   }
 }
 
@@ -245,6 +247,7 @@ const googleIdentity = (overrides: Partial<OauthIdentity> = {}): OauthIdentity =
   email: 'lina@helpdock.com',
   name: 'Lina',
   authoritative: true,
+  hostedDomain: 'helpdock.com',
   ...overrides,
 });
 
@@ -1049,6 +1052,88 @@ describe('OAuth', () => {
     expect(staff.users.size).toBe(0);
   });
 
+  describe('the allowed Workspace domains (oauth.google.allowedDomains)', () => {
+    const callback = () =>
+      service.completeOauth({
+        provider: 'google',
+        code: 'c',
+        state: 's',
+        browserNonce: 'n',
+        userAgent: 'Firefox',
+      });
+
+    it('signs in a Workspace account on a listed domain', async () => {
+      staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity();
+
+      await expect(callback()).resolves.toMatchObject({ kind: 'session' });
+    });
+
+    it('refuses a Gmail account once domains are listed, and audits why', async () => {
+      staff.add(await newUser({ email: 'lina@gmail.com' }));
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({ email: 'lina@gmail.com', hostedDomain: undefined });
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(oauthIdentities.links).toEqual([]);
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({
+          action: 'auth.sign_in.failed',
+          userId: null,
+          meta: { method: 'oauth', provider: 'google', reason: 'domain-not-allowed' },
+        }),
+      );
+    });
+
+    it('turns away an account bound before the domain was dropped from the list', async () => {
+      const lina = staff.add(await newUser());
+      oauthIdentities.links.push({
+        userId: lina.id,
+        provider: 'google',
+        subject: '1049',
+        email: lina.email,
+      });
+      await settings.set('oauth.google.allowedDomains', ['acme.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity();
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(audit.entries).toContainEqual(
+        expect.objectContaining({ action: 'auth.sign_in.failed', userId: lina.id }),
+      );
+    });
+
+    it('refuses to connect an account from another domain to a session', async () => {
+      const lina = staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({ hostedDomain: 'other.com', email: 'lina@other.com' });
+      oauth.linkUserId = lina.id;
+
+      await expect(callback()).rejects.toMatchObject({
+        auth: { code: 'oauth-domain-not-allowed' },
+      });
+      expect(oauthIdentities.links).toEqual([]);
+      expect(audit.actions()).toEqual(['auth.oauth.link_refused']);
+    });
+
+    it('leaves GitHub alone', async () => {
+      const lina = staff.add(await newUser());
+      await settings.set('oauth.google.allowedDomains', ['helpdock.com'], { updatedBy: 'test' });
+      oauth.identity = googleIdentity({
+        provider: 'github',
+        subject: '7',
+        hostedDomain: undefined,
+      });
+      oauth.linkUserId = lina.id;
+
+      await expect(callback()).resolves.toEqual({ kind: 'connected' });
+    });
+  });
+
   it('turns a provider failure into a sign-in failure, not a 500', async () => {
     oauth.identity = new OauthError('the state does not belong to this provider');
 
@@ -1396,7 +1481,7 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
         userId: user.id,
         brandId: BRAND_ID,
         url: `${APP_URL}/me/security`,
-        values: { change: 'password' },
+        values: { change: 'password', occurredAt: expect.any(String) },
       }),
     ]);
   });
@@ -1414,7 +1499,7 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
       expect.objectContaining({
         userId: user.id,
         brandId: null,
-        values: { change: 'passwordReset' },
+        values: { change: 'passwordReset', occurredAt: expect.any(String) },
       }),
     ]);
   });

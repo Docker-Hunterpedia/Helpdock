@@ -84,14 +84,18 @@ export class OauthIdentityRepository {
       : 'conflict';
   }
 
-  /** Whether there was a link to remove. */
-  async unlink(userId: string, provider: OauthProvider, tx?: Queryable): Promise<boolean> {
-    const removed = await (tx ?? this.#db)
+  /** The address the removed link was made with, or undefined when there was none to remove. */
+  async unlink(
+    userId: string,
+    provider: OauthProvider,
+    tx?: Queryable,
+  ): Promise<{ readonly emailAtLink: string } | undefined> {
+    const [removed] = await (tx ?? this.#db)
       .delete(userOauthIdentities)
       .where(
         and(eq(userOauthIdentities.userId, userId), eq(userOauthIdentities.provider, provider)),
       )
-      .returning({ id: userOauthIdentities.id });
-    return removed.length > 0;
+      .returning({ emailAtLink: userOauthIdentities.emailAtLink });
+    return removed;
   }
 }

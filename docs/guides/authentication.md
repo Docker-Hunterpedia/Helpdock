@@ -454,7 +454,12 @@ The account holder is told by email whenever their password is changed or
 reset, their second factor is turned on or off, their recovery codes are
 redrawn, or a Google or GitHub account is connected to or disconnected from
 their account (ASVS 2.2.3, 2.5.5) — a `securityChange` auth email naming which one,
-with a link to their security page and what to do if it was not them. From
+when it happened, what to do if it was not them, and a link to their security
+page. "When" is told in the time zone of the brand the email is routed
+through, because a staff account has no zone of its own. A provider notice
+also names the provider account by its address ("The GitHub account
+lina@example.com is connected."). Security emails ignore notification
+preferences and cannot be turned off. From
 inside a session the outbox row joins the request's transaction, so a change
 that rolls back sends nothing; a reset, which has none, goes the way the reset
 link went. The link is to a page, not a credential, and does not expire.
@@ -538,12 +543,25 @@ the person who holds it here.
   - **GitHub: never.** GitHub keeps an address "verified" after its owner loses
     the mailbox, so a GitHub account is linked only from inside a session (below).
   - Anything else, a consumer Google account on a company address included,
-    answers **`oauth-link-required`**: "Sign in another way once, then connect
-    it from your security page." It answers the same whether or not anybody
-    here holds the address, so it confirms nobody.
+    answers **`oauth-link-required`**. The callback screen says "Connect your
+    GitHub account first" and lists the steps: sign in with the password or a
+    sign-in link, open Your account → Security → Sign-in methods, choose
+    Connect. It answers the same whether or not anybody here holds the
+    address, so it confirms nobody.
 - **An authoritative address whose account is already bound** to another
   account of that provider answers **`oauth-identity-conflict`** and changes
   nothing: a recycled Workspace address does not move the account.
+- **The allowed Workspace domains** (`oauth.google.allowedDomains`, M18-07)
+  narrow Google further. Empty, the default, allows every Google account the
+  rules above allow. A list allows only managed Workspace accounts whose `hd`
+  claim is one of the listed domains, so a Gmail or other consumer account is
+  refused. The check is on `hd`, which Google asserts, not on the address's
+  domain, and it applies to every Google sign-in and connect, **bound accounts
+  included**: taking a domain off the list turns away the accounts on it.
+  A refusal answers **`oauth-domain-not-allowed`** ("This Google account can't
+  sign in here"), says nothing about whether an account exists, and is audited
+  as `auth.sign_in.failed` (or `auth.oauth.link_refused` for a connect) with
+  `reason: domain-not-allowed`. GitHub has no such list (D-53).
 - **Nothing else changes after the first factor.** The second factor, the
   trusted-browser check and enrolment for those who must have one run exactly
   as after a password. Deactivated accounts still cannot sign in.
@@ -551,14 +569,17 @@ the person who holds it here.
 ### Connecting and disconnecting a provider
 
 A signed-in person connects a provider account from **Your account → Security
-→ Sign-in providers** (`/me/security`, since 1.0.2). The card lists each
+→ Sign-in methods** (`/me/security`; the card was called "Sign-in providers"
+in 1.0.2). The card lists each
 provider the install has configured; with none configured it is not shown.
 Each row says whether the provider is connected, with the address it had and
 the day it was linked, and offers **Connect** or **Disconnect**. Both open a
 "Confirm it's you" dialog that takes the current password or a 6-digit code
 from the authenticator app. Connect then goes to the provider and back to the
 page, which says the provider is connected; a refusal lands on the sign-in
-callback screen with its reason. While nothing is linked, the card explains
+callback screen with its reason. When a provider is the account's only way in,
+its Disconnect is disabled and a note under the list says to set a password or
+connect another provider first. While nothing is linked, the card explains
 that since 1.0.1 a provider signs in only after it is connected here once.
 
 Under the card, the API does the following:
@@ -589,8 +610,11 @@ spends no attempt; the security page disables that button and says why.
 which provider is the last way in.
 
 1.0.1 added the API, the sign-in screen's message for `oauth-link-required`
-and the security notice; 1.0.2 adds the security page's card and the
-last-way-in refusal.
+and the security notice; 1.0.2 added the security page's card and the
+last-way-in refusal. 1.1 (M18-07) adds the allowed Workspace domains, the
+callback screens that explain `oauth-link-required` and
+`oauth-domain-not-allowed`, and the security notice that names the provider
+account and when it changed.
 
 ### Upgrading from 1.0
 
@@ -617,6 +641,7 @@ and cannot be changed in admin.
 | Setting | |
 |---|---|
 | `oauth.google.clientId` / `oauth.google.clientSecret` | From the Google Cloud console, an OAuth 2.0 Client ID of type "Web application". |
+| `oauth.google.allowedDomains` | **Allowed Workspace domains**: type a domain and press Enter for each. Lower-case host names, at most 20; `HD_OAUTH_GOOGLE_ALLOWED_DOMAINS` takes a JSON array such as `["example.com"]`. |
 | `oauth.github.clientId` / `oauth.github.clientSecret` | From GitHub → Settings → Developer settings → OAuth Apps. |
 
 The redirect URL to register with the provider is
@@ -712,6 +737,7 @@ is never editable.
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
 | `auth.webauthn.rpId` | empty | The passkey RP ID, written by the first passkey registration and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
 | `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
+| `oauth.google.allowedDomains` | `[]` | Workspace domains whose accounts may use Google sign-in. Empty allows any address Google vouches for |
 | `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
 
 From `.env`: `APP_MASTER_KEY`, and the two session limits in

@@ -443,6 +443,7 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_SMTP_FROM_NAME` | `smtp.fromName` | brand | no | — | Display name shown beside the From address, for example the brand name. |
 | `HD_OAUTH_GOOGLE_CLIENT_ID` | `oauth.google.clientId` | install | no | — | Google OAuth client id for staff sign-in. Empty disables the button. |
 | `HD_OAUTH_GOOGLE_CLIENT_SECRET` | `oauth.google.clientSecret` | install | yes | — | Google OAuth client secret. |
+| `HD_OAUTH_GOOGLE_ALLOWED_DOMAINS` | `oauth.google.allowedDomains` | install | no | `[]` | Google Workspace domains (the hd claim) whose accounts may use Google sign-in, as a JSON array. Empty allows any address Google vouches for; a list also refuses @gmail.com (ADR 0051). |
 | `HD_OAUTH_GITHUB_CLIENT_ID` | `oauth.github.clientId` | install | no | — | GitHub OAuth client id for staff sign-in. Empty disables the button. |
 | `HD_OAUTH_GITHUB_CLIENT_SECRET` | `oauth.github.clientSecret` | install | yes | — | GitHub OAuth client secret. |
 | `HD_SSO_ENFORCED` | `sso.enforced` | install | no | `false` | Require staff SSO except designated break-glass install admins. |

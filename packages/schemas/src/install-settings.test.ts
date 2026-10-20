@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   installAuthenticationSettingsSchema,
   installAuthenticationSettingsUpdateSchema,
+  workspaceDomainSchema,
 } from './install-settings.js';
 
 describe('install authentication settings', () => {
@@ -17,6 +18,8 @@ describe('install authentication settings', () => {
         clientSecretConfigured: true,
         clientSecretLocked: false,
         enabled: true,
+        allowedDomains: [],
+        allowedDomainsLocked: false,
         clientSecret: 'must-not-leak',
       },
       github: {
@@ -53,5 +56,41 @@ describe('install authentication settings', () => {
         github: { clientId: '' },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('the allowed Workspace domains', () => {
+  const update = (allowedDomains: unknown) =>
+    installAuthenticationSettingsUpdateSchema.safeParse({
+      requireTwoFactor: false,
+      magicLinkValidityMinutes: 10,
+      google: { clientId: '', allowedDomains },
+      github: { clientId: '' },
+    });
+
+  it('lower-cases, trims and de-duplicates the domains it is given', () => {
+    const parsed = update([' Helpdock.com ', 'helpdock.com', 'helpdock.sa']);
+
+    expect(parsed.success && parsed.data.google.allowedDomains).toEqual([
+      'helpdock.com',
+      'helpdock.sa',
+    ]);
+  });
+
+  it.each([['@gmail.com'], ['lina@helpdock.com'], ['localhost'], ['https://helpdock.com']])(
+    'refuses %s, which is not a domain',
+    (domain) => {
+      expect(update([domain]).success).toBe(false);
+    },
+  );
+
+  it('refuses more than twenty domains', () => {
+    expect(update(Array.from({ length: 21 }, (_, index) => `d${index}.example.com`)).success).toBe(
+      false,
+    );
+  });
+
+  it('accepts a domain the setting stores', () => {
+    expect(workspaceDomainSchema.parse('acme.co.uk')).toBe('acme.co.uk');
   });
 });

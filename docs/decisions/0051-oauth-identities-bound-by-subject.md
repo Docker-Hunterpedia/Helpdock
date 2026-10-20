@@ -4,9 +4,9 @@ Status: accepted
 Date: 2026-10-20
 
 Accepted with the 1.0.1 security fix, which implements the binding for Google
-and GitHub (see "Implementation" below). The Microsoft provider, the
-allow-lists, passkey step-up and invitation binding are still to be built in
-M18 (M18-07, M18-08).
+and GitHub (see "Implementation" below). M18-07 adds the Google allow-list; the
+Microsoft provider, passkey step-up and invitation binding are still to be
+built in M18 (M18-08, the passkey deliverables, and M18-07's invitation part).
 
 ## Context
 
@@ -103,3 +103,30 @@ Left for M18: Microsoft (decision 5), the allow-lists (decision 4), a passkey
 as step-up, binding at invitation acceptance (the invitation form has no
 provider option yet), and the Security › Sign-in methods control, which needs
 its artboard first.
+
+## Implementation (1.0.2)
+
+The security page's card (`Admin/Me-SignInProviders`) connects and disconnects
+a provider behind the step-up, and disconnecting an account's last way in (no
+password, no other provider) is refused with `oauth-last-sign-in`.
+
+## Implementation (M18-07, 1.1)
+
+- **Decision 4 for Google:** `oauth.google.allowedDomains`, an install setting
+  pinnable by `HD_OAUTH_GOOGLE_ALLOWED_DOMAINS` and edited under Settings ›
+  Authentication. A non-empty list admits only Workspace accounts whose `hd`
+  claim is listed, on every Google sign-in and connect, bound accounts
+  included; anything else answers `oauth-domain-not-allowed`, audited with
+  `reason: domain-not-allowed`. The check is on `hd`, never the address's
+  domain.
+- The callback screens of `Admin/Login-Providers` explain
+  `oauth-link-required` (with the steps to connect) and
+  `oauth-domain-not-allowed`; the card is renamed Sign-in methods
+  (`Admin/Profile-Security-SignInMethods`).
+- The `securityChange` email for a connected or disconnected provider names
+  the provider account and when it changed (`Email/SecurityChange-M18`).
+
+Still open: Microsoft and its tenant pin (M18-08), a passkey as step-up and as
+a first factor in the last-way-in rule (with passkeys, M18-02/M18-06), and
+binding at invitation acceptance, which waits for an invitation screen with
+provider buttons on the design canvas.

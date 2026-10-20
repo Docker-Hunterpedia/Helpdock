@@ -53,6 +53,42 @@ it('tells a person whose provider cannot make the first link to connect it from 
     { initialEntries: ['/oauth/callback?error=oauth-link-required&provider=github'] },
   );
 
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Connect your GitHub account first' }),
+  ).toBeVisible();
+  expect(screen.getAllByRole('listitem').map((step) => step.textContent)).toEqual([
+    'Sign in with your password or a sign-in link.',
+    'Open Your account › Security › Sign-in methods.',
+    'Choose Connect GitHub.',
+  ]);
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/sign-in');
+});
+
+it('says a Google account outside the allowed domains cannot sign in here', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-domain-not-allowed&provider=google'] },
+  );
+
+  expect(
+    await screen.findByRole('heading', {
+      level: 1,
+      name: "This Google account can't sign in here",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByRole('list')).not.toBeInTheDocument();
+});
+
+it('falls back to the sentence when the callback names no provider', async () => {
+  renderApp(
+    <Routes>
+      <Route path="/oauth/callback" element={<AuthComplete />} />
+    </Routes>,
+    { initialEntries: ['/oauth/callback?error=oauth-link-required'] },
+  );
+
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'This account is not connected here yet. Sign in another way once, then connect it from your security page.',
   );

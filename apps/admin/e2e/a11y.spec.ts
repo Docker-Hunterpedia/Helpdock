@@ -12,6 +12,7 @@ import {
   openContact,
   openContacts,
   openSecurity,
+  openSettings,
   openStaff,
   openTicket,
   openTicketing,
@@ -366,6 +367,45 @@ test.describe('accessibility', () => {
 
     await page.goto(`/invite/${MOCK_EXPIRED_INVITE_TOKEN}`);
     await page.getByRole('heading', { name: t('auth:invite.expiredTitle'), level: 1 }).waitFor();
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('the OAuth callback refusals have no violations', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    for (const [code, provider] of [
+      ['oauth-link-required', 'github'],
+      ['oauth-domain-not-allowed', 'google'],
+    ] as const) {
+      await page.goto(`/oauth/callback?error=${code}&provider=${provider}`);
+      await page
+        .getByRole('heading', {
+          level: 1,
+          name: t(`auth:oauth.refusals.${code}.title`, {
+            provider: t(`auth:signIn.${provider}`),
+          }),
+        })
+        .waitFor();
+
+      expect(await violations(page)).toEqual([]);
+    }
+  });
+
+  test('the authentication settings have no violations, the domain error included', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSettings(page, locale);
+    const domains = page.getByLabel(t('settings:oauth.allowedDomains'));
+    await domains.waitFor();
+    expect(await violations(page)).toEqual([]);
+
+    await domains.fill('lina@gmail.com');
+    await domains.press('Enter');
+    await page.getByText(t('settings:oauth.allowedDomainsInvalid')).waitFor();
 
     expect(await violations(page)).toEqual([]);
   });

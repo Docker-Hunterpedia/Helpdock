@@ -363,6 +363,8 @@ const authErrorCodes = [
   'oauth-identity-conflict',
   /** Disconnecting this provider account would leave no password and no other provider (1.0.2). */
   'oauth-last-sign-in',
+  /** A Google account outside `oauth.google.allowedDomains` (M18-07). Says nothing about accounts. */
+  'oauth-domain-not-allowed',
   'invalid-credentials',
   'totp-mismatch',
   'totp-locked',

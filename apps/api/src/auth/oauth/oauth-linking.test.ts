@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideOauthSignIn, googleIsAuthoritative } from './oauth-linking.js';
+import { decideOauthSignIn, googleDomainAllowed, googleIsAuthoritative } from './oauth-linking.js';
 
 describe('googleIsAuthoritative', () => {
   it.each([
@@ -12,6 +12,18 @@ describe('googleIsAuthoritative', () => {
     ['an unverified Gmail address', 'lina@gmail.com', false, undefined, false],
   ] as const)('decides %s', (_case, email, emailVerified, hostedDomain, expected) => {
     expect(googleIsAuthoritative({ email, emailVerified, hostedDomain })).toBe(expected);
+  });
+});
+
+describe('googleDomainAllowed (oauth.google.allowedDomains)', () => {
+  it.each([
+    ['any account when the list is empty', undefined, [], true],
+    ['a Workspace account on a listed domain', 'acme.com', ['acme.com', 'acme.sa'], true],
+    ['a listed domain Google sends in another case', 'ACME.sa', ['acme.com', 'acme.sa'], true],
+    ['a Workspace account on another domain', 'other.com', ['acme.com'], false],
+    ['a consumer account, which has no hd', undefined, ['acme.com'], false],
+  ] as const)('allows %s: %s', (_case, hostedDomain, allowedDomains, expected) => {
+    expect(googleDomainAllowed({ hostedDomain, allowedDomains })).toBe(expected);
   });
 });
 

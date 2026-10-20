@@ -22,6 +22,7 @@ export const PALETTE_SHORTCUT_ACTIONS = [
   'ticket.status',
   'ticket.priority',
   'ticket.tags',
+  'ticket.snooze',
   'ticket.macros',
   'list.close',
 ] as const satisfies readonly ShortcutId[];

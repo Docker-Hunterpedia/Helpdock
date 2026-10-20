@@ -206,6 +206,9 @@ export const PAGES: readonly PageEntry[] = [
       roles: ['admin', 'teamLeader'],
     },
   ),
+  setting('automationRouting', 'automation', automationRoute('routing'), 'rules:tabs.routing', {
+    roles: ['admin', 'teamLeader'],
+  }),
   setting('automationMacros', 'automation', automationRoute('macros'), 'rules:tabs.macros', {
     roles: ['admin', 'teamLeader', 'agent'],
   }),

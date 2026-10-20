@@ -1,16 +1,7 @@
 import { type Locale, NAMESPACES } from '@helpdock/i18n';
 import type { QuickSearch } from '@helpdock/schemas';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import {
-  BookOpen,
-  Compass,
-  FileText,
-  type LucideIcon,
-  Search,
-  Ticket,
-  User,
-  Zap,
-} from 'lucide-react';
+import { Compass, FileText, type LucideIcon, Search, Ticket, User, Zap } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useT } from '../app/i18n.js';
@@ -19,7 +10,6 @@ import { articleRoute, contactRoute, ROUTES, ticketRoute } from '../app/route-pa
 import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../auth/session.tsx';
 import type { KeyStroke } from '../keyboard/keys.js';
 import { useQuickSearchApi } from './context.js';
-import { fold } from './fold.js';
 import {
   isolate,
   namesTicket,
@@ -93,7 +83,6 @@ const ICON = {
   page: Compass,
   action: Zap,
   search: Search,
-  book: BookOpen,
 } as const;
 
 export function usePaletteOptions(
@@ -333,6 +322,3 @@ export function usePaletteOptions(
     },
   };
 }
-
-/** Folded text for tests and callers that match by hand. */
-export const foldedTexts = (texts: readonly string[]): string[] => texts.map(fold);

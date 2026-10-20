@@ -187,9 +187,9 @@ describe.skipIf(!hasDocker)('quick search', () => {
 
     const db = runtime.db;
     ada = { id: seeded.userId, email: seeded.email, token: '' };
-    [sam, bo, vera, rita, ola] = await Promise.all(
+    [sam, bo, vera, rita, ola] = (await Promise.all(
       ['sam', 'bo', 'vera', 'rita', 'ola'].map((name) => addPerson(db, name)),
-    ) as [Person, Person, Person, Person, Person];
+    )) as [Person, Person, Person, Person, Person];
 
     otherBrand = uuidv7();
     await db.insert(brands).values({ id: otherBrand, name: 'Globex', prefix: 'GLX' });
@@ -257,12 +257,11 @@ describe.skipIf(!hasDocker)('quick search', () => {
       ada,
       { categoryId: category.body.id, names: { en: 'Refunds', ar: 'الاسترداد' } },
     );
-    const article = await call(
-      'POST',
-      `${brandPath(seeded.brandId)}/help-center/articles`,
-      ada,
-      { sectionId: section.body.id, locale: 'en', title: 'Refund policy draft' },
-    );
+    const article = await call('POST', `${brandPath(seeded.brandId)}/help-center/articles`, ada, {
+      sectionId: section.body.id,
+      locale: 'en',
+      title: 'Refund policy draft',
+    });
     expect(article.status).toBe(201);
   }, 300_000);
 
@@ -342,11 +341,7 @@ describe.skipIf(!hasDocker)('quick search', () => {
   it('refuses an empty or over-long query and an out-of-range limit', async () => {
     const empty = await find(bo, ' ');
     const long = await find(bo, 'x'.repeat(201));
-    const limit = await call(
-      'GET',
-      `${brandPath(seeded.brandId)}/quick-search?q=a&limit=50`,
-      bo,
-    );
+    const limit = await call('GET', `${brandPath(seeded.brandId)}/quick-search?q=a&limit=50`, bo);
 
     expect([empty.status, long.status, limit.status]).toEqual([400, 400, 400]);
   });

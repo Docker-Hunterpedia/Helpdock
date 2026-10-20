@@ -1,16 +1,16 @@
 import type { DbTransaction } from '@helpdock/db';
 import type { ContactList, TicketList } from '@helpdock/schemas';
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { PgDialect } from 'drizzle-orm/pg-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContactsService } from '../contacts/contacts.service.js';
 import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import type { HelpCenterSearch, SearchQuery } from '../help-center/ports.js';
 import type { TicketsService } from '../tickets/tickets.service.js';
 import {
   QUICK_SEARCH_RULE,
-  QuickSearchService,
   type QuickSearchScope,
+  QuickSearchService,
   SECTION_BUDGET_MS,
 } from './quick-search.service.js';
 
@@ -106,8 +106,14 @@ const run = async (scope: QuickSearchScope, doubles: Doubles = {}) => {
   return { result, statements, list, contacts, search, consume };
 };
 
+beforeEach(() => {
+  // A failed section is logged; the tests that make one fail do not need the line.
+  vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+});
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('QuickSearchService', () => {

@@ -180,7 +180,8 @@
         "status": "Change status",
         "priority": "Change priority",
         "tags": "Edit tags",
-        "macros": "Apply a macro"
+        "macros": "Apply a macro",
+        "snooze": "Snooze this ticket…"
       },
       "list": {
         "close": "Close this ticket"
@@ -226,6 +227,7 @@
       "ticketingSlas": "sla, service level, response target, resolution target, breach",
       "automationRules": "workflow, triggers, automations, if then",
       "automationTimeBased": "scheduled rules, timers, escalation, auto close, reminders",
+      "automationRouting": "routing rules, where tickets go, test routing, dry run, assignment path",
       "automationMacros": "canned responses, saved replies, snippets, templates",
       "channelsMailboxes": "email, imap, inbound email, support address, forwarding",
       "channelsOutgoing": "smtp, sender, dkim, spf, deliverability",

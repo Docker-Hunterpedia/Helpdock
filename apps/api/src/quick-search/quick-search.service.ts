@@ -77,7 +77,10 @@ export class QuickSearchService {
     this.#limiter = limiter;
   }
 
-  async search(scope: QuickSearchScope, { q, limit, locale }: QuickSearchQuery): Promise<QuickSearch> {
+  async search(
+    scope: QuickSearchScope,
+    { q, limit, locale }: QuickSearchQuery,
+  ): Promise<QuickSearch> {
     if (!(await this.#limiter.consume(QUICK_SEARCH_RULE, scope.viewerId))) {
       throw new HttpException('Too many searches; wait a moment', HttpStatus.TOO_MANY_REQUESTS);
     }

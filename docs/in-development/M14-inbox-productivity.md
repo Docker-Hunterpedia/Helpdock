@@ -440,6 +440,54 @@ focus). *Undo last bulk change* also sits in the palette for the server's 60 s.
 
 ### M14-05 Command palette
 
+**Status: built, in review** (issue #292). Built as below, with these
+differences:
+
+- **Opening.** `⌘K` / `Ctrl+K` is registry entry `general.palette`, a modifier
+  chord, so it works with the single-key switch off and in a field. The
+  sidebar has no Search control on its board (`Admin/Shell` draws none), so
+  the palette is also "Search and commands" in the account menu, beside
+  "Keyboard shortcuts"; a Search row in the sidebar waits for an artboard.
+- **The read.** `quick-search` answers each section as `{ status: 'ok',
+  items }`, `{ status: 'skipped' }` (no permission) or `{ status: 'failed' }`
+  (an error, or over the 300 ms budget), which is what the board's "a section
+  failed" panel is drawn from. The sections run one after another, each
+  inside a savepoint with a 300 ms `statement_timeout`, so one that fails
+  rolls back to its savepoint and the next still runs in the same request
+  transaction. It takes a `locale` the articles are looked up in first.
+- **Articles** are the help-center search with the `internal` audience
+  (published versions, public and internal, never logged to `hc_search_log`),
+  plus, for `help_center:manage`, the titles of drafts and scheduled versions.
+- **Actions** are the registry shortcuts a screen has attached right now and
+  the person may use, so "Reply", "Change priority", "Snooze this ticket…" are
+  there with a ticket open and a Viewer is offered none that write; plus
+  "Copy link to this ticket", Switch brand, Switch language and Theme. Each
+  shows its keys, left out while the single-key switch is off. Choosing one
+  runs after the palette has closed and given focus back, so it does not fight
+  the dialog for focus. Left out because what they act on is not built:
+  "Undo last bulk change" (M14-03, M14-04), and the board's "Assign HD-1042 to
+  me" and "Snooze HD-1042…" on a ticket that is *found* rather than open, which
+  would need a write from outside the ticket view; the palette's ticket
+  actions act on the open ticket. The Tab "ask the assistant" hint waits for
+  M12-13, as the board says.
+- **Recents** are `{ kind, id }` in this browser's storage per person and
+  brand, written whenever the person lands on a ticket, a contact or a
+  settings page (not only when they pick it from the palette), re-read through
+  the api when the palette opens; one the api no longer shows is dropped and
+  forgotten.
+- **Pages** (`apps/admin/src/palette/pages.ts`) are titled from the existing
+  catalog keys (`Area › Tab`) with keywords in `admin:palette.keywords.<id>`,
+  matched in both languages whatever the interface language, folded as the
+  help-center index folds. `pages.test.ts` walks `route-paths.ts` and every
+  settings page's tab list and fails on a route or tab that is neither in the
+  registry nor excluded with a reason.
+- **Accessibility.** The sections that failed and the "no results" panel sit
+  outside the listbox, which holds only options and groups; the count is a
+  polite `role="status"`. The arrows are the only keys the palette takes, so
+  Left and Right move the caret in Arabic as in English.
+
+Guide: [Keyboard shortcuts](../guides/keyboard-shortcuts.md#command-palette).
+
 `⌘K` / `Ctrl+K`, or the sidebar's Search (which already shows the `⌘K` hint per
 DESIGN §6.1). A `role="dialog"` with an ARIA 1.2 combobox and a grouped
 listbox:

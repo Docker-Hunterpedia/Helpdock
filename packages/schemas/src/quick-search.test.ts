@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { QUICK_SEARCH_LIMIT_DEFAULT, quickSearchQuerySchema, quickSearchSchema } from './quick-search.js';
+import {
+  QUICK_SEARCH_LIMIT_DEFAULT,
+  quickSearchQuerySchema,
+  quickSearchSchema,
+} from './quick-search.js';
 
 describe('quickSearchQuerySchema', () => {
   it('trims the text and defaults the limit', () => {

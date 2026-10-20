@@ -326,6 +326,18 @@ A start opens the conversation, with or without its first message:
   reports where the challenge ran, and a pass from any other site is refused
   in the same way. A native app that renders the challenge in a web view
   must load it from one of those hosts.
+- **Upgrade note for 1.1, for a client that renders Turnstile itself** (a
+  native app or a custom widget): render the challenge with
+  `action: 'widget-first-message'` and `cData: '<brandId>'`, the brand id in
+  the widget's path. The api refuses a Turnstile pass whose action or cData
+  is anything else, missing included, as it refuses a wrong token, so a
+  client that does not pass them stops being able to start a conversation.
+  This is what keeps a token solved for the web form, or for another brand
+  that shares the site key, from opening a chat. hCaptcha has neither field,
+  so an hCaptcha token is bound by its host only. A refusal is logged at
+  `warn` as `CAPTCHA refused` with the provider's error codes
+  (`action-mismatch`, `cdata-mismatch`, `hostname-mismatch`, …), never the
+  token.
 - `prechat` carries the pre-chat form's answers, or the contact form's, which
   asks the same fields. `prechat.custom` is keyed by ticket custom field keys.
   The api checks the values against the field definitions and keeps only the

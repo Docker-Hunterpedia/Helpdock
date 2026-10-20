@@ -45,6 +45,8 @@ The card at the end of an article takes one answer per visitor and article versi
 
 Notes are counted on Help center › Insights. Staff answering on their own help center are thanked but not counted.
 
+One address may send 30 answers in 15 minutes to one brand's help center; past that the post is answered 429 and nothing is recorded, and the refusal is counted as `rate_limit_refusals_total{bucket="hc-feedback-ip"}`. There is no CAPTCHA on the card: one on a "Was this helpful?" button would cost more answers than it saves.
+
 ## Staff on the help center
 
 Staff read internal articles, with an **Internal** badge, and an internal-only help center, once they open it from the admin:

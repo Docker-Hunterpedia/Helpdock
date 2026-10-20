@@ -1,5 +1,6 @@
 import {
   type CaptchaProvider as CaptchaAdapter,
+  type CaptchaSurface,
   type CaptchaTransport,
   createCaptchaProvider,
 } from '@helpdock/channels';
@@ -92,14 +93,21 @@ export const safeCaptchaTransport = (allowCidrs: readonly string[]): CaptchaTran
 
 export type CaptchaCheck = 'passed' | 'failed' | 'not_configured';
 
+/** Where a refusal's reason goes: the provider's error codes, never the token or the secret. */
+export interface CaptchaRefusalLog {
+  warn(fields: Record<string, unknown>, message: string): void;
+}
+
 /** "Is this token good for this brand?", in one call for the widget and the form. */
 export class CaptchaVerifier {
   readonly #keys: CaptchaKeysReader;
   readonly #adapter: (provider: CaptchaProvider) => CaptchaAdapter;
+  readonly #log: CaptchaRefusalLog;
 
-  constructor(keys: CaptchaKeysReader, transport: CaptchaTransport) {
+  constructor(keys: CaptchaKeysReader, transport: CaptchaTransport, log: CaptchaRefusalLog) {
     this.#keys = keys;
     this.#adapter = (provider) => createCaptchaProvider(provider, transport);
+    this.#log = log;
   }
 
   async verify(input: {
@@ -108,6 +116,8 @@ export class CaptchaVerifier {
     readonly remoteIp: string | null;
     /** Where the challenge may have been solved; see `CaptchaVerifyInput.hostnames`. */
     readonly hostnames: readonly string[];
+    /** The surface asking; with `brandId`, what a Turnstile pass must answer back. */
+    readonly surface: CaptchaSurface;
     readonly tx?: DbTransaction;
   }): Promise<CaptchaCheck> {
     const keys = await this.#keys.forBrand(input.brandId, input.tx);
@@ -125,7 +135,16 @@ export class CaptchaVerifier {
       token: input.token,
       remoteIp: input.remoteIp,
       hostnames: input.hostnames,
+      binding: { surface: input.surface, brandId: input.brandId },
     });
+    if (!verdict.success) {
+      // `action-mismatch`, `cdata-mismatch` and `hostname-mismatch` are
+      // otherwise indistinguishable from a wrong token to whoever operates this.
+      this.#log.warn(
+        { brandId: input.brandId, surface: input.surface, errorCodes: verdict.errorCodes },
+        'CAPTCHA refused',
+      );
+    }
     return verdict.success ? 'passed' : 'failed';
   }
 }

@@ -874,3 +874,16 @@ DESIGN.md changes in the same PRs:
 The three tracks are independent once M18-01 lands, so CAPTCHA (M18-10, M18-11)
 and social sign-in (M18-07 to M18-09) can run in parallel with the passkey
 screens.
+
+## Progress
+
+- **M18-11 CAPTCHA and abuse hardening** (#285): in review. The hostname check
+  had landed in 1.0.1; this adds the Turnstile `action` per surface
+  (`widget-first-message`, `web-form`, refused as `action-mismatch`) and the
+  brand as `cData` (`cdata-mismatch`; hCaptcha has neither, so its tokens stay
+  bound by host only), a `CaptchaSurface` type M18-10 reuses, the
+  `email-dispatch-ip` bucket (30 per 15 minutes per IP on sign-in link and
+  reset requests, apart from the sign-in budget), the `hc-feedback-ip` bucket
+  (30 per 15 minutes per IP and brand on "Was this helpful?", answered 429),
+  and the full list of `rate_limit_refusals_total` bucket labels in the
+  operations guide.

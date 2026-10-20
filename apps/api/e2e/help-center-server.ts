@@ -67,6 +67,7 @@ const siteOver = (access: 'public' | 'internal_only', port: number) =>
       ],
     },
     cache: new NoPageCache(),
+    feedbackBudget: async () => true,
     staff: {
       readerOf: async () => null,
       spendPass: async () => null,

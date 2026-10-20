@@ -280,6 +280,7 @@ export class WidgetConversationsService {
           token: body.captchaToken,
           remoteIp: facts.ip,
           hostnames: hostnamesOf(settings.allowedOrigins),
+          surface: 'widget-first-message',
           tx,
         });
         // ADR 0003: refused "before any ticket, contact or conversation row".

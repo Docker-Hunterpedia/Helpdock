@@ -24,10 +24,19 @@ export function SortMenu({
   const t = useT();
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [tooltipFocusDisabled, setTooltipFocusDisabled] = useState(false);
 
   return (
     <>
-      <Tooltip title={t('tickets:sort.action')}>
+      <Tooltip
+        title={t('tickets:sort.action')}
+        disableInteractive
+        disableFocusListener={tooltipFocusDisabled}
+        open={tooltipOpen && anchor === null}
+        onOpen={() => setTooltipOpen(true)}
+        onClose={() => setTooltipOpen(false)}
+      >
         <Button
           id={id}
           variant="outlined"
@@ -37,7 +46,16 @@ export function SortMenu({
           aria-haspopup="menu"
           aria-expanded={anchor !== null}
           aria-controls={anchor === null ? undefined : `${id}-menu`}
-          onClick={(event) => setAnchor(event.currentTarget)}
+          onBlur={() => {
+            setTooltipOpen(false);
+            if (anchor === null) setTooltipFocusDisabled(false);
+          }}
+          onClick={(event) => {
+            // Restoring focus from the menu must not reopen a tooltip over the list.
+            setTooltipFocusDisabled(true);
+            setTooltipOpen(false);
+            setAnchor(event.currentTarget);
+          }}
         >
           <ArrowDownUp size={14} aria-hidden="true" />
         </Button>

@@ -297,6 +297,8 @@ Labels sit above inputs, 13 px weight 500, 6 px gap. Hints and errors go below a
   360 px list header (#353). Both are square sm 28 with localized tooltips and
   accessible names; Filter includes the active count in its name and tooltip
   and the aria-hidden CountBadge from the NotificationBell (§6.2).
+  These tooltips are non-interactive, close on menu opening or blur, and do
+  not reopen when a menu restores focus; a fresh keyboard focus shows them again.
   `Admin/Tickets-SortSla` and `Admin/Tickets-Narrow` were redrawn under #353
   (`AdminTicketsSortSla.dc.html` and `AdminTicketsNarrow.dc.html`), replacing
   text Sort and Filter buttons so New ticket fits at 360 px. The Filter badge

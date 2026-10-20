@@ -152,16 +152,35 @@ test('ticket header fits its 360 px column with active filters', async ({
     page.getByRole('tooltip', { name: t('tickets:sort.action'), exact: true }),
   ).toBeVisible();
   await expect(sort).not.toHaveAttribute('title');
+  await expect(
+    page.getByRole('tooltip', { name: t('tickets:sort.action'), exact: true }),
+  ).toHaveCSS('pointer-events', 'none');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('menu')).toBeVisible();
+  await expect(page.getByRole('tooltip')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(sort).toBeFocused();
+  await expect(page.getByRole('tooltip')).toBeHidden();
   await page.keyboard.press('Tab');
   await expect(filter).toBeFocused();
   await expect(page.getByRole('tooltip', { name: filterLabel, exact: true })).toBeVisible();
   await expect(filter).not.toHaveAttribute('title');
+  await expect(page.getByRole('tooltip', { name: filterLabel, exact: true })).toHaveCSS(
+    'pointer-events',
+    'none',
+  );
   await filter.click();
   await expect(page.getByRole('region', { name: t('tickets:filters.title') })).toBeVisible();
+  await expect(page.getByRole('tooltip')).toBeHidden();
   await page.keyboard.press('Escape');
   await expect(
     region.getByRole('button', { name: t('tickets:list.filterActive', { count: 4 }), exact: true }),
   ).toBeFocused();
+  await expect(page.getByRole('tooltip')).toBeHidden();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(filter).toBeFocused();
+  await expect(page.getByRole('tooltip', { name: filterLabel, exact: true })).toBeVisible();
   await region.getByRole('button', { name: t('tickets:newTicket.action'), exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 });

@@ -1223,6 +1223,9 @@ The ticket-list header uses icon-only **Sort** and **Filter** buttons so its
 localized tooltips; Filter shows the active count in a badge, its tooltip and
 accessible name. Every counted filter has a removable chip, including Source.
 **New ticket** keeps its text label.
+The tooltips do not capture clicks and close when you open a menu or move focus
+away. Closing a menu restores focus without reopening its tooltip; tab away and
+back to read it again.
 
 `apps/admin/src/screens/tickets/` is the `Admin · ticket view` artboard: the
 list, the thread and the details panel, on one route. The boundary it reads

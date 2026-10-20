@@ -104,6 +104,8 @@ export function TicketList({
   const newTicketKeys = useAriaKeyShortcuts('general.newTicket');
   const searchKeys = useAriaKeyShortcuts('general.search');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [tooltipFocusDisabled, setTooltipFocusDisabled] = useState(false);
   const active = activeFilterCount(filters);
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
@@ -112,6 +114,8 @@ export function TicketList({
 
   useEffect(() => {
     if (openFiltersToken !== null) {
+      setTooltipFocusDisabled(true);
+      setTooltipOpen(false);
       setFiltersOpen(true);
     }
   }, [openFiltersToken]);
@@ -145,7 +149,14 @@ export function TicketList({
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
             <SortMenu filters={filters} onChange={onFiltersChange} />
-            <Tooltip title={filterLabel}>
+            <Tooltip
+              title={filterLabel}
+              disableInteractive
+              disableFocusListener={tooltipFocusDisabled}
+              open={tooltipOpen && !filtersOpen}
+              onOpen={() => setTooltipOpen(true)}
+              onClose={() => setTooltipOpen(false)}
+            >
               <Button
                 ref={filterButton}
                 variant="outlined"
@@ -154,7 +165,14 @@ export function TicketList({
                 sx={{ minWidth: 28, width: 28, padding: 0, flexShrink: 0, overflow: 'visible' }}
                 aria-expanded={filtersOpen}
                 aria-haspopup="dialog"
+                onBlur={() => {
+                  setTooltipOpen(false);
+                  if (!filtersOpen) setTooltipFocusDisabled(false);
+                }}
                 onClick={() => {
+                  // Keep the restored focus without reopening a tooltip over Save as new.
+                  setTooltipFocusDisabled(true);
+                  setTooltipOpen(false);
                   setFiltersOpen(true);
                 }}
               >

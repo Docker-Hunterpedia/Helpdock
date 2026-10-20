@@ -72,6 +72,30 @@ describe('saved views in the workspace', () => {
     expect(badge).toHaveStyle({ insetBlockStart: '-6px', insetInlineEnd: '-6px' });
   });
 
+  it.each(['Sort', 'Filter (4)'])(
+    '#353: dismisses the %s tooltip through menu opening and focus restoration',
+    async (label) => {
+      const { user } = await renderTickets();
+      const button = screen.getByRole('button', { name: label });
+      await user.hover(button);
+      expect(await screen.findByRole('tooltip', { name: label })).toBeVisible();
+      await user.click(button);
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+      await user.unhover(button);
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(button).toHaveFocus());
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      await user.tab();
+      await user.tab({ shift: true });
+      expect(button).toHaveFocus();
+      expect(await screen.findByRole('tooltip', { name: label })).toBeVisible();
+      await user.tab();
+      await waitFor(() =>
+        expect(screen.queryByRole('tooltip', { name: label })).not.toBeInTheDocument(),
+      );
+    },
+  );
+
   it.each([
     ['1', 'Imported'],
     ['0', 'Created in Helpdock'],

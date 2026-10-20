@@ -448,6 +448,11 @@ with no plus icon; the view title stays on one line. The `Admin/Tickets-SortSla`
 menu and ordering are unchanged. The webhook endpoint test also derives its all-events count from `WEBHOOK_EVENTS.length`
 after M14-28 expanded the event picker.
 
+PR #354 follow-up: Sort and Filter tooltips are non-interactive and close when
+the menu opens or the trigger loses focus. Menu-restored focus does not reopen
+them over the changed-filters actions; leaving and returning by keyboard shows
+them again. Regression checks cover both triggers and the en/ar header flow.
+
 `sort=slaDue`: the nearest due time of the ticket's running, unpaused,
 unsatisfied clocks, breached ones first by how long ago, then soonest due, then
 tickets without a clock. A stored generated column `tickets.sla_next_due_at`

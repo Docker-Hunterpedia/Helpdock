@@ -43,6 +43,19 @@ describe('AppShell', () => {
     vi.unstubAllGlobals();
   });
 
+  it('prints a primary count only for the keys the session carries', async () => {
+    const apis = await signedInMockApis();
+    const session = await apis.auth.me();
+    vi.spyOn(apis.auth, 'me').mockResolvedValue(
+      session === null ? null : { ...session, navCounts: { tickets: 24 } },
+    );
+    renderApp(<AppRoutes />, { ...signedIn(apis), initialEntries: ['/tickets'] });
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+
+    expect(await within(nav).findByRole('link', { name: /^Tickets\s*24$/ })).toBeVisible();
+    expect(within(nav).getByRole('link', { name: /^Contacts$/ })).toBeVisible();
+  });
+
   it('lists every destination as a link in one named navigation', async () => {
     await renderShell();
     const nav = screen.getByRole('navigation', { name: 'Main' });
@@ -55,10 +68,11 @@ describe('AppShell', () => {
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual([
-      'Tickets24',
-      'Contacts812',
-      'Help center36',
-      'Reports9',
+      // The api sends no primary counts in 1.0 (UX-24), so the fixture has none.
+      'Tickets',
+      'Contacts',
+      'Help center',
+      'Reports',
       // The + beside "Views": an icon link, named by its aria-label.
       '',
       'All tickets',

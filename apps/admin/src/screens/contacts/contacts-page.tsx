@@ -107,6 +107,19 @@ export function ContactsPage(): ReactNode {
     enabled: tab === 'accounts',
   });
 
+  // The caption counts the whole brand, whichever tab is open and whatever is
+  // typed: each list above is only read on its own tab, so its total said
+  // "0 accounts" on People and "0 people" on Accounts. The keys are the
+  // unfiltered lists', so the tab that opens first answers both reads.
+  const brandContacts = useQuery({
+    queryKey: ['contacts', brand.id, {}],
+    queryFn: () => api.listContacts(brand.id, {}),
+  });
+  const brandAccounts = useQuery({
+    queryKey: ['accounts', brand.id, ''],
+    queryFn: () => api.listAccounts(brand.id, {}),
+  });
+
   const setParam = (key: string, value: string | null): void => {
     setParams((previous) => {
       const next = new URLSearchParams(previous);
@@ -141,8 +154,8 @@ export function ContactsPage(): ReactNode {
       <PageHeader
         title={t('contacts:title')}
         caption={t('contacts:subtitle', {
-          people: t('contacts:peopleCount', { count: total }),
-          accounts: t('contacts:accountCount', { count: accounts.data?.total ?? 0 }),
+          people: t('contacts:peopleCount', { count: brandContacts.data?.total ?? 0 }),
+          accounts: t('contacts:accountCount', { count: brandAccounts.data?.total ?? 0 }),
         })}
         action={
           <Button

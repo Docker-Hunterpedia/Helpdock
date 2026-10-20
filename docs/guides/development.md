@@ -982,8 +982,10 @@ flows, but skips API coverage, package integration and widget browsers. An
 API-only edit runs API coverage and real-api browsers, but skips admin fixture
 suites. Shared packages include their transitive consumers from workspace
 manifests, including test and peer dependencies. Package changes retain the
-complete package coverage and integration suites. Every affected app is typechecked;
-API route guards run only when the API is affected. Lint, import boundaries and
+complete package coverage and integration suites. Every affected app is typechecked,
+and any code change also runs the root `tsc --noEmit` over every test file and
+`src/testing` helper, as `pnpm typecheck` does on `main`, so a helper that only
+the full check would catch cannot slip through a pull request. API route guards run only when the API is affected. Lint, import boundaries and
 the dependency audit remain repository-wide checks. Semgrep and the production
 image smoke test run for any affected workspace.
 

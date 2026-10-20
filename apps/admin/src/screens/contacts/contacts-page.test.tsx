@@ -74,6 +74,16 @@ describe('the contact list', () => {
     expect(await screen.findByText(/8 people/)).toBeInTheDocument();
   });
 
+  it('counts the brand’s accounts on the People tab and its people on Accounts', async () => {
+    const { user } = await renderContacts();
+
+    // Each tab reads only its own list; the caption used to say "0 accounts".
+    expect(await screen.findByText(/^8 people · [1-9]\d* accounts?$/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Accounts' }));
+    expect(await screen.findByText(/^8 people · [1-9]\d* accounts?$/)).toBeInTheDocument();
+  });
+
   it('offers to review the possible duplicates it found', async () => {
     await renderContacts();
 

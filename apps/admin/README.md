@@ -235,12 +235,16 @@ scanner reads it.
 ### The contact screens
 
 `src/screens/contacts/` is M1-04, built from the `Admin/Contacts` and
-`Admin/Contact` artboards. Two decisions are worth knowing before changing them:
+`Admin/Contact` artboards. Three decisions are worth knowing before changing
+them:
 
 - **The URL is the state.** The search term, the filters, the People/Accounts
   tab and the page all live in the query string, so a filtered list is a link an
   agent can send to a colleague and the back button steps through what they
   looked at rather than out of the screen.
+- **The caption counts the whole brand.** "8 people · 2 accounts" reads the
+  unfiltered first page of each list, whichever tab is open and whatever is
+  typed; the tables below it are filtered.
 - **The hidden-ticket count is the feature.** DOMAIN-RULES §1.2 says a contact
   timeline shows how many tickets the viewer's departments exclude. That count
   drives the caption under the heading and the lock row in the list, and it is
@@ -545,10 +549,11 @@ guide](../../docs/guides/authentication.md#endpoints).
 is the realtime client: a browser cannot set headers on a WebSocket handshake,
 so the token goes in `auth.token` instead. It stays in memory either way.
 
-Two things the fixture does that the real service owns: `navCounts` on the
-session is optional and the sidebar renders a count only for the keys it
-receives, and switching brand is a client-side change to the cached session
-until a milestone gives it somewhere to persist.
+Two things worth knowing about the session: `navCounts` is optional and the
+sidebar renders a count only for the keys it receives — the api sends none in
+1.0, so the fixture sends none either and the screenshots show the sidebar
+production shows — and switching brand is a client-side change to the cached
+session until a milestone gives it somewhere to persist.
 
 ### The socket
 

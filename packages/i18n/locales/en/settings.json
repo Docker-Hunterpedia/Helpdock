@@ -46,11 +46,14 @@
   "aside": {
     "redirectUrls": {
       "title": "Redirect URLs",
-      "body": "Register these with Google and GitHub:"
+      "body": "Register these with Google and GitHub:",
+      "copy": "Copy the {{provider}} redirect URL",
+      "copied": "Redirect URL copied.",
+      "copyError": "Copy failed. Select the address and copy it."
     },
     "live": {
       "title": "Changes apply live",
-      "body": "Every api and worker replica picks up a saved setting within a second. No restart. Keys set in {{envFile}} always win and are marked with a lock."
+      "body": "A saved setting takes effect within a second, with no restart. Keys set in {{envFile}} always win and are marked with a lock."
     },
     "recent": {
       "title": "Recent changes",

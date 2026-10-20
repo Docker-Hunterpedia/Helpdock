@@ -43,6 +43,20 @@ test.describe('the admin shell', () => {
     await expect(switcher).toContainText(secondBrand?.name ?? '');
   });
 
+  test('draws the primary nav without counts, as production does', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+
+    // The api sends no primary counts in 1.0, and the fixture none either (UX-24).
+    const nav = page.getByRole('navigation', { name: t('admin:nav.label') });
+    await expect(nav.getByRole('link', { name: t('admin:nav.tickets'), exact: true })).toHaveText(
+      t('admin:nav.tickets'),
+    );
+  });
+
   test('marks the open page and moves the marker when another is opened', async ({
     page,
     appLocale: locale,

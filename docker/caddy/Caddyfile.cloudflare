@@ -17,7 +17,7 @@
 #    every visitor and key every per-address limit (sign-in, widget, web form,
 #    rating page) on it, so one visitor could lock the rest out. With it, Caddy
 #    believes Cloudflare's `CF-Connecting-IP` header when, and only when, the
-#    peer is in these ranges, and `helpdock_upstream` forwards that one address
+#    peer is in these ranges, and `helpdock_proxy` forwards that one address
 #    as `X-Forwarded-For`. A request that reaches this server around Cloudflare
 #    is not from these ranges, so a `CF-Connecting-IP` it carries is ignored and
 #    its own address is used.

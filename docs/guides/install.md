@@ -284,8 +284,9 @@ in the tab stops routing at once (within 30 seconds on every api replica).
 
 An unverified hostname gets a 403 and no certificate, which is what keeps a
 stranger pointing DNS at your server from spending your certificate authority's
-rate limits. `/internal/*` is not reachable from outside: Caddy answers 404 for
-it, and the check travels over the Compose network.
+rate limits. The bundled Caddy answers 404 for `/internal/*` except
+`/internal/inbound-parse/*` on the API and admin hosts. Brand help-center hosts
+block every internal path, and the domain check travels over the Compose network.
 
 | The tab says | What it means |
 |---|---|

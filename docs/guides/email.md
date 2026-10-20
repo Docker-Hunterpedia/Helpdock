@@ -30,8 +30,13 @@ Your mail provider posts each message to Helpdock. The recipient address picks t
 
 Use `https://<API_HOST>` as the base URL for the endpoints below. Both bundled
 Caddy configurations also accept these webhooks on `ADMIN_HOST`, which serves
-the REST API too. Brand help-center domains block all `/internal/*` paths;
-the API and admin hosts block every internal path except `/internal/inbound-parse/*`.
+the REST API too. With the bundled Caddy, brand help-center domains block all
+`/internal/*` paths; the API and admin hosts block every internal path except
+`/internal/inbound-parse/*`.
+
+For host-proxy and platform installs, see [External proxy](deploy.md#external-proxy):
+nginx and Traefik need the opt-in inbound-parse exception shown there; the
+platform templates ship no path-deny rules.
 
 | Provider | Endpoint | Configure |
 |---|---|---|

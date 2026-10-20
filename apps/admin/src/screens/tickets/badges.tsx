@@ -234,7 +234,8 @@ export function SlaTimer({
   );
 }
 
-const CHANNEL_ICONS = {
+/** DESIGN §5's channel icons; M14-08's routing trail draws its arrival with them too. */
+export const CHANNEL_ICONS = {
   email: Mail,
   chat: MessageCircle,
   telegram: Send,

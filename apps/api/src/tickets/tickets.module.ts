@@ -32,6 +32,8 @@ import { MergeRepository } from './merge/merge.repository.js';
 import { MergeService } from './merge/merge.service.js';
 import { MergeParticipantsHook } from './merge/participants.hook.js';
 import { ChannelReplyDeliveryHooks, ReplyDeliveryHook } from './reply-delivery.hook.js';
+import { TicketRoutingController } from './routing/ticket-routing.controller.js';
+import { TicketRoutingService } from './routing/ticket-routing.service.js';
 import { TicketSpamController } from './ticket-spam.controller.js';
 import { TicketSpamService } from './ticket-spam.service.js';
 import { TicketsController } from './tickets.controller.js';
@@ -84,6 +86,7 @@ export class TicketsModule {
         TicketSpamController,
         TimeEntriesController,
         MergeController,
+        TicketRoutingController,
       ],
       providers: [
         TicketRepository,
@@ -191,6 +194,8 @@ export class TicketsModule {
             new ParticipantsMergeHook(new TicketParticipantsService(new ParticipantsRepository())),
         },
         MergeService,
+        // M14-08's routing trail.
+        TicketRoutingService,
       ],
       // M3-06: applying a macro replies and edits through this very service.
       exports: [TicketsService],

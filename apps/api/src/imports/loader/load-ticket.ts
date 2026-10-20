@@ -6,6 +6,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { arrivalOf } from '../../tickets/routing/arrival.js';
 import { ImportLoadError, type TicketLoad } from './contracts.js';
 import type { ImportScope } from './external-ids.js';
 
@@ -105,6 +106,13 @@ export async function createImportedTicket(
       number: input.record.number ?? null,
       url: input.record.sourceUrl ?? null,
       createdAt: input.record.createdAt,
+      // M14-08. An import runs no rules and assigns no one, so this is the whole trail.
+      ...arrivalOf({
+        entry: 'import',
+        entryId: input.runId,
+        departmentId: input.resolved.departmentId,
+        reason: 'import_mapping',
+      }),
     },
   });
 }

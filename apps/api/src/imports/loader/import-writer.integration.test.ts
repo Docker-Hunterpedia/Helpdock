@@ -1041,6 +1041,14 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
       .where(eq(ticketActivity.ticketId, loaded.ticketId));
     const sourceEvents = history.filter((event) => event.action === 'ticket.imported.event');
     expect(sourceEvents).toHaveLength(2);
+    // M14-08: an import records its arrival on its own row, and nothing ran after it.
+    expect(history.find((event) => event.action === 'ticket.imported')?.to?.arrival).toEqual({
+      entry: 'import',
+      entryId: input.runId,
+      departmentId: input.resolved.departmentId,
+      reason: 'import_mapping',
+    });
+    expect(history.some((event) => event.action === 'ticket.created')).toBe(false);
     expect(sourceEvents.find((event) => event.actorType === 'system')).toMatchObject({
       from: { status: 'open' },
       createdAt: new Date('2019-01-01T21:00:00Z'),

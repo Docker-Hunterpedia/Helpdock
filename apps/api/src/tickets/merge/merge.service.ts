@@ -33,6 +33,7 @@ import {
   type LifecycleContext,
 } from '../lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from '../lifecycle/lifecycle-failure.js';
+import { arrivalOf, requestArrival } from '../routing/arrival.js';
 import { activityActorFor, writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
 import { TicketRepository, type TicketWithStatus } from '../tickets.repository.js';
@@ -518,6 +519,7 @@ export class MergeService {
         statusId: status.id,
         priority: created.priority,
         splitFromId: original.id,
+        ...arrivalOf(requestArrival(context.actor, created.departmentId)),
       },
     });
 

@@ -24,6 +24,11 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../../tickets/lifecycle/lifecycle.service.js';
+import {
+  type ArrivalEntryPoint,
+  addressWrittenTo,
+  arrivalOf,
+} from '../../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../../tickets/ticket-events.js';
 import type { TicketRepository } from '../../tickets/tickets.repository.js';
@@ -63,6 +68,8 @@ export interface RouteContext {
   /** The mailbox: its department takes a new ticket, its policy the remote images. */
   readonly mailbox: {
     readonly id: string;
+    /** The address it receives for: M14-08 prefers it as the address written to. */
+    readonly address: string;
     readonly departmentId: string;
     readonly remoteImages: 'block' | 'proxy';
     readonly authFailureIsSpam: boolean;
@@ -108,6 +115,20 @@ export type RouteOutcome =
       /** Filed under Spam (M2-07): never auto-replied, since its sender may be forged. */
       readonly spam: boolean;
     };
+
+/** M14-08: the mailbox a message came in through, and the address it was written to. */
+const mailboxEntry = (context: RouteContext, message: EmailInboundMessage): ArrivalEntryPoint => {
+  const address = addressWrittenTo(
+    message.email.recipients,
+    context.mailbox.address,
+    message.email.deliveryAddress,
+  );
+  return {
+    entry: 'mailbox',
+    entryId: context.mailbox.id,
+    ...(address === undefined ? {} : { address }),
+  };
+};
 
 /** How many copied-in addresses one message may add; a mailing blast is not a CC line. */
 export const MAX_CC_PER_MESSAGE = 20;
@@ -323,7 +344,16 @@ export class ConversationRouter {
       departmentId: ticket.departmentId,
       actor,
       action: 'ticket.created',
-      to: { subject: ticket.subject, statusId: status.id, priority: ticket.priority },
+      to: {
+        subject: ticket.subject,
+        statusId: status.id,
+        priority: ticket.priority,
+        ...arrivalOf({
+          ...mailboxEntry(context, message),
+          departmentId: ticket.departmentId,
+          reason: referenced === undefined ? 'entry_department' : 'referenced_ticket',
+        }),
+      },
     });
 
     if (referenced !== undefined) {
@@ -379,6 +409,7 @@ export class ConversationRouter {
           lifecycleContext(context, actor),
           candidate.ticket,
           candidate.status,
+          mailboxEntry(context, message),
         );
     const target = landing.ticket;
     if (target.id !== candidate.ticket.id) {

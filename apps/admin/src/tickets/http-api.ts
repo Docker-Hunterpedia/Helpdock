@@ -20,6 +20,7 @@ import type {
   TicketMessage,
   TicketMessagePage,
   TicketParticipantList,
+  TicketRouting,
   TicketSpamSender,
   TicketSplitRequest,
   TicketStatusList,
@@ -47,6 +48,7 @@ import {
   ticketMessagePageSchema,
   ticketMessageSchema,
   ticketParticipantListSchema,
+  ticketRoutingSchema,
   ticketSchema,
   ticketSpamSenderSchema,
   ticketStatusListSchema,
@@ -199,6 +201,12 @@ export class HttpTicketsApi implements TicketsApi {
         `${this.#ticket(brandId, ticketId)}/participants`,
         request,
       ),
+    );
+  }
+
+  async routing(brandId: string, ticketId: string): Promise<TicketRouting> {
+    return ticketRoutingSchema.parse(
+      await this.#transport.request('GET', `${this.#ticket(brandId, ticketId)}/routing`),
     );
   }
 

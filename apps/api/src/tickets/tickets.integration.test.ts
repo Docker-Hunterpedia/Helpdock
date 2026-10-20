@@ -22,6 +22,7 @@ import {
   uuidv7,
   withSystem,
   withTenant,
+  workflowRules,
 } from '@helpdock/db';
 import { outboxEvents, silentLogger } from '@helpdock/jobs';
 import type { ContactStats, ErrorResponse } from '@helpdock/schemas';
@@ -37,6 +38,7 @@ import {
   type TicketList,
   type TicketMessage,
   type TicketMessagePage,
+  type TicketRouting,
   type TicketStatus,
   type TicketStatusList,
   type TicketStatusUsage,
@@ -1691,6 +1693,16 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(status).toBe(404);
     });
 
+    it('answers 404 to its routing trail (M14-08)', async () => {
+      const { status } = await call(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${billingTicket}/routing`,
+        sam,
+      );
+
+      expect(status).toBe(404);
+    });
+
     it('refuses a reply to it', async () => {
       const { status } = await call(
         'POST',
@@ -1808,6 +1820,135 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(
         (await call('GET', `${brandPath(seeded.brandId)}/tickets/${billingTicket}`, ada)).status,
       ).toBe(200);
+    });
+  });
+
+  // ---------------------------------------------------------- routing trail
+
+  describe('the routing trail (M14-08)', () => {
+    it('records how a person filed a ticket, and reads the automatic steps after it in words', async () => {
+      const detail = await createTicket(sam);
+      const ticketId = detail.ticket.id;
+      expect(detail.activity[0]?.to?.arrival).toEqual({
+        entry: 'staff',
+        entryId: sam.id,
+        departmentId: support,
+        reason: 'chosen_by_staff',
+      });
+
+      const ruleId = uuidv7();
+      const goneRuleId = uuidv7();
+      const at = (seconds: number) =>
+        new Date(Date.parse(detail.ticket.createdAt) + seconds * 1000);
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx.insert(workflowRules).values({
+          id: ruleId,
+          brandId: seeded.brandId,
+          name: 'Urgent words',
+          kind: 'event',
+          trigger: 'ticket.created',
+          conditions: {},
+          actions: [],
+          position: 900,
+          enabled: false,
+        });
+        const base = { brandId: seeded.brandId, ticketId, departmentId: support };
+        await tx.insert(ticketActivity).values([
+          {
+            ...base,
+            actorType: 'system',
+            actorId: `rule:${ruleId}`,
+            via: 'rule',
+            action: 'ticket.updated',
+            from: { priority: 'medium' },
+            to: { priority: 'urgent' },
+            createdAt: at(1),
+          },
+          {
+            ...base,
+            actorType: 'system',
+            actorId: `rule:${goneRuleId}`,
+            via: 'rule',
+            action: 'ticket.updated',
+            from: { priority: 'urgent' },
+            to: { priority: 'high' },
+            createdAt: at(2),
+          },
+          {
+            ...base,
+            actorType: 'system',
+            actorId: 'assignment',
+            via: 'system',
+            action: 'ticket.updated',
+            from: { assigneeId: null },
+            to: { assigneeId: sam.id, assignedBy: 'round_robin' },
+            createdAt: at(3),
+          },
+          {
+            ...base,
+            actorType: 'staff',
+            actorId: sam.id,
+            via: 'ui',
+            action: 'ticket.updated',
+            from: { priority: 'high' },
+            to: { priority: 'low' },
+            createdAt: at(4),
+          },
+        ]);
+      });
+
+      const { status, body } = await call<TicketRouting>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticketId}/routing`,
+        sam,
+      );
+
+      expect(status).toBe(200);
+      expect(body.origin).toEqual({
+        kind: 'recorded',
+        channel: 'manual',
+        entry: 'staff',
+        address: null,
+        reason: 'chosen_by_staff',
+        department: { id: support, name: 'Support', nameAr: null },
+      });
+      expect(body.steps.map(({ change, by }) => ({ change, by }))).toEqual([
+        {
+          change: { kind: 'priority', from: 'medium', to: 'urgent' },
+          by: { kind: 'rule', ruleId, name: 'Urgent words' },
+        },
+        {
+          change: { kind: 'priority', from: 'urgent', to: 'high' },
+          by: { kind: 'rule', ruleId: goneRuleId, name: null },
+        },
+        {
+          change: { kind: 'assigned', assignee: { id: sam.id, name: expect.any(String) } },
+          by: { kind: 'assignment', mode: 'round_robin' },
+        },
+      ]);
+    });
+
+    it('says only "arrived on" for a ticket whose creation recorded no arrival', async () => {
+      const { ticket } = await createTicket(sam);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(ticketActivity)
+          .set({ to: { subject: ticket.subject } })
+          .where(
+            and(
+              eq(ticketActivity.ticketId, ticket.id),
+              eq(ticketActivity.action, 'ticket.created'),
+            ),
+          ),
+      );
+
+      const { body } = await call<TicketRouting>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}/routing`,
+        sam,
+      );
+
+      expect(body).toEqual({ origin: { kind: 'unrecorded', channel: 'manual' }, steps: [] });
     });
   });
 

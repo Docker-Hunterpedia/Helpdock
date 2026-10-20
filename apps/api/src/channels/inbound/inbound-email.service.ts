@@ -126,6 +126,7 @@ export class InboundEmailService {
               brandId: target.brandId,
               mailbox: {
                 id: mailbox.id,
+                address: mailbox.address,
                 departmentId: mailbox.departmentId,
                 remoteImages: mailbox.remoteImages,
                 authFailureIsSpam: mailbox.authFailureIsSpam,

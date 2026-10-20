@@ -30,6 +30,7 @@ import type {
   Mailbox,
   MailboxList,
   TicketMessagePage,
+  TicketRouting,
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
@@ -163,7 +164,7 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
     }) as Env;
 
   const call = <T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     who: Person | null,
     payload?: unknown,
@@ -653,6 +654,20 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         departmentId: support,
       });
 
+      // M14-08: the arrival names the mailbox's address and why it took the department.
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${ticket?.id}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        entry: 'mailbox',
+        address: 'hello@helpdock.test',
+        reason: 'entry_department',
+        department: { id: support },
+      });
+
       // The thread's read: the card's facts, and no remote URL.
       const page = await call<TicketMessagePage>(
         'GET',
@@ -789,6 +804,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       expect(stranger?.ticketId).not.toBe(ticket?.id);
       const separate = await ticketOf(stranger?.ticketId ?? '');
       expect(separate?.departmentId).toBe(ticket?.departmentId);
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${separate?.id}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({ entry: 'mailbox', reason: 'referenced_ticket' });
 
       const page = await call<TicketMessagePage>(
         'GET',
@@ -851,6 +872,66 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       });
       // The secondary's contact is a CC of the primary after a merge (§2.4), so it threads there.
       expect((await messageOf('merge-c@x'))?.ticketId).toBe(primary?.ticketId);
+    });
+
+    it('records a continuation as arriving at the address the reply was written to (M14-08)', async () => {
+      const from = unique('continues');
+      await parse({
+        from: { address: from },
+        to: [{ address: 'hello@helpdock.test' }],
+        subject: 'Order 77',
+        text: 'Where is it?',
+        messageId: '<continue-1@acme.de>',
+      });
+      const original = await messageOf('continue-1@acme.de');
+      const [closed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ id: ticketStatuses.id })
+          .from(ticketStatuses)
+          .where(and(eq(ticketStatuses.systemState, 'closed'), eq(ticketStatuses.isSpam, false))),
+      );
+      const closing = await call('PATCH', `${brandPath()}/tickets/${original?.ticketId}`, ada, {
+        statusId: closed?.id,
+      });
+      expect(closing.status).toBe(200);
+      await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+        reopenPolicy: { kind: 'never' },
+      });
+      // A second mailbox in another department: the reply comes in there, and
+      // the continuation stays in the closed ticket's department.
+      expect(
+        (await createMailbox({ address: 'refunds@helpdock.test', departmentId: billing })).status,
+      ).toBe(201);
+
+      try {
+        await parse({
+          from: { address: from },
+          to: [{ address: 'refunds@helpdock.test' }],
+          subject: 'Re: Order 77',
+          text: 'Still nothing.',
+          messageId: '<continue-2@acme.de>',
+          inReplyTo: '<continue-1@acme.de>',
+        });
+      } finally {
+        await call('PATCH', `${brandPath()}/ticketing/reply-behaviour`, ada, {
+          reopenPolicy: { kind: 'within_days', days: 7 },
+        });
+      }
+
+      const reply = await messageOf('continue-2@acme.de');
+      expect(reply?.ticketId).not.toBe(original?.ticketId);
+      const routing = await call<TicketRouting>(
+        'GET',
+        `${brandPath()}/tickets/${reply?.ticketId}/routing`,
+        ada,
+      );
+      expect(routing.body.origin).toMatchObject({
+        kind: 'recorded',
+        entry: 'mailbox',
+        address: 'refunds@helpdock.test',
+        reason: 'continued_from',
+        department: { id: support },
+      });
     });
 
     it('drops automated mail unless the mailbox allow-lists the sender, and blocked senders', async () => {
@@ -1020,7 +1101,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         imap: TEST_IMAP,
       });
 
-    const deliver = async (subject: string, from: string): Promise<void> => {
+    const deliver = async (
+      subject: string,
+      from: string,
+      headers?: Readonly<Record<string, string>>,
+      to = 'desk@helpdock.test',
+    ): Promise<void> => {
       const transport = nodemailer.createTransport({
         host: greenmail.getHost(),
         port: greenmail.getMappedPort(SMTP_PORT),
@@ -1029,7 +1115,9 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
       });
       await transport.sendMail({
         from,
-        to: 'desk@helpdock.test',
+        to,
+        envelope: { from, to: ['desk@helpdock.test'] },
+        headers,
         subject,
         text: `Body of ${subject}`,
       });
@@ -1080,6 +1168,37 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
           .where(eq(contacts.name, from)),
       );
       expect(again).toHaveLength(1);
+
+      // M14-08: an IMAP delivery may have only third parties in To/Cc.
+      for (const [headers, expected] of [
+        [{ 'Delivered-To': 'alias@acme.test' }, 'alias@acme.test'],
+        [{ 'X-Original-To': 'original@acme.test' }, 'original@acme.test'],
+        [{}, 'desk@helpdock.test'],
+        [{ 'Delivered-To': 'a'.repeat(321) }, 'desk@helpdock.test'],
+      ] as const) {
+        const sender = unique('bcc');
+        await deliver('Bcc arrival', sender, headers, 'colleague@acme.test');
+        await poller()({ data: { brandId: seeded.brandId, mailboxId: mailbox.body.id } });
+        const [bccTicket] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select({ id: tickets.id })
+            .from(tickets)
+            .innerJoin(contacts, eq(contacts.id, tickets.contactId))
+            .where(eq(contacts.name, sender)),
+        );
+        expect(bccTicket).toBeDefined();
+        const routing = await call<TicketRouting>(
+          'GET',
+          `${brandPath()}/tickets/${bccTicket?.id}/routing`,
+          ada,
+        );
+        expect(routing.status).toBe(200);
+        expect(routing.body.origin).toMatchObject({
+          kind: 'recorded',
+          entry: 'mailbox',
+          address: expected,
+        });
+      }
     });
 
     it('records a refused sign-in as the mailbox’s health, and does nothing for a mailbox that is gone', async () => {

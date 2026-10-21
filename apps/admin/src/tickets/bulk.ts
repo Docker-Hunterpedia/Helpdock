@@ -176,15 +176,27 @@ export function failureOf(error: unknown): BulkFailure {
   }
 
   // An answer with a 4xx status, or one of the api's coded refusals, is the api saying no.
-  if (isAuthError(error) && (error.code !== 'unavailable' || isClientError(error.status))) {
-    return { kind: 'failed' };
-  }
-  if (isTicketLifecycleError(error)) {
-    return { kind: 'failed' };
+  if (isAuthError(error)) {
+    return error.code !== 'unavailable' || isClientError(error.status)
+      ? { kind: 'failed' }
+      : { kind: 'unknown' };
   }
 
-  return { kind: 'unknown' };
+  return isCodedRefusal(error) ? { kind: 'failed' } : { kind: 'unknown' };
 }
+
+/**
+ * Every refusal the transport builds from a response that carries a code is an
+ * `Error` subclass of its own (`TicketingError`, `ContactError`, …). What it
+ * throws for everything else is a built-in or a schema's: a failed `fetch` is a
+ * `TypeError`, a body that is not the api's a `SyntaxError` or a `ZodError`.
+ */
+const isCodedRefusal = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.constructor !== Error &&
+  !(error instanceof TypeError) &&
+  !(error instanceof SyntaxError) &&
+  error.name !== 'ZodError';
 
 const isClientError = (status: number | undefined): boolean =>
   status !== undefined && status >= 400 && status < 500;

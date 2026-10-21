@@ -254,3 +254,37 @@ test('keeps the bar inside the list column, clear of the open ticket’s compose
     writing.y + writing.height <= bounds.y;
   expect(apart).toBe(true);
 });
+
+for (const width of [1280, 768]) {
+  test(`fits the actions on one row under the count, at ${String(width)} px`, async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTickets(page, locale, 'all');
+    await page.setViewportSize({ width, height: 800 });
+    if (width < 1024) {
+      // Below 1024 px the list is a drawer.
+      await page.getByRole('button', { name: t('tickets:list.open') }).click();
+    }
+    await boxOf(page, locale, 'HD-1042').click();
+    const bar = page.getByRole('toolbar', { name: t('tickets:bulk.bar.label') });
+    await expect(bar).toBeVisible();
+
+    // Two rows: every action button on one line, the count and Clear on the other.
+    const tops = await Promise.all(
+      ['status', 'close', 'assign', 'snooze', 'more'].map(async (name) => {
+        const box = await bar
+          .getByRole('button', { name: t(`tickets:bulk.bar.${name}` as 'tickets:bulk.bar.more') })
+          .boundingBox();
+        return box?.y ?? Number.NaN;
+      }),
+    );
+    expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(2);
+    const clear = await bar
+      .getByRole('button', { name: t('tickets:bulk.bar.clear') })
+      .boundingBox();
+    expect(clear?.y ?? Number.NaN).toBeLessThan(Math.min(...tops));
+  });
+}

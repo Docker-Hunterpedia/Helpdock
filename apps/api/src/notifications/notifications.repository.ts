@@ -480,10 +480,13 @@ export class NotificationsRepository {
         messageChannel: ticketMessages.channel,
         detail: notifications.detail,
         bulkOperationId: notifications.bulkOperationId,
-        // The whole of the operation's assignments to this person, not only the rows
-        // in the window or the page, so the bell's "assigned you N" is a total.
+        // The whole of the operation's assignments to this person that they can still
+        // see, not only the rows in the window or the page, so the bell's "assigned you
+        // N" is a total. The join to `tickets` runs under the reader's policy, as the
+        // panel's own does, so a ticket in a department they cannot read is not counted.
         bulkOperationCount: sql<number>`(
           SELECT count(*)::int FROM ${notifications} AS same_operation
+          INNER JOIN ${tickets} AS visible ON visible.id = same_operation.ticket_id
           WHERE same_operation.bulk_operation_id = ${notifications.bulkOperationId}
             AND same_operation.user_id = ${notifications.userId}
         )`,

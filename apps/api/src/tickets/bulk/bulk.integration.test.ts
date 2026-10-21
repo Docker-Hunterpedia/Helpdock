@@ -1050,6 +1050,29 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
       expect(items.map((item) => item.bulkOperationId)).toEqual([operationId, operationId]);
     });
 
+    it('counts only the operation’s tickets the reader can still see', async () => {
+      const [stays, moves] = await createMany(2, { departmentId: billing });
+      const named = [stays, moves] as string[];
+      const applied = await previewAndApply(ada, named, { assigneeId: bea.id });
+      const operationId = applied.body.operationId as string;
+      for (const row of await outboxOf('ticket.assigned', named)) {
+        await dispatch('ticket.assigned', row);
+      }
+      // Bea works Billing only: once one ticket moves to Support it is out of her sight.
+      expect(
+        (await call('PATCH', `${brandPath()}/tickets/${moves}`, ada, { departmentId: support }))
+          .status,
+      ).toBe(200);
+
+      const panel = await call<{
+        items: { bulkOperationId: string | null; bulkOperationCount: number }[];
+      }>('GET', `${brandPath()}/notifications`, bea);
+
+      const rows = panel.body.items.filter((row) => row.bulkOperationId === operationId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.bulkOperationCount).toBe(1);
+    });
+
     it('withdraws nothing for tickets the Undo could not follow out of sight', async () => {
       const mine = await createMany(2, { departmentId: billing });
       const applied = await previewAndApply(bea, mine, {

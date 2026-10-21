@@ -1,6 +1,8 @@
 import type { BulkResponse } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { AuthError } from '../auth/api.js';
+import { ContactError } from '../contacts/api.js';
+import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from './api.js';
 import {
   type BulkChoice,
@@ -145,9 +147,20 @@ describe('failureOf', () => {
     expect(failureOf(new AuthError('unavailable', { status: 403 }))).toEqual({ kind: 'failed' });
   });
 
+  it('takes any coded refusal the transport builds as the api saying no', () => {
+    expect(failureOf(new TicketingError('assignee-above-actor'))).toEqual({ kind: 'failed' });
+    expect(failureOf(new ContactError('merge-self'))).toEqual({ kind: 'failed' });
+  });
+
   it('does not know what happened when no answer the api stands behind came back', () => {
     expect(failureOf(new AuthError('unavailable'))).toEqual({ kind: 'unknown' });
     expect(failureOf(new AuthError('unavailable', { status: 502 }))).toEqual({ kind: 'unknown' });
     expect(failureOf(new Error('boom'))).toEqual({ kind: 'unknown' });
+    expect(failureOf(new TypeError('Failed to fetch'))).toEqual({ kind: 'unknown' });
+    expect(failureOf(new SyntaxError('Unexpected token <'))).toEqual({ kind: 'unknown' });
+    expect(failureOf(Object.assign(new Error('bad'), { name: 'ZodError' }))).toEqual({
+      kind: 'unknown',
+    });
+    expect(failureOf('a string')).toEqual({ kind: 'unknown' });
   });
 });

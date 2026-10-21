@@ -55,6 +55,13 @@ type MenuName =
 
 const STALE_MS = 30_000;
 
+/**
+ * The five actions share a 360 px column with its padding. A small button's
+ * default 64 px minimum width and 12 px padding put More on a third line, so they
+ * take their content's width and an 8 px (§4) inline padding.
+ */
+const ACTION = { minWidth: 0, paddingInline: 2 } as const;
+
 export interface BulkBarProps {
   readonly brandId: string;
   readonly count: number;
@@ -137,13 +144,14 @@ export function BulkBar({
       </Box>
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-        <Button size="small" variant="text" color="inherit" {...opener('status')}>
+        <Button size="small" variant="text" color="inherit" sx={ACTION} {...opener('status')}>
           {t('tickets:bulk.bar.status')}
         </Button>
         <Button
           size="small"
           variant="text"
           color="inherit"
+          sx={ACTION}
           disabled={busy}
           onClick={() => {
             onChoose({ kind: 'close' });
@@ -151,16 +159,17 @@ export function BulkBar({
         >
           {t('tickets:bulk.bar.close')}
         </Button>
-        <Button size="small" variant="text" color="inherit" {...opener('assignee')}>
+        <Button size="small" variant="text" color="inherit" sx={ACTION} {...opener('assignee')}>
           {t('tickets:bulk.bar.assign')}
         </Button>
-        <Button size="small" variant="text" color="inherit" {...opener('snooze')}>
+        <Button size="small" variant="text" color="inherit" sx={ACTION} {...opener('snooze')}>
           {t('tickets:bulk.bar.snooze')}
         </Button>
         <Button
           size="small"
           variant="text"
           color="inherit"
+          sx={ACTION}
           startIcon={<Ellipsis size={16} aria-hidden="true" />}
           {...opener('more')}
         >

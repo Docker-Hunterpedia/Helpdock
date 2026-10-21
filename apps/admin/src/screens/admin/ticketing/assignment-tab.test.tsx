@@ -5,7 +5,7 @@ import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
 import { TicketingError } from '../../../ticketing/api.js';
 import { atCap } from './assignment-agents.tsx';
-import { parseWhole } from './assignment-editor.tsx';
+import { idleAwayChoices, parseWhole } from './assignment-editor.tsx';
 
 /**
  * The Assignment tab against the fixture (M1-07). What is asserted is what the
@@ -52,6 +52,22 @@ describe('parseWhole', () => {
     expect(parseWhole('501', 500)).toBeUndefined();
     expect(parseWhole('2.5', 500)).toBeUndefined();
     expect(parseWhole('eight', 500)).toBeUndefined();
+  });
+});
+
+describe('idleAwayChoices (M14-18)', () => {
+  it('offers the presets from 10 to 240 minutes', () => {
+    expect(idleAwayChoices(null)).toEqual([10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
+    expect(idleAwayChoices(30)).toEqual([10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
+  });
+
+  it('adds a value saved through the API, in order, so the form never hides what is stored', () => {
+    expect(idleAwayChoices(25)).toEqual([10, 15, 20, 25, 30, 45, 60, 90, 120, 180, 240]);
+  });
+
+  it('does not add a value the API would refuse', () => {
+    expect(idleAwayChoices(5)).toEqual([10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
+    expect(idleAwayChoices(999)).toEqual([10, 15, 20, 30, 45, 60, 90, 120, 180, 240]);
   });
 });
 
@@ -122,6 +138,71 @@ describe('the editor', () => {
     await user.click(screen.getByRole('checkbox', { name: /Unassign when the agent is offline/ }));
     expect(screen.queryByText(/Enter a whole number of minutes/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  describe('mark idle agents away after (M14-18)', () => {
+    const idleSelect = () => screen.getByRole('combobox', { name: 'Mark idle agents away after' });
+
+    it('starts off for a department that has no limit, and says what away means', async () => {
+      await renderAssignment();
+
+      expect(idleSelect()).toHaveTextContent('Off');
+      expect(
+        screen.getByText(
+          /Away agents are not picked by the rotation\. Any activity brings them back/,
+        ),
+      ).toBeVisible();
+      expect(screen.getByText(/never what was done/)).toBeVisible();
+    });
+
+    it('shows the stored limit of the department being edited', async () => {
+      const { user } = await renderAssignment();
+
+      await user.click(screen.getByRole('button', { name: 'Edit Billing' }));
+      await screen.findByRole('heading', { name: 'Assignment · Billing' });
+
+      expect(idleSelect()).toHaveTextContent('30 minutes');
+    });
+
+    it('saves a limit, and turns it off again with null', async () => {
+      const { user, ticketing } = await renderAssignment();
+      const update = vi.spyOn(ticketing, 'updateAssignment');
+
+      await user.click(idleSelect());
+      await user.click(await screen.findByRole('option', { name: '45 minutes' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText('Support saved')).toBeInTheDocument();
+      expect(update.mock.lastCall?.[2]).toMatchObject({ idleAwayMinutes: 45 });
+      expect(idleSelect()).toHaveTextContent('45 minutes');
+
+      await user.click(idleSelect());
+      await user.click(await screen.findByRole('option', { name: 'Off' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(update.mock.lastCall?.[2]).toMatchObject({ idleAwayMinutes: null }),
+      );
+    });
+
+    it('offers nothing below 10 minutes or above 240', async () => {
+      const { user } = await renderAssignment();
+
+      await user.click(idleSelect());
+      const options = (await screen.findAllByRole('option')).map((option) => option.textContent);
+
+      expect(options[0]).toBe('Off');
+      expect(options[1]).toBe('10 minutes');
+      expect(options.at(-1)).toBe('240 minutes');
+    });
+
+    it('goes back to what is saved on Cancel', async () => {
+      const { user } = await renderAssignment();
+
+      await user.click(idleSelect());
+      await user.click(await screen.findByRole('option', { name: '60 minutes' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(idleSelect()).toHaveTextContent('Off');
+    });
   });
 
   it('puts the card back to what is saved on Cancel', async () => {

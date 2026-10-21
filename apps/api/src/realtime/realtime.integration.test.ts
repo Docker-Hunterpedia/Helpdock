@@ -33,7 +33,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInResponseForTest } from '../testing/staff-sign-in.js';
 import { PresenceService } from './presence.service.js';
-import { presenceSocketKey } from './presence.store.js';
+import { presenceIdleKey, presenceSocketKey } from './presence.store.js';
 import { SOCKET_EVENT_RULES } from './socket-rate-limit.js';
 
 /**
@@ -422,6 +422,58 @@ describe.skipIf(!hasDocker)('the realtime gateway', () => {
       expect((await presenceOf(1, seeded.brandId, token)).body.presence[seeded.userId]).toBe(
         'away',
       );
+    });
+
+    it('ends an idle away on a report of activity, on every replica, and says so once (M14-18)', async () => {
+      const { token } = await signIn();
+      const socket = await connect(0, token);
+      await join(socket, brandRoom(seeded.brandId));
+      const changes: { data: { userId: string; status: PresenceStatus } }[] = [];
+      socket.on(REALTIME_EVENTS.presenceChanged, (envelope: (typeof changes)[number]) => {
+        changes.push(envelope);
+      });
+
+      expect(
+        await socket.emitWithAck(REALTIME_EVENTS.presenceActive, { brandId: seeded.brandId }),
+      ).toEqual({
+        ok: true,
+        data: { status: 'online', idleEnded: false },
+      });
+
+      // What the sweep of any replica does when the department's limit has passed.
+      await redis.sadd(presenceIdleKey(seeded.brandId), seeded.userId);
+      expect((await presenceOf(1, seeded.brandId, token)).body.presence[seeded.userId]).toBe(
+        'away',
+      );
+
+      const report = { brandId: seeded.brandId };
+      expect(await socket.emitWithAck(REALTIME_EVENTS.presenceActive, report)).toEqual({
+        ok: true,
+        data: { status: 'online', idleEnded: true },
+      });
+      expect(await socket.emitWithAck(REALTIME_EVENTS.presenceActive, report)).toEqual({
+        ok: true,
+        data: { status: 'online', idleEnded: false },
+      });
+      expect((await presenceOf(1, seeded.brandId, token)).body.presence[seeded.userId]).toBe(
+        'online',
+      );
+      expect(
+        await eventually(() =>
+          changes.some(
+            (change) => change.data.userId === seeded.userId && change.data.status === 'online',
+          ),
+        ),
+      ).toBe(true);
+    });
+
+    it('answers a report of activity for a brand the socket never joined with offline', async () => {
+      const { token } = await signIn();
+      const socket = await connect(0, token);
+
+      expect(
+        await socket.emitWithAck(REALTIME_EVENTS.presenceActive, { brandId: seeded.brandId }),
+      ).toEqual({ ok: true, data: { status: 'offline', idleEnded: false } });
     });
 
     it('takes someone offline once their liveness key has expired', async () => {

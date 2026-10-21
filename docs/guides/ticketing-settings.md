@@ -562,6 +562,7 @@ side card; the first department is open on arrival. Under the list, **Agents in
 | Mode | **Manual** (default), **Round-robin**, **Skill-based** | Manual leaves new tickets unassigned. Round-robin gives each to the next eligible agent. Skill-based does the same among the eligible agents whose skills match one of the ticket's tags, and among all of them when none match. |
 | Load cap per agent | empty (no cap) or 1–500 | Open and escalated tickets an agent may hold **in this department** before the rotation skips them. On-hold, closed, spam and merged tickets do not count. |
 | Unassign when the agent is offline for | off (default), or 1–1440 minutes (default 15) | When the agent's last socket in the brand goes, their open tickets here are unassigned after this long unless they came back. |
+| Mark idle agents away after | off (default), or 10–240 minutes | When an agent in this department's rotation has been inactive this long — no pointer, key or touch in any of their tabs — they are marked **Away**: the rotation stops picking them and the widget stops listing them as online. Any activity brings them back, and they see "You were set to away while idle" once. Only "active in the last minute" is reported, never what was done. The tickets they hold stay with them: away is not offline. Someone in several departments takes the shortest limit. Choosing Away yourself is never undone by activity. |
 | When an agent loses access | **Leave them unassigned** (default) or **Round-robin the tickets** | What happens to a ticket whose assignee can no longer work it — deactivated, removed from the brand, or their departments narrowed. |
 
 ### Who the rotation picks
@@ -575,7 +576,7 @@ by id so every replica agrees. Eligible means all of:
 - they are **in rotation** here. With no choice stored, Agents are in and Team
   Leaders and Admins are out — an Admin reaches every department and should not
   find tickets they never asked for. The checkbox on their row stores a choice;
-- they are **online**. Away is not online;
+- they are **online**. Away is not online, whether they chose it or the department's idle limit set it;
 - they are **under the cap**. An agent at their cap is skipped, never queued:
   the ticket goes to the next eligible agent, or stays unassigned.
 

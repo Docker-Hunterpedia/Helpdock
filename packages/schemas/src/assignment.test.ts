@@ -33,6 +33,19 @@ describe('departmentAssignmentUpdateRequestSchema', () => {
     ).toBe(false);
   });
 
+  it('takes the idle limit from 10 to 240 minutes, and null for off (M14-18)', () => {
+    for (const idleAwayMinutes of [10, 30, 240, null]) {
+      expect(departmentAssignmentUpdateRequestSchema.parse({ idleAwayMinutes })).toEqual({
+        idleAwayMinutes,
+      });
+    }
+    for (const idleAwayMinutes of [0, 9, 241, 30.5, '30']) {
+      expect(departmentAssignmentUpdateRequestSchema.safeParse({ idleAwayMinutes }).success).toBe(
+        false,
+      );
+    }
+  });
+
   it('refuses a mode or on_unassign value it does not know', () => {
     expect(departmentAssignmentUpdateRequestSchema.safeParse({ mode: 'random' }).success).toBe(
       false,

@@ -174,6 +174,16 @@ export class RedisStub {
     return fields.size;
   }
 
+  async hsetnx(key: string, field: string, value: string): Promise<number> {
+    const hash = this.#entryOf(key, 'hash');
+    if (hash.has(field)) {
+      return 0;
+    }
+    hash.set(field, value);
+
+    return 1;
+  }
+
   async hget(key: string, field: string): Promise<string | null> {
     const entry = this.#live(key);
     return entry?.data.kind === 'hash' ? (entry.data.value.get(field) ?? null) : null;
@@ -386,6 +396,14 @@ class ChainableStub {
 
   hset(...args: Parameters<RedisStub['hset']>): this {
     return this.#queued(() => this.#stub.hset(...args));
+  }
+
+  hsetnx(...args: Parameters<RedisStub['hsetnx']>): this {
+    return this.#queued(() => this.#stub.hsetnx(...args));
+  }
+
+  hdel(...args: Parameters<RedisStub['hdel']>): this {
+    return this.#queued(() => this.#stub.hdel(...args));
   }
 
   set(...args: Parameters<RedisStub['set']>): this {

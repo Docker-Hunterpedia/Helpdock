@@ -2,8 +2,9 @@ import { brandRoom, PRESENCE_REAPER_INTERVAL_MS, REALTIME_EVENTS } from '@helpdo
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedisStub } from '../testing/redis-stub.js';
 import { silentLogger } from '../testing/silent-logger.js';
+import type { IdleAwayPolicy } from './idle-away.policy.js';
 import { PresenceService } from './presence.service.js';
-import { PresenceStore, presenceSocketKey } from './presence.store.js';
+import { PresenceStore, presenceActiveKey, presenceSocketKey } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
 import type { StaffOfflineHook } from './staff-offline.hook.js';
 
@@ -197,6 +198,179 @@ describe('PresenceService', () => {
       await service.heartbeat('s1', [{ brandId: BRAND, userId: LINA, socketId: 's1' }]);
 
       expect(announced).toEqual([]);
+    });
+  });
+
+  describe('idle away (M14-18)', () => {
+    const MINUTE = 60_000;
+    let clock: number;
+    let limits: Map<string, number>;
+    let idleService: PresenceService;
+    let limitsFor: IdleAwayPolicy['limitsFor'];
+
+    beforeEach(() => {
+      clock = 10_000_000;
+      limits = new Map([[LINA, 30]]);
+      limitsFor = () => Promise.resolve(limits);
+      store = new PresenceStore(redis.asRedis(), () => clock);
+      idleService = new PresenceService(store, publisher, offline, silentLogger(), {
+        limitsFor: (brandId) => limitsFor(brandId),
+      });
+    });
+
+    const joinLina = (): Promise<unknown> =>
+      idleService.join({ brandId: BRAND, userId: LINA, socketId: 's1' });
+
+    it('marks someone away when their limit has passed, and announces it once', async () => {
+      await joinLina();
+      announced.length = 0;
+
+      await idleService.sweep(clock + 30 * MINUTE);
+      await idleService.sweep(clock + 31 * MINUTE);
+
+      expect(announced).toEqual([announcement('away')]);
+      expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away' });
+    });
+
+    it('leaves them online one millisecond before the limit', async () => {
+      await joinLina();
+      announced.length = 0;
+
+      await idleService.sweep(clock + 30 * MINUTE - 1);
+
+      expect(announced).toEqual([]);
+      expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'online' });
+    });
+
+    it('restarts the count whenever they report activity', async () => {
+      await joinLina();
+      clock += 20 * MINUTE;
+      await idleService.active({ brandId: BRAND, userId: LINA });
+      announced.length = 0;
+
+      await idleService.sweep(clock + 29 * MINUTE);
+      expect(announced).toEqual([]);
+
+      await idleService.sweep(clock + 30 * MINUTE);
+      expect(announced).toEqual([announcement('away')]);
+    });
+
+    it('never marks someone whose departments set no limit', async () => {
+      limits.clear();
+      await joinLina();
+      announced.length = 0;
+
+      await idleService.sweep(clock + 24 * 60 * MINUTE);
+
+      expect(announced).toEqual([]);
+    });
+
+    it('uses each person limit, not the shortest in the brand', async () => {
+      const omar = '01937f5e-7e53-7000-8000-000000000002';
+      limits = new Map([
+        [LINA, 10],
+        [omar, 60],
+      ]);
+      await joinLina();
+      await idleService.join({ brandId: BRAND, userId: omar, socketId: 's2' });
+
+      await idleService.sweep(clock + 11 * MINUTE);
+
+      expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away', [omar]: 'online' });
+    });
+
+    it('starts the clock for someone present before they had one', async () => {
+      await joinLina();
+      await redis.hdel(presenceActiveKey(BRAND), LINA);
+      announced.length = 0;
+
+      await idleService.sweep(clock + 40 * MINUTE);
+      expect(announced).toEqual([]);
+
+      clock += 40 * MINUTE;
+      await idleService.sweep(clock + 30 * MINUTE);
+      expect(announced).toEqual([announcement('away')]);
+    });
+
+    it('brings them back on activity, announces it, and says the idle away ended', async () => {
+      await joinLina();
+      await idleService.sweep(clock + 30 * MINUTE);
+      announced.length = 0;
+
+      expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
+        status: 'online',
+        idleEnded: true,
+      });
+      expect(announced).toEqual([announcement('online')]);
+
+      expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
+        status: 'online',
+        idleEnded: false,
+      });
+      expect(announced).toEqual([announcement('online')]);
+    });
+
+    it('does not claim a return for someone who chose away themselves', async () => {
+      await joinLina();
+      await idleService.setStatus({ brandId: BRAND, userId: LINA }, 'away');
+      await idleService.sweep(clock + 30 * MINUTE);
+      announced.length = 0;
+
+      expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
+        status: 'away',
+        idleEnded: false,
+      });
+      expect(announced).toEqual([announcement('away')]);
+    });
+
+    it('answers offline to activity from someone with no socket', async () => {
+      expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
+        status: 'offline',
+        idleEnded: false,
+      });
+      expect(announced).toEqual([]);
+    });
+
+    it('lifts the mark when the department stops asking for it', async () => {
+      await joinLina();
+      await idleService.sweep(clock + 30 * MINUTE);
+      announced.length = 0;
+      limits.clear();
+
+      await idleService.sweep(clock + 31 * MINUTE);
+
+      expect(announced).toEqual([announcement('online')]);
+      expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'online' });
+    });
+
+    it('keeps every mark as it was when the limits cannot be read', async () => {
+      await joinLina();
+      await idleService.sweep(clock + 30 * MINUTE);
+      announced.length = 0;
+      limitsFor = () => Promise.reject(new Error('postgres is down'));
+
+      await idleService.sweep(clock + 31 * MINUTE);
+
+      expect(announced).toEqual([]);
+      expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away' });
+    });
+
+    it('tells the widget listeners when someone goes idle, as for any presence change', async () => {
+      const heard: string[] = [];
+      idleService.onChange((brandId) => heard.push(brandId));
+      await joinLina();
+      heard.length = 0;
+
+      await idleService.sweep(clock + 30 * MINUTE);
+
+      expect(heard).toEqual([BRAND]);
+    });
+
+    it('does not start the offline timer for an idle person: away is not offline', async () => {
+      await joinLina();
+      await idleService.sweep(clock + 30 * MINUTE);
+
+      expect(offline.calls).toEqual([]);
     });
   });
 });

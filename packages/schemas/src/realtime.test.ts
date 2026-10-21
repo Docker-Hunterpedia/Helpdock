@@ -5,6 +5,8 @@ import {
   departmentRoom,
   notificationCreatedSchema,
   parseRoom,
+  presenceActiveAckSchema,
+  presenceActiveSchema,
   presenceChangedEnvelopeSchema,
   presenceSetSchema,
   REALTIME_EVENT_PAYLOADS,
@@ -190,5 +192,25 @@ describe('acknowledgements', () => {
       roomAckSchema.safeParse({ ok: false, error: { code: 'forbidden', message: 'no' } }).success,
     ).toBe(true);
     expect(roomAckSchema.safeParse({ ok: true, error: { code: 'forbidden' } }).success).toBe(false);
+  });
+});
+
+describe('presence:active (M14-18)', () => {
+  it('carries a brand and nothing else', () => {
+    expect(presenceActiveSchema.parse({ brandId: BRAND, key: 'a', element: 'input' })).toEqual({
+      brandId: BRAND,
+    });
+    expect(presenceActiveSchema.safeParse({}).success).toBe(false);
+    expect(presenceActiveSchema.safeParse({ brandId: 'nope' }).success).toBe(false);
+  });
+
+  it('acknowledges with the status and whether an idle away ended', () => {
+    expect(
+      presenceActiveAckSchema.safeParse({ ok: true, data: { status: 'online', idleEnded: true } })
+        .success,
+    ).toBe(true);
+    expect(
+      presenceActiveAckSchema.safeParse({ ok: true, data: { status: 'online' } }).success,
+    ).toBe(false);
   });
 });

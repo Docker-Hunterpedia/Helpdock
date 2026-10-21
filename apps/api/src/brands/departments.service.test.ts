@@ -36,6 +36,7 @@ const department = (id: string, name: string, sortOrder: number): Department => 
   loadCap: null,
   autoUnassignOffline: false,
   autoUnassignAfterMinutes: 15,
+  idleAwayMinutes: null,
   onUnassign: 'leave_unassigned',
   createdAt: new Date(),
   updatedAt: new Date(),

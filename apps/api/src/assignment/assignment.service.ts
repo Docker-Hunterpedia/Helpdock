@@ -52,9 +52,32 @@ const toDepartmentAssignment = (
   loadCap: row.loadCap,
   autoUnassignOffline: row.autoUnassignOffline,
   autoUnassignAfterMinutes: row.autoUnassignAfterMinutes,
+  idleAwayMinutes: row.idleAwayMinutes,
   onUnassign: row.onUnassign,
   ...counts,
 });
+
+/** The settings a save actually changed, with their new values: an unchanged one is not a change. */
+const changedSettings = (
+  before: DepartmentAssignmentRow,
+  request: DepartmentAssignmentUpdateRequest,
+): DepartmentAssignmentUpdateRequest => {
+  const previous: Record<keyof DepartmentAssignmentUpdateRequest, unknown> = {
+    mode: before.assignmentMode,
+    loadCap: before.loadCap,
+    autoUnassignOffline: before.autoUnassignOffline,
+    autoUnassignAfterMinutes: before.autoUnassignAfterMinutes,
+    idleAwayMinutes: before.idleAwayMinutes,
+    onUnassign: before.onUnassign,
+  };
+
+  return Object.fromEntries(
+    Object.entries(request).filter(
+      ([key, value]) =>
+        value !== undefined && previous[key as keyof DepartmentAssignmentUpdateRequest] !== value,
+    ),
+  );
+};
 
 export class AssignmentService {
   readonly #repository: AssignmentRepository;
@@ -120,6 +143,9 @@ export class AssignmentService {
       ...(request.autoUnassignAfterMinutes === undefined
         ? {}
         : { autoUnassignAfterMinutes: request.autoUnassignAfterMinutes }),
+      ...(request.idleAwayMinutes === undefined
+        ? {}
+        : { idleAwayMinutes: request.idleAwayMinutes }),
       ...(request.onUnassign === undefined ? {} : { onUnassign: request.onUnassign }),
     };
     await this.#repository.updateDepartment(context.tx, departmentId, values);
@@ -130,7 +156,7 @@ export class AssignmentService {
       action: 'assignment.updated',
       targetType: 'department',
       targetId: departmentId,
-      meta: { name: before.name, changes: request },
+      meta: { name: before.name, changes: changedSettings(before, request) },
     });
 
     const updated = (await this.list(context)).departments.find(

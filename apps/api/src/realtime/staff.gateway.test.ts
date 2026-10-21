@@ -283,6 +283,18 @@ describe('StaffGateway', () => {
       await expect(gateway.setPresence(colleague, away)).resolves.toMatchObject({ ok: true });
     });
 
+    it('limits the activity report on its own budget', async () => {
+      const { gateway } = limited();
+      const socket = socketOf('s1');
+      await spend(SOCKET_EVENT_RULES['presence:active'].limit, () =>
+        gateway.reportActivity(socket, { brandId: BRAND_A }),
+      );
+
+      await expect(gateway.reportActivity(socket, { brandId: BRAND_A })).rejects.toMatchObject({
+        error: { code: 'rate_limited' },
+      });
+    });
+
     it('limits the heartbeat too', async () => {
       const { gateway } = limited();
       const socket = socketOf('s1');
@@ -332,6 +344,34 @@ describe('StaffGateway', () => {
       expect(
         await harnessed.gateway.setPresence(socketOf('s1'), { brandId: BRAND_A, status: 'away' }),
       ).toEqual({ ok: true, data: { status: 'offline' } });
+    });
+  });
+
+  describe('presence:active (M14-18)', () => {
+    it('acknowledges activity from a connected socket without marking a return', async () => {
+      const socket = socketOf('s1');
+      await harnessed.gateway.join(socket, { brandId: BRAND_A, room: brandRoom(BRAND_A) });
+
+      expect(await harnessed.gateway.reportActivity(socket, { brandId: BRAND_A })).toEqual({
+        ok: true,
+        data: { status: 'online', idleEnded: false },
+      });
+    });
+
+    it('answers offline for a brand the socket has not joined', async () => {
+      expect(await harnessed.gateway.reportActivity(socketOf('s1'), { brandId: BRAND_A })).toEqual({
+        ok: true,
+        data: { status: 'offline', idleEnded: false },
+      });
+    });
+
+    it('refuses a body that names anything but a brand', async () => {
+      const socket = socketOf('s1');
+      await harnessed.gateway.join(socket, { brandId: BRAND_A, room: brandRoom(BRAND_A) });
+
+      await expect(
+        harnessed.gateway.reportActivity(socket, { brandId: 'not-a-brand' }),
+      ).rejects.toMatchObject({ error: { code: 'invalid_payload' } });
     });
   });
 

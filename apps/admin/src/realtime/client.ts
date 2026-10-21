@@ -4,6 +4,7 @@ import type {
   NotificationRead,
   PresenceChanged,
   PresenceMap,
+  PresenceStatus,
   SettablePresenceStatus,
   TicketChanged,
   TicketMessageEvent,
@@ -19,6 +20,11 @@ import type {
  * browser tests and `pnpm dev` run against. The screens see only this, so no
  * component has a socket to mishandle.
  */
+
+export interface ActivityReportResult {
+  readonly status: PresenceStatus;
+  readonly idleEnded: boolean;
+}
 
 export type RealtimeConnection = 'connecting' | 'connected' | 'closed';
 
@@ -51,6 +57,13 @@ export interface RealtimeClient {
   /** The map REST answers with, which is the truth a screen renders first (DOMAIN-RULES §7). */
   presence(brandId: string): Promise<PresenceMap>;
   setPresence(status: SettablePresenceStatus): Promise<void>;
+  /**
+   * M14-18. Says "I was active in the last minute" and nothing else. Answers
+   * this person's status as the server now has it, and whether this report is
+   * the one that ended an idle away; null when there is no connection to
+   * report over (a missed report is made up by the next one).
+   */
+  reportActivity(): Promise<ActivityReportResult | null>;
   /**
    * Joins a room until the returned handle is called, and re-joins it after a
    * reconnect. A handle rather than a `leave(room)` because two screens may

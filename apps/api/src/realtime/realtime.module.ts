@@ -1,6 +1,7 @@
 import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
+import { DepartmentIdleAwayPolicy } from '../assignment/idle-away.policy.js';
 import { OutboxStaffOfflineHook } from '../assignment/staff-offline.hook.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import type { Logger } from '../logging/logger.js';
@@ -9,6 +10,7 @@ import { METRICS } from '../observability/tokens.js';
 import { DB, LOGGER, REDIS } from '../runtime/tokens.js';
 import { RealtimeEmitSubscriber } from './broadcast.js';
 import type { SocketSessionResolver } from './handshake.js';
+import type { IdleAwayPolicy } from './idle-away.policy.js';
 import type { SocketConnectionsGauge } from './metrics.js';
 import { PresenceController } from './presence.controller.js';
 import { PresenceService } from './presence.service.js';
@@ -21,6 +23,7 @@ import { SocketRegistry } from './socket-registry.js';
 import { type SessionRevocations, StaffGateway, type StaffSocketOptions } from './staff.gateway.js';
 import type { StaffOfflineHook } from './staff-offline.hook.js';
 import {
+  IDLE_AWAY_POLICY,
   ROOM_SCOPE_READER,
   SESSION_REVOCATIONS,
   SOCKET_CONNECTIONS_GAUGE,
@@ -45,6 +48,8 @@ export interface RealtimeModuleOptions {
   readonly connectionsGauge?: SocketConnectionsGauge;
   /** Defaults to M1-07's auto-unassign timer over `DB`. The unit tests pass a fake. */
   readonly staffOfflineHook?: StaffOfflineHook;
+  /** Defaults to M14-18's department limits over `DB`. The unit tests pass a fake. */
+  readonly idleAwayPolicy?: IdleAwayPolicy;
   /** Defaults to the real one over `DB`. The unit tests pass a fake. */
   readonly roomScopeReader?: RoomScopeReader;
   /** The `/staff` handshake's origin and M4-04's agent-typing relay. */
@@ -87,6 +92,13 @@ export class RealtimeModule {
               useFactory: (db: Db): StaffOfflineHook => new OutboxStaffOfflineHook(db),
             }
           : { provide: STAFF_OFFLINE_HOOK, useValue: options.staffOfflineHook },
+        options.idleAwayPolicy === undefined
+          ? {
+              provide: IDLE_AWAY_POLICY,
+              inject: [DB],
+              useFactory: (db: Db): IdleAwayPolicy => new DepartmentIdleAwayPolicy(db),
+            }
+          : { provide: IDLE_AWAY_POLICY, useValue: options.idleAwayPolicy },
         options.roomScopeReader === undefined
           ? {
               provide: ROOM_SCOPE_READER,

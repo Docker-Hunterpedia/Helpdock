@@ -1176,6 +1176,8 @@ export class MockTicketingApi implements TicketingApi {
       autoUnassignOffline: request.autoUnassignOffline ?? current.autoUnassignOffline,
       autoUnassignAfterMinutes:
         request.autoUnassignAfterMinutes ?? current.autoUnassignAfterMinutes,
+      idleAwayMinutes:
+        request.idleAwayMinutes === undefined ? current.idleAwayMinutes : request.idleAwayMinutes,
       onUnassign: request.onUnassign ?? current.onUnassign,
     };
 
@@ -1224,6 +1226,7 @@ export class MockTicketingApi implements TicketingApi {
         loadCap: null,
         autoUnassignOffline: false,
         autoUnassignAfterMinutes: 15,
+        idleAwayMinutes: null,
         onUnassign: 'leave_unassigned',
       }
     );
@@ -1250,6 +1253,7 @@ export class MockTicketingApi implements TicketingApi {
       loadCap: settings.loadCap,
       autoUnassignOffline: settings.autoUnassignOffline,
       autoUnassignAfterMinutes: settings.autoUnassignAfterMinutes,
+      idleAwayMinutes: settings.idleAwayMinutes,
       onUnassign: settings.onUnassign,
       agentsInRotation: rotating.length,
       agentsOnline: rotating.filter((assignee) => assignee.presence === 'online').length,

@@ -12,6 +12,7 @@ import type {
 import { parseRoom } from '@helpdock/schemas';
 import { MOCK_USER } from '../auth/mock-api.js';
 import {
+  type ActivityReportResult,
   type RealtimeClient,
   type RealtimeListener,
   RealtimeListeners,
@@ -39,14 +40,26 @@ export const MOCK_COLLEAGUE_ID = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
 /** Only used before `start`, which is the only moment there is no brand. */
 const MOCK_BRAND_ID = '0192c3f0-1a2b-7c3d-8e4f-000000000001';
 
+/**
+ * The idle limit the fixture's "server" applies: a department that marks idle
+ * agents away after thirty minutes, as the `Admin/Ticketing-Assignment-Idle`
+ * artboard shows. A browser test moves its clock past it with `page.clock`.
+ */
+export const MOCK_IDLE_AWAY_MS = 30 * 60_000;
+
 export class MockRealtimeClient implements RealtimeClient {
   readonly #listeners = new RealtimeListeners();
   readonly #memberships = new RoomMemberships();
   readonly #userId: string;
   #status: PresenceStatus = 'offline';
+  /** The server's second reason to be away: no activity report within the limit. */
+  #idle = false;
+  #idleTimer: ReturnType<typeof setTimeout> | undefined;
   #brandId: string | null = null;
   /** Every ticket this client has said it is looking at, in order. */
   readonly announced: string[] = [];
+  /** How many activity reports this client has sent (M14-18). */
+  reports = 0;
   /** What each of those announcements said this browser was doing (M1-09). */
   readonly announcedActivity: TicketViewingActivity[] = [];
 
@@ -61,6 +74,8 @@ export class MockRealtimeClient implements RealtimeClient {
   start(brandId: string): void {
     this.#brandId = brandId;
     this.#status = 'online';
+    this.#idle = false;
+    this.#armIdle();
     this.#listeners.connection('connected');
     this.#listeners.presenceChanged({ userId: this.#userId, brandId, status: 'online' });
   }
@@ -69,6 +84,8 @@ export class MockRealtimeClient implements RealtimeClient {
     const brandId = this.#brandId;
     this.#brandId = null;
     this.#status = 'offline';
+    this.#idle = false;
+    clearTimeout(this.#idleTimer);
     this.#memberships.clear();
     this.#listeners.connection('closed');
     if (brandId !== null) {
@@ -78,18 +95,62 @@ export class MockRealtimeClient implements RealtimeClient {
 
   presence(_brandId: string): Promise<PresenceMap> {
     return Promise.resolve({
-      ...(this.#status === 'offline' ? {} : { [this.#userId]: this.#status }),
+      ...(this.#status === 'offline' ? {} : { [this.#userId]: this.#effective() }),
       [MOCK_COLLEAGUE_ID]: 'away' as const,
     });
   }
 
   setPresence(status: SettablePresenceStatus): Promise<void> {
     this.#status = status;
-    if (this.#brandId !== null) {
-      this.#listeners.presenceChanged({ userId: this.#userId, brandId: this.#brandId, status });
+    if (status === 'online') {
+      this.#idle = false;
+      this.#armIdle();
     }
+    this.#announce();
 
     return Promise.resolve();
+  }
+
+  /** Plays the server's idle clock: a report restarts it, and ends an idle away. */
+  reportActivity(): Promise<ActivityReportResult | null> {
+    if (this.#brandId === null) {
+      return Promise.resolve(null);
+    }
+
+    this.reports += 1;
+    const wasIdle = this.#idle;
+    this.#idle = false;
+    this.#armIdle();
+    if (wasIdle) {
+      this.#announce();
+    }
+
+    return Promise.resolve({
+      status: this.#effective(),
+      idleEnded: wasIdle && this.#effective() === 'online',
+    });
+  }
+
+  #effective(): PresenceStatus {
+    return this.#status === 'online' && this.#idle ? 'away' : this.#status;
+  }
+
+  #announce(): void {
+    if (this.#brandId !== null) {
+      this.#listeners.presenceChanged({
+        userId: this.#userId,
+        brandId: this.#brandId,
+        status: this.#effective(),
+      });
+    }
+  }
+
+  #armIdle(): void {
+    clearTimeout(this.#idleTimer);
+    this.#idleTimer = setTimeout(() => {
+      this.#idle = true;
+      this.#announce();
+    }, MOCK_IDLE_AWAY_MS);
   }
 
   joinRoom(room: string): () => void {

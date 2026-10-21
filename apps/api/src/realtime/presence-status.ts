@@ -14,17 +14,24 @@ export interface DerivePresenceInput {
   readonly hasLiveSocket: boolean;
   /** What they last set themselves to, if anything. */
   readonly explicit: SettablePresenceStatus | undefined;
+  /**
+   * M14-18. Their department's idle limit has passed without a report of
+   * activity. It is a second reason to be `away`, kept apart from `explicit`
+   * so that activity can end it without undoing a choice the person made.
+   */
+  readonly idle?: boolean;
 }
 
 export const derivePresence = ({
   hasLiveSocket,
   explicit,
+  idle = false,
 }: DerivePresenceInput): PresenceStatus => {
   if (!hasLiveSocket) {
     return 'offline';
   }
 
-  return explicit === 'away' ? 'away' : 'online';
+  return explicit === 'away' || idle ? 'away' : 'online';
 };
 
 /**
@@ -36,12 +43,14 @@ export const derivePresence = ({
 export const presenceMapOf = (
   present: readonly string[],
   explicit: Readonly<Record<string, string>>,
+  idle: ReadonlySet<string> = new Set(),
 ): PresenceMap => {
   const map: Record<string, PresenceStatus> = {};
   for (const userId of present) {
     map[userId] = derivePresence({
       hasLiveSocket: true,
       explicit: explicit[userId] === 'away' ? 'away' : 'online',
+      idle: idle.has(userId),
     });
   }
 

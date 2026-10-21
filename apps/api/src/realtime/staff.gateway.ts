@@ -1,7 +1,9 @@
 import {
   type HeartbeatAck,
   type PresenceAck,
+  type PresenceActiveAck,
   parseRoom,
+  presenceActiveSchema,
   presenceSetSchema,
   REALTIME_EVENTS,
   type RoomAck,
@@ -270,6 +272,24 @@ export class StaffGateway implements OnGatewayInit, OnGatewayConnection, OnGatew
     return ok({
       status: await this.#presence.setStatus({ brandId, userId: userIdOf(socket.data) }, status),
     });
+  }
+
+  /**
+   * M14-18. "I was active in the last minute". It carries the brand and nothing
+   * else — never what was done — and the clock it refreshes is the person's,
+   * not the socket's, so a second tab's silence cannot undo the first's work.
+   */
+  @SubscribeMessage(REALTIME_EVENTS.presenceActive)
+  @Requires('brand:read')
+  async reportActivity(
+    @ConnectedSocket() socket: StaffSocket,
+    @MessageBody() body: unknown,
+  ): Promise<PresenceActiveAck> {
+    await this.#throttle(socket, REALTIME_EVENTS.presenceActive);
+    const { brandId } = parseMessage(presenceActiveSchema, body);
+    await this.#requireLiveSession(socket);
+
+    return ok(await this.#presence.active({ brandId, userId: userIdOf(socket.data) }));
   }
 
   /**

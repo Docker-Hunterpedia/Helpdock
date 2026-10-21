@@ -125,7 +125,8 @@ one person gets at most **6** notification emails an hour and **40** a day from
 one brand, digests included. Twelve notifications in an hour reach the person
 as no more than six emails.
 
-**Nothing while they are working.** While the person is online (not away) in
+**Nothing while they are working.** While the person is online (not away, whether they chose Away or the
+department's idle limit set it, M14-18) in
 the brand, a Right away email waits until they have been away or offline for 5
 minutes, and never more than 15 minutes in all (owner decision D-27); what they
 read meanwhile drops out.

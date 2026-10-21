@@ -40,7 +40,9 @@
       "offline": "Offline"
     },
     "setAway": "Set yourself away",
-    "setOnline": "Set yourself online"
+    "setOnline": "Set yourself online",
+    "idleReturned": "You were set to away while idle. You're back now, and new tickets can be assigned to you again.",
+    "idleReturnedDismiss": "Dismiss"
   },
   "theme": {
     "label": "Theme",

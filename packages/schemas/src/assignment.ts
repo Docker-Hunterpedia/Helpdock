@@ -40,11 +40,15 @@ export type OnUnassign = z.infer<typeof onUnassignSchema>;
 export const LOAD_CAP_MAX = 500;
 export const AUTO_UNASSIGN_MINUTES_DEFAULT = 15;
 export const AUTO_UNASSIGN_MINUTES_MAX = 1_440;
+/** M14-18: the range of "Mark idle agents away after", in minutes. Off is null. */
+export const IDLE_AWAY_MINUTES_MIN = 10;
+export const IDLE_AWAY_MINUTES_MAX = 240;
 /** More skills than this on one agent in one department is a tag list, not a skill set. */
 export const MAX_SKILLS_PER_AGENT = 50;
 
 const loadCapSchema = z.int().min(1).max(LOAD_CAP_MAX);
 const autoUnassignMinutesSchema = z.int().min(1).max(AUTO_UNASSIGN_MINUTES_MAX);
+const idleAwayMinutesSchema = z.int().min(IDLE_AWAY_MINUTES_MIN).max(IDLE_AWAY_MINUTES_MAX);
 
 /** One row of the Assignment tab: a department and how it routes. */
 export const departmentAssignmentSchema = z.object({
@@ -56,6 +60,8 @@ export const departmentAssignmentSchema = z.object({
   loadCap: loadCapSchema.nullable(),
   autoUnassignOffline: z.boolean(),
   autoUnassignAfterMinutes: autoUnassignMinutesSchema,
+  /** M14-18. Minutes without activity before an agent is marked away; null is off. */
+  idleAwayMinutes: idleAwayMinutesSchema.nullable(),
   onUnassign: onUnassignSchema,
   /** Agents in rotation who are online now. */
   agentsOnline: z.int().nonnegative(),
@@ -80,6 +86,7 @@ export const departmentAssignmentUpdateRequestSchema = z
     loadCap: loadCapSchema.nullable().optional(),
     autoUnassignOffline: z.boolean().optional(),
     autoUnassignAfterMinutes: autoUnassignMinutesSchema.optional(),
+    idleAwayMinutes: idleAwayMinutesSchema.nullable().optional(),
     onUnassign: onUnassignSchema.optional(),
   })
   .refine(

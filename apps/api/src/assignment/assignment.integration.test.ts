@@ -32,15 +32,22 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import type { Job } from 'bullmq';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { Redis } from 'ioredis';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
+import { presenceDecision } from '../notifications/email-pacing.js';
+import { type IdleAwayPolicy, NoIdleAwayPolicy } from '../realtime/idle-away.policy.js';
+import { PresenceService } from '../realtime/presence.service.js';
+import { PresenceStore } from '../realtime/presence.store.js';
+import { RealtimePublisher } from '../realtime/publisher.js';
+import { NoopStaffOfflineHook } from '../realtime/staff-offline.hook.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { dockerAvailable } from '../testing/docker-available.js';
+import { silentLogger as silentApiLogger } from '../testing/silent-logger.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { AssignmentRepository } from './assignment.repository.js';
 import {
@@ -51,7 +58,8 @@ import {
   createStaffOfflineHandler,
   type OfflineUnassignQueue,
 } from './assignment-events.js';
-import { RedisOfflineSinceStore } from './presence-adapters.js';
+import { DepartmentIdleAwayPolicy } from './idle-away.policy.js';
+import { RedisOfflineSinceStore, StorePresenceReader } from './presence-adapters.js';
 import { OutboxStaffOfflineHook } from './staff-offline.hook.js';
 
 /**
@@ -964,6 +972,322 @@ describe.skipIf(!hasDocker)('assignment', () => {
       expect(await assigneeOf(ticket.ticket.id)).toBe(sam.id);
 
       await configure(support, { autoUnassignOffline: false });
+    });
+  });
+
+  // ------------------------------------------------- idle agents marked away
+
+  describe('idle agents marked away (M14-18)', () => {
+    const MINUTE = 60_000;
+    let clock = 50_000_000;
+    let store: PresenceStore;
+    let reader: StorePresenceReader;
+    /** One entry per `presence:changed` any "replica" published. */
+    const announced: { userId: string; status: string }[] = [];
+
+    const replicaOf = (
+      policy: IdleAwayPolicy = new DepartmentIdleAwayPolicy(runtime.db),
+    ): PresenceService => {
+      const publisher = new RealtimePublisher();
+      publisher.bind({
+        to: () => ({
+          emit: (_event: string, envelope: { data: { userId: string; status: string } }) => {
+            announced.push({ userId: envelope.data.userId, status: envelope.data.status });
+          },
+        }),
+        // biome-ignore lint/suspicious/noExplicitAny: the double implements the one method the publisher calls.
+      } as any);
+
+      return new PresenceService(
+        store,
+        publisher,
+        new NoopStaffOfflineHook(),
+        silentApiLogger(),
+        policy,
+      );
+    };
+
+    const join = (service: PresenceService, who: Person, socketId: string) =>
+      service.join({ brandId: seeded.brandId, userId: who.id, socketId });
+    const statusOf = (who: Person) => store.statusOf(seeded.brandId, who.id);
+
+    beforeAll(async () => {
+      await configure(support, { mode: 'round_robin', loadCap: null, autoUnassignOffline: true });
+    });
+
+    beforeEach(async () => {
+      clock = 50_000_000;
+      store = new PresenceStore(redis, () => clock);
+      reader = new StorePresenceReader(store);
+      announced.length = 0;
+      await closeOut();
+      const keys = await redis.keys('presence:*');
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    });
+
+    afterAll(async () => {
+      await configure(support, { idleAwayMinutes: null, autoUnassignOffline: false });
+    });
+
+    it('saves the setting within 10 to 240 minutes, or off, and audits only what changed', async () => {
+      const patch = (idleAwayMinutes: number | null) =>
+        call<DepartmentAssignment>('PATCH', `${brandPath()}/assignment/${support}`, ada, {
+          idleAwayMinutes,
+        });
+
+      expect((await patch(9)).status).toBe(400);
+      expect((await patch(241)).status).toBe(400);
+      expect((await patch(10)).body.idleAwayMinutes).toBe(10);
+      expect((await patch(240)).body.idleAwayMinutes).toBe(240);
+      expect((await patch(30)).body.idleAwayMinutes).toBe(30);
+      expect((await patch(null)).body.idleAwayMinutes).toBeNull();
+      expect(
+        (
+          await call<DepartmentAssignmentList>('GET', `${brandPath()}/assignment`, ada)
+        ).body.departments.find((row) => row.departmentId === support)?.idleAwayMinutes,
+      ).toBeNull();
+
+      await configure(support, { idleAwayMinutes: 45, loadCap: null });
+      const [latest] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ meta: auditLog.meta })
+          .from(auditLog)
+          .where(and(eq(auditLog.action, 'assignment.updated'), eq(auditLog.targetId, support)))
+          .orderBy(desc(auditLog.createdAt))
+          .limit(1),
+      );
+      expect(latest?.meta).toMatchObject({ changes: { idleAwayMinutes: 45 } });
+      expect(latest?.meta).not.toHaveProperty('changes.loadCap');
+      await configure(support, { idleAwayMinutes: 30 });
+    });
+
+    it('reaches the agents in the rotation, and the shortest limit wins for someone in two departments', async () => {
+      const policy = new DepartmentIdleAwayPolicy(runtime.db);
+      const limits = await policy.limitsFor(seeded.brandId);
+      // Agents are in rotation by default; a Team Leader and an Admin are not.
+      expect(limits.get(sam.id)).toBe(30);
+      expect(limits.get(sue.id)).toBe(30);
+      expect(limits.has(tess.id)).toBe(false);
+      expect(limits.has(ada.id)).toBe(false);
+      expect(limits.has(bo.id)).toBe(false);
+
+      await call('PATCH', `${brandPath()}/assignment/${support}/agents/${sue.id}`, ada, {
+        inRotation: false,
+      });
+      expect((await policy.limitsFor(seeded.brandId)).has(sue.id)).toBe(false);
+      await call('PATCH', `${brandPath()}/assignment/${support}/agents/${sue.id}`, ada, {
+        inRotation: true,
+      });
+
+      await configure(billing, { idleAwayMinutes: 15 });
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .update(userBrandRoles)
+          .set({ departmentIds: [support, billing] })
+          .where(eq(userBrandRoles.userId, sam.id)),
+      );
+      try {
+        const both = await policy.limitsFor(seeded.brandId);
+        expect(both.get(sam.id)).toBe(15);
+        expect(both.get(bo.id)).toBe(15);
+        expect(both.get(sue.id)).toBe(30);
+      } finally {
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(userBrandRoles)
+            .set({ departmentIds: [support] })
+            .where(eq(userBrandRoles.userId, sam.id)),
+        );
+        await configure(billing, { idleAwayMinutes: null });
+      }
+    });
+
+    it('reads no limits for a brand where no department sets one', async () => {
+      await configure(support, { idleAwayMinutes: null });
+      try {
+        expect(
+          (await new DepartmentIdleAwayPolicy(runtime.db).limitsFor(seeded.brandId)).size,
+        ).toBe(0);
+      } finally {
+        await configure(support, { idleAwayMinutes: 30 });
+      }
+    });
+
+    it('marks an idle agent away after the limit, so the rotation stops picking them, and back on activity', async () => {
+      const replica = replicaOf();
+      await join(replica, sam, 'sam-1');
+      await join(replica, sue, 'sue-1');
+
+      await replica.sweep(clock + 29 * MINUTE);
+      expect(await statusOf(sam)).toBe('online');
+
+      // Sue is active at minute 20; Sam is not.
+      clock += 20 * MINUTE;
+      await replica.active({ brandId: seeded.brandId, userId: sue.id });
+      await replica.sweep(clock + 10 * MINUTE);
+
+      expect(await statusOf(sam)).toBe('away');
+      expect(await statusOf(sue)).toBe('online');
+      expect(await reader.online(seeded.brandId)).toEqual(new Set([sue.id]));
+
+      const first = await createTicket(ada);
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        createAssignmentRequestedHandler({ repository, presence: reader })({
+          outboxId: uuidv7(),
+          brandId: seeded.brandId,
+          event: ASSIGNMENT_EVENTS.requested,
+          payload: { ticketId: first.ticket.id, trigger: 'routed' },
+          tx,
+          log: silentLogger,
+        }),
+      );
+      expect(await assigneeOf(first.ticket.id)).toBe(sue.id);
+
+      // Everyone idle: nobody is eligible and the ticket waits.
+      await replica.sweep(clock + 31 * MINUTE);
+      expect(await reader.online(seeded.brandId)).toEqual(new Set());
+
+      expect(await replica.active({ brandId: seeded.brandId, userId: sam.id })).toEqual({
+        status: 'online',
+        idleEnded: true,
+      });
+      expect(await reader.online(seeded.brandId)).toEqual(new Set([sam.id]));
+    });
+
+    it('announces an idle away once even when two replicas sweep together', async () => {
+      const first = replicaOf();
+      const second = replicaOf();
+      await join(first, sam, 'sam-1');
+      announced.length = 0;
+
+      await Promise.all([first.sweep(clock + 30 * MINUTE), second.sweep(clock + 30 * MINUTE)]);
+
+      expect(announced.filter((entry) => entry.userId === sam.id)).toEqual([
+        { userId: sam.id, status: 'away' },
+      ]);
+    });
+
+    it('keeps one clock across tabs and across replicas', async () => {
+      const first = replicaOf();
+      const second = replicaOf();
+      await join(first, sam, 'sam-tab-1');
+      await join(second, sam, 'sam-tab-2');
+
+      // The second tab reports at minute 25; the first tab's silence is not the person's.
+      clock += 25 * MINUTE;
+      await second.active({ brandId: seeded.brandId, userId: sam.id });
+      await first.sweep(clock + 29 * MINUTE);
+      expect(await statusOf(sam)).toBe('online');
+
+      await first.sweep(clock + 30 * MINUTE);
+      expect(await statusOf(sam)).toBe('away');
+
+      // Closing one tab does not end the idle away, and the other's report does.
+      await first.leave({ brandId: seeded.brandId, userId: sam.id, socketId: 'sam-tab-1' });
+      expect(await statusOf(sam)).toBe('away');
+      expect(await first.active({ brandId: seeded.brandId, userId: sam.id })).toMatchObject({
+        status: 'online',
+        idleEnded: true,
+      });
+    });
+
+    it('keeps an explicit away through activity: only the idle reason ends', async () => {
+      const replica = replicaOf();
+      await join(replica, sam, 'sam-1');
+      await replica.setStatus({ brandId: seeded.brandId, userId: sam.id }, 'away');
+      await replica.sweep(clock + 30 * MINUTE);
+
+      expect(await replica.active({ brandId: seeded.brandId, userId: sam.id })).toEqual({
+        status: 'away',
+        idleEnded: false,
+      });
+      expect(await statusOf(sam)).toBe('away');
+    });
+
+    it('lifts the mark when the department turns the setting off', async () => {
+      const replica = replicaOf();
+      await join(replica, sam, 'sam-1');
+      await replica.sweep(clock + 30 * MINUTE);
+      expect(await statusOf(sam)).toBe('away');
+
+      await configure(support, { idleAwayMinutes: null });
+      try {
+        await replica.sweep(clock + 31 * MINUTE);
+        expect(await statusOf(sam)).toBe('online');
+      } finally {
+        await configure(support, { idleAwayMinutes: 30 });
+      }
+    });
+
+    it('never idles anyone while no department asks for it', async () => {
+      const replica = replicaOf(new NoIdleAwayPolicy());
+      await join(replica, sam, 'sam-1');
+
+      await replica.sweep(clock + 24 * 60 * MINUTE);
+
+      expect(await statusOf(sam)).toBe('online');
+    });
+
+    it('leaves the tickets of an idle agent with them: away is not offline', async () => {
+      const replica = replicaOf();
+      await join(replica, sam, 'sam-1');
+      await join(replica, sue, 'sue-1');
+      const ticket = await createTicket(ada, { assigneeId: sam.id });
+      await replica.sweep(clock + 30 * MINUTE);
+      expect(await statusOf(sam)).toBe('away');
+
+      const since = new Date().toISOString();
+      const rescheduled: unknown[] = [];
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        createOfflineUnassignProcessor({
+          repository,
+          presence: reader,
+          lookup: reader,
+          offlineSince: new RedisOfflineSinceStore(redis),
+          calendarFor: (calendarTx, brandId, departmentId) =>
+            new BusinessHoursService(
+              new SlaRepository(),
+              new SlaService(new SlaRepository()),
+            ).calendarFor(brandId, departmentId, calendarTx),
+          queue: { add: async (job) => void rescheduled.push(job) },
+          now: () => new Date('2026-09-23T12:00:00.000Z'),
+        })({
+          payload: { brandId: seeded.brandId, userId: sam.id, departmentId: support, since },
+          brandId: seeded.brandId,
+          tx,
+          job: {} as Job,
+          log: silentLogger,
+        }),
+      );
+
+      expect(await assigneeOf(ticket.ticket.id)).toBe(sam.id);
+      expect(rescheduled).toEqual([]);
+    });
+
+    it('is read as away by the notification presence hold, which then paces by its grace', async () => {
+      const replica = replicaOf();
+      await join(replica, sam, 'sam-1');
+      await replica.sweep(clock + 30 * MINUTE);
+
+      const status = await reader.statusOf(seeded.brandId, sam.id);
+      expect(status).toBe('away');
+      const now = new Date('2026-10-21T10:00:00.000Z');
+      // Seen online two minutes ago: the five-minute away grace is still running.
+      const decision = presenceDecision(
+        status,
+        {
+          heldSince: new Date(now.getTime() - 3 * MINUTE),
+          seenOnlineAt: new Date(now.getTime() - 2 * MINUTE),
+        },
+        now,
+      );
+      expect(decision.kind).toBe('hold');
+      // Never found online by a send: nothing to wait for.
+      expect(presenceDecision(status, { heldSince: null, seenOnlineAt: null }, now)).toEqual({
+        kind: 'send',
+      });
     });
   });
 

@@ -74,6 +74,11 @@ export const departments = pgTable(
     /** DOMAIN-RULES §12: unassign an agent's tickets after they go offline. */
     autoUnassignOffline: boolean('auto_unassign_offline').notNull().default(false),
     autoUnassignAfterMinutes: integer('auto_unassign_after_minutes').notNull().default(15),
+    /**
+     * M14-18, DOMAIN-RULES §12: mark an agent of this department away after this
+     * many minutes without a sign of life. Null is off.
+     */
+    idleAwayMinutes: integer('idle_away_minutes'),
     /** DOMAIN-RULES §12: what a ticket does when its assignee loses access to it. */
     onUnassign: onUnassignEnum('on_unassign').notNull().default('leave_unassigned'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -92,6 +97,10 @@ export const departments = pgTable(
     check(
       'departments_auto_unassign_minutes_range',
       sql`${table.autoUnassignAfterMinutes} BETWEEN 1 AND 1440`,
+    ),
+    check(
+      'departments_idle_away_minutes_range',
+      sql`${table.idleAwayMinutes} IS NULL OR ${table.idleAwayMinutes} BETWEEN 10 AND 240`,
     ),
   ],
 );

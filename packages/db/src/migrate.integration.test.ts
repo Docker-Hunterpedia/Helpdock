@@ -86,6 +86,7 @@ const MIGRATION_TAGS = [
   '0065_oauth_microsoft_provider',
   '0066_bulk_edit',
   '0067_passkey_user_verified',
+  '0068_idle_away_minutes',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -289,6 +290,25 @@ describe.skipIf(!hasDocker)('migrations', () => {
       const origins =
         await owner`SELECT enumlabel FROM pg_enum JOIN pg_type ON enumtypid = pg_type.oid WHERE typname = 'csat_answer_channel'`;
       expect(origins.map((entry) => entry.enumlabel)).toContain('import');
+    } finally {
+      await owner.end();
+    }
+  });
+
+  it('keeps idle_away_minutes null or within 10 to 240 on a department', async () => {
+    const url = await migrated('idle_away_minutes');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const [brand] =
+        await owner`INSERT INTO brands (id, name, prefix) VALUES (gen_random_uuid(), 'Idle', 'ID') RETURNING id`;
+      const insert = (name: string, minutes: number | null) =>
+        owner`INSERT INTO departments (id, brand_id, name, idle_away_minutes)
+          VALUES (gen_random_uuid(), ${brand?.id}, ${name}, ${minutes})`;
+      await insert('off', null);
+      await insert('lowest', 10);
+      await insert('highest', 240);
+      await expect(insert('too-low', 9)).rejects.toMatchObject({ code: '23514' });
+      await expect(insert('too-high', 241)).rejects.toMatchObject({ code: '23514' });
     } finally {
       await owner.end();
     }

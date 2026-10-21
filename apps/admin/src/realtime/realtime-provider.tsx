@@ -40,6 +40,13 @@ export interface Realtime {
   /** This person's own presence in the current brand. */
   readonly status: PresenceStatus;
   setStatus(status: SettablePresenceStatus): void;
+  /**
+   * M14-18. True after the server ended an idle away on this person's own
+   * activity, until they dismiss the notice or it times out. Said once per
+   * return, never again for the same one.
+   */
+  readonly idleReturned: boolean;
+  dismissIdleReturn(): void;
   presenceIn(brandId: string): PresenceMap;
 }
 
@@ -52,11 +59,9 @@ export interface RealtimeProviderProps {
   readonly children: ReactNode;
   /** Tests and the mock adapter pass their own; production builds one. */
   readonly client?: RealtimeClient;
-  /** Overridden by the away-timer test; production uses DOMAIN-RULES §12's five minutes. */
-  readonly idleMs?: number;
 }
 
-export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderProps): ReactNode {
+export function RealtimeProvider({ children, client }: RealtimeProviderProps): ReactNode {
   const api = useAuthApi();
   const session = useSession();
   const brandId = currentBrand(session).id;
@@ -65,6 +70,7 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
   const realtimeClient = useMemo(() => client ?? createRealtimeClient(api), [client, api]);
   const [connection, setConnection] = useState<RealtimeConnection>('connecting');
   const [presence, setPresence] = useState<PresenceMap>(EMPTY_PRESENCE);
+  const [idleReturned, setIdleReturned] = useState(false);
   const status = statusOf(presence, userId);
   /**
    * What this person's status is right now, readable synchronously.
@@ -133,25 +139,41 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
     [realtimeClient, brandId, userId],
   );
 
+  /**
+   * M14-18. The browser only says it was active; whether silence means away is
+   * the server's call, because it knows the department's limit. The answer
+   * carries this person's status, applied at once so the dot does not wait for
+   * the event, and whether this report ended an idle away.
+   */
   useEffect(() => {
     const watcher = watchActivity({
-      ...(idleMs === undefined ? {} : { idleMs }),
-      onIdle: () => {
-        if (statusRef.current === 'online') {
-          setStatus('away');
-        }
-      },
-      onActive: () => {
-        if (statusRef.current === 'away') {
-          setStatus('online');
-        }
+      report: () => {
+        realtimeClient
+          .reportActivity()
+          .then((result) => {
+            if (result === null) {
+              return;
+            }
+            setPresence((current) =>
+              applyPresenceChange(current, { userId, brandId, status: result.status }),
+            );
+            if (result.idleEnded) {
+              setIdleReturned(true);
+            }
+          })
+          // A report lost to a dropped socket is made up by the next one.
+          .catch(() => undefined);
       },
     });
 
     return () => {
       watcher.stop();
     };
-  }, [setStatus, idleMs]);
+  }, [realtimeClient, brandId, userId]);
+
+  const dismissIdleReturn = useCallback(() => {
+    setIdleReturned(false);
+  }, []);
 
   const value = useMemo<Realtime>(
     () => ({
@@ -159,11 +181,22 @@ export function RealtimeProvider({ children, client, idleMs }: RealtimeProviderP
       client: realtimeClient,
       status,
       setStatus,
+      idleReturned,
+      dismissIdleReturn,
       // The same object for every brand but this one, so a consumer that puts
       // the result in a dependency list is not re-run on every render.
       presenceIn: (asked) => (asked === brandId ? presence : EMPTY_PRESENCE),
     }),
-    [connection, realtimeClient, presence, status, setStatus, brandId],
+    [
+      connection,
+      realtimeClient,
+      presence,
+      status,
+      setStatus,
+      idleReturned,
+      dismissIdleReturn,
+      brandId,
+    ],
   );
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;

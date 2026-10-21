@@ -97,6 +97,7 @@ export const REALTIME_EVENTS = {
   roomJoin: 'room:join',
   roomLeave: 'room:leave',
   presenceSet: 'presence:set',
+  presenceActive: 'presence:active',
   presenceHeartbeat: 'presence:heartbeat',
 
   /**
@@ -137,6 +138,13 @@ export const presenceSetSchema = z.object({
   status: settablePresenceStatusSchema,
 });
 export type PresenceSet = z.infer<typeof presenceSetSchema>;
+
+/**
+ * M14-18. "I was active in the last minute", and nothing about what was done.
+ * It carries only the brand, so there is no content for a log to leak.
+ */
+export const presenceActiveSchema = z.object({ brandId: z.uuid() });
+export type PresenceActive = z.infer<typeof presenceActiveSchema>;
 
 export const presenceChangedSchema = z.object({
   userId: z.uuid(),
@@ -383,6 +391,16 @@ export type RoomAck = z.infer<typeof roomAckSchema>;
 export const presenceAckSchema = socketAckSchema(z.object({ status: presenceStatusSchema }));
 export type PresenceAck = z.infer<typeof presenceAckSchema>;
 
+/**
+ * `idleEnded` is true on the one report that took the person out of an idle
+ * away, which is what lets the admin say "You were set to away while idle"
+ * once rather than on every report.
+ */
+export const presenceActiveAckSchema = socketAckSchema(
+  z.object({ status: presenceStatusSchema, idleEnded: z.boolean() }),
+);
+export type PresenceActiveAck = z.infer<typeof presenceActiveAckSchema>;
+
 export const ticketViewingAckSchema = socketAckSchema(z.object({ ticketId: z.uuid() }));
 export type TicketViewingAck = z.infer<typeof ticketViewingAckSchema>;
 
@@ -396,8 +414,12 @@ export type HeartbeatAck = z.infer<typeof heartbeatAckSchema>;
 export const PRESENCE_SOCKET_TTL_SECONDS = 60;
 export const PRESENCE_HEARTBEAT_INTERVAL_MS = 25_000;
 export const PRESENCE_REAPER_INTERVAL_MS = 30_000;
-/** How long without a pointer, key or focus event before a client calls itself away. */
-export const PRESENCE_AWAY_AFTER_MS = 5 * 60 * 1000;
+/**
+ * M14-18. A client reports activity at most this often. The department's idle
+ * limit (10 minutes at the least) is measured from the last report, so a report
+ * that is up to a minute stale cannot mark an active person away.
+ */
+export const PRESENCE_ACTIVITY_REPORT_INTERVAL_MS = 60_000;
 
 /** How often a client with a ticket open says so, and how long a saying lasts. */
 export const TICKET_VIEWING_INTERVAL_MS = 30_000;

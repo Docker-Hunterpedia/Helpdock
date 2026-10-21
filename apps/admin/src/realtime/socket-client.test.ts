@@ -310,6 +310,47 @@ describe('SocketRealtimeClient', () => {
     await expect(client.setPresence('away')).resolves.toBeUndefined();
   });
 
+  describe('reportActivity (M14-18)', () => {
+    const connected = async () => {
+      const client = clientWith();
+      client.start(BRAND);
+      await settle();
+      sockets[0]?.fire('connect');
+      await settle();
+
+      return client;
+    };
+
+    it('sends the brand and nothing else, and returns what the server answered', async () => {
+      const client = await connected();
+      if (sockets[0] !== undefined) {
+        sockets[0].ack = { ok: true, data: { status: 'online', idleEnded: true } };
+      }
+
+      expect(await client.reportActivity()).toEqual({ status: 'online', idleEnded: true });
+      expect(sockets[0]?.acked.at(-1)).toEqual({
+        event: REALTIME_EVENTS.presenceActive,
+        payload: { brandId: BRAND },
+      });
+    });
+
+    it('answers null while there is no socket, rather than throwing at the caller', async () => {
+      expect(await clientWith().reportActivity()).toBeNull();
+    });
+
+    it.each([
+      ['a refusal', { ok: false, error: { code: 'rate_limited', message: 'slow down' } }],
+      ['an answer of the wrong shape', { ok: true, data: { status: 'sleeping' } }],
+    ])('answers null for %s', async (_name, answer) => {
+      const client = await connected();
+      if (sockets[0] !== undefined) {
+        sockets[0].ack = answer;
+      }
+
+      expect(await client.reportActivity()).toBeNull();
+    });
+  });
+
   it('closes on stop and does not come back', async () => {
     const client = clientWith();
     client.start(BRAND);

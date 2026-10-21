@@ -132,6 +132,7 @@ Client to server, all acknowledged:
 | `room:join` | `{ brandId, room }` | `@Requires('brand:read')` | `{ ok: true, data: { room } }` |
 | `room:leave` | `{ room }` | `@Authenticated()` | `{ ok: true, data: { room } }` |
 | `presence:set` | `{ brandId, status: 'online' \| 'away' }` | `@Requires('brand:read')` | `{ ok: true, data: { status } }` |
+| `presence:active` | `{ brandId }` — M14-18; nothing about what was done | `@Requires('brand:read')` | `{ ok: true, data: { status, idleEnded } }` |
 | `presence:heartbeat` | `{}` | `@Authenticated()` | `{ ok: true, data: { at } }` |
 | `ticket:viewing` | `{ brandId, ticketId, activity? }` — `activity` is `viewing` (the default) or `replying` | `@Requires('ticket:read')` | `{ ok: true, data: { ticketId } }` |
 
@@ -231,6 +232,8 @@ Redis holds it, because it is spread over every replica:
 | `presence:sockets:<brandId>:<userId>` | That person's socket ids there | with its last member |
 | `presence:sock:<socketId>` | Nothing; its existence *is* the liveness | 60 s |
 | `presence:status:<brandId>` | The explicit `away` toggles | with its last member |
+| `presence:active:<brandId>` | When each person last reported activity, in epoch ms (M14-18) | with its last member |
+| `presence:idle:<brandId>` | People marked away for being idle (M14-18) | with its last member |
 
 The liveness key is the only one with a TTL, and that is the point: a replica
 that dies without running a single disconnect handler leaves its sockets'
@@ -253,17 +256,36 @@ restricts *tickets* by department, never colleagues: an Agent has to see who is
 online before taking a ticket. Changing who may work in a brand stays
 `staff:manage`.
 
-### The away timer
+### Idle agents marked away
 
 The server cannot tell the difference between reading a ticket and going to
-lunch — the socket stays open either way — so the browser says. After five
-minutes with no pointer, key, wheel or touch event and no tab becoming visible,
-the admin sends `presence:set` with `away`; the next sign of life sends
-`online`. The user menu has the same toggle for saying so deliberately.
+lunch — the socket stays open either way — so the browser says, and the server
+decides what silence means (M14-18).
 
-Either path is a no-op for a status the person is already in, so the two cannot
-double up: a toggle to `away` a moment after the timer reached the same
-conclusion costs nothing.
+The admin sends `presence:active` with the brand when a pointer, key, wheel or
+touch event happens or a tab becomes visible, and once on opening, at most once
+a minute per tab; an event inside the minute schedules one report for its end.
+The message carries the brand and nothing else: never which key or element.
+
+The server keeps one clock per person per brand, not per socket, so a second
+tab's silence does not undo the first's work. A department may set **Mark idle
+agents away after** (10 to 240 minutes, Ticketing › Assignment); a person's
+limit is the shortest among the departments that set one and whose rotation
+includes them. The reaper's 30 s sweep marks whoever is past their limit, and
+`presence:changed` says `away`; exactly one replica announces it, because the
+`sadd` that marks them answers 1 on one replica only. The sweep reads the
+limits through the `IDLE_AWAY_POLICY` token (`DepartmentIdleAwayPolicy`), and a
+sweep that cannot read them changes nothing.
+
+Activity ends the mark, announces `online`, and the acknowledgement of that one
+report says `idleEnded: true` so the admin shows "You were set to away while
+idle" once. An explicit Away from the user menu is a separate reason: activity
+never undoes it, and choosing Online ends both. Going offline forgets the clock
+and the mark.
+
+Idle away is `away`, not `offline`: the rotation skips the person, the widget
+does not list them as online, the notification presence hold treats them as
+away, and the offline auto-unassign timer never starts for them.
 
 ### The hook M1 needs
 

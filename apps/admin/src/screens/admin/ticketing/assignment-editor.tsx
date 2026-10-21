@@ -7,6 +7,8 @@ import type {
 import {
   AUTO_UNASSIGN_MINUTES_MAX,
   assignmentModeSchema,
+  IDLE_AWAY_MINUTES_MAX,
+  IDLE_AWAY_MINUTES_MIN,
   LOAD_CAP_MAX,
   onUnassignSchema,
 } from '@helpdock/schemas';
@@ -37,6 +39,22 @@ import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
  * and a malformed one as the same `NaN`.
  */
 
+/**
+ * M14-18's choices, within the 10 to 240 the API accepts. A value saved some
+ * other way (the API takes any whole number in the range) is added to the list,
+ * so opening the form never shows a setting that is not what is stored.
+ */
+const IDLE_AWAY_PRESETS = [10, 15, 20, 30, 45, 60, 90, 120, 180, 240] as const;
+const IDLE_AWAY_OFF = 'off';
+
+export const idleAwayChoices = (stored: number | null): readonly number[] =>
+  stored === null ||
+  stored < IDLE_AWAY_MINUTES_MIN ||
+  stored > IDLE_AWAY_MINUTES_MAX ||
+  (IDLE_AWAY_PRESETS as readonly number[]).includes(stored)
+    ? IDLE_AWAY_PRESETS
+    : [...IDLE_AWAY_PRESETS, stored].sort((left, right) => left - right);
+
 /** A whole number within the range, or null for an empty box. `undefined` is "not a number". */
 export const parseWhole = (text: string, max: number): number | null | undefined => {
   const trimmed = text.trim();
@@ -50,6 +68,9 @@ export const parseWhole = (text: string, max: number): number | null | undefined
 
   return value >= 1 && value <= max ? value : undefined;
 };
+
+const idleAwayValue = (minutes: number | null): string =>
+  minutes === null ? IDLE_AWAY_OFF : String(minutes);
 
 export function AssignmentEditor({
   department,
@@ -70,12 +91,14 @@ export function AssignmentEditor({
   const capId = useId();
   const minutesId = useId();
   const onUnassignId = useId();
+  const idleAwayId = useId();
 
   const [mode, setMode] = useState<AssignmentMode>(department.mode);
   const [cap, setCap] = useState(department.loadCap === null ? '' : String(department.loadCap));
   const [autoUnassign, setAutoUnassign] = useState(department.autoUnassignOffline);
   const [minutes, setMinutes] = useState(String(department.autoUnassignAfterMinutes));
   const [onUnassign, setOnUnassign] = useState<OnUnassign>(department.onUnassign);
+  const [idleAway, setIdleAway] = useState(idleAwayValue(department.idleAwayMinutes));
 
   const reset = (): void => {
     setMode(department.mode);
@@ -83,6 +106,7 @@ export function AssignmentEditor({
     setAutoUnassign(department.autoUnassignOffline);
     setMinutes(String(department.autoUnassignAfterMinutes));
     setOnUnassign(department.onUnassign);
+    setIdleAway(idleAwayValue(department.idleAwayMinutes));
   };
 
   // Follows the selection only, for the reason `TagEditor` gives: a background
@@ -113,6 +137,7 @@ export function AssignmentEditor({
       loadCap,
       autoUnassignOffline: autoUnassign,
       autoUnassignAfterMinutes: afterMinutes ?? department.autoUnassignAfterMinutes,
+      idleAwayMinutes: idleAway === IDLE_AWAY_OFF ? null : Number(idleAway),
       onUnassign,
     });
   };
@@ -250,6 +275,31 @@ export function AssignmentEditor({
           </Typography>
         )}
       </Box>
+
+      <Field
+        id={idleAwayId}
+        label={t('ticketing:assignment.editor.idleAway')}
+        hint={t('ticketing:assignment.editor.idleAwayHint')}
+      >
+        <Select
+          id={idleAwayId}
+          value={idleAway}
+          size="small"
+          disabled={busy}
+          onChange={(event) => {
+            setIdleAway(event.target.value);
+          }}
+          sx={{ inlineSize: 240 }}
+          inputProps={{ 'aria-label': t('ticketing:assignment.editor.idleAway') }}
+        >
+          <MenuItem value={IDLE_AWAY_OFF}>{t('ticketing:assignment.editor.idleAwayOff')}</MenuItem>
+          {idleAwayChoices(department.idleAwayMinutes).map((minutes) => (
+            <MenuItem key={minutes} value={String(minutes)}>
+              {t('ticketing:assignment.editor.idleAwayOption', { minutes })}
+            </MenuItem>
+          ))}
+        </Select>
+      </Field>
 
       <Field
         id={onUnassignId}

@@ -1,7 +1,7 @@
 import { PRESENCE_SOCKET_TTL_SECONDS } from '@helpdock/schemas';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RedisStub } from '../testing/redis-stub.js';
-import { PresenceStore, presenceSocketKey } from './presence.store.js';
+import { PresenceStore, presenceActiveKey, presenceSocketKey } from './presence.store.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 const OTHER_BRAND = '01937f5e-7e53-7000-8000-00000000000b';
@@ -12,9 +12,12 @@ describe('PresenceStore', () => {
   let redis: RedisStub;
   let store: PresenceStore;
 
+  let clock: number;
+
   beforeEach(() => {
     redis = new RedisStub();
-    store = new PresenceStore(redis.asRedis());
+    clock = 1_000_000;
+    store = new PresenceStore(redis.asRedis(), () => clock);
   });
 
   it('announces an arrival once, however many tabs the person opens', async () => {
@@ -154,6 +157,118 @@ describe('PresenceStore', () => {
       ]);
 
       expect(repaired).toEqual([]);
+    });
+  });
+
+  describe('idle away (M14-18)', () => {
+    const lina = { brandId: BRAND, userId: LINA };
+
+    it('stamps the first arrival only, so a second tab does not restart the clock', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      clock += 5 * 60_000;
+      await store.join({ ...lina, socketId: 's2' });
+
+      expect(await store.lastActiveAt(BRAND, LINA)).toBe(1_000_000);
+    });
+
+    it('marks idle once, and shows the person as away', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+
+      expect(await store.markIdle(BRAND, LINA)).toBe(true);
+      expect(await store.markIdle(BRAND, LINA)).toBe(false);
+      expect(await store.map(BRAND)).toEqual({ [LINA]: 'away' });
+      expect(await store.statusOf(BRAND, LINA)).toBe('away');
+    });
+
+    it('does not mark someone with no socket idle: they are offline', async () => {
+      expect(await store.markIdle(BRAND, LINA)).toBe(false);
+      expect(await store.map(BRAND)).toEqual({});
+    });
+
+    it('ends the idle away on activity, once, and refreshes the clock', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.markIdle(BRAND, LINA);
+      clock += 60_000;
+
+      expect(await store.touch(lina)).toEqual({ present: true, idleEnded: true });
+      expect(await store.touch(lina)).toEqual({ present: true, idleEnded: false });
+      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+      expect(await store.statusOf(BRAND, LINA)).toBe('online');
+    });
+
+    it('lets activity lift the idle reason but never an explicit away', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.setStatus(lina, 'away');
+      await store.markIdle(BRAND, LINA);
+
+      expect(await store.touch(lina)).toEqual({ present: true, idleEnded: true });
+      expect(await store.statusOf(BRAND, LINA)).toBe('away');
+    });
+
+    it('treats activity from someone with no socket as nothing', async () => {
+      expect(await store.touch(lina)).toEqual({ present: false, idleEnded: false });
+      expect(await store.lastActiveAt(BRAND, LINA)).toBeNull();
+    });
+
+    it('is ended by saying online from the menu, which is activity too', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.markIdle(BRAND, LINA);
+
+      await store.setStatus(lina, 'online');
+
+      expect(await store.statusOf(BRAND, LINA)).toBe('online');
+    });
+
+    it('keeps one clock for the person across tabs, and one idle state', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.join({ ...lina, socketId: 's2' });
+      await store.markIdle(BRAND, LINA);
+      await store.leave({ ...lina, socketId: 's1' });
+
+      expect(await store.statusOf(BRAND, LINA)).toBe('away');
+      // A report made from the other tab ends it for the person.
+      expect(await store.touch(lina)).toEqual({ present: true, idleEnded: true });
+    });
+
+    it('forgets the clock and the idle mark when the person goes offline', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.markIdle(BRAND, LINA);
+      await store.leave({ ...lina, socketId: 's1' });
+      clock += 1_000;
+
+      await store.join({ ...lina, socketId: 's2' });
+
+      expect(await store.statusOf(BRAND, LINA)).toBe('online');
+      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+    });
+
+    it('keeps brands apart', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.join({ brandId: OTHER_BRAND, userId: LINA, socketId: 's2' });
+      await store.markIdle(BRAND, LINA);
+
+      expect(await store.statusOf(OTHER_BRAND, LINA)).toBe('online');
+      expect(await store.idleUsers(OTHER_BRAND)).toEqual([]);
+    });
+
+    it('starts a missing clock from now, without touching an existing one', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      clock += 1_000;
+      await store.stampIfMissing(BRAND, LINA);
+      expect(await store.lastActiveAt(BRAND, LINA)).toBe(1_000_000);
+
+      await redis.hdel(presenceActiveKey(BRAND), LINA);
+      await store.stampIfMissing(BRAND, LINA);
+      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+    });
+
+    it('releases an idle mark once, for the one caller that does', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      await store.markIdle(BRAND, LINA);
+
+      expect(await store.idleUsers(BRAND)).toEqual([LINA]);
+      expect(await store.releaseIdle(BRAND, LINA)).toBe(true);
+      expect(await store.releaseIdle(BRAND, LINA)).toBe(false);
     });
   });
 });

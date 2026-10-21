@@ -6,13 +6,20 @@ import {
   REALTIME_EVENTS,
   type SettablePresenceStatus,
 } from '@helpdock/schemas';
-import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import type { Logger } from '../logging/logger.js';
 import { LOGGER } from '../runtime/tokens.js';
+import { type IdleAwayPolicy, NoIdleAwayPolicy } from './idle-away.policy.js';
 import { type PresenceMembership, PresenceStore } from './presence.store.js';
 import { RealtimePublisher } from './publisher.js';
 import type { StaffOfflineHook } from './staff-offline.hook.js';
-import { STAFF_OFFLINE_HOOK } from './tokens.js';
+import { IDLE_AWAY_POLICY, STAFF_OFFLINE_HOOK } from './tokens.js';
 
 /**
  * Staff presence (DOMAIN-RULES §12): the store decides *what* is true, this
@@ -33,6 +40,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
   readonly #publisher: RealtimePublisher;
   readonly #offline: StaffOfflineHook;
   readonly #logger: Logger;
+  readonly #idlePolicy: IdleAwayPolicy;
   #reaper: NodeJS.Timeout | null = null;
 
   constructor(
@@ -40,7 +48,9 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
     @Inject(RealtimePublisher) publisher: RealtimePublisher,
     @Inject(STAFF_OFFLINE_HOOK) offline: StaffOfflineHook,
     @Inject(LOGGER) logger: Logger,
+    @Optional() @Inject(IDLE_AWAY_POLICY) idlePolicy: IdleAwayPolicy = new NoIdleAwayPolicy(),
   ) {
+    this.#idlePolicy = idlePolicy;
     this.#store = store;
     this.#publisher = publisher;
     this.#offline = offline;
@@ -107,12 +117,37 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
     return status;
   }
 
+  /**
+   * M14-18. Somebody reported activity. Answers their status, and whether this
+   * report is the one that ended an idle away (so the admin can say so once).
+   * An explicit away stays: only the idle reason is lifted, never a choice.
+   */
+  async active(
+    membership: Omit<PresenceMembership, 'socketId'>,
+  ): Promise<{ status: PresenceStatus; idleEnded: boolean }> {
+    const { present, idleEnded } = await this.#store.touch(membership);
+    if (!present) {
+      return { status: 'offline', idleEnded: false };
+    }
+
+    const status = await this.#store.statusOf(membership.brandId, membership.userId);
+    if (idleEnded) {
+      this.#announce(membership.brandId, membership.userId, status);
+    }
+
+    return { status, idleEnded: idleEnded && status === 'online' };
+  }
+
   async mapOf(brandId: string): Promise<PresenceMap> {
     return this.#store.map(brandId);
   }
 
-  /** Everyone whose sockets have all expired is offline, and is announced as such. */
-  async sweep(): Promise<void> {
+  /**
+   * Everyone whose sockets have all expired is offline, and is announced as
+   * such; then, per brand, everyone who has been idle past their department's
+   * limit is away (M14-18).
+   */
+  async sweep(now: number = Date.now()): Promise<void> {
     try {
       for (const brandId of await this.#store.brands()) {
         for (const userId of await this.#store.usersIn(brandId)) {
@@ -121,11 +156,50 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
             await this.#goneOffline(brandId, userId);
           }
         }
+        await this.#sweepIdle(brandId, now);
       }
     } catch (error) {
       // A sweep that throws must not kill the interval: Redis comes back, and
       // the next sweep thirty seconds later finds the same expired keys.
       this.#logger.error({ err: error }, 'The presence sweep failed');
+    }
+  }
+
+  /**
+   * Marks away whoever has reported nothing for their limit, and lifts the mark
+   * from whoever's department stopped asking for it. A failing policy read
+   * leaves every mark as it was: guessing "nobody is limited" would wake the
+   * whole brand up, and guessing "everybody is" would put them to sleep.
+   */
+  async #sweepIdle(brandId: string, now: number): Promise<void> {
+    let limits: ReadonlyMap<string, number>;
+    try {
+      limits = await this.#idlePolicy.limitsFor(brandId);
+    } catch (error) {
+      this.#logger.error({ err: error, brandId }, 'The idle-away limits could not be read');
+      return;
+    }
+
+    for (const userId of await this.#store.usersIn(brandId)) {
+      const minutes = limits.get(userId);
+      if (minutes === undefined) {
+        continue;
+      }
+
+      const lastActive = await this.#store.lastActiveAt(brandId, userId);
+      if (lastActive === null) {
+        await this.#store.stampIfMissing(brandId, userId);
+        continue;
+      }
+      if (now - lastActive >= minutes * 60_000 && (await this.#store.markIdle(brandId, userId))) {
+        this.#announce(brandId, userId, await this.#store.statusOf(brandId, userId));
+      }
+    }
+
+    for (const userId of await this.#store.idleUsers(brandId)) {
+      if (!limits.has(userId) && (await this.#store.releaseIdle(brandId, userId))) {
+        this.#announce(brandId, userId, await this.#store.statusOf(brandId, userId));
+      }
     }
   }
 

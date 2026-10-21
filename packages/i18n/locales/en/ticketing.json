@@ -153,7 +153,8 @@
     "policyDeleted": "Policy {{name}} deleted",
     "policiesReordered": "Policy order saved",
     "slaSettingsSaved": "SLA settings saved",
-    "macroChanged": "That macro changed after you applied it. Apply it again."
+    "macroChanged": "That macro changed after you applied it. Apply it again.",
+    "pinConflict": "The pinned field changed at the same moment. Try again."
   },
   "statuses": {
     "add": "Add status",

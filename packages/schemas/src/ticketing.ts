@@ -254,6 +254,8 @@ export const ticketingRefusalSchema = z.enum([
    * macro between it being applied and the reply being sent (409, M3-06).
    */
   'macro-changed',
+  /** Another change to the brand's fields got to the pinned field first; try again (409, M14-16). */
+  'pin-conflict',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

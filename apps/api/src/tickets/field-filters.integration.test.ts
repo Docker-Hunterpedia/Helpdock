@@ -609,6 +609,39 @@ describe.skipIf(!hasDocker)('custom-field filters', () => {
       await pin(severity, true);
     });
 
+    it('keeps one pinned field when two different fields are pinned at the same moment', async () => {
+      const a = await addField({ key: 'race_a', label: 'Race A', type: 'select', options: ['x'] });
+      const b = await addField({ key: 'race_b', label: 'Race B', type: 'select', options: ['x'] });
+
+      const results = await Promise.all([pin(a, true), pin(b, true)]);
+
+      // Never a 500: the row lock makes them take turns.
+      expect(results.map((result) => result.status)).toEqual([200, 200]);
+      const pinned = (await fieldsOf()).filter((field) => field.pinned);
+      expect(pinned).toHaveLength(1);
+    });
+
+    it('never leaves a hidden field pinned when a pin and a hide arrive together', async () => {
+      for (let round = 0; round < 5; round += 1) {
+        const field = await addField({
+          key: `race_hide_${round}`,
+          label: `Race hide ${round}`,
+          type: 'select',
+          options: ['x'],
+        });
+        const path = `${brandPath()}/custom-fields/${field.id}`;
+
+        const results = await Promise.all([
+          call('PATCH', path, ada, { pinned: true }),
+          call('PATCH', path, ada, { agentVisible: false }),
+        ]);
+
+        expect(results.map((result) => result.status).every((status) => status < 500)).toBe(true);
+        const after = (await fieldsOf()).find((candidate) => candidate.id === field.id);
+        expect(after?.pinned === true && after.agentVisible === false).toBe(false);
+      }
+    });
+
     it('is held to one by the database as well as by the service', async () => {
       const second = (await fieldsOf()).find((field) => field.key === 'plan') as CustomFieldDef;
 

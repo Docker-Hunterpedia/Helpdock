@@ -12,6 +12,7 @@ import type {
 import { isChoiceField } from '@helpdock/schemas';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { isUniqueViolation } from '../http/unique-violation.js';
 import { writeTicketingAudit } from './audit.js';
 import type { CustomFieldsRepository, FieldUsage } from './custom-fields.repository.js';
 import type { TicketingActor, TicketingContext } from './ticketing-context.js';
@@ -70,6 +71,9 @@ export class CustomFieldsService {
     context: TicketingContext,
     request: CustomFieldCreateRequest,
   ): Promise<CustomFieldDef> {
+    if (request.pinned) {
+      await this.#repository.lockFields(context.tx);
+    }
     if (await this.#repository.keyTaken(context.tx, request.target, request.key)) {
       throw new TicketingFailure('name-taken');
     }
@@ -118,6 +122,9 @@ export class CustomFieldsService {
     fieldId: string,
     request: CustomFieldUpdateRequest,
   ): Promise<CustomFieldDef> {
+    // Before the checks, so a concurrent "pin" and "hide from Agents" are
+    // judged one after the other against the row the first one left.
+    await this.#repository.lockFields(context.tx);
     const def = await this.#require(context.tx, fieldId);
     const usage = await this.#repository.usage(context.tx, def);
     const movesType = request.type !== undefined && request.type !== def.type;
@@ -150,15 +157,17 @@ export class CustomFieldsService {
     // The unique index allows one pinned field, so the old one is let go first.
     const unpinned = pins ? await this.#repository.unpinOthers(context.tx, fieldId) : [];
 
-    await this.#repository.update(context.tx, fieldId, {
-      ...(request.label === undefined ? {} : { label: request.label }),
-      ...(request.labelAr === undefined ? {} : { labelAr: request.labelAr }),
-      ...(request.type === undefined ? {} : { type: request.type }),
-      ...(options === undefined ? {} : { options }),
-      ...(request.required === undefined ? {} : { required: request.required }),
-      ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
-      ...(request.pinned === undefined ? {} : { pinned: request.pinned }),
-    });
+    await this.#writingPin(() =>
+      this.#repository.update(context.tx, fieldId, {
+        ...(request.label === undefined ? {} : { label: request.label }),
+        ...(request.labelAr === undefined ? {} : { labelAr: request.labelAr }),
+        ...(request.type === undefined ? {} : { type: request.type }),
+        ...(options === undefined ? {} : { options }),
+        ...(request.required === undefined ? {} : { required: request.required }),
+        ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
+        ...(request.pinned === undefined ? {} : { pinned: request.pinned }),
+      }),
+    );
 
     await writeTicketingAudit(context.tx, {
       brandId: context.brandId,
@@ -187,9 +196,22 @@ export class CustomFieldsService {
   /** Pins a field and returns the keys of the ones that let go. */
   async #pin(tx: DbTransaction, fieldId: string): Promise<string[]> {
     const unpinned = await this.#repository.unpinOthers(tx, fieldId);
-    await this.#repository.update(tx, fieldId, { pinned: true });
+    await this.#writingPin(() => this.#repository.update(tx, fieldId, { pinned: true }));
 
     return unpinned;
+  }
+
+  /**
+   * The row lock keeps two pins apart; the unique index is the backstop for a
+   * write path that does not take it, and its refusal is a 409 the person can
+   * retry rather than a 500.
+   */
+  async #writingPin<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      throw isUniqueViolation(error) ? new TicketingFailure('pin-conflict') : error;
+    }
   }
 
   /**

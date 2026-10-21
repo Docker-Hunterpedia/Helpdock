@@ -78,6 +78,11 @@ interface ListCase {
   readonly budgetMs?: number;
 }
 
+/** One `fieldFilter` parameter: `key` is any of `values`. */
+const fieldFilter = (key: string, values: readonly string[]): string[] => [
+  JSON.stringify({ key, op: 'any_of', values }),
+];
+
 const queryString = (query: ListCase['query']): string => {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -124,7 +129,32 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
         });
       },
     });
+    await seedFieldValues();
   }, 1_800_000);
+
+  /**
+   * M14-16: a Severity select and a multi-select on the measured brand, valued
+   * on every ticket (0.2 % / 5 % / 10 % / 85 % of tickets across four options,
+   * the multi-select 30 % EU), so the field-filter cases read a rare value, a
+   * common one and an array. The same shape the PR's EXPLAIN table was taken on.
+   */
+  const seedFieldValues = async (): Promise<void> => {
+    await stack.owner.db.execute(sql`
+      INSERT INTO custom_field_defs (id, brand_id, target, key, label, type, options, sort_order)
+      VALUES
+        (gen_random_uuid(), ${dataset.brandId}, 'ticket', 'severity', 'Severity', 'select',
+          '["Sev 0","Sev 1","Sev 2","Sev 3"]'::jsonb, 0),
+        (gen_random_uuid(), ${dataset.brandId}, 'ticket', 'regions', 'Regions', 'multi_select',
+          '["EU","US","MEA"]'::jsonb, 1)`);
+    await stack.owner.db.execute(sql`
+      UPDATE tickets SET custom = jsonb_build_object(
+        'severity', CASE WHEN random() < 0.002 THEN 'Sev 0' WHEN random() < 0.05 THEN 'Sev 1'
+                         WHEN random() < 0.15 THEN 'Sev 2' ELSE 'Sev 3' END,
+        'regions', CASE WHEN random() < 0.3 THEN jsonb_build_array('EU')
+                        ELSE jsonb_build_array('US', 'MEA') END)
+      WHERE brand_id = ${dataset.brandId}`);
+    await stack.owner.db.execute(sql`ANALYZE tickets`);
+  };
 
   afterAll(async () => {
     await stack?.stop();
@@ -205,6 +235,30 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
             budgetMs: settings.noMatchGateMs,
           },
           { name: 'tags: all-of two', session, query: { tagIds: [...dataset.tagPair] } },
+          // M14-16: custom-field filters. No index backs them (a GIN was
+          // measured and never chosen), so these are the numbers that say the
+          // list still holds its gate with one: a rare value, a common one, a
+          // multi-select, and two filters with the live states.
+          {
+            name: 'field: rare select',
+            session,
+            query: { fieldFilter: fieldFilter('severity', ['Sev 0']) },
+          },
+          {
+            name: 'field: common select',
+            session,
+            query: { fieldFilter: fieldFilter('severity', ['Sev 3']) },
+          },
+          {
+            name: 'field: multi-select',
+            session,
+            query: { fieldFilter: fieldFilter('regions', ['EU']) },
+          },
+          {
+            name: 'field: select + live states',
+            session,
+            query: { fieldFilter: fieldFilter('severity', ['Sev 1']), systemState: LIVE_STATES },
+          },
           {
             name: 'page 2 (keyset)',
             session,
@@ -273,10 +327,11 @@ describe.skipIf(!hasDocker)('ticket list at 50k tickets (M1-15, DOMAIN-RULES §1
       await withTenant(stack.app.db, context, async (tx) => {
         const reader = { brandId: dataset.brandId, viewerId: context.principalId };
         const page = await repository.listTickets(tx, reader, query);
+        const fieldFilters = await repository.resolveFieldFilters(tx, reader, query.fieldFilter);
         const halves: SearchMode[] = page.search === 'fuzzy' ? ['exact', 'fuzzy'] : ['exact'];
         for (const search of halves) {
           const rows = await tx.execute<{ 'QUERY PLAN': string }>(
-            sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, reader, query, search)}`,
+            sql`EXPLAIN (ANALYZE, BUFFERS) ${repository.listTicketsStatement(tx, reader, query, search, fieldFilters)}`,
           );
           const label = search === 'fuzzy' ? ' · fuzzy fallback' : '';
           plans[`${listCase.session} · ${listCase.name}${label}`] = [...rows]

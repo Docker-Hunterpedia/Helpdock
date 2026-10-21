@@ -1043,7 +1043,7 @@ built and measured on the 50k-ticket dataset of
 the plans were identical with and without it (12 to 45 ms for a rare value, a
 common one and a department-restricted Agent), because `@>` is not `LEAKPROOF`
 and Postgres therefore does not run it ahead of the row-level-security policies,
-and the list is paged by the `tickets_brand_*` indexes anyway.
+and the list is paged by the `tickets_brand_*` indexes anyway. `pnpm --filter @helpdock/api perf:tickets` carries four field-filter cases (a rare value, a common one, a multi-select, and a filter with the live states) so the numbers can be taken again.
 
 **The Severity recipe.** Helpdock has no Severity field of its own; priority is
 what the SLA engine targets. A team that wants one: add a **Select** field named

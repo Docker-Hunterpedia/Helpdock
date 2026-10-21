@@ -221,3 +221,24 @@ test('puts the same rows in the Views tab’s editor and prints them in the "Sho
   const row = page.getByRole('row').filter({ hasText: 'Gold, shared' });
   await expect(row).toContainText(t('tickets:summary.is', { field: TIER[locale], value: 'gold' }));
 });
+
+test('stacks a row in the Views tab’s narrow card, so the value keeps room and nothing scrolls sideways', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTicketing(page, locale);
+  await page.getByRole('tab', { name: t('ticketing:tabs.views') }).click();
+  await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
+
+  const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
+  await card.getByRole('button', { name: t('tickets:fieldFilters.add') }).click();
+  await page.getByRole('menuitem', { name: ORDER_ID[locale], exact: true }).click();
+
+  // The card is about 300 px wide: one cell of a four-column row would be ~20 px.
+  const value = card.getByLabel(t('tickets:fieldFilters.valueOf', { field: ORDER_ID[locale] }));
+  expect((await value.boundingBox())?.width ?? 0).toBeGreaterThan(150);
+  expect(await card.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(false);
+  expect(await violations(page)).toEqual([]);
+});

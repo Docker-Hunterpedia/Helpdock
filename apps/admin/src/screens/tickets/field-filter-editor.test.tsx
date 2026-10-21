@@ -67,6 +67,24 @@ describe('FieldFilterEditor', () => {
     expect(screen.getByRole('button', { name: 'Add filter' })).toBeDisabled();
   });
 
+  it('keeps its status region mounted from the start, so a screen reader hears it fill', async () => {
+    const { user } = render([], { applyLabel: 'Apply' });
+    const status = screen.getByRole('status');
+    expect(status).toBeEmptyDOMElement();
+
+    await addFilter(user, 'Severity');
+
+    // The same element, now with text: it was never remounted.
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status).toHaveTextContent('no value yet');
+  });
+
+  it('has no status region where rows apply as they change', () => {
+    render([{ key: 'vip', op: 'is', value: true }]);
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('applies a select filter once an option is chosen, and not before', async () => {
     const { user, onChange } = render([], { applyLabel: 'Apply' });
 

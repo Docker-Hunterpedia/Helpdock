@@ -20,6 +20,8 @@ let rows: CustomFieldDefRow[];
 let usage: Record<string, FieldUsage>;
 let cleared: { key: string; option: string }[];
 let ordered: readonly string[];
+let locked: number;
+let failNextWrite: Error | undefined;
 
 const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefRow => ({
   brandId: '01937f5e-7e53-7000-8000-0000000000b1',
@@ -60,10 +62,18 @@ const repository = {
     if (row === undefined) {
       return undefined;
     }
+    if (failNextWrite !== undefined) {
+      const failure = failNextWrite;
+      failNextWrite = undefined;
+      throw failure;
+    }
     const updated = { ...row, ...values } as CustomFieldDefRow;
     rows = rows.map((candidate) => (candidate.id === id ? updated : candidate));
 
     return updated;
+  },
+  lockFields: async () => {
+    locked += 1;
   },
   unpinOthers: async (_tx: DbTransaction, id: string) => {
     const others = rows.filter((row) => row.pinned && row.id !== id);
@@ -95,6 +105,8 @@ beforeEach(() => {
   usage = { tier: { rows: 7, optionRows: { gold: 4 } } };
   cleared = [];
   ordered = [];
+  locked = 0;
+  failNextWrite = undefined;
   service = new CustomFieldsService(repository);
   transaction = fakeTransaction();
 });
@@ -401,5 +413,52 @@ describe('pinning (M14-16)', () => {
     );
     await expect(create({ pinned: true, target: 'contact' })).rejects.toThrow(BadRequestException);
     expect(rows.some((row) => row.key === 'severity')).toBe(false);
+  });
+});
+
+describe('concurrent pins (M14-16)', () => {
+  it('locks the brand’s fields before it judges an update, and before a create that pins', async () => {
+    await service.update(contextFor(transaction.tx), 'tier', { label: 'Tier', force: false });
+    expect(locked).toBe(1);
+
+    await service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'plain',
+      label: 'Plain',
+      type: 'text',
+      options: [],
+      required: false,
+      agentVisible: true,
+      pinned: false,
+    });
+    expect(locked).toBe(1);
+
+    await service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'severity',
+      label: 'Severity',
+      type: 'select',
+      options: ['Sev 1'],
+      required: false,
+      agentVisible: true,
+      pinned: true,
+    });
+    expect(locked).toBe(2);
+  });
+
+  it('answers a unique-index refusal as a 409 pin-conflict, not a 500', async () => {
+    failNextWrite = Object.assign(new Error('duplicate key'), { code: '23505' });
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).rejects.toMatchObject({ reason: 'pin-conflict', status: 409 });
+  });
+
+  it('lets any other write failure through unchanged', async () => {
+    failNextWrite = new Error('connection lost');
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).rejects.toThrow('connection lost');
   });
 });

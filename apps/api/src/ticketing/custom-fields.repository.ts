@@ -78,6 +78,22 @@ export class CustomFieldsRepository {
     return rows[0];
   }
 
+  /**
+   * Locks every field definition of the brand until the transaction ends
+   * (M14-16). Pinning and hiding read a field, check a rule about it and then
+   * write, so two requests that interleave could each pass the check and leave
+   * a hidden field pinned, or two fields pinned. A brand has at most a few
+   * hundred rows here and edits them rarely, so one lock per brand is the
+   * simplest thing that is right. Ordered by id so two lockers cannot deadlock.
+   */
+  async lockFields(tx: DbTransaction): Promise<void> {
+    await tx
+      .select({ id: customFieldDefs.id })
+      .from(customFieldDefs)
+      .orderBy(asc(customFieldDefs.id))
+      .for('update');
+  }
+
   async keyTaken(tx: DbTransaction, target: CustomFieldTarget, key: string): Promise<boolean> {
     const rows = await tx
       .select({ id: customFieldDefs.id })

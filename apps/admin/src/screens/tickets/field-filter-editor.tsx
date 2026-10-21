@@ -101,7 +101,9 @@ export function FieldFilterEditor({
   const changed = json(complete) !== json(value);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    // A size container, because the room is the card's or the popover's, not the
+    // window's: the Views tab's editor is 300 px wide on a desktop.
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, containerType: 'inline-size' }}>
       {rows.length === 0 ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {t('tickets:fieldFilters.none')}
@@ -125,17 +127,25 @@ export function FieldFilterEditor({
                 sx={{
                   listStyle: 'none',
                   display: 'grid',
-                  gridTemplateColumns: '112px 128px minmax(0, 1fr) 28px',
+                  // Narrow: the name and the remove button, then the operator
+                  // and the value each on a line of their own.
+                  gridTemplateColumns: 'minmax(0, 1fr) 28px',
+                  gridTemplateAreas: '"label remove" "op op" "value value"',
                   gap: 2,
                   alignItems: 'center',
+                  '@container (min-width: 440px)': {
+                    gridTemplateColumns: '112px 128px minmax(0, 1fr) 28px',
+                    gridTemplateAreas: '"label op value remove"',
+                  },
                 }}
               >
-                <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+                <Typography variant="body2" sx={{ gridArea: 'label', overflowWrap: 'anywhere' }}>
                   {label}
                 </Typography>
                 <TextField
                   select
                   size="small"
+                  sx={{ gridArea: 'op' }}
                   value={row.op}
                   disabled={disabled}
                   slotProps={{
@@ -154,15 +164,18 @@ export function FieldFilterEditor({
                     </option>
                   ))}
                 </TextField>
-                <ValueControl
-                  row={row}
-                  def={def}
-                  label={label}
-                  disabled={disabled}
-                  onPatch={(change) => patch(row.key, change)}
-                />
+                <Box sx={{ gridArea: 'value', minWidth: 0 }}>
+                  <ValueControl
+                    row={row}
+                    def={def}
+                    label={label}
+                    disabled={disabled}
+                    onPatch={(change) => patch(row.key, change)}
+                  />
+                </Box>
                 <IconButton
                   size="small"
+                  sx={{ gridArea: 'remove' }}
                   disabled={disabled}
                   aria-label={t('tickets:fieldFilters.remove', { field: label })}
                   onClick={() => {
@@ -205,11 +218,13 @@ export function FieldFilterEditor({
           </Button>
         )}
       </Box>
-      {incomplete > 0 && applyLabel !== undefined ? (
+      {applyLabel === undefined ? null : (
+        // Mounted from the start and only filled in later: a live region that
+        // appears with its text is not reliably announced.
         <Typography variant="caption" role="status" sx={{ color: 'text.secondary' }}>
-          {t('tickets:fieldFilters.incomplete', { count: incomplete })}
+          {incomplete > 0 ? t('tickets:fieldFilters.incomplete') : ''}
         </Typography>
-      ) : null}
+      )}
 
       <Menu
         id={menuId}

@@ -264,13 +264,27 @@ describe('toMessage', () => {
   });
 
   it('names the agent when the brand shows agents, and the brand when it does not', () => {
-    const named = toMessage(wireMessage({ agent: { name: 'Lina', avatarUrl: null } }), 'Acme');
+    const named = toMessage(
+      wireMessage({
+        agent: {
+          name: 'Lina',
+          title: 'Billing specialist',
+          avatarUrl: 'https://bucket.test/l.webp',
+        },
+      }),
+      'Acme',
+    );
     const hidden = toMessage(wireMessage({ agent: null }), 'Acme');
     const ai = toMessage(wireMessage({ author: 'ai' }), 'Acme');
 
     expect(named.author).toEqual({
       kind: 'agent',
-      agent: { id: 'agent:Lina', name: 'Lina', avatar_url: null },
+      agent: {
+        id: 'agent:Lina',
+        name: 'Lina',
+        title: 'Billing specialist',
+        avatar_url: 'https://bucket.test/l.webp',
+      },
     });
     expect(hidden.author).toEqual({
       kind: 'agent',

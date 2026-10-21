@@ -100,7 +100,7 @@ describe('ai_meta', () => {
   });
 
   it('puts the answer alone in the widget message, which draws its own sources', () => {
-    const view = toWidgetMessage(row(), [], { staffNames: new Map(), showAgentIdentity: false });
+    const view = toWidgetMessage(row(), [], { agents: new Map(), showAgentIdentity: false });
 
     expect(widgetMessageSchema.parse(view)).toEqual(view);
     expect(view).toMatchObject({

@@ -148,10 +148,16 @@ export const toAttachment = (wire: WireAttachment): Attachment => ({
  * An agent as the thread draws them. With "show the agent's name" off the
  * api sends no name, and the brand speaks instead (M4-08).
  */
-export const agentOf = (name: string | null, avatarUrl: string | null, brandName: string) =>
+export const agentOf = (
+  name: string | null,
+  avatarUrl: string | null,
+  brandName: string,
+  title: string | null = null,
+) =>
   ({
     id: name === null ? 'brand' : `agent:${name}`,
     name: name ?? brandName,
+    ...(title === null ? {} : { title }),
     avatar_url: avatarUrl,
   }) satisfies AgentSummary;
 
@@ -169,7 +175,12 @@ export const toMessage = (wire: WireMessage, brandName: string): WidgetMessage =
           ? { kind: 'ai' }
           : {
               kind: 'agent',
-              agent: agentOf(wire.agent?.name ?? null, wire.agent?.avatarUrl ?? null, brandName),
+              agent: agentOf(
+                wire.agent?.name ?? null,
+                wire.agent?.avatarUrl ?? null,
+                brandName,
+                wire.agent?.title ?? null,
+              ),
             },
   body: wire.text,
   attachments: wire.attachments.map(toAttachment),

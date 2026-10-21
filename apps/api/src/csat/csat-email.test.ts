@@ -43,10 +43,10 @@ describe('CsatEmailSource', () => {
     );
   });
 
-  it('names the closer by first name, and nobody when the page may not', async () => {
-    expect(
-      (await source({ closer: 'Lina Haddad' }).forDelivery(tx, surveyDelivery()))?.closedBy,
-    ).toBe('Lina');
+  it('names the closer by the public name the repository resolved, and nobody when the page may not', async () => {
+    expect((await source({ closer: 'Lina' }).forDelivery(tx, surveyDelivery()))?.closedBy).toBe(
+      'Lina',
+    );
     expect((await source().forDelivery(tx, surveyDelivery()))?.closedBy).toBeNull();
   });
 

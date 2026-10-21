@@ -71,9 +71,14 @@ export const SAMPLE_AI_HANDOFF: Record<WidgetLocale, string> = {
   ar: 'لست متأكداً من الإجابة، لذلك سأحوّلك إلى الفريق بدلاً من التخمين. سيرد عليك أحدهم هنا قريباً.',
 };
 
-export const LINA: AgentSummary = { id: 'agent-lina', name: 'Lina Haddad', avatar_url: null };
-const KARIM: AgentSummary = { id: 'agent-karim', name: 'Karim Nasser', avatar_url: null };
-const SARA: AgentSummary = { id: 'agent-sara', name: 'Sara Ali', avatar_url: null };
+export const LINA: AgentSummary = {
+  id: 'agent-lina',
+  name: 'Lina',
+  title: 'Billing specialist',
+  avatar_url: null,
+};
+const KARIM: AgentSummary = { id: 'agent-karim', name: 'Karim', avatar_url: null };
+const SARA: AgentSummary = { id: 'agent-sara', name: 'Sara', avatar_url: null };
 
 const MB = 1024 * 1024;
 

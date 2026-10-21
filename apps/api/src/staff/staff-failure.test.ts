@@ -9,6 +9,11 @@ const REASONS: readonly StaffRefusal[] = [
   'out-of-scope',
   'viewer-disabled',
   'last-install-admin',
+  'invalid-phone',
+  'photo-missing',
+  'photo-too-large',
+  'photo-unsupported-type',
+  'photo-unreadable',
 ];
 
 describe('StaffFailure', () => {
@@ -20,6 +25,19 @@ describe('StaffFailure', () => {
     for (const reason of ['self', 'viewer-disabled', 'last-install-admin'] as const) {
       expect(new StaffFailure(reason).getStatus(), reason).toBe(HttpStatus.CONFLICT);
     }
+  });
+});
+
+describe('the profile refusals', () => {
+  it.each([
+    'invalid-phone',
+    'photo-missing',
+    'photo-too-large',
+    'photo-unsupported-type',
+    'photo-unreadable',
+  ] as const)('answers 400 for %s, the caller sent something the profile cannot keep', (reason) => {
+    expect(new StaffFailure(reason).getStatus()).toBe(HttpStatus.BAD_REQUEST);
+    expect(mapError(new StaffFailure(reason)).code).toBe('validation_failed');
   });
 });
 

@@ -70,6 +70,8 @@ export interface Recipient {
   readonly name: string;
   readonly email: string;
   readonly locale: 'en' | 'ar';
+  /** The person's own IANA zone (M14-12); absent or null means the brand's. */
+  readonly timeZone?: string | null;
 }
 
 const reference = sql<string>`${tickets.prefix} || '-' || ${tickets.number}::text`;
@@ -130,7 +132,12 @@ export class EmailPacingRepository {
 
   async recipient(tx: DbTransaction, userId: string): Promise<Recipient | undefined> {
     const [row] = await tx
-      .select({ name: users.name, email: users.email, locale: users.locale })
+      .select({
+        name: users.name,
+        email: users.email,
+        locale: users.locale,
+        timeZone: users.timeZone,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -140,8 +147,8 @@ export class EmailPacingRepository {
 
   /**
    * The brand's name for the subject, and its time zone for times and the
-   * daily digest's hour. A person's own time zone arrives with M14-12's
-   * `users.time_zone`; until then the brand's stands in for everyone in it.
+   * daily digest's hour when the person has not chosen their own
+   * (`users.time_zone`, M14-12).
    */
   async brand(
     tx: DbTransaction,
@@ -287,10 +294,11 @@ export class EmailPacingRepository {
   async unbatchedRecipients(
     tx: DbTransaction,
     brandId: string,
-  ): Promise<{ userId: string; preferences: EmailPreferences }[]> {
+  ): Promise<{ userId: string; preferences: EmailPreferences; timeZone: string | null }[]> {
     const rows = await tx
       .selectDistinct({
         userId: notifications.userId,
+        timeZone: users.timeZone,
         emailSchedule: notificationPrefs.emailSchedule,
         digestHour: notificationPrefs.digestHour,
         pausedUntil: notificationPrefs.pausedUntil,
@@ -298,6 +306,7 @@ export class EmailPacingRepository {
       })
       .from(notifications)
       .leftJoin(notificationPrefs, eq(notificationPrefs.userId, notifications.userId))
+      .leftJoin(users, eq(users.id, notifications.userId))
       .where(
         and(
           eq(notifications.brandId, brandId),
@@ -307,14 +316,17 @@ export class EmailPacingRepository {
       )
       .orderBy(asc(notifications.userId));
 
-    return rows.map(({ userId, emailSchedule, digestHour, pausedUntil, emailUnsubscribedAt }) => ({
-      userId,
-      preferences: toPreferences(
-        emailSchedule === null || digestHour === null
-          ? undefined
-          : { emailSchedule, digestHour, pausedUntil, emailUnsubscribedAt },
-      ),
-    }));
+    return rows.map(
+      ({ userId, timeZone, emailSchedule, digestHour, pausedUntil, emailUnsubscribedAt }) => ({
+        userId,
+        timeZone,
+        preferences: toPreferences(
+          emailSchedule === null || digestHour === null
+            ? undefined
+            : { emailSchedule, digestHour, pausedUntil, emailUnsubscribedAt },
+        ),
+      }),
+    );
   }
 
   /**

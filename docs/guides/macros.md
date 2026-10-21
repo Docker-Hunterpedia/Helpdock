@@ -30,7 +30,23 @@ The allow-list is M1-06's template list plus the sender:
 | `{{contact.first_name}}`, `{{contact.last_name}}`, `{{contact.name}}`, `{{contact.email}}` | The ticket's contact |
 | `{{ticket.number}}` | `HD-1042` |
 | `{{brand.name}}` | The brand |
-| `{{agent.first_name}}` | Whoever sends the reply. For a rule, the ticket's assignee |
+| `{{agent.first_name}}` | The first word of the sender's full name. For a rule, the sender is the ticket's assignee |
+| `{{agent.name}}` | The name the sender chose for customers, their **public name** (their first name until they set one) |
+| `{{agent.full_name}}` | The sender's full name, for the rare reply that should carry it |
+| `{{agent.title}}` | The sender's job title in the language of the reply; English when there is no Arabic one; nothing when neither is set |
+| `{{agent.phone}}` | The sender's phone, in international form; nothing when unset |
+| `{{department.name}}` | The ticket's department, in the language of the reply |
+
+The sender sets their public name, titles and phone on **Your account →
+Profile** (see [Staff and roles](staff-and-roles.md#profile-for-customers)).
+A value that is unset renders as nothing, so a customer never reads a
+placeholder; the email address of the sender is not a placeholder.
+
+**Signatures take them too.** A signature
+(**Your account → Email signature**) may use `{{agent.name}}`, `{{agent.title}}`,
+`{{agent.phone}}`, `{{department.name}}` and `{{brand.name}}`, so one brand-wide
+instruction, "sign with `{{agent.name}}` and `{{agent.title}}`", works for every
+agent. A signature line whose placeholder is empty (no phone number) is dropped.
 
 An unknown placeholder is left as written, so a typo shows. Rendering is one
 pass over a fixed list of names (`packages/schemas/src/placeholders.ts`), never

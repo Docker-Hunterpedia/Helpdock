@@ -6,7 +6,7 @@ import { Clock } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
-import { useTicketsApi } from '../../../auth/session.tsx';
+import { useStaffApi, useTicketsApi } from '../../../auth/session.tsx';
 import { useAriaKeyShortcuts } from '../../../keyboard/keyboard-provider.tsx';
 import { ticketKeys } from '../../../tickets/keys.js';
 import { isolate, wakeTime } from '../format.js';
@@ -122,13 +122,23 @@ export function SnoozeMenu({
   const api = useTicketsApi();
   const { locale } = usePreferences();
   const [picking, setPicking] = useState(false);
-  const agentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const staffApi = useStaffApi();
+  // The picker reads what is typed in the browser's zone, so it says that one;
+  // the presets (Next business day at nine) are worked out in the zone the
+  // person chose in their profile (M14-12), the browser's until they do.
+  const profile = useQuery({
+    queryKey: ['me', 'profile'],
+    queryFn: () => staffApi.profile(),
+    staleTime: 60_000,
+  });
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const agentZone = profile.data?.timeZone ?? browserZone;
   const end = dir(locale) === 'rtl' ? 'left' : 'right';
 
   const presets = useQuery({
     queryKey: [...ticketKeys.brand(brandId), 'snooze-presets', ticketId, agentZone],
     queryFn: () => api.snoozePresets(brandId, ticketId, agentZone),
-    enabled: anchor !== null,
+    enabled: anchor !== null && !profile.isPending,
     gcTime: 0,
   });
 
@@ -223,7 +233,7 @@ export function SnoozeMenu({
 
       <SnoozePickerDialog
         open={picking}
-        agentZone={agentZone}
+        agentZone={browserZone}
         departmentName={data?.departmentName ?? ''}
         departmentZone={differs ? departmentZone : null}
         busy={busy}

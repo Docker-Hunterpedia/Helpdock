@@ -206,6 +206,7 @@ import {
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
 import { createSamlMetadataProcessor } from '../sso/saml-metadata.job.js';
+import { ProfilePhotoStore } from '../staff/profile-photo.store.js';
 import { telegramApiFactory } from '../telegram/bot-api-factory.js';
 import { createTelegramInboundService } from '../telegram/factory.js';
 import { TelegramRepository } from '../telegram/telegram.repository.js';
@@ -234,6 +235,7 @@ import { registerTriageEventHandlers } from '../triage/triage-events.js';
 import { createWebhookDeliverProcessor } from '../webhooks/webhook-deliver.job.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
 import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
+import { AgentCards } from '../widget/agent-cards.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 
@@ -569,9 +571,12 @@ export const workerDependencies: WorkerDependencies = {
     // M4-04: the same ticket events as widget frames, on the widget's channel.
     // M7-06: a `conversation` frame carries the hours of the team answering it.
     const widgetHours = businessHoursService();
-    registerWidgetEventHandlers(new RedisWidgetBroadcast(redis), {
-      calendarsFor: (brandId, tx) => widgetHours.calendarsFor(brandId, tx),
-    });
+    registerWidgetEventHandlers(
+      new RedisWidgetBroadcast(redis),
+      { calendarsFor: (brandId, tx) => widgetHours.calendarsFor(brandId, tx) },
+      // M14-12: the photo of whoever wrote, presigned for the frame.
+      new AgentCards(new ProfilePhotoStore(storageFor(env))),
+    );
     // M1-14: deletes the objects of attachments a purge or an erasure removed.
     registerObjectPurgeHandler(storageFor(env));
     // M7-08: a brand reached 80 % or 100 % of an AI budget window.

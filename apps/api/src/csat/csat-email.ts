@@ -3,7 +3,6 @@ import { CSAT_RATING_MAX, CSAT_RATING_MIN } from '@helpdock/schemas';
 import type { SurveyEmailSource } from '../email/email-send.job.js';
 import type { CsatSurveyEmail } from '../email/render-delivery.js';
 import type { CsatRepository } from './csat.repository.js';
-import { firstNameOf } from './csat.service.js';
 import { type CsatTokens, csatSurveyUrl } from './tokens.js';
 
 const SCORES = Array.from(
@@ -62,7 +61,7 @@ export class CsatEmailSource implements SurveyEmailSource {
 
     return {
       links: links.filter((link): link is string => link !== null),
-      closedBy: closer === undefined ? null : firstNameOf(closer),
+      closedBy: closer ?? null,
     };
   }
 

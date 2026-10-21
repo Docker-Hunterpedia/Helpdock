@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { passwordSchema, staffRoleSchema } from './auth.js';
-import { localeSchema } from './brand.js';
+import { localeSchema, timezoneSchema } from './brand.js';
 import { departmentSchema } from './ticketing.js';
 
 /**
@@ -42,6 +42,16 @@ export const staffRefusalSchema = z.enum([
   'viewer-disabled',
   /** The install would be left with no install admin (409). */
   'last-install-admin',
+  /** The public phone is not an international number (400, M14-12). */
+  'invalid-phone',
+  /** The photo upload carried no file (400). */
+  'photo-missing',
+  /** The photo is over the size cap (400). */
+  'photo-too-large',
+  /** The photo is not a JPEG, PNG or WebP by its bytes (400). */
+  'photo-unsupported-type',
+  /** The photo is the right type but will not decode (400). */
+  'photo-unreadable',
 ]);
 export type StaffRefusal = z.infer<typeof staffRefusalSchema>;
 
@@ -196,6 +206,20 @@ export type InviteTokenParam = z.infer<typeof inviteTokenParamSchema>;
 // The account a person owns
 // --------------------------------------------------------------------------
 
+/** Longest public name, job title and phone a profile keeps; the form counts against the same numbers. */
+export const PUBLIC_NAME_MAX_LENGTH = 60;
+export const JOB_TITLE_MAX_LENGTH = 80;
+export const PUBLIC_PHONE_MAX_LENGTH = 40;
+
+/** The photo's two sizes as presigned, short-lived URLs (M14-12). */
+export const profilePhotoSchema = z.object({
+  /** 64 px: the avatar beside a name. */
+  small: z.url(),
+  /** 256 px: the preview on the profile page. */
+  large: z.url(),
+});
+export type ProfilePhoto = z.infer<typeof profilePhotoSchema>;
+
 export const profileSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1),
@@ -206,19 +230,54 @@ export const profileSchema = z.object({
   recoveryCodesLeft: z.number().int().nonnegative(),
   /** `auth.require2fa`. On, the disable button is not offered. */
   twoFactorRequired: z.boolean(),
+  /** M14-12. What the person chose to be called by customers; null means the first name. */
+  publicName: z.string().nullable(),
+  /** What customers see today: the public name, or the first word of `name`. */
+  displayName: z.string().min(1),
+  jobTitleEn: z.string().nullable(),
+  jobTitleAr: z.string().nullable(),
+  /** E.164. Shown to customers only where a signature uses `{{agent.phone}}`. */
+  phone: z.string().nullable(),
+  /** IANA name; null until the person (or their browser, on first visit) sets it. */
+  timeZone: z.string().nullable(),
+  photo: profilePhotoSchema.nullable(),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
+/** A text field of the profile: blank means "clear it", and a value is trimmed and capped. */
+const clearable = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((value) => (value === '' ? null : value));
+
+/**
+ * A partial update: a field left out is kept, `null` (or blank) clears it. Name
+ * and language are the security page's; the rest is M14-12's.
+ */
 export const profileUpdateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     locale: localeSchema.optional(),
+    publicName: clearable(PUBLIC_NAME_MAX_LENGTH).optional(),
+    jobTitleEn: clearable(JOB_TITLE_MAX_LENGTH).optional(),
+    jobTitleAr: clearable(JOB_TITLE_MAX_LENGTH).optional(),
+    phone: clearable(PUBLIC_PHONE_MAX_LENGTH).optional(),
+    timeZone: timezoneSchema.nullable().optional(),
   })
   .refine(
-    (value) => value.name !== undefined || value.locale !== undefined,
-    'Send a name, a language, or both',
+    (value) => Object.values(value).some((field) => field !== undefined),
+    'Send at least one field to change',
   );
 export type ProfileUpdateRequest = z.infer<typeof profileUpdateRequestSchema>;
+
+/** What the photo upload accepts and keeps (M14-12). */
+export const PROFILE_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+/** The two square sizes the upload is re-encoded to, in pixels. */
+export const PROFILE_PHOTO_SIZES = { small: 64, large: 256 } as const;
 
 export const passwordChangeRequestSchema = z.object({
   currentPassword: z.string().min(1).max(200),

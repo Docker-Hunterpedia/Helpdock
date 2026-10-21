@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { localeSchema } from './brand.js';
+import { AGENT_PLACEHOLDERS } from './placeholders.js';
 import { messageCreateRequestSchema, ticketMessageSchema, ticketPrioritySchema } from './ticket.js';
 import { TEMPLATE_PLACEHOLDERS } from './ticket-templates.js';
 
@@ -33,7 +34,11 @@ export const MAX_MACROS_PER_BRAND = 500;
  * M1-06's placeholders plus the one a reply needs that a new ticket does not:
  * who is sending it. An allow-list for the reason `TEMPLATE_PLACEHOLDERS` gives.
  */
-export const CANNED_PLACEHOLDERS = [...TEMPLATE_PLACEHOLDERS, 'agent.first_name'] as const;
+export const CANNED_PLACEHOLDERS = [
+  ...TEMPLATE_PLACEHOLDERS,
+  'agent.first_name',
+  ...AGENT_PLACEHOLDERS,
+] as const;
 export type CannedPlaceholder = (typeof CANNED_PLACEHOLDERS)[number];
 
 /** The languages a reply is written in: the interface's two (REQUIREMENTS §4.13). */

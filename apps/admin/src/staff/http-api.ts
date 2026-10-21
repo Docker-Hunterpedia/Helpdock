@@ -100,6 +100,17 @@ export class HttpStaffApi implements StaffApi {
     return profileSchema.parse(await this.#transport.request('PATCH', '/me/profile', request));
   }
 
+  async uploadPhoto(file: File): Promise<Profile> {
+    const form = new FormData();
+    form.append('photo', file);
+
+    return profileSchema.parse(await this.#transport.request('POST', '/me/profile/photo', form));
+  }
+
+  async removePhoto(): Promise<Profile> {
+    return profileSchema.parse(await this.#transport.request('DELETE', '/me/profile/photo'));
+  }
+
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     await this.#transport.request('POST', '/me/password', { currentPassword, newPassword });
   }

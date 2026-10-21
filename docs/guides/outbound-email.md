@@ -50,13 +50,24 @@ contact's, else the brand's default); an empty Arabic signature falls back to
 the English one. Links become clickable. The composer shows the signature under
 the reply before it is sent.
 
+A signature may use placeholders, filled from the sender's **Profile** when the
+reply goes out: `{{agent.name}}`, `{{agent.title}}` (in the reply's language),
+`{{agent.phone}}`, `{{department.name}}` and `{{brand.name}}`. So a brand can ask
+every agent to sign with `{{agent.name}}` and `{{agent.title}} · {{brand.name}}`,
+and a signature line whose placeholder is empty (an agent without a phone number)
+is left out rather than printed blank. The composer's preview and the sent email
+use the same code, and the preview on the signature tab fills them from your own
+profile.
+
 ## The message
 
 Every customer email is one 600 px column with a plain-text part carrying the
 same words (artboard `EmailCustomer`): the reply marker, the brand, the body,
 the signature, and a reference box with `[HD-1042]` so the customer's answer
 threads. It is written in the customer's language and mirrored for Arabic. An
-agent's reply goes out as "Lina Haddad via Helpdock Billing".
+agent's reply goes out as "Lina via Helpdock Billing": the sender's **public
+name** (their first name until they set one on Your account → Profile), never
+the full name and never an address.
 
 Headers:
 

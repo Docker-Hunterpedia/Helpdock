@@ -3,6 +3,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { AuthService } from '../auth/auth.service.js';
 import type { Logger } from '../logging/logger.js';
 import { writeStaffAudit } from './audit.js';
+import type { ProfilePhotoStore } from './profile-photo.store.js';
 import type { StaffRepository } from './staff.repository.js';
 import { StaffFailure } from './staff-failure.js';
 
@@ -28,6 +29,7 @@ import { StaffFailure } from './staff-failure.js';
 export interface InstallStaffServiceOptions {
   readonly staff: StaffRepository;
   readonly auth: AuthService;
+  readonly photos: ProfilePhotoStore;
   readonly logger: Logger;
 }
 
@@ -61,6 +63,8 @@ export class InstallStaffService {
     // be live, but a session that somehow survived must not outlive the
     // identity it belonged to.
     await this.#parts.auth.revokeAllAccess(userId, 'deleted');
+
+    await this.#parts.photos.removeQuietly(user.photoKey, this.#parts.logger);
 
     await writeStaffAudit(tx, {
       brandId: INSTALL_SCOPE_BRAND_ID,

@@ -6,13 +6,13 @@ import type {
   WidgetMessage,
 } from '@helpdock/schemas';
 import { readAiMeta, toWidgetMessageAi } from '../ai/auto-reply/ai-meta.js';
-import { firstNameOf } from '../csat/csat.service.js';
+import type { AgentCard } from './agent-cards.js';
 import type { TicketWithStatus } from './widget.repository.js';
 
 /**
  * Rows as a visitor sees them (DOMAIN-RULES §1.3, layer 4). The shapes have
  * no field for a note, an internal author id, an object key or an agent's
- * surname, so none of them can leak through a response or a socket frame.
+ * full name, so none of them can leak through a response or a socket frame.
  */
 
 const AUTHOR = {
@@ -32,8 +32,8 @@ export const toWidgetAttachment = (row: AttachmentRow): WidgetAttachment => ({
 });
 
 export interface MessageViewOptions {
-  /** Staff display names by user id. */
-  readonly staffNames: ReadonlyMap<string, string>;
+  /** What a visitor may see of each staff author, by user id. */
+  readonly agents: ReadonlyMap<string, AgentCard>;
   /** The brand's "Show the agent's name and photo" (M4-08). */
   readonly showAgentIdentity: boolean;
 }
@@ -41,12 +41,13 @@ export interface MessageViewOptions {
 export const toWidgetMessage = (
   row: TicketMessageRow,
   files: readonly AttachmentRow[],
-  { staffNames, showAgentIdentity }: MessageViewOptions,
+  { agents, showAgentIdentity }: MessageViewOptions,
 ): WidgetMessage => {
   const author = AUTHOR[row.authorType];
-  const staffName =
-    author === 'agent' && row.authorId !== null ? staffNames.get(row.authorId) : undefined;
-  const agentName = showAgentIdentity && staffName !== undefined ? firstNameOf(staffName) : null;
+  const card =
+    showAgentIdentity && author === 'agent' && row.authorId !== null
+      ? agents.get(row.authorId)
+      : undefined;
 
   return {
     id: row.id,
@@ -54,7 +55,8 @@ export const toWidgetMessage = (
     seq: row.seq,
     clientId: author === 'visitor' ? row.clientId : null,
     author,
-    agent: agentName === null ? null : { name: agentName, avatarUrl: null },
+    agent:
+      card === undefined ? null : { name: card.name, title: card.title, avatarUrl: card.avatarUrl },
     text: answerOf(row) ?? row.bodyText,
     html: author === 'visitor' || answerOf(row) !== undefined ? null : row.bodyHtml,
     attachments: files.map(toWidgetAttachment),

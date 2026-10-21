@@ -159,8 +159,8 @@ to the browser, so it follows you to every browser you sign in on. It arrives
 with your session (`user.singleKeyShortcuts` in `GET /api/auth/me`), which the
 admin reads before it draws anything, so no letter is taken before your choice
 is known. It is on
-by default (owner decision D-32). Until M14-12 adds it to Your account ›
-Profile, the sheet's footer is the only place to change it. With the switch
+by default (owner decision D-32). It is changed in the sheet's footer and under
+**Working in Helpdock** on Your account › Profile (M14-12). With the switch
 off `?` is off too, so the sheet is also in the menu under your name, as
 **Keyboard shortcuts** (showing the `?` key while `?` works): that is how you
 turn the switch back on.

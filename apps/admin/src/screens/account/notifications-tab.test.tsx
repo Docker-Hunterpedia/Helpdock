@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('Your account', () => {
-  it('opens Security from /me, with the three tabs', async () => {
+  it('opens Profile from /me, first of four tabs', async () => {
     const { auth, staff } = await signedInMockApis();
     renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me'] });
 
@@ -57,19 +57,20 @@ describe('Your account', () => {
     );
     const tabs = within(screen.getByRole('tablist', { name: 'Your account' })).getAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Profile',
       'Security',
       'Notifications',
       'Email signature',
     ]);
-    expect(screen.getByRole('tab', { name: 'Security' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('sends an unknown tab to Security', async () => {
+  it('sends an unknown tab to Profile', async () => {
     const { auth, staff } = await signedInMockApis();
     renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me/nothing'] });
 
     expect(
-      await screen.findByRole('tab', { name: 'Security' }, { timeout: FIRST_PAINT_MS }),
+      await screen.findByRole('tab', { name: 'Profile' }, { timeout: FIRST_PAINT_MS }),
     ).toHaveAttribute('aria-selected', 'true');
   });
 });

@@ -35,30 +35,37 @@ const message = (overrides: Partial<TicketMessageRow> = {}): TicketMessageRow =>
     ...overrides,
   }) as TicketMessageRow;
 
-const staffNames = new Map([[AGENT, 'Lina Haddad']]);
+const agents = new Map([
+  [
+    AGENT,
+    { name: 'Lina', title: 'Billing specialist', avatarUrl: 'https://bucket.test/lina/64.webp' },
+  ],
+]);
 
 describe('toWidgetMessage', () => {
-  it("signs an agent's reply with a first name when the brand shows agents", () => {
-    const view = toWidgetMessage(message(), [], { staffNames, showAgentIdentity: true });
+  it("signs an agent's reply with the public name, title and photo when the brand shows agents", () => {
+    const view = toWidgetMessage(message(), [], { agents, showAgentIdentity: true });
 
     expect(widgetMessageSchema.parse(view)).toEqual(view);
     expect(view).toMatchObject({
       author: 'agent',
-      agent: { name: 'Lina', avatarUrl: null },
+      agent: {
+        name: 'Lina',
+        title: 'Billing specialist',
+        avatarUrl: 'https://bucket.test/lina/64.webp',
+      },
       clientId: null,
       html: '<p>On its way</p>',
     });
   });
 
   it('signs nothing when the brand hides agents', () => {
-    expect(
-      toWidgetMessage(message(), [], { staffNames, showAgentIdentity: false }).agent,
-    ).toBeNull();
+    expect(toWidgetMessage(message(), [], { agents, showAgentIdentity: false }).agent).toBeNull();
   });
 
   it("gives a visitor's own message back its clientId and no HTML", () => {
     const view = toWidgetMessage(message({ authorType: 'contact', authorId: null }), [], {
-      staffNames,
+      agents,
       showAgentIdentity: true,
     });
 
@@ -67,7 +74,7 @@ describe('toWidgetMessage', () => {
 
   it('carries attachments without their object keys', () => {
     const file = attachmentRow({ originalName: 'receipt.png', status: 'ready', size: 42 });
-    const view = toWidgetMessage(message(), [file], { staffNames, showAgentIdentity: true });
+    const view = toWidgetMessage(message(), [file], { agents, showAgentIdentity: true });
 
     expect(view.attachments).toEqual([
       {

@@ -12,7 +12,7 @@ import {
   userBrandRoles,
   users,
 } from '@helpdock/db';
-import type { CsatAnswerChannel } from '@helpdock/schemas';
+import { type CsatAnswerChannel, publicNameOf } from '@helpdock/schemas';
 import { and, desc, eq, gt, isNotNull, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 
 /**
@@ -147,7 +147,8 @@ export class CsatRepository {
   }
 
   /**
-   * The name of whoever closed the ticket this survey is for, when that was a
+   * The public name (M14-12: what the person chose to be called, their first
+   * name until then) of whoever closed the ticket this survey is for, when that was a
    * staff member who is still active in the brand and who wrote to the
    * customer on this ticket; otherwise undefined. The last condition is what
    * keeps the name inside the link's purpose (DOMAIN-RULES §4.6): it names
@@ -158,7 +159,7 @@ export class CsatRepository {
    */
   async closerName(tx: DbTransaction, survey: CsatResponse): Promise<string | undefined> {
     const [row] = await tx
-      .select({ name: users.name })
+      .select({ fullName: users.name, publicName: users.publicName })
       .from(ticketActivity)
       .innerJoin(users, sql`${users.id}::text = ${ticketActivity.actorId}`)
       .innerJoin(
@@ -186,7 +187,9 @@ export class CsatRepository {
       .orderBy(desc(ticketActivity.createdAt))
       .limit(1);
 
-    return row?.name;
+    const name = row === undefined ? '' : publicNameOf(row);
+
+    return name === '' ? undefined : name;
   }
 
   async find(tx: DbTransaction, surveyId: string): Promise<CsatResponse | undefined> {

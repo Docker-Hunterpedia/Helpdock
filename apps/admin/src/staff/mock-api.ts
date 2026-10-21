@@ -11,6 +11,12 @@ import type {
   StaffSessionList,
   StaffUpdateRequest,
 } from '@helpdock/schemas';
+import {
+  normalisePhone,
+  PROFILE_PHOTO_MAX_BYTES,
+  PROFILE_PHOTO_MIME_TYPES,
+  publicNameOf,
+} from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { type StaffApi, StaffError } from './api.js';
 
@@ -136,7 +142,38 @@ const seedProfile = (): Profile => ({
   twoFactorEnabled: true,
   recoveryCodesLeft: 8,
   twoFactorRequired: false,
+  publicName: null,
+  displayName: 'Lina',
+  jobTitleEn: 'Billing specialist',
+  jobTitleAr: 'أخصائية الفوترة',
+  phone: '+966551234567',
+  timeZone: 'Asia/Riyadh',
+  photo: null,
 });
+
+/** What the api's sniff reads: the first bytes of a PNG, a JPEG or a WebP. */
+const looksLikeImage = (head: Uint8Array): boolean => {
+  const at = (offset: number, bytes: readonly number[]): boolean =>
+    bytes.every((byte, index) => head[offset + index] === byte);
+
+  return (
+    at(0, [0x89, 0x50, 0x4e, 0x47]) ||
+    at(0, [0xff, 0xd8, 0xff]) ||
+    (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50]))
+  );
+};
+
+const readAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      resolve(String(reader.result));
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error('unreadable'));
+    };
+    reader.readAsDataURL(file);
+  });
 
 const seedSessions = (): StaffSessionList => ({
   sessions: [
@@ -304,11 +341,51 @@ export class MockStaffApi implements StaffApi {
   }
 
   async updateProfile(request: ProfileUpdateRequest): Promise<Profile> {
-    this.#profile = {
+    let phone = request.phone === undefined ? this.#profile.phone : request.phone;
+    if (request.phone !== undefined && request.phone !== null) {
+      const normalised = normalisePhone(request.phone);
+      if (!normalised.ok) {
+        throw new StaffError('invalid-phone');
+      }
+      phone = normalised.value;
+    }
+    const next = {
       ...this.#profile,
       ...(request.name === undefined ? {} : { name: request.name }),
       ...(request.locale === undefined ? {} : { locale: request.locale }),
+      ...(request.publicName === undefined ? {} : { publicName: request.publicName }),
+      ...(request.jobTitleEn === undefined ? {} : { jobTitleEn: request.jobTitleEn }),
+      ...(request.jobTitleAr === undefined ? {} : { jobTitleAr: request.jobTitleAr }),
+      ...(request.timeZone === undefined ? {} : { timeZone: request.timeZone }),
+      phone,
     };
+    this.#profile = {
+      ...next,
+      displayName: publicNameOf({ fullName: next.name, publicName: next.publicName }),
+    };
+
+    return this.#profile;
+  }
+
+  async uploadPhoto(file: File): Promise<Profile> {
+    if (file.size > PROFILE_PHOTO_MAX_BYTES) {
+      throw new StaffError('photo-too-large');
+    }
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    if (
+      !(PROFILE_PHOTO_MIME_TYPES as readonly string[]).includes(file.type) ||
+      !looksLikeImage(head)
+    ) {
+      throw new StaffError('photo-unsupported-type');
+    }
+    const url = await readAsDataUrl(file);
+    this.#profile = { ...this.#profile, photo: { small: url, large: url } };
+
+    return this.#profile;
+  }
+
+  async removePhoto(): Promise<Profile> {
+    this.#profile = { ...this.#profile, photo: null };
 
     return this.#profile;
   }

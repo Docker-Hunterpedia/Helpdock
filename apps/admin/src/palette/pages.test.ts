@@ -72,6 +72,7 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   staff: 'in the registry',
   system: 'in the registry',
   systemAuditLog: 'in the registry',
+  meProfile: 'in the registry',
   security: 'in the registry',
   meNotifications: 'in the registry',
   signature: 'in the registry',

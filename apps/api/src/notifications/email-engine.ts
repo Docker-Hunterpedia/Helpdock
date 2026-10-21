@@ -402,7 +402,7 @@ export class NotificationEmailEngine {
       renderBatchEmail({
         kind: batch.kind,
         locale: recipient.locale,
-        timeZone: brand.timeZone,
+        timeZone: recipient.timeZone ?? brand.timeZone,
         to: { address: recipient.email, name: recipient.name },
         brandName: brand.name,
         content,
@@ -480,7 +480,10 @@ export class NotificationEmailEngine {
     const config = await this.#deps.config();
     const placements: Placement[] = [];
 
-    for (const { userId, preferences } of await repository.unbatchedRecipients(tx, brandId)) {
+    for (const { userId, preferences, timeZone } of await repository.unbatchedRecipients(
+      tx,
+      brandId,
+    )) {
       const off = isEmailOff(preferences);
       const paused = isPaused(preferences, now);
       if (!off && !paused && preferences.schedule === 'immediate') {
@@ -497,7 +500,7 @@ export class NotificationEmailEngine {
       const kind = preferences.schedule === 'hourly' ? 'hourly' : 'daily';
       if (
         kind === 'daily' &&
-        (localHour(hour, brand.timeZone) !== preferences.digestHour ||
+        (localHour(hour, timeZone ?? brand.timeZone) !== preferences.digestHour ||
           (await repository.dailyOpenedSince(
             tx,
             brandId,

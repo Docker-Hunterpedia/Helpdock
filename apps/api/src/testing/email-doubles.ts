@@ -5,7 +5,12 @@ import {
   type EmailOutboundSettings,
   uuidv7,
 } from '@helpdock/db';
-import type { EmailRepository, ReplyAddressing, SendFacts } from '../email/email.repository.js';
+import type {
+  EmailAuthor,
+  EmailRepository,
+  ReplyAddressing,
+  SendFacts,
+} from '../email/email.repository.js';
 import type { InstallSmtp, SmtpServer, SmtpTransportFactory } from '../email/transport.js';
 import { BILLING, deliveryRow, TICKET } from './email-fixtures.js';
 
@@ -52,6 +57,7 @@ export const recordingTx = (): RecordingTx => {
 export const addressing = (overrides: Partial<ReplyAddressing> = {}): ReplyAddressing => ({
   ticketId: TICKET,
   departmentId: BILLING,
+  departmentName: 'Billing',
   contact: { name: 'Mona Khalil', address: 'mona@example.com' },
   locale: 'en',
   cc: ['karim@acme.de'],
@@ -68,6 +74,8 @@ export class FakeEmailRepository {
   failures: { id: string; attempts: number; error: string; dead: boolean }[] = [];
   signatures = new Map<string, { en: string | null; ar: string | null }>();
   users = new Map<string, { name: string; email: string; locale: 'en' | 'ar' }>();
+  /** What a person set for customers (M14-12), beside the signature in `signatures`. */
+  profiles = new Map<string, Partial<EmailAuthor>>();
   departments = new Set<string>([BILLING]);
 
   settings = async () => this.settingsRow;
@@ -75,6 +83,20 @@ export class FakeEmailRepository {
     this.saved.push(patch);
   };
   userName = async (_tx: DbTransaction, id: string) => this.users.get(id)?.name ?? null;
+  author = async (_tx: DbTransaction, id: string): Promise<EmailAuthor> => {
+    const signature = this.signatures.get(id);
+
+    return {
+      name: this.users.get(id)?.name ?? 'Lina Haddad',
+      publicName: null,
+      jobTitleEn: null,
+      jobTitleAr: null,
+      publicPhone: null,
+      signatureEn: signature?.en ?? null,
+      signatureAr: signature?.ar ?? null,
+      ...this.profiles.get(id),
+    };
+  };
   userAddress = async (_tx: DbTransaction, id: string) => {
     const user = this.users.get(id);
     return user === undefined ? undefined : { email: user.email, locale: user.locale };

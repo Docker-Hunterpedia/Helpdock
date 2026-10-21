@@ -3,6 +3,7 @@ import { type OutboxEventHandler, registerEventHandler } from '@helpdock/jobs';
 import { WIDGET_EVENTS } from '@helpdock/schemas';
 import type { DepartmentCalendars } from '../sla/business-hours.service.js';
 import { TICKET_EVENTS, ticketEventPayloadSchema } from '../tickets/ticket-events.js';
+import type { AgentCards } from './agent-cards.js';
 import { resolveWidgetSettings } from './resolved-settings.js';
 import { WidgetRepository } from './widget.repository.js';
 import { calendarHours } from './widget-hours.js';
@@ -31,7 +32,7 @@ import { toWidgetConversation, toWidgetMessage } from './widget-view.js';
 export const WIDGET_SUBSCRIBER = 'widget';
 
 export const createWidgetMessageHandler =
-  (broadcast: WidgetBroadcast): OutboxEventHandler =>
+  (broadcast: WidgetBroadcast, cards: AgentCards): OutboxEventHandler =>
   async ({ tx, brandId, payload }) => {
     const parsed = ticketEventPayloadSchema.parse(payload);
     if (parsed.messageId === undefined || (parsed.kind !== 'public' && parsed.kind !== 'ai')) {
@@ -45,12 +46,15 @@ export const createWidgetMessageHandler =
     }
     const settings = resolveWidgetSettings(await new WidgetSettingsRepository().row(tx, brandId));
     const files = await widget.attachmentsOf(tx, [row.id]);
-    const staffNames = await widget.staffNames(
-      tx,
-      row.authorType === 'staff' && row.authorId !== null ? [row.authorId] : [],
-    );
+    const agents =
+      row.authorType === 'staff' && row.authorId !== null && settings.conversation.showAgentIdentity
+        ? await cards.of(
+            await widget.staffIdentities(tx, [row.authorId]),
+            await widget.ticketLanguage(tx, row.ticketId),
+          )
+        : new Map();
     const message = toWidgetMessage(row, files.get(row.id) ?? [], {
-      staffNames,
+      agents,
       showAgentIdentity: settings.conversation.showAgentIdentity,
     });
 
@@ -116,10 +120,11 @@ export const createWidgetConversationHandler =
 export const registerWidgetEventHandlers = (
   broadcast: WidgetBroadcast,
   conversation: WidgetConversationDeps,
+  cards: AgentCards,
 ): void => {
   registerEventHandler(
     TICKET_EVENTS.replied,
-    createWidgetMessageHandler(broadcast),
+    createWidgetMessageHandler(broadcast, cards),
     WIDGET_SUBSCRIBER,
   );
 

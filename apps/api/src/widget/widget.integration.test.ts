@@ -72,6 +72,7 @@ import { ignoreAuthEmailInThisSuite, signInForTest } from '../testing/staff-sign
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
 import { registerWebhookEventHandlers } from '../webhooks/webhook-events.js';
 import { WebhooksRepository } from '../webhooks/webhooks.repository.js';
+import { AgentCards } from './agent-cards.js';
 import { WidgetConversationsService } from './widget-conversations.service.js';
 import { registerWidgetEventHandlers } from './widget-events.js';
 import {
@@ -436,9 +437,14 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       new SlaRepository(),
       new SlaService(new SlaRepository()),
     );
-    registerWidgetEventHandlers(new RedisWidgetBroadcast(worker), {
-      calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx),
-    });
+    registerWidgetEventHandlers(
+      new RedisWidgetBroadcast(worker),
+      { calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx) },
+      new AgentCards({
+        smallUrl: async (folder) =>
+          folder === null ? null : `https://bucket.test/${folder}64.webp`,
+      }),
+    );
 
     seeded = await seedDevInstall({ db: runtime.db, env: envFor() });
     ownBrandId = seeded.brandId;
@@ -1164,6 +1170,7 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       // The brand shows agents: a first name, never a surname.
       expect(page.body.messages[0]?.author).toBe('agent');
       expect(page.body.messages[0]?.agent?.name).toMatch(/^\S+$/);
+      expect(page.body.messages[0]?.agent).toMatchObject({ title: null, avatarUrl: null });
       expect(page.body.lastSeq).toBe(reply.seq);
       expect(JSON.stringify(page.body)).not.toContain('warehouse');
     });
@@ -1194,13 +1201,35 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
       expect(stream.headers.get('content-type')).toContain('text/event-stream');
       const reader = stream.body?.getReader();
 
+      // M14-12: the frame names the agent as they chose to appear.
+      await runtime.db
+        .update(users)
+        .set({
+          publicName: 'Ada L',
+          jobTitleEn: 'Billing specialist',
+          photoKey: `install/users/${ada.id}/photo/`,
+        })
+        .where(eq(users.id, ada.id));
       const overSocket = nextEvent<WidgetMessage>(socket, WIDGET_EVENTS.message);
       const reply = await agentReply(conversationId, 'public', 'Here to help');
       await drainOutbox();
+      await runtime.db
+        .update(users)
+        .set({ publicName: null, jobTitleEn: null, photoKey: null })
+        .where(eq(users.id, ada.id));
 
       const socketEnvelope = await overSocket;
       expect(socketEnvelope.seq).toBe(reply.seq);
-      expect(socketEnvelope.data).toMatchObject({ text: 'Here to help', author: 'agent' });
+      expect(socketEnvelope.data).toMatchObject({
+        text: 'Here to help',
+        author: 'agent',
+        agent: {
+          name: 'Ada L',
+          title: 'Billing specialist',
+          avatarUrl: `https://bucket.test/install/users/${ada.id}/photo/64.webp`,
+        },
+      });
+      expect(JSON.stringify(socketEnvelope.data)).not.toContain(ada.email);
 
       let text = '';
       const decoder = new TextDecoder();

@@ -7,6 +7,7 @@ import { EmailTokenStore } from '../auth/email-token.store.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
+import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { AccountController } from './account.controller.js';
 import { AccountService } from './account.service.js';
@@ -16,6 +17,7 @@ import { InviteService } from './invite.service.js';
 import { InviteStore } from './invite.store.js';
 import { InvitesController } from './invites.controller.js';
 import { AssignmentStaffLifecycleHooks } from './lifecycle-hooks.js';
+import { ProfilePhotoStore } from './profile-photo.store.js';
 import { StaffController } from './staff.controller.js';
 import { StaffRepository } from './staff.repository.js';
 import { StaffService } from './staff.service.js';
@@ -36,6 +38,9 @@ import { StaffService } from './staff.service.js';
  */
 
 export interface StaffModuleOptions {
+  readonly env: Env;
+  /** The bucket for profile photos. Absent: built from the bootstrap keys, as `MediaModule` does. */
+  readonly storage?: ObjectStorage;
   /**
    * The process logger. A value rather than an injected provider because
    * `LOGGER` belongs to `AppModule`, which an imported module cannot see.
@@ -46,7 +51,11 @@ export interface StaffModuleOptions {
 @Module({})
 // biome-ignore lint/complexity/noStaticOnlyClass: a Nest module is a decorated class; `forRoot` is the framework's own shape for a dynamic one.
 export class StaffModule {
-  static forRoot({ logger }: StaffModuleOptions): DynamicModule {
+  static forRoot({ logger, env, storage }: StaffModuleOptions): DynamicModule {
+    const photos = new ProfilePhotoStore(
+      storage ?? new S3ObjectStorage(createS3Client(env), env.S3_BUCKET),
+    );
+
     return {
       module: StaffModule,
       controllers: [StaffController, InvitesController, AccountController, InstallStaffController],
@@ -131,6 +140,7 @@ export class StaffModule {
             return service;
           },
         },
+        { provide: ProfilePhotoStore, useValue: photos },
         {
           provide: AccountService,
           inject: [StaffRepository, AuthService, SessionService],
@@ -138,13 +148,13 @@ export class StaffModule {
             staff: StaffRepository,
             auth: AuthService,
             sessions: SessionService,
-          ): AccountService => new AccountService({ staff, auth, sessions, logger }),
+          ): AccountService => new AccountService({ staff, auth, sessions, photos, logger }),
         },
         {
           provide: InstallStaffService,
           inject: [StaffRepository, AuthService],
           useFactory: (staff: StaffRepository, auth: AuthService): InstallStaffService =>
-            new InstallStaffService({ staff, auth, logger }),
+            new InstallStaffService({ staff, auth, photos, logger }),
         },
       ],
     };

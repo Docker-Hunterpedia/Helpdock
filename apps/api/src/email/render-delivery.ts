@@ -7,7 +7,13 @@ import {
   renderCustomerEmail,
 } from '@helpdock/channels';
 import type { EmailDelivery } from '@helpdock/db';
-import { type AutoReplyTemplates, CSAT_TOKEN_TTL_DAYS } from '@helpdock/schemas';
+import {
+  type AutoReplyTemplates,
+  agentPlaceholderValues,
+  CSAT_TOKEN_TTL_DAYS,
+  publicNameOf,
+  renderSignature,
+} from '@helpdock/schemas';
 import type { SendFacts } from './email.repository.js';
 import {
   csatSurveyCopy,
@@ -46,7 +52,7 @@ export interface RenderInput {
 export interface CsatSurveyEmail {
   /** The rating page with each score pressed, 1 first. */
   readonly links: readonly string[];
-  /** The first name of the agent who closed the ticket, when the page may name them. */
+  /** The public name of the agent who closed the ticket, when the page may name them. */
   readonly closedBy: string | null;
 }
 
@@ -55,15 +61,52 @@ const SURVEY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'Auto-Submitted': 'auto-generated',
 });
 
-/** The signature in the customer's language; an Arabic reply falls back to the English one. */
-export const signatureFor = (author: SendFacts['author'], locale: 'en' | 'ar'): string | null => {
+/** What a signature's placeholders may name beyond the author. */
+export interface SignatureContext {
+  readonly brandName: string;
+  readonly departmentName: string;
+}
+
+/**
+ * The signature in the customer's language, with its placeholders filled in
+ * (M14-12): `{{agent.name}}`, `{{agent.title}}`, `{{agent.phone}}`,
+ * `{{department.name}}` and `{{brand.name}}`. An Arabic reply falls back to the
+ * English signature when there is no Arabic one; a line whose placeholder is
+ * empty (no phone) is dropped.
+ */
+export const signatureFor = (
+  author: SendFacts['author'],
+  locale: 'en' | 'ar',
+  context: SignatureContext,
+): string | null => {
   if (author === null) {
     return null;
   }
   const preferred = locale === 'ar' ? author.signatureAr : author.signatureEn;
   const chosen = preferred === null || preferred.trim() === '' ? author.signatureEn : preferred;
+  if (chosen === null || chosen.trim() === '') {
+    return null;
+  }
 
-  return chosen === null || chosen.trim() === '' ? null : chosen;
+  const rendered = renderSignature(
+    chosen,
+    new Map<string, string>([
+      ...agentPlaceholderValues(
+        {
+          fullName: author.name,
+          publicName: author.publicName,
+          jobTitleEn: author.jobTitleEn,
+          jobTitleAr: author.jobTitleAr,
+          phone: author.publicPhone,
+        },
+        locale,
+        context.departmentName,
+      ),
+      ['brand.name', context.brandName],
+    ]),
+  );
+
+  return rendered.trim() === '' ? null : rendered;
 };
 
 export const renderDelivery = (input: RenderInput): EmailMessage =>
@@ -92,7 +135,12 @@ const renderMessage = ({ delivery, facts, thread, templates }: RenderInput): Ema
     replyMarker: auto ? null : copy.replyMarker,
     bodyHtml: content.bodyHtml,
     bodyText: content.bodyText,
-    signature: auto ? null : signatureFor(facts.author, locale),
+    signature: auto
+      ? null
+      : signatureFor(facts.author, locale, {
+          brandName: facts.brandName,
+          departmentName: facts.departmentName,
+        }),
     note: transcript
       ? transcriptCopy(locale, { brandName: facts.brandName, reference: facts.ticket.reference })
           .note
@@ -110,7 +158,10 @@ const renderMessage = ({ delivery, facts, thread, templates }: RenderInput): Ema
 
   const displayName =
     !auto && facts.author !== null
-      ? copy.fromVia(facts.author.name, delivery.fromName)
+      ? copy.fromVia(
+          publicNameOf({ fullName: facts.author.name, publicName: facts.author.publicName }),
+          delivery.fromName,
+        )
       : delivery.fromName;
 
   return {

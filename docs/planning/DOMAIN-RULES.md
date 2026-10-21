@@ -224,6 +224,18 @@ Test routing (M14-09, `POST /api/brands/:id/routing/test`, `ticketing:manage`) a
 - **Department scope (§1.2).** A reader whose scope is some departments sees and tests only the doors that file into them; any other door answers 404 as an unknown one does. If the rules move the sample into a department outside the reader's scope, the result says so and does not show that department's rotation.
 - Tests: the row counts of every table a real arrival writes, the block-list counters and the rotation stamps unchanged after a run, and a second run picking the same person; a write made inside a dry run refused by the database; each verdict (ticket, blocked, automated); the scope and permission rules (integration).
 
+### 2.10 How an agent appears to a customer
+
+What a customer is told about the person who answered them is one decision, made in one place (`publicNameOf`, `packages/schemas/src/placeholders.ts`), not a field each channel reads for itself (M14-12).
+
+1. **The public name.** A person's `public_name` when set; otherwise the first word of `users.name`, which is what every customer surface showed before the field existed. The full name reaches a customer only through `{{agent.full_name}}`, which an author has to write. The email address, the role, the department scope and the presence state never reach one.
+2. **Where it applies.** The widget (an agent's message, the online line), the `From` display name of an email reply ("Lina via Support"), the widget transcript email, the CSAT page and email ("closed by"), and the opening line on the Meta channels ("Lina · Helpdock"). The assistant and rules carry the brand's name alone, as before. Telegram shows no agent name.
+3. **Title and phone.** `job_title_en` and `job_title_ar`; a reply in Arabic with no Arabic title says the English one, and never the other way round. The phone is shown only where a signature or a reply uses `{{agent.phone}}`.
+4. **The photo** is a customer-visible file only through a presigned URL that lives five minutes (§4.5), issued for the author of a message in the visitor's own conversation, after that conversation has been read under row-level security. There is no public photo route. What is stored is the sharp re-encode (§4.5's rules for images), never the upload.
+5. **Placeholders.** `{{agent.name}}`, `{{agent.full_name}}`, `{{agent.title}}`, `{{agent.phone}}` and `{{department.name}}` render from the sender (for a rule, the assignee). A value the person left unset renders as nothing, so a customer never reads a placeholder; one the renderer does not know stays as written (§2.2's reply rules). A signature takes the same names plus `{{brand.name}}`; a signature line whose placeholder came out empty is dropped.
+6. **The time zone** (`users.time_zone`, IANA) is the person's own: the daily digest's hour (§20) and the snooze menu's presets read it, then the brand's.
+- Tests: the public name falling back to the first name and never the surname; the Arabic-to-English title fallback; empty placeholders rendering as nothing; no email address in any customer-facing payload; a presigned photo URL only for a message's author (unit and integration); the upload's refusals (unit, integration).
+
 ---
 
 ## 3. SLA calculation
@@ -605,3 +617,4 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-20 | New §20 Notification delivery: email schedules, Right away pacing, the send-time re-check, the presence hold, pause and per-brand digests (M14-10, [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md)); §6's email key, §10's rebuild and §11's batches follow. |
 | 2026-10-20 | The new §2.7 Bulk changes: preview, all-or-nothing apply against the previewed set, the lock order, the operation log and a 60-second Undo; §11 keeps operations 7 days (M14-03, [ADR 0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md)). |
 | 2026-10-20 | The new §2.9: Test routing walks a sample through the arrival path read-only, with the engine's own evaluation order, and shows no rotation outside the reader's scope (M14-09). |
+| 2026-10-21 | The new §2.10: an agent appears to customers by a public name (the first name until set), with a title, an optional presigned photo and agent placeholders; §20's digest hour and the snooze presets read the person's own time zone (M14-12). |

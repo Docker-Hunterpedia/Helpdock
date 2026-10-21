@@ -338,7 +338,11 @@ describe('the remote transport', () => {
 
     live.socket.connected = true;
     live.fire('connect');
-    live.envelope('message', message(1, { agent: { name: 'Lina', avatarUrl: null } }), 1);
+    live.envelope(
+      'message',
+      message(1, { agent: { name: 'Lina', title: null, avatarUrl: null } }),
+      1,
+    );
     live.envelope('message', { ...message(2), conversationId: BRAND }, 2);
     live.envelope('queue', { conversationId: CONVERSATION, position: 3 });
     live.envelope('queue', { conversationId: CONVERSATION, position: null });

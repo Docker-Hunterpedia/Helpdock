@@ -1,16 +1,21 @@
 import type { DbTransaction } from '@helpdock/db';
-import type {
-  Profile,
-  ProfileUpdateRequest,
-  RecoveryCodes,
-  StaffSessionList,
+import {
+  normalisePhone,
+  type Profile,
+  type ProfileUpdateRequest,
+  publicNameOf,
+  type RecoveryCodes,
+  type StaffSessionList,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import type { AuthService } from '../auth/auth.service.js';
 import { AuthFailure } from '../auth/auth-failure.js';
 import type { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
+import { type EncodedPhoto, encodeProfilePhoto, PhotoRefusal } from './profile-photo.js';
+import type { ProfilePhotoStore } from './profile-photo.store.js';
 import type { StaffRepository } from './staff.repository.js';
+import { StaffFailure } from './staff-failure.js';
 
 /**
  * The four things a person may change about their own account: their name and
@@ -27,6 +32,7 @@ export interface AccountServiceOptions {
   readonly staff: StaffRepository;
   readonly auth: AuthService;
   readonly sessions: SessionService;
+  readonly photos: ProfilePhotoStore;
   readonly logger: Logger;
 }
 
@@ -52,6 +58,13 @@ export class AccountService {
       twoFactorEnabled: user.totpEnabled,
       recoveryCodesLeft: user.recoveryCodesHashed.length,
       twoFactorRequired: await this.#parts.auth.secondFactorRequiredFor(userId, tx),
+      publicName: user.publicName,
+      displayName: publicNameOf({ fullName: user.name, publicName: user.publicName }),
+      jobTitleEn: user.jobTitleEn,
+      jobTitleAr: user.jobTitleAr,
+      phone: user.publicPhone,
+      timeZone: user.timeZone,
+      photo: await this.#parts.photos.urls(user.photoKey),
     };
   }
 
@@ -63,9 +76,56 @@ export class AccountService {
     await this.#parts.staff.updateProfile(tx, userId, {
       ...(request.name === undefined ? {} : { name: request.name }),
       ...(request.locale === undefined ? {} : { locale: request.locale }),
+      ...(request.publicName === undefined ? {} : { publicName: request.publicName }),
+      ...(request.jobTitleEn === undefined ? {} : { jobTitleEn: request.jobTitleEn }),
+      ...(request.jobTitleAr === undefined ? {} : { jobTitleAr: request.jobTitleAr }),
+      ...(request.phone === undefined ? {} : { publicPhone: this.#phone(request.phone) }),
+      ...(request.timeZone === undefined ? {} : { timeZone: request.timeZone }),
     });
 
     return this.profile(tx, userId);
+  }
+
+  /**
+   * Replaces the photo with `bytes`, re-encoded, and deletes the one it
+   * replaced. A photo that fails the gates (`PhotoRefusal`) changes nothing.
+   */
+  async setPhoto(
+    tx: DbTransaction,
+    userId: string,
+    bytes: Uint8Array,
+    declaredMime: string,
+  ): Promise<Profile> {
+    const encoded: EncodedPhoto = await encodeProfilePhoto(bytes, declaredMime).catch(
+      (error: unknown) => {
+        throw error instanceof PhotoRefusal ? new StaffFailure(`photo-${error.reason}`) : error;
+      },
+    );
+    const folder = await this.#parts.photos.save(userId, encoded);
+    const previous = await this.#parts.staff.replacePhoto(tx, userId, folder);
+    await this.#parts.photos.removeQuietly(previous, this.#parts.logger);
+
+    return this.profile(tx, userId);
+  }
+
+  async removePhoto(tx: DbTransaction, userId: string): Promise<Profile> {
+    const previous = await this.#parts.staff.replacePhoto(tx, userId, null);
+    await this.#parts.photos.removeQuietly(previous, this.#parts.logger);
+
+    return this.profile(tx, userId);
+  }
+
+  /** A public phone is kept in E.164 like a contact's (ADR 0008); null clears it. */
+  #phone(raw: string | null): string | null {
+    if (raw === null) {
+      return null;
+    }
+    const result = normalisePhone(raw);
+    if (!result.ok) {
+      throw new StaffFailure('invalid-phone');
+    }
+
+    return result.value;
   }
 
   /**

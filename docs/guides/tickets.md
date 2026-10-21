@@ -1583,7 +1583,7 @@ by the same function the send job cuts them with: "Plain text. Sent as 3 message
 1 text, 2 attachments. Meta may charge for each." (the charge is WhatsApp's),
 "Sent as 2 messages: the text is cut at 2000 characters." (Messenger), "Sent as 3
 messages: the text in 2 parts of up to 1000 bytes, 1 attachment." (Instagram). The
-first message opens with the agent's first name and the brand, "Lina · Helpdock"
+first message opens with the agent's public name and the brand, "Lina · Helpdock"
 ([Replying](meta-channels.md#replying)), and that line is counted: a reply that is
 only files counts it as one text message. On Instagram a file that is not a PDF is
 named in the warning colour before Send, because it will be left out. While the strip
@@ -2113,7 +2113,7 @@ tap already answered sends its score as `rating` and presses it; either way
 nothing is recorded until **Send**. It is themed
 with the brand accent when the brand has one (none do until M5/M6's themes).
 
-**Who closed it.** An open link's `ticket.closedBy` is the first name of the
+**Who closed it.** An open link's `ticket.closedBy` is the public name (the first name until one is set) of the
 staff member who closed the ticket ("closed by Lina"), and null otherwise. It is
 set only when that person is still active in the brand and wrote a public reply
 on the ticket, so the page names nobody the customer has not already heard

@@ -15,6 +15,7 @@ import {
   tickets,
   users,
 } from '@helpdock/db';
+import { publicNameOf } from '@helpdock/schemas';
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
 /**
@@ -43,11 +44,7 @@ export interface SendFacts {
     readonly authorId: string | null;
     readonly authorType: string;
   } | null;
-  readonly author: {
-    readonly name: string;
-    readonly signatureEn: string | null;
-    readonly signatureAr: string | null;
-  } | null;
+  readonly author: EmailAuthor | null;
   /**
    * M4-08. The conversation a transcript carries: its public replies and AI
    * answers in order, never a note or a system row. Empty for every other kind.
@@ -55,9 +52,35 @@ export interface SendFacts {
   readonly transcript: readonly TranscriptLine[];
 }
 
+/**
+ * Whoever wrote a reply, as far as the customer's copy of it needs: the name
+ * they are known by (M14-12), their title and phone for the signature's
+ * placeholders, and the signature itself. The email address is not here.
+ */
+export interface EmailAuthor {
+  /** The full name, which only `{{agent.full_name}}` shows a customer. */
+  readonly name: string;
+  readonly publicName: string | null;
+  readonly jobTitleEn: string | null;
+  readonly jobTitleAr: string | null;
+  readonly publicPhone: string | null;
+  readonly signatureEn: string | null;
+  readonly signatureAr: string | null;
+}
+
+const authorColumns = {
+  name: users.name,
+  publicName: users.publicName,
+  jobTitleEn: users.jobTitleEn,
+  jobTitleAr: users.jobTitleAr,
+  publicPhone: users.publicPhone,
+  signatureEn: users.signatureEn,
+  signatureAr: users.signatureAr,
+} as const;
+
 export interface TranscriptLine {
   readonly from: 'visitor' | 'agent';
-  /** The agent's first name; null for the visitor. */
+  /** The agent's public name; null for the visitor. */
   readonly agentName: string | null;
   readonly text: string;
   readonly at: Date;
@@ -67,6 +90,8 @@ export interface TranscriptLine {
 export interface ReplyAddressing {
   readonly ticketId: string;
   readonly departmentId: string;
+  /** In the reply's language, for `{{department.name}}` in a signature. */
+  readonly departmentName: string;
   readonly contact: { readonly name: string; readonly address: string } | null;
   readonly locale: 'en' | 'ar';
   readonly cc: readonly string[];
@@ -92,6 +117,13 @@ export class EmailRepository {
       .insert(emailOutboundSettings)
       .values({ brandId, ...values })
       .onConflictDoUpdate({ target: emailOutboundSettings.brandId, set: values });
+  }
+
+  /** A staff member as the customer's copy of their reply needs them (M14-12). */
+  async author(tx: DbTransaction, userId: string): Promise<EmailAuthor | undefined> {
+    const [row] = await tx.select(authorColumns).from(users).where(eq(users.id, userId)).limit(1);
+
+    return row;
   }
 
   async userName(tx: DbTransaction, userId: string): Promise<string | null> {
@@ -170,6 +202,8 @@ export class EmailRepository {
       .select({
         id: tickets.id,
         departmentId: tickets.departmentId,
+        departmentName: departments.name,
+        departmentNameAr: departments.nameAr,
         contactId: tickets.contactId,
         contactName: contacts.name,
         contactLocale: contacts.locale,
@@ -177,6 +211,7 @@ export class EmailRepository {
       })
       .from(tickets)
       .innerJoin(brands, eq(brands.id, tickets.brandId))
+      .innerJoin(departments, eq(departments.id, tickets.departmentId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
       .where(eq(tickets.id, ticketId))
       .limit(1);
@@ -200,11 +235,17 @@ export class EmailRepository {
       ),
     ];
 
+    const locale = ticket.contactLocale ?? ticket.brandLocale;
+
     return {
       ticketId: ticket.id,
       departmentId: ticket.departmentId,
+      departmentName:
+        locale === 'ar' && ticket.departmentNameAr !== null
+          ? ticket.departmentNameAr
+          : ticket.departmentName,
       contact: address === null ? null : { name: ticket.contactName ?? '', address },
-      locale: ticket.contactLocale ?? ticket.brandLocale,
+      locale,
       cc,
     };
   }
@@ -407,11 +448,7 @@ export class EmailRepository {
       message?.authorType === 'staff' && message.authorId !== null
         ? (
             await tx
-              .select({
-                name: users.name,
-                signatureEn: users.signatureEn,
-                signatureAr: users.signatureAr,
-              })
+              .select(authorColumns)
               .from(users)
               .where(eq(users.id, message.authorId))
               .limit(1)
@@ -444,6 +481,7 @@ export class EmailRepository {
         bodyText: ticketMessages.bodyText,
         createdAt: ticketMessages.createdAt,
         staffName: users.name,
+        staffPublicName: users.publicName,
       })
       .from(ticketMessages)
       .leftJoin(
@@ -462,7 +500,7 @@ export class EmailRepository {
       from: row.authorType === 'contact' ? 'visitor' : 'agent',
       agentName:
         row.authorType === 'staff' && row.staffName !== null
-          ? (row.staffName.trim().split(/\s+/u)[0] ?? null)
+          ? publicNameOf({ fullName: row.staffName, publicName: row.staffPublicName }) || null
           : null,
       text: row.bodyText,
       at: row.createdAt,

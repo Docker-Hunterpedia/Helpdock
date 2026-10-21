@@ -127,10 +127,16 @@ export class HttpTransport {
       credentials: 'same-origin',
       headers: {
         accept: 'application/json',
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        // A form is sent as it is: the browser writes its own multipart
+        // boundary into the content type, and a JSON one here would break it.
+        ...(body === undefined || body instanceof FormData
+          ? {}
+          : { 'content-type': 'application/json' }),
         ...(sent === null ? {} : { authorization: `Bearer ${sent}` }),
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined
+        ? {}
+        : { body: body instanceof FormData ? body : JSON.stringify(body) }),
       ...(signal === undefined ? {} : { signal }),
     });
 

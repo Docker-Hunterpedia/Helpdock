@@ -21,7 +21,7 @@ import { bodiesOf } from './macros.service.js';
  * `AdminAutomationMacros`), and the result says so, so the composer can show
  * "Arabic variant empty · English used".
  *
- * **`{{agent.first_name}}`** is whoever sends the reply: the agent at the
+ * **`{{agent.first_name}}`, `{{agent.name}}` and the rest of `agent.*`** are whoever sends the reply: the agent at the
  * composer, or — for a rule, which is nobody — the ticket's assignee. With
  * neither it stays spelled out, the same rule as any placeholder that has no
  * value to fill from.
@@ -81,10 +81,10 @@ export class CannedResponsesService {
     const bodies = bodiesOf(row);
     const fellBack = wanted !== 'en' && bodies[wanted].trim() === '';
     const locale: MacroLocale = fellBack ? 'en' : wanted;
-    const agentName =
+    const agent =
       options.agent === undefined
-        ? ticket.assigneeName
-        : await this.#macros.staffName(tx, options.agent.id);
+        ? ticket.assignee
+        : await this.#macros.staffIdentity(tx, options.agent.id);
 
     const { segments, unknown } = renderSegments(
       bodies[locale],
@@ -92,7 +92,9 @@ export class CannedResponsesService {
         brand: { name: brandName },
         contact,
         ticket: { number: ticket.reference },
-        agent: agentName === null ? undefined : { name: agentName },
+        agent: agent ?? undefined,
+        department: { name: ticket.departmentName },
+        language: locale,
       }),
     );
 

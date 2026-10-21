@@ -1,6 +1,7 @@
 import { useEffect } from 'preact/hooks';
-import { initials, listNames, nextOpening, ordinal } from '../format.js';
+import { listNames, nextOpening, ordinal } from '../format.js';
 import { closedUntil, teamHours } from '../state/hours.js';
+import { Avatar } from './Avatar.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
 
@@ -75,14 +76,17 @@ export function Banners() {
 
   const online = availability?.state === 'online' ? availability.agents_online : [];
   if (!conversation && online.length > 0) {
-    const names = online.map((agent) => agent.name.split(' ')[0] ?? agent.name);
+    const names = online.map((agent) => agent.name);
     return (
       <div class="hd-presence">
         <span class="hd-avatar-stack" aria-hidden="true">
           {online.slice(0, 3).map((agent) => (
-            <span key={agent.id} class="hd-avatar hd-avatar-sm">
-              {initials(agent.name)}
-            </span>
+            <Avatar
+              key={agent.id}
+              name={agent.name}
+              url={agent.avatar_url}
+              class="hd-avatar hd-avatar-sm"
+            />
           ))}
         </span>
         <span>

@@ -87,6 +87,7 @@ const MIGRATION_TAGS = [
   '0066_bulk_edit',
   '0067_passkey_user_verified',
   '0068_idle_away_minutes',
+  '0069_customer_profile',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

@@ -15,6 +15,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Trans } from 'react-i18next';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
+import { useStaffApi } from '../../../auth/session.tsx';
 import { isMetaError, metaKeys } from '../../../meta/api.js';
 import { useMetaApi } from '../../../meta/context.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
@@ -162,7 +163,7 @@ export function useTicketMeta({
   readonly channel: string;
   /** The contact's name, or null while it is not known; blank is "the customer". */
   readonly customerName: string | null;
-  /** Who is writing, whose first name opens the reply. */
+  /** Who is writing; their public name opens the reply, their first name until it has loaded. */
   readonly viewerName: string;
   /** The brand's name, which opens it too; null until the brand has been read. */
   readonly brandName: string | null;
@@ -172,6 +173,13 @@ export function useTicketMeta({
   authorOf(message: TicketMessage): string | null;
 }): TicketMeta {
   const t = useT();
+  const staffApi = useStaffApi();
+  // The name customers see on Meta (M14-12), so the character count matches what is sent.
+  const profile = useQuery({
+    queryKey: ['me', 'profile'],
+    queryFn: () => staffApi.profile(),
+    staleTime: 60_000,
+  });
   const { locale } = usePreferences();
   const api = useMetaApi();
   const toast = useToast();
@@ -398,7 +406,10 @@ export function useTicketMeta({
       openingLine:
         brandName === null
           ? ''
-          : metaOpeningLine({ firstName: firstWordOf(viewerName), brand: brandName }),
+          : metaOpeningLine({
+              firstName: profile.data?.displayName ?? firstWordOf(viewerName),
+              brand: brandName,
+            }),
       closed: state.kind === 'closed',
       stripId,
     },

@@ -269,9 +269,33 @@ export class StaffRepository {
   async updateProfile(
     tx: DbTransaction,
     userId: string,
-    changes: { readonly name?: string; readonly locale?: 'en' | 'ar' },
+    changes: Partial<
+      Pick<
+        User,
+        'name' | 'locale' | 'publicName' | 'jobTitleEn' | 'jobTitleAr' | 'publicPhone' | 'timeZone'
+      >
+    >,
   ): Promise<void> {
     await tx.update(users).set(changes).where(eq(users.id, userId));
+  }
+
+  /**
+   * Points the account at a new photo folder, or at none, and returns the folder it
+   * pointed at before so the caller can delete that one's objects.
+   */
+  async replacePhoto(
+    tx: DbTransaction,
+    userId: string,
+    photoKey: string | null,
+  ): Promise<string | null> {
+    const [before] = await tx
+      .select({ photoKey: users.photoKey })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for('update');
+    await tx.update(users).set({ photoKey }).where(eq(users.id, userId));
+
+    return before?.photoKey ?? null;
   }
 
   /**
@@ -294,6 +318,14 @@ export class StaffRepository {
         totpEnabled: false,
         recoveryCodesHashed: [],
         installAdmin: false,
+        publicName: null,
+        jobTitleEn: null,
+        jobTitleAr: null,
+        publicPhone: null,
+        photoKey: null,
+        timeZone: null,
+        signatureEn: null,
+        signatureAr: null,
       })
       .where(and(eq(users.id, userId), eq(users.status, 'deactivated')))
       .returning({ id: users.id });

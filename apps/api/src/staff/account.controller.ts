@@ -30,6 +30,7 @@ import {
   StaffSessionListDto,
   TotpCodeRequestDto,
 } from './dto.js';
+import { readPhotoUpload } from './profile-photo-body.js';
 
 /**
  * A person's own account: their details, their password, their second factor
@@ -68,6 +69,30 @@ export class AccountController {
     @Body(new ZodValidationPipe(ProfileUpdateRequestDto)) body: ProfileUpdateRequestDto,
   ): Promise<Profile> {
     return this.#account.updateProfile(getTx(), this.#userId(), body);
+  }
+
+  /**
+   * The photo as the `photo` file of a multipart form. It is sniffed, cropped
+   * square and re-encoded to WebP before anything is stored; the answer is the
+   * profile with fresh presigned URLs.
+   */
+  @Post('profile/photo')
+  @Authenticated()
+  @ZodSerializerDto(ProfileDto)
+  async uploadPhoto(@Req() request: FastifyRequest): Promise<Profile> {
+    const { bytes, declaredMime } = await readPhotoUpload(
+      request.body,
+      request.headers['content-type'],
+    );
+
+    return this.#account.setPhoto(getTx(), this.#userId(), bytes, declaredMime);
+  }
+
+  @Delete('profile/photo')
+  @Authenticated()
+  @ZodSerializerDto(ProfileDto)
+  removePhoto(): Promise<Profile> {
+    return this.#account.removePhoto(getTx(), this.#userId());
   }
 
   @Post('password')

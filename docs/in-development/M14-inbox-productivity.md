@@ -426,10 +426,10 @@ client can loop with idempotency keys).
 differences:
 
 - **Where the bar sits.** `Admin/Tickets-Bulk` draws it as one 700 px row
-  "replacing the list footer", which cannot fit a 360 px column. It floats over
-  the next column from the bottom inline start of the list (`position: absolute`
-  inside the list section), and wraps inside the column when the list is a
-  drawer (below 1024 px).
+  "replacing the list footer", which cannot fit a 360 px column. It is the list's
+  footer at every width, in two rows (count and Clear, then Status, Close,
+  Assign, Snooze and More); Priority, Team, Department and Tags open from More.
+  A floating bar was tried and covered the composer.
 - **Pickers.** Assign and Snooze are the details panel's and the header's own
   components (`AssigneePopover`, `SnoozeMenu`, extracted for the purpose); Status,
   Priority, Department, Team and Tags are menus, because the panel uses native
@@ -454,11 +454,14 @@ differences:
   changes.
 - **Errors.** A `bulk-changed` (409) previews again and shows the dialog even
   when everything would now change; a 429 says how long to wait (`Retry-After`)
-  and keeps the selection; any other failure says nothing was changed.
+  and keeps the selection; a refusal the api answered says nothing was changed,
+  and a lost answer (no response, a 5xx) says the result is unknown and reads
+  the list again, because the apply may have committed.
 - **Notification folding** (the M14-03 note's "reading is M14-04"): the panel
   returns `bulkOperationId`, the bell folds two or more `assigned` rows of one
-  operation into "Omar assigned you 12 tickets" (opening it reads them all and
-  opens My open), and the email batcher reads the column it already folded on.
+  operation into "Omar assigned you 12 tickets", the count being the api's total
+  (`bulkOperationCount`) rather than the rows loaded (opening it reads them all
+  and opens My open), and the email batcher reads the column it already folded on.
   No artboard draws the folded bell line; it uses the row anatomy of the others.
 - **The fixture** (`MockTicketsApi`) keeps the api's budget (twenty applies and
   undos a minute, 429) and plays one scripted race for the browser suite: the

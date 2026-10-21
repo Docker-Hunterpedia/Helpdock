@@ -105,6 +105,8 @@ export interface PanelRow {
   readonly detail: Record<string, unknown>;
   /** The bulk edit that caused it (M14-04 folds a person's rows of one into one line). */
   readonly bulkOperationId: string | null;
+  /** How many of this person's notifications that operation made; 0 without one. */
+  readonly bulkOperationCount: number;
   readonly createdAt: Date;
   readonly readAt: Date | null;
 }
@@ -478,6 +480,13 @@ export class NotificationsRepository {
         messageChannel: ticketMessages.channel,
         detail: notifications.detail,
         bulkOperationId: notifications.bulkOperationId,
+        // The whole of the operation's assignments to this person, not only the rows
+        // in the window or the page, so the bell's "assigned you N" is a total.
+        bulkOperationCount: sql<number>`(
+          SELECT count(*)::int FROM ${notifications} AS same_operation
+          WHERE same_operation.bulk_operation_id = ${notifications.bulkOperationId}
+            AND same_operation.user_id = ${notifications.userId}
+        )`,
         createdAt: notifications.createdAt,
         readAt: notifications.readAt,
       })

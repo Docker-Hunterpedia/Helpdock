@@ -103,7 +103,8 @@ test('applies at once when every ticket would change, and Undo puts it back', as
   const link = rowOf(page, 'HD-1042').getByRole('link');
   await expect(link).toContainText(priorityOf('urgent'));
 
-  await bar.getByRole('button', { name: t('tickets:bulk.bar.priority') }).click();
+  await bar.getByRole('button', { name: t('tickets:bulk.bar.more') }).click();
+  await page.getByRole('menuitem', { name: t('tickets:bulk.bar.priority') }).click();
   await page.getByRole('menuitem', { name: t('tickets:priority.low'), exact: true }).click();
 
   // Applied without a dialog: the toast is the whole answer.
@@ -221,4 +222,35 @@ test('previews again when something changed meanwhile, and shows the list as it 
   await expect(
     page.getByRole('status').filter({ hasText: t('tickets:bulk.toast.close', { count: 1 }) }),
   ).toBeVisible();
+});
+
+test('keeps the bar inside the list column, clear of the open ticket’s composer', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTickets(page, locale, 'all');
+  await page.getByRole('link', { name: /HD-1042/ }).click();
+  const composer = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+  await composer.waitFor();
+  await boxOf(page, locale, 'HD-1041').click();
+  const bar = page.getByRole('toolbar', { name: t('tickets:bulk.bar.label') });
+  await expect(bar).toBeVisible();
+
+  const list = await page.getByRole('region', { name: t('tickets:list.label') }).boundingBox();
+  const bounds = await bar.boundingBox();
+  const writing = await composer.boundingBox();
+  if (list === null || bounds === null || writing === null) {
+    throw new Error('the list, the bar and the composer are all on screen');
+  }
+  // Inside the column, so beside the composer and never over it.
+  expect(bounds.x).toBeGreaterThanOrEqual(list.x - 1);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(list.x + list.width + 1);
+  const apart =
+    bounds.x + bounds.width <= writing.x ||
+    writing.x + writing.width <= bounds.x ||
+    bounds.y + bounds.height <= writing.y ||
+    writing.y + writing.height <= bounds.y;
+  expect(apart).toBe(true);
 });

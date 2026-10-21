@@ -412,29 +412,84 @@ describe('applying a bulk edit', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('says it could not check, and says nothing was changed when an apply fails', async () => {
+  it('says one second in the singular', async () => {
     const { user, apis } = await renderTickets();
-    const bulk = vi.spyOn(apis.tickets, 'bulk');
-    bulk.mockRejectedValueOnce(new Error('down'));
-    await user.click(box('HD-1042'));
-
-    await chooseClose(user);
-    expect(await screen.findByText('The change could not be checked. Try again.')).toBeVisible();
-
-    bulk.mockImplementation(async (_brand, request) => {
+    vi.spyOn(apis.tickets, 'bulk').mockImplementation(async (_brand, request) => {
       if (request.mode === 'apply') {
-        throw new Error('down');
+        throw new AuthError('rate-limited', { retryAfter: 1, status: 429 });
       }
       return answer(
         'preview',
         Object.fromEntries(request.ticketIds.map((id) => [id, 'will_change' as const])),
       );
     });
+    await user.click(box('HD-1042'));
+
     await chooseClose(user);
+
+    expect(await screen.findByText('Too many bulk changes. Try again in 1 second.')).toBeVisible();
+    expect(bar()).toHaveTextContent('1 selected');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  const applyFails = async (error: Error) => {
+    const { user, apis } = await renderTickets();
+    const list = vi.spyOn(apis.tickets, 'list');
+    vi.spyOn(apis.tickets, 'bulk').mockImplementation(async (_brand, request) => {
+      if (request.mode === 'apply') {
+        throw error;
+      }
+      return answer(
+        'preview',
+        Object.fromEntries(request.ticketIds.map((id) => [id, 'will_change' as const])),
+      );
+    });
+    await user.click(box('HD-1042'));
+    list.mockClear();
+
+    await chooseClose(user);
+
+    return { list };
+  };
+
+  it('says it could not check when the preview fails', async () => {
+    const { user, apis } = await renderTickets();
+    vi.spyOn(apis.tickets, 'bulk').mockRejectedValueOnce(new Error('down'));
+    await user.click(box('HD-1042'));
+
+    await chooseClose(user);
+
+    expect(await screen.findByText('The change could not be checked. Try again.')).toBeVisible();
+  });
+
+  it('says nothing was changed only when the api answered with a refusal', async () => {
+    await applyFails(new TicketLifecycleError('ticket-merged'));
+
     expect(
       await screen.findByText('The change could not be made. Nothing was changed.'),
     ).toBeVisible();
     expect(bar()).toHaveTextContent('1 selected');
+  });
+
+  it.each([
+    ['a lost connection', new Error('network')],
+    ['a 502', new AuthError('unavailable', { status: 502 })],
+  ])('does not claim nothing changed after %s, and reads the list again', async (_name, error) => {
+    const { list } = await applyFails(error);
+
+    expect(
+      await screen.findByText("We couldn't confirm whether the change was made. Check the list."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    await waitFor(() => expect(list).toHaveBeenCalled());
+  });
+
+  it('counts a 4xx without a code as a refusal', async () => {
+    await applyFails(new AuthError('unavailable', { status: 403 }));
+
+    expect(
+      await screen.findByText('The change could not be made. Nothing was changed.'),
+    ).toBeVisible();
   });
 
   it('applies a priority picked from its menu, with the toast wording of a plain change', async () => {
@@ -449,7 +504,8 @@ describe('applying a bulk edit', () => {
       );
     await user.click(box('HD-1042'));
 
-    await user.click(within(bar()).getByRole('button', { name: 'Priority' }));
+    await user.click(within(bar()).getByRole('button', { name: 'More' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Priority' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Low' }));
 
     expect(await screen.findByText('Updated 1 ticket')).toBeVisible();
@@ -556,6 +612,15 @@ describe('the changes the bar offers', () => {
     return request?.changes;
   };
 
+  /** The rarer pickers (Priority, Team, Department, Tags) open from More. */
+  const fromMore = async (
+    user: Awaited<ReturnType<typeof renderTickets>>['user'],
+    name: string,
+  ): Promise<void> => {
+    await user.click(barButton('More'));
+    await user.click(await screen.findByRole('menuitem', { name }));
+  };
+
   const barButton = (name: string) => within(bar()).getByRole('button', { name });
 
   it('assigns to me', async () => {
@@ -598,7 +663,7 @@ describe('the changes the bar offers', () => {
 
   it('adds a tag', async () => {
     const changes = await choose(async (user) => {
-      await user.click(barButton('Tags'));
+      await fromMore(user, 'Tags');
       await user.click((await screen.findAllByRole('menuitem', { name: 'VIP' }))[0] as HTMLElement);
     });
 
@@ -607,7 +672,7 @@ describe('the changes the bar offers', () => {
 
   it('removes a tag', async () => {
     const changes = await choose(async (user) => {
-      await user.click(barButton('Tags'));
+      await fromMore(user, 'Tags');
       await user.click((await screen.findAllByRole('menuitem', { name: 'VIP' }))[1] as HTMLElement);
     });
 
@@ -616,7 +681,7 @@ describe('the changes the bar offers', () => {
 
   it('moves to a department', async () => {
     const changes = await choose(async (user) => {
-      await user.click(barButton('Department'));
+      await fromMore(user, 'Department');
       await user.click((await screen.findAllByRole('menuitem'))[0] as HTMLElement);
     });
 
@@ -634,7 +699,7 @@ describe('the changes the bar offers', () => {
 
   it('clears the team', async () => {
     const changes = await choose(async (user) => {
-      await user.click(barButton('Team'));
+      await fromMore(user, 'Team');
       await user.click(await screen.findByRole('menuitem', { name: 'No team' }));
     });
 

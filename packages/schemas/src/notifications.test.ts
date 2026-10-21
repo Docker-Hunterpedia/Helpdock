@@ -132,14 +132,23 @@ describe('a panel row (M14-04)', () => {
   it('carries the bulk edit that caused it, or null', () => {
     const operation = '0192c3f0-1a2b-7c3d-8e4f-0000000b0001';
 
-    expect(notificationSchema.parse({ ...row, bulkOperationId: operation }).bulkOperationId).toBe(
-      operation,
-    );
-    expect(notificationSchema.parse({ ...row, bulkOperationId: null }).bulkOperationId).toBeNull();
+    expect(
+      notificationSchema.parse({ ...row, bulkOperationId: operation, bulkOperationCount: 12 }),
+    ).toMatchObject({ bulkOperationId: operation, bulkOperationCount: 12 });
+    expect(
+      notificationSchema.parse({ ...row, bulkOperationId: null, bulkOperationCount: 0 }),
+    ).toMatchObject({ bulkOperationId: null, bulkOperationCount: 0 });
   });
 
   it('refuses a row that does not say, and an operation that is not an id', () => {
     expect(notificationSchema.safeParse(row).success).toBe(false);
-    expect(notificationSchema.safeParse({ ...row, bulkOperationId: 'op' }).success).toBe(false);
+    expect(
+      notificationSchema.safeParse({ ...row, bulkOperationId: 'op', bulkOperationCount: 1 })
+        .success,
+    ).toBe(false);
+    expect(
+      notificationSchema.safeParse({ ...row, bulkOperationId: null, bulkOperationCount: -1 })
+        .success,
+    ).toBe(false);
   });
 });

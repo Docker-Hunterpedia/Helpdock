@@ -21,7 +21,6 @@ import { Ellipsis } from 'lucide-react';
 import { type ReactNode, useId, useMemo, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { useTicketingApi, useTicketsApi } from '../../../auth/session.tsx';
 import type { BulkChoice } from '../../../tickets/bulk.js';
 import { ticketKeys } from '../../../tickets/keys.js';
@@ -87,7 +86,6 @@ export function BulkBar({
   onClear,
 }: BulkBarProps): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const { locale } = usePreferences();
   const id = useId();
   const [open, setOpen] = useState<{ name: MenuName; anchor: HTMLElement } | null>(null);
@@ -122,73 +120,53 @@ export function BulkBar({
       role="toolbar"
       aria-label={t('tickets:bulk.bar.label')}
       aria-busy={busy}
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: 1,
-        paddingBlock: 1.5,
-        paddingInline: 3,
-        borderRadius: '10px',
-        backgroundColor: tokens['bg.surface'],
-        border: `1px solid ${tokens['border.default']}`,
-        boxShadow: 2,
-        width: 'max-content',
-        maxWidth: '100%',
-      }}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
     >
-      <Typography
-        component="span"
-        variant="bodyStrong"
-        sx={{ marginInlineEnd: 2, whiteSpace: 'nowrap' }}
-      >
-        {busy ? t('tickets:bulk.bar.working') : t('tickets:bulk.bar.count', { count })}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Typography component="span" variant="bodyStrong" sx={{ whiteSpace: 'nowrap' }}>
+          {busy ? t('tickets:bulk.bar.working') : t('tickets:bulk.bar.count', { count })}
+        </Typography>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={onClear}
+          sx={{ marginInlineStart: 'auto' }}
+        >
+          {t('tickets:bulk.bar.clear')}
+        </Button>
+      </Box>
 
-      <Button size="small" variant="text" color="inherit" {...opener('status')}>
-        {t('tickets:bulk.bar.status')}
-      </Button>
-      <Button
-        size="small"
-        variant="text"
-        color="inherit"
-        disabled={busy}
-        onClick={() => {
-          onChoose({ kind: 'close' });
-        }}
-      >
-        {t('tickets:bulk.bar.close')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('assignee')}>
-        {t('tickets:bulk.bar.assign')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('team')}>
-        {t('tickets:bulk.bar.team')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('department')}>
-        {t('tickets:bulk.bar.department')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('tags')}>
-        {t('tickets:bulk.bar.tags')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('priority')}>
-        {t('tickets:bulk.bar.priority')}
-      </Button>
-      <Button size="small" variant="text" color="inherit" {...opener('snooze')}>
-        {t('tickets:bulk.bar.snooze')}
-      </Button>
-      <Button
-        size="small"
-        variant="text"
-        color="inherit"
-        startIcon={<Ellipsis size={16} aria-hidden="true" />}
-        {...opener('more')}
-      >
-        {t('tickets:bulk.bar.more')}
-      </Button>
-      <Button size="small" variant="outlined" onClick={onClear} sx={{ marginInlineStart: 'auto' }}>
-        {t('tickets:bulk.bar.clear')}
-      </Button>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+        <Button size="small" variant="text" color="inherit" {...opener('status')}>
+          {t('tickets:bulk.bar.status')}
+        </Button>
+        <Button
+          size="small"
+          variant="text"
+          color="inherit"
+          disabled={busy}
+          onClick={() => {
+            onChoose({ kind: 'close' });
+          }}
+        >
+          {t('tickets:bulk.bar.close')}
+        </Button>
+        <Button size="small" variant="text" color="inherit" {...opener('assignee')}>
+          {t('tickets:bulk.bar.assign')}
+        </Button>
+        <Button size="small" variant="text" color="inherit" {...opener('snooze')}>
+          {t('tickets:bulk.bar.snooze')}
+        </Button>
+        <Button
+          size="small"
+          variant="text"
+          color="inherit"
+          startIcon={<Ellipsis size={16} aria-hidden="true" />}
+          {...opener('more')}
+        >
+          {t('tickets:bulk.bar.more')}
+        </Button>
+      </Box>
 
       <ChoiceMenu anchor={anchorOf('status')} label={t('tickets:bulk.menu.status')} onClose={close}>
         {statuses
@@ -277,6 +255,21 @@ export function BulkBar({
       </ChoiceMenu>
 
       <ChoiceMenu anchor={anchorOf('more')} label={t('tickets:bulk.menu.more')} onClose={close}>
+        {/* The rarer pickers open from here, on the same button. */}
+        {(['priority', 'team', 'department', 'tags'] as const).map((name) => (
+          <MenuItem
+            key={name}
+            aria-haspopup="menu"
+            onClick={() => {
+              if (open !== null) {
+                setOpen({ name, anchor: open.anchor });
+              }
+            }}
+          >
+            {t(`tickets:bulk.bar.${name}`)}
+          </MenuItem>
+        ))}
+        <Divider />
         <MenuItem
           onClick={() => {
             close();

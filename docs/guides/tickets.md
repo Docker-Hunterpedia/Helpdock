@@ -1654,12 +1654,13 @@ row of the list, named "Select HD-1042", and a select-all box above the rows.
   page ticks its first 50 and the caption says "the limit is 50". The selection
   survives `j`/`k` and a refresh that keeps the rows, and is dropped when the
   view, a filter or the search changes.
-- **The bar.** While anything is ticked a toolbar shows the count and **Status,
-  Close, Assign, Team, Department, Tags, Priority, Snooze, More** (Set a field,
-  Wake snoozed tickets, Mark as spam) and **Clear**. Assign is the details
-  panel's picker with "Assign to me" first, and offers the people who can take
-  the tickets' departments; Snooze is the header's menu. Choosing a change
-  *previews* it.
+- **The bar.** While anything is ticked the list's footer shows two rows: the
+  count and **Clear**, then **Status, Close, Assign, Snooze** and **More**. More
+  holds Priority, Team, Department, Tags, Set a field, Wake snoozed tickets and
+  Mark as spam. The bar stays inside the list column at every width, so it never
+  covers the open ticket. Assign is the details panel's picker with "Assign to
+  me" first, and offers the people who can take the tickets' departments; Snooze
+  is the header's menu. Choosing a change *previews* it.
 - **Applying.** If every ticket would change it is applied at once. Otherwise a
   dialog says "10 of 12 tickets will be closed. 2 can't be closed:" and lists
   each ticket that cannot, with its reference and the reason in words; the
@@ -1672,6 +1673,10 @@ row of the list, named "Select HD-1042", and a select-all box above the rows.
   **Undo last bulk change** in the command palette (`⌘K`) offers it for that
   minute from any screen. A field somebody changed since is left as it is and the
   toast says how many tickets that was.
+- **A lost answer.** If the apply's answer never arrives (a dropped connection,
+  a 502) the toast says "We couldn't confirm whether the change was made. Check
+  the list." and the list is read again; "Nothing was changed" is said only when
+  the api answered with a refusal.
 - **Limits.** Twenty applies and undos a minute per person; the twenty-first
   answers 429 and the toast says how long to wait. Nothing is changed.
 

@@ -1021,7 +1021,15 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
           limit: 10,
         }),
       );
-      expect(panel.filter((row) => row.bulkOperationId === operationId)).toHaveLength(2);
+      const folded = panel.filter((row) => row.bulkOperationId === operationId);
+      expect(folded).toHaveLength(2);
+      // The count is the operation's, however many rows the panel was asked for.
+      expect(folded.map((row) => row.bulkOperationCount)).toEqual([2, 2]);
+      expect(
+        panel
+          .filter((row) => row.bulkOperationId === null)
+          .every((row) => row.bulkOperationCount === 0),
+      ).toBe(true);
 
       const [batch] = await owner.db
         .insert(notificationEmailBatches)

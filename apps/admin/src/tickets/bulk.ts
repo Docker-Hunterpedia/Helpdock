@@ -152,7 +152,13 @@ export type BulkFailure =
   | { readonly kind: 'rateLimited'; readonly retryAfter: number | undefined }
   | { readonly kind: 'expired' }
   | { readonly kind: 'alreadyUndone' }
-  | { readonly kind: 'failed' };
+  /** The api answered with a refusal: it did not do what was asked. */
+  | { readonly kind: 'failed' }
+  /**
+   * No answer the api stands behind (a lost connection, a 5xx, a body that is
+   * not its own): an apply may have committed, so nothing can be claimed.
+   */
+  | { readonly kind: 'unknown' };
 
 export function failureOf(error: unknown): BulkFailure {
   if (isTicketLifecycleError(error)) {
@@ -169,5 +175,16 @@ export function failureOf(error: unknown): BulkFailure {
     return { kind: 'rateLimited', retryAfter: error.retryAfter };
   }
 
-  return { kind: 'failed' };
+  // An answer with a 4xx status, or one of the api's coded refusals, is the api saying no.
+  if (isAuthError(error) && (error.code !== 'unavailable' || isClientError(error.status))) {
+    return { kind: 'failed' };
+  }
+  if (isTicketLifecycleError(error)) {
+    return { kind: 'failed' };
+  }
+
+  return { kind: 'unknown' };
 }
+
+const isClientError = (status: number | undefined): boolean =>
+  status !== undefined && status >= 400 && status < 500;

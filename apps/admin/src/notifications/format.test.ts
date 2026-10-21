@@ -32,6 +32,7 @@ const item = (overrides: Partial<NotificationView> = {}): NotificationView => ({
   excerpt: null,
   messageChannel: null,
   bulkOperationId: null,
+  bulkOperationCount: 0,
   detail: { clock: 'first_response' },
   createdAt: new Date(NOW - 2 * 60_000).toISOString(),
   readAt: null,
@@ -167,6 +168,7 @@ describe('foldBulk (M14-04)', () => {
       actorName: 'Omar Nasser',
       detail: { assignedBy: 'person' },
       bulkOperationId: OP,
+      bulkOperationCount: 3,
       ...overrides,
     });
 
@@ -223,6 +225,7 @@ describe('the folded line (M14-04)', () => {
         ticketReference: `HD-${1000 + index}`,
         actorName: 'Omar Nasser',
         bulkOperationId: 'op',
+        bulkOperationCount: n,
       }),
     );
 
@@ -232,6 +235,13 @@ describe('the folded line (M14-04)', () => {
     expect(bulkTitle(ar, rows(2))).toContain('تذكرتين');
     expect(bulkTitle(ar, rows(5))).toContain('5 تذاكر');
     expect(bulkTitle(ar, rows(12))).toContain('12 تذكرة');
+  });
+
+  it('says the operation’s total, not only the rows on screen', () => {
+    const loaded = rows(4).map((row) => ({ ...row, bulkOperationCount: 12 }));
+
+    expect(bulkTitle(t, loaded)).toBe('Omar Nasser assigned you 12 tickets');
+    expect(bulkLine(t, loaded)).toBe('HD-1000, HD-1001, HD-1002 and 9 more');
   });
 
   it('names someone for an assignment with no known person', () => {

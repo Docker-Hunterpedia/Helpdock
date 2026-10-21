@@ -1219,9 +1219,11 @@
     },
     "error": {
       "rateLimited": "Too many bulk changes. Wait a moment and try again.",
-      "rateLimitedIn": "Too many bulk changes. Try again in {{seconds}} seconds.",
       "failed": "The change could not be made. Nothing was changed.",
-      "previewFailed": "The change could not be checked. Try again."
+      "previewFailed": "The change could not be checked. Try again.",
+      "rateLimitedIn_one": "Too many bulk changes. Try again in {{count}} second.",
+      "rateLimitedIn_other": "Too many bulk changes. Try again in {{count}} seconds.",
+      "unknown": "We couldn't confirm whether the change was made. Check the list."
     },
     "toast": {
       "undo": "Undo",

@@ -54,8 +54,6 @@ export interface ListSelection {
   readonly announcement: string;
   /** The bulk bar; null while nothing is ticked. */
   readonly bar: ReactNode;
-  /** The bar floats over the next column (a wide list); in a drawer it sits in the column. */
-  readonly floatingBar: boolean;
   onSelect(ticketId: string, range: boolean): void;
   onSelectPage(): void;
 }
@@ -393,20 +391,8 @@ export function TicketList({
       </Box>
 
       {selection?.bar == null ? null : (
-        <Box
-          sx={
-            selection.floatingBar
-              ? {
-                  position: 'absolute',
-                  insetBlockEnd: 16,
-                  insetInlineStart: 16,
-                  zIndex: 2,
-                  // The sidebar's 220 px and a 16 px margin at each side.
-                  maxWidth: 'calc(100vw - 252px)',
-                }
-              : { padding: 3, borderBlockStart: `1px solid ${tokens['border.default']}` }
-          }
-        >
+        // The list's footer: always inside the column, so it never covers the open ticket.
+        <Box sx={{ padding: 3, borderBlockStart: `1px solid ${tokens['border.default']}` }}>
           {selection.bar}
         </Box>
       )}

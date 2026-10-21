@@ -55,9 +55,11 @@ When somebody assigns you several tickets in one [bulk edit](tickets.md#bulk-edi
 the panel shows **one row**, "Omar assigned you 12 tickets", with the first three
 references and "and 9 more". Opening it marks all of that operation's rows read
 and goes to **My open**. Only two or more `assigned` rows of the same operation
-fold, and the bell does it with what is on screen: a lone assignment, or a row
-of the operation that has aged out of the 30 days, is its own row. Each row of
-`GET /notifications` carries `bulkOperationId` (null for any other cause).
+fold (the bell folds what it has loaded; a lone assignment is its own row). The
+count in "assigned you 12 tickets" is the api's total for the operation, not the
+rows on screen: each row of `GET /notifications` carries `bulkOperationId` (null
+for any other cause) and `bulkOperationCount`, the number of that operation's
+notifications for the reader (0 without one).
 
 A row holds ids, never content: the subject and names are read when the panel
 is, under the reader's own department scope, so a ticket they can no longer see

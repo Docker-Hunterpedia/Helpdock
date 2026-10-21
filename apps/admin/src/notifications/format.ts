@@ -187,17 +187,25 @@ export const foldBulk = (items: readonly NotificationView[]): PanelEntry[] => {
   return entries;
 };
 
+/**
+ * How many tickets the operation assigned to the reader: the api's count of all
+ * of them, which a busy panel may show only some of, never less than what is on
+ * screen.
+ */
+const bulkTotal = (items: readonly NotificationView[]): number =>
+  Math.max(items.length, items[0]?.bulkOperationCount ?? 0);
+
 /** "Omar assigned you 12 tickets". */
 export const bulkTitle = (t: T, items: readonly NotificationView[]): string =>
   t('admin:notifications.title.assignedBulk', {
     actor: items[0]?.actorName ?? t('admin:notifications.someone'),
-    count: items.length,
+    count: bulkTotal(items),
   });
 
 /** The first three references and "and 9 more": enough to recognise the batch, never a wall. */
 export const bulkLine = (t: T, items: readonly NotificationView[]): string => {
   const shown = items.slice(0, 3).map((item) => item.ticketReference);
-  const rest = items.length - shown.length;
+  const rest = bulkTotal(items) - shown.length;
 
   return rest <= 0
     ? shown.join(', ')

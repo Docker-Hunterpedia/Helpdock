@@ -496,7 +496,6 @@ export function TicketsPage(): ReactNode {
               max: SELECTION_CAP,
               headerRef: headerCheckbox,
               announcement,
-              floatingBar: wideList,
               bar:
                 count === 0 ? null : (
                   <BulkBar

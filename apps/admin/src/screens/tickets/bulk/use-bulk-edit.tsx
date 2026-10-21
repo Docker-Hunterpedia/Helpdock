@@ -83,15 +83,20 @@ export function useBulkEdit({
         tell(
           failure.retryAfter === undefined
             ? t('tickets:bulk.error.rateLimited')
-            : t('tickets:bulk.error.rateLimitedIn', { seconds: failure.retryAfter }),
+            : t('tickets:bulk.error.rateLimitedIn', { count: failure.retryAfter }),
         );
+      } else if (step === 'apply' && failure.kind === 'unknown') {
+        // The apply may have committed with its answer lost on the way back, so
+        // "nothing was changed" would be a guess: say so, and read the list again.
+        tell(t('tickets:bulk.error.unknown'));
+        void queryClient.invalidateQueries({ queryKey: ticketKeys.brand(brandId) });
       } else {
         tell(
           t(step === 'preview' ? 'tickets:bulk.error.previewFailed' : 'tickets:bulk.error.failed'),
         );
       }
     },
-    [t, tell],
+    [brandId, queryClient, t, tell],
   );
 
   const apply = useCallback(

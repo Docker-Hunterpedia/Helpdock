@@ -27,6 +27,7 @@ const row: PanelRow = {
   messageChannel: 'manual',
   detail: { unexpected: true, clock: 'nonsense' },
   bulkOperationId: '0199f4b2-9999-7000-8000-000000000001',
+  bulkOperationCount: 12,
   createdAt: new Date('2026-09-27T11:46:00.000Z'),
   readAt: null,
 };
@@ -144,6 +145,7 @@ describe('NotificationsService — the panel', () => {
           messageChannel: 'manual',
           detail: {},
           bulkOperationId: '0199f4b2-9999-7000-8000-000000000001',
+          bulkOperationCount: 12,
           createdAt: '2026-09-27T11:46:00.000Z',
           readAt: null,
         },

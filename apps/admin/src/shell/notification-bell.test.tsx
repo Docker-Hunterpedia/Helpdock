@@ -149,7 +149,11 @@ describe('NotificationBell', () => {
 
   describe('a bulk edit’s assignments (M14-04)', () => {
     const OPERATION = '0192c3f0-1a2b-7c3d-8e4f-0000000b0001';
-    const assigned = (n: number, operation: string | null = OPERATION): NotificationView => ({
+    const assigned = (
+      n: number,
+      operation: string | null = OPERATION,
+      total = 4,
+    ): NotificationView => ({
       id: `0192c3f0-1a2b-7c3d-8e4f-0000000a10${String(n).padStart(2, '0')}`,
       kind: 'assigned',
       ticketId: `0192c3f0-1a2b-7c3d-8e4f-0000000010${String(n).padStart(2, '0')}`,
@@ -161,6 +165,7 @@ describe('NotificationBell', () => {
       excerpt: null,
       messageChannel: null,
       bulkOperationId: operation,
+      bulkOperationCount: operation === null ? 0 : total,
       detail: { assignedBy: 'person' },
       createdAt: new Date(Date.now() - n * 60_000).toISOString(),
       readAt: null,
@@ -182,6 +187,21 @@ describe('NotificationBell', () => {
       await user.click(within(list).getByRole('link'));
 
       await waitFor(async () => expect((await api.list(BRAND, 'unread')).unreadCount).toBe(0));
+    });
+
+    it('says the operation’s total when the panel shows only some of its rows', async () => {
+      const api = new MockNotificationsApi({
+        items: [assigned(1, OPERATION, 12), assigned(2, OPERATION, 12)],
+      });
+      const { user } = await renderBell({ api });
+      await user.click(await bell(2));
+
+      const list = within(await screen.findByRole('dialog', { name: 'Notifications' })).getByRole(
+        'list',
+        { name: 'Notifications' },
+      );
+      expect(within(list).getByText('Omar Nasser assigned you 12 tickets')).toBeInTheDocument();
+      expect(within(list).getByText('HD-1001, HD-1002 and 10 more')).toBeInTheDocument();
     });
 
     it('leaves a lone assignment as its own row', async () => {

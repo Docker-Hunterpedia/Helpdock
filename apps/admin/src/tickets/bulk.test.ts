@@ -141,7 +141,13 @@ describe('failureOf', () => {
 
   it('reads anything else as a failure', () => {
     expect(failureOf(new TicketLifecycleError('ticket-merged'))).toEqual({ kind: 'failed' });
-    expect(failureOf(new AuthError('unavailable'))).toEqual({ kind: 'failed' });
-    expect(failureOf(new Error('boom'))).toEqual({ kind: 'failed' });
+    expect(failureOf(new AuthError('invalid-credentials'))).toEqual({ kind: 'failed' });
+    expect(failureOf(new AuthError('unavailable', { status: 403 }))).toEqual({ kind: 'failed' });
+  });
+
+  it('does not know what happened when no answer the api stands behind came back', () => {
+    expect(failureOf(new AuthError('unavailable'))).toEqual({ kind: 'unknown' });
+    expect(failureOf(new AuthError('unavailable', { status: 502 }))).toEqual({ kind: 'unknown' });
+    expect(failureOf(new Error('boom'))).toEqual({ kind: 'unknown' });
   });
 });

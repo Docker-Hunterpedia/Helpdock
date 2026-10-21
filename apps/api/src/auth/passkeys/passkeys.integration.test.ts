@@ -814,33 +814,6 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
     });
   });
 
-  describe('what a password reset leaves', () => {
-    it('keeps the passkeys, and the notice names how many', async () => {
-      await addPasskey(new SoftwareAuthenticator());
-      await addPasskey(new SoftwareAuthenticator());
-      await email.clear();
-
-      await app.inject({
-        method: 'POST',
-        url: '/api/auth/password/forgot',
-        headers: { 'content-type': 'application/json' },
-        payload: JSON.stringify({ email: seeded.email }),
-      });
-      const link = (await email.last()).text.split('\n').find((line) => line.startsWith('http'));
-      const token = new URL(link ?? '').searchParams.get('token') ?? '';
-      const reset = await app.inject({
-        method: 'POST',
-        url: '/api/auth/password/reset',
-        headers: { 'content-type': 'application/json' },
-        payload: JSON.stringify({ token, password: 'a brand new long password' }),
-      });
-
-      expect(reset.statusCode).toBeLessThan(300);
-      expect(await storedFor(seeded.userId)).toHaveLength(2);
-      expect((await email.last()).text).toContain('Your 2 passkeys were kept');
-    });
-  });
-
   describe("the install admin's view on /api/install/passkeys", () => {
     /** What another host would have left behind, written the way the first registration writes it. */
     const pinTo = (rpId: string) =>
@@ -930,6 +903,34 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
       });
       expect((await email.last()).subject).toBe('Your passkeys were removed');
       expect((await addPasskey(new SoftwareAuthenticator(), 'Again')).statusCode).toBe(201);
+    });
+  });
+
+  // Last on purpose: a reset ends every session of the account.
+  describe('what a password reset leaves', () => {
+    it('keeps the passkeys, and the notice names how many', async () => {
+      await addPasskey(new SoftwareAuthenticator());
+      await addPasskey(new SoftwareAuthenticator());
+      await email.clear();
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/password/forgot',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ email: seeded.email }),
+      });
+      const link = (await email.last()).text.split('\n').find((line) => line.startsWith('http'));
+      const token = new URL(link ?? '').searchParams.get('token') ?? '';
+      const reset = await app.inject({
+        method: 'POST',
+        url: '/api/auth/password/reset',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ token, password: 'a brand new long password' }),
+      });
+
+      expect(reset.statusCode).toBeLessThan(300);
+      expect(await storedFor(seeded.userId)).toHaveLength(2);
+      expect((await email.last()).text).toContain('Your 2 passkeys were kept');
     });
   });
 });

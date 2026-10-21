@@ -5,6 +5,7 @@ import {
   NOTIFICATION_PREFERENCE_DEFAULTS,
   notificationListQuerySchema,
   notificationPreferencesSchema,
+  notificationSchema,
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
 } from './notifications.js';
@@ -108,5 +109,37 @@ describe('excerptOf', () => {
 
   it('cuts mid-word when there is no boundary worth keeping', () => {
     expect(excerptOf('a'.repeat(30), 10)).toBe(`${'a'.repeat(10)}…`);
+  });
+});
+
+describe('a panel row (M14-04)', () => {
+  const row = {
+    id: '0192c3f0-1a2b-7c3d-8e4f-0000000a0001',
+    kind: 'assigned',
+    ticketId: '0192c3f0-1a2b-7c3d-8e4f-000000001042',
+    ticketReference: 'HD-1042',
+    subject: 'Refund',
+    departmentName: 'Billing',
+    departmentNameAr: null,
+    actorName: 'Omar',
+    excerpt: null,
+    messageChannel: null,
+    detail: { assignedBy: 'person' },
+    createdAt: '2026-10-21T10:00:00.000Z',
+    readAt: null,
+  };
+
+  it('carries the bulk edit that caused it, or null', () => {
+    const operation = '0192c3f0-1a2b-7c3d-8e4f-0000000b0001';
+
+    expect(notificationSchema.parse({ ...row, bulkOperationId: operation }).bulkOperationId).toBe(
+      operation,
+    );
+    expect(notificationSchema.parse({ ...row, bulkOperationId: null }).bulkOperationId).toBeNull();
+  });
+
+  it('refuses a row that does not say, and an operation that is not an id', () => {
+    expect(notificationSchema.safeParse(row).success).toBe(false);
+    expect(notificationSchema.safeParse({ ...row, bulkOperationId: 'op' }).success).toBe(false);
   });
 });

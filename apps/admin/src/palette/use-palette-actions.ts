@@ -10,6 +10,7 @@ import { currentBrand, useSession, useSwitchBrand } from '../auth/session.tsx';
 import { useKeyboard } from '../keyboard/keyboard-provider.tsx';
 import type { KeyStroke } from '../keyboard/keys.js';
 import { isSingleKey, shortcutById } from '../keyboard/registry.js';
+import { useBulkUndo } from '../tickets/bulk-undo.tsx';
 import { useToast } from '../ui/toasts.tsx';
 import { PALETTE_SHORTCUT_ACTIONS } from './actions.js';
 
@@ -46,6 +47,7 @@ export function usePaletteActions(): readonly PaletteAction[] {
   const switchBrand = useSwitchBrand();
   const toast = useToast();
   const { singleKeys, isAvailable, run } = useKeyboard();
+  const bulkUndo = useBulkUndo();
   const brand = currentBrand(session);
 
   return useMemo(() => {
@@ -128,7 +130,23 @@ export function usePaletteActions(): readonly PaletteAction[] {
       }),
     );
 
-    return [...fromShortcuts, ...copyLink, ...brands, languageAction, ...themes];
+    // M14-04: the last bulk edit, for the minute the api accepts its undo; the
+    // toast that followed it was only there for ten seconds.
+    const undoBulk: PaletteAction[] = bulkUndo.available
+      ? [
+          {
+            id: 'undoBulk',
+            label: say('admin:palette.actions.undoBulk'),
+            texts: textsOf('admin:palette.actions.undoBulk'),
+            suggested: true,
+            run: () => {
+              void bulkUndo.undo();
+            },
+          },
+        ]
+      : [];
+
+    return [...fromShortcuts, ...undoBulk, ...copyLink, ...brands, languageAction, ...themes];
   }, [
     i18n,
     t,
@@ -140,6 +158,7 @@ export function usePaletteActions(): readonly PaletteAction[] {
     singleKeys,
     isAvailable,
     run,
+    bulkUndo,
     setLocale,
     setThemePreference,
     switchBrand,

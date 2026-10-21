@@ -50,15 +50,10 @@ export function SnoozeControl({
   onSnooze(until: string): void;
 }): ReactNode {
   const t = useT();
-  const api = useTicketsApi();
-  const { locale } = usePreferences();
   const menuId = useId();
   const keys = useAriaKeyShortcuts('ticket.snooze');
   const button = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const [picking, setPicking] = useState(false);
-  const agentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const end = dir(locale) === 'rtl' ? 'left' : 'right';
 
   // The `h` shortcut: each press is a new signal, and opens the menu.
   useEffect(() => {
@@ -66,21 +61,6 @@ export function SnoozeControl({
       setAnchor(button.current);
     }
   }, [openSignal]);
-
-  const presets = useQuery({
-    queryKey: [...ticketKeys.brand(brandId), 'snooze-presets', ticketId, agentZone],
-    queryFn: () => api.snoozePresets(brandId, ticketId, agentZone),
-    enabled: anchor !== null,
-    gcTime: 0,
-  });
-
-  const close = (): void => {
-    setAnchor(null);
-  };
-  const now = Date.now();
-  const data = presets.data;
-  const departmentZone = data?.departmentTimeZone ?? null;
-  const differs = departmentZone !== null && departmentZone !== agentZone;
 
   return (
     <>
@@ -101,8 +81,67 @@ export function SnoozeControl({
         {t('tickets:snooze.button')}
       </Button>
 
-      <Menu
+      <SnoozeMenu
         id={menuId}
+        brandId={brandId}
+        ticketId={ticketId}
+        anchor={anchor}
+        busy={busy}
+        onClose={() => {
+          setAnchor(null);
+        }}
+        onSnooze={onSnooze}
+      />
+    </>
+  );
+}
+
+/**
+ * The menu and the picker dialog, driven by whoever owns the anchor: the
+ * header's button here, and the bulk bar's Snooze (M14-04), which reads the
+ * presets against the first selected ticket's department calendar.
+ */
+export function SnoozeMenu({
+  id,
+  brandId,
+  ticketId,
+  anchor,
+  busy,
+  onClose,
+  onSnooze,
+}: {
+  readonly id: string;
+  readonly brandId: string;
+  readonly ticketId: string;
+  readonly anchor: HTMLElement | null;
+  readonly busy: boolean;
+  onClose(): void;
+  onSnooze(until: string): void;
+}): ReactNode {
+  const t = useT();
+  const api = useTicketsApi();
+  const { locale } = usePreferences();
+  const [picking, setPicking] = useState(false);
+  const agentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const end = dir(locale) === 'rtl' ? 'left' : 'right';
+
+  const presets = useQuery({
+    queryKey: [...ticketKeys.brand(brandId), 'snooze-presets', ticketId, agentZone],
+    queryFn: () => api.snoozePresets(brandId, ticketId, agentZone),
+    enabled: anchor !== null,
+    gcTime: 0,
+  });
+
+  const close = onClose;
+  const now = Date.now();
+  const data = presets.data;
+  const departmentZone = data?.departmentTimeZone ?? null;
+  const differs = departmentZone !== null && departmentZone !== agentZone;
+
+  return (
+    <>
+      <Menu
+        id={id}
         anchorEl={anchor}
         open={anchor !== null}
         onClose={close}

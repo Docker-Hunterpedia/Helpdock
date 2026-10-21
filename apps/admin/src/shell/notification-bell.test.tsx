@@ -1,4 +1,4 @@
-import type { Session } from '@helpdock/schemas';
+import type { NotificationView, Session } from '@helpdock/schemas';
 import { screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Route, Routes } from 'react-router';
@@ -145,5 +145,55 @@ describe('NotificationBell', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Notifications could not be loaded. Try again in a moment.',
     );
+  });
+
+  describe('a bulk edit’s assignments (M14-04)', () => {
+    const OPERATION = '0192c3f0-1a2b-7c3d-8e4f-0000000b0001';
+    const assigned = (n: number, operation: string | null = OPERATION): NotificationView => ({
+      id: `0192c3f0-1a2b-7c3d-8e4f-0000000a10${String(n).padStart(2, '0')}`,
+      kind: 'assigned',
+      ticketId: `0192c3f0-1a2b-7c3d-8e4f-0000000010${String(n).padStart(2, '0')}`,
+      ticketReference: `HD-10${String(n).padStart(2, '0')}`,
+      subject: `Subject ${String(n)}`,
+      departmentName: 'Billing',
+      departmentNameAr: 'الفوترة',
+      actorName: 'Omar Nasser',
+      excerpt: null,
+      messageChannel: null,
+      bulkOperationId: operation,
+      detail: { assignedBy: 'person' },
+      createdAt: new Date(Date.now() - n * 60_000).toISOString(),
+      readAt: null,
+    });
+
+    it('is one line, and opening it reads every row of the operation', async () => {
+      const api = new MockNotificationsApi({
+        items: [assigned(1), assigned(2), assigned(3), assigned(4)],
+      });
+      const { user } = await renderBell({ api });
+      await user.click(await bell(4));
+
+      const panel = await screen.findByRole('dialog', { name: 'Notifications' });
+      const list = within(panel).getByRole('list', { name: 'Notifications' });
+      expect(within(list).getAllByRole('link')).toHaveLength(1);
+      expect(within(list).getByText('Omar Nasser assigned you 4 tickets')).toBeInTheDocument();
+      expect(within(list).getByText('HD-1001, HD-1002, HD-1003 and 1 more')).toBeInTheDocument();
+
+      await user.click(within(list).getByRole('link'));
+
+      await waitFor(async () => expect((await api.list(BRAND, 'unread')).unreadCount).toBe(0));
+    });
+
+    it('leaves a lone assignment as its own row', async () => {
+      const api = new MockNotificationsApi({ items: [assigned(1), assigned(2, null)] });
+      const { user } = await renderBell({ api });
+      await user.click(await bell(2));
+
+      const list = within(await screen.findByRole('dialog', { name: 'Notifications' })).getByRole(
+        'list',
+        { name: 'Notifications' },
+      );
+      expect(within(list).getAllByRole('link')).toHaveLength(2);
+    });
   });
 });

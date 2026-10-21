@@ -210,6 +210,8 @@ export const notificationSchema = z.object({
   /** The channel of that reply, for "Email · 2 h ago". */
   messageChannel: ticketChannelSchema.nullable(),
   detail: notificationDetailSchema,
+  /** The bulk edit that caused it (M14-04): the panel folds one operation's `assigned` rows into one line. */
+  bulkOperationId: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
   readAt: z.iso.datetime().nullable(),
 });

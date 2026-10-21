@@ -4,6 +4,7 @@ import {
   type Db,
   type DbHandle,
   departments,
+  notificationEmailBatches,
   notifications,
   outbox,
   ticketActivity,
@@ -32,6 +33,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
 import { createLogger } from '../../logging/logger.js';
+import { EmailPacingRepository } from '../../notifications/email-pacing.repository.js';
 import {
   createBulkUndoneHandler,
   createFanOutHandler,
@@ -1000,6 +1002,44 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
       await dispatch(BULK_EVENTS.undone, { ...(undone?.payload as object), id: undone?.id ?? '' });
 
       expect((await bulkNotifications(operationId)).map((row) => row.ticketId)).toEqual([kept]);
+    });
+
+    it('hands the operation to the bell’s panel and to the email batch, which fold on it', async () => {
+      const ids = await createMany(2);
+      const applied = await previewAndApply(ada, ids, { assigneeId: cy.id });
+      const operationId = applied.body.operationId as string;
+      for (const row of await outboxOf('ticket.assigned', ids)) {
+        await dispatch('ticket.assigned', row);
+      }
+
+      const panel = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        new NotificationsRepository().panel(tx, {
+          brandId: seeded.brandId,
+          userId: cy.id,
+          unreadOnly: false,
+          since: new Date(Date.now() - 60_000),
+          limit: 10,
+        }),
+      );
+      expect(panel.filter((row) => row.bulkOperationId === operationId)).toHaveLength(2);
+
+      const [batch] = await owner.db
+        .insert(notificationEmailBatches)
+        .values({
+          brandId: seeded.brandId,
+          userId: cy.id,
+          kind: 'immediate',
+          scheduledFor: new Date(),
+        })
+        .returning({ id: notificationEmailBatches.id });
+      await owner.db
+        .update(notifications)
+        .set({ emailBatchId: batch?.id ?? '', emailState: 'pending' })
+        .where(eq(notifications.bulkOperationId, operationId));
+      const items = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        new EmailPacingRepository().batchItems(tx, batch?.id ?? ''),
+      );
+      expect(items.map((item) => item.bulkOperationId)).toEqual([operationId, operationId]);
     });
 
     it('withdraws nothing for tickets the Undo could not follow out of sight', async () => {

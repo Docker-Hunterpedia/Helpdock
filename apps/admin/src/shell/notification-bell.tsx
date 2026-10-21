@@ -22,12 +22,17 @@ import { usePreferences } from '../app/providers.tsx';
 import { ROUTES, ticketRoute } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
+import { useKeyboard } from '../keyboard/keyboard-provider.tsx';
 import { useNotificationsApi } from '../notifications/context.tsx';
 import {
+  bulkLine,
+  bulkTitle,
+  foldBulk,
   groupByDay,
   notificationCaption,
   notificationLine,
   notificationTitle,
+  timeAgo,
 } from '../notifications/format.js';
 import { notificationsKey, useNotificationList } from '../notifications/use-notifications.js';
 import { useToast } from '../ui/toasts.tsx';
@@ -175,6 +180,16 @@ function NotificationPanel({
     onSettled: refresh,
   });
 
+  // M14-04: one line for a bulk edit's assignments reads them all at once.
+  const openBulk = useMutation({
+    mutationFn: (items: readonly NotificationView[]) =>
+      Promise.all(
+        items.filter((item) => item.readAt === null).map((item) => api.markRead(brandId, item.id)),
+      ),
+    onSettled: refresh,
+  });
+  const keyboard = useKeyboard();
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box
@@ -244,6 +259,15 @@ function NotificationPanel({
               open.mutate(item);
               onClose();
               void navigate(ticketRoute(item.ticketId));
+            }}
+            onOpenBulk={(items) => {
+              openBulk.mutate(items);
+              onClose();
+              // Where the assigned tickets are all in one place; the newest
+              // ticket when the shortcut is not attached (outside the shell).
+              if (!keyboard.run('goTo.myOpen') && items[0] !== undefined) {
+                void navigate(ticketRoute(items[0].ticketId));
+              }
             }}
           />
         )}
@@ -336,9 +360,11 @@ function PanelEmpty({
 function NotificationRows({
   items,
   onOpen,
+  onOpenBulk,
 }: {
   readonly items: readonly NotificationView[];
   readonly onOpen: (item: NotificationView) => void;
+  readonly onOpenBulk: (items: readonly NotificationView[]) => void;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
@@ -372,10 +398,14 @@ function NotificationRows({
         >
           {t(`admin:notifications.panel.${group}`)}
         </Box>,
-        ...rows.map((item) => {
+        ...foldBulk(rows).map((entry) => {
+          const item = entry.type === 'item' ? entry.item : (entry.items[0] as NotificationView);
           const look = KIND_LOOK[item.kind];
           const Icon = look.icon;
-          const isUnread = item.readAt === null;
+          const isUnread =
+            entry.type === 'item'
+              ? entry.item.readAt === null
+              : entry.items.some((member) => member.readAt === null);
           const tint =
             look.tone === 'primary'
               ? { background: tokens['action.primary.tint'], color: tokens['text.link'] }
@@ -385,15 +415,36 @@ function NotificationRows({
                     background: tokens[`status.${look.tone}.tint`],
                     color: tokens[`status.${look.tone}.text`],
                   };
+          const title =
+            entry.type === 'item' ? notificationTitle(t, item) : bulkTitle(t, entry.items);
+          const line =
+            entry.type === 'item' ? (
+              <>
+                <Typography component="bdi" variant="mono" sx={{ fontSize: 'inherit' }}>
+                  {item.ticketReference}
+                </Typography>{' '}
+                <bdi>{notificationLine(t, item)}</bdi>
+              </>
+            ) : (
+              <bdi>{bulkLine(t, entry.items)}</bdi>
+            );
+          const caption =
+            entry.type === 'item'
+              ? notificationCaption(t, item, locale, now)
+              : t('admin:notifications.caption.time', { time: timeAgo(t, item.createdAt, now) });
 
           return (
-            <Box component="li" key={item.id}>
+            <Box component="li" key={entry.type === 'item' ? item.id : `bulk-${entry.operationId}`}>
               <Box
                 component="a"
                 href={ticketRoute(item.ticketId)}
                 onClick={(event: MouseEvent) => {
                   event.preventDefault();
-                  onOpen(item);
+                  if (entry.type === 'item') {
+                    onOpen(item);
+                  } else {
+                    onOpenBulk(entry.items);
+                  }
                 }}
                 sx={{
                   display: 'flex',
@@ -432,20 +483,17 @@ function NotificationRows({
                     variant="body2"
                     sx={{ fontWeight: isUnread ? 500 : 400 }}
                   >
-                    {notificationTitle(t, item)}
+                    {title}
                   </Typography>
                   <Typography
                     component="span"
                     noWrap
                     sx={{ fontSize: 13, color: isUnread ? 'text.primary' : 'text.secondary' }}
                   >
-                    <Typography component="bdi" variant="mono" sx={{ fontSize: 'inherit' }}>
-                      {item.ticketReference}
-                    </Typography>{' '}
-                    <bdi>{notificationLine(t, item)}</bdi>
+                    {line}
                   </Typography>
                   <Typography component="span" variant="caption" sx={{ color: 'text.secondary' }}>
-                    {notificationCaption(t, item, locale, now)}
+                    {caption}
                   </Typography>
                 </Box>
                 {isUnread ? (

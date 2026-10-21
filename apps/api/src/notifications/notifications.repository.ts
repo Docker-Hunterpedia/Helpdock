@@ -103,6 +103,8 @@ export interface PanelRow {
   readonly bodyText: string | null;
   readonly messageChannel: TicketChannel | null;
   readonly detail: Record<string, unknown>;
+  /** The bulk edit that caused it (M14-04 folds a person's rows of one into one line). */
+  readonly bulkOperationId: string | null;
   readonly createdAt: Date;
   readonly readAt: Date | null;
 }
@@ -475,6 +477,7 @@ export class NotificationsRepository {
         bodyText: ticketMessages.bodyText,
         messageChannel: ticketMessages.channel,
         detail: notifications.detail,
+        bulkOperationId: notifications.bulkOperationId,
         createdAt: notifications.createdAt,
         readAt: notifications.readAt,
       })

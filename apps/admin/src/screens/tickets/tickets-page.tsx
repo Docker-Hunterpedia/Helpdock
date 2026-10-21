@@ -15,12 +15,29 @@ import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { ROUTES, ticketIdFromPath, ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { currentBrand, useContactsApi, useSession, useTicketsApi } from '../../auth/session.tsx';
+import {
+  currentBrand,
+  useContactsApi,
+  useSession,
+  useTicketingApi,
+  useTicketsApi,
+} from '../../auth/session.tsx';
 import { useShortcutHandlers } from '../../keyboard/keyboard-provider.tsx';
 import type { ShortcutId } from '../../keyboard/registry.js';
 import { EmptyState } from '../../shell/empty-state.tsx';
+import { ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import { mergePages, moveSelection } from '../../tickets/pages.js';
+import {
+  headerState,
+  keepListed,
+  NO_SELECTION,
+  range,
+  SELECTION_CAP,
+  type Selection,
+  toggle,
+  togglePage,
+} from '../../tickets/selection.js';
 import {
   ALL_VIEW,
   emptyKindOf,
@@ -35,8 +52,12 @@ import {
   withoutFilters,
 } from '../../tickets/views.js';
 import { useToast } from '../../ui/toasts.tsx';
+import { BulkBar } from './bulk/bulk-bar.tsx';
+import { BulkFieldDialog } from './bulk/bulk-field-dialog.tsx';
+import { BulkPreviewDialog } from './bulk/bulk-preview-dialog.tsx';
+import { useBulkEdit } from './bulk/use-bulk-edit.tsx';
 import { useFilterSummary } from './filter-summary.js';
-import { paragraph } from './format.js';
+import { paragraph, ticketReference } from './format.js';
 import { NewTicketDialog, type NewTicketValue } from './new-ticket-dialog.tsx';
 import { TICKET_LIST_WIDTH, TicketList } from './ticket-list.tsx';
 import { TicketView } from './ticket-view.tsx';
@@ -66,6 +87,9 @@ import { SaveViewDialog } from './view-dialogs.tsx';
 export const LIST_SHORTCUTS = [
   'list.next',
   'list.previous',
+  'list.select',
+  'list.selectRange',
+  'list.clearSelection',
 ] as const satisfies readonly ShortcutId[];
 
 const DETAILS_BREAKPOINT = '(min-width:1280px)';
@@ -189,6 +213,87 @@ export function TicketsPage(): ReactNode {
     useMemo(() => tickets.map((ticket) => ticket.departmentId), [tickets]),
   );
 
+  // ------------------------------------------------------------- selection
+
+  // M14-04. A reader without `ticket:write` gets the list as it was.
+  const canWrite = session.user.role !== 'viewer';
+  const listedIds = useMemo(() => tickets.map((ticket) => ticket.id), [tickets]);
+  const [selection, setSelection] = useState<Selection>(NO_SELECTION);
+  const [capped, setCapped] = useState(false);
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const headerCheckbox = useRef<HTMLInputElement | null>(null);
+  const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
+  // In list order, so a preview reads in the order the person sees the rows.
+  const selectedInListOrder = useMemo(
+    () => listedIds.filter((id) => selectedIds.has(id)),
+    [listedIds, selectedIds],
+  );
+  const selectedTickets = useMemo(
+    () => tickets.filter((ticket) => selectedIds.has(ticket.id)),
+    [tickets, selectedIds],
+  );
+  const ticketingApi = useTicketingApi();
+  const fieldDefs = useQuery({
+    queryKey: ['custom-fields', brand.id],
+    queryFn: () => ticketingApi.customFields(brand.id),
+    staleTime: 60_000,
+    enabled: canWrite && selection.ids.length > 0,
+  });
+
+  // A different view, filter or search is a different list: nothing carries over.
+  const listKey = JSON.stringify(query);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `listKey` is the trigger; the body does not read it.
+  useEffect(() => {
+    setSelection(NO_SELECTION);
+    setCapped(false);
+  }, [listKey]);
+
+  // A row that left the list (closed elsewhere, moved) is no longer selected,
+  // so the count never names a ticket the person cannot see. A realtime
+  // refresh that keeps the rows keeps the selection.
+  useEffect(() => {
+    setSelection((held) => keepListed(held, listedIds));
+  }, [listedIds]);
+
+  const refocusHeader = useCallback((): void => {
+    // After the bar has gone, so focus does not fall to the page.
+    requestAnimationFrame(() => {
+      headerCheckbox.current?.focus();
+    });
+  }, []);
+
+  const clearSelection = useCallback(
+    (focus: boolean): void => {
+      setSelection(NO_SELECTION);
+      setCapped(false);
+      if (focus) {
+        refocusHeader();
+      }
+    },
+    [refocusHeader],
+  );
+
+  const bulk = useBulkEdit({
+    brandId: brand.id,
+    ticketIds: selectedInListOrder,
+    onDone: () => {
+      clearSelection(true);
+    },
+  });
+
+  const count = selection.ids.length;
+  const [announcement, setAnnouncement] = useState('');
+  const announced = useRef(0);
+  useEffect(() => {
+    if (count === announced.current) {
+      return;
+    }
+    announced.current = count;
+    setAnnouncement(
+      count === 0 ? t('tickets:bulk.announceNone') : t('tickets:bulk.announce', { count }),
+    );
+  }, [count, t]);
+
   const linkSearch = params.toString() === '' ? '' : `?${params.toString()}`;
 
   const setFilters = useCallback(
@@ -232,25 +337,48 @@ export function TicketsPage(): ReactNode {
    * next render — in which the handler still believed nothing was selected,
    * and `j` pressed twice quickly would open the same ticket twice.
    */
-  const latest = useRef({ tickets, ticketId, linkSearch });
+  const latest = useRef({ tickets, ticketId, linkSearch, listedIds, selection });
   // A layout effect, not a passive one: passive effects run *after* the
   // browser has painted, so for a frame or two the list would be on screen
   // while the handler still believed the old one was. A key pressed in that
   // window would act on what the person is no longer looking at.
   useLayoutEffect(() => {
-    latest.current = { tickets, ticketId, linkSearch };
+    latest.current = { tickets, ticketId, linkSearch, listedIds, selection };
   });
 
   const move = (step: 1 | -1): void => {
     const open = latest.current.ticketId;
     const next = moveSelection(latest.current.tickets, open, step);
     if (next !== null && next !== open) {
+      // A row still holding focus from a click would be "the focused row" for
+      // `x` while the open ticket has moved on, so focus leaves the list.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest('[data-ticket-id]') !== null) {
+        active.blur();
+      }
       // Recorded before the navigation rather than waiting to be told: this
       // handler is what moved the selection, and `j` held down must step
       // through the list rather than re-open the first row each time.
       latest.current = { ...latest.current, ticketId: next };
       void navigate({ pathname: ticketRoute(next), search: latest.current.linkSearch });
     }
+  };
+
+  /**
+   * The row `x` acts on: the one holding focus (Tab, or a click on its box),
+   * else the open ticket. `j`/`k` move the open ticket, so selecting down the
+   * list is `j`, `x`, `j`, `x`.
+   */
+  const focusedRow = (): string | null => {
+    const active = document.activeElement;
+    const row = active instanceof Element ? active.closest('[data-ticket-id]') : null;
+
+    return row?.getAttribute('data-ticket-id') ?? latest.current.ticketId;
+  };
+
+  const change = (result: { selection: Selection; capped: boolean }): void => {
+    setSelection(result.selection);
+    setCapped(result.capped);
   };
 
   useShortcutHandlers<(typeof LIST_SHORTCUTS)[number]>({
@@ -260,6 +388,31 @@ export function TicketsPage(): ReactNode {
     'list.previous': () => {
       move(-1);
     },
+    'list.select': canWrite
+      ? () => {
+          const id = focusedRow();
+          if (id !== null && latest.current.listedIds.includes(id)) {
+            change(toggle(latest.current.selection, id));
+          }
+        }
+      : null,
+    'list.selectRange': canWrite
+      ? () => {
+          const id = focusedRow();
+          if (id !== null) {
+            change(range(latest.current.selection, id, latest.current.listedIds));
+          }
+        }
+      : null,
+    // Attached only while something is ticked, so Esc is the page's otherwise.
+    'list.clearSelection':
+      canWrite && selection.ids.length > 0
+        ? () => {
+            const active = document.activeElement;
+            const inBar = active instanceof Element && active.closest('[role="toolbar"]') !== null;
+            clearSelection(inBar || active === document.body);
+          }
+        : null,
   });
 
   // ------------------------------------------------------------- mutations
@@ -334,6 +487,47 @@ export function TicketsPage(): ReactNode {
       loading={list.isPending || list.isFetchingNextPage}
       failed={list.isError}
       linkSearch={linkSearch}
+      selection={
+        canWrite
+          ? {
+              ids: selectedIds,
+              header: headerState(selection, listedIds),
+              capped,
+              max: SELECTION_CAP,
+              headerRef: headerCheckbox,
+              announcement,
+              floatingBar: wideList,
+              bar:
+                count === 0 ? null : (
+                  <BulkBar
+                    brandId={brand.id}
+                    count={count}
+                    firstTicketId={selectedInListOrder[0] ?? ''}
+                    departmentIds={[
+                      ...new Set(selectedTickets.map((ticket) => ticket.departmentId)),
+                    ]}
+                    statuses={directory.statuses}
+                    departments={directory.departments}
+                    tags={directory.tags}
+                    busy={bulk.busy}
+                    onChoose={bulk.start}
+                    onMoreField={() => {
+                      setFieldOpen(true);
+                    }}
+                    onClear={() => {
+                      clearSelection(true);
+                    }}
+                  />
+                ),
+              onSelect: (id, extend) => {
+                change(extend ? range(selection, id, listedIds) : toggle(selection, id));
+              },
+              onSelectPage: () => {
+                change(togglePage(selection, listedIds));
+              },
+            }
+          : undefined
+      }
       onTypedChange={setTyped}
       onFiltersChange={setFilters}
       onLoadMore={() => {
@@ -429,6 +623,34 @@ export function TicketsPage(): ReactNode {
         }}
         onClose={() => {
           setDialogOpen(false);
+        }}
+      />
+
+      <BulkPreviewDialog
+        choice={bulk.review?.choice ?? null}
+        summary={bulk.review?.summary ?? null}
+        refreshed={bulk.review?.refreshed ?? false}
+        applying={bulk.applying}
+        referenceOf={(id) => {
+          const found = tickets.find((ticket) => ticket.id === id);
+          return found === undefined ? id.slice(0, 8) : ticketReference(found);
+        }}
+        onConfirm={bulk.confirm}
+        onCancel={bulk.cancel}
+      />
+
+      <BulkFieldDialog
+        open={fieldOpen}
+        fields={ticketFieldsFor(
+          fieldDefs.data?.fields ?? [],
+          session.user.role === 'admin' || session.user.role === 'teamLeader',
+        )}
+        onClose={() => {
+          setFieldOpen(false);
+        }}
+        onSubmit={(key, value) => {
+          setFieldOpen(false);
+          bulk.start({ kind: 'field', key, value });
         }}
       />
 

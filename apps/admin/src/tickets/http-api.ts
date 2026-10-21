@@ -1,5 +1,8 @@
 import type {
   AssignableAgentList,
+  BulkRequest,
+  BulkResponse,
+  BulkUndoResponse,
   MacroLocale,
   MacroRunRequest,
   MacroRunResponse,
@@ -37,6 +40,8 @@ import type {
 } from '@helpdock/schemas';
 import {
   assignableAgentListSchema,
+  bulkResponseSchema,
+  bulkUndoResponseSchema,
   macroRunResponseSchema,
   renderedMacroSchema,
   snoozePresetsSchema,
@@ -280,6 +285,21 @@ export class HttpTicketsApi implements TicketsApi {
   async unmerge(brandId: string, ticketId: string): Promise<TicketMergeResult> {
     return ticketMergeResultSchema.parse(
       await this.#transport.request('POST', `${this.#ticket(brandId, ticketId)}/unmerge`),
+    );
+  }
+
+  async bulk(brandId: string, request: BulkRequest): Promise<BulkResponse> {
+    return bulkResponseSchema.parse(
+      await this.#transport.request('POST', `${this.#brand(brandId)}/tickets/bulk`, request),
+    );
+  }
+
+  async undoBulk(brandId: string, operationId: string): Promise<BulkUndoResponse> {
+    return bulkUndoResponseSchema.parse(
+      await this.#transport.request(
+        'POST',
+        `${this.#brand(brandId)}/tickets/bulk/${encodeURIComponent(operationId)}/undo`,
+      ),
     );
   }
 

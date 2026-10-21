@@ -15,10 +15,9 @@ import type { KeyStroke } from './keys.js';
  * why every composer shortcut but `/` carries a modifier. A sequence (`g`
  * then a letter) is a global shortcut, drawn in the sheet's "Go to" group.
  *
- * Not here yet, because what they act on does not exist: `x` and `Shift`+`x`
- * selection and `Esc` to clear it (M14-04), `{{` the placeholder picker
- * (M14-14) and
- * `Enter` on a focused row, which needs the focus model of M14-04.
+ * Not here yet, because what they act on does not exist: `{{` the placeholder
+ * picker (M14-14) and `Enter` on a focused row, which would need a roving focus
+ * model the list does not have (a row is a link, so Enter on it already opens it).
  */
 
 export type ShortcutScope = 'global' | 'list' | 'ticket' | 'composer';
@@ -36,6 +35,7 @@ export type ShortcutPermission = 'ticket:write' | 'report:read' | 'settings';
 const KEY = (key: string): KeyStroke => ({ key });
 const MOD = (key: string): KeyStroke => ({ key, mod: true });
 const MOD_SHIFT = (key: string): KeyStroke => ({ key, mod: true, shift: true });
+const SHIFT = (key: string): KeyStroke => ({ key, shift: true });
 
 export const SHORTCUTS = [
   // General
@@ -70,6 +70,18 @@ export const SHORTCUTS = [
   { id: 'list.next', scope: 'list', keys: [KEY('j')] },
   { id: 'list.previous', scope: 'list', keys: [KEY('k')] },
   { id: 'list.close', scope: 'list', keys: [KEY('e')], permission: 'ticket:write' },
+  // M14-04. `x` ticks the focused row (the one in focus, else the open ticket's),
+  // `Shift`+`x` ticks from the last one ticked to it, and `Esc` clears; the
+  // handler for `Esc` is attached only while something is ticked, so it never
+  // takes the key from anything else.
+  { id: 'list.select', scope: 'list', keys: [KEY('x')], permission: 'ticket:write' },
+  { id: 'list.selectRange', scope: 'list', keys: [SHIFT('x')], permission: 'ticket:write' },
+  {
+    id: 'list.clearSelection',
+    scope: 'list',
+    keys: [KEY('Escape')],
+    permission: 'ticket:write',
+  },
   // Ticket
   { id: 'ticket.reply', scope: 'ticket', keys: [KEY('r')], permission: 'ticket:write' },
   { id: 'ticket.note', scope: 'ticket', keys: [KEY('n')], permission: 'ticket:write' },

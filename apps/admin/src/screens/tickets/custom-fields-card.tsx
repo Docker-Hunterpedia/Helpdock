@@ -156,7 +156,7 @@ function CustomFieldEditor({
   );
 }
 
-interface EditorProps {
+export interface EditorProps {
   readonly def: CustomFieldDef;
   readonly id: string;
   readonly label: string;
@@ -171,8 +171,8 @@ interface EditorProps {
   onCommit(next: CustomDraft): void;
 }
 
-/** One control per type (M1-06's six). */
-function editorFor(props: EditorProps): ReactNode {
+/** One control per type (M1-06's six). The bulk bar's Field dialog (M14-04) draws the same ones. */
+export function editorFor(props: EditorProps): ReactNode {
   const { def, id, label, draft, disabled, refused, described, none, onDraft, onCommit } = props;
   const aria = { 'aria-invalid': refused, 'aria-describedby': described };
 

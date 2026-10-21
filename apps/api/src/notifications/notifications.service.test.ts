@@ -26,6 +26,7 @@ const row: PanelRow = {
   bodyText: '@Lina can you confirm from finance?',
   messageChannel: 'manual',
   detail: { unexpected: true, clock: 'nonsense' },
+  bulkOperationId: '0199f4b2-9999-7000-8000-000000000001',
   createdAt: new Date('2026-09-27T11:46:00.000Z'),
   readAt: null,
 };
@@ -142,6 +143,7 @@ describe('NotificationsService — the panel', () => {
           excerpt: '@Lina can you confirm from finance?',
           messageChannel: 'manual',
           detail: {},
+          bulkOperationId: '0199f4b2-9999-7000-8000-000000000001',
           createdAt: '2026-09-27T11:46:00.000Z',
           readAt: null,
         },

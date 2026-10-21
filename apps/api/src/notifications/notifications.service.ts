@@ -226,6 +226,7 @@ const toView = (row: PanelRow): NotificationView => {
     excerpt: row.bodyText === null ? null : excerptOf(row.bodyText),
     messageChannel: row.messageChannel,
     detail: detail.success ? detail.data : {},
+    bulkOperationId: row.bulkOperationId,
     createdAt: row.createdAt.toISOString(),
     readAt: row.readAt === null ? null : row.readAt.toISOString(),
   };

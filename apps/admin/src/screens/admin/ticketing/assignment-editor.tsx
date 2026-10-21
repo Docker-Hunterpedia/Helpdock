@@ -295,7 +295,7 @@ export function AssignmentEditor({
           <MenuItem value={IDLE_AWAY_OFF}>{t('ticketing:assignment.editor.idleAwayOff')}</MenuItem>
           {idleAwayChoices(department.idleAwayMinutes).map((minutes) => (
             <MenuItem key={minutes} value={String(minutes)}>
-              {t('ticketing:assignment.editor.idleAwayOption', { minutes })}
+              {t('ticketing:assignment.editor.idleAwayOption', { count: minutes })}
             </MenuItem>
           ))}
         </Select>

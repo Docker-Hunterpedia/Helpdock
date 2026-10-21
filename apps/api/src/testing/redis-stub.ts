@@ -1,4 +1,5 @@
 import type { Redis } from 'ioredis';
+import { registerPresenceScripts } from './presence-redis.js';
 
 /**
  * An in-memory stand-in for the handful of Redis commands the auth service and
@@ -52,6 +53,12 @@ export class RedisStub {
   readonly #entries = new Map<string, Entry>();
   readonly #scripts = new Map<string, ScriptMirror>();
   readonly published: PublishedMessage[] = [];
+  /** Stands in for Redis's `TIME` in the presence scripts' mirrors; a test moves it. */
+  clock: () => number = Date.now;
+
+  constructor() {
+    registerPresenceScripts(this, () => this.clock());
+  }
 
   /** Registers the JavaScript mirror of one Lua script. */
   defineScript(lua: string, mirror: ScriptMirror): this {

@@ -141,9 +141,8 @@ export function RealtimeProvider({ children, client }: RealtimeProviderProps): R
 
   /**
    * M14-18. The browser only says it was active; whether silence means away is
-   * the server's call, because it knows the department's limit. The answer
-   * carries this person's status, applied at once so the dot does not wait for
-   * the event, and whether this report ended an idle away.
+   * the server's call, because it knows the department's limit. The answer says
+   * whether this report ended an idle away; presence itself arrives as events.
    */
   useEffect(() => {
     const watcher = watchActivity({
@@ -151,13 +150,14 @@ export function RealtimeProvider({ children, client }: RealtimeProviderProps): R
         realtimeClient
           .reportActivity()
           .then((result) => {
-            if (result === null) {
-              return;
-            }
-            setPresence((current) =>
-              applyPresenceChange(current, { userId, brandId, status: result.status }),
-            );
-            if (result.idleEnded) {
+            // Only the report that ended an idle away carries news. Any other
+            // answer is a status the events already deliver, and applying it
+            // would let a stale `offline` from a reconnecting socket blank the
+            // person's dot.
+            if (result?.idleEnded === true) {
+              setPresence((current) =>
+                applyPresenceChange(current, { userId, brandId, status: result.status }),
+              );
               setIdleReturned(true);
             }
           })

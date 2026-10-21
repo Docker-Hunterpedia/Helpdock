@@ -263,7 +263,7 @@ lunch — the socket stays open either way — so the browser says, and the serv
 decides what silence means (M14-18).
 
 The admin sends `presence:active` with the brand when a pointer, key, wheel or
-touch event happens or a tab becomes visible, and once on opening, at most once
+touch event happens, the window gains focus or a tab becomes visible, and once on opening, at most once
 a minute per tab; an event inside the minute schedules one report for its end.
 The message carries the brand and nothing else: never which key or element.
 
@@ -272,8 +272,11 @@ tab's silence does not undo the first's work. A department may set **Mark idle
 agents away after** (10 to 240 minutes, Ticketing › Assignment); a person's
 limit is the shortest among the departments that set one and whose rotation
 includes them. The reaper's 30 s sweep marks whoever is past their limit, and
-`presence:changed` says `away`; exactly one replica announces it, because the
-`sadd` that marks them answers 1 on one replica only. The sweep reads the
+`presence:changed` says `away`. Checking the clock, the person's presence and
+marking them is one Lua script on Redis's own clock (`TIME`), so a report
+landing at the same moment, or a departure, cannot be overruled and replicas
+whose clocks disagree still agree; exactly one replica announces it, because
+the `sadd` in that script answers 1 on one replica only. The sweep reads the
 limits through the `IDLE_AWAY_POLICY` token (`DepartmentIdleAwayPolicy`), and a
 sweep that cannot read them changes nothing.
 

@@ -206,13 +206,15 @@ describe('RealtimeProvider', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
       });
 
-    it('reports once on mount, and applies the status the server answers with', async () => {
-      client.reportAnswer = { status: 'away', idleEnded: false };
+    it('reports once on mount, and ignores a status that is not news', async () => {
+      client.reportAnswer = { status: 'offline', idleEnded: false };
 
       await renderProbe(client);
 
       await waitFor(() => expect(client.reports).toBe(1));
-      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('away'));
+      // A reconnecting socket answers offline for a person the events say is online.
+      act(() => client.announce(MOCK_USER.id, 'online'));
+      expect(screen.getByTestId('status')).toHaveTextContent('online');
       expect(screen.getByTestId('returned')).toHaveTextContent('false');
     });
 

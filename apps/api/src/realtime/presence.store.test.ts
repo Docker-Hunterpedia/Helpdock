@@ -17,7 +17,8 @@ describe('PresenceStore', () => {
   beforeEach(() => {
     redis = new RedisStub();
     clock = 1_000_000;
-    store = new PresenceStore(redis.asRedis(), () => clock);
+    redis.clock = () => clock;
+    store = new PresenceStore(redis.asRedis());
   });
 
   it('announces an arrival once, however many tabs the person opens', async () => {
@@ -162,44 +163,52 @@ describe('PresenceStore', () => {
 
   describe('idle away (M14-18)', () => {
     const lina = { brandId: BRAND, userId: LINA };
+    const MINUTE = 60_000;
+    const stamp = async (): Promise<number | null> => {
+      const at = await redis.hget(presenceActiveKey(BRAND), LINA);
+
+      return at === null ? null : Number(at);
+    };
+    /** Marks idle if their last report is `limit` minutes old at `clock`. */
+    const markIdle = (limit = 0) => store.markIdleIfStale(BRAND, LINA, limit * MINUTE);
 
     it('stamps the first arrival only, so a second tab does not restart the clock', async () => {
       await store.join({ ...lina, socketId: 's1' });
       clock += 5 * 60_000;
       await store.join({ ...lina, socketId: 's2' });
 
-      expect(await store.lastActiveAt(BRAND, LINA)).toBe(1_000_000);
+      expect(await stamp()).toBe(1_000_000);
     });
 
     it('marks idle once, and shows the person as away', async () => {
       await store.join({ ...lina, socketId: 's1' });
 
-      expect(await store.markIdle(BRAND, LINA)).toBe(true);
-      expect(await store.markIdle(BRAND, LINA)).toBe(false);
+      expect(await markIdle()).toBe(true);
+      expect(await markIdle()).toBe(false);
       expect(await store.map(BRAND)).toEqual({ [LINA]: 'away' });
       expect(await store.statusOf(BRAND, LINA)).toBe('away');
     });
 
     it('does not mark someone with no socket idle: they are offline', async () => {
-      expect(await store.markIdle(BRAND, LINA)).toBe(false);
+      expect(await markIdle()).toBe(false);
       expect(await store.map(BRAND)).toEqual({});
     });
 
     it('ends the idle away on activity, once, and refreshes the clock', async () => {
       await store.join({ ...lina, socketId: 's1' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
       clock += 60_000;
 
       expect(await store.touch(lina)).toEqual({ present: true, idleEnded: true });
       expect(await store.touch(lina)).toEqual({ present: true, idleEnded: false });
-      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+      expect(await stamp()).toBe(clock);
       expect(await store.statusOf(BRAND, LINA)).toBe('online');
     });
 
     it('lets activity lift the idle reason but never an explicit away', async () => {
       await store.join({ ...lina, socketId: 's1' });
       await store.setStatus(lina, 'away');
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
 
       expect(await store.touch(lina)).toEqual({ present: true, idleEnded: true });
       expect(await store.statusOf(BRAND, LINA)).toBe('away');
@@ -207,12 +216,12 @@ describe('PresenceStore', () => {
 
     it('treats activity from someone with no socket as nothing', async () => {
       expect(await store.touch(lina)).toEqual({ present: false, idleEnded: false });
-      expect(await store.lastActiveAt(BRAND, LINA)).toBeNull();
+      expect(await stamp()).toBeNull();
     });
 
     it('is ended by saying online from the menu, which is activity too', async () => {
       await store.join({ ...lina, socketId: 's1' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
 
       await store.setStatus(lina, 'online');
 
@@ -222,7 +231,7 @@ describe('PresenceStore', () => {
     it('keeps one clock for the person across tabs, and one idle state', async () => {
       await store.join({ ...lina, socketId: 's1' });
       await store.join({ ...lina, socketId: 's2' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
       await store.leave({ ...lina, socketId: 's1' });
 
       expect(await store.statusOf(BRAND, LINA)).toBe('away');
@@ -232,39 +241,60 @@ describe('PresenceStore', () => {
 
     it('forgets the clock and the idle mark when the person goes offline', async () => {
       await store.join({ ...lina, socketId: 's1' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
       await store.leave({ ...lina, socketId: 's1' });
       clock += 1_000;
 
       await store.join({ ...lina, socketId: 's2' });
 
       expect(await store.statusOf(BRAND, LINA)).toBe('online');
-      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+      expect(await stamp()).toBe(clock);
     });
 
     it('keeps brands apart', async () => {
       await store.join({ ...lina, socketId: 's1' });
       await store.join({ brandId: OTHER_BRAND, userId: LINA, socketId: 's2' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
 
       expect(await store.statusOf(OTHER_BRAND, LINA)).toBe('online');
       expect(await store.idleUsers(OTHER_BRAND)).toEqual([]);
     });
 
-    it('starts a missing clock from now, without touching an existing one', async () => {
+    it('starts a missing clock from now instead of marking idle, and then counts from it', async () => {
       await store.join({ ...lina, socketId: 's1' });
-      clock += 1_000;
-      await store.stampIfMissing(BRAND, LINA);
-      expect(await store.lastActiveAt(BRAND, LINA)).toBe(1_000_000);
-
       await redis.hdel(presenceActiveKey(BRAND), LINA);
-      await store.stampIfMissing(BRAND, LINA);
-      expect(await store.lastActiveAt(BRAND, LINA)).toBe(clock);
+      clock += 40 * MINUTE;
+
+      expect(await markIdle(30)).toBe(false);
+      expect(await stamp()).toBe(clock);
+
+      clock += 30 * MINUTE - 1;
+      expect(await markIdle(30)).toBe(false);
+      clock += 1;
+      expect(await markIdle(30)).toBe(true);
+    });
+
+    it('marks idle only once the last report is old enough, never one millisecond sooner', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      clock += 10 * MINUTE - 1;
+      expect(await markIdle(10)).toBe(false);
+
+      clock += 1;
+      expect(await markIdle(10)).toBe(true);
+    });
+
+    it('does not mark someone who reported after the limit was last read', async () => {
+      await store.join({ ...lina, socketId: 's1' });
+      clock += 30 * MINUTE;
+      await store.touch(lina);
+
+      expect(await markIdle(30)).toBe(false);
+      expect(await store.statusOf(BRAND, LINA)).toBe('online');
     });
 
     it('releases an idle mark once, for the one caller that does', async () => {
       await store.join({ ...lina, socketId: 's1' });
-      await store.markIdle(BRAND, LINA);
+      await markIdle();
 
       expect(await store.idleUsers(BRAND)).toEqual([LINA]);
       expect(await store.releaseIdle(BRAND, LINA)).toBe(true);

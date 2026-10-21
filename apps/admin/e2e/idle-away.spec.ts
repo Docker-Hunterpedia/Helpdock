@@ -66,7 +66,7 @@ test.describe('the idle setting on the Assignment tab', () => {
     await idleSelect(page, locale).click();
     await page
       .getByRole('option', {
-        name: t('ticketing:assignment.editor.idleAwayOption', { minutes: 45 }),
+        name: t('ticketing:assignment.editor.idleAwayOption', { count: 45 }),
       })
       .click();
     await page
@@ -77,7 +77,7 @@ test.describe('the idle setting on the Assignment tab', () => {
       t('ticketing:toast.assignmentSaved', { name: support(locale) }),
     );
     await expect(idleSelect(page, locale)).toHaveText(
-      t('ticketing:assignment.editor.idleAwayOption', { minutes: 45 }),
+      t('ticketing:assignment.editor.idleAwayOption', { count: 45 }),
     );
   });
 
@@ -88,7 +88,7 @@ test.describe('the idle setting on the Assignment tab', () => {
     const t = strings(locale);
     await openAssignment(page, locale, billing(locale));
     await expect(idleSelect(page, locale)).toHaveText(
-      t('ticketing:assignment.editor.idleAwayOption', { minutes: 30 }),
+      t('ticketing:assignment.editor.idleAwayOption', { count: 30 }),
     );
 
     await idleSelect(page, locale).click();
@@ -113,10 +113,10 @@ test.describe('the idle setting on the Assignment tab', () => {
     await idleSelect(page, locale).click();
     const options = page.getByRole('option');
     await expect(options.nth(1)).toHaveText(
-      t('ticketing:assignment.editor.idleAwayOption', { minutes: 10 }),
+      t('ticketing:assignment.editor.idleAwayOption', { count: 10 }),
     );
     await expect(options.last()).toHaveText(
-      t('ticketing:assignment.editor.idleAwayOption', { minutes: 240 }),
+      t('ticketing:assignment.editor.idleAwayOption', { count: 240 }),
     );
     await options.nth(3).click();
     await page.getByRole('button', { name: t('common:actions.cancel') }).click();

@@ -8,14 +8,14 @@ import { PRESENCE_ACTIVITY_REPORT_INTERVAL_MS } from '@helpdock/schemas';
  * means (DOMAIN-RULES §12).
  *
  * Only that fact is sent, at most once per interval: never which key, which
- * element or what was typed. Pointer, key, wheel and touch events, and the tab
- * becoming visible again, count as activity.
+ * element or what was typed. Pointer, key, wheel and touch events, the window gaining
+ * focus, and the tab becoming visible again count as activity.
  *
  * An event inside the interval is not dropped: it schedules one report for the
  * end of it, so the server's clock is never more than an interval behind the
  * person, which is why the shortest department limit is ten minutes.
  */
-export const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+export const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'focus'] as const;
 
 export interface WatchActivityOptions {
   /** Sends the report. A failure is the caller's to swallow; the next event tries again. */

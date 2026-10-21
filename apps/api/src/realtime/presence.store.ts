@@ -49,6 +49,41 @@ const added = (results: [Error | null, unknown][] | null, index: number): boolea
   return result !== undefined && result[0] === null && result[1] === 1;
 };
 
+/**
+ * The three scripts below take the time from Redis (`TIME`), not from the api
+ * process, so replicas whose clocks disagree still agree on who is idle.
+ */
+const NOW_MS = `local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)`;
+
+/** KEYS: brand members, activity clock, idle set. ARGV: user. Answers {present, idleEnded}. */
+export const TOUCH_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return {0, 0} end
+redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+return {1, redis.call('SREM', KEYS[3], ARGV[1])}`;
+
+/** KEYS: brand members, activity clock. ARGV: user, 'nx' (only if missing) or 'set'. */
+export const STAMP_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return 0 end
+if ARGV[2] == 'nx' then
+  return redis.call('HSETNX', KEYS[2], ARGV[1], string.format('%.0f', now))
+end
+redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+return 1`;
+
+/** KEYS: brand members, activity clock, idle set. ARGV: user, limit in ms. */
+export const MARK_IDLE_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return 0 end
+local at = tonumber(redis.call('HGET', KEYS[2], ARGV[1]))
+if at == nil then
+  redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+  return 0
+end
+if now - at >= tonumber(ARGV[2]) then
+  return redis.call('SADD', KEYS[3], ARGV[1])
+end
+return 0`;
+
 export interface PresenceMembership {
   readonly brandId: string;
   readonly userId: string;
@@ -57,11 +92,9 @@ export interface PresenceMembership {
 
 export class PresenceStore {
   readonly #redis: Redis;
-  readonly #now: () => number;
 
-  constructor(redis: Redis, now: () => number = Date.now) {
+  constructor(redis: Redis) {
     this.#redis = redis;
-    this.#now = now;
   }
 
   /**
@@ -76,10 +109,10 @@ export class PresenceStore {
       .sadd(presenceBrandKey(brandId), userId)
       .sadd(presenceSocketsKey(brandId, userId), socketId)
       .set(presenceSocketKey(socketId), '1', 'EX', PRESENCE_SOCKET_TTL_SECONDS)
-      // Arriving is a sign of life, but a second tab opening must not revive
-      // an idle person it was not opened by, so only the first arrival stamps.
-      .hsetnx(presenceActiveKey(brandId), userId, String(this.#now()))
       .exec();
+    // Arriving is a sign of life, but a second tab opening must not revive an
+    // idle person it was not opened by, so only the first arrival stamps.
+    await this.#stamp(brandId, userId, 'nx');
 
     // `sadd` answers 1 only when the member was not already there. Index 1 is
     // the brand's member set, in the order the pipeline above queues them.
@@ -155,8 +188,8 @@ export class PresenceStore {
         .multi()
         .hdel(presenceStatusKey(brandId), userId)
         .srem(presenceIdleKey(brandId), userId)
-        .hset(presenceActiveKey(brandId), userId, String(this.#now()))
         .exec();
+      await this.#stamp(brandId, userId, 'set');
     } else {
       await this.#redis.hset(presenceStatusKey(brandId), userId, status);
     }
@@ -199,42 +232,51 @@ export class PresenceStore {
     brandId,
     userId,
   }: Omit<PresenceMembership, 'socketId'>): Promise<{ present: boolean; idleEnded: boolean }> {
-    if ((await this.#redis.sismember(presenceBrandKey(brandId), userId)) !== 1) {
-      return { present: false, idleEnded: false };
-    }
+    const [present, ended] = (await this.#redis.eval(
+      TOUCH_SCRIPT,
+      3,
+      presenceBrandKey(brandId),
+      presenceActiveKey(brandId),
+      presenceIdleKey(brandId),
+      userId,
+    )) as [number, number];
 
-    const results = await this.#redis
-      .multi()
-      .hset(presenceActiveKey(brandId), userId, String(this.#now()))
-      .srem(presenceIdleKey(brandId), userId)
-      .exec();
-
-    return { present: true, idleEnded: added(results, 1) };
-  }
-
-  /** When the person last reported activity, in epoch ms, or null if never. */
-  async lastActiveAt(brandId: string, userId: string): Promise<number | null> {
-    const stamp = await this.#redis.hget(presenceActiveKey(brandId), userId);
-    const at = stamp === null ? Number.NaN : Number(stamp);
-
-    return Number.isFinite(at) ? at : null;
+    return { present: present === 1, idleEnded: ended === 1 };
   }
 
   /**
-   * Starts counting from now for someone with no stamp (present before this
-   * shipped, or whose stamp was lost), so they are not idle on the first look.
+   * Marks the person idle if, and only if, they are present and their last
+   * report is at least `limitMs` old by Redis's own clock. One script, so a
+   * report landing between the check and the mark cannot be overruled and a
+   * departure cannot be followed by a mark. A person with no clock yet (present
+   * before this shipped, or whose stamp was lost) starts one now and is not
+   * idle on the first look. True only for the caller that marked them, who
+   * announces it.
    */
-  async stampIfMissing(brandId: string, userId: string): Promise<void> {
-    await this.#redis.hsetnx(presenceActiveKey(brandId), userId, String(this.#now()));
+  async markIdleIfStale(brandId: string, userId: string, limitMs: number): Promise<boolean> {
+    return (
+      (await this.#redis.eval(
+        MARK_IDLE_SCRIPT,
+        3,
+        presenceBrandKey(brandId),
+        presenceActiveKey(brandId),
+        presenceIdleKey(brandId),
+        userId,
+        limitMs,
+      )) === 1
+    );
   }
 
-  /** Marks the person idle. True only for the caller that did, who announces it. */
-  async markIdle(brandId: string, userId: string): Promise<boolean> {
-    if ((await this.#redis.sismember(presenceBrandKey(brandId), userId)) !== 1) {
-      return false;
-    }
-
-    return (await this.#redis.sadd(presenceIdleKey(brandId), userId)) === 1;
+  /** Stamps the person's clock with Redis's time, only while they are present. */
+  async #stamp(brandId: string, userId: string, mode: 'nx' | 'set'): Promise<void> {
+    await this.#redis.eval(
+      STAMP_SCRIPT,
+      2,
+      presenceBrandKey(brandId),
+      presenceActiveKey(brandId),
+      userId,
+      mode,
+    );
   }
 
   /** Who is idle-away now. The sweep releases those whose department stopped asking for it. */

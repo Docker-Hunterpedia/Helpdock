@@ -39,7 +39,7 @@ import { createLogger } from '../logging/logger.js';
 import { presenceDecision } from '../notifications/email-pacing.js';
 import { type IdleAwayPolicy, NoIdleAwayPolicy } from '../realtime/idle-away.policy.js';
 import { PresenceService } from '../realtime/presence.service.js';
-import { PresenceStore } from '../realtime/presence.store.js';
+import { PresenceStore, presenceActiveKey, presenceIdleKey } from '../realtime/presence.store.js';
 import { RealtimePublisher } from '../realtime/publisher.js';
 import { NoopStaffOfflineHook } from '../realtime/staff-offline.hook.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
@@ -979,7 +979,6 @@ describe.skipIf(!hasDocker)('assignment', () => {
 
   describe('idle agents marked away (M14-18)', () => {
     const MINUTE = 60_000;
-    let clock = 50_000_000;
     let store: PresenceStore;
     let reader: StorePresenceReader;
     /** One entry per `presence:changed` any "replica" published. */
@@ -1010,14 +1009,26 @@ describe.skipIf(!hasDocker)('assignment', () => {
     const join = (service: PresenceService, who: Person, socketId: string) =>
       service.join({ brandId: seeded.brandId, userId: who.id, socketId });
     const statusOf = (who: Person) => store.statusOf(seeded.brandId, who.id);
+    /**
+     * Redis's clock cannot be moved, so a person's silence is set instead: their
+     * last report is made `minutes` old, which is all the sweep reads.
+     */
+    const silentFor = async (minutes: number, ...people: Person[]): Promise<void> => {
+      for (const who of people) {
+        await redis.hset(
+          presenceActiveKey(seeded.brandId),
+          who.id,
+          String(Date.now() - minutes * MINUTE),
+        );
+      }
+    };
 
     beforeAll(async () => {
       await configure(support, { mode: 'round_robin', loadCap: null, autoUnassignOffline: true });
     });
 
     beforeEach(async () => {
-      clock = 50_000_000;
-      store = new PresenceStore(redis, () => clock);
+      store = new PresenceStore(redis);
       reader = new StorePresenceReader(store);
       announced.length = 0;
       await closeOut();
@@ -1120,13 +1131,14 @@ describe.skipIf(!hasDocker)('assignment', () => {
       await join(replica, sam, 'sam-1');
       await join(replica, sue, 'sue-1');
 
-      await replica.sweep(clock + 29 * MINUTE);
+      await silentFor(29, sam, sue);
+      await replica.sweep();
       expect(await statusOf(sam)).toBe('online');
 
-      // Sue is active at minute 20; Sam is not.
-      clock += 20 * MINUTE;
+      // Sue reports; Sam has been silent for his 30 minutes.
+      await silentFor(30, sam);
       await replica.active({ brandId: seeded.brandId, userId: sue.id });
-      await replica.sweep(clock + 10 * MINUTE);
+      await replica.sweep();
 
       expect(await statusOf(sam)).toBe('away');
       expect(await statusOf(sue)).toBe('online');
@@ -1146,7 +1158,8 @@ describe.skipIf(!hasDocker)('assignment', () => {
       expect(await assigneeOf(first.ticket.id)).toBe(sue.id);
 
       // Everyone idle: nobody is eligible and the ticket waits.
-      await replica.sweep(clock + 31 * MINUTE);
+      await silentFor(31, sue);
+      await replica.sweep();
       expect(await reader.online(seeded.brandId)).toEqual(new Set());
 
       expect(await replica.active({ brandId: seeded.brandId, userId: sam.id })).toEqual({
@@ -1162,7 +1175,8 @@ describe.skipIf(!hasDocker)('assignment', () => {
       await join(first, sam, 'sam-1');
       announced.length = 0;
 
-      await Promise.all([first.sweep(clock + 30 * MINUTE), second.sweep(clock + 30 * MINUTE)]);
+      await silentFor(30, sam);
+      await Promise.all([first.sweep(), second.sweep()]);
 
       expect(announced.filter((entry) => entry.userId === sam.id)).toEqual([
         { userId: sam.id, status: 'away' },
@@ -1175,13 +1189,14 @@ describe.skipIf(!hasDocker)('assignment', () => {
       await join(first, sam, 'sam-tab-1');
       await join(second, sam, 'sam-tab-2');
 
-      // The second tab reports at minute 25; the first tab's silence is not the person's.
-      clock += 25 * MINUTE;
+      // The second tab reports; the first tab's silence is not the person's.
       await second.active({ brandId: seeded.brandId, userId: sam.id });
-      await first.sweep(clock + 29 * MINUTE);
+      await silentFor(29, sam);
+      await first.sweep();
       expect(await statusOf(sam)).toBe('online');
 
-      await first.sweep(clock + 30 * MINUTE);
+      await silentFor(30, sam);
+      await first.sweep();
       expect(await statusOf(sam)).toBe('away');
 
       // Closing one tab does not end the idle away, and the other's report does.
@@ -1193,11 +1208,65 @@ describe.skipIf(!hasDocker)('assignment', () => {
       });
     });
 
+    describe('the sweep and a report or a departure at the same moment', () => {
+      const ROUNDS = 100;
+      const idleMembers = () => redis.smembers(presenceIdleKey(seeded.brandId));
+
+      it('never leaves someone idle whose report lands while the sweep is deciding', async () => {
+        const member = { brandId: seeded.brandId, userId: sam.id };
+        for (let round = 0; round < ROUNDS; round += 1) {
+          await store.join({ ...member, socketId: `race-${round}` });
+          await silentFor(30, sam);
+
+          await Promise.all([
+            store.touch(member),
+            store.markIdleIfStale(seeded.brandId, sam.id, 30 * MINUTE),
+          ]);
+
+          // Whichever ran first, the report is the later word on the person.
+          expect(await idleMembers()).toEqual([]);
+          expect(await statusOf(sam)).toBe('online');
+          await store.leave({ ...member, socketId: `race-${round}` });
+        }
+      });
+
+      it('never marks someone who has just gone offline, and leaves no mark behind', async () => {
+        const member = { brandId: seeded.brandId, userId: sam.id };
+        for (let round = 0; round < ROUNDS; round += 1) {
+          await store.join({ ...member, socketId: `gone-${round}` });
+          await silentFor(30, sam);
+
+          await Promise.all([
+            store.leave({ ...member, socketId: `gone-${round}` }),
+            store.markIdleIfStale(seeded.brandId, sam.id, 30 * MINUTE),
+          ]);
+
+          expect(await idleMembers()).toEqual([]);
+          expect(await statusOf(sam)).toBe('offline');
+          expect(await redis.hget(presenceActiveKey(seeded.brandId), sam.id)).toBeNull();
+        }
+      });
+
+      it('reads the time from Redis, not from the api process', async () => {
+        const member = { brandId: seeded.brandId, userId: sam.id };
+        await store.join({ ...member, socketId: 'skew' });
+        const realNow = Date.now;
+        // A replica whose clock is an hour fast must not change who is idle.
+        Date.now = () => realNow() + 60 * MINUTE;
+        try {
+          expect(await store.markIdleIfStale(seeded.brandId, sam.id, 30 * MINUTE)).toBe(false);
+        } finally {
+          Date.now = realNow;
+        }
+      });
+    });
+
     it('keeps an explicit away through activity: only the idle reason ends', async () => {
       const replica = replicaOf();
       await join(replica, sam, 'sam-1');
       await replica.setStatus({ brandId: seeded.brandId, userId: sam.id }, 'away');
-      await replica.sweep(clock + 30 * MINUTE);
+      await silentFor(30, sam);
+      await replica.sweep();
 
       expect(await replica.active({ brandId: seeded.brandId, userId: sam.id })).toEqual({
         status: 'away',
@@ -1209,12 +1278,13 @@ describe.skipIf(!hasDocker)('assignment', () => {
     it('lifts the mark when the department turns the setting off', async () => {
       const replica = replicaOf();
       await join(replica, sam, 'sam-1');
-      await replica.sweep(clock + 30 * MINUTE);
+      await silentFor(30, sam);
+      await replica.sweep();
       expect(await statusOf(sam)).toBe('away');
 
       await configure(support, { idleAwayMinutes: null });
       try {
-        await replica.sweep(clock + 31 * MINUTE);
+        await replica.sweep();
         expect(await statusOf(sam)).toBe('online');
       } finally {
         await configure(support, { idleAwayMinutes: 30 });
@@ -1225,7 +1295,8 @@ describe.skipIf(!hasDocker)('assignment', () => {
       const replica = replicaOf(new NoIdleAwayPolicy());
       await join(replica, sam, 'sam-1');
 
-      await replica.sweep(clock + 24 * 60 * MINUTE);
+      await silentFor(24 * 60, sam);
+      await replica.sweep();
 
       expect(await statusOf(sam)).toBe('online');
     });
@@ -1235,7 +1306,8 @@ describe.skipIf(!hasDocker)('assignment', () => {
       await join(replica, sam, 'sam-1');
       await join(replica, sue, 'sue-1');
       const ticket = await createTicket(ada, { assigneeId: sam.id });
-      await replica.sweep(clock + 30 * MINUTE);
+      await silentFor(30, sam);
+      await replica.sweep();
       expect(await statusOf(sam)).toBe('away');
 
       const since = new Date().toISOString();
@@ -1269,7 +1341,8 @@ describe.skipIf(!hasDocker)('assignment', () => {
     it('is read as away by the notification presence hold, which then paces by its grace', async () => {
       const replica = replicaOf();
       await join(replica, sam, 'sam-1');
-      await replica.sweep(clock + 30 * MINUTE);
+      await silentFor(30, sam);
+      await replica.sweep();
 
       const status = await reader.statusOf(seeded.brandId, sam.id);
       expect(status).toBe('away');

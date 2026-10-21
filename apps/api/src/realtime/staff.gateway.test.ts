@@ -365,7 +365,18 @@ describe('StaffGateway', () => {
       });
     });
 
-    it('refuses a body that names anything but a brand', async () => {
+    it('refuses a brand the socket never joined, however it is spelled, and records nothing', async () => {
+      const socket = socketOf('s1');
+      await harnessed.gateway.join(socket, { brandId: BRAND_A, room: brandRoom(BRAND_A) });
+
+      expect(await harnessed.gateway.reportActivity(socket, { brandId: BRAND_B })).toEqual({
+        ok: true,
+        data: { status: 'offline', idleEnded: false },
+      });
+      expect(await harnessed.presence.mapOf(BRAND_B)).toEqual({});
+    });
+
+    it('refuses a body whose brand is not a uuid', async () => {
       const socket = socketOf('s1');
       await harnessed.gateway.join(socket, { brandId: BRAND_A, room: brandRoom(BRAND_A) });
 

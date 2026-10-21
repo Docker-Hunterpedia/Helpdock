@@ -212,11 +212,19 @@ describe('PresenceService', () => {
       clock = 10_000_000;
       limits = new Map([[LINA, 30]]);
       limitsFor = () => Promise.resolve(limits);
-      store = new PresenceStore(redis.asRedis(), () => clock);
+      redis.clock = () => clock;
+      store = new PresenceStore(redis.asRedis());
       idleService = new PresenceService(store, publisher, offline, silentLogger(), {
         limitsFor: (brandId) => limitsFor(brandId),
       });
     });
+
+    /** Sweeps as if `offset` ms had passed since the clock last moved. */
+    const sweepAt = (offset: number): Promise<void> => {
+      redis.clock = () => clock + offset;
+
+      return idleService.sweep();
+    };
 
     const joinLina = (): Promise<unknown> =>
       idleService.join({ brandId: BRAND, userId: LINA, socketId: 's1' });
@@ -225,8 +233,8 @@ describe('PresenceService', () => {
       await joinLina();
       announced.length = 0;
 
-      await idleService.sweep(clock + 30 * MINUTE);
-      await idleService.sweep(clock + 31 * MINUTE);
+      await sweepAt(30 * MINUTE);
+      await sweepAt(31 * MINUTE);
 
       expect(announced).toEqual([announcement('away')]);
       expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away' });
@@ -236,7 +244,7 @@ describe('PresenceService', () => {
       await joinLina();
       announced.length = 0;
 
-      await idleService.sweep(clock + 30 * MINUTE - 1);
+      await sweepAt(30 * MINUTE - 1);
 
       expect(announced).toEqual([]);
       expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'online' });
@@ -248,10 +256,10 @@ describe('PresenceService', () => {
       await idleService.active({ brandId: BRAND, userId: LINA });
       announced.length = 0;
 
-      await idleService.sweep(clock + 29 * MINUTE);
+      await sweepAt(29 * MINUTE);
       expect(announced).toEqual([]);
 
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       expect(announced).toEqual([announcement('away')]);
     });
 
@@ -260,7 +268,7 @@ describe('PresenceService', () => {
       await joinLina();
       announced.length = 0;
 
-      await idleService.sweep(clock + 24 * 60 * MINUTE);
+      await sweepAt(24 * 60 * MINUTE);
 
       expect(announced).toEqual([]);
     });
@@ -274,7 +282,7 @@ describe('PresenceService', () => {
       await joinLina();
       await idleService.join({ brandId: BRAND, userId: omar, socketId: 's2' });
 
-      await idleService.sweep(clock + 11 * MINUTE);
+      await sweepAt(11 * MINUTE);
 
       expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away', [omar]: 'online' });
     });
@@ -284,17 +292,17 @@ describe('PresenceService', () => {
       await redis.hdel(presenceActiveKey(BRAND), LINA);
       announced.length = 0;
 
-      await idleService.sweep(clock + 40 * MINUTE);
+      await sweepAt(40 * MINUTE);
       expect(announced).toEqual([]);
 
       clock += 40 * MINUTE;
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       expect(announced).toEqual([announcement('away')]);
     });
 
     it('brings them back on activity, announces it, and says the idle away ended', async () => {
       await joinLina();
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       announced.length = 0;
 
       expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
@@ -313,7 +321,7 @@ describe('PresenceService', () => {
     it('does not claim a return for someone who chose away themselves', async () => {
       await joinLina();
       await idleService.setStatus({ brandId: BRAND, userId: LINA }, 'away');
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       announced.length = 0;
 
       expect(await idleService.active({ brandId: BRAND, userId: LINA })).toEqual({
@@ -333,11 +341,11 @@ describe('PresenceService', () => {
 
     it('lifts the mark when the department stops asking for it', async () => {
       await joinLina();
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       announced.length = 0;
       limits.clear();
 
-      await idleService.sweep(clock + 31 * MINUTE);
+      await sweepAt(31 * MINUTE);
 
       expect(announced).toEqual([announcement('online')]);
       expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'online' });
@@ -345,11 +353,11 @@ describe('PresenceService', () => {
 
     it('keeps every mark as it was when the limits cannot be read', async () => {
       await joinLina();
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
       announced.length = 0;
       limitsFor = () => Promise.reject(new Error('postgres is down'));
 
-      await idleService.sweep(clock + 31 * MINUTE);
+      await sweepAt(31 * MINUTE);
 
       expect(announced).toEqual([]);
       expect(await idleService.mapOf(BRAND)).toEqual({ [LINA]: 'away' });
@@ -361,14 +369,14 @@ describe('PresenceService', () => {
       await joinLina();
       heard.length = 0;
 
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
 
       expect(heard).toEqual([BRAND]);
     });
 
     it('does not start the offline timer for an idle person: away is not offline', async () => {
       await joinLina();
-      await idleService.sweep(clock + 30 * MINUTE);
+      await sweepAt(30 * MINUTE);
 
       expect(offline.calls).toEqual([]);
     });

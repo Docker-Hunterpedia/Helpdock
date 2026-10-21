@@ -147,7 +147,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
    * such; then, per brand, everyone who has been idle past their department's
    * limit is away (M14-18).
    */
-  async sweep(now: number = Date.now()): Promise<void> {
+  async sweep(): Promise<void> {
     try {
       for (const brandId of await this.#store.brands()) {
         for (const userId of await this.#store.usersIn(brandId)) {
@@ -156,7 +156,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
             await this.#goneOffline(brandId, userId);
           }
         }
-        await this.#sweepIdle(brandId, now);
+        await this.#sweepIdle(brandId);
       }
     } catch (error) {
       // A sweep that throws must not kill the interval: Redis comes back, and
@@ -171,7 +171,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
    * leaves every mark as it was: guessing "nobody is limited" would wake the
    * whole brand up, and guessing "everybody is" would put them to sleep.
    */
-  async #sweepIdle(brandId: string, now: number): Promise<void> {
+  async #sweepIdle(brandId: string): Promise<void> {
     let limits: ReadonlyMap<string, number>;
     try {
       limits = await this.#idlePolicy.limitsFor(brandId);
@@ -186,12 +186,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      const lastActive = await this.#store.lastActiveAt(brandId, userId);
-      if (lastActive === null) {
-        await this.#store.stampIfMissing(brandId, userId);
-        continue;
-      }
-      if (now - lastActive >= minutes * 60_000 && (await this.#store.markIdle(brandId, userId))) {
+      if (await this.#store.markIdleIfStale(brandId, userId, minutes * 60_000)) {
         this.#announce(brandId, userId, await this.#store.statusOf(brandId, userId));
       }
     }

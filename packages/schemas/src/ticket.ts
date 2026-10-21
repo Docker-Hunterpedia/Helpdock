@@ -7,6 +7,7 @@ import { importSourceLink } from './import-source-link.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
 import { ticketSlaSchema, ticketSlaSummarySchema } from './sla.js';
 import { MAX_TAGS_PER_BRAND, tagSchema } from './tags.js';
+import { ticketFieldFiltersParamSchema } from './ticket-field-filter.js';
 import { timeEntrySecondsSchema } from './time-entries.js';
 
 /**
@@ -635,6 +636,12 @@ export const ticketListQuerySchema = z.object({
    * number still finds it, whatever this says (#221).
    */
   snoozed: z.enum(['exclude', 'only', 'include']).optional(),
+  /**
+   * M14-16. Filters on the ticket's custom fields, all of which have to match.
+   * A query string writes one `fieldFilter=<json>` per filter; a saved view
+   * stores them as objects (`ticket-field-filter.ts`).
+   */
+  fieldFilter: ticketFieldFiltersParamSchema.optional(),
   sort: ticketSortSchema
     .default('updatedAt')
     .describe(

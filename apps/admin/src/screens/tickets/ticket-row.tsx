@@ -1,4 +1,4 @@
-import type { Ticket } from '@helpdock/schemas';
+import type { CustomFieldDef, Ticket } from '@helpdock/schemas';
 import { Box, Checkbox, Typography } from '@mui/material';
 import { Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -10,6 +10,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
 import { ChannelMark, PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
 import { elapsed, ticketReference, wakeTime } from './format.js';
+import { PinnedFieldChip, pinnedValueOf } from './pinned-field-chip.tsx';
 
 /** WhatsApp, Messenger and Instagram rows say which platform they are with an icon (M10-08). */
 const isMetaChannel = (channel: Ticket['channel']): boolean =>
@@ -57,6 +58,7 @@ export function TicketRow({
   now,
   search,
   selection,
+  pinnedField,
 }: {
   readonly ticket: Ticket;
   readonly selected: boolean;
@@ -65,12 +67,15 @@ export function TicketRow({
   readonly search: string;
   /** M14-04: the checkbox, for somebody who may change tickets. */
   readonly selection?: RowSelection | undefined;
+  /** M14-16: the brand's pinned field, whose value this row shows as a chip. */
+  readonly pinnedField?: CustomFieldDef | undefined;
 }): ReactNode {
   const tokens = useSemanticTokens();
   const t = useT();
   const { locale } = usePreferences();
   const reference = ticketReference(ticket);
   const contactName = ticket.contact?.name ?? null;
+  const pinnedValue = pinnedValueOf(ticket, pinnedField);
 
   const ticked = selection?.checked === true;
   const tinted = selected || ticked;
@@ -153,6 +158,9 @@ export function TicketRow({
               </>
             )}
             <TicketAiMark state={ticket.ai} />
+            {pinnedField === undefined || pinnedValue === null ? null : (
+              <PinnedFieldChip def={pinnedField} value={pinnedValue} size="row" />
+            )}
           </Typography>
         </Box>
 

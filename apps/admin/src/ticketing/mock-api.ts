@@ -298,6 +298,7 @@ const seedFields = (): CustomFieldDef[] => [
     options: ['gold', 'silver', 'bronze'],
     required: true,
     agentVisible: true,
+    pinned: false,
     sortOrder: 0,
   },
   {
@@ -310,6 +311,7 @@ const seedFields = (): CustomFieldDef[] => [
     options: [],
     required: false,
     agentVisible: true,
+    pinned: false,
     sortOrder: 1,
   },
   {
@@ -322,6 +324,7 @@ const seedFields = (): CustomFieldDef[] => [
     options: [],
     required: false,
     agentVisible: true,
+    pinned: false,
     sortOrder: 2,
   },
   {
@@ -334,6 +337,7 @@ const seedFields = (): CustomFieldDef[] => [
     options: [],
     required: false,
     agentVisible: false,
+    pinned: false,
     sortOrder: 0,
   },
   {
@@ -346,6 +350,7 @@ const seedFields = (): CustomFieldDef[] => [
     options: [],
     required: false,
     agentVisible: true,
+    pinned: false,
     sortOrder: 0,
   },
 ];
@@ -971,9 +976,13 @@ export class MockTicketingApi implements TicketingApi {
       options: [...request.options],
       required: request.required,
       agentVisible: request.agentVisible,
+      pinned: request.pinned,
       sortOrder: this.#fields.filter((field) => field.target === request.target).length,
     };
-    this.#fields.push(created);
+    this.#fields = [
+      ...this.#fields.map((row) => (request.pinned ? { ...row, pinned: false } : row)),
+      created,
+    ];
 
     return created;
   }
@@ -1008,8 +1017,12 @@ export class MockTicketingApi implements TicketingApi {
       ...(request.options === undefined ? {} : { options: [...request.options] }),
       ...(request.required === undefined ? {} : { required: request.required }),
       ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
+      ...(request.pinned === undefined ? {} : { pinned: request.pinned }),
     };
-    this.#fields = this.#fields.map((row) => (row.id === fieldId ? updated : row));
+    // One pinned field per brand: pinning this one lets the previous go (M14-16).
+    this.#fields = this.#fields.map((row) =>
+      row.id === fieldId ? updated : request.pinned === true ? { ...row, pinned: false } : row,
+    );
 
     return updated;
   }

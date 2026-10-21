@@ -1,6 +1,7 @@
 import type { Locale } from '@helpdock/i18n';
 import type {
   TicketChannel,
+  TicketFieldFilter,
   TicketPriority,
   TicketSort,
   TicketSortDirection,
@@ -9,6 +10,7 @@ import type {
   TicketViewFilters,
   TicketViewFiltersInput,
 } from '@helpdock/schemas';
+import { ticketFieldFilterSchema } from '@helpdock/schemas';
 import type { TicketQuery } from './api.js';
 
 /**
@@ -44,6 +46,8 @@ export interface WorkspaceFilters {
   readonly channel: readonly TicketChannel[];
   readonly overdue: boolean;
   readonly imported?: boolean | undefined;
+  /** M14-16. Filters on ticket custom fields; all of them have to match. */
+  readonly fieldFilter: readonly TicketFieldFilter[];
   /** M14-02. Snoozed tickets are left out unless a view (Snoozed) or the URL asks for them. */
   readonly snoozed: SnoozedFilter;
   readonly q: string;
@@ -61,6 +65,7 @@ export const EMPTY_FILTERS: WorkspaceFilters = {
   channel: [],
   overdue: false,
   imported: undefined,
+  fieldFilter: [],
   snoozed: 'exclude',
   q: '',
   sort: 'updatedAt',
@@ -82,6 +87,7 @@ export const filtersOfView = (filters: TicketViewFilters): WorkspaceFilters => (
   channel: filters.channel ?? [],
   overdue: filters.overdue ?? false,
   imported: filters.imported,
+  fieldFilter: filters.fieldFilter ?? [],
   snoozed: filters.snoozed ?? 'exclude',
   q: filters.q ?? '',
   sort: filters.sort,
@@ -103,6 +109,7 @@ export const viewFiltersOf = (filters: WorkspaceFilters): TicketViewFiltersInput
     channel: some(filters.channel),
     overdue: filters.overdue ? true : undefined,
     imported: filters.imported,
+    fieldFilter: some(filters.fieldFilter),
     snoozed: filters.snoozed === 'exclude' ? undefined : filters.snoozed,
     q: filters.q === '' ? undefined : filters.q,
     sort: filters.sort,
@@ -138,6 +145,8 @@ const PARAM = {
   channel: 'channel',
 } as const;
 
+/** One `field=<json>` per custom-field filter (M14-16). */
+const FIELD = 'field';
 const OVERDUE = 'overdue';
 const IMPORTED = 'imported';
 const SNOOZED = 'snoozed';
@@ -148,6 +157,21 @@ const SEARCH = 'q';
 export const CUSTOM = 'custom';
 
 const SORTS: readonly TicketSort[] = ['updatedAt', 'createdAt', 'number', 'priority', 'slaDue'];
+
+/**
+ * The custom-field filters a link carries. A parameter that is not JSON, or
+ * not a filter the api's schema knows, is dropped rather than raising: a link
+ * edited by hand opens an unfiltered list instead of a broken page.
+ */
+const fieldFiltersFromParams = (params: URLSearchParams): TicketFieldFilter[] =>
+  params.getAll(FIELD).flatMap((raw) => {
+    try {
+      const parsed = ticketFieldFilterSchema.safeParse(JSON.parse(raw));
+      return parsed.success ? [parsed.data] : [];
+    } catch {
+      return [];
+    }
+  });
 
 /** The filters as the query string carries them. */
 export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => {
@@ -163,6 +187,7 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
     overdue: params.get(OVERDUE) === '1',
     imported:
       params.get(IMPORTED) === '1' ? true : params.get(IMPORTED) === '0' ? false : undefined,
+    fieldFilter: fieldFiltersFromParams(params),
     snoozed:
       params.get(SNOOZED) === 'only' || params.get(SNOOZED) === 'include'
         ? (params.get(SNOOZED) as SnoozedFilter)
@@ -180,6 +205,7 @@ export const withoutFilters = (params: URLSearchParams): URLSearchParams => {
     ...Object.values(PARAM),
     OVERDUE,
     IMPORTED,
+    FIELD,
     SNOOZED,
     SORT,
     DIRECTION,
@@ -207,6 +233,9 @@ export const withFilters = (
     next.set(OVERDUE, '1');
   }
   if (filters.imported !== undefined) next.set(IMPORTED, filters.imported ? '1' : '0');
+  for (const filter of filters.fieldFilter) {
+    next.append(FIELD, JSON.stringify(filter));
+  }
   if (filters.snoozed !== 'exclude') {
     next.set(SNOOZED, filters.snoozed);
   }
@@ -224,6 +253,12 @@ export const withFilters = (
   return next;
 };
 
+const canonical = (filter: TicketFieldFilter): string => {
+  // `any_of` is a set: the same options in another order are the same question.
+  const same = filter.op === 'any_of' ? { ...filter, values: [...filter.values].sort() } : filter;
+  return JSON.stringify(Object.entries(same).sort(([a], [b]) => a.localeCompare(b)));
+};
+
 const sameSet = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && new Set([...left, ...right]).size === new Set(left).size;
 
@@ -238,6 +273,7 @@ export const sameFilters = (left: WorkspaceFilters, right: WorkspaceFilters): bo
   sameSet(left.channel, right.channel) &&
   left.overdue === right.overdue &&
   left.imported === right.imported &&
+  sameSet(left.fieldFilter.map(canonical), right.fieldFilter.map(canonical)) &&
   left.snoozed === right.snoozed &&
   left.q === right.q &&
   left.sort === right.sort &&
@@ -312,6 +348,7 @@ export const activeFilterCount = (filters: WorkspaceFilters): number =>
   filters.departmentId.length +
   filters.tagIds.length +
   filters.channel.length +
+  filters.fieldFilter.length +
   (filters.overdue ? 1 : 0) +
   (filters.imported === undefined ? 0 : 1);
 

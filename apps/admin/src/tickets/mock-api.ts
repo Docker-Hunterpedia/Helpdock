@@ -30,6 +30,7 @@ import type {
   TicketCreateRequest,
   TicketCsat,
   TicketDetail,
+  TicketFieldFilter,
   TicketLink,
   TicketList,
   TicketMergeRequest,
@@ -2293,9 +2294,47 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
     (query.overdue !== true || isOverdue(ticket, now)) &&
     (query.imported === undefined || Boolean(ticket.imported) === query.imported) &&
+    (query.fieldFilter ?? []).every((filter) => matchesFieldFilter(ticket.custom, filter)) &&
     snoozeMatches(ticket, query.snoozed) &&
     (term === '' || ticket.subject.toLowerCase().includes(term))
   );
+};
+
+/**
+ * M14-16: one custom-field filter, as the api's `fieldFilterClause` reads the
+ * stored values. The fixture decides by the value's shape where the api
+ * decides by the definition's type, which the same stored objects agree with.
+ */
+const matchesFieldFilter = (
+  custom: Record<string, unknown>,
+  filter: TicketFieldFilter,
+): boolean => {
+  const stored = custom[filter.key];
+
+  switch (filter.op) {
+    case 'any_of':
+      return Array.isArray(stored)
+        ? stored.some((member) => filter.values.includes(String(member)))
+        : typeof stored === 'string' && filter.values.includes(stored);
+    case 'not_set':
+      return stored === undefined || stored === null;
+    case 'is':
+      return filter.value ? stored === true : stored !== true;
+    case 'before':
+      return typeof stored === typeof filter.value && (stored as number | string) < filter.value;
+    case 'after':
+      return typeof stored === typeof filter.value && (stored as number | string) > filter.value;
+    case 'between':
+      return (
+        typeof stored === typeof filter.from &&
+        (stored as number | string) >= filter.from &&
+        (stored as number | string) <= filter.to
+      );
+    case 'contains':
+      return (
+        typeof stored === 'string' && stored.toLowerCase().includes(filter.value.toLowerCase())
+      );
+  }
 };
 
 /** M14-02: snoozed tickets are left out of a list unless it asks for them. */

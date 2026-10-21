@@ -94,6 +94,13 @@ export const customFieldDefSchema = z.object({
   required: z.boolean(),
   /** Whether an Agent sees it. A display rule, never a security boundary. */
   agentVisible: z.boolean(),
+  /**
+   * M14-16. The one select field of the brand whose value shows as a chip on
+   * the ticket row and in the ticket header. At most one per brand, and only a
+   * ticket field an Agent may see: a chip on every row would otherwise show
+   * what the details panel hides.
+   */
+  pinned: z.boolean(),
   sortOrder: z.int().nonnegative(),
 });
 export type CustomFieldDef = z.infer<typeof customFieldDefSchema>;
@@ -148,6 +155,8 @@ export const customFieldCreateRequestSchema = z
     options: customFieldOptionsSchema.default([]),
     required: z.boolean().default(false),
     agentVisible: z.boolean().default(true),
+    /** M14-16. Pins the new field (and unpins the brand's previous one). */
+    pinned: z.boolean().default(false),
   })
   .superRefine(assertOptionsMatchType);
 export type CustomFieldCreateRequest = z.infer<typeof customFieldCreateRequestSchema>;
@@ -170,6 +179,8 @@ export const customFieldUpdateRequestSchema = z
     options: customFieldOptionsSchema.optional(),
     required: z.boolean().optional(),
     agentVisible: z.boolean().optional(),
+    /** Pins this select field (and unpins the brand's previous one), or unpins it. */
+    pinned: z.boolean().optional(),
     /** Remove an option that rows still carry, clearing it from them. */
     force: z.boolean().default(false),
   })

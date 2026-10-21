@@ -12,6 +12,7 @@ const def = (type: CustomFieldType, overrides: Partial<CustomFieldDef> = {}): Cu
   options: type === 'select' || type === 'multi_select' ? ['a', 'b'] : [],
   required: false,
   agentVisible: true,
+  pinned: false,
   sortOrder: 0,
   ...overrides,
 });

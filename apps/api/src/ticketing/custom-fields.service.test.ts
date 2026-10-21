@@ -1,5 +1,6 @@
 import type { CustomFieldDefRow, DbTransaction, NewCustomFieldDef } from '@helpdock/db';
 import type { CustomFieldTarget } from '@helpdock/schemas';
+import { BadRequestException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import type { CustomFieldsRepository, FieldUsage } from './custom-fields.repository.js';
@@ -30,6 +31,7 @@ const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefR
   options: [],
   required: false,
   agentVisible: true,
+  pinned: false,
   webForm: false,
   sortOrder: 0,
   createdAt: new Date(),
@@ -62,6 +64,12 @@ const repository = {
     rows = rows.map((candidate) => (candidate.id === id ? updated : candidate));
 
     return updated;
+  },
+  unpinOthers: async (_tx: DbTransaction, id: string) => {
+    const others = rows.filter((row) => row.pinned && row.id !== id);
+    rows = rows.map((row) => (row.id === id ? row : { ...row, pinned: false }));
+
+    return others.map((row) => row.key);
   },
   delete: async (_tx: DbTransaction, id: string) => {
     rows = rows.filter((row) => row.id !== id);
@@ -129,6 +137,7 @@ describe('create', () => {
       options: [],
       required: false,
       agentVisible: true,
+      pinned: false,
     });
 
     expect(transaction.audit[0]).toMatchObject({
@@ -147,6 +156,7 @@ describe('create', () => {
         options: [],
         required: false,
         agentVisible: true,
+        pinned: false,
       }),
     ).rejects.toThrow(TicketingFailure);
   });
@@ -161,6 +171,7 @@ describe('create', () => {
         options: [],
         required: false,
         agentVisible: true,
+        pinned: false,
       }),
     ).resolves.toMatchObject({ key: 'tier' });
   });
@@ -282,5 +293,113 @@ describe('reorder', () => {
     await expect(
       service.reorder(contextFor(transaction.tx), { target: 'contact', fieldIds: ['tier'] }),
     ).rejects.toThrow(/exactly once/i);
+  });
+});
+
+describe('pinning (M14-16)', () => {
+  const create = (over: Record<string, unknown>) =>
+    service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'severity',
+      label: 'Severity',
+      type: 'select',
+      options: ['Sev 1'],
+      required: false,
+      agentVisible: true,
+      pinned: false,
+      ...over,
+    });
+
+  it('pins a ticket select that Agents see, and says so in the audit row', async () => {
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).resolves.toMatchObject({ pinned: true });
+
+    expect(transaction.audit[0]).toMatchObject({
+      action: 'custom_field.updated',
+      meta: { key: 'tier', pinned: true },
+    });
+    expect(transaction.audit[0]?.meta).not.toHaveProperty('unpinned');
+  });
+
+  it('lets the previously pinned field go, and names it in the audit row', async () => {
+    rows.push(def({ id: 'plan', key: 'plan', type: 'select', options: ['Pro'], pinned: true }));
+
+    await service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false });
+
+    expect(rows.filter((row) => row.pinned).map((row) => row.key)).toEqual(['tier']);
+    expect(transaction.audit[0]?.meta).toMatchObject({ pinned: true, unpinned: ['plan'] });
+  });
+
+  it('refuses to pin a field that is not a ticket select', async () => {
+    // `seats` is a number on the contact target: wrong type and wrong target.
+    await expect(
+      service.update(contextFor(transaction.tx), 'seats', { pinned: true, force: false }),
+    ).rejects.toThrow(/select field that Agents can see/);
+  });
+
+  it('refuses to pin a field Agents cannot see', async () => {
+    rows.push(
+      def({ id: 'hidden', key: 'hidden', type: 'select', options: ['a'], agentVisible: false }),
+    );
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'hidden', { pinned: true, force: false }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('refuses to hide a pinned field from Agents or to retype it, unless the same edit unpins it', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+    usage = {};
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { agentVisible: false, force: false }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', {
+        type: 'text',
+        options: [],
+        force: false,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', {
+        agentVisible: false,
+        pinned: false,
+        force: false,
+      }),
+    ).resolves.toMatchObject({ agentVisible: false, pinned: false });
+  });
+
+  it('does not touch the pin when an edit does not mention it', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+
+    await service.update(contextFor(transaction.tx), 'tier', { label: 'Tier', force: false });
+
+    expect(rows.find((row) => row.id === 'tier')?.pinned).toBe(true);
+    expect(transaction.audit[0]?.meta).not.toHaveProperty('pinned');
+  });
+
+  it('creates a field pinned, and unpins the previous one', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+
+    await expect(create({ pinned: true })).resolves.toMatchObject({
+      key: 'severity',
+      pinned: true,
+    });
+
+    expect(rows.filter((row) => row.pinned).map((row) => row.key)).toEqual(['severity']);
+    expect(transaction.audit[0]?.meta).toMatchObject({ pinned: true, unpinned: ['tier'] });
+  });
+
+  it('refuses to create a pinned field that cannot be pinned', async () => {
+    await expect(create({ pinned: true, type: 'text', options: [] })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(create({ pinned: true, agentVisible: false })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(create({ pinned: true, target: 'contact' })).rejects.toThrow(BadRequestException);
+    expect(rows.some((row) => row.key === 'severity')).toBe(false);
   });
 });

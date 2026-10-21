@@ -180,7 +180,7 @@ L 6 d.
 | M14-13 | Setup checklist | 3 d | M14-12 (one step reads it) |
 | M14-14 | Saved-reply and macro polish | 3 d | M14-12 (placeholders) |
 | M14-15 | `@` mention picker in notes | 2 d | — |
-| M14-16 | Custom-field filters in the list and views, pinned field chip (the Severity answer) | 3 d | — |
+| M14-16 | Custom-field filters in the list and views, pinned field chip (the Severity answer) — built, in review (#303) | 3 d | — |
 | M14-17 | Fields required to close | 2.5 d | M14-03 (bulk refusals) |
 | M14-18 | Idle agents marked away | 2 d | — |
 | M14-19 | Compact composer and workspace breakpoints (UX-01, UX-21) | 3 d (M) | — |
@@ -1037,10 +1037,47 @@ endpoint is the assignee picker's list, which already applies that rule.
 The ticket list and the view editor take filters on ticket custom fields:
 select and multi-select (`is any of`, `is not set`), checkbox (`is`), number
 and date (`before`, `after`, `between`), text (`contains`). They reach SQL as
-bound parameters against `tickets.custom` with a GIN index on the `jsonb`.
+bound parameters against `tickets.custom`, with no index of its own (see the status below).
 A brand may **pin one select field** (Admin › Ticketing › Custom fields): its
 value shows as a `Tag`-style chip on the row's caption line and in the ticket
 header, without a new hue. The guide gains the Severity recipe.
+
+**Status: built, in review** (issue [#303](https://github.com/Docker-Hunterpedia/Helpdock/issues/303)).
+- [x] `fieldFilter` on `GET /tickets` and in a view's filters (`ticket-field-filter.ts`
+  in `@helpdock/schemas`): one JSON object per filter, all of which have to match.
+  The api checks each against the brand's definitions
+  (`apps/api/src/tickets/field-filters.ts`) before it is compiled, so a key that is
+  no ticket field, an operator the type has no use for, or a number compared with a
+  day is a 400, never an empty list.
+- [x] The compiler runs in the list's own `WHERE` (`ticket-query.ts`), under the
+  reader's row-level security and department scope; every value is a bound
+  parameter. A view's sidebar count uses the same `WHERE`.
+- [x] Saved views keep the filters and check them when saved. A shared view is
+  checked as an Agent would read it, so it cannot name a field hidden from Agents.
+  A view whose field was deleted since counts nothing in the sidebar instead of
+  failing it, and its list answers 400 until the view is edited.
+- [x] Visibility: a field with `agentVisible` off is a filter only for readers who
+  hold `ticketing:manage` (Admin, Team Leader); for everyone else, including API
+  keys, it answers as if it did not exist.
+- [x] Pinned field: `custom_field_defs.pinned` with a partial unique index (one per
+  brand). Only a ticket select that Agents may see can be pinned, pinning another
+  lets the first go, and hiding or retyping a pinned field is refused until it is
+  unpinned. The chip is neutral (`PinnedFieldChip`) on the row's caption line and in
+  the header.
+- [x] The Filter popover and the Views tab's editor share `FieldFilterEditor`.
+  Playwright `en`/`ar`: `apps/admin/e2e/field-filters.spec.ts`.
+- [x] Docs: `docs/guides/tickets.md` (Listing, Filtering by a custom field, the
+  Severity recipe), `docs/guides/ticketing-settings.md`.
+- Differences from the text above, because the code is the source of truth:
+  **no GIN index on `tickets.custom`.** One was built and measured on the 50k-ticket
+  dataset of DOMAIN-RULES §14: the planner never chose it for the list (identical
+  plans with and without it, 12 to 45 ms either way). `jsonb`'s `@>` is not
+  `LEAKPROOF`, so under the `FORCE`d policies Postgres will not run it ahead of
+  them (the same reason as the search tokens in ARCHITECTURE §5), and the list is
+  ordered and paged by the `tickets_brand_*` indexes anyway. It would only have
+  cost every ticket write.
+  Mailbox and address filters are M14-26's and the new field types M14-27's; the
+  required-to-close switch on the same artboard is M14-17's.
 
 ### M14-17 Fields required to close
 
@@ -1333,13 +1370,13 @@ Changed tables:
 
 | Table | Change |
 |---|---|
-| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, sla_next_due_at, id)`; GIN on `custom` |
+| `tickets` | `snoozed_until timestamptz`, `snoozed_by uuid`, `snooze_resume_status_id uuid`, `snooze_version int not null default 0`; check: all three set or none; partial index `(brand_id, snoozed_until) where snoozed_until is not null`; generated `sla_next_due_at` with index `(brand_id, sla_next_due_at, id)` |
 | `ticket_statuses` | built-in key `snoozed`, seeded for every brand by `seedBrandStatuses` (`packages/db/src/ticket-statuses.ts`) and backfilled by the migration; its state and flags fixed like the other system statuses |
 | `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (M14-03: an Undo takes back an email still waiting)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
 | `notification_prefs` (install scope, per person) | `email_schedule`, `digest_hour`, `paused_until`, `email_unsubscribed_at` |
 | `users` (install scope) | `public_name`, `job_title_en`, `job_title_ar`, `public_phone`, `photo_key` (a bucket folder; built as `photo_key`, not `photo_media_id`), `time_zone`, `single_key_shortcuts boolean default true` |
 | `canned_responses` (macros share it) | `shortcut text` unique per owner scope, `use_count int` |
-| `custom_field_defs` | `required_to_close boolean default false`, `pinned boolean` (at most one per brand, partial unique index) |
+| `custom_field_defs` | `required_to_close boolean default false`, `pinned boolean not null default false` (at most one per brand, partial unique index; M14-16) |
 | `departments` | `idle_away_minutes int null` |
 | `ticket_activity.detail` | `ticket.created` gains `arrival` (Zod schema, no column); new kinds `ticket.snoozed`, `ticket.woke` |
 

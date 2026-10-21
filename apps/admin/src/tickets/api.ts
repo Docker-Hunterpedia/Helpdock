@@ -19,6 +19,7 @@ import type {
   TicketChannel,
   TicketCreateRequest,
   TicketDetail,
+  TicketFieldFilter,
   TicketLifecycleRefusal,
   TicketList,
   TicketMergeRequest,
@@ -220,6 +221,8 @@ export interface TicketQuery {
   /** Only tickets whose SLA has run out (M1-05). */
   readonly overdue?: boolean;
   readonly imported?: boolean;
+  /** M14-16. Filters on ticket custom fields; all of them have to match. */
+  readonly fieldFilter?: readonly TicketFieldFilter[];
   /** M14-02. `exclude` (the api's default), `only` (the Snoozed view) or `include`. */
   readonly snoozed?: 'exclude' | 'only' | 'include';
   /** Free text: every word of the subject and first message, with a fuzzy fallback (ADR 0011). */

@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
   type ImportMapping,
+  importFieldTargetSchema,
   importMappingChoiceId,
   importMappingsSchema,
   importMappingValueSchema,
@@ -80,4 +81,24 @@ it.each([
   { kind: 'status', externalValue: 'open', target: { statusId: id, clientSecret: 'fixture' } },
 ])('refuses mappings outside the approved target contract: %j', (mapping) => {
   expect(importMappingsSchema.safeParse([mapping]).success).toBe(false);
+});
+
+it('never lets an import create a pinned field (M14-16): the brand picks its one pinned field itself', () => {
+  const create = (pinned: boolean) =>
+    importFieldTargetSchema.safeParse({
+      kind: 'create',
+      definition: {
+        target: 'ticket',
+        key: 'severity',
+        label: 'Severity',
+        type: 'select',
+        options: ['Sev 1'],
+        required: false,
+        agentVisible: true,
+        pinned,
+      },
+    });
+
+  expect(create(false).success).toBe(true);
+  expect(create(true).success).toBe(false);
 });

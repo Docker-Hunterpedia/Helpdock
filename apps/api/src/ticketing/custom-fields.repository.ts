@@ -8,7 +8,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import type { CustomFieldTarget } from '@helpdock/schemas';
-import { and, asc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 
 /**
@@ -121,6 +121,21 @@ export class CustomFieldsRepository {
       .returning();
 
     return rows[0];
+  }
+
+  /**
+   * Unpins every other field of the brand and returns their keys (M14-16). The
+   * partial unique index allows one pinned field, so the previous one has to
+   * go before the new one is written.
+   */
+  async unpinOthers(tx: DbTransaction, fieldId: string): Promise<string[]> {
+    const rows = await tx
+      .update(customFieldDefs)
+      .set({ pinned: false })
+      .where(and(eq(customFieldDefs.pinned, true), ne(customFieldDefs.id, fieldId)))
+      .returning({ key: customFieldDefs.key });
+
+    return rows.map((row) => row.key);
   }
 
   /**

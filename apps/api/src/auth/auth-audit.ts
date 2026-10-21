@@ -49,7 +49,8 @@ export type AuthAuditAction =
   | 'auth.passkey.added'
   | 'auth.passkey.renamed'
   | 'auth.passkey.removed'
-  | 'auth.passkey.counter_regressed';
+  | 'auth.passkey.counter_regressed'
+  | 'auth.passkey.rp_moved';
 
 export type SignInMethod =
   | 'password'

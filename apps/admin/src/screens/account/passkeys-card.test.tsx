@@ -392,3 +392,91 @@ describe('removing', () => {
     expect(within(confirm).getByText('You still have 2 passkeys.')).toBeInTheDocument();
   });
 });
+
+describe('redrawing the recovery codes with a passkey', () => {
+  const assertion = {
+    id: 'AQID',
+    rawId: 'AQID',
+    type: 'public-key',
+    response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+    clientExtensionResults: {},
+  };
+
+  it('is not offered to an account without a passkey', async () => {
+    await renderWith({});
+
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate with a passkey' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('is not offered where the browser has no passkey support', async () => {
+    ceremony.supported = false;
+    await renderWith({ count: 1 });
+
+    expect(
+      screen.queryByRole('button', { name: 'Regenerate with a passkey' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('asks the browser for a passkey, then shows the new codes once', async () => {
+    ceremony.assert.mockResolvedValue(assertion);
+    const { user } = await renderWith({ count: 1 });
+
+    await user.click(await screen.findByRole('button', { name: 'Regenerate with a passkey' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Regenerate recovery codes with a passkey?',
+    });
+    expect(ceremony.assert).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Use my passkey' }));
+
+    expect(await screen.findByText('Your new recovery codes')).toBeInTheDocument();
+    expect(ceremony.assert).toHaveBeenCalledOnce();
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('says nothing when the browser prompt is closed, and shows no codes', async () => {
+    ceremony.assert.mockRejectedValue(new PasskeyCeremonyError('cancelled'));
+    const { user } = await renderWith({ count: 1 });
+
+    await user.click(await screen.findByRole('button', { name: 'Regenerate with a passkey' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Regenerate recovery codes with a passkey?',
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Use my passkey' }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('Your new recovery codes')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't confirm with your passkey/)).not.toBeInTheDocument();
+  });
+
+  it('says so when the passkey could not be confirmed, and shows no codes', async () => {
+    ceremony.assert.mockRejectedValue(new PasskeyCeremonyError('failed'));
+    const { user } = await renderWith({ count: 1 });
+
+    await user.click(await screen.findByRole('button', { name: 'Regenerate with a passkey' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Regenerate recovery codes with a passkey?',
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Use my passkey' }));
+
+    expect(await screen.findByText(/Couldn't confirm with your passkey/)).toBeInTheDocument();
+    expect(screen.queryByText('Your new recovery codes')).not.toBeInTheDocument();
+  });
+
+  it('leaves the codes alone when the dialog is cancelled', async () => {
+    const { user } = await renderWith({ count: 1 });
+
+    await user.click(await screen.findByRole('button', { name: 'Regenerate with a passkey' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Regenerate recovery codes with a passkey?',
+    });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(ceremony.assert).not.toHaveBeenCalled();
+  });
+});

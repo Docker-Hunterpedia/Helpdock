@@ -4,6 +4,7 @@ import {
   createDb,
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
+  settings as settingsTable,
   users,
   uuidv7,
   webauthnCredentials,
@@ -837,6 +838,98 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
       expect(reset.statusCode).toBeLessThan(300);
       expect(await storedFor(seeded.userId)).toHaveLength(2);
       expect((await email.last()).text).toContain('Your 2 passkeys were kept');
+    });
+  });
+
+  describe("the install admin's view on /api/install/passkeys", () => {
+    /** What another host would have left behind, written the way the first registration writes it. */
+    const pinTo = (rpId: string) =>
+      withTenant(runtime.db, system, (tx) =>
+        tx
+          .insert(settingsTable)
+          .values({
+            key: 'auth.webauthn.rpId',
+            brandId: INSTALL_SCOPE_BRAND_ID,
+            value: JSON.stringify(rpId),
+            updatedBy: 'test',
+          })
+          .onConflictDoUpdate({
+            target: [settingsTable.key, settingsTable.brandId],
+            set: { value: JSON.stringify(rpId) },
+          }),
+      );
+
+    it.each([
+      ['GET', '/api/install/passkeys'],
+      ['POST', '/api/install/passkeys/move'],
+    ] as const)('refuses %s %s without a session', async (method, path) => {
+      expect((await call(method, path, undefined, null)).statusCode).toBe(401);
+    });
+
+    it('counts passkeys and the people holding them, and names the pinned RP ID', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'One');
+      await addPasskey(new SoftwareAuthenticator(), 'Two');
+      await strangerWith(new SoftwareAuthenticator());
+
+      const response = await call('GET', '/api/install/passkeys');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        state: 'available',
+        rpId: 'support.example.com',
+        pinnedRpId: 'support.example.com',
+        pinLocked: false,
+        passkeyCount: 3,
+        holderCount: 2,
+      });
+    });
+
+    it('refuses to move when nothing is paused, and removes nothing', async () => {
+      await addPasskey(new SoftwareAuthenticator());
+
+      const response = await call('POST', '/api/install/passkeys/move');
+
+      expect(response.statusCode).toBe(409);
+      expect(await storedFor(seeded.userId)).toHaveLength(1);
+    });
+
+    it('moves: removes every passkey, re-pins, audits, and tells the holder', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'One');
+      await addPasskey(new SoftwareAuthenticator(), 'Two');
+      await email.clear();
+      await pinTo('admin.example.com');
+
+      const paused = await call('GET', '/api/install/passkeys');
+      expect(paused.json()).toMatchObject({
+        state: 'paused',
+        rpId: 'support.example.com',
+        pinnedRpId: 'admin.example.com',
+      });
+
+      const moved = await call('POST', '/api/install/passkeys/move');
+
+      expect(moved.statusCode).toBe(200);
+      expect(moved.json()).toEqual({
+        rpId: 'support.example.com',
+        passkeysRemoved: 2,
+        holdersNotified: 1,
+      });
+      expect(await storedFor(seeded.userId)).toHaveLength(0);
+      const after = await call('GET', '/api/install/passkeys');
+      expect(after.json()).toMatchObject({
+        state: 'available',
+        pinnedRpId: 'support.example.com',
+        passkeyCount: 0,
+      });
+      const [moveAudit] = await auditRows('auth.passkey.rp_moved');
+      expect(moveAudit?.meta).toEqual({
+        from: 'admin.example.com',
+        to: 'support.example.com',
+        passkeys: 2,
+        holders: 1,
+      });
+      expect((await email.last()).subject).toBe('Your passkeys were removed');
+      expect((await addPasskey(new SoftwareAuthenticator(), 'Again')).statusCode).toBe(201);
     });
   });
 });

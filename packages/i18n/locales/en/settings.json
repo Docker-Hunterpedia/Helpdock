@@ -12,9 +12,9 @@
   "signInMethods": {
     "title": "Sign-in methods",
     "description": "Password sign-in is always on. Enable the others by adding credentials.",
-    "requireTwoFactor": "Require two-factor authentication for all staff",
-    "requireTwoFactorHint": "Staff without TOTP are asked to enrol at next sign-in.",
-    "magicLinkValidity": "Magic link validity (minutes)",
+    "requireTwoFactor": "Require a second factor for all staff",
+    "requireTwoFactorHint": "Staff without an authenticator app or a passkey are asked to set one up at next sign-in. Admins always need one.",
+    "magicLinkValidity": "Sign-in link validity (minutes)",
     "magicLinkRange": "Enter a whole number from 1 to 60."
   },
   "oauth": {
@@ -26,7 +26,7 @@
     "microsoftClientId": "Application (client) ID",
     "microsoftClientSecret": "Client secret value",
     "tenantId": "Directory (tenant) ID",
-    "tenantIdHint": "A GUID from Entra ID. \u201ccommon\u201d and \u201corganizations\u201d are refused. Only work accounts of this one organisation can sign in.",
+    "tenantIdHint": "A GUID from Entra ID. “common” and “organizations” are refused. Only work accounts of this one organisation can sign in.",
     "allowConsumers": "Also allow personal Microsoft accounts",
     "allowConsumersHint": "Outlook.com and Hotmail accounts, through the consumers tenant. They can only be connected from the security page, never linked by address. Off unless you need it.",
     "tenantIdInvalid": "Enter the directory ID as a GUID, like 00000000-0000-0000-0000-000000000000.",
@@ -76,5 +76,35 @@
       "entryCount_one": "{{count}} change in the last week",
       "entryCount_other": "{{count}} changes in the last week"
     }
+  },
+  "passkeys": {
+    "title": "Passkeys",
+    "caption": "Phishing-resistant sign-in with a fingerprint, face, device PIN or security key. No third party involved.",
+    "captionUnavailable": "Phishing-resistant sign-in with a fingerprint, face, device PIN or security key.",
+    "status": {
+      "available": "Available",
+      "paused": "Paused",
+      "unavailable": "Unavailable"
+    },
+    "rpId": "Relying party ID",
+    "rpIdNone": "Not pinned yet. The first passkey that is added pins it to this address.",
+    "rpIdPinned": "Pinned at first use on {{date}}. Passkeys work only on this address.",
+    "rpIdEnvironment": "Pinned by the environment. Passkeys work only on this address.",
+    "inUse": "In use",
+    "inUseNone": "No passkeys yet",
+    "inUseValue_one": "{{count}} passkey across {{staff}} staff",
+    "inUseValue_other": "{{count}} passkeys across {{staff}} staff",
+    "pausedTitle": "This install's address changed",
+    "pausedBody": "Passkeys were registered for {{from}}, but this install now runs at {{to}}. Passkey sign-in, second factor and step-up are paused; every other method works. Move passkeys to the new address when the move is final; staff then add their passkeys again.",
+    "move": "Move passkeys to {{host}}",
+    "moveTitle": "Move passkeys to {{host}}?",
+    "moveBody": "Every existing passkey stops working and is removed. Staff are emailed and add theirs again at the new address. This can't be undone.",
+    "moveConfirm": "Move passkeys",
+    "moved": "Passkeys moved. {{count}} removed.",
+    "moveError": "Couldn't move the passkeys. Try again.",
+    "moveLocked": "The environment pins this address (HD_AUTH_WEBAUTHN_RP_ID). Change it there.",
+    "unavailableTitle": "Passkeys are off",
+    "unavailableBody": "Passkeys need HTTPS. Set {{appUrl}} to an https address (or use http://localhost while developing) and they turn on by themselves.",
+    "loadError": "Couldn't read the passkey status."
   }
 }

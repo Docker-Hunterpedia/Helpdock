@@ -2,6 +2,7 @@ import type { Settings } from '@helpdock/config';
 import {
   auditLog,
   type Db,
+  type DbTransaction,
   INSTALL_SCOPE_BRAND_ID,
   settings as settingsTable,
   withSystem,
@@ -23,6 +24,13 @@ export interface PinnedRpId {
 export interface RpIdPin {
   read(): Promise<PinnedRpId | null>;
   pinIfUnset(rpId: string): Promise<PinnedRpId>;
+  /** True when `HD_AUTH_WEBAUTHN_RP_ID` pins it, so nothing here may change it. */
+  isLocked(): boolean;
+  /**
+   * Re-pins to `rpId` in one transaction with `within`, which removes the
+   * passkeys made for the old one: the pin must never move while they stay.
+   */
+  moveTo<T>(rpId: string, actorId: string, within: (tx: DbTransaction) => Promise<T>): Promise<T>;
 }
 
 /**
@@ -45,6 +53,37 @@ export class RpIdPinStore implements RpIdPin {
   constructor({ db, settings }: { readonly db: Db; readonly settings: Settings }) {
     this.#db = db;
     this.#settings = settings;
+  }
+
+  isLocked(): boolean {
+    return this.#settings.isLockedByEnv(KEY);
+  }
+
+  async moveTo<T>(
+    rpId: string,
+    actorId: string,
+    within: (tx: DbTransaction) => Promise<T>,
+  ): Promise<T> {
+    if (this.isLocked()) {
+      throw new Error(`${KEY} is pinned by the environment and cannot be moved`);
+    }
+
+    return withSystem(this.#db, INSTALL_SCOPE_BRAND_ID, async (tx) => {
+      const result = await within(tx);
+      await tx
+        .insert(settingsTable)
+        .values({
+          key: KEY,
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          value: JSON.stringify(rpId),
+          updatedBy: actorId,
+        })
+        .onConflictDoUpdate({
+          target: [settingsTable.key, settingsTable.brandId],
+          set: { value: JSON.stringify(rpId), updatedBy: actorId, updatedAt: sql`now()` },
+        });
+      return result;
+    });
   }
 
   /** The pinned RP ID, or null before the first registration. */

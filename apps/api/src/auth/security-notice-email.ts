@@ -28,6 +28,7 @@ export const SECURITY_CHANGES = [
   'oauthDisconnected',
   'passkeyAdded',
   'passkeyRemoved',
+  'passkeysMoved',
 ] as const;
 export type SecurityChange = (typeof SECURITY_CHANGES)[number];
 
@@ -43,6 +44,7 @@ const WORDED_CHANGES = new Set<NoticeKind>([
   'oauthDisconnected',
   'passkeyAdded',
   'passkeyRemoved',
+  'passkeysMoved',
   'passwordResetPasskeys',
 ]);
 

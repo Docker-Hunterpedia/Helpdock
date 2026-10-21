@@ -1,5 +1,7 @@
 import type { DbTransaction, WebauthnCredential } from '@helpdock/db';
 import {
+  type InstallPasskeys,
+  type InstallPasskeysMoved,
   MAX_PASSKEYS_PER_ACCOUNT,
   type Passkey,
   type PasskeyAdded,
@@ -12,7 +14,7 @@ import {
   type RegistrationResponse,
   type SessionClaims,
 } from '@helpdock/schemas';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { currentRequestContext } from '../../context/request-context.js';
 import type { Logger } from '../../logging/logger.js';
 import type { AuthService } from '../auth.service.js';
@@ -124,6 +126,73 @@ export class PasskeyService {
       throw new UnauthorizedException('Authentication is required for this route');
     }
     return claims;
+  }
+
+  /** Settings › Authentication: whether passkeys work, which RP ID they were made for, how many. */
+  async installStatus(): Promise<InstallPasskeys> {
+    const status = await this.#parts.webauthn.status();
+    const totals = await this.#parts.passkeys.totals();
+    const pinned = status.state === 'unavailable' ? null : status.pinned;
+
+    return {
+      state: status.state,
+      rpId: status.state === 'unavailable' ? null : status.rpId,
+      pinnedRpId: pinned?.rpId ?? null,
+      pinnedAt: pinned?.pinnedAt?.toISOString() ?? null,
+      pinLocked: this.#parts.webauthn.isPinLocked(),
+      passkeyCount: totals.passkeys,
+      holderCount: totals.holders,
+    };
+  }
+
+  /**
+   * "Move passkeys to <new host>": the install's address changed for good, so
+   * every passkey made for the old one is removed and the RP ID is pinned to the
+   * new host, in one transaction. Their holders are emailed afterwards and add
+   * theirs again. An account whose only second factor was a passkey loses its
+   * recovery codes with it, as removing the last passkey does.
+   */
+  async moveToCurrentHost(actorId: string): Promise<InstallPasskeysMoved> {
+    const { webauthn, passkeys, auth, logger } = this.#parts;
+    const status = await webauthn.status();
+    if (status.state !== 'paused') {
+      throw new ConflictException('Passkeys are not paused: there is nothing to move');
+    }
+    if (webauthn.isPinLocked()) {
+      throw new ConflictException('HD_AUTH_WEBAUTHN_RP_ID pins the RP ID: change it there');
+    }
+
+    const holders = await webauthn.moveRpId(status.rpId, actorId, async (tx) => {
+      const held = await passkeys.holders(tx);
+      await passkeys.removeAll(tx);
+      for (const holder of held.filter((person) => !person.totpEnabled)) {
+        await auth.clearRecoveryCodes(holder.userId, tx);
+      }
+      return held;
+    });
+    const removed = holders.reduce((sum, holder) => sum + holder.passkeys, 0);
+
+    await auth.recordCredentialEvent('auth.passkey.rp_moved', actorId, 'staff', {
+      from: status.pinned.rpId,
+      to: status.rpId,
+      passkeys: removed,
+      holders: holders.length,
+    });
+    logger.warn({ from: status.pinned.rpId, to: status.rpId, removed }, 'Moved passkeys');
+
+    let notified = 0;
+    for (const holder of holders) {
+      try {
+        await auth.notifyCredentialChange(holder.userId, 'passkeysMoved', undefined, {
+          account: status.rpId,
+        });
+        notified += 1;
+      } catch (error) {
+        logger.error({ err: error, userId: holder.userId }, 'Could not email a passkey holder');
+      }
+    }
+
+    return { rpId: status.rpId, passkeysRemoved: removed, holdersNotified: notified };
   }
 
   async list(userId: string, tx: DbTransaction): Promise<PasskeyList> {

@@ -54,7 +54,12 @@
     "regenerateSubmit": "إنشاء",
     "regenerated": "رموز استرداد جديدة. الرموز القديمة لم تعد تعمل.",
     "newCodesTitle": "رموز الاسترداد الجديدة",
-    "newCodesBody": "يعمل كل رمز مرة واحدة، وهذه المرة الوحيدة التي تُعرض فيها."
+    "newCodesBody": "يعمل كل رمز مرة واحدة، وهذه المرة الوحيدة التي تُعرض فيها.",
+    "regenerateWithPasskey": "إنشاء رموز جديدة بمفتاح مرور",
+    "regenerateWithPasskeyTitle": "إنشاء رموز استرداد جديدة بمفتاح مرور؟",
+    "regenerateWithPasskeyBody": "سيطلب المتصفح مفتاح مرور. تتوقف الرموز الحالية عن العمل فورًا.",
+    "regenerateWithPasskeySubmit": "استخدم مفتاح المرور",
+    "regenerateWithPasskeyFailed": "تعذّر التأكيد بمفتاح المرور. حاول مرة أخرى أو استخدم رمزًا."
   },
   "passkeys": {
     "title": "مفاتيح المرور",

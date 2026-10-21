@@ -1,6 +1,8 @@
 import type {
   InstallAuthenticationSettings,
   InstallAuthenticationSettingsUpdate,
+  InstallPasskeys,
+  InstallPasskeysMoved,
 } from '@helpdock/schemas';
 import type { SettingsApi } from './api.js';
 
@@ -43,7 +45,34 @@ export const MOCK_AUTHENTICATION_SETTINGS: InstallAuthenticationSettings = {
   },
 };
 
+/** Where a browser test seeds the install's passkey status (`Partial<InstallPasskeys>`). */
+export const MOCK_INSTALL_PASSKEYS_STORAGE = 'helpdock.mock.install-passkeys';
+
+export const MOCK_INSTALL_PASSKEYS: InstallPasskeys = {
+  state: 'available',
+  rpId: 'localhost',
+  pinnedRpId: 'localhost',
+  pinnedAt: '2026-10-20T08:00:00.000Z',
+  pinLocked: false,
+  passkeyCount: 12,
+  holderCount: 7,
+};
+
+const seededPasskeys = (): InstallPasskeys => {
+  try {
+    const raw = window.localStorage.getItem(MOCK_INSTALL_PASSKEYS_STORAGE);
+    return {
+      ...MOCK_INSTALL_PASSKEYS,
+      ...(raw === null ? {} : (JSON.parse(raw) as Partial<InstallPasskeys>)),
+    };
+  } catch {
+    return { ...MOCK_INSTALL_PASSKEYS };
+  }
+};
+
 export class MockSettingsApi implements SettingsApi {
+  #passkeys: InstallPasskeys = seededPasskeys();
+
   #authentication: InstallAuthenticationSettings = structuredClone(MOCK_AUTHENTICATION_SETTINGS);
 
   authentication(): Promise<InstallAuthenticationSettings> {
@@ -75,6 +104,25 @@ export class MockSettingsApi implements SettingsApi {
     };
 
     return this.authentication();
+  }
+
+  passkeys(): Promise<InstallPasskeys> {
+    return Promise.resolve({ ...this.#passkeys });
+  }
+
+  movePasskeys(): Promise<InstallPasskeysMoved> {
+    const removed = this.#passkeys.passkeyCount;
+    const holders = this.#passkeys.holderCount;
+    const rpId = this.#passkeys.rpId ?? '';
+    this.#passkeys = {
+      ...this.#passkeys,
+      state: 'available',
+      pinnedRpId: rpId,
+      pinnedAt: new Date().toISOString(),
+      passkeyCount: 0,
+      holderCount: 0,
+    };
+    return Promise.resolve({ rpId, passkeysRemoved: removed, holdersNotified: holders });
   }
 }
 

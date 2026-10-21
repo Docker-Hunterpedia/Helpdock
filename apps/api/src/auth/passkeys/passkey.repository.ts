@@ -182,4 +182,37 @@ export class PasskeyRepository {
       .where(eq(webauthnCredentials.userId, userId));
     return row?.total ?? 0;
   }
+
+  /** Every passkey on the install and the people who hold them, for the install admin's count. */
+  async totals(tx?: Queryable): Promise<{ readonly passkeys: number; readonly holders: number }> {
+    const [row] = await (tx ?? this.#db)
+      .select({
+        passkeys: sql<number>`count(*)::int`,
+        holders: sql<number>`count(distinct ${webauthnCredentials.userId})::int`,
+      })
+      .from(webauthnCredentials);
+    return { passkeys: row?.passkeys ?? 0, holders: row?.holders ?? 0 };
+  }
+
+  /** Who holds a passkey, with how many and whether they also have an authenticator app. */
+  async holders(
+    tx: Queryable,
+  ): Promise<{ userId: string; passkeys: number; totpEnabled: boolean }[]> {
+    return tx
+      .select({
+        userId: webauthnCredentials.userId,
+        passkeys: sql<number>`count(*)::int`,
+        totpEnabled: users.totpEnabled,
+      })
+      .from(webauthnCredentials)
+      .innerJoin(users, eq(users.id, webauthnCredentials.userId))
+      .groupBy(webauthnCredentials.userId, users.totpEnabled)
+      .orderBy(asc(webauthnCredentials.userId));
+  }
+
+  /** Deletes every passkey on the install; the caller moves the RP ID in the same transaction. */
+  async removeAll(tx: Queryable): Promise<number> {
+    const removed = await tx.delete(webauthnCredentials).returning({ id: webauthnCredentials.id });
+    return removed.length;
+  }
 }

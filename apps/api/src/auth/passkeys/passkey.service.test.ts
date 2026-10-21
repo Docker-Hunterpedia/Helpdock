@@ -121,6 +121,29 @@ class FakeRows {
     return Promise.resolve(row);
   };
   markUsed = vi.fn(() => Promise.resolve());
+  /** Who `holders` reports as also having an authenticator app. */
+  withApp = new Set<string>();
+  totals = () =>
+    Promise.resolve({
+      passkeys: this.rows.length,
+      holders: new Set(this.rows.map((row) => row.userId)).size,
+    });
+  holders = () => {
+    const counts = new Map<string, number>();
+    for (const row of this.rows) counts.set(row.userId, (counts.get(row.userId) ?? 0) + 1);
+    return Promise.resolve(
+      [...counts].map(([holder, passkeys]) => ({
+        userId: holder,
+        passkeys,
+        totpEnabled: this.withApp.has(holder),
+      })),
+    );
+  };
+  removeAll = () => {
+    const removed = this.rows.length;
+    this.rows = [];
+    return Promise.resolve(removed);
+  };
 }
 
 const rowFor = (
@@ -160,10 +183,12 @@ let rows: FakeRows;
 let limiterAllows: boolean;
 let signingKeys: SigningKeys;
 let service: PasskeyService;
+let pin: MemoryRpIdPin;
 
 beforeEach(async () => {
   auth = new FakeAuth();
   rows = new FakeRows();
+  pin = new MemoryRpIdPin();
   limiterAllows = true;
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
   signingKeys = { kid: 'k1', privateKey, publicKey };
@@ -172,7 +197,7 @@ beforeEach(async () => {
     webauthn: new WebAuthnService({
       appUrl: APP_URL,
       ceremonies: new WebAuthnCeremonyStore(authRedis().redis),
-      pin: new MemoryRpIdPin(),
+      pin,
     }),
     passkeys: rows as unknown as PasskeyRepository,
     limiter: { consume: () => Promise.resolve(limiterAllows) } as unknown as RateLimiter,
@@ -700,5 +725,130 @@ describe('list', () => {
       authenticatorApp: false,
     });
     expect(withApp).toMatchObject({ removalBlocked: false, authenticatorApp: true });
+  });
+});
+
+describe('installStatus', () => {
+  it('counts passkeys and the people holding them, with the pin', async () => {
+    pin.pinned = { rpId: 'desk.example.com', pinnedAt: new Date('2026-10-20T08:00:00Z') };
+    const first = new SoftwareAuthenticator();
+    const second = new SoftwareAuthenticator();
+    rows.rows.push(
+      rowFor(userId, 'One', first.credentialId, first.cosePublicKey),
+      rowFor(uuidv7(), 'Two', second.credentialId, second.cosePublicKey),
+    );
+
+    expect(await service.installStatus()).toEqual({
+      state: 'available',
+      rpId: 'desk.example.com',
+      pinnedRpId: 'desk.example.com',
+      pinnedAt: '2026-10-20T08:00:00.000Z',
+      pinLocked: false,
+      passkeyCount: 2,
+      holderCount: 2,
+    });
+  });
+
+  it('says paused, naming both hosts, when the address moved', async () => {
+    pin.pinned = { rpId: 'admin.example.com', pinnedAt: null };
+
+    expect(await service.installStatus()).toMatchObject({
+      state: 'paused',
+      rpId: 'desk.example.com',
+      pinnedRpId: 'admin.example.com',
+      pinnedAt: null,
+    });
+  });
+
+  it('reports a pin the environment holds as locked', async () => {
+    pin.locked = true;
+
+    expect(await service.installStatus()).toMatchObject({ pinLocked: true, pinnedRpId: null });
+  });
+});
+
+describe('moveToCurrentHost', () => {
+  const adminId = uuidv7();
+  const addFor = (owner: string, name: string) => {
+    const key = new SoftwareAuthenticator();
+    rows.rows.push(rowFor(owner, name, key.credentialId, key.cosePublicKey));
+  };
+  const moved = () => {
+    pin.pinned = { rpId: 'admin.example.com', pinnedAt: null };
+  };
+
+  it('removes every passkey, re-pins, audits and emails each holder once', async () => {
+    moved();
+    const other = uuidv7();
+    addFor(userId, 'A');
+    addFor(userId, 'B');
+    addFor(other, 'C');
+    rows.withApp.add(other);
+
+    const result = await service.moveToCurrentHost(adminId);
+
+    expect(result).toEqual({
+      rpId: 'desk.example.com',
+      passkeysRemoved: 3,
+      holdersNotified: 2,
+    });
+    expect(rows.rows).toEqual([]);
+    expect(pin.pinned?.rpId).toBe('desk.example.com');
+    expect(auth.events).toEqual([
+      {
+        action: 'auth.passkey.rp_moved',
+        actor: 'staff',
+        meta: { from: 'admin.example.com', to: 'desk.example.com', passkeys: 3, holders: 2 },
+      },
+    ]);
+    expect(auth.notices).toEqual([
+      { change: 'passkeysMoved', values: { account: 'desk.example.com' } },
+      { change: 'passkeysMoved', values: { account: 'desk.example.com' } },
+    ]);
+    expect((await service.installStatus()).state).toBe('available');
+  });
+
+  it('forgets the recovery codes of a holder whose only second factor was a passkey', async () => {
+    moved();
+    const other = uuidv7();
+    addFor(userId, 'Only');
+    addFor(other, 'With app');
+    rows.withApp.add(other);
+
+    await service.moveToCurrentHost(adminId);
+
+    expect(auth.clearRecoveryCodes).toHaveBeenCalledTimes(1);
+    expect(auth.clearRecoveryCodes).toHaveBeenCalledWith(userId, expect.anything());
+  });
+
+  it('refuses when nothing is paused and removes nothing', async () => {
+    pin.pinned = { rpId: 'desk.example.com', pinnedAt: new Date() };
+    addFor(userId, 'Kept');
+
+    await expect(service.moveToCurrentHost(adminId)).rejects.toThrow('nothing to move');
+    expect(rows.rows).toHaveLength(1);
+    expect(auth.events).toEqual([]);
+  });
+
+  it('refuses when the environment pins the RP ID', async () => {
+    moved();
+    pin.locked = true;
+    addFor(userId, 'Kept');
+
+    await expect(service.moveToCurrentHost(adminId)).rejects.toThrow('HD_AUTH_WEBAUTHN_RP_ID');
+    expect(rows.rows).toHaveLength(1);
+    expect(pin.pinned?.rpId).toBe('admin.example.com');
+  });
+
+  it('still finishes, and counts only the emails sent, when one holder cannot be told', async () => {
+    moved();
+    addFor(userId, 'A');
+    addFor(uuidv7(), 'B');
+    auth.notifyCredentialChange.mockRejectedValueOnce(new Error('mail down'));
+
+    const result = await service.moveToCurrentHost(adminId);
+
+    expect(result).toMatchObject({ passkeysRemoved: 2, holdersNotified: 1 });
+    expect(rows.rows).toEqual([]);
   });
 });

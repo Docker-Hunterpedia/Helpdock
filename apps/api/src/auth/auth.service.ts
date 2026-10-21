@@ -2299,7 +2299,7 @@ export class AuthService {
   notifyCredentialChange(
     userId: string,
     change: SecurityChange,
-    tx: DbTransaction,
+    tx: DbTransaction | undefined,
     values: Readonly<Record<string, string>>,
   ): Promise<void> {
     return this.#notifySecurityChange(userId, change, tx, values);

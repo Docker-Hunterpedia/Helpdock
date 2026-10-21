@@ -1540,7 +1540,11 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
         repository: new NotificationsRepository(),
         broadcast: { emit: async (input) => void frames.push(input) },
         pushConfigured: async () => false,
-        queue: { addEmailSchedule: async () => undefined, addPush: async () => undefined },
+        queue: {
+          addEmailSchedule: async () => undefined,
+          addPush: async () => undefined,
+          addEmailTest: async () => undefined,
+        },
       });
     });
 

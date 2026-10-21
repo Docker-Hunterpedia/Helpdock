@@ -2,10 +2,10 @@ import type { NotificationView, Session } from '@helpdock/schemas';
 import { screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { MOCK_BRANDS } from '../auth/mock-api.js';
 import { SessionProvider } from '../auth/session.tsx';
-import { MockNotificationsApi } from '../notifications/mock-api.js';
+import { MOCK_EMAIL_STATE_STORAGE, MockNotificationsApi } from '../notifications/mock-api.js';
 import { MockRealtimeClient } from '../realtime/mock-client.js';
 import { RealtimeProvider } from '../realtime/realtime-provider.tsx';
 import { renderApp } from '../test/render.tsx';
@@ -56,6 +56,10 @@ const bell = (unread: number) =>
     name: unread === 0 ? 'Notifications' : `Notifications, ${String(unread)} unread`,
   });
 
+afterEach(() => {
+  window.localStorage.clear();
+});
+
 describe('NotificationBell', () => {
   it('says how many are unread, in its name as well as on it', async () => {
     await renderBell();
@@ -80,6 +84,32 @@ describe('NotificationBell', () => {
     within(panel).getByRole('button', { name: 'All' }).focus();
     await user.keyboard('{Escape}');
     expect(await bell(0)).toBeInTheDocument();
+  });
+
+  it('heads the panel with why email is stopped, and resumes from there (M14-11)', async () => {
+    window.localStorage.setItem(
+      MOCK_EMAIL_STATE_STORAGE,
+      JSON.stringify({ pausedUntil: new Date(Date.now() + 3_600_000).toISOString() }),
+    );
+    const { user, api } = await renderBell();
+    await user.click(await bell(3));
+    const panel = await screen.findByRole('dialog', { name: 'Notifications' });
+
+    expect(await within(panel).findByRole('status')).toHaveTextContent(/^Paused until \d\d:\d\d/);
+    await user.click(within(panel).getByRole('button', { name: 'Resume now' }));
+
+    await waitFor(() => expect(within(panel).queryByRole('status')).toBeNull());
+    expect((await api.preferences()).emailDelivery.pausedUntil).toBeNull();
+  });
+
+  it('shows no line while email is flowing, and none for an install without outgoing email', async () => {
+    window.localStorage.setItem(MOCK_EMAIL_STATE_STORAGE, JSON.stringify({ smtp: false }));
+    const { user } = await renderBell();
+    await user.click(await bell(3));
+    const panel = await screen.findByRole('dialog', { name: 'Notifications' });
+    await within(panel).findByRole('list', { name: 'Notifications' });
+
+    expect(within(panel).queryByRole('status')).toBeNull();
   });
 
   it('filters to the unread, and says so when there are none', async () => {

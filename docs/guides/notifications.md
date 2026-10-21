@@ -85,7 +85,10 @@ The Notifications tab is reached from the account menu or the panel's
 to the person, not the brand: they are the same in every brand they work in.
 
 The caption says where email goes and in which language: the person's app
-language, set on the Security tab.
+language, set on the Security tab. Above the matrix is the **Email schedule**
+card (M14-11, see [Email schedule](#email-schedule) and [Pause](#pause)), and
+the three kinds that can cut a Right away wait (a mention, an SLA breach, an
+escalation) carry an *Urgent* caption in the matrix.
 
 ## Email
 
@@ -110,6 +113,15 @@ Each person chooses one schedule, the same in every brand:
 | **Hourly digest** | At the top of each hour, what is still unread. |
 | **Daily digest** | Once a day, at the hour they choose (08:00 unless changed), in their time zone. |
 | **Off** | No notification email. |
+
+The schedule is four cards on Your account › Notifications; choosing one, or
+the digest hour beside *Daily digest* (a drop-down of 00:00 to 23:00, read in
+the current brand's time zone until M14-12 gives people their own), is saved
+with **Save schedule**, and **Discard** puts the saved one back. Changing the
+hour chooses *Daily digest* for you. **Send me a test email** sends one
+real-looking message to your own address (never to one you type), through the
+outbox, at most five an hour; it is off, with a note, on an install that has no
+outgoing email.
 
 Right away is the default for everyone, existing accounts included: an upgrade
 from 1.0 replaces one email per notification with batched email (owner
@@ -190,6 +202,46 @@ retrying.
 A pause (until a time, at most a year ahead) holds email **and** push. It drops
 rather than delays: what arrives during it is marked `skipped_paused` and stays
 in the bell, and nothing is sent when it ends.
+
+**Pause notifications** on the Email schedule card offers *For 1 hour*, *Until
+tomorrow 09:00*, *For 1 week* and *Until a date…* (09:00 on a day from tomorrow
+to a year ahead), in the browser's time zone until M14-12 gives people their
+own. While one runs, a line heads the card and the bell's panel: "Paused until
+17:00. Email and push resume then; the bell keeps everything." with **Resume
+now**.
+
+### Unsubscribe
+
+Every notification email (a single one, a batch, a digest and the test email)
+ends with "…Change them, or unsubscribe from notification emails" and carries
+`List-Unsubscribe` (an HTTPS address with a signed token) and
+`List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+([RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)), so a mail client can show
+its own Unsubscribe button.
+
+- A mail client's **POST** to that address unsubscribes at once.
+- A person's **click** on the footer link (a `GET`) opens a confirmation page
+  at `/unsubscribe/<token>` in their language and changes nothing, so a link
+  scanner that follows every URL unsubscribes nobody. The button posts the same
+  one-click request.
+- Unsubscribing sets `notification_prefs.email_unsubscribed_at` and leaves the
+  matrix, the schedule, the hour and any pause as they were. Preferences are
+  global (M3-07), so it stops notification email from **every brand**; the bell,
+  push you turned on and security emails keep working. A queued batch sends
+  nothing and its rows are marked `skipped_off`.
+- Your account › Notifications then says "You unsubscribed on 3 Oct…" with
+  **Turn email back on**, which clears it and restores exactly the same
+  choices. The bell's panel shows the same line.
+- A token is good for a year from the email that carried it. It is signed
+  (HMAC-SHA256, key derived with HKDF from `APP_MASTER_KEY` for this purpose
+  alone), names one user and can do one thing: turn that user's notification
+  email off. A forged, altered, expired or unknown token, and a token for a
+  deactivated account, all get the same "This link has expired" page (`404`),
+  so the page never says whether an address has an account here. Repeating a
+  request changes nothing further; the first one writes the audit row
+  `notification.email_unsubscribed`. The route is limited to 120 requests per
+  address per 15 minutes. After a master key rotation, links signed under the
+  previous key still work; older ones do not.
 
 ### Settings for an install
 
@@ -289,7 +341,10 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 | `POST /api/brands/:brandId/notifications/:id/read` | `ticket:read` | Marks one of the caller's own read; `404` for anyone else's |
 | `POST /api/brands/:brandId/notifications/read-all` | `ticket:read` | Marks all of the caller's read in the brand |
 | `POST /api/brands/:brandId/notifications/test-push` | `ticket:read` | `{ subscriptionId }`; `409` without VAPID keys |
-| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour` and `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and keeps the rest |
+| `POST /api/brands/:brandId/notifications/test-email` | `ticket:read` | A test email to the caller's own address through the outbox (`204`); `409` on an install without SMTP, `429` past five an hour |
+| `GET /api/public/unsubscribe/:token` | public, signed token | What the confirmation page draws (`{ state: 'confirm', email, locale }`); changes nothing; `404` for any token that is no good |
+| `POST /api/public/unsubscribe/:token` | public, signed token | RFC 8058 one-click: body `List-Unsubscribe=One-Click` (`400` otherwise); unsubscribes, idempotently; `{ state: 'done', locale }` |
+| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour`, `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and `emailUnsubscribed: false` ("Turn email back on"; `true` is refused) and keeps the rest. The view also says whether the install can send email (`emailConfigured`) and the zone the digest hour is read in (`digestTimeZone`, the current brand's) |
 | `POST /api/me/push-subscriptions` | signed in | `PushSubscription.toJSON()` plus a label; `https` endpoints only |
 | `DELETE /api/me/push-subscriptions/:id` | signed in | Removes one of the caller's browsers |
 
@@ -312,7 +367,5 @@ notifications can open a fresh batch.
 
 ## Known gaps
 
-- The schedule, digest hour and pause have an API but no screen until M14-11,
-  which also adds one-click unsubscribe and *Send me a test email*.
 - The daily digest uses the brand's time zone for anyone who has not chosen
   their own on Your account › Profile.

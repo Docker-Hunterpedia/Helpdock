@@ -1,12 +1,15 @@
 import {
+  type EmailDelivery,
   NOTIFICATION_PREFERENCE_DEFAULTS,
   type NotificationList,
   type NotificationPreferences,
+  type NotificationPreferencesUpdate,
   type NotificationPreferencesView,
   type NotificationView,
   type PushSubscriptionCreate,
   type PushSubscriptionView,
 } from '@helpdock/schemas';
+import { AuthError } from '../auth/api.js';
 import { MOCK_EMAIL } from '../auth/mock-api.js';
 import {
   MOCK_TICKET_REFUND,
@@ -139,6 +142,13 @@ const fixture = (now: number): NotificationView[] => [
   },
 ];
 
+/**
+ * Where a browser test presets the email half of the page: JSON with any of
+ * `unsubscribedAt`, `pausedUntil`, `schedule` and `smtp: false` (an install that
+ * cannot send email), read when the mock is built.
+ */
+export const MOCK_EMAIL_STATE_STORAGE = 'helpdock.mock.email';
+
 const readStorage = (key: string): string | null => {
   try {
     return globalThis.localStorage?.getItem(key) ?? null;
@@ -154,6 +164,15 @@ export class MockNotificationsApi implements NotificationsApi {
   readonly #pushConfigured: boolean;
   /** Test pushes "sent", for a unit test to read. */
   readonly testPushes: string[] = [];
+  /** Test emails "sent", for a unit test to read. */
+  testEmails = 0;
+  #delivery: EmailDelivery = {
+    schedule: 'immediate',
+    digestHour: 8,
+    pausedUntil: null,
+    unsubscribedAt: null,
+  };
+  #emailConfigured = true;
   #nextId = 1;
 
   constructor({
@@ -163,6 +182,18 @@ export class MockNotificationsApi implements NotificationsApi {
   }: { now?: number; pushConfigured?: boolean; items?: NotificationView[] } = {}) {
     this.#items = items ?? fixture(now);
     this.#pushConfigured = pushConfigured;
+    const preset = readStorage(MOCK_EMAIL_STATE_STORAGE);
+    if (preset !== null) {
+      try {
+        const { smtp, ...delivery } = JSON.parse(preset) as Partial<EmailDelivery> & {
+          smtp?: boolean;
+        };
+        this.#delivery = { ...this.#delivery, ...delivery };
+        this.#emailConfigured = smtp !== false;
+      } catch {
+        // A preset that is not JSON is ignored, as a missing one is.
+      }
+    }
   }
 
   async list(_brandId: string, filter: 'all' | 'unread'): Promise<NotificationList> {
@@ -202,13 +233,34 @@ export class MockNotificationsApi implements NotificationsApi {
         publicKey: this.#pushConfigured ? MOCK_VAPID_PUBLIC_KEY : null,
         subscriptions: this.#subscriptions.map(({ endpoint: _endpoint, ...view }) => view),
       },
-      emailDelivery: {
-        schedule: 'immediate',
-        digestHour: 8,
-        pausedUntil: null,
-        unsubscribedAt: null,
-      },
+      emailDelivery: { ...this.#delivery },
+      emailConfigured: this.#emailConfigured,
+      digestTimeZone: 'Asia/Riyadh',
     };
+  }
+
+  async testEmail(_brandId: string): Promise<void> {
+    if (!this.#emailConfigured) {
+      throw new AuthError('unavailable', { status: 409 });
+    }
+    this.testEmails += 1;
+  }
+
+  async updateSettings(
+    update: NotificationPreferencesUpdate,
+  ): Promise<NotificationPreferencesView> {
+    if (update.preferences !== undefined) {
+      this.#preferences = update.preferences;
+    }
+    this.#delivery = {
+      ...this.#delivery,
+      ...(update.emailSchedule === undefined ? {} : { schedule: update.emailSchedule }),
+      ...(update.digestHour === undefined ? {} : { digestHour: update.digestHour }),
+      ...(update.pausedUntil === undefined ? {} : { pausedUntil: update.pausedUntil }),
+      ...(update.emailUnsubscribed === false ? { unsubscribedAt: null } : {}),
+    };
+
+    return this.preferences();
   }
 
   async updatePreferences(

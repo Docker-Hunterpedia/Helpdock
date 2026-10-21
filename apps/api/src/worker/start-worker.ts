@@ -52,6 +52,7 @@ import {
   notifyDigestTickJob,
   notifyEmailRebuildJob,
   notifyEmailScheduleJob,
+  notifyEmailTestJob,
   notifyPushJob,
   type OutboxRelay,
   outboxEventJob,
@@ -190,6 +191,7 @@ import { registerNotificationHandlers } from '../notifications/notification-even
 import { NotificationsRepository } from '../notifications/notifications.repository.js';
 import { readPacingConfig } from '../notifications/pacing-settings.js';
 import { WebPushSender } from '../notifications/push.js';
+import { UnsubscribeTokens } from '../notifications/unsubscribe-tokens.js';
 import { StorageUsageStore } from '../observability/storage-usage.js';
 import { RedisRealtimeBroadcast } from '../realtime/broadcast.js';
 import { PresenceStore } from '../realtime/presence.store.js';
@@ -768,6 +770,12 @@ export const workerDependencies: WorkerDependencies = {
         },
         addPush: async (jobId, payload) => {
           await notify.add(notifyPushJob.name, payload, { ...notifyPushJob.options, jobId });
+        },
+        addEmailTest: async (jobId, payload) => {
+          await notify.add(notifyEmailTestJob.name, payload, {
+            ...notifyEmailTestJob.options,
+            jobId,
+          });
         },
       },
     });
@@ -1543,6 +1551,7 @@ export const workerDependencies: WorkerDependencies = {
         presenceOf: (brandId, userId) => presence.statusOf(brandId, userId),
         systemSender: () => channels.systemSender(),
         appUrl: env.APP_URL,
+        unsubscribe: new UnsubscribeTokens(createKeyring(env)),
         log,
       }),
     });

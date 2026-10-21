@@ -9,6 +9,8 @@ import {
   pushSubscriptionParamSchema,
   pushSubscriptionSchema,
   pushTestRequestSchema,
+  unsubscribeRequestSchema,
+  unsubscribeTokenParamSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
@@ -33,3 +35,6 @@ export class NotificationPreferencesUpdateDto extends createZodDto(
 export class PushSubscriptionCreateDto extends createZodDto(pushSubscriptionCreateSchema) {}
 export class PushSubscriptionDto extends createZodDto(pushSubscriptionSchema) {}
 export class PushSubscriptionParamDto extends createZodDto(pushSubscriptionParamSchema) {}
+
+export class UnsubscribeTokenParamDto extends createZodDto(unsubscribeTokenParamSchema) {}
+export class UnsubscribeRequestDto extends createZodDto(unsubscribeRequestSchema) {}

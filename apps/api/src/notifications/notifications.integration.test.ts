@@ -199,6 +199,7 @@ describe.skipIf(!hasDocker)('notifications', () => {
       queue: {
         addEmailSchedule: async (_jobId, payload) => void emailJobs.push(payload),
         addPush: async (_jobId, payload) => void pushJobs.push(payload),
+        addEmailTest: async () => undefined,
       },
     });
 

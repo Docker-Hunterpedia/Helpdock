@@ -1,13 +1,19 @@
-import type { Settings } from '@helpdock/config';
+import { createKeyring, type Env, type Settings } from '@helpdock/config';
+import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
-import { SETTINGS } from '../runtime/tokens.js';
+import type { Redis } from 'ioredis';
+import { RateLimiter } from '../auth/rate-limit.js';
+import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { InstallChannels } from './install-channels.js';
 import {
   NotificationPreferencesController,
   NotificationsController,
 } from './notifications.controller.js';
 import { NotificationsRepository } from './notifications.repository.js';
-import { NotificationsService } from './notifications.service.js';
+import { NotificationsService, TEST_EMAIL_LIMIT_PER_HOUR } from './notifications.service.js';
+import { UnsubscribeController } from './unsubscribe.controller.js';
+import { UnsubscribeService } from './unsubscribe.service.js';
+import { UnsubscribeTokens } from './unsubscribe-tokens.js';
 
 /**
  * M3-07's request half: the bell's panel and the Notifications tab. The
@@ -21,13 +27,45 @@ export class NotificationsModule {
   static forRoot(): DynamicModule {
     return {
       module: NotificationsModule,
-      controllers: [NotificationsController, NotificationPreferencesController],
+      controllers: [
+        NotificationsController,
+        NotificationPreferencesController,
+        UnsubscribeController,
+      ],
       providers: [
         {
           provide: NotificationsService,
-          inject: [SETTINGS],
-          useFactory: (settings: Settings): NotificationsService =>
-            new NotificationsService(new NotificationsRepository(), new InstallChannels(settings)),
+          inject: [SETTINGS, REDIS],
+          useFactory: (settings: Settings, redis: Redis): NotificationsService => {
+            const limiter = new RateLimiter(redis);
+
+            return new NotificationsService(
+              new NotificationsRepository(),
+              new InstallChannels(settings),
+              {
+                allow: (userId) =>
+                  limiter.consume(
+                    {
+                      bucket: 'notify-test-email',
+                      limit: TEST_EMAIL_LIMIT_PER_HOUR,
+                      windowSeconds: 3600,
+                    },
+                    userId,
+                  ),
+              },
+            );
+          },
+        },
+        {
+          provide: UnsubscribeService,
+          inject: [DB, ENV, REDIS],
+          useFactory: (db: Db, env: Env, redis: Redis): UnsubscribeService =>
+            new UnsubscribeService({
+              db,
+              repository: new NotificationsRepository(),
+              tokens: new UnsubscribeTokens(createKeyring(env)),
+              limiter: new RateLimiter(redis),
+            }),
         },
       ],
     };

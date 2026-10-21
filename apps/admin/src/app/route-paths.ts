@@ -113,6 +113,11 @@ export const ROUTES = {
    * mounts the page on its own for this prefix, without the staff providers.
    */
   csat: '/csat/',
+  /**
+   * The unsubscribe page a notification email links to (M14-11). Like the
+   * rating page, `main.tsx` mounts it on its own, without the staff providers.
+   */
+  unsubscribe: '/unsubscribe/',
 } as const;
 
 export const ticketRoute = (ticketId: string): string => `/tickets/${encodeURIComponent(ticketId)}`;
@@ -150,6 +155,17 @@ export function csatTokenFromPath(pathname: string): string | null {
   }
 
   const [token = ''] = pathname.slice(ROUTES.csat.length).split('/');
+
+  return token === '' ? null : decodeURIComponent(token);
+}
+
+/** The unsubscribe link's token, when the path is the unsubscribe page; otherwise null. */
+export function unsubscribeTokenFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(ROUTES.unsubscribe)) {
+    return null;
+  }
+
+  const [token = ''] = pathname.slice(ROUTES.unsubscribe.length).split('/');
 
   return token === '' ? null : decodeURIComponent(token);
 }

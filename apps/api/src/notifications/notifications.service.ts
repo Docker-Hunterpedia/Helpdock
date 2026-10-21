@@ -16,7 +16,13 @@ import {
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
 } from '@helpdock/schemas';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { NOTIFICATION_EVENTS } from './notification-events.js';
 import type {
   NotificationsRepository,
@@ -45,20 +51,36 @@ export interface PushAvailability {
   vapidPublicKey(): Promise<string | null>;
 }
 
+/** Whether the install can send notification email at all (its `smtp.*` settings). */
+export interface EmailAvailability {
+  smtpConfigured(): Promise<boolean>;
+}
+
+/** The budget on "Send me a test email", per person. */
+export interface TestEmailLimiter {
+  /** True when one more is allowed, and counts it. */
+  allow(userId: string): Promise<boolean>;
+}
+
 const DAY_MS = 86_400_000;
+
+export const TEST_EMAIL_LIMIT_PER_HOUR = 5;
 
 export class NotificationsService {
   readonly #repository: NotificationsRepository;
-  readonly #push: PushAvailability;
+  readonly #push: PushAvailability & EmailAvailability;
+  readonly #testEmails: TestEmailLimiter;
   readonly #now: () => Date;
 
   constructor(
     repository: NotificationsRepository,
-    push: PushAvailability,
+    push: PushAvailability & EmailAvailability,
+    testEmails: TestEmailLimiter,
     now: () => Date = () => new Date(),
   ) {
     this.#repository = repository;
     this.#push = push;
+    this.#testEmails = testEmails;
     this.#now = now;
   }
 
@@ -121,16 +143,43 @@ export class NotificationsService {
     });
   }
 
+  /**
+   * "Send me a test email" (M14-11): through the outbox like every other
+   * email, to the address of the person asking and never to one they name,
+   * at most {@link TEST_EMAIL_LIMIT_PER_HOUR} an hour.
+   */
+  async testEmail(context: PanelContext): Promise<void> {
+    if (!(await this.#push.smtpConfigured())) {
+      throw new ConflictException('This install cannot send email: no SMTP settings');
+    }
+    if (!(await this.#testEmails.allow(context.userId))) {
+      throw new HttpException('Too many test emails', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    await enqueueOutbox(context.tx, {
+      brandId: context.brandId,
+      event: NOTIFICATION_EVENTS.emailTest,
+      payload: { userId: context.userId },
+    });
+  }
+
   // ------------------------------------------------------------ preferences
 
-  async preferences(tx: DbTransaction, userId: string): Promise<NotificationPreferencesView> {
-    const [stored, account, publicKey, subscriptions, emailDelivery] = await Promise.all([
-      this.#repository.storedPreferences(tx, userId),
-      this.#repository.account(tx, userId),
-      this.#push.vapidPublicKey(),
-      this.#repository.subscriptionsOf(tx, userId),
-      this.#repository.emailDelivery(tx, userId),
-    ]);
+  async preferences(
+    tx: DbTransaction,
+    userId: string,
+    brandId: string | null = null,
+  ): Promise<NotificationPreferencesView> {
+    const [stored, account, publicKey, subscriptions, emailDelivery, emailConfigured, zone] =
+      await Promise.all([
+        this.#repository.storedPreferences(tx, userId),
+        this.#repository.account(tx, userId),
+        this.#push.vapidPublicKey(),
+        this.#repository.subscriptionsOf(tx, userId),
+        this.#repository.emailDelivery(tx, userId),
+        this.#push.smtpConfigured(),
+        brandId === null ? Promise.resolve(undefined) : this.#repository.brandTimeZone(tx, brandId),
+      ]);
     /* c8 ignore next 3 -- the guard has already proved the account exists. */
     if (account === undefined) {
       throw new NotFoundException('No such account');
@@ -146,6 +195,8 @@ export class NotificationsService {
         subscriptions: subscriptions.map(toSubscriptionView),
       },
       emailDelivery,
+      emailConfigured,
+      digestTimeZone: zone ?? null,
     };
   }
 
@@ -157,6 +208,7 @@ export class NotificationsService {
     tx: DbTransaction,
     userId: string,
     update: NotificationPreferencesUpdate,
+    brandId: string | null = null,
   ): Promise<NotificationPreferencesView> {
     const pausedUntil =
       update.pausedUntil === undefined || update.pausedUntil === null
@@ -166,9 +218,10 @@ export class NotificationsService {
       emailSchedule: update.emailSchedule,
       digestHour: update.digestHour,
       pausedUntil,
+      emailUnsubscribedAt: update.emailUnsubscribed === false ? null : undefined,
     });
 
-    return this.preferences(tx, userId);
+    return this.preferences(tx, userId, brandId);
   }
 
   #pauseEnd(value: string): Date {

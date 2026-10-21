@@ -1,6 +1,7 @@
 import type { DbTransaction } from '@helpdock/db';
 import {
   type NotifyEmailSchedulePayload,
+  type NotifyEmailTestPayload,
   type NotifyPushPayload,
   silentLogger,
 } from '@helpdock/jobs';
@@ -18,6 +19,7 @@ import { TICKET_ASSIGNED_EVENT, TICKET_EVENTS } from '../tickets/ticket-events.j
 import {
   CONSUMED_EVENTS,
   createBulkUndoneHandler,
+  createEmailTestHandler,
   createFanOutHandler,
   createNotificationCreatedHandler,
   createNotificationReadHandler,
@@ -621,6 +623,7 @@ const deliver = async (fake: Fake) => {
     queue: {
       addEmailSchedule: async (jobId, payload) => void emails.push([jobId, payload]),
       addPush: async (jobId, payload) => void pushes.push([jobId, payload]),
+      addEmailTest: async () => undefined,
     },
     now: () => NOW,
   })({
@@ -713,6 +716,7 @@ describe('the push test handler', () => {
       queue: {
         addEmailSchedule: async () => undefined,
         addPush: async (jobId, payload) => void pushes.push([jobId, payload]),
+        addEmailTest: async () => undefined,
       },
     })({
       outboxId: OUTBOX,
@@ -737,6 +741,38 @@ describe('the push test handler', () => {
 
   it('pushes nothing to a browser that has changed hands since', async () => {
     expect(await press(LINA)).toEqual([]);
+  });
+});
+
+describe('the test email handler (M14-11)', () => {
+  const press = async (payload: Record<string, unknown>) => {
+    const jobs: [string, NotifyEmailTestPayload][] = [];
+    await createEmailTestHandler({
+      queue: {
+        addEmailSchedule: async () => undefined,
+        addPush: async () => undefined,
+        addEmailTest: async (jobId, job) => void jobs.push([jobId, job]),
+      },
+    })({
+      outboxId: OUTBOX,
+      brandId: BRAND,
+      event: NOTIFICATION_EVENTS.emailTest,
+      payload,
+      tx: {} as DbTransaction,
+      log: silentLogger,
+    });
+
+    return jobs;
+  };
+
+  it('queues one job for the person who pressed, keyed by the press', async () => {
+    expect(await press({ userId: OMAR })).toEqual([
+      [`notify.email_test.${OUTBOX}`, { brandId: BRAND, userId: OMAR, testId: OUTBOX }],
+    ]);
+  });
+
+  it('refuses a payload that names no person, rather than guessing one', async () => {
+    await expect(press({})).rejects.toThrow();
   });
 });
 

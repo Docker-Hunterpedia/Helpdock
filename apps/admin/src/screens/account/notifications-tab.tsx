@@ -27,8 +27,13 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useSession } from '../../auth/session.tsx';
 import { PushDeniedError, type PushPermission } from '../../notifications/browser-push.js';
 import { useBrowserPush, useNotificationsApi } from '../../notifications/context.tsx';
+import {
+  PREFERENCES_KEY,
+  useNotificationPreferences,
+} from '../../notifications/use-preferences.js';
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { useToast } from '../../ui/toasts.tsx';
+import { EmailScheduleCard } from './email-schedule-card.tsx';
 
 /**
  * The Notifications tab of Your account (M3-07, artboard `AdminNotifications`
@@ -41,7 +46,7 @@ import { useToast } from '../../ui/toasts.tsx';
  * keys, and the card beside it says why (ADR 0002).
  */
 
-export const PREFERENCES_KEY = ['me', 'notification-preferences'] as const;
+export { PREFERENCES_KEY };
 
 /**
  * Which of this browser's subscriptions the api knows it by. Per browser, so
@@ -70,10 +75,16 @@ const storeId = (id: string | null): void => {
   }
 };
 
+/** The kinds that may cut a Right away wait (DOMAIN-RULES §20). */
+const URGENT_KINDS: ReadonlySet<NotificationKind> = new Set([
+  'mentioned',
+  'sla_breached',
+  'escalated',
+]);
+
 export function NotificationsTab(): ReactNode {
   const t = useT();
-  const api = useNotificationsApi();
-  const view = useQuery({ queryKey: PREFERENCES_KEY, queryFn: () => api.preferences() });
+  const view = useNotificationPreferences();
 
   if (view.isError) {
     return <AlertBanner tone="danger">{t('me:notifications.loadFailed')}</AlertBanner>;
@@ -91,7 +102,10 @@ export function NotificationsTab(): ReactNode {
         alignItems: 'start',
       }}
     >
-      <PreferencesForm view={view.data} />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <EmailScheduleCard view={view.data} />
+        <PreferencesForm view={view.data} />
+      </Box>
       <PushCard view={view.data} />
     </Box>
   );
@@ -180,6 +194,15 @@ function PreferencesForm({ view }: { readonly view: NotificationPreferencesView 
                   <TableCell component="th" scope="row" sx={{ paddingBlock: 3 }}>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
                       {label}
+                      {URGENT_KINDS.has(kind) ? (
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          sx={{ marginInlineStart: 2, color: tokens['status.danger.text'] }}
+                        >
+                          {t('me:notifications.schedule.urgent')}
+                        </Typography>
+                      ) : null}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       {t(`me:notifications.kinds.${kind}.hint`, { name: firstName })}

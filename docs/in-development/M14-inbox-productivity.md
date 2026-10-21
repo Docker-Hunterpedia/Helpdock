@@ -861,6 +861,32 @@ rows in the same preference matrix and follow these pacing rules.
 
 ### M14-11 Notification settings and unsubscribe
 
+**Status: built, in review** (issue #298). Built as below, with these
+differences: no migration, because `notification_prefs.email_unsubscribed_at`
+arrived with M14-10; the token is `<user id + issue time>.<mac>` and the page
+route is `/unsubscribe/<token>`, while the one-click address in
+`List-Unsubscribe` is the api's `POST /api/public/unsubscribe/<token>` (a
+mail client must POST to an address that answers POST, and the admin bundle's
+page does not); the confirmation shows the address to the token's holder, and
+every bad token is one `404`; the digest hour is shown in the current brand's
+time zone until M14-12 (`digestTimeZone` in the preferences view), and *Until
+tomorrow 09:00* and *Until a date…* use the browser's; the card's buttons read
+*Save schedule* and *Discard* (accessible name *Discard schedule changes*)
+because the matrix beneath has *Save changes* and *Discard*; *Until a date…*
+opens a small date dialog that the board does not draw; the bell shows the
+line for unsubscribed, paused and Off, but not the install's lack of outgoing
+email, which only the settings tab says; the test email is
+`POST /api/brands/:brandId/notifications/test-email` (brand-scoped because the
+outbox is), answers `204` and is limited to five an hour. The Sounds card of
+the same board is M14-25. Guide: [Notifications › Unsubscribe](../guides/notifications.md#unsubscribe).
+
+- [x] `UnsubscribeTokens` (HKDF key for `notify-unsubscribe`, HMAC, one year, previous key accepted) and the `List-Unsubscribe` pair on every notification email.
+- [x] `GET`/`POST /api/public/unsubscribe/:token`: rate-limited, one `404` for any bad token, idempotent, audited once as `notification.email_unsubscribed`.
+- [x] `PUT /api/me/notification-preferences` takes `emailUnsubscribed: false`; the view gains `emailConfigured` and `digestTimeZone`.
+- [x] `notify.email_test` job and `POST …/test-email`.
+- [x] The Email schedule card, the pause menu and date dialog, the status line (card and bell), the *Urgent* captions, and the public unsubscribe page, en and ar.
+- [x] DOMAIN-RULES §4.6 and §20; `docs/guides/notifications.md`; DESIGN §6 and change log 1.49.
+
 Your account › Notifications gains, above the existing `PreferenceMatrix`:
 the schedule as `RadioCard`s with the digest hour, the person's time zone (from
 M14-12), *Pause* with its menu and the time it ends, *Send me a test email*,

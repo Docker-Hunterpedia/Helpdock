@@ -627,6 +627,7 @@ describe.skipIf(!hasDocker)('snooze', () => {
         pushConfigured: async () => false,
         addEmailSchedule: async () => {},
         addPush: async () => {},
+        addEmailTest: async () => {},
       } as never);
 
       await withSystem(runtime.db, seeded.brandId, (tx) =>

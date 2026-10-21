@@ -25,6 +25,10 @@ const input = (overrides: Partial<StaffEmailInput> = {}): StaffEmailInput => ({
   messageText: null,
   detail: { clock: 'first_response' },
   appUrl: 'https://desk.example.com',
+  unsubscribe: {
+    page: 'https://desk.example.com/unsubscribe/token?lang=en',
+    oneClick: 'https://desk.example.com/api/public/unsubscribe/token',
+  },
   ...overrides,
 });
 
@@ -53,9 +57,20 @@ describe('renderStaffNotificationEmail', () => {
       'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',
     );
     expect(email.text).toContain('Helpdock · sent to lina@helpdock.test');
+    expect(email.text).toContain(
+      'unsubscribe from notification emails: https://desk.example.com/unsubscribe/token?lang=en',
+    );
+    expect(email.html).toContain('href="https://desk.example.com/unsubscribe/token?lang=en"');
     expect(renderStaffNotificationEmail(input({ locale: 'ar' })).text).toContain(
       'تصلك هذه الرسائل بسبب إعدادات إشعاراتك.',
     );
+  });
+
+  it('carries the RFC 8058 headers, naming the one-click address', () => {
+    expect(renderStaffNotificationEmail(input()).headers).toEqual({
+      'List-Unsubscribe': '<https://desk.example.com/api/public/unsubscribe/token>',
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    });
   });
 
   it("quotes a workflow rule's message on the escalation it sends", () => {

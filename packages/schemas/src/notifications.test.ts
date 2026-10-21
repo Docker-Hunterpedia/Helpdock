@@ -5,9 +5,14 @@ import {
   NOTIFICATION_PREFERENCE_DEFAULTS,
   notificationListQuerySchema,
   notificationPreferencesSchema,
+  notificationPreferencesUpdateSchema,
   notificationSchema,
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
+  UNSUBSCRIBE_TOKEN_PATTERN,
+  unsubscribeRequestSchema,
+  unsubscribeTokenParamSchema,
+  unsubscribeViewSchema,
 } from './notifications.js';
 
 const KEYS = {
@@ -150,5 +155,56 @@ describe('a panel row (M14-04)', () => {
       notificationSchema.safeParse({ ...row, bulkOperationId: null, bulkOperationCount: -1 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('the unsubscribe contract (M14-11)', () => {
+  const token = `${'A'.repeat(27)}.${'b'.repeat(43)}`;
+
+  it('takes a token of exactly the signed shape, and nothing else, before any lookup', () => {
+    expect(UNSUBSCRIBE_TOKEN_PATTERN.test(token)).toBe(true);
+    expect(unsubscribeTokenParamSchema.safeParse({ token }).success).toBe(true);
+    for (const bad of [
+      '',
+      'x',
+      `${token}.x`,
+      `${'A'.repeat(26)}.${'b'.repeat(43)}`,
+      `${token}/..`,
+    ]) {
+      expect(unsubscribeTokenParamSchema.safeParse({ token: bad }).success).toBe(false);
+    }
+  });
+
+  it('accepts only the RFC 8058 one-click body', () => {
+    expect(unsubscribeRequestSchema.safeParse({ 'List-Unsubscribe': 'One-Click' }).success).toBe(
+      true,
+    );
+    for (const bad of [
+      {},
+      { 'List-Unsubscribe': 'Other' },
+      { 'List-Unsubscribe': 'One-Click', x: 1 },
+    ]) {
+      expect(unsubscribeRequestSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('shows the address on the confirmation and leaves it out of the answer', () => {
+    expect(unsubscribeViewSchema.parse({ state: 'confirm', email: 'a@b.c', locale: 'ar' })).toEqual(
+      { state: 'confirm', email: 'a@b.c', locale: 'ar' },
+    );
+    expect(unsubscribeViewSchema.parse({ state: 'done', locale: 'en' })).toEqual({
+      state: 'done',
+      locale: 'en',
+    });
+    expect(unsubscribeViewSchema.safeParse({ state: 'gone', locale: 'en' }).success).toBe(false);
+  });
+
+  it('lets a person turn email back on and never unsubscribe themselves through the settings', () => {
+    expect(
+      notificationPreferencesUpdateSchema.safeParse({ emailUnsubscribed: false }).success,
+    ).toBe(true);
+    expect(notificationPreferencesUpdateSchema.safeParse({ emailUnsubscribed: true }).success).toBe(
+      false,
+    );
   });
 });

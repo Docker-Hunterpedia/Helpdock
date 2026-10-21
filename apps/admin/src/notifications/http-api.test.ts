@@ -27,6 +27,8 @@ const view: NotificationPreferencesView = {
     pausedUntil: null,
     unsubscribedAt: null,
   },
+  emailConfigured: true,
+  digestTimeZone: null,
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -89,6 +91,28 @@ describe('HttpNotificationsApi', () => {
         { preferences: NOTIFICATION_PREFERENCE_DEFAULTS },
       ],
     ]);
+  });
+
+  it('saves the schedule, a pause and "Turn email back on" as the update the api takes', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(view)));
+
+    await api.updateSettings({ emailSchedule: 'daily', digestHour: 7 });
+    await api.updateSettings({ pausedUntil: '2026-10-22T09:00:00.000Z' });
+    await api.updateSettings({ emailUnsubscribed: false });
+
+    expect(calls()).toEqual([
+      ['/api/me/notification-preferences', 'PUT', { emailSchedule: 'daily', digestHour: 7 }],
+      ['/api/me/notification-preferences', 'PUT', { pausedUntil: '2026-10-22T09:00:00.000Z' }],
+      ['/api/me/notification-preferences', 'PUT', { emailUnsubscribed: false }],
+    ]);
+  });
+
+  it('asks for a test email on the brand route, with no address in the request', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(noContent()));
+
+    await api.testEmail(BRAND);
+
+    expect(calls()).toEqual([[`/api/brands/${BRAND}/notifications/test-email`, 'POST', undefined]]);
   });
 
   it('adds and removes a browser', async () => {

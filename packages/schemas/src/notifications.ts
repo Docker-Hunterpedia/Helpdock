@@ -134,6 +134,13 @@ export const notificationPreferencesViewSchema = z.object({
     subscriptions: z.array(pushSubscriptionSchema),
   }),
   emailDelivery: emailDeliverySchema,
+  /** False while the install has no SMTP settings: notification emails cannot be sent at all. */
+  emailConfigured: z.boolean(),
+  /**
+   * The time zone the daily digest's hour is read in (the current brand's until
+   * M14-12 gives people their own); null when the request names no brand.
+   */
+  digestTimeZone: z.string().nullable(),
 });
 export type NotificationPreferencesView = z.infer<typeof notificationPreferencesViewSchema>;
 
@@ -148,11 +155,51 @@ export const notificationPreferencesUpdateSchema = z
     emailSchedule: emailScheduleSchema.optional(),
     digestHour: z.int().min(0).max(23).optional(),
     pausedUntil: z.iso.datetime().nullable().optional(),
+    /** `false` is "Turn email back on" after an unsubscribe; only the person's own unsubscribe sets it. */
+    emailUnsubscribed: z.literal(false).optional(),
   })
   .refine((update) => Object.values(update).some((value) => value !== undefined), {
     message: 'must change something',
   });
 export type NotificationPreferencesUpdate = z.infer<typeof notificationPreferencesUpdateSchema>;
+
+// -------------------------------------------------- one-click unsubscribe
+
+/** DOMAIN-RULES §4.6: an unsubscribe link works for a year from the email that carried it. */
+export const UNSUBSCRIBE_TOKEN_TTL_DAYS = 365;
+
+/**
+ * `<20 bytes>.<32 bytes>`, both base64url: the user id and the issue time, and
+ * the HMAC over them. Checked before anything is computed, so a malformed
+ * path is refused without a lookup.
+ */
+export const UNSUBSCRIBE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{27}\.[A-Za-z0-9_-]{43}$/;
+
+export const unsubscribeTokenParamSchema = z.object({
+  token: z.string().regex(UNSUBSCRIBE_TOKEN_PATTERN),
+});
+
+/**
+ * RFC 8058 section 3.1: the body a mail client's one-click POST carries. The
+ * confirmation page sends the same body, so the two take one path.
+ */
+export const unsubscribeRequestSchema = z.strictObject({
+  'List-Unsubscribe': z.literal('One-Click'),
+});
+
+/**
+ * What the public page draws. `confirm` names the address the link is for,
+ * which only its holder can see; `done` is the answer to the unsubscribe, a
+ * first one or a repeat. A forged, altered, expired or unknown token is a 404,
+ * the same one for each, so the page never says whether an address exists.
+ */
+export const unsubscribeViewSchema = z.object({
+  state: z.enum(['confirm', 'done']),
+  /** Present on `confirm` only. */
+  email: z.string().optional(),
+  locale: z.enum(['en', 'ar']),
+});
+export type UnsubscribeView = z.infer<typeof unsubscribeViewSchema>;
 
 /** Base64url, as `PushSubscription.toJSON()` hands the keys over. */
 const BASE64URL = /^[A-Za-z0-9_-]+={0,2}$/;

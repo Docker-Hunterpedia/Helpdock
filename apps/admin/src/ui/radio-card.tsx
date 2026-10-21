@@ -27,12 +27,16 @@ export function RadioCard({
   readonly value: string;
   readonly checked: boolean;
   readonly disabled?: boolean;
-  /** A 16 px Lucide icon, drawn `aria-hidden`. */
-  readonly icon: ReactNode;
+  /** A 16 px Lucide icon, drawn `aria-hidden`. Left out where the board draws none. */
+  readonly icon?: ReactNode;
   readonly title: string;
   /** A Tag beside the title, such as "Recommended". */
   readonly tag?: ReactNode;
-  readonly description: string;
+  /**
+   * The sentence under the title. A node, so a card can hold a control inside
+   * it ("Once a day at [08:00]" in `Admin/Account-Notifications-Schedule`).
+   */
+  readonly description: ReactNode;
   readonly onSelect: (value: string) => void;
 }): ReactNode {
   const tokens = useSemanticTokens();
@@ -68,9 +72,11 @@ export function RadioCard({
       />
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 500 }}>
-          <Box component="span" aria-hidden="true" sx={{ display: 'inline-flex' }}>
-            {icon}
-          </Box>
+          {icon === undefined ? null : (
+            <Box component="span" aria-hidden="true" sx={{ display: 'inline-flex' }}>
+              {icon}
+            </Box>
+          )}
           {title}
           {tag}
         </Box>

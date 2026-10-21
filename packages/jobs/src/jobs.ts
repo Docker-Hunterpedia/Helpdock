@@ -779,6 +779,33 @@ export const notifyPushJob = defineJob({
     `notify.push:${payload.subscriptionId}:${payload.notificationId ?? payload.testId}`,
 });
 
+export const notifyEmailTestPayloadSchema = z.object({
+  brandId: z.uuid(),
+  userId: z.uuid(),
+  /** The outbox row of the "Send me a test email" press: one press, one email. */
+  testId: z.uuid(),
+});
+export type NotifyEmailTestPayload = z.infer<typeof notifyEmailTestPayloadSchema>;
+
+/**
+ * M14-11: the test email of the Notifications tab, to the address of the
+ * person who pressed the button and to nobody else. It goes through the same
+ * sender and carries the same footer and `List-Unsubscribe` headers as a real
+ * notification, so the button proves the path a real one takes.
+ */
+export const notifyEmailTestJob = defineJob({
+  name: 'notify.email_test',
+  queue: QUEUE_NAMES.notify,
+  schema: notifyEmailTestPayloadSchema,
+  options: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { age: 86_400, count: 1_000 },
+    removeOnFail: { age: 7 * 86_400 },
+  },
+  idempotencyKey: (payload) => `notify.email_test:${payload.testId}`,
+});
+
 export const AUTH_EMAIL_KINDS = ['magicLink', 'passwordReset', 'invite', 'securityChange'] as const;
 
 export const authEmailPayloadSchema = z.object({
@@ -1786,6 +1813,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [notifyDigestTickJob.name]: notifyDigestTickJob,
   [notifyEmailRebuildJob.name]: notifyEmailRebuildJob,
   [notifyPushJob.name]: notifyPushJob,
+  [notifyEmailTestJob.name]: notifyEmailTestJob,
   [authEmailJob.name]: authEmailJob,
   [domainVerifyJob.name]: domainVerifyJob,
   [domainVerifyScheduleJob.name]: domainVerifyScheduleJob,

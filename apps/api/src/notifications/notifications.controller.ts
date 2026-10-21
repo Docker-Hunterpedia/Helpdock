@@ -90,6 +90,16 @@ export class NotificationsController {
   ): Promise<void> {
     await this.#notifications.testPush(requirePanelContext(), body.subscriptionId);
   }
+
+  /** "Send me a test email" on the Notifications tab: to the caller's own address only. */
+  @Post('test-email')
+  @Requires('ticket:read')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async testEmail(
+    @Param(new ZodValidationPipe(NotificationBrandParamDto)) _params: NotificationBrandParamDto,
+  ): Promise<void> {
+    await this.#notifications.testEmail(requirePanelContext());
+  }
 }
 
 /**
@@ -109,7 +119,7 @@ export class NotificationPreferencesController {
   @Authenticated()
   @ZodSerializerDto(NotificationPreferencesViewDto)
   preferences(): Promise<NotificationPreferencesView> {
-    return this.#notifications.preferences(getTx(), userId());
+    return this.#notifications.preferences(getTx(), userId(), targetBrandId());
   }
 
   @Put('notification-preferences')
@@ -119,7 +129,7 @@ export class NotificationPreferencesController {
     @Body(new ZodValidationPipe(NotificationPreferencesUpdateDto))
     body: NotificationPreferencesUpdateDto,
   ): Promise<NotificationPreferencesView> {
-    return this.#notifications.updatePreferences(getTx(), userId(), body);
+    return this.#notifications.updatePreferences(getTx(), userId(), body, targetBrandId());
   }
 
   @Post('push-subscriptions')
@@ -144,6 +154,9 @@ export class NotificationPreferencesController {
 
 /** The guard has already refused anything but a staff principal with a session. */
 const userId = (): string => requireStaffPrincipalId(requireRequestContext().principal);
+
+/** The brand the request names, if any: it sets the time zone the digest hour is shown in. */
+const targetBrandId = (): string | null => requireRequestContext().targetBrandId;
 
 /** The request's transaction, brand and staff member. An api key has no bell. */
 const requirePanelContext = (): PanelContext => {

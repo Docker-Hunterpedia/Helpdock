@@ -58,6 +58,7 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   me: 'redirects to Security',
   meTab: 'the family of the account tabs, each in the registry',
   csat: 'the public rating page, not a staff screen',
+  unsubscribe: 'the public unsubscribe page, not a staff screen',
   // Destinations that ARE in the registry are listed as such below.
   tickets: 'in the registry',
   contacts: 'in the registry',

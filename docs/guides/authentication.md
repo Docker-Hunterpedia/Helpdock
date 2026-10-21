@@ -458,20 +458,27 @@ Moving the passkeys to the new host means re-pinning the setting, after which
 staff add their passkeys again. An install admin does it from **Settings ›
 Authentication**: the Passkeys section shows `Paused`, both hosts, and a
 **Move passkeys to <new host>** button. The button opens a confirmation that says
-every existing passkey stops working, and then, in one transaction, removes every
-passkey on the install (a passkey made for the old host cannot work on the new
-one, and left in place it would still count as a second factor), forgets the
-recovery codes of anyone whose only second factor it was, and pins
-`auth.webauthn.rpId` to the current host. It writes `auth.passkey.rp_moved`
-(`from`, `to`, `passkeys`, `holders`) and emails each holder a `securityChange`
-notice saying the install moved and they should add a passkey again. The same
-warning shows on the System page. Behind the button are two routes, both
-`install:admin`:
+every existing passkey stops working, and that people with no authenticator app also
+lose their recovery codes and will set up a second factor again. Then, in **one
+transaction**, it moves the pin only while it still holds the old host (two moves
+cannot both run), locks the holders' accounts, removes every passkey on the
+install (a passkey made for the old host cannot work on the new one, and left in
+place it would still count as a second factor), forgets the recovery codes of
+anyone with no app, writes `auth.passkey.rp_moved` (`from`, `to`, `passkeys`,
+`holders`) and queues each holder a `securityChange` notice through the outbox. If
+any step fails, none of it happens. The same warning shows on the System page.
+
+The move is refused while it would lock people out: when SSO is enforced and a
+configured break-glass admin relies on a passkey (they have no authenticator app),
+or when an account that must have a second factor (an Admin, an install admin, or
+everyone under `auth.require2fa`) has only passkeys. The dialog shows how many
+accounts, and the admin adds authenticator apps first. Behind the button are two
+routes, both `install:admin`:
 
 | Route | |
 |---|---|
-| `GET /api/install/passkeys` | `state` (`available`, `paused`, `unavailable`), the `rpId` `APP_URL` implies, the `pinnedRpId` and when it was pinned, `pinLocked`, and the counts `passkeyCount` and `holderCount`. Counts only: it names nobody |
-| `POST /api/install/passkeys/move` | Only while `paused`, otherwise `409`; also `409` while `HD_AUTH_WEBAUTHN_RP_ID` pins the RP ID. Answers `{ rpId, passkeysRemoved, holdersNotified }` |
+| `GET /api/install/passkeys` | `state` (`available`, `paused`, `unavailable`), the `rpId` `APP_URL` implies, the `pinnedRpId` and when it was pinned, `pinLocked`, the counts `passkeyCount` and `holderCount`, and, while paused, `blockers` (`breakGlassAccounts`, `secondFactorAccounts`). Counts only: it names nobody |
+| `POST /api/install/passkeys/move` | Only while `paused`. Answers `{ rpId, passkeysRemoved, holdersNotified }`, or `409` with `error.passkeys.reason`: `not-paused`, `pin-locked` (`HD_AUTH_WEBAUTHN_RP_ID` pins the RP ID) or `move-blocked` |
 
 `HD_AUTH_WEBAUTHN_RP_ID` also sets the pin: while it is set, the environment value
 is the pin and nothing is written to the database, so the button is not offered

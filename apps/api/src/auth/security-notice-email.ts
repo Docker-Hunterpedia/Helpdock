@@ -166,7 +166,14 @@ export const renderSecurityNoticeEmail = ({
     // A worded change may leave a line out; the reset that kept passkeys has no "if this wasn't you".
     return has(`${kind}.${key}`) ? t(`${kind}.${key}` as never, common) : '';
   };
-  const remainder = kind === 'passkeyRemoved' ? remainingKey(remaining, values.totp === '1') : null;
+  const remainder =
+    kind === 'passkeyRemoved'
+      ? remainingKey(remaining, values.totp === '1')
+      : kind === 'passkeysMoved'
+        ? values.totp === '1'
+          ? 'withApp'
+          : 'noApp'
+        : null;
   const body = own ? t(`${kind}.body` as never, common) : t(`body_${kind}` as never, common);
 
   const copy = {

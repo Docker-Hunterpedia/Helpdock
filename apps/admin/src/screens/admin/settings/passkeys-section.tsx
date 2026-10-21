@@ -41,8 +41,10 @@ export function PasskeysSection(): ReactNode {
       await queryClient.invalidateQueries({ queryKey: SETTINGS_PASSKEYS_QUERY_KEY });
       toast({ tone: 'success', message: t('settings:passkeys.moved', { count: passkeysRemoved }) });
     },
-    onError: () => {
+    onError: async () => {
       setMoving(false);
+      // A refusal may mean the counts moved since the page loaded.
+      await queryClient.invalidateQueries({ queryKey: SETTINGS_PASSKEYS_QUERY_KEY });
       toast({ tone: 'danger', message: t('settings:passkeys.moveError') });
     },
   });
@@ -55,6 +57,8 @@ export function PasskeysSection(): ReactNode {
   }
 
   const status = query.data;
+  const blocked =
+    status.blockers.breakGlassAccounts > 0 || status.blockers.secondFactorAccounts > 0;
   const title = t('settings:passkeys.title');
 
   return (
@@ -121,13 +125,37 @@ export function PasskeysSection(): ReactNode {
             title={t('settings:passkeys.moveTitle', { host: status.rpId })}
             body={t('settings:passkeys.moveBody')}
             confirmLabel={t('settings:passkeys.moveConfirm')}
+            confirmDisabled={blocked}
             onClose={() => {
               setMoving(false);
             }}
             onConfirm={() => {
               move.mutate();
             }}
-          />
+          >
+            {blocked ? (
+              <AlertBanner tone="danger">
+                <Box component="strong" sx={{ display: 'block', fontWeight: 600 }}>
+                  {t('settings:passkeys.moveBlockedTitle')}
+                </Box>
+                {status.blockers.breakGlassAccounts > 0 ? (
+                  <Box component="span" sx={{ display: 'block' }}>
+                    {t('settings:passkeys.moveBlockedBreakGlass', {
+                      count: status.blockers.breakGlassAccounts,
+                    })}
+                  </Box>
+                ) : null}
+                {status.blockers.secondFactorAccounts > 0 ? (
+                  <Box component="span" sx={{ display: 'block' }}>
+                    {t('settings:passkeys.moveBlockedSecondFactor', {
+                      count: status.blockers.secondFactorAccounts,
+                    })}
+                  </Box>
+                ) : null}
+                {t('settings:passkeys.moveBlockedHint')}
+              </AlertBanner>
+            ) : null}
+          </ConfirmDialog>
         </>
       ) : null}
 

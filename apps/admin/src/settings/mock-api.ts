@@ -56,6 +56,7 @@ export const MOCK_INSTALL_PASSKEYS: InstallPasskeys = {
   pinLocked: false,
   passkeyCount: 12,
   holderCount: 7,
+  blockers: { breakGlassAccounts: 0, secondFactorAccounts: 0 },
 };
 
 const seededPasskeys = (): InstallPasskeys => {

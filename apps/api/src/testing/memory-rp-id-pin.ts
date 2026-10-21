@@ -1,5 +1,5 @@
 import type { DbTransaction } from '@helpdock/db';
-import type { PinnedRpId, RpIdPin } from '../auth/webauthn/rp-id-pin.js';
+import { type PinnedRpId, type RpIdPin, RpIdPinChangedError } from '../auth/webauthn/rp-id-pin.js';
 
 /** `auth.webauthn.rpId` without a database, for unit tests of the passkey ceremonies. */
 export class MemoryRpIdPin implements RpIdPin {
@@ -14,18 +14,33 @@ export class MemoryRpIdPin implements RpIdPin {
   }
 
   locked = false;
+  /** Rows a completed move wrote through its transaction. */
+  audited: Record<string, unknown>[] = [];
 
   isLocked(): boolean {
     return this.locked;
   }
 
   async moveTo<T>(
-    rpId: string,
-    _actorId: string,
+    { from, to }: { from: string; to: string; actorId: string },
     within: (tx: DbTransaction) => Promise<T>,
   ): Promise<T> {
-    const result = await within({} as DbTransaction);
-    this.pinned = { rpId, pinnedAt: new Date() };
+    if (this.pinned?.rpId !== from) {
+      throw new RpIdPinChangedError();
+    }
+    const written: Record<string, unknown>[] = [];
+    // Only what the move writes through its transaction: the audit row.
+    const tx = {
+      insert: () => ({
+        values: (row: Record<string, unknown>) => {
+          written.push(row);
+          return Promise.resolve();
+        },
+      }),
+    } as unknown as DbTransaction;
+    const result = await within(tx);
+    this.audited.push(...written);
+    this.pinned = { rpId: to, pinnedAt: new Date() };
     return result;
   }
 

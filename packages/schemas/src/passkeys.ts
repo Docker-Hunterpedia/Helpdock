@@ -246,6 +246,16 @@ export const installPasskeysSchema = z.strictObject({
   pinLocked: z.boolean(),
   passkeyCount: z.number().int().nonnegative(),
   holderCount: z.number().int().nonnegative(),
+  /**
+   * What moving the passkeys would break, counted while paused (zero otherwise).
+   * Any non-zero count makes the move refuse (`move-blocked`).
+   */
+  blockers: z.strictObject({
+    /** Configured SSO break-glass accounts that rely on a verified passkey. */
+    breakGlassAccounts: z.number().int().nonnegative(),
+    /** Accounts that must have a second factor and have only passkeys. */
+    secondFactorAccounts: z.number().int().nonnegative(),
+  }),
 });
 export type InstallPasskeys = z.infer<typeof installPasskeysSchema>;
 
@@ -256,3 +266,11 @@ export const installPasskeysMovedSchema = z.strictObject({
   holdersNotified: z.number().int().nonnegative(),
 });
 export type InstallPasskeysMoved = z.infer<typeof installPasskeysMovedSchema>;
+
+/**
+ * Why moving the passkeys was refused, on `error.passkeys.reason`: nothing is
+ * paused, the environment pins the RP ID, or the move would lock accounts out
+ * (the counts are on `GET /api/install/passkeys`).
+ */
+export const passkeysRefusalSchema = z.enum(['not-paused', 'pin-locked', 'move-blocked']);
+export type PasskeysRefusal = z.infer<typeof passkeysRefusalSchema>;

@@ -196,9 +196,9 @@ export class PasskeyRepository {
 
   /** Who holds a passkey, with how many and whether they also have an authenticator app. */
   async holders(
-    tx: Queryable,
+    tx?: Queryable,
   ): Promise<{ userId: string; passkeys: number; totpEnabled: boolean }[]> {
-    return tx
+    return (tx ?? this.#db)
       .select({
         userId: webauthnCredentials.userId,
         passkeys: sql<number>`count(*)::int`,

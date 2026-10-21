@@ -101,6 +101,9 @@ refused for break-glass. A break-glass admin who holds only a passkey is locked 
 address (`APP_URL`) changes and pauses passkeys, so keep an authenticator app on
 the account too, or set `HD_SSO_ENFORCED=false` in the environment to turn enforcement off
 (unsetting the variable does nothing when enforcement was switched on in Settings).
+Settings › Authentication › Passkeys refuses "Move passkeys" while enforcement is on
+and a break-glass admin relies on a passkey, since the move removes every passkey:
+add an authenticator app to that account first.
 Someone who signed in through SSO may finish with an authenticator code, a
 passkey or a single-use recovery code as the second factor, but never a trusted
 browser. A recovery code still never finishes break-glass, which stays a fresh

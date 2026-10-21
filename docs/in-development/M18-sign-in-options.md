@@ -766,9 +766,14 @@ Backlog or never:
     that says every passkey stops working. One transaction deletes every passkey,
     forgets the recovery codes of holders with no app, and re-pins
     `auth.webauthn.rpId` (`RpIdPinStore.moveTo`); then `auth.passkey.rp_moved` is
-    audited and each holder gets the `passkeysMoved` `securityChange` email (en,
-    ar). Refused with `409` unless paused, and while `HD_AUTH_WEBAUTHN_RP_ID`
-    pins it. DOMAIN-RULES §12.1 rule 5.
+    written in the same transaction, as is each holder's `passkeysMoved`
+    `securityChange` notice (en, ar; it says whether recovery codes were
+    forgotten). The pin moves only while it still holds the old host and the
+    holders' account rows are locked, so two moves cannot both run. `409` with
+    `error.passkeys.reason` `not-paused`, `pin-locked`, or `move-blocked` when the
+    move would lock out a configured break-glass admin under enforcement or leave a
+    required account with no second factor; the counts are in the GET and the
+    dialog. DOMAIN-RULES §12.1 rule 5; ADR 0050 and rule 1 amended.
   - **System page.** The same warning, with a link to Settings.
   - **Security › Regenerate with a passkey.** Offered when the account holds a
     passkey on a supporting browser; a confirmation, the browser prompt, the codes

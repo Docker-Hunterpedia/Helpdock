@@ -75,6 +75,7 @@ describe('HttpSettingsApi', () => {
       pinLocked: false,
       passkeyCount: 3,
       holderCount: 2,
+      blockers: { breakGlassAccounts: 0, secondFactorAccounts: 0 },
     };
     fetchMock.mockResolvedValueOnce(json(status));
 

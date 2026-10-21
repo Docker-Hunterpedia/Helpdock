@@ -113,6 +113,40 @@ describe('PasskeysSection', () => {
     expect(move).toHaveBeenCalledOnce();
   });
 
+  it('says what the move would break, and will not confirm, while accounts would be locked out', async () => {
+    const api = apiWith({
+      ...paused,
+      blockers: { breakGlassAccounts: 1, secondFactorAccounts: 3 },
+    });
+    const move = vi.spyOn(api, 'movePasskeys');
+    const { user } = renderApp(<SettingsPage />, { settingsApi: api });
+    const region = await section();
+
+    await user.click(
+      within(region).getByRole('button', { name: 'Move passkeys to desk.helpdock.com' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText('Add an authenticator app first')).toBeVisible();
+    expect(within(dialog).getByText(/1 emergency sign-in account/)).toBeVisible();
+    expect(within(dialog).getByText(/3 accounts must have a second factor/)).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: 'Move passkeys' })).toBeDisabled();
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('tells people without an authenticator app they lose their recovery codes', async () => {
+    const { user } = renderApp(<SettingsPage />, { settingsApi: apiWith(paused) });
+    const region = await section();
+
+    await user.click(
+      within(region).getByRole('button', { name: 'Move passkeys to desk.helpdock.com' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByText(/lose their recovery codes/)).toBeVisible();
+    expect(within(dialog).getByText(/set up a second factor again/)).toBeVisible();
+  });
+
   it('does not move when the confirmation is cancelled', async () => {
     const api = apiWith(paused);
     const move = vi.spyOn(api, 'movePasskeys');

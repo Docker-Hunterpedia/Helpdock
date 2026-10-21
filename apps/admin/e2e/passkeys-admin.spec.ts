@@ -137,6 +137,34 @@ test.describe('Settings › Authentication › Passkeys', () => {
     ).toBeVisible();
   });
 
+  test('will not confirm the move while it would lock accounts out, and says why', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await seedInstallPasskeys(page, {
+      ...PAUSED,
+      blockers: { breakGlassAccounts: 1, secondFactorAccounts: 2 },
+    });
+    await signIn(page, locale);
+    await openSettings(page, locale);
+
+    await page
+      .getByRole('region', { name: t('settings:passkeys.title') })
+      .getByRole('button', { name: t('settings:passkeys.move', { host: 'desk.helpdock.com' }) })
+      .click();
+    const dialog = page.getByRole('dialog');
+
+    await expect(dialog.getByText(t('settings:passkeys.moveBlockedTitle'))).toBeVisible();
+    await expect(
+      dialog.getByText(t('settings:passkeys.moveBlockedSecondFactor', { count: 2 })),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: t('settings:passkeys.moveConfirm') }),
+    ).toBeDisabled();
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('explains an install without HTTPS', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await seedInstallPasskeys(page, { state: 'unavailable', rpId: null, pinnedRpId: null });
@@ -215,7 +243,7 @@ test.describe('Security › regenerate recovery codes with a passkey', () => {
     await expect(page.getByText(t('me:twoFactor.newCodesTitle'))).toBeVisible();
   });
 
-  test('says so, and shows no codes, when the browser prompt is dismissed', async ({
+  test('closes quietly, and shows no codes, when the browser prompt is dismissed', async ({
     page,
     appLocale: locale,
   }) => {

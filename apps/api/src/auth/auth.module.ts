@@ -160,6 +160,7 @@ export const createAuthRuntime = ({
     auth,
     webauthn,
     passkeys: passkeyRows,
+    ssoPolicy,
     limiter,
     signingKeys,
     logger,

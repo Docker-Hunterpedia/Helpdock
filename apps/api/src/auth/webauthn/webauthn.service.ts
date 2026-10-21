@@ -438,15 +438,14 @@ export class WebAuthnService {
   }
 
   /**
-   * Pins the RP ID to `rpId` in one transaction with `within`, which must remove
-   * the passkeys made for the old one (M18-06, "Move passkeys").
+   * Moves the pin from `from` to `to` in one transaction with `within` (M18-06,
+   * "Move passkeys"). Throws `RpIdPinChangedError` when the pin is no longer `from`.
    */
   moveRpId<T>(
-    rpId: string,
-    actorId: string,
+    move: { readonly from: string; readonly to: string; readonly actorId: string },
     within: (tx: DbTransaction) => Promise<T>,
   ): Promise<T> {
-    return this.#pin.moveTo(rpId, actorId, within);
+    return this.#pin.moveTo(move, within);
   }
 
   /**

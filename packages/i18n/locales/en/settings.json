@@ -98,13 +98,19 @@
     "pausedBody": "Passkeys were registered for {{from}}, but this install now runs at {{to}}. Passkey sign-in, second factor and step-up are paused; every other method works. Move passkeys to the new address when the move is final; staff then add their passkeys again.",
     "move": "Move passkeys to {{host}}",
     "moveTitle": "Move passkeys to {{host}}?",
-    "moveBody": "Every existing passkey stops working and is removed. Staff are emailed and add theirs again at the new address. This can't be undone.",
+    "moveBody": "Every existing passkey stops working and is removed. People who had no authenticator app also lose their recovery codes and will set up a second factor again. Staff are emailed. This can't be undone.",
     "moveConfirm": "Move passkeys",
     "moved": "Passkeys moved. {{count}} removed.",
     "moveError": "Couldn't move the passkeys. Try again.",
     "moveLocked": "The environment pins this address (HD_AUTH_WEBAUTHN_RP_ID). Change it there.",
     "unavailableTitle": "Passkeys are off",
     "unavailableBody": "Passkeys need HTTPS. Set {{appUrl}} to an https address (or use http://localhost while developing) and they turn on by themselves.",
-    "loadError": "Couldn't read the passkey status."
+    "loadError": "Couldn't read the passkey status.",
+    "moveBlockedTitle": "Add an authenticator app first",
+    "moveBlockedBreakGlass_one": "{{count}} emergency sign-in account (break-glass) relies on a passkey and would be locked out while SSO is enforced.",
+    "moveBlockedBreakGlass_other": "{{count}} emergency sign-in accounts (break-glass) rely on a passkey and would be locked out while SSO is enforced.",
+    "moveBlockedSecondFactor_one": "{{count}} account must have a second factor and has only passkeys.",
+    "moveBlockedSecondFactor_other": "{{count}} accounts must have a second factor and have only passkeys.",
+    "moveBlockedHint": "Ask them to turn on an authenticator app, then move the passkeys."
   }
 }

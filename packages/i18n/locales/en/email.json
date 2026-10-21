@@ -94,8 +94,10 @@
       "subject": "Your passkeys were removed",
       "eyebrow": "Security · passkeys",
       "heading": "Your passkeys were removed",
-      "body": "This install now runs at {{account}}, so the passkeys registered for its old address could no longer work and were removed. Your password and any authenticator app still work. Add a passkey again from your security page.",
-      "action": "Open your security page"
+      "body": "This install now runs at {{account}}, so the passkeys registered for its old address could no longer work and were removed. Add a passkey again from your security page.",
+      "action": "Open your security page",
+      "withApp": "Your authenticator app still works.",
+      "noApp": "Your recovery codes were forgotten with them. Set up a second factor again from your security page."
     }
   },
   "smtpTest": {

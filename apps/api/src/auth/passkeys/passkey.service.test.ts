@@ -48,6 +48,9 @@ class FakeAuth {
     return Promise.resolve({ recoveryCodes: ['CCCC-3333'] });
   });
 
+  /** Accounts that must have a second factor, for `secondFactorRequiredFor`. */
+  requiredIds = new Set<string>();
+  secondFactorRequiredFor = vi.fn((id: string) => Promise.resolve(this.requiredIds.has(id)));
   activeAccount = vi.fn(() => Promise.resolve(this.user));
   isSecondFactorRequired = vi.fn(() => Promise.resolve(this.required));
   confirmWithSecret = vi.fn((_id: string, proof: unknown) => {
@@ -184,11 +187,13 @@ let limiterAllows: boolean;
 let signingKeys: SigningKeys;
 let service: PasskeyService;
 let pin: MemoryRpIdPin;
+let breakGlassLost: number;
 
 beforeEach(async () => {
   auth = new FakeAuth();
   rows = new FakeRows();
   pin = new MemoryRpIdPin();
+  breakGlassLost = 0;
   limiterAllows = true;
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
   signingKeys = { kid: 'k1', privateKey, publicKey };
@@ -200,6 +205,7 @@ beforeEach(async () => {
       pin,
     }),
     passkeys: rows as unknown as PasskeyRepository,
+    ssoPolicy: { breakGlassLosingPasskeys: () => Promise.resolve(breakGlassLost) },
     limiter: { consume: () => Promise.resolve(limiterAllows) } as unknown as RateLimiter,
     signingKeys,
     logger: silentLogger(),
@@ -746,6 +752,7 @@ describe('installStatus', () => {
       pinLocked: false,
       passkeyCount: 2,
       holderCount: 2,
+      blockers: { breakGlassAccounts: 0, secondFactorAccounts: 0 },
     });
   });
 
@@ -794,16 +801,17 @@ describe('moveToCurrentHost', () => {
     });
     expect(rows.rows).toEqual([]);
     expect(pin.pinned?.rpId).toBe('desk.example.com');
-    expect(auth.events).toEqual([
-      {
+    expect(pin.audited).toEqual([
+      expect.objectContaining({
         action: 'auth.passkey.rp_moved',
-        actor: 'staff',
+        actorType: 'staff',
+        actorId: adminId,
         meta: { from: 'admin.example.com', to: 'desk.example.com', passkeys: 3, holders: 2 },
-      },
+      }),
     ]);
     expect(auth.notices).toEqual([
-      { change: 'passkeysMoved', values: { account: 'desk.example.com' } },
-      { change: 'passkeysMoved', values: { account: 'desk.example.com' } },
+      { change: 'passkeysMoved', values: { account: 'desk.example.com', totp: '0' } },
+      { change: 'passkeysMoved', values: { account: 'desk.example.com', totp: '1' } },
     ]);
     expect((await service.installStatus()).state).toBe('available');
   });
@@ -825,9 +833,11 @@ describe('moveToCurrentHost', () => {
     pin.pinned = { rpId: 'desk.example.com', pinnedAt: new Date() };
     addFor(userId, 'Kept');
 
-    await expect(service.moveToCurrentHost(adminId)).rejects.toThrow('nothing to move');
+    await expect(service.moveToCurrentHost(adminId)).rejects.toMatchObject({
+      reason: 'not-paused',
+    });
     expect(rows.rows).toHaveLength(1);
-    expect(auth.events).toEqual([]);
+    expect(pin.audited).toEqual([]);
   });
 
   it('refuses when the environment pins the RP ID', async () => {
@@ -835,20 +845,77 @@ describe('moveToCurrentHost', () => {
     pin.locked = true;
     addFor(userId, 'Kept');
 
-    await expect(service.moveToCurrentHost(adminId)).rejects.toThrow('HD_AUTH_WEBAUTHN_RP_ID');
+    await expect(service.moveToCurrentHost(adminId)).rejects.toMatchObject({
+      reason: 'pin-locked',
+    });
     expect(rows.rows).toHaveLength(1);
     expect(pin.pinned?.rpId).toBe('admin.example.com');
   });
 
-  it('still finishes, and counts only the emails sent, when one holder cannot be told', async () => {
+  it('changes nothing, and audits nothing, when a holder cannot be told', async () => {
     moved();
     addFor(userId, 'A');
     addFor(uuidv7(), 'B');
-    auth.notifyCredentialChange.mockRejectedValueOnce(new Error('mail down'));
+    auth.notifyCredentialChange.mockRejectedValueOnce(new Error('outbox down'));
 
-    const result = await service.moveToCurrentHost(adminId);
+    await expect(service.moveToCurrentHost(adminId)).rejects.toThrow('outbox down');
 
-    expect(result).toMatchObject({ passkeysRemoved: 2, holdersNotified: 1 });
-    expect(rows.rows).toEqual([]);
+    expect(pin.pinned?.rpId).toBe('admin.example.com');
+    expect(pin.audited).toEqual([]);
+  });
+
+  it('refuses while a configured break-glass account would lose its only factor', async () => {
+    moved();
+    addFor(userId, 'Only key');
+    breakGlassLost = 2;
+
+    await expect(service.moveToCurrentHost(adminId)).rejects.toMatchObject({
+      reason: 'move-blocked',
+    });
+    expect(pin.pinned?.rpId).toBe('admin.example.com');
+    expect(pin.audited).toEqual([]);
+  });
+
+  it('refuses while an account that must have a second factor would be left with none', async () => {
+    moved();
+    const withApp = uuidv7();
+    addFor(userId, 'Only key');
+    addFor(withApp, 'Key');
+    rows.withApp.add(withApp);
+    auth.requiredIds.add(userId);
+    auth.requiredIds.add(withApp);
+
+    await expect(service.moveToCurrentHost(adminId)).rejects.toMatchObject({
+      reason: 'move-blocked',
+    });
+    expect(rows.rows).toHaveLength(2);
+  });
+
+  it('is told, by installStatus, what would block it', async () => {
+    moved();
+    addFor(userId, 'Only key');
+    auth.requiredIds.add(userId);
+    breakGlassLost = 1;
+
+    expect((await service.installStatus()).blockers).toEqual({
+      breakGlassAccounts: 1,
+      secondFactorAccounts: 1,
+    });
+  });
+
+  it('answers a conflict when another move got there first', async () => {
+    moved();
+    addFor(userId, 'A');
+    // The pin changed between the status read and the move: another move won.
+    const win = pin.moveTo.bind(pin);
+    pin.moveTo = async (move, within) => {
+      pin.pinned = { rpId: 'desk.example.com', pinnedAt: new Date() };
+      return win(move, within);
+    };
+
+    await expect(service.moveToCurrentHost(adminId)).rejects.toMatchObject({
+      reason: 'not-paused',
+    });
+    expect(rows.rows).toHaveLength(1);
   });
 });

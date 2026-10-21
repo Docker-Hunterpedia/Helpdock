@@ -54,7 +54,8 @@ accounts (`users`) are install-wide.
    `source = 'sso'`; memberships an admin made by hand (`manual`) are never
    touched. A removed role revokes the user's sessions, as a role edit does.
 10. **Enforcement** refuses password, magic link and OAuth for everyone except up
-    to three break-glass install admins who must have TOTP. `idp_enforces_mfa`
+    to three break-glass install admins who must have TOTP (a passkey may
+    replace it: [ADR 0053](0053-break-glass-with-a-passkey.md)). `idp_enforces_mfa`
     per connection lets the IdP's MFA satisfy `auth.require2fa` and the admin rule.
 
 ## Consequences
@@ -198,8 +199,10 @@ returns bounded raw bytes rather than automatically decompressing responses.
   changes hold its exclusive counterpart through commit and Redis revocation.
   Atomic Redis registration refuses minting against a revoked family. SSO has a
   twelve-hour family ceiling regardless of longer local-session configuration.
-- Break-glass means password followed by fresh TOTP. Magic links, OAuth, trusted
-  browsers and recovery codes cannot replace that second factor under enforcement.
+- Break-glass means password followed by a fresh TOTP code, or, since
+  [ADR 0053](0053-break-glass-with-a-passkey.md), a fresh user-verified passkey
+  assertion. Magic links, OAuth, trusted browsers, recovery codes and passwordless
+  passkey sign-in cannot replace that second factor under enforcement.
   IdP MFA remains an administrator-vouched policy, rather than inference from `amr`.
 - Invitation activation/audit and pending-token cleanup happen after required
   factors. Pending local challenges recheck enforcement and linked connection status.

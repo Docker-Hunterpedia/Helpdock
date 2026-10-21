@@ -600,6 +600,154 @@ describe.skipIf(!hasDocker)(
       expect(await sessions.listSessions(user.id)).toEqual([]);
     });
 
+    describe('after an SSO assertion, under enforcement (ADR 0053)', () => {
+      const SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+      const RECOVERY = 'RC-ABCD-EFGH';
+      const enforce = (on: boolean) =>
+        owner.db
+          .insert(settings)
+          .values({
+            brandId: INSTALL_SCOPE_BRAND_ID,
+            updatedBy: ADMIN,
+            key: 'sso.enforced',
+            value: String(on),
+          })
+          .onConflictDoUpdate({
+            target: [settings.key, settings.brandId],
+            set: { value: String(on) },
+          });
+      const ssoUser = async (options: { totp: boolean; role?: 'viewer' | 'admin' }) => {
+        const auth = app.get(AuthService);
+        const [user] = await owner.db
+          .insert(users)
+          .values({
+            email: 'ada@example.com',
+            name: 'Ada',
+            status: 'active',
+            recoveryCodesHashed: [await auth.hashPassword(RECOVERY)],
+            ...(options.totp
+              ? {
+                  totpEnabled: true,
+                  totpSecretEncrypted: encryptSecret(
+                    SECRET,
+                    createKeyring({ APP_MASTER_KEY: KEY }),
+                  ),
+                }
+              : {}),
+          })
+          .returning();
+        if (!user) throw new Error('Missing SSO user');
+        await owner.db
+          .insert(userBrandRoles)
+          .values({ userId: user.id, brandId: BRAND, role: options.role ?? 'viewer' });
+        return user;
+      };
+      const challengeAfterSso = async () => {
+        const outcome = await app.get(AuthService).completeSso(assertion(), undefined);
+        if (outcome.kind !== 'totp-required') throw new Error('Expected a second-factor challenge');
+        return outcome.challengeId;
+      };
+      const recovery = (challengeId: string) =>
+        app.get(AuthService).useRecoveryCode({
+          ip: '203.0.113.9',
+          challengeId,
+          code: RECOVERY,
+          userAgent: undefined,
+        });
+
+      it('refuses a recovery code when enforced and accepts it when not', async () => {
+        await ssoUser({ totp: true });
+        await enforce(true);
+        const refused = await challengeAfterSso();
+        await expect(recovery(refused)).rejects.toMatchObject({ auth: { code: 'sso-required' } });
+
+        await enforce(false);
+        const open = await challengeAfterSso();
+        await expect(recovery(open)).resolves.toMatchObject({
+          session: { user: { email: 'ada@example.com' } },
+        });
+      });
+
+      it('still takes a fresh app code, since the IdP is the first factor', async () => {
+        await ssoUser({ totp: true });
+        await enforce(true);
+        const challengeId = await challengeAfterSso();
+
+        await expect(
+          app.get(AuthService).verifyTotp({
+            ip: '203.0.113.9',
+            challengeId,
+            code: await generate({ secret: SECRET }),
+            userAgent: undefined,
+            trustDevice: false,
+          }),
+        ).resolves.toMatchObject({ issued: { session: { user: { email: 'ada@example.com' } } } });
+      });
+
+      it('never honours a trusted browser once enforced, and says so for every first factor', async () => {
+        const policy = app.get(SsoSignInPolicy);
+        await enforce(false);
+        await expect(policy.allows('sso', 'trusted-browser')).resolves.toBe(true);
+        await expect(policy.allows('password', 'recovery-code')).resolves.toBe(true);
+
+        await enforce(true);
+        await expect(policy.allows('sso', 'trusted-browser')).resolves.toBe(false);
+        await expect(policy.allows('sso', 'recovery-code')).resolves.toBe(false);
+        await expect(policy.allows('password', 'trusted-browser')).resolves.toBe(false);
+        await expect(policy.allows('sso', 'totp')).resolves.toBe(true);
+        await expect(policy.allows('sso', 'passkey')).resolves.toBe(true);
+      });
+
+      it('lets an Admin with no second factor finish enrolment after SSO', async () => {
+        await ssoUser({ totp: false, role: 'admin' });
+        await enforce(true);
+        const outcome = await app.get(AuthService).completeSso(assertion(), undefined);
+        if (outcome.kind !== 'second-factor-enrolment-required') {
+          throw new Error('Expected an enrolment challenge');
+        }
+
+        const { secret } = await app.get(AuthService).startEnrolment(outcome.challengeId);
+        const done = await app.get(AuthService).completeEnrolment({
+          challengeId: outcome.challengeId,
+          ip: '203.0.113.9',
+          code: await generate({ secret }),
+          userAgent: undefined,
+        });
+
+        expect(done.recoveryCodes).toHaveLength(10);
+        expect(done.issued.session.user.email).toBe('ada@example.com');
+      });
+
+      it('refuses to start or finish a local enrolment begun before enforcement came on', async () => {
+        const auth = app.get(AuthService);
+        const password = 'M11-only-correct-horse-passphrase!';
+        const user = await ssoUser({ totp: false, role: 'admin' });
+        await owner.db
+          .update(users)
+          .set({ passwordHash: await auth.hashPassword(password) })
+          .where(eq(users.id, user.id));
+        const outcome = await auth.signIn({
+          email: user.email,
+          password,
+          ip: 'enrol-test',
+          userAgent: undefined,
+          trustedDeviceCookie: undefined,
+        });
+        if (outcome.kind !== 'second-factor-enrolment-required') {
+          throw new Error('Expected an enrolment challenge');
+        }
+        await enforce(true);
+
+        await expect(auth.startEnrolment(outcome.challengeId)).rejects.toMatchObject({
+          auth: { code: 'sso-required' },
+        });
+        await expect(auth.startPasskeyEnrolment(outcome.challengeId)).rejects.toMatchObject({
+          auth: { code: 'sso-required' },
+        });
+        expect(await sessions.listSessions(user.id)).toEqual([]);
+      });
+    });
+
     it('refuses JIT when its only mapped role is disabled by install policy', async () => {
       await runtime.settings.set('roles.viewerEnabled', false, { updatedBy: ADMIN });
       try {

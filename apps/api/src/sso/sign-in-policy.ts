@@ -2,6 +2,7 @@ import type { Keyring, Settings } from '@helpdock/config';
 import { type Db, INSTALL_SCOPE_BRAND_ID, ssoConnections, users, withSystem } from '@helpdock/db';
 import { eq, sql } from 'drizzle-orm';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
 import { readSsoSetting } from './sso-settings.js';
 
 /** Install-global pre-tenant policy; never uses the cached enforcement settings. */
@@ -18,8 +19,9 @@ export class SsoSignInPolicy {
     await withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, async (tx) => {
       if (!(await readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced')))
         return;
-      // Emergency access is a password followed by a fresh stored TOTP. Magic
-      // links, OAuth, recovery codes and trusted-browser cookies do not qualify.
+      // Emergency access is a password followed by a fresh app code or a fresh
+      // passkey assertion (ADR 0053). Magic links, OAuth, passwordless passkeys,
+      // recovery codes and trusted-browser cookies do not qualify.
       if (method !== 'password') throw new AuthFailure('sso-required');
       const allowed = await readSsoSetting(
         tx,
@@ -31,17 +33,23 @@ export class SsoSignInPolicy {
         .select()
         .from(users)
         .where(sql`lower(${users.email}) = lower(${email})`);
-      if (
-        !user ||
-        !allowed.includes(user.id) ||
-        !user.installAdmin ||
-        user.status !== 'active' ||
-        !user.passwordHash ||
-        !user.totpEnabled ||
-        !user.totpSecretEncrypted
-      )
-        throw new AuthFailure('sso-required');
+      if (!user || !allowed.includes(user.id)) throw new AuthFailure('sso-required');
+      const held = (await passkeyCounts(tx, [user.id])).get(user.id) ?? 0;
+      if (!isBreakGlassEligible(user, held)) throw new AuthFailure('sso-required');
     });
+  }
+
+  /**
+   * Whether a sign-in that began with `firstFactor` may finish with `factor`
+   * under the current enforcement. Always true when SSO is not enforced.
+   */
+  async allows(firstFactor: string, factor: string | null): Promise<boolean> {
+    return !(await this.enforced()) || enforcementAllows(firstFactor, factor);
+  }
+
+  /** The refusing form of {@link allows}. */
+  async assertAllowed(firstFactor: string, factor: string | null): Promise<void> {
+    if (!(await this.allows(firstFactor, factor))) throw new AuthFailure('sso-required');
   }
 
   async connections(): Promise<{ id: string; name: string }[]> {

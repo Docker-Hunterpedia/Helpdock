@@ -1,0 +1,1 @@
+ALTER TABLE "webauthn_credentials" ADD COLUMN "user_verified" boolean DEFAULT false NOT NULL;

@@ -372,7 +372,7 @@ export class AuthService {
       ip,
     );
 
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#parts.ssoPolicy.assertAllowed(firstFactorOf(challenge), 'recovery-code');
     const reserved = await this.#reserveAttempt(challengeId, challenge);
     const match = await spendRecoveryCode(code, user.recoveryCodesHashed, this.#parts.hasher);
     if (match === null) {
@@ -432,7 +432,7 @@ export class AuthService {
       throw new AuthFailure('invalid-credentials');
     }
     const { ceremonyId, options } = await this.#parts.webauthn.authenticationOptions({
-      purpose: 'second-factor',
+      purpose: await this.#secondFactorPurpose(challenge),
       binding: { userId: user.id, familyId: challengeId },
       allow: held,
     });
@@ -473,7 +473,13 @@ export class AuthService {
     await this.#assertPasskeyAllowed(challenge);
     const reserved = await this.#reserveAttempt(challengeId, challenge);
 
-    const check = await this.#checkAssertion(user, ceremonyId, challengeId, response);
+    const check = await this.#checkAssertion(
+      user,
+      await this.#secondFactorPurpose(challenge),
+      ceremonyId,
+      challengeId,
+      response,
+    );
     if (!check.ok) {
       throw await this.#failAttempt(challengeId, challenge, reserved, 'passkey-invalid');
     }
@@ -1784,7 +1790,7 @@ export class AuthService {
     const passkeyCount = await this.#parts.passkeys.count(user.id);
     if (user.totpEnabled || passkeyCount > 0) {
       if (
-        !(await this.#parts.ssoPolicy.enforced()) &&
+        (await this.#parts.ssoPolicy.allows(method, 'trusted-browser')) &&
         (await this.#parts.trustedDevices.isTrusted(user.id, trustedDeviceCookie))
       ) {
         return {
@@ -1836,9 +1842,8 @@ export class AuthService {
   ): Promise<IssuedSession> {
     if (factors.method !== 'sso') {
       await this.#parts.ssoPolicy.assertLocal(user.email, factors.method);
-      if ((await this.#parts.ssoPolicy.enforced()) && factors.secondFactor !== 'totp')
-        throw new AuthFailure('sso-required');
     }
+    await this.#parts.ssoPolicy.assertAllowed(factors.method, factors.secondFactor);
     // An invited account becomes active the first time it proves an identity
     // (DOMAIN-RULES §12).
     if (user.status === 'invited') {
@@ -1878,10 +1883,12 @@ export class AuthService {
     // A passkey the install cannot use at the moment (its address moved) is
     // hidden only where an authenticator app can stand in for it.
     const usable = !user.totpEnabled || (await this.#parts.webauthn.status()).state === 'available';
-    // Offer only what verify accepts: under SSO enforcement a local first factor
-    // (break-glass) takes a code, never a passkey (ADR 0053 opens it later).
-    const allowed = method === 'sso' || !(await this.#parts.ssoPolicy.enforced());
-    return { totp: user.totpEnabled, passkey: passkeyCount > 0 && usable && allowed };
+    // Offer only what verify accepts under the current enforcement.
+    return {
+      totp: user.totpEnabled && (await this.#parts.ssoPolicy.allows(method, 'totp')),
+      passkey:
+        passkeyCount > 0 && usable && (await this.#parts.ssoPolicy.allows(method, 'passkey')),
+    };
   }
 
   /**
@@ -1892,6 +1899,7 @@ export class AuthService {
    */
   async #checkAssertion(
     user: StaffUser,
+    purpose: 'second-factor' | 'break-glass',
     ceremonyId: string,
     challengeId: string,
     response: AuthenticationResponse,
@@ -1900,7 +1908,7 @@ export class AuthService {
     let check: AssertionCheck | { readonly ok: false; readonly reason: 'ceremony-gone' };
     try {
       check = await this.#parts.webauthn.verifyAuthentication({
-        purpose: 'second-factor',
+        purpose,
         binding: { userId: user.id, familyId: challengeId },
         ceremonyId,
         response: toAuthenticationJson(response),
@@ -1929,18 +1937,29 @@ export class AuthService {
   }
 
   /**
-   * Under SSO enforcement a passkey is a local factor and opens no session of
-   * its own (break-glass takes a code until ADR 0053), so it is refused before
-   * it costs an attempt or mints a ceremony. A challenge that followed an SSO
-   * assertion is not a local sign-in: there the IdP is the first factor, and a
-   * passkey is a fair second one.
+   * Under SSO enforcement a passkey answers only a challenge that followed an
+   * SSO assertion (the IdP is the first factor) or a break-glass password
+   * (ADR 0053), and anything else is refused before it costs an attempt or
+   * mints a ceremony.
    */
   async #assertPasskeyAllowed(
     found: Awaited<ReturnType<TotpChallengeStore['read']>>,
   ): Promise<void> {
-    if (firstFactorOf(found) !== 'sso' && (await this.#parts.ssoPolicy.enforced())) {
-      throw new AuthFailure('sso-required');
-    }
+    await this.#parts.ssoPolicy.assertAllowed(firstFactorOf(found), 'passkey');
+  }
+
+  /**
+   * A break-glass passkey assertion must carry user verification; every other
+   * second-factor passkey needs presence only. Enforcement is read when the
+   * ceremony is minted and again when it is checked, so a ceremony minted
+   * before enforcement came on is refused and the person asks again.
+   */
+  async #secondFactorPurpose(
+    found: Awaited<ReturnType<TotpChallengeStore['read']>>,
+  ): Promise<'second-factor' | 'break-glass'> {
+    return firstFactorOf(found) !== 'sso' && (await this.#parts.ssoPolicy.enforced())
+      ? 'break-glass'
+      : 'second-factor';
   }
 
   /** Passkey sign-in is a local method: refused under SSO enforcement, before anything is spent. */
@@ -2056,7 +2075,7 @@ export class AuthService {
   /**
    * Before a sign-in link is read or spent. SSO enforcement refuses outright,
    * and before the token is touched, so a link refused for it is not burnt:
-   * break-glass access is a password and a fresh TOTP, and a link is neither.
+   * break-glass access is a password and a fresh code or passkey, and a link is neither.
    */
   async #assertMagicLinkAllowed(ip: string): Promise<void> {
     if (!(await this.#parts.limiter.consume(MAGIC_LINK_LOOKUP_RULE, ip))) {

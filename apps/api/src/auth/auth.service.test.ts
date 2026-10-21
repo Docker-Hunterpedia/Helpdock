@@ -395,6 +395,7 @@ const credentialRow = (
   discoverable: true,
   backupEligible: false,
   backedUp: false,
+  userVerified: true,
   name,
   createdAt: new Date(),
   lastUsedAt: null,
@@ -2902,6 +2903,10 @@ describe('a passkey as the second factor (M18-03)', () => {
   });
 
   describe('under SSO enforcement', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     const asSso = async (): Promise<{
       challengeId: string;
       authenticator: SoftwareAuthenticator;
@@ -2931,18 +2936,62 @@ describe('a passkey as the second factor (M18-03)', () => {
       expect(audit.entries.at(-1)?.meta).toMatchObject({ method: 'sso', secondFactor: 'passkey' });
     });
 
-    it('does not offer the passkey after a local first factor, which verify would refuse', async () => {
-      const local = await start({ totp: true });
+    it('offers the app and the passkey after a break-glass password', async () => {
       vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      const local = await start({ totp: true });
 
       await expect(signIn({ email: local.user.email })).resolves.toMatchObject({
-        factors: { totp: true, passkey: false },
+        factors: { totp: true, passkey: true },
       });
     });
 
-    it('refuses a local first factor before it mints a ceremony or costs an attempt', async () => {
+    it('opens the break-glass session with a passkey that carries user verification', async () => {
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      const { challengeId, authenticator } = await start();
+
+      await expect(
+        verify(challengeId, await assertWith(authenticator, challengeId)),
+      ).resolves.toMatchObject({ issued: expect.anything() });
+      expect(audit.entries.at(-1)).toMatchObject({
+        action: 'auth.sign_in.succeeded',
+        meta: { method: 'password', secondFactor: 'passkey' },
+      });
+    });
+
+    it('refuses a break-glass assertion without user verification and charges an attempt', async () => {
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      const { challengeId, authenticator } = await start();
+      const { ceremonyId, options } = await optionsFor(challengeId);
+      const response = authenticator.assert(options as never, {
+        origin: APP_URL,
+        userVerified: false,
+      }) as never;
+
+      await expect(codeOf(verify(challengeId, { ceremonyId, response }))).resolves.toEqual({
+        code: 'passkey-invalid',
+        attemptsLeft: 2,
+      });
+    });
+
+    it('refuses a ceremony minted before enforcement came on, and a fresh one then works', async () => {
+      const { challengeId, authenticator } = await start();
+      const early = await assertWith(authenticator, challengeId);
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+
+      await expect(codeOf(verify(challengeId, early))).resolves.toMatchObject({
+        code: 'passkey-invalid',
+      });
+      await expect(
+        verify(challengeId, await assertWith(authenticator, challengeId)),
+      ).resolves.toMatchObject({ issued: expect.anything() });
+    });
+
+    it('refuses a local first factor that is not a break-glass admin before it mints a ceremony or costs an attempt', async () => {
       const { challengeId } = await start();
       vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      vi.spyOn(SsoSignInPolicy.prototype, 'assertLocal').mockRejectedValue(
+        new AuthFailureClass('sso-required'),
+      );
 
       await expect(codeOf(optionsFor(challengeId))).resolves.toEqual({ code: 'sso-required' });
       await expect(
@@ -2953,6 +3002,22 @@ describe('a passkey as the second factor (M18-03)', () => {
             ceremonyId: 'A'.repeat(43),
             response: {} as never,
             trustDevice: false,
+            userAgent: undefined,
+          }),
+        ),
+      ).resolves.toEqual({ code: 'sso-required' });
+    });
+
+    it('never lets a recovery code finish a break-glass sign-in', async () => {
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      const { challengeId } = await start();
+
+      await expect(
+        codeOf(
+          service.useRecoveryCode({
+            challengeId,
+            ip: IP,
+            code: 'abcde-fghij',
             userAgent: undefined,
           }),
         ),

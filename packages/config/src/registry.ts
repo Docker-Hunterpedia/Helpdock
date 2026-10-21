@@ -226,7 +226,8 @@ export const SETTING_DEFINITIONS = [
     default: [],
     secret: false,
     scope: 'install',
-    description: 'Install admins who retain password and TOTP sign-in during SSO enforcement.',
+    description:
+      'Install admins who retain password and (authenticator code or passkey) sign-in during SSO enforcement.',
   }),
   defineSetting({
     key: 'sso.spPrivateKey',

@@ -49,6 +49,12 @@ export const webauthnCredentials = pgTable(
     discoverable: boolean('discoverable'),
     backupEligible: boolean('backup_eligible').notNull(),
     backedUp: boolean('backed_up').notNull(),
+    /**
+     * Whether the registration ceremony carried user verification (a PIN or a
+     * biometric). Break-glass needs it (ADR 0053); rows from before this column
+     * are unknown and count as not verified.
+     */
+    userVerified: boolean('user_verified').notNull().default(false),
     /** Chosen by the person; rendered inside `<bdi>`. */
     name: varchar('name', { length: 80 }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

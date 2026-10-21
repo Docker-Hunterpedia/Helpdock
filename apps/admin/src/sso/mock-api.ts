@@ -16,6 +16,9 @@ import { MOCK_BRANDS, MOCK_USER, type MockAuthApi } from '../auth/mock-api.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type SsoApi, SsoError } from './api.js';
 
+const MOCK_UNVERIFIED_ADMIN_ID = '0198f5a0-0000-7000-8000-000000000b02';
+const MOCK_INELIGIBLE_ADMIN_ID = '0198f5a0-0000-7000-8000-000000000b01';
+
 export class MockSsoApi implements SsoApi {
   readonly #connections = new Map<string, SsoConnection>();
   readonly #mappings = new Map<string, SsoMapping[]>();
@@ -161,7 +164,31 @@ export class MockSsoApi implements SsoApi {
         name: brand.name,
         departments: [...MOCK_DEPARTMENTS],
       })),
-      admins: [{ id: MOCK_USER.id, name: MOCK_USER.name, email: MOCK_USER.email, eligible: true }],
+      admins: [
+        {
+          id: MOCK_USER.id,
+          name: MOCK_USER.name,
+          email: MOCK_USER.email,
+          eligible: true,
+          passkeyNeedsVerification: false,
+        },
+        // Has a password and no authenticator app or passkey yet (ADR 0053).
+        {
+          id: MOCK_INELIGIBLE_ADMIN_ID,
+          name: 'Ola Saeed',
+          email: 'ola@helpdock.com',
+          eligible: false,
+          passkeyNeedsVerification: false,
+        },
+        // Only holds a security key with no PIN, so it cannot give user verification.
+        {
+          id: MOCK_UNVERIFIED_ADMIN_ID,
+          name: 'Omar Nasser',
+          email: 'omar@helpdock.com',
+          eligible: false,
+          passkeyNeedsVerification: true,
+        },
+      ],
     };
   }
   async test(id: string) {

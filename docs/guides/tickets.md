@@ -1640,7 +1640,45 @@ details card and the thread's address line.
 (M14-03, [DOMAIN-RULES §2.7](../planning/DOMAIN-RULES.md#27-bulk-changes),
 [ADR 0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md)).
 It is a staff-session route of the admin: it is not in the public API v1, which
-has no bulk route. The screen that drives it is M14-04.
+has no bulk route. The ticket list drives it ([in the admin](#bulk-edit-in-the-admin)).
+
+### Bulk edit in the admin
+
+Anybody who may change tickets (everyone but a Viewer) sees a checkbox on each
+row of the list, named "Select HD-1042", and a select-all box above the rows.
+
+- **Ticking.** Click a box; Shift-click ticks every row from the one ticked last
+  to this one; the header box ticks the loaded rows (indeterminate when only some
+  are ticked). `x` ticks the focused row and `Shift`+`x` the range, `Esc` clears
+  ([keyboard shortcuts](keyboard-shortcuts.md)). At most 50 at a time: a longer
+  page ticks its first 50 and the caption says "the limit is 50". The selection
+  survives `j`/`k` and a refresh that keeps the rows, and is dropped when the
+  view, a filter or the search changes.
+- **The bar.** While anything is ticked the list's footer shows two rows: the
+  count and **Clear**, then **Status, Close, Assign, Snooze** and **More**. More
+  holds Priority, Team, Department, Tags, Set a field, Wake snoozed tickets and
+  Mark as spam. The bar stays inside the list column at every width, so it never
+  covers the open ticket. Assign is the details panel's picker with "Assign to
+  me" first, and offers the people who can take the tickets' departments; Snooze
+  is the header's menu. Choosing a change *previews* it.
+- **Applying.** If every ticket would change it is applied at once. Otherwise a
+  dialog says "10 of 12 tickets will be closed. 2 can't be closed:" and lists
+  each ticket that cannot, with its reference and the reason in words; the
+  primary is "Close 10" (or "Apply to 10"). When nothing would change there is no
+  primary. If a ticket changed between the preview and the apply the api answers
+  `bulk-changed` (409) and the dialog opens again with the new list and a note;
+  an apply is all or nothing against what was previewed.
+- **Undo.** A toast "Closed 10 tickets · Undo" stays ten seconds, paused while
+  the pointer or focus is on it. The api accepts the undo for sixty, and
+  **Undo last bulk change** in the command palette (`⌘K`) offers it for that
+  minute from any screen. A field somebody changed since is left as it is and the
+  toast says how many tickets that was.
+- **A lost answer.** If the apply's answer never arrives (a dropped connection,
+  a 502) the toast says "We couldn't confirm whether the change was made. Check
+  the list." and the list is read again; "Nothing was changed" is said only when
+  the api answered with a refusal.
+- **Limits.** Twenty applies and undos a minute per person; the twenty-first
+  answers 429 and the toast says how long to wait. Nothing is changed.
 
 ```http
 POST /api/brands/:brandId/tickets/bulk

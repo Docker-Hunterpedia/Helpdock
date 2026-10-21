@@ -112,7 +112,13 @@
       "sla_warning": "تنبيه اتفاقية مستوى الخدمة · {{clock}}",
       "sla_breached": "تجاوز اتفاقية مستوى الخدمة · {{clock}}",
       "escalated": "صُعّد إليك أو إلى فريقك",
-      "snooze_ended": "انتهى التأجيل"
+      "snooze_ended": "انتهى التأجيل",
+      "assignedBulk_zero": "أسند إليك {{actor}} تذاكر",
+      "assignedBulk_one": "أسند إليك {{actor}} تذكرة واحدة",
+      "assignedBulk_two": "أسند إليك {{actor}} تذكرتين",
+      "assignedBulk_few": "أسند إليك {{actor}} {{count}} تذاكر",
+      "assignedBulk_many": "أسند إليك {{actor}} {{count}} تذكرة",
+      "assignedBulk_other": "أسند إليك {{actor}} {{count}} تذكرة"
     },
     "clock": {
       "first_response": "الرد الأول",
@@ -149,7 +155,8 @@
       "days_few": "قبل {{count}} أيام",
       "days_many": "قبل {{count}} يومًا",
       "days_other": "قبل {{count}} يوم"
-    }
+    },
+    "bulkMore": "و{{count}} أخرى"
   },
   "palette": {
     "label": "لوحة الأوامر",
@@ -218,7 +225,8 @@
         "light": "المظهر: فاتح",
         "dark": "المظهر: داكن",
         "auto": "المظهر: مطابق للنظام"
-      }
+      },
+      "undoBulk": "التراجع عن آخر تغيير جماعي"
     },
     "keywords": {
       "tickets": "صندوق الوارد, قائمة, محادثات, دعم",

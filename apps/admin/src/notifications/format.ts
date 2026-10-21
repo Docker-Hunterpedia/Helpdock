@@ -136,3 +136,78 @@ export const groupByDay = (
 
   return groups;
 };
+
+// ------------------------------------------------------------------ bulk edits
+
+/** A row of the panel: one notification, or one bulk edit's assignments folded into a line. */
+export type PanelEntry =
+  | { readonly type: 'item'; readonly item: NotificationView }
+  | {
+      readonly type: 'bulk';
+      readonly operationId: string;
+      /** Newest first, as the panel lists them. */
+      readonly items: readonly NotificationView[];
+    };
+
+/** An operation that assigned fewer tickets than this is not worth a line of its own. */
+export const BULK_FOLD_MIN = 2;
+
+/**
+ * Folds the `assigned` rows one bulk edit made into one entry (M14-04: "Omar
+ * assigned you 12 tickets"), standing where the newest of them stood. Only
+ * assignments fold, because that is the only notification a bulk edit makes
+ * (`bulkOperationId` is stamped on no other kind), and only an operation that
+ * assigned {@link BULK_FOLD_MIN} or more of the rows on screen; a single one
+ * reads as the ordinary notification it is.
+ */
+export const foldBulk = (items: readonly NotificationView[]): PanelEntry[] => {
+  const byOperation = new Map<string, NotificationView[]>();
+  for (const item of items) {
+    if (item.kind === 'assigned' && item.bulkOperationId !== null) {
+      byOperation.set(item.bulkOperationId, [
+        ...(byOperation.get(item.bulkOperationId) ?? []),
+        item,
+      ]);
+    }
+  }
+
+  const entries: PanelEntry[] = [];
+  const placed = new Set<string>();
+  for (const item of items) {
+    const operationId = item.bulkOperationId;
+    const group = operationId === null ? undefined : byOperation.get(operationId);
+    if (operationId === null || group === undefined || group.length < BULK_FOLD_MIN) {
+      entries.push({ type: 'item', item });
+    } else if (!placed.has(operationId)) {
+      placed.add(operationId);
+      entries.push({ type: 'bulk', operationId, items: group });
+    }
+  }
+
+  return entries;
+};
+
+/**
+ * How many tickets the operation assigned to the reader: the api's count of all
+ * of them, which a busy panel may show only some of, never less than what is on
+ * screen.
+ */
+const bulkTotal = (items: readonly NotificationView[]): number =>
+  Math.max(items.length, items[0]?.bulkOperationCount ?? 0);
+
+/** "Omar assigned you 12 tickets". */
+export const bulkTitle = (t: T, items: readonly NotificationView[]): string =>
+  t('admin:notifications.title.assignedBulk', {
+    actor: items[0]?.actorName ?? t('admin:notifications.someone'),
+    count: bulkTotal(items),
+  });
+
+/** The first three references and "and 9 more": enough to recognise the batch, never a wall. */
+export const bulkLine = (t: T, items: readonly NotificationView[]): string => {
+  const shown = items.slice(0, 3).map((item) => item.ticketReference);
+  const rest = bulkTotal(items) - shown.length;
+
+  return rest <= 0
+    ? shown.join(', ')
+    : `${shown.join(', ')} ${t('admin:notifications.bulkMore', { count: rest })}`;
+};

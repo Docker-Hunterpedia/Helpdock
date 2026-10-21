@@ -51,6 +51,16 @@ lists the **last 30 days** of the brand on screen, grouped by day, with an
 its ticket. Opening a ticket any other way marks every notification about it
 read too (M14-10), so an email still waiting to go leaves it out.
 
+When somebody assigns you several tickets in one [bulk edit](tickets.md#bulk-edit),
+the panel shows **one row**, "Omar assigned you 12 tickets", with the first three
+references and "and 9 more". Opening it marks all of that operation's rows read
+and goes to **My open**. Only two or more `assigned` rows of the same operation
+fold (the bell folds what it has loaded; a lone assignment is its own row). The
+count in "assigned you 12 tickets" is the api's total for the operation, not the
+rows on screen: each row of `GET /notifications` carries `bulkOperationId` (null
+for any other cause) and `bulkOperationCount`, the number of that operation's
+notifications for the reader (0 without one).
+
 A row holds ids, never content: the subject and names are read when the panel
 is, under the reader's own department scope, so a ticket they can no longer see
 drops out of their panel. The nightly retention job deletes rows older than 30
@@ -143,6 +153,8 @@ Following the `Email/NotificationBatch` artboard:
   happened ("4 assigned, 2 replies"), then **Needs you now** (mentions,
   breaches, escalations), then **Tickets**, folded per ticket ("Mona replied 2
   times"). Each reference links to its ticket.
+- **A bulk edit's assignments** are one line, "Omar assigned you 3 tickets", for two or more tickets
+  of one operation, with the references (M14-04).
 - **A digest** says how many things happened since when and how many need the
   person now, and folds a kind that touched several tickets into one line ("7
   tickets assigned to you, by Omar and round-robin").
@@ -302,5 +314,3 @@ notifications can open a fresh batch.
   which also adds one-click unsubscribe and *Send me a test email*.
 - The daily digest uses the brand's time zone until M14-12 gives each person
   their own.
-- A batch folds per bulk operation only once M14-04 reads the operation M14-03
-  now records on each notification; until then a bulk change folds per ticket.

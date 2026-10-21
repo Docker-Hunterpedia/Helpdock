@@ -61,6 +61,30 @@ describe('resolveShortcut', () => {
     expect(press({ key: 'e', code: 'KeyE' }, null, without('list.close')).id).toBeNull();
   });
 
+  describe('selecting rows (M14-04)', () => {
+    it('names x the focused row and Shift+x the range, on any layout', () => {
+      expect(press({ key: 'x', code: 'KeyX' }).id).toBe('list.select');
+      expect(press({ key: 'X', code: 'KeyX', shiftKey: true }).id).toBe('list.selectRange');
+      // An Arabic layout types ء on the X key.
+      expect(press({ key: 'ء', code: 'KeyX' }).id).toBe('list.select');
+      expect(press({ key: 'ء', code: 'KeyX', shiftKey: true }).id).toBe('list.selectRange');
+    });
+
+    it('answers Esc only while a handler is attached, and never in a field or a dialog', () => {
+      const esc = { key: 'Escape', code: 'Escape' };
+      const none = { available: (id: ShortcutId) => id !== 'list.clearSelection' };
+
+      expect(press(esc).id).toBe('list.clearSelection');
+      expect(press(esc, null, none)).toEqual({ id: null, pending: null, consumed: false });
+      expect(press(esc, null, { typing: true }).id).toBeNull();
+      expect(press(esc, null, { inOverlay: true }).id).toBeNull();
+    });
+
+    it('is off with the single-key switch, like every key without a modifier', () => {
+      expect(press({ key: 'x', code: 'KeyX' }, null, { singleKeys: false }).id).toBeNull();
+    });
+  });
+
   describe('g sequences', () => {
     const g = { key: 'g', code: 'KeyG' };
 
@@ -92,7 +116,18 @@ describe('resolveShortcut', () => {
     });
 
     it.each([
-      { case: 'Esc', event: { key: 'Escape', code: 'Escape' }, overrides: {}, id: null },
+      {
+        case: 'Esc with nothing to clear',
+        event: { key: 'Escape', code: 'Escape' },
+        overrides: { available: (id: ShortcutId) => id !== 'list.clearSelection' },
+        id: null,
+      },
+      {
+        case: 'Esc with a selection to clear',
+        event: { key: 'Escape', code: 'Escape' },
+        overrides: {},
+        id: 'list.clearSelection',
+      },
       { case: 'Tab', event: { key: 'Tab', code: 'Tab' }, overrides: {}, id: null },
       {
         case: '⌘\\',

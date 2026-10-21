@@ -1,6 +1,6 @@
 import type { TicketAiState } from '@helpdock/schemas';
 import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderApp } from '../../test/render.tsx';
 import { HOUR, NOW, testTicket } from '../../tickets/fixtures.js';
 import { TicketRow } from './ticket-row.tsx';
@@ -140,5 +140,68 @@ describe('a snoozed row (M14-02)', () => {
     );
 
     expect(screen.queryByLabelText(/^Snoozed until /)).not.toBeInTheDocument();
+  });
+});
+
+describe('the checkbox on a row (M14-04)', () => {
+  const renderSelectable = (checked: boolean, onSelect = vi.fn()) =>
+    renderApp(
+      <ul>
+        <TicketRow
+          ticket={testTicket()}
+          selected={false}
+          now={NOW}
+          search=""
+          selection={{ checked, onSelect }}
+        />
+      </ul>,
+    );
+
+  it('is named by the reference, and is not part of the link’s name', () => {
+    renderSelectable(false);
+
+    expect(screen.getByRole('checkbox', { name: 'Select HD-1042' })).not.toBeChecked();
+    expect(
+      screen.getByRole('link', { name: /^Medium priority Refund for order 42 HD-1042/ }),
+    ).toBeVisible();
+    expect(screen.getByRole('link').closest('li')).toContainElement(screen.getByRole('checkbox'));
+    expect(screen.getByRole('link')).not.toContainElement(screen.getByRole('checkbox'));
+  });
+
+  it('shows a ticked row ticked', () => {
+    renderSelectable(true);
+
+    expect(screen.getByRole('checkbox', { name: 'Select HD-1042' })).toBeChecked();
+  });
+
+  it('reports a plain click and a Shift-click apart', async () => {
+    const onSelect = vi.fn();
+    const { user } = renderSelectable(false, onSelect);
+
+    await user.click(screen.getByRole('checkbox'));
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByRole('checkbox'));
+    await user.keyboard('{/Shift}');
+
+    expect(onSelect.mock.calls).toEqual([[false], [true]]);
+  });
+
+  it('draws no checkbox without a selection, so a reader who cannot write has none', () => {
+    renderApp(
+      <ul>
+        <TicketRow ticket={testTicket()} selected={false} now={NOW} search="" />
+      </ul>,
+    );
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('carries the ticket id for the shortcuts to find the focused row', () => {
+    renderSelectable(false);
+
+    expect(screen.getByRole('checkbox').closest('li')).toHaveAttribute(
+      'data-ticket-id',
+      testTicket().id,
+    );
   });
 });

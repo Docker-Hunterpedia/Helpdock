@@ -2,6 +2,11 @@ import type {
   AiCallView,
   AssignableAgentList,
   Attachment,
+  BulkChanges,
+  BulkRequest,
+  BulkResponse,
+  BulkTicketResult,
+  BulkUndoResponse,
   ContactTimeline,
   Macro,
   MacroLocale,
@@ -52,6 +57,8 @@ import type {
   TimeEntryList,
 } from '@helpdock/schemas';
 import {
+  BULK_OPERATIONS_PER_MINUTE,
+  BULK_UNDO_WINDOW_SECONDS,
   customValuesSchema,
   mergeCustomValues,
   normaliseEmail,
@@ -63,6 +70,7 @@ import {
   ticketActivityQuerySchema,
   UNMERGE_WINDOW_MS,
 } from '@helpdock/schemas';
+import { AuthError } from '../auth/api.js';
 import { ContactError } from '../contacts/api.js';
 import {
   MOCK_CONTACT_ACCOUNT,
@@ -87,6 +95,7 @@ import { mockAssignable } from '../ticketing/mock-assignment.js';
 import { MockBlockList } from '../ticketing/mock-block-list.js';
 import type { MockMacros } from '../ticketing/mock-macros.js';
 import { TicketLifecycleError, type TicketQuery, type TicketsApi } from './api.js';
+import { type BulkSnapshot, planBulk, snapshotOf, undoPlan, updateOf } from './mock-bulk.js';
 import { MOCK_IMPORTED_CSAT, mockImportedCsatEvent } from './mock-imported-csat.js';
 import { metaSeed } from './mock-meta-seed.js';
 import { mockRouting } from './mock-routing.js';
@@ -815,6 +824,12 @@ export class MockTicketsApi implements TicketsApi {
   readonly #merges = new Map<string, MergeRecord>();
   /** M14-02: the status each snoozed ticket was in before, which a wake returns it to. */
   readonly #resume = new Map<string, TicketStatus>();
+  /** M14-04: the bulk edits Undo can still put back, by operation id. */
+  readonly #bulkOperations = new Map<string, MockBulkOperation>();
+  /** M14-04: when each apply and undo was made, for the api's twenty a minute. */
+  #bulkRuns: number[] = [];
+  /** M14-04: whether the one scripted race (a colleague closes HD-1035 mid-edit) has happened. */
+  #bulkRaced = false;
   /** M7-06: the AI log of each ticket. */
   readonly #aiCalls = new Map<string, readonly AiCallView[]>();
   /** M1-05. Counted against this fixture's own tickets, as the api counts its own. */
@@ -1090,6 +1105,7 @@ export class MockTicketsApi implements TicketsApi {
       ...(request.priority === undefined ? {} : { priority: request.priority }),
       ...(request.departmentId === undefined ? {} : { departmentId: request.departmentId }),
       ...(request.assigneeId === undefined ? {} : { assigneeId: request.assigneeId }),
+      ...(request.teamId === undefined ? {} : { teamId: request.teamId }),
       status,
       ...(snooze === undefined
         ? leavesSnooze
@@ -1565,6 +1581,161 @@ export class MockTicketsApi implements TicketsApi {
   }
 
   /** M7-06. The fixture's model calls; none until a test seeds them with {@link seedAiCalls}. */
+  async bulk(brandId: string, request: BulkRequest): Promise<BulkResponse> {
+    if (request.mode === 'apply') {
+      this.#spendBulkBudget();
+    }
+    const { changes } = request;
+    const plan = () => this.#bulkResults(request.ticketIds, changes);
+    let results = plan();
+
+    if (request.mode === 'preview') {
+      return bulkResponse('preview', results, null, null);
+    }
+
+    // The fixture's one scripted race, so the browser suite can draw `bulk-changed`:
+    // while the first close that names HD-1035 is in flight a colleague closes it,
+    // which is what turns the previewed set stale in the api.
+    if (!this.#bulkRaced && changes.close === true && request.ticketIds.includes(MOCK_TICKET_VAT)) {
+      this.#bulkRaced = true;
+      await this.update(brandId, MOCK_TICKET_VAT, { statusId: MOCK_STATUS_CLOSED });
+      results = plan();
+    }
+
+    const changing = results
+      .filter((result) => result.outcome === 'will_change')
+      .map((r) => r.ticketId);
+    const expected = request.expect ?? [];
+    if (changing.length !== expected.length || changing.some((id) => !expected.includes(id))) {
+      throw new TicketLifecycleError('bulk-changed');
+    }
+
+    const { tags: known } = await this.#catalog.tags(brandId);
+    const operation: MockBulkOperation = {
+      id: this.#nextId('b'),
+      actorId: MOCK_SELF_ID,
+      until: Date.now() + BULK_UNDO_WINDOW_SECONDS * 1000,
+      undone: false,
+      items: [],
+      changes,
+    };
+    for (const ticketId of changing) {
+      const ticket = this.#require(ticketId);
+      const planned = planBulk(ticket, changes, this.#bulkContext());
+      if (planned.outcome !== 'will_change') {
+        continue;
+      }
+      const update = updateOf(planned, changes);
+      if (Object.keys(update).length > 0) {
+        await this.update(brandId, ticketId, update);
+      }
+      if (planned.fields.includes('tags')) {
+        await this.setTags(
+          brandId,
+          ticketId,
+          planned.after.tagIds.filter((id) => known.some((tag) => tag.id === id)),
+        );
+      }
+      operation.items.push({
+        ticketId,
+        fields: planned.fields,
+        before: planned.before,
+        after: planned.after,
+      });
+    }
+    if (operation.items.length === 0) {
+      return bulkResponse('apply', results, null, null);
+    }
+    this.#bulkOperations.set(operation.id, operation);
+
+    return bulkResponse('apply', results, operation.id, new Date(operation.until).toISOString());
+  }
+
+  async undoBulk(brandId: string, operationId: string): Promise<BulkUndoResponse> {
+    const operation = this.#bulkOperations.get(operationId);
+    if (operation?.actorId !== MOCK_SELF_ID) {
+      throw new Error(`no such bulk operation: ${operationId}`);
+    }
+    if (operation.undone) {
+      throw new TicketLifecycleError('bulk-already-undone');
+    }
+    if (Date.now() > operation.until) {
+      throw new TicketLifecycleError('bulk-undo-expired');
+    }
+    this.#spendBulkBudget();
+    operation.undone = true;
+
+    const results: BulkUndoResponse['results'] = [];
+    for (const item of operation.items) {
+      const ticket = this.#tickets.find((candidate) => candidate.id === item.ticketId);
+      if (ticket === undefined) {
+        continue;
+      }
+      const planned = undoPlan(
+        snapshotOf(ticket, operation.changes.customField?.key),
+        item.before,
+        item.after,
+        item.fields,
+      );
+      if (Object.keys(planned.update).length > 0) {
+        await this.update(brandId, item.ticketId, planned.update);
+      }
+      if (planned.tagIds !== null) {
+        await this.setTags(brandId, item.ticketId, planned.tagIds);
+      }
+      results.push({
+        ticketId: item.ticketId,
+        outcome:
+          planned.kept.length === 0
+            ? 'reverted'
+            : planned.reverted.length === 0
+              ? 'kept'
+              : 'partly_reverted',
+        reverted: planned.reverted,
+        kept: planned.kept,
+        code: null,
+      });
+    }
+
+    return { operationId, results, notFound: 0 };
+  }
+
+  #bulkContext() {
+    return {
+      statuses: this.#statuses,
+      meId: MOCK_SELF_ID,
+      snoozedStatusId: MOCK_STATUS_SNOOZED,
+    };
+  }
+
+  #bulkResults(ticketIds: readonly string[], changes: BulkChanges): BulkTicketResult[] {
+    return ticketIds.map((ticketId): BulkTicketResult => {
+      const ticket = this.#tickets.find((candidate) => candidate.id === ticketId);
+      if (ticket === undefined) {
+        return { ticketId, outcome: 'not_found', fields: [], code: null };
+      }
+      const planned = planBulk(ticket, changes, this.#bulkContext());
+      if (planned.outcome === 'will_change') {
+        return { ticketId, outcome: 'will_change', fields: planned.fields, code: null };
+      }
+      if (planned.outcome === 'refused') {
+        return { ticketId, outcome: 'refused', fields: [], code: planned.code };
+      }
+
+      return { ticketId, outcome: 'unchanged', fields: [], code: null };
+    });
+  }
+
+  /** The api's twenty applies and undos a minute per person, answered 429. */
+  #spendBulkBudget(): void {
+    const now = Date.now();
+    this.#bulkRuns = this.#bulkRuns.filter((at) => now - at < MINUTE);
+    if (this.#bulkRuns.length >= BULK_OPERATIONS_PER_MINUTE) {
+      throw new AuthError('rate-limited', { retryAfter: 30, status: 429 });
+    }
+    this.#bulkRuns.push(now);
+  }
+
   async aiCalls(_brandId: string, ticketId: string): Promise<TicketAiCalls> {
     this.#require(ticketId);
     return Promise.resolve({ items: [...(this.#aiCalls.get(ticketId) ?? [])] });
@@ -1998,6 +2169,39 @@ export class MockTicketsApi implements TicketsApi {
 }
 
 const isoNow = (): string => new Date().toISOString();
+
+/** One applied bulk edit the fixture can still undo. */
+interface MockBulkOperation {
+  readonly id: string;
+  readonly actorId: string;
+  readonly until: number;
+  undone: boolean;
+  readonly changes: BulkChanges;
+  readonly items: {
+    readonly ticketId: string;
+    readonly fields: BulkTicketResult['fields'];
+    readonly before: BulkSnapshot;
+    readonly after: BulkSnapshot;
+  }[];
+}
+
+const bulkResponse = (
+  mode: BulkResponse['mode'],
+  results: BulkTicketResult[],
+  operationId: string | null,
+  undoUntil: string | null,
+): BulkResponse => ({
+  mode,
+  results,
+  counts: {
+    willChange: results.filter((result) => result.outcome === 'will_change').length,
+    unchanged: results.filter((result) => result.outcome === 'unchanged').length,
+    refused: results.filter((result) => result.outcome === 'refused').length,
+    notFound: results.filter((result) => result.outcome === 'not_found').length,
+  },
+  operationId,
+  undoUntil,
+});
 
 /** The contacts fixture's names, so a participants card reads like the contact screen. */
 const MOCK_CONTACT_NAMES: Readonly<Record<string, string>> = {

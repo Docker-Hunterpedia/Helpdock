@@ -1,5 +1,5 @@
 import type { Ticket } from '@helpdock/schemas';
-import { Box, Typography } from '@mui/material';
+import { Box, Checkbox, Typography } from '@mui/material';
 import { Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -38,18 +38,33 @@ const isMetaChannel = (channel: Ticket['channel']): boolean =>
  * The link is named by its content, not by an `aria-label`: a label would
  * replace the priority, status, SLA and contact with the subject alone, which
  * is all a screen reader used to hear of a row.
+ *
+ * **The checkbox (M14-04) is the row's, not the link's**: a control inside an
+ * anchor is two interactive elements in one, so the row is a flex `li` holding
+ * the checkbox and then the link. A ticked row is tinted; the open one also
+ * carries the 3 px edge, so "open" and "ticked" stay two different things.
+ * Without `selection` (a Viewer) there is no checkbox and the row is as before.
  */
+export interface RowSelection {
+  readonly checked: boolean;
+  /** `range` is true for a Shift-click: the rows between the last one ticked and this. */
+  onSelect(range: boolean): void;
+}
+
 export function TicketRow({
   ticket,
   selected,
   now,
   search,
+  selection,
 }: {
   readonly ticket: Ticket;
   readonly selected: boolean;
   readonly now: number;
   /** Carried onto the link so the list a person came back to is the same list. */
   readonly search: string;
+  /** M14-04: the checkbox, for somebody who may change tickets. */
+  readonly selection?: RowSelection | undefined;
 }): ReactNode {
   const tokens = useSemanticTokens();
   const t = useT();
@@ -57,28 +72,60 @@ export function TicketRow({
   const reference = ticketReference(ticket);
   const contactName = ticket.contact?.name ?? null;
 
+  const ticked = selection?.checked === true;
+  const tinted = selected || ticked;
+
   return (
-    <Box component="li" sx={{ listStyle: 'none' }}>
+    <Box
+      component="li"
+      data-ticket-id={ticket.id}
+      sx={{
+        listStyle: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        height: 64,
+        borderBlockEnd: `1px solid ${tokens['border.default']}`,
+        // DESIGN §6.3: the selected row is tinted and carries a 3 px edge at
+        // the inline start, which is the right edge in Arabic.
+        borderInlineStart: `3px solid ${selected ? tokens['action.primary'] : 'transparent'}`,
+        backgroundColor: tinted ? tokens['action.primary.tint'] : 'transparent',
+        '&:hover': {
+          backgroundColor: tinted ? tokens['action.primary.tint'] : tokens['bg.muted'],
+        },
+      }}
+    >
+      {selection === undefined ? null : (
+        <Checkbox
+          size="small"
+          checked={selection.checked}
+          // The click, not the change, because only the click knows about Shift.
+          onClick={(event) => {
+            selection.onSelect(event.shiftKey);
+          }}
+          onChange={() => {}}
+          slotProps={{
+            input: {
+              'aria-label': t('tickets:bulk.selectRow', { reference }),
+            },
+          }}
+          sx={{ padding: 1, marginInlineStart: 2, flexShrink: 0 }}
+        />
+      )}
       <Box
         component={Link}
         to={{ pathname: ticketRoute(ticket.id), search }}
         aria-current={selected ? 'true' : undefined}
         sx={{
+          flex: 1,
+          minWidth: 0,
+          height: '100%',
           display: 'flex',
           alignItems: 'center',
           gap: 3,
-          height: 64,
-          paddingInline: 4,
+          paddingInline: selection === undefined ? 4 : 2,
+          paddingInlineEnd: 4,
           textDecoration: 'none',
           color: 'inherit',
-          borderBlockEnd: `1px solid ${tokens['border.default']}`,
-          // DESIGN §6.3: the selected row is tinted and carries a 3 px edge at
-          // the inline start, which is the right edge in Arabic.
-          borderInlineStart: `3px solid ${selected ? tokens['action.primary'] : 'transparent'}`,
-          backgroundColor: selected ? tokens['action.primary.tint'] : 'transparent',
-          '&:hover': {
-            backgroundColor: selected ? tokens['action.primary.tint'] : tokens['bg.muted'],
-          },
         }}
       >
         <PriorityDot priority={ticket.priority} />

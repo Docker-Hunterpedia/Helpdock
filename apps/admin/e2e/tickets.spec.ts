@@ -505,7 +505,10 @@ test.describe('right to left', () => {
     await signIn(page, locale);
     await openTicket(page, locale);
 
-    const row = page.getByRole('link', { name: /HD-1042/ });
+    // The edge is the row's own (the `li`), since the checkbox sits beside the link (M14-04).
+    const row = page
+      .locator('li[data-ticket-id]')
+      .filter({ has: page.getByRole('link', { name: /HD-1042/ }) });
     // DESIGN §6.3: the 3 px edge is at the inline start, which is the right
     // edge in Arabic — so it is the *left* border that must be absent.
     await expect(row).toHaveCSS('border-right-width', '3px');

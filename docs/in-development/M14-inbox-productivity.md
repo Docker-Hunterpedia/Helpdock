@@ -274,8 +274,7 @@ Snooze menu reads its four times from `GET /tickets/:id/snooze-presets`, which
 works them out against the department calendar on the server, so there is one
 copy of the calendar maths. The status picker leaves Snoozed out unless the
 ticket is in it (`isSnoozed` on the status), because choosing it would ask for a
-time. The bulk bar and the palette entry wait for M14-04 and M14-05, which build
-what they act on. A ticket moved from Awaiting customer to Snoozed starts
+time. The bulk bar (M14-04) offers Snooze and Wake. A ticket moved from Awaiting customer to Snoozed starts
 counting its response clock again, which is the rule applied as written.
 Guide: [Snooze](../guides/snooze.md).
 
@@ -365,7 +364,7 @@ minute per person, and 60 previews (the plan's 20 would let one edit use two).
 The activity row does not carry the operation id (`ticket_activity` has no
 column for it, and `via: bulk` plus the item rows say which operation made it).
 Not built here: the bell's and the batcher's folding of one operation into one
-line (the column and the stamp are in; the reading is M14-04), and the
+line (the column and the stamp are in; the reading was done in M14-04), and the
 required-fields refusals (M14-17). Guide: [Tickets](../guides/tickets.md#bulk-edit).
 
 `POST /api/brands/:brandId/tickets/bulk` with `{ ticketIds (1–50, unique),
@@ -423,6 +422,54 @@ client can loop with idempotency keys).
 
 ### M14-04 Bulk edit UI
 
+**Status: built, in review** (issue #291). Built as below, with these
+differences:
+
+- **Where the bar sits.** `Admin/Tickets-Bulk` draws it as one 700 px row
+  "replacing the list footer", which cannot fit a 360 px column. It is the list's
+  footer at every width, in two rows (count and Clear, then Status, Close,
+  Assign, Snooze and More); Priority, Team, Department and Tags open from More.
+  A floating bar was tried and covered the composer.
+- **Pickers.** Assign and Snooze are the details panel's and the header's own
+  components (`AssigneePopover`, `SnoozeMenu`, extracted for the purpose); Status,
+  Priority, Department, Team and Tags are menus, because the panel uses native
+  selects there. The people and teams on offer are those of the departments the
+  ticked tickets are in (`assignable` and `teams` per department, merged), so an
+  Agent, who may not read the staff list, can still assign. Tags change one tag
+  at a time (add or remove); the api takes lists.
+- **Focus.** `x` acts on the row that holds keyboard focus (Tab, or a click on
+  its box) and otherwise on the open ticket's row; `j`/`k` take focus off the
+  list so the open ticket is "the focused row" again. `Esc` is attached only
+  while something is ticked. After Clear, `Esc` from the bar, or an applied
+  edit, focus goes to the header checkbox; ticking never moves focus.
+- **The preview** lists tickets that would be `unchanged` ("Already closed.")
+  next to the refused ones, as the board's second row does; a reason word per
+  refusal code the api sends (`ticket-closed`, `assignee-above-actor`, …) and
+  "It can't be changed." for one it does not know. The required-fields reason
+  has the board's wording without the field's name, which the api's refusal does
+  not carry yet (M14-17).
+- **The toast** keeps the board's ten seconds, paused on hover and focus; the
+  rest of the api's sixty seconds is "Undo last bulk change" in the palette,
+  held by `BulkUndoProvider` in the shell until the window closes or the brand
+  changes.
+- **Errors.** A `bulk-changed` (409) previews again and shows the dialog even
+  when everything would now change; a 429 says how long to wait (`Retry-After`)
+  and keeps the selection; a refusal the api answered says nothing was changed,
+  and a lost answer (no response, a 5xx) says the result is unknown and reads
+  the list again, because the apply may have committed.
+- **Notification folding** (the M14-03 note's "reading is M14-04"): the panel
+  returns `bulkOperationId`, the bell folds two or more `assigned` rows of one
+  operation into "Omar assigned you 12 tickets", the count being the api's total
+  (`bulkOperationCount`) rather than the rows loaded (opening it reads them all
+  and opens My open), and the email batcher reads the column it already folded on.
+  No artboard draws the folded bell line; it uses the row anatomy of the others.
+- **The fixture** (`MockTicketsApi`) keeps the api's budget (twenty applies and
+  undos a minute, 429) and plays one scripted race for the browser suite: the
+  first close that names HD-1035 finds it closed by a colleague.
+
+Guide: [Tickets › Bulk edit](../guides/tickets.md#bulk-edit),
+[Keyboard shortcuts](../guides/keyboard-shortcuts.md).
+
 The row checkbox DESIGN §6.3 already draws, labelled "Select HD-1042";
 `x` toggles the focused row, `Shift`+`x` and Shift-click select the range from
 the last toggled row; the header checkbox selects the loaded page (indeterminate
@@ -469,7 +516,7 @@ differences:
   shows its keys, left out while the single-key switch is off. Choosing one
   runs after the palette has closed and given focus back, so it does not fight
   the dialog for focus. Left out because what they act on is not built:
-  "Undo last bulk change" (M14-03, M14-04), and the board's "Assign HD-1042 to
+  "Undo last bulk change" (added by M14-04), and the board's "Assign HD-1042 to
   me" and "Snooze HD-1042…" on a ticket that is *found* rather than open, which
   would need a write from outside the ticket view; the palette's ticket
   actions act on the open ticket. The Tab "ask the assistant" hint waits for
@@ -717,8 +764,8 @@ and `seen_online_at`, and pacing `last_urgent_at`, which the urgent interval
 and a resumable presence hold need; the hold's "away for 5 minutes" is
 measured from the last time the send found the person online, re-checked every
 minute; `bulk_operation_id` arrived with M14-03 (the column, stamped on an
-assignment a bulk edit made; the bell's and the batcher's folding on it is
-M14-04's); the daily digest's hour is read in the brand's time zone until M14-12
+assignment a bulk edit made; the bell's and the batcher's folding on it was
+done in M14-04); the daily digest's hour is read in the brand's time zone until M14-12
 adds `users.time_zone`; opening a ticket (`GET /tickets/:id` by a person)
 marks their notifications about it read; an install without SMTP marks rows
 `skipped_unconfigured` at scheduling rather than opening batches; the English

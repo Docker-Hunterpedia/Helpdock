@@ -514,6 +514,7 @@ export class EmailPacingRepository {
           string | null
         >`(SELECT u.name FROM ${users} u WHERE u.id = ${notifications.actorId})`,
         detail: notifications.detail,
+        bulkOperationId: notifications.bulkOperationId,
         createdAt: notifications.createdAt,
         readAt: notifications.readAt,
         email: notifications.email,
@@ -531,8 +532,6 @@ export class EmailPacingRepository {
         reference: row.reference ?? '',
         subject: row.subject ?? '',
         detail: detail.success ? detail.data : {},
-        // M14-03 stores the operation; folding on it is deferred to M14-04.
-        bulkOperationId: null,
       };
     });
   }

@@ -104,7 +104,9 @@
       "sla_warning": "SLA warning · {{clock}}",
       "sla_breached": "SLA breach · {{clock}}",
       "escalated": "Escalated to you or your team",
-      "snooze_ended": "Snooze ended"
+      "snooze_ended": "Snooze ended",
+      "assignedBulk_one": "{{actor}} assigned you {{count}} ticket",
+      "assignedBulk_other": "{{actor}} assigned you {{count}} tickets"
     },
     "clock": {
       "first_response": "first response",
@@ -129,7 +131,8 @@
       "hours_other": "{{count}} h ago",
       "days_one": "{{count}} day ago",
       "days_other": "{{count}} days ago"
-    }
+    },
+    "bulkMore": "and {{count}} more"
   },
   "palette": {
     "label": "Command palette",
@@ -194,7 +197,8 @@
         "light": "Theme: light",
         "dark": "Theme: dark",
         "auto": "Theme: match system"
-      }
+      },
+      "undoBulk": "Undo last bulk change"
     },
     "keywords": {
       "tickets": "inbox, queue, conversations, support",

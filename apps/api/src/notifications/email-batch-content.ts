@@ -31,11 +31,7 @@ export interface BatchItem {
   readonly actorName: string | null;
   readonly detail: NotificationDetail;
   readonly createdAt: Date;
-  /**
-   * The bulk change that caused it. Always null for now: M14-03 records
-   * `notifications.bulk_operation_id`, and reading it here is M14-04's; the
-   * folding below is ready for it.
-   */
+  /** The bulk change that caused it (`notifications.bulk_operation_id`); the folding below reads it. */
   readonly bulkOperationId: string | null;
 }
 

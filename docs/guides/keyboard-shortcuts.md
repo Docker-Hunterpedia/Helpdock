@@ -58,6 +58,9 @@ navigation only, and the api refuses a change whatever the keys do.
 | `j` | Next ticket | everyone |
 | `k` | Previous ticket | everyone |
 | `e` | Close | everyone but a Viewer |
+| `x` | Select the focused ticket | everyone but a Viewer |
+| `Shift` + `x` | Select a range of tickets | everyone but a Viewer |
+| `Escape` | Clear the selection | everyone but a Viewer |
 
 ### Ticket
 
@@ -81,11 +84,11 @@ navigation only, and the api refuses a change whatever the keys do.
 | `/` | Insert a saved reply | everyone but a Viewer |
 <!-- shortcuts:end -->
 
-Not yet: `⌘K` for the command palette (M14-05), `x` and `Shift`+`x` to select
-tickets and `Esc` to clear the selection (M14-04), `{{` for the placeholder
-picker in the composer (M14-14), and `Enter` on a focused row, which needs
-M14-04's focus model. Each is added to the registry, and so to the sheet and
-this guide, with the deliverable that builds it.
+Not yet: `{{` for the placeholder picker in the composer (M14-14), and `Enter`
+on a focused row, which would need a roving focus the list does not have (a row
+is a link, so `Enter` on it already opens the ticket). Each is added to the
+registry, and so to the sheet and this guide, with the deliverable that builds
+it.
 
 ## Where a shortcut answers
 
@@ -93,7 +96,11 @@ this guide, with the deliverable that builds it.
   `c` open the ticket workspace first when you are elsewhere.
 - **List** answers in the ticket workspace. `j` and `k` open the next and the
   previous ticket of the list; `e` closes the open one, into the brand's first
-  closed status (never Spam or Merged).
+  closed status (never Spam or Merged). `x` ticks the focused row, which is the
+  row holding keyboard focus or, failing that, the open ticket's; `Shift`+`x`
+  ticks every row from the one ticked last to it; `Esc` clears the selection
+  (it answers only while something is ticked). See
+  [Bulk edit](tickets.md#bulk-edit).
 - **Ticket** answers while a ticket is open. `a`, `s`, `p` and `t` open the
   assignee picker, the status and priority menus and the tag picker in the
   details panel, opening the panel first on a window narrower than 1280 px.

@@ -1,4 +1,4 @@
-import { UNMERGE_WINDOW_MS } from '@helpdock/schemas';
+import { BULK_OPERATIONS_PER_MINUTE, type BulkChanges, UNMERGE_WINDOW_MS } from '@helpdock/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MOCK_CONTACT_MONA } from '../contacts/mock-api.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
@@ -548,5 +548,176 @@ describe('snooze (M14-02)', () => {
     expect(moved.snoozedUntil).toBe(later);
     expect(woke.status.id).toBe(before);
     expect(before).not.toBe(MOCK_STATUS_SNOOZED);
+  });
+});
+
+describe('bulk edit (M14-04)', () => {
+  const ids = [MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN];
+  const preview = (api: MockTicketsApi, changes: BulkChanges, ticketIds: string[] = ids) =>
+    api.bulk(BRAND, { ticketIds, changes, mode: 'preview' });
+
+  it('previews without writing, and says per ticket what would move', async () => {
+    const api = new MockTicketsApi();
+
+    const response = await preview(api, { priority: 'low' });
+
+    expect(response.counts).toEqual({ willChange: 2, unchanged: 0, refused: 0, notFound: 0 });
+    expect(response.results.map((result) => result.fields)).toEqual([['priority'], ['priority']]);
+    expect(response.operationId).toBeNull();
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority).not.toBe('low');
+  });
+
+  it('reports a closed ticket as unchanged by a close, refused by a snooze, and a stranger as not found', async () => {
+    const api = new MockTicketsApi();
+
+    const closing = await preview(api, { close: true }, [MOCK_TICKET_CLOSED]);
+    const snoozing = await preview(
+      api,
+      { snoozedUntil: new Date(Date.now() + 3_600_000 * 4).toISOString() },
+      [MOCK_TICKET_CLOSED],
+    );
+    const missing = await preview(api, { close: true }, ['0192c3f0-1a2b-7c3d-8e4f-0000000fffff']);
+
+    expect(closing.results[0]?.outcome).toBe('unchanged');
+    expect(snoozing.results[0]).toMatchObject({ outcome: 'refused', code: 'ticket-closed' });
+    expect(missing.results[0]?.outcome).toBe('not_found');
+  });
+
+  it('applies the ids the preview named, and Undo puts the old values back', async () => {
+    const api = new MockTicketsApi();
+    const before = (await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority;
+
+    const applied = await api.bulk(BRAND, {
+      ticketIds: ids,
+      changes: { priority: 'low' },
+      mode: 'apply',
+      expect: ids,
+    });
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority).toBe('low');
+    expect(applied.operationId).not.toBeNull();
+    expect(Date.parse(applied.undoUntil ?? '')).toBeGreaterThan(Date.now());
+
+    const undone = await api.undoBulk(BRAND, applied.operationId ?? '');
+
+    expect(undone.results.map((result) => result.outcome)).toEqual(['reverted', 'reverted']);
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority).toBe(before);
+  });
+
+  it('answers bulk-changed when the tickets that would change are not the ones the preview named', async () => {
+    const api = new MockTicketsApi();
+
+    await expect(
+      api.bulk(BRAND, {
+        ticketIds: ids,
+        changes: { priority: 'low' },
+        mode: 'apply',
+        expect: [MOCK_TICKET_REFUND],
+      }),
+    ).rejects.toEqual(new TicketLifecycleError('bulk-changed'));
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority).not.toBe('low');
+  });
+
+  it('plays its one scripted race: a colleague closes HD-1035 while a close that names it is applied', async () => {
+    const api = new MockTicketsApi();
+    const named = [MOCK_TICKET_REFUND, MOCK_TICKET_VAT];
+
+    const attempt = (): Promise<unknown> =>
+      api.bulk(BRAND, { ticketIds: named, changes: { close: true }, mode: 'apply', expect: named });
+
+    await expect(attempt()).rejects.toEqual(new TicketLifecycleError('bulk-changed'));
+    const fresh = await preview(api, { close: true }, named);
+    expect(fresh.results.map((result) => result.outcome)).toEqual(['will_change', 'unchanged']);
+    // Once only: the second time it is an ordinary stale apply that now names a ticket that cannot change.
+    await expect(attempt()).rejects.toEqual(new TicketLifecycleError('bulk-changed'));
+  });
+
+  it('keeps a field somebody changed since, and says so', async () => {
+    const api = new MockTicketsApi();
+    const applied = await api.bulk(BRAND, {
+      ticketIds: [MOCK_TICKET_REFUND],
+      changes: { priority: 'low' },
+      mode: 'apply',
+      expect: [MOCK_TICKET_REFUND],
+    });
+    await api.update(BRAND, MOCK_TICKET_REFUND, { priority: 'high' });
+
+    const undone = await api.undoBulk(BRAND, applied.operationId ?? '');
+
+    expect(undone.results[0]).toMatchObject({ outcome: 'kept', kept: ['priority'], reverted: [] });
+    expect((await api.ticket(BRAND, MOCK_TICKET_REFUND)).ticket.priority).toBe('high');
+  });
+
+  it('puts tags back as a set', async () => {
+    const api = new MockTicketsApi();
+    const tagId = '0192c3f0-1a2b-7c3d-8e4f-000000000102';
+    const held =
+      (await api.ticket(BRAND, MOCK_TICKET_SIGN_IN)).ticket.tags?.map((tag) => tag.id) ?? [];
+    const applied = await api.bulk(BRAND, {
+      ticketIds: [MOCK_TICKET_SIGN_IN],
+      changes: { addTagIds: [tagId] },
+      mode: 'apply',
+      expect: [MOCK_TICKET_SIGN_IN],
+    });
+    expect(
+      (await api.ticket(BRAND, MOCK_TICKET_SIGN_IN)).ticket.tags?.map((tag) => tag.id),
+    ).toContain(tagId);
+
+    await api.undoBulk(BRAND, applied.operationId ?? '');
+
+    expect(
+      (await api.ticket(BRAND, MOCK_TICKET_SIGN_IN)).ticket.tags?.map((tag) => tag.id),
+    ).toEqual(held);
+  });
+
+  it('refuses a second undo and an undo after the sixty seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = new MockTicketsApi();
+      const applied = await api.bulk(BRAND, {
+        ticketIds: ids,
+        changes: { priority: 'low' },
+        mode: 'apply',
+        expect: ids,
+      });
+      await api.undoBulk(BRAND, applied.operationId ?? '');
+      await expect(api.undoBulk(BRAND, applied.operationId ?? '')).rejects.toEqual(
+        new TicketLifecycleError('bulk-already-undone'),
+      );
+
+      const late = await api.bulk(BRAND, {
+        ticketIds: ids,
+        changes: { priority: 'low' },
+        mode: 'apply',
+        expect: ids,
+      });
+      vi.advanceTimersByTime(61_000);
+      await expect(api.undoBulk(BRAND, late.operationId ?? '')).rejects.toEqual(
+        new TicketLifecycleError('bulk-undo-expired'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('answers 429 once twenty applies have been made in a minute, previews apart', async () => {
+    const api = new MockTicketsApi();
+    const apply = (priority: 'low' | 'high') =>
+      api.bulk(BRAND, {
+        ticketIds: [MOCK_TICKET_REFUND],
+        changes: { priority },
+        mode: 'apply',
+        expect: [MOCK_TICKET_REFUND],
+      });
+
+    for (let n = 0; n < BULK_OPERATIONS_PER_MINUTE; n += 1) {
+      await apply(n % 2 === 0 ? 'low' : 'high');
+    }
+
+    await expect(apply('low')).rejects.toMatchObject({ code: 'rate-limited', status: 429 });
+    await expect(preview(api, { priority: 'low' })).resolves.toMatchObject({ mode: 'preview' });
+  });
+
+  it('will not undo an operation it never made', async () => {
+    await expect(new MockTicketsApi().undoBulk(BRAND, 'nope')).rejects.toThrow('no such bulk');
   });
 });

@@ -1,5 +1,8 @@
 import type {
   AssignableAgentList,
+  BulkRequest,
+  BulkResponse,
+  BulkUndoResponse,
   MacroLocale,
   MacroRunRequest,
   MacroRunResponse,
@@ -124,6 +127,16 @@ export interface TicketsApi {
 
   /** M14-08: "How it got here", composed by the api from the ticket's activity. */
   routing(brandId: string, ticketId: string): Promise<TicketRouting>;
+
+  /**
+   * M14-04. One bulk edit (DOMAIN-RULES §2.7): `mode: 'preview'` writes nothing
+   * and answers per ticket; `mode: 'apply'` names the ids the preview said
+   * would change and is all or nothing. A stale apply is a
+   * {@link TicketLifecycleError} `bulk-changed`.
+   */
+  bulk(brandId: string, request: BulkRequest): Promise<BulkResponse>;
+  /** M14-04. Puts a bulk edit back, inside its 60 seconds and by the person who made it. */
+  undoBulk(brandId: string, operationId: string): Promise<BulkUndoResponse>;
 
   /** M1-09. Closes `ticketId` into `request.primaryTicketId` (DOMAIN-RULES §2.4). */
   merge(brandId: string, ticketId: string, request: TicketMergeRequest): Promise<TicketMergeResult>;

@@ -1,7 +1,7 @@
 import type { Department, TagSummary, Ticket, TicketStatus } from '@helpdock/schemas';
-import { Box, Button, Chip, InputAdornment, TextField, Typography } from '@mui/material';
+import { Box, Button, Checkbox, Chip, InputAdornment, TextField, Typography } from '@mui/material';
 import { ListFilter, Search, TicketIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
@@ -9,7 +9,9 @@ import type { ShortcutId } from '../../keyboard/registry.js';
 import { ShortcutHints } from '../../keyboard/shortcut-hints.tsx';
 import { CountBadge } from '../../shell/count-badge.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
+import type { HeaderState } from '../../tickets/selection.js';
 import { activeFilterCount, type EmptyKind, type WorkspaceFilters } from '../../tickets/views.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
@@ -33,6 +35,28 @@ import { TicketListSkeleton } from './ticket-skeletons.tsx';
  */
 
 export const TICKET_LIST_WIDTH = 360;
+
+/**
+ * What the list needs to draw ticking (M14-04): which rows are ticked, the
+ * header checkbox, and the bar that appears while anything is. `undefined` for
+ * a reader who cannot change tickets, who gets the list as it was.
+ */
+export interface ListSelection {
+  readonly ids: ReadonlySet<string>;
+  readonly header: HeaderState;
+  /** The last tick wanted more than the cap and took what fit. */
+  readonly capped: boolean;
+  /** The max a bulk edit may name, for the caption. */
+  readonly max: number;
+  /** The header checkbox, so focus can come back to the list when the bar goes. */
+  readonly headerRef: RefObject<HTMLInputElement | null>;
+  /** What a screen reader hears when the count changes: "3 tickets selected". */
+  readonly announcement: string;
+  /** The bulk bar; null while nothing is ticked. */
+  readonly bar: ReactNode;
+  onSelect(ticketId: string, range: boolean): void;
+  onSelectPage(): void;
+}
 
 const EMPTY_COPY = {
   search: { heading: 'tickets:empty.searchHeading', body: 'tickets:empty.searchBody' },
@@ -70,6 +94,7 @@ export function TicketList({
   loading,
   failed,
   linkSearch,
+  selection,
   onTypedChange,
   onFiltersChange,
   onLoadMore,
@@ -111,6 +136,8 @@ export function TicketList({
   readonly loading: boolean;
   readonly failed: boolean;
   readonly linkSearch: string;
+  /** M14-04. */
+  readonly selection?: ListSelection | undefined;
   onTypedChange(value: string): void;
   onFiltersChange(filters: WorkspaceFilters): void;
   onLoadMore(): void;
@@ -169,6 +196,7 @@ export function TicketList({
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
+        position: 'relative',
         backgroundColor: tokens['bg.surface'],
         borderInlineEnd: `1px solid ${tokens['border.default']}`,
       }}
@@ -326,6 +354,9 @@ export function TicketList({
           />
         ) : (
           <>
+            {selection === undefined ? null : (
+              <SelectionHeader selection={selection} loaded={tickets.length} />
+            )}
             <Box component="ul" sx={{ margin: 0, padding: 0 }}>
               {tickets.map((ticket) => (
                 <TicketRow
@@ -334,6 +365,16 @@ export function TicketList({
                   selected={ticket.id === selectedId}
                   now={now}
                   search={linkSearch}
+                  selection={
+                    selection === undefined
+                      ? undefined
+                      : {
+                          checked: selection.ids.has(ticket.id),
+                          onSelect: (range) => {
+                            selection.onSelect(ticket.id, range);
+                          },
+                        }
+                  }
                 />
               ))}
             </Box>
@@ -349,6 +390,13 @@ export function TicketList({
         )}
       </Box>
 
+      {selection?.bar == null ? null : (
+        // The list's footer: always inside the column, so it never covers the open ticket.
+        <Box sx={{ padding: 3, borderBlockStart: `1px solid ${tokens['border.default']}` }}>
+          {selection.bar}
+        </Box>
+      )}
+
       <FilterPopover
         anchorEl={filtersOpen ? filterButton.current : null}
         filters={filters}
@@ -362,6 +410,68 @@ export function TicketList({
           setFiltersOpen(false);
         }}
       />
+    </Box>
+  );
+}
+
+/**
+ * The header of the rows (`Admin/Tickets-Bulk`): a checkbox that selects the
+ * loaded page — indeterminate when only some are ticked — and a caption with
+ * the count and the cap. The caption is a polite live region, so ticking with
+ * the keyboard says "3 tickets selected" without moving focus.
+ */
+function SelectionHeader({
+  selection,
+  loaded,
+}: {
+  readonly selection: ListSelection;
+  readonly loaded: number;
+}): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+  const count = selection.ids.size;
+
+  // MUI marks a mixed box with `aria-checked="mixed"` and leaves the native
+  // `indeterminate` property alone, which a native checkbox must agree with.
+  useEffect(() => {
+    if (selection.headerRef.current !== null) {
+      selection.headerRef.current.indeterminate = selection.header === 'some';
+    }
+  }, [selection.header, selection.headerRef]);
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        height: 36,
+        paddingInlineStart: '3px',
+        borderBlockEnd: `1px solid ${tokens['border.default']}`,
+        color: 'text.secondary',
+      }}
+    >
+      <Checkbox
+        size="small"
+        checked={selection.header === 'all'}
+        indeterminate={selection.header === 'some'}
+        onChange={selection.onSelectPage}
+        slotProps={{
+          input: { ref: selection.headerRef, 'aria-label': t('tickets:bulk.selectAll') },
+        }}
+        sx={{ padding: 1, marginInlineStart: 2, flexShrink: 0 }}
+      />
+      <Typography variant="caption" sx={{ marginInlineStart: 3 }}>
+        {count === 0
+          ? t('tickets:bulk.headerNone')
+          : t(selection.capped ? 'tickets:bulk.headerCapped' : 'tickets:bulk.headerCaption', {
+              selected: count,
+              loaded,
+              max: selection.max,
+            })}
+      </Typography>
+      <Box component="span" aria-live="polite" aria-atomic="true" sx={visuallyHidden}>
+        {selection.announcement}
+      </Box>
     </Box>
   );
 }

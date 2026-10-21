@@ -511,3 +511,94 @@ describe('macros (M3-06)', () => {
     expect(lastInit().method).toBe('POST');
   });
 });
+
+describe('bulk edit (M14-04)', () => {
+  const OPERATION = '0192c3f0-1a2b-7c3d-8e4f-0000000b0001';
+  const answer = (mode: 'preview' | 'apply') => ({
+    mode,
+    results: [{ ticketId: TICKET, outcome: 'will_change', fields: ['priority'], code: null }],
+    counts: { willChange: 1, unchanged: 0, refused: 0, notFound: 0 },
+    operationId: mode === 'apply' ? OPERATION : null,
+    undoUntil: mode === 'apply' ? '2026-10-21T10:01:00.000Z' : null,
+  });
+
+  it('posts a preview to the bulk route and parses the per-ticket answer', async () => {
+    fetchMock.mockResolvedValue(json(answer('preview')));
+
+    const response = await api.bulk(BRAND, {
+      ticketIds: [TICKET],
+      changes: { priority: 'low' },
+      mode: 'preview',
+    });
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/bulk`);
+    expect(lastInit().method).toBe('POST');
+    expect(JSON.parse(String(lastInit().body))).toEqual({
+      ticketIds: [TICKET],
+      changes: { priority: 'low' },
+      mode: 'preview',
+    });
+    expect(response.results[0]?.outcome).toBe('will_change');
+    expect(response.operationId).toBeNull();
+  });
+
+  it('sends the ids the preview named when it applies, and keeps the operation Undo takes', async () => {
+    fetchMock.mockResolvedValue(json(answer('apply')));
+
+    const response = await api.bulk(BRAND, {
+      ticketIds: [TICKET],
+      changes: { close: true },
+      mode: 'apply',
+      expect: [TICKET],
+    });
+
+    expect(JSON.parse(String(lastInit().body))).toMatchObject({ mode: 'apply', expect: [TICKET] });
+    expect(response.operationId).toBe(OPERATION);
+  });
+
+  it('turns the 409 of a stale apply into the reason the screen previews again on', async () => {
+    fetchMock.mockResolvedValue(
+      json(
+        {
+          error: {
+            code: 'conflict',
+            message: 'changed',
+            requestId: 'r',
+            lifecycle: { reason: 'bulk-changed' },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      api.bulk(BRAND, { ticketIds: [TICKET], changes: { close: true }, mode: 'apply', expect: [] }),
+    ).rejects.toEqual(new TicketLifecycleError('bulk-changed'));
+  });
+
+  it('undoes an operation by its id, escaped', async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        operationId: OPERATION,
+        results: [
+          { ticketId: TICKET, outcome: 'reverted', reverted: ['priority'], kept: [], code: null },
+        ],
+        notFound: 0,
+      }),
+    );
+
+    const response = await api.undoBulk(BRAND, OPERATION);
+
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/bulk/${OPERATION}/undo`);
+    expect(lastInit().method).toBe('POST');
+    expect(response.results[0]?.reverted).toEqual(['priority']);
+  });
+
+  it('rejects an answer the api’s own schema would not have sent', async () => {
+    fetchMock.mockResolvedValue(json({ mode: 'preview', results: 'no' }));
+
+    await expect(
+      api.bulk(BRAND, { ticketIds: [TICKET], changes: { close: true }, mode: 'preview' }),
+    ).rejects.toThrow();
+  });
+});

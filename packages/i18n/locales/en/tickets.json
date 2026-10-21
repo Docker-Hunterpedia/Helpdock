@@ -384,7 +384,10 @@
       "list": {
         "next": "Next ticket",
         "previous": "Previous ticket",
-        "close": "Close"
+        "close": "Close",
+        "select": "Select the focused ticket",
+        "selectRange": "Select a range of tickets",
+        "clearSelection": "Clear the selection"
       },
       "ticket": {
         "reply": "Reply",
@@ -1121,5 +1124,130 @@
       "woke": "Ticket woke up"
     },
     "rowLabel": "Snoozed until {{time}}"
+  },
+  "bulk": {
+    "selectRow": "Select {{reference}}",
+    "selectAll": "Select all loaded tickets",
+    "headerNone": "Select all",
+    "headerCaption": "{{selected}} of {{loaded}} selected · up to {{max}} at a time",
+    "headerCapped": "{{selected}} of {{loaded}} selected · the limit is {{max}} at a time",
+    "announceNone": "Selection cleared",
+    "bar": {
+      "label": "Bulk actions",
+      "working": "Checking…",
+      "status": "Status",
+      "close": "Close",
+      "assign": "Assign",
+      "team": "Team",
+      "department": "Department",
+      "tags": "Tags",
+      "priority": "Priority",
+      "snooze": "Snooze",
+      "more": "More",
+      "clear": "Clear",
+      "setField": "Set a field…",
+      "wake": "Wake snoozed tickets",
+      "spam": "Mark as spam",
+      "count_one": "{{count}} selected",
+      "count_other": "{{count}} selected"
+    },
+    "menu": {
+      "status": "Change status to",
+      "priority": "Change priority to",
+      "department": "Move to department",
+      "team": "Assign to team",
+      "noTeam": "No team",
+      "teamsFailed": "Teams could not be loaded.",
+      "tags": "Change tags",
+      "addTag": "Add tag",
+      "removeTag": "Remove tag",
+      "noTags": "This brand has no tags yet.",
+      "assignMe": "Assign to me",
+      "assignFooter": "Tickets this person cannot take are listed before you apply.",
+      "more": "More changes"
+    },
+    "field": {
+      "title": "Set a field",
+      "field": "Field",
+      "none": "This brand has no ticket fields.",
+      "submit": "Review the change",
+      "cancel": "Cancel"
+    },
+    "dialog": {
+      "closeNote": "Surveys go out after the 60-second undo window. Webhooks and pushes that already left can't be recalled.",
+      "changeNote": "You can undo this for 60 seconds. Webhooks and pushes that already left can't be recalled.",
+      "refreshed": "Something changed while you were looking. This is the list as it stands now.",
+      "cancel": "Cancel",
+      "dismiss": "Close",
+      "applying": "Applying…",
+      "confirmClose": "Close {{n}}",
+      "confirmChange": "Apply to {{n}}",
+      "ticketsList": "Tickets that cannot change",
+      "titleClose_one": "Close {{count}} ticket?",
+      "titleClose_other": "Close {{count}} tickets?",
+      "titleChange_one": "Change {{count}} ticket?",
+      "titleChange_other": "Change {{count}} tickets?",
+      "summaryClose_one": "{{willChange}} of {{count}} ticket will be closed.",
+      "summaryClose_other": "{{willChange}} of {{count}} tickets will be closed.",
+      "summaryChange_one": "{{willChange}} of {{count}} ticket will change.",
+      "summaryChange_other": "{{willChange}} of {{count}} tickets will change.",
+      "blockedClose_one": "{{count}} can't be closed:",
+      "blockedClose_other": "{{count}} can't be closed:",
+      "blockedChange_one": "{{count}} can't be changed:",
+      "blockedChange_other": "{{count}} can't be changed:",
+      "noneClose_one": "This ticket can't be closed:",
+      "noneClose_other": "None of the {{count}} tickets can be closed:",
+      "noneChange_one": "This ticket can't be changed:",
+      "noneChange_other": "None of the {{count}} tickets can be changed:"
+    },
+    "reason": {
+      "unchanged": "Already has this change.",
+      "unchangedClose": "Already closed.",
+      "notFound": "No longer available to you.",
+      "ticket-closed": "A closed ticket cannot be snoozed.",
+      "ticket-merged": "Merged into another ticket; change that one instead.",
+      "ticket-deleted": "This ticket was deleted.",
+      "snooze-requires-time": "Snoozed needs a wake time; use Snooze.",
+      "assignee-above-actor": "Only an Admin can assign work to an Admin.",
+      "not-eligible": "That person cannot take tickets in this ticket's department.",
+      "fields-required-to-close": "Required fields must be filled in before it can be closed.",
+      "unknown-reference": "Something you chose does not exist in this ticket's department.",
+      "invalid": "That change is not allowed for this ticket.",
+      "forbidden": "You may not change this ticket.",
+      "conflict": "It is in a state this change does not apply to.",
+      "other": "It can't be changed."
+    },
+    "error": {
+      "rateLimited": "Too many bulk changes. Wait a moment and try again.",
+      "failed": "The change could not be made. Nothing was changed.",
+      "previewFailed": "The change could not be checked. Try again.",
+      "rateLimitedIn_one": "Too many bulk changes. Try again in {{count}} second.",
+      "rateLimitedIn_other": "Too many bulk changes. Try again in {{count}} seconds.",
+      "unknown": "We couldn't confirm whether the change was made. Check the list."
+    },
+    "toast": {
+      "undo": "Undo",
+      "close_one": "Closed {{count}} ticket",
+      "close_other": "Closed {{count}} tickets",
+      "spam_one": "Marked {{count}} ticket as spam",
+      "spam_other": "Marked {{count}} tickets as spam",
+      "snooze_one": "Snoozed {{count}} ticket",
+      "snooze_other": "Snoozed {{count}} tickets",
+      "assign_one": "Assigned {{count}} ticket",
+      "assign_other": "Assigned {{count}} tickets",
+      "changed_one": "Updated {{count}} ticket",
+      "changed_other": "Updated {{count}} tickets"
+    },
+    "undo": {
+      "expired": "A bulk change can be undone for 60 seconds, and those have passed.",
+      "already": "This bulk change was already undone.",
+      "failed": "The change could not be undone. Try again.",
+      "done_one": "Undid the change to {{count}} ticket",
+      "done_other": "Undid the change to {{count}} tickets",
+      "partly_one": "Undone, but {{count}} ticket had changed since and was left as it is.",
+      "partly_other": "Undone, but {{count}} tickets had changed since and were left as they are."
+    },
+    "announce_one": "{{count}} ticket selected",
+    "announce_other": "{{count}} tickets selected"
   }
 }

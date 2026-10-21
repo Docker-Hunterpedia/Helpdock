@@ -210,6 +210,10 @@ export const notificationSchema = z.object({
   /** The channel of that reply, for "Email · 2 h ago". */
   messageChannel: ticketChannelSchema.nullable(),
   detail: notificationDetailSchema,
+  /** The bulk edit that caused it (M14-04): the panel folds one operation's `assigned` rows into one line. */
+  bulkOperationId: z.uuid().nullable(),
+  /** How many assignments that operation made to the reader in all (0 without one), which the folded line says. */
+  bulkOperationCount: z.int().nonnegative(),
   createdAt: z.iso.datetime(),
   readAt: z.iso.datetime().nullable(),
 });

@@ -9,6 +9,7 @@ import { useGlobalShortcuts } from '../keyboard/global-shortcuts.js';
 import { KeyboardProvider, useShortcutHandlers } from '../keyboard/keyboard-provider.tsx';
 import type { ShortcutId } from '../keyboard/registry.js';
 import { PaletteProvider } from '../palette/palette-provider.tsx';
+import { BulkUndoProvider } from '../tickets/bulk-undo.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
 import { SIDEBAR_WIDTH, Sidebar } from './sidebar.tsx';
 import { useSidebarCollapse } from './sidebar-collapse.js';
@@ -35,9 +36,11 @@ export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): 
   // M14-01: every keyboard shortcut of the signed-in admin goes through it.
   return (
     <KeyboardProvider>
-      <PaletteProvider>
-        <ShellLayout flush={flush} />
-      </PaletteProvider>
+      <BulkUndoProvider>
+        <PaletteProvider>
+          <ShellLayout flush={flush} />
+        </PaletteProvider>
+      </BulkUndoProvider>
     </KeyboardProvider>
   );
 }

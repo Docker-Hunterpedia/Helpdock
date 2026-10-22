@@ -59,6 +59,7 @@ const department = (overrides: Partial<DepartmentAssignmentRow> = {}): Departmen
   loadCap: null,
   autoUnassignOffline: true,
   autoUnassignAfterMinutes: 15,
+  idleAwayMinutes: null,
   onUnassign: 'leave_unassigned',
   ...overrides,
 });

@@ -510,7 +510,9 @@ Per brand, set by Admin (defaults in bold):
 | Delete | Only after deactivation; personal data replaced, content kept as "Former staff" |
 | Removal from one brand | Same as deactivation scoped to that brand |
 
-Presence (`online`, `away`, `offline`) is derived from `/staff` socket connections and an explicit toggle. Auto-unassign on offline (R §4.1) runs after 15 minutes offline, configurable per department, and never during business hours closed periods.
+Presence (`online`, `away`, `offline`) is derived from `/staff` socket connections, an explicit toggle and, for a department that asks for it, idle time. Auto-unassign on offline (R §4.1) runs after 15 minutes offline, configurable per department, and never during business hours closed periods.
+
+**Idle away (M14-18).** A department may set `idle_away_minutes` (null, or 10 to 240). The admin app reports "active in the last minute" over the `/staff` socket (`presence:active`, at most once a minute per tab, carrying the brand and nothing about what was done). A person is `away` while the time since their last report, from any of their tabs, is at least the **shortest** limit among the departments that set one and whose rotation includes them (they can work it and are in rotation); the sweep that runs every 30 s on every replica marks them, and exactly one replica announces it. Any report ends the idle mark. An explicit Away is a separate reason and is never ended by activity; choosing Online ends both. Idle away is `away`, not `offline`: the rotation skips the person, the widget does not list them as online, the notification presence hold treats them as away (§20), and the offline auto-unassign timer is **not** started and, if one fires, finds them not offline and does nothing. Going offline forgets the clock and the mark; the next arrival starts online. A department that turns the limit off releases the people it had marked at the next sweep; a sweep that cannot read the limits changes nothing.
 
 ### 12.1 Staff authentication factors
 
@@ -595,6 +597,7 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-20 | §12: Microsoft sign-in joins the OAuth row, bound by `<tid>:<oid>` and linked by address only for a verified-domain member of the one pinned tenant (M18-08, ADR 0051). |
 | 2026-10-20 | §12: the SSO first-link rule, with Entra ID's `xms_edov` from members of the one tenant a connection names (M18-09, ADR 0026). |
 | 2026-10-20 | The new §2.8: every ticket records how it arrived, and the routing trail is derived from activity under the ticket's department policy (M14-08). |
+| 2026-10-21 | §12: idle away, a department limit of 10 to 240 minutes ended by a report of activity from any tab; away is not offline (M14-18). |
 | 2026-10-21 | §12.1 rule 3: break-glass with a passkey; enforcement precondition is a password and (TOTP or a passkey) (M18-05, ADR 0053). |
 | 2026-10-21 | §12.1 rule 4: passwordless passkey sign-in, with the shared per-IP bucket and the single `invalid-credentials` refusal (M18-04). |
 | 2026-10-21 | §12.1 rule 2: adding, renaming and removing a passkey need a step-up, at most 10 per account, the last-factor refusal, the `securityChange` email and the audit rows (M18-02). |

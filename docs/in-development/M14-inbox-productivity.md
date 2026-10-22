@@ -983,6 +983,48 @@ gap the report can show. API keys are owner decision D-30.
 
 ### M14-18 Idle agents marked away
 
+**Status: built, in review** (issue #305). Built as below, with these
+differences:
+
+- **The existing five-minute away timer is gone.** The plan's "what exists"
+  table says there was no idle detection, but the admin app did set the
+  *explicit* away toggle after five minutes of silence in a tab, per tab, so a
+  second tab left alone turned a working person away. That timer is replaced by
+  the activity report below: with no department limit nobody is marked away for
+  being idle any more, and with one the server decides. Choosing Away in the
+  account menu is unchanged and is never undone by activity. Departments that
+  already existed when the setting arrived were backfilled to a **10-minute
+  idle limit** (migration `0068`) — the closest to that five-minute timer the
+  10-minute minimum allows; departments created after it default to off (NULL).
+  Admins can change it or turn it off per department on Ticketing › Assignment.
+- **Where the limit is read.** Presence is per brand, a department is not, so a
+  person's limit is the **shortest** of the departments that set one and whose
+  rotation includes them (they can work it and are in rotation). The sweep runs
+  every 30 s on every replica, so an idle person turns away within 30 s of the
+  limit.
+- **Two reasons to be away, kept apart.** The idle mark
+  (`presence:idle:<brandId>`) is separate from the explicit toggle
+  (`presence:status:<brandId>`): activity ends the first and never the second.
+  The clock is the person's (`presence:active:<brandId>`), not the socket's, so
+  a second tab's silence does not undo the first's work.
+- **No REST route.** The plan's table lists `POST /api/presence/activity` beside
+  the socket event. A person with no `/staff` socket is offline and has nothing
+  to refresh, so the route would have nothing to do; the report is the socket
+  event `presence:active` only.
+- **The notice** is the artboard's neutral "on return" banner, in a polite
+  `aria-live` region with no `status` role (the SequenceChip does the same, so
+  an empty region never competes with the toasts for a status locator). It is
+  shown once, from the acknowledgement of the report that ended the idle away,
+  for ten seconds or until dismissed, pausing on hover and focus. It takes no
+  focus. It is not shown for a return from an away the person chose.
+- [x] `departments.idle_away_minutes` (null or 10 to 240; migration
+  `0068_idle_away_minutes`), in the assignment settings API and the Assignment
+  tab (`Admin/Ticketing-Assignment-Idle`, en and ar).
+- [x] `presence:active` (brand only, acknowledged, rate limited), the store's
+  clock and idle set, the sweep, `presence:changed` on both transitions.
+- [x] The assignment audit row now records only the settings that changed, with
+  their new values.
+
 A department setting **Mark idle agents away after** (off, or 10–240 minutes).
 The admin app reports activity (pointer, key, focus) at most once a minute over
 the `/staff` socket; after the set time without it the presence becomes away,

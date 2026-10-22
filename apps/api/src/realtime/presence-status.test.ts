@@ -14,6 +14,15 @@ describe('derivePresence', () => {
     expect(derivePresence(input)).toBe(expected);
   });
 
+  it.each([
+    [{ hasLiveSocket: true, explicit: undefined, idle: true }, 'away'],
+    [{ hasLiveSocket: true, explicit: 'away' as const, idle: true }, 'away'],
+    [{ hasLiveSocket: true, explicit: undefined, idle: false }, 'online'],
+    [{ hasLiveSocket: false, explicit: undefined, idle: true }, 'offline'],
+  ])('with the idle reason, %o is %s', (input, expected) => {
+    expect(derivePresence(input)).toBe(expected);
+  });
+
   it('is offline with no socket even for someone who last chose away', () => {
     // Closing the laptop wins over the toggle: the toggle only chooses between
     // the two states a reachable person can be in (DOMAIN-RULES §12).
@@ -27,6 +36,17 @@ describe('presenceMapOf', () => {
       [LINA]: 'online',
       [OMAR]: 'away',
     });
+  });
+
+  it('lists an idle person as away without any explicit toggle', () => {
+    expect(presenceMapOf([LINA, OMAR], {}, new Set([OMAR]))).toEqual({
+      [LINA]: 'online',
+      [OMAR]: 'away',
+    });
+  });
+
+  it('omits an idle person with no socket, like any other', () => {
+    expect(presenceMapOf([LINA], {}, new Set([OMAR]))).toEqual({ [LINA]: 'online' });
   });
 
   it('omits people with no socket, because absence is what offline means', () => {

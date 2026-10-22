@@ -36,13 +36,19 @@ export type DepartmentAssignmentRow = Pick<
   | 'loadCap'
   | 'autoUnassignOffline'
   | 'autoUnassignAfterMinutes'
+  | 'idleAwayMinutes'
   | 'onUnassign'
 >;
 
 export type DepartmentAssignmentValues = Partial<
   Pick<
     Department,
-    'assignmentMode' | 'loadCap' | 'autoUnassignOffline' | 'autoUnassignAfterMinutes' | 'onUnassign'
+    | 'assignmentMode'
+    | 'loadCap'
+    | 'autoUnassignOffline'
+    | 'autoUnassignAfterMinutes'
+    | 'idleAwayMinutes'
+    | 'onUnassign'
   >
 >;
 
@@ -64,6 +70,7 @@ const departmentColumns = {
   loadCap: departments.loadCap,
   autoUnassignOffline: departments.autoUnassignOffline,
   autoUnassignAfterMinutes: departments.autoUnassignAfterMinutes,
+  idleAwayMinutes: departments.idleAwayMinutes,
   onUnassign: departments.onUnassign,
 };
 

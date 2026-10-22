@@ -6,30 +6,17 @@ import type {
 } from '@helpdock/schemas';
 import { act, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MOCK_BRANDS, MOCK_USER } from '../auth/mock-api.js';
 import { SessionProvider } from '../auth/session.tsx';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
-import type { RealtimeClient, RealtimeListener } from './client.js';
+import type { ActivityReportResult, RealtimeClient, RealtimeListener } from './client.js';
 import { RealtimeListeners } from './client.js';
 import { RealtimeProvider, usePresence, useRealtime } from './realtime-provider.tsx';
 
 const BRAND = MOCK_BRANDS[0]?.id ?? '';
 const OMAR = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
-/**
- * The idle window the away-timer tests ask for. The watcher's timer is armed in
- * a mount effect, so these tests install fake timers before they render and
- * move the window with `vi.advanceTimersByTime`: nothing depends on how long a
- * slow machine takes to get from one line to the next.
- *
- * Every other test runs with a window longer than any test run, because a timer
- * that can fire during a test about something else is a race, and on a slow
- * machine it loses.
- */
-const IDLE_MS = 5 * 60_000;
-const NEVER_IDLE_MS = 600_000;
-
 /** A client a test drives: it never opens anything and announces on demand. */
 class TestClient implements RealtimeClient {
   readonly rooms = new Set<string>();
@@ -75,13 +62,25 @@ class TestClient implements RealtimeClient {
     return Promise.resolve();
   }
 
+  /** What the next activity report answers; a test chooses it. */
+  reportAnswer: ActivityReportResult | null = null;
+  reports = 0;
+  failReports = false;
+
+  reportActivity(): Promise<ActivityReportResult | null> {
+    this.reports += 1;
+    return this.failReports
+      ? Promise.reject(new Error('socket closed'))
+      : Promise.resolve(this.reportAnswer);
+  }
+
   announce(userId: string, status: PresenceStatus, brandId = BRAND): void {
     this.listeners.presenceChanged({ userId, brandId, status });
   }
 }
 
 function Probe(): ReactNode {
-  const { connection, status, setStatus } = useRealtime();
+  const { connection, status, setStatus, idleReturned, dismissIdleReturn } = useRealtime();
   const presence = usePresence(BRAND);
 
   return (
@@ -89,6 +88,10 @@ function Probe(): ReactNode {
       <output data-testid="connection">{connection}</output>
       <output data-testid="status">{status}</output>
       <output data-testid="others">{JSON.stringify(presence)}</output>
+      <output data-testid="returned">{String(idleReturned)}</output>
+      <button type="button" onClick={dismissIdleReturn}>
+        dismiss
+      </button>
       <button type="button" onClick={() => setStatus('away')}>
         away
       </button>
@@ -106,10 +109,10 @@ const session = async (): Promise<Session> => {
   return found;
 };
 
-const renderProbe = async (client: TestClient, idleMs = NEVER_IDLE_MS) =>
+const renderProbe = async (client: TestClient) =>
   renderApp(
     <SessionProvider session={await session()}>
-      <RealtimeProvider client={client} idleMs={idleMs}>
+      <RealtimeProvider client={client}>
         <Probe />
       </RealtimeProvider>
     </SessionProvider>,
@@ -197,54 +200,79 @@ describe('RealtimeProvider', () => {
     expect(client.stopped).toBe(1);
   });
 
-  describe('the away timer', () => {
-    beforeEach(() => {
-      // Only the timer: React's scheduler and the promises of the mock APIs
-      // stay real, so rendering and `act` behave as they do everywhere else.
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    const idleFor = (ms: number) =>
-      act(async () => {
-        vi.advanceTimersByTime(ms);
-      });
+  describe('activity reports (M14-18)', () => {
     const keypress = () =>
       act(() => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
       });
 
-    it('sets away after the idle window and back to online on the next keypress, each announced once', async () => {
-      await renderProbe(client, IDLE_MS);
+    it('reports once on mount, and ignores a status that is not news', async () => {
+      client.reportAnswer = { status: 'offline', idleEnded: false };
+
+      await renderProbe(client);
+
+      await waitFor(() => expect(client.reports).toBe(1));
+      // A reconnecting socket answers offline for a person the events say is online.
       act(() => client.announce(MOCK_USER.id, 'online'));
       expect(screen.getByTestId('status')).toHaveTextContent('online');
-
-      await idleFor(IDLE_MS - 1);
-      expect(screen.getByTestId('status')).toHaveTextContent('online');
-      expect(client.set).toEqual([]);
-
-      await idleFor(1);
-      expect(screen.getByTestId('status')).toHaveTextContent('away');
-      expect(client.set).toEqual(['away']);
-
-      await keypress();
-      expect(screen.getByTestId('status')).toHaveTextContent('online');
-      expect(client.set).toEqual(['away', 'online']);
-
-      await idleFor(IDLE_MS);
-      expect(client.set).toEqual(['away', 'online', 'away']);
+      expect(screen.getByTestId('returned')).toHaveTextContent('false');
     });
 
-    it('leaves someone who is already offline alone', async () => {
-      await renderProbe(client, IDLE_MS);
+    it('raises the return notice only when a report ended an idle away', async () => {
+      client.reportAnswer = { status: 'online', idleEnded: true };
 
-      await idleFor(IDLE_MS * 5);
+      await renderProbe(client);
 
-      expect(client.set).toEqual([]);
-      expect(screen.getByTestId('status')).toHaveTextContent('offline');
+      await waitFor(() => expect(screen.getByTestId('returned')).toHaveTextContent('true'));
+      expect(screen.getByTestId('status')).toHaveTextContent('online');
+    });
+
+    it('lets the notice be dismissed, and does not bring it back on its own', async () => {
+      client.reportAnswer = { status: 'online', idleEnded: true };
+      const { user } = await renderProbe(client);
+      await waitFor(() => expect(screen.getByTestId('returned')).toHaveTextContent('true'));
+
+      await user.click(screen.getByRole('button', { name: 'dismiss' }));
+      client.reportAnswer = { status: 'online', idleEnded: false };
+      await keypress();
+
+      expect(screen.getByTestId('returned')).toHaveTextContent('false');
+    });
+
+    it("no longer sets itself away: that is the server's call now", async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      try {
+        await renderProbe(client);
+        act(() => client.announce(MOCK_USER.id, 'online'));
+
+        await act(async () => {
+          vi.advanceTimersByTime(6 * 60 * 60_000);
+        });
+
+        expect(client.set).toEqual([]);
+        expect(screen.getByTestId('status')).toHaveTextContent('online');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('survives a report lost to a closed socket, and a connection that is not there yet', async () => {
+      client.failReports = true;
+      await renderProbe(client);
+      await waitFor(() => expect(client.reports).toBe(1));
+
+      client.failReports = false;
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      try {
+        await act(async () => {
+          vi.advanceTimersByTime(61_000);
+        });
+        await keypress();
+        expect(client.reports).toBe(2);
+        expect(screen.getByTestId('status')).not.toHaveTextContent('away');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

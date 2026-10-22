@@ -74,6 +74,7 @@ export interface MockDepartmentAssignment {
   readonly loadCap: number | null;
   readonly autoUnassignOffline: boolean;
   readonly autoUnassignAfterMinutes: number;
+  readonly idleAwayMinutes: number | null;
   readonly onUnassign: OnUnassign;
 }
 
@@ -84,6 +85,7 @@ export const seedAssignmentSettings = (): Record<string, MockDepartmentAssignmen
     loadCap: 8,
     autoUnassignOffline: true,
     autoUnassignAfterMinutes: 15,
+    idleAwayMinutes: null,
     onUnassign: 'round_robin',
   },
   [MOCK_BILLING_ID]: {
@@ -91,6 +93,7 @@ export const seedAssignmentSettings = (): Record<string, MockDepartmentAssignmen
     loadCap: 6,
     autoUnassignOffline: true,
     autoUnassignAfterMinutes: 30,
+    idleAwayMinutes: 30,
     onUnassign: 'leave_unassigned',
   },
   [MOCK_ONBOARDING_ID]: {
@@ -98,6 +101,7 @@ export const seedAssignmentSettings = (): Record<string, MockDepartmentAssignmen
     loadCap: null,
     autoUnassignOffline: false,
     autoUnassignAfterMinutes: 15,
+    idleAwayMinutes: null,
     onUnassign: 'leave_unassigned',
   },
 });

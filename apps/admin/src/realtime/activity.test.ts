@@ -1,4 +1,4 @@
-import { PRESENCE_AWAY_AFTER_MS } from '@helpdock/schemas';
+import { PRESENCE_ACTIVITY_REPORT_INTERVAL_MS } from '@helpdock/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTIVITY_EVENTS, watchActivity } from './activity.js';
 
@@ -27,82 +27,116 @@ class FakeTarget {
   }
 }
 
-describe('watchActivity', () => {
-  let target: FakeTarget;
-  let idle: number;
-  let active: number;
+const INTERVAL = PRESENCE_ACTIVITY_REPORT_INTERVAL_MS;
 
-  const watch = (idleMs = PRESENCE_AWAY_AFTER_MS) =>
+describe('watchActivity (M14-18)', () => {
+  let target: FakeTarget;
+  let reports: number;
+  let visible: boolean;
+
+  const watch = (intervalMs = INTERVAL) =>
     watchActivity({
       target,
-      idleMs,
-      onIdle: () => {
-        idle += 1;
-      },
-      onActive: () => {
-        active += 1;
+      intervalMs,
+      isVisible: () => visible,
+      report: () => {
+        reports += 1;
       },
     });
 
   beforeEach(() => {
     vi.useFakeTimers();
     target = new FakeTarget();
-    idle = 0;
-    active = 0;
+    reports = 0;
+    visible = true;
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('calls idle after five minutes of nothing (DOMAIN-RULES §12)', () => {
+  it('reports once on start: opening the app is activity', () => {
     watch();
 
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS - 1);
-    expect(idle).toBe(0);
+    expect(reports).toBe(1);
+  });
+
+  it.each(ACTIVITY_EVENTS)('reports %s once the interval has passed', (event) => {
+    watch();
+    vi.advanceTimersByTime(INTERVAL);
+
+    target.fire(event);
+
+    expect(reports).toBe(2);
+  });
+
+  it('reports a tab becoming visible again, and ignores one becoming hidden', () => {
+    watch();
+    vi.advanceTimersByTime(INTERVAL);
+
+    visible = false;
+    target.fire('visibilitychange');
+    expect(reports).toBe(1);
+
+    visible = true;
+    target.fire('visibilitychange');
+    expect(reports).toBe(2);
+  });
+
+  it('sends at most one report per interval, however busy the person is', () => {
+    watch();
+
+    for (let keystroke = 0; keystroke < 200; keystroke += 1) {
+      vi.advanceTimersByTime(100);
+      target.fire('keydown');
+    }
+    // 20 s of typing: still the one report from the start, and one waiting.
+    expect(reports).toBe(1);
+
+    vi.advanceTimersByTime(INTERVAL);
+    expect(reports).toBe(2);
+  });
+
+  it('does not lose activity inside the interval: one report goes out when it ends', () => {
+    watch();
+    vi.advanceTimersByTime(20_000);
+    target.fire('pointerdown');
+    expect(reports).toBe(1);
+
+    vi.advanceTimersByTime(INTERVAL - 20_000 - 1);
+    expect(reports).toBe(1);
 
     vi.advanceTimersByTime(1);
-    expect(idle).toBe(1);
+    expect(reports).toBe(2);
   });
 
-  it.each([...ACTIVITY_EVENTS, 'visibilitychange'])('treats %s as a sign of life', (event) => {
+  it('sends nothing for a quiet interval, so silence is what the server sees', () => {
     watch();
 
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS - 10);
-    target.fire(event);
-    vi.advanceTimersByTime(20);
+    vi.advanceTimersByTime(INTERVAL * 10);
 
-    expect(idle).toBe(0);
+    expect(reports).toBe(1);
   });
 
-  it('calls active once when somebody comes back, and not on every keystroke', () => {
-    watch();
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS);
-
-    target.fire('keydown');
-    target.fire('keydown');
-
-    expect([idle, active]).toEqual([1, 1]);
-  });
-
-  it('goes idle again after another quiet five minutes', () => {
-    watch();
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS);
-    target.fire('keydown');
-
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS);
-
-    expect(idle).toBe(2);
-  });
-
-  it('unbinds everything and cancels the timer when it is stopped', () => {
+  it('unbinds everything and cancels a waiting report when it is stopped', () => {
     const watcher = watch();
+    target.fire('keydown');
     expect(target.bound()).toBe(ACTIVITY_EVENTS.length + 1);
 
     watcher.stop();
-    vi.advanceTimersByTime(PRESENCE_AWAY_AFTER_MS * 2);
+    vi.advanceTimersByTime(INTERVAL * 2);
 
     expect(target.bound()).toBe(0);
-    expect(idle).toBe(0);
+    expect(reports).toBe(1);
+  });
+
+  it('carries nothing about the event: the report takes no arguments', () => {
+    const report = vi.fn();
+    watchActivity({ target, report, isVisible: () => true });
+    vi.advanceTimersByTime(INTERVAL);
+
+    target.fire('keydown');
+
+    expect(report).toHaveBeenLastCalledWith();
   });
 });

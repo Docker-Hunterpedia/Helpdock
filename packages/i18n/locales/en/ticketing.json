@@ -571,6 +571,11 @@
       "minutes": "Minutes offline",
       "minutesSuffix": "minutes, not while the department is closed",
       "minutesInvalid": "Enter a whole number of minutes from 1 to 1440.",
+      "idleAway": "Mark idle agents away after",
+      "idleAwayOff": "Off",
+      "idleAwayOption_one": "{{count}} minute",
+      "idleAwayOption_other": "{{count}} minutes",
+      "idleAwayHint": "Away agents are not picked by the rotation. Any activity brings them back. Only “active in the last minute” is reported, never what was done.",
       "onUnassign": "When an agent loses access",
       "onUnassignHint": "Applies to role changes and deactivation.",
       "onUnassignOptions": {

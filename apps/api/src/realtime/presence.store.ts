@@ -21,6 +21,8 @@ import { derivePresence, presenceMapOf } from './presence-status.js';
  * | `presence:sockets:<brandId>:<userId>` | that person's socket ids there | with its last member |
  * | `presence:sock:<socketId>` | nothing; its existence *is* the liveness | 60 s, refreshed by the client |
  * | `presence:status:<brandId>` | the explicit `away` toggles, per user | with its last member |
+ * | `presence:active:<brandId>` | when each user last reported activity (ms), M14-18 | with its last member |
+ * | `presence:idle:<brandId>` | users whose department's idle limit passed, M14-18 | with its last member |
  *
  * The liveness key is the only one with a TTL, and that is deliberate: a
  * replica that dies without running a single `disconnect` handler leaves its
@@ -34,6 +36,8 @@ export const presenceSocketsKey = (brandId: string, userId: string): string =>
   `presence:sockets:${brandId}:${userId}`;
 export const presenceSocketKey = (socketId: string): string => `presence:sock:${socketId}`;
 export const presenceStatusKey = (brandId: string): string => `presence:status:${brandId}`;
+export const presenceActiveKey = (brandId: string): string => `presence:active:${brandId}`;
+export const presenceIdleKey = (brandId: string): string => `presence:idle:${brandId}`;
 
 /**
  * Whether the command at `index` added a set member. A failed command reports
@@ -44,6 +48,41 @@ const added = (results: [Error | null, unknown][] | null, index: number): boolea
   const result = results?.[index];
   return result !== undefined && result[0] === null && result[1] === 1;
 };
+
+/**
+ * The three scripts below take the time from Redis (`TIME`), not from the api
+ * process, so replicas whose clocks disagree still agree on who is idle.
+ */
+const NOW_MS = `local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)`;
+
+/** KEYS: brand members, activity clock, idle set. ARGV: user. Answers {present, idleEnded}. */
+export const TOUCH_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return {0, 0} end
+redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+return {1, redis.call('SREM', KEYS[3], ARGV[1])}`;
+
+/** KEYS: brand members, activity clock. ARGV: user, 'nx' (only if missing) or 'set'. */
+export const STAMP_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return 0 end
+if ARGV[2] == 'nx' then
+  return redis.call('HSETNX', KEYS[2], ARGV[1], string.format('%.0f', now))
+end
+redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+return 1`;
+
+/** KEYS: brand members, activity clock, idle set. ARGV: user, limit in ms. */
+export const MARK_IDLE_SCRIPT = `${NOW_MS}
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 0 then return 0 end
+local at = tonumber(redis.call('HGET', KEYS[2], ARGV[1]))
+if at == nil then
+  redis.call('HSET', KEYS[2], ARGV[1], string.format('%.0f', now))
+  return 0
+end
+if now - at >= tonumber(ARGV[2]) then
+  return redis.call('SADD', KEYS[3], ARGV[1])
+end
+return 0`;
 
 export interface PresenceMembership {
   readonly brandId: string;
@@ -71,6 +110,9 @@ export class PresenceStore {
       .sadd(presenceSocketsKey(brandId, userId), socketId)
       .set(presenceSocketKey(socketId), '1', 'EX', PRESENCE_SOCKET_TTL_SECONDS)
       .exec();
+    // Arriving is a sign of life, but a second tab opening must not revive an
+    // idle person it was not opened by, so only the first arrival stamps.
+    await this.#stamp(brandId, userId, 'nx');
 
     // `sadd` answers 1 only when the member was not already there. Index 1 is
     // the brand's member set, in the order the pipeline above queues them.
@@ -139,8 +181,15 @@ export class PresenceStore {
 
     if (status === 'online') {
       // Absence of a toggle *is* online, so clearing it keeps the hash the size
-      // of the people who are away rather than the size of the brand.
-      await this.#redis.hdel(presenceStatusKey(brandId), userId);
+      // of the people who are away rather than the size of the brand. Saying
+      // "I am here" is also activity, so it ends an idle away as well: left
+      // standing, it would turn the person's own choice straight back to away.
+      await this.#redis
+        .multi()
+        .hdel(presenceStatusKey(brandId), userId)
+        .srem(presenceIdleKey(brandId), userId)
+        .exec();
+      await this.#stamp(brandId, userId, 'set');
     } else {
       await this.#redis.hset(presenceStatusKey(brandId), userId, status);
     }
@@ -150,24 +199,94 @@ export class PresenceStore {
 
   /** One person's status, without reading the whole brand to find it. */
   async statusOf(brandId: string, userId: string): Promise<PresenceStatus> {
-    const [present, explicit] = await Promise.all([
+    const [present, explicit, idle] = await Promise.all([
       this.#redis.sismember(presenceBrandKey(brandId), userId),
       this.#redis.hget(presenceStatusKey(brandId), userId),
+      this.#redis.sismember(presenceIdleKey(brandId), userId),
     ]);
 
     return derivePresence({
       hasLiveSocket: present === 1,
       explicit: explicit === 'away' ? 'away' : undefined,
+      idle: idle === 1,
     });
   }
 
   async map(brandId: string): Promise<PresenceMap> {
-    const [present, explicit] = await Promise.all([
+    const [present, explicit, idle] = await Promise.all([
       this.#redis.smembers(presenceBrandKey(brandId)),
       this.#redis.hgetall(presenceStatusKey(brandId)),
+      this.#redis.smembers(presenceIdleKey(brandId)),
     ]);
 
-    return presenceMapOf(present, explicit);
+    return presenceMapOf(present, explicit, new Set(idle));
+  }
+
+  /**
+   * M14-18. The person reported activity (from any of their tabs: the clock is
+   * per person, not per socket). Answers whether that ended an idle away, which
+   * is decided by the `srem`, so two tabs reporting together announce it once.
+   * Someone with no socket here is offline and has nothing to refresh.
+   */
+  async touch({
+    brandId,
+    userId,
+  }: Omit<PresenceMembership, 'socketId'>): Promise<{ present: boolean; idleEnded: boolean }> {
+    const [present, ended] = (await this.#redis.eval(
+      TOUCH_SCRIPT,
+      3,
+      presenceBrandKey(brandId),
+      presenceActiveKey(brandId),
+      presenceIdleKey(brandId),
+      userId,
+    )) as [number, number];
+
+    return { present: present === 1, idleEnded: ended === 1 };
+  }
+
+  /**
+   * Marks the person idle if, and only if, they are present and their last
+   * report is at least `limitMs` old by Redis's own clock. One script, so a
+   * report landing between the check and the mark cannot be overruled and a
+   * departure cannot be followed by a mark. A person with no clock yet (present
+   * before this shipped, or whose stamp was lost) starts one now and is not
+   * idle on the first look. True only for the caller that marked them, who
+   * announces it.
+   */
+  async markIdleIfStale(brandId: string, userId: string, limitMs: number): Promise<boolean> {
+    return (
+      (await this.#redis.eval(
+        MARK_IDLE_SCRIPT,
+        3,
+        presenceBrandKey(brandId),
+        presenceActiveKey(brandId),
+        presenceIdleKey(brandId),
+        userId,
+        limitMs,
+      )) === 1
+    );
+  }
+
+  /** Stamps the person's clock with Redis's time, only while they are present. */
+  async #stamp(brandId: string, userId: string, mode: 'nx' | 'set'): Promise<void> {
+    await this.#redis.eval(
+      STAMP_SCRIPT,
+      2,
+      presenceBrandKey(brandId),
+      presenceActiveKey(brandId),
+      userId,
+      mode,
+    );
+  }
+
+  /** Who is idle-away now. The sweep releases those whose department stopped asking for it. */
+  async idleUsers(brandId: string): Promise<readonly string[]> {
+    return this.#redis.smembers(presenceIdleKey(brandId));
+  }
+
+  /** Ends an idle away without activity (the setting was turned off). True for the caller that did. */
+  async releaseIdle(brandId: string, userId: string): Promise<boolean> {
+    return (await this.#redis.srem(presenceIdleKey(brandId), userId)) === 1;
   }
 
   /** Every brand anyone is present in. The reaper's work list. */
@@ -215,6 +334,10 @@ export class PresenceStore {
   async #forget(brandId: string, userId: string): Promise<boolean> {
     const removed = await this.#redis.srem(presenceBrandKey(brandId), userId);
     await this.#redis.hdel(presenceStatusKey(brandId), userId);
+    // Offline is its own state: coming back starts from online, with the clock
+    // at zero, rather than inheriting an idle away from before.
+    await this.#redis.hdel(presenceActiveKey(brandId), userId);
+    await this.#redis.srem(presenceIdleKey(brandId), userId);
 
     if ((await this.#redis.scard(presenceBrandKey(brandId))) === 0) {
       await this.#redis.srem(presenceBrandsKey, brandId);

@@ -491,6 +491,7 @@ describe('assignment (M1-07)', () => {
     loadCap: 8,
     autoUnassignOffline: true,
     autoUnassignAfterMinutes: 15,
+    idleAwayMinutes: 30,
     onUnassign: 'leave_unassigned',
     agentsOnline: 1,
     agentsInRotation: 2,
@@ -525,6 +526,15 @@ describe('assignment (M1-07)', () => {
     expect(url).toBe(`/api/brands/${BRAND}/assignment/${DEPARTMENT}`);
     expect(JSON.parse(String(init.body))).toEqual({ loadCap: null });
     expect(saved.loadCap).toBeNull();
+  });
+
+  it('patches the idle limit, and turns it off with null (M14-18)', async () => {
+    fetchMock.mockResolvedValue(json({ ...setting, idleAwayMinutes: null }));
+
+    const saved = await api.updateAssignment(BRAND, DEPARTMENT, { idleAwayMinutes: null });
+
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ idleAwayMinutes: null });
+    expect(saved.idleAwayMinutes).toBeNull();
   });
 
   it('reads and patches the agents of one department', async () => {

@@ -11,6 +11,7 @@ import type { ShortcutId } from '../keyboard/registry.js';
 import { PaletteProvider } from '../palette/palette-provider.tsx';
 import { BulkUndoProvider } from '../tickets/bulk-undo.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
+import { IdleReturnNotice } from './idle-return-notice.tsx';
 import { SIDEBAR_WIDTH, Sidebar } from './sidebar.tsx';
 import { useSidebarCollapse } from './sidebar-collapse.js';
 
@@ -87,6 +88,7 @@ function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
           <Sidebar collapse={{ collapsed, onToggle: toggle }} />
         </Box>
         {content}
+        <IdleReturnNotice />
       </Box>
     );
   }
@@ -142,6 +144,7 @@ function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
       </Drawer>
 
       {content}
+      <IdleReturnNotice />
     </Box>
   );
 }

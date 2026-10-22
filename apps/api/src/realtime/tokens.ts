@@ -15,3 +15,5 @@ export const ROOM_SCOPE_READER = Symbol('helpdock.room-scope-reader');
 export const SOCKET_EVENT_LIMITER = Symbol('helpdock.socket-event-limiter');
 /** The `/staff` handshake's origin rule and M4-04's agent-typing relay; see `staff.gateway.ts`. */
 export const STAFF_SOCKET_OPTIONS = Symbol('helpdock.staff-socket-options');
+/** M14-18: how long each person of a brand may be idle before they are marked away. */
+export const IDLE_AWAY_POLICY = Symbol('helpdock.idle-away-policy');

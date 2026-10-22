@@ -6,6 +6,7 @@ import {
   notificationReadEnvelopeSchema,
   PRESENCE_HEARTBEAT_INTERVAL_MS,
   type PresenceMap,
+  presenceActiveAckSchema,
   presenceChangedEnvelopeSchema,
   REALTIME_EVENTS,
   roomAckSchema,
@@ -21,6 +22,7 @@ import {
 import { io } from 'socket.io-client';
 import { backoffDelay } from './backoff.js';
 import {
+  type ActivityReportResult,
   type RealtimeClient,
   type RealtimeListener,
   RealtimeListeners,
@@ -154,6 +156,19 @@ export class SocketRealtimeClient implements RealtimeClient {
     const parsed = brandPresenceSchema.safeParse(await response.json());
 
     return parsed.success ? parsed.data.presence : {};
+  }
+
+  async reportActivity(): Promise<ActivityReportResult | null> {
+    const brandId = this.#brandId;
+    if (this.#socket === null || brandId === null) {
+      return null;
+    }
+
+    const ack = presenceActiveAckSchema.safeParse(
+      await this.#socket.emitWithAck(REALTIME_EVENTS.presenceActive, { brandId }),
+    );
+
+    return ack.success && ack.data.ok ? ack.data.data : null;
   }
 
   async setPresence(status: SettablePresenceStatus): Promise<void> {

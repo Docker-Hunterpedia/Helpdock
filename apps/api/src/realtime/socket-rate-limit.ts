@@ -14,6 +14,12 @@ import type { RateLimiter, RateLimitRule } from '../auth/rate-limit.js';
 export const SOCKET_EVENT_RULES = {
   [REALTIME_EVENTS.roomJoin]: { bucket: 'socket-room-join', limit: 120, windowSeconds: 60 },
   [REALTIME_EVENTS.presenceSet]: { bucket: 'socket-presence-set', limit: 30, windowSeconds: 60 },
+  // One report a minute per tab; sixty is a well-behaved client's many times over.
+  [REALTIME_EVENTS.presenceActive]: {
+    bucket: 'socket-presence-active',
+    limit: 60,
+    windowSeconds: 60,
+  },
   [REALTIME_EVENTS.presenceHeartbeat]: {
     bucket: 'socket-presence-heartbeat',
     limit: 60,

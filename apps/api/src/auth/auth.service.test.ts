@@ -42,6 +42,7 @@ import { RefreshStore } from './session/refresh-store.js';
 import { SessionService } from './session/session.service.js';
 import type { StaffMembership, StaffRepository, StaffUser } from './staff.repository.js';
 import { TotpChallengeStore } from './totp/challenge-store.js';
+import { hashRecoveryCodes } from './totp/recovery-codes.js';
 import { newTotpSecret } from './totp/totp.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
 import { TotpStepStore } from './totp/used-steps.js';
@@ -2934,6 +2935,65 @@ describe('a passkey as the second factor (M18-03)', () => {
 
       expect(issued.session.user.email).toBe('lina@helpdock.com');
       expect(audit.entries.at(-1)?.meta).toMatchObject({ method: 'sso', secondFactor: 'passkey' });
+    });
+
+    it('offers the app and the passkey on the challenge an SSO assertion leaves', async () => {
+      const made = await withTotp();
+      const user = staff.add(made.user, 'admin');
+      passkeyCounts.set(user.id, 1);
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      vi.spyOn(SsoIdentityService.prototype, 'signIn').mockResolvedValue({
+        user,
+        idpEnforcesMfa: false,
+      } as never);
+
+      await expect(
+        service.completeSso(
+          {
+            connectionId: uuidv7(),
+            subject: 'staff-1',
+            email: user.email,
+            emailVerified: true,
+            groups: [],
+          },
+          undefined,
+        ),
+      ).resolves.toMatchObject({
+        kind: 'totp-required',
+        factors: { totp: true, passkey: true },
+      });
+    });
+
+    it('lets a recovery code finish an SSO sign-in under enforcement, and spends it (#387)', async () => {
+      const user = staff.add(
+        await newUser({
+          recoveryCodesHashed: await hashRecoveryCodes(['RC-2MDV-KDNP'], hasher),
+        }),
+        'admin',
+      );
+      vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValue(true);
+      vi.spyOn(SsoIdentityService.prototype, 'assertLinked').mockResolvedValue(undefined);
+      const challengeId = await new TotpChallengeStore(stub.asRedis()).create({
+        userId: user.id,
+        kind: 'second-factor',
+        firstFactor: 'sso',
+        ssoConnectionId: uuidv7(),
+      });
+
+      await expect(
+        service.useRecoveryCode({
+          ip: IP,
+          challengeId,
+          code: 'rc-2mdv-kdnp',
+          userAgent: undefined,
+        }),
+      ).resolves.toMatchObject({ session: { user: { email: user.email } } });
+
+      expect(staff.users.get(user.id)?.recoveryCodesHashed).toEqual([]);
+      expect(audit.entries.at(-1)?.meta).toMatchObject({
+        method: 'sso',
+        secondFactor: 'recovery-code',
+      });
     });
 
     it('offers the app and the passkey after a break-glass password', async () => {

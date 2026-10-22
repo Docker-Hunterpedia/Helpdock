@@ -655,12 +655,47 @@ describe.skipIf(!hasDocker)(
           userAgent: undefined,
         });
 
-      it('refuses a recovery code when enforced and accepts it when not', async () => {
-        await ssoUser({ totp: true });
-        await enforce(true);
-        const refused = await challengeAfterSso();
-        await expect(recovery(refused)).rejects.toMatchObject({ auth: { code: 'sso-required' } });
+      it('spends a recovery code after an SSO assertion under enforcement, and still refuses one after a password (#387)', async () => {
+        const auth = app.get(AuthService);
+        const password = 'M11-only-correct-horse-passphrase!';
+        const user = await ssoUser({ totp: true });
+        // The same person is also the break-glass admin, so the password first
+        // factor is reachable under enforcement at all.
+        await owner.db
+          .update(users)
+          .set({ installAdmin: true, passwordHash: await auth.hashPassword(password) })
+          .where(eq(users.id, user.id));
+        await owner.db.insert(settings).values({
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          updatedBy: ADMIN,
+          key: 'sso.breakGlassUserIds',
+          value: JSON.stringify([user.id]),
+        });
 
+        await enforce(true);
+        const enforced = await challengeAfterSso();
+        await expect(recovery(enforced)).resolves.toMatchObject({
+          session: { user: { email: 'ada@example.com' } },
+        });
+        const [spent] = await owner.db.select().from(users).where(eq(users.id, user.id));
+        expect(spent?.recoveryCodesHashed).toEqual([]);
+
+        const outcome = await auth.signIn({
+          email: user.email,
+          password,
+          ip: 'break-glass-recovery',
+          userAgent: undefined,
+          trustedDeviceCookie: undefined,
+        });
+        if (outcome.kind !== 'totp-required') throw new Error('Expected a break-glass challenge');
+        await expect(recovery(outcome.challengeId)).rejects.toMatchObject({
+          auth: { code: 'sso-required' },
+        });
+
+        await owner.db
+          .update(users)
+          .set({ recoveryCodesHashed: [await auth.hashPassword(RECOVERY)] })
+          .where(eq(users.id, user.id));
         await enforce(false);
         const open = await challengeAfterSso();
         await expect(recovery(open)).resolves.toMatchObject({
@@ -692,7 +727,8 @@ describe.skipIf(!hasDocker)(
 
         await enforce(true);
         await expect(policy.allows('sso', 'trusted-browser')).resolves.toBe(false);
-        await expect(policy.allows('sso', 'recovery-code')).resolves.toBe(false);
+        await expect(policy.allows('sso', 'recovery-code')).resolves.toBe(true);
+        await expect(policy.allows('password', 'recovery-code')).resolves.toBe(false);
         await expect(policy.allows('password', 'trusted-browser')).resolves.toBe(false);
         await expect(policy.allows('sso', 'totp')).resolves.toBe(true);
         await expect(policy.allows('sso', 'passkey')).resolves.toBe(true);

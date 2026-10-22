@@ -33,9 +33,9 @@ describe('what SSO enforcement allows', () => {
     ['totp', true],
     ['passkey', true],
     ['idp', true],
-    [null, true],
-    ['recovery-code', false],
+    ['recovery-code', true],
     ['trusted-browser', false],
+    [null, true],
   ] as const)('after an SSO assertion, %s is %s', (second, allowed) => {
     expect(enforcementAllows('sso', second)).toBe(allowed);
   });

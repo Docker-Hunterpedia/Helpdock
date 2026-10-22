@@ -729,12 +729,13 @@ Backlog or never:
     response gains `passkeyNeedsVerification`, shown as
     `sso:ineligibleUnverified` (a line the artboard does not draw).
   - The SSO-first column is covered by the table, the unit scenarios and
-    `identity.integration.test.ts` (recovery code refused when enforced and
-    accepted when not; app code accepted; enrolment completes; a local enrolment
+    `identity.integration.test.ts` (recovery code accepted with enforcement on
+    and off, and still refused after a break-glass password; app code accepted;
+    enrolment completes; a local enrolment
     begun earlier is refused). A trusted browser is never honoured after SSO
     (`completeSso` passes no cookie), so that cell is the policy table only.
-    A recovery code after an SSO assertion stays refused under enforcement, as
-    in 1.0; the owner is deciding whether that should change.
+    A recovery code after an SSO assertion was refused under enforcement until
+    #387 (owner decision, 2026-10-21) allowed it.
   - A break-glass admin who holds only a passkey cannot sign in while passkeys
     are paused after an `APP_URL` change; the SSO guide says to keep an app on
     the account too, or to set `HD_SSO_ENFORCED=false`.

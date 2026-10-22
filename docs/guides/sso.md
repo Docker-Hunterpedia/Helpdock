@@ -101,9 +101,12 @@ refused for break-glass. A break-glass admin who holds only a passkey is locked 
 address (`APP_URL`) changes and pauses passkeys, so keep an authenticator app on
 the account too, or set `HD_SSO_ENFORCED=false` in the environment to turn enforcement off
 (unsetting the variable does nothing when enforcement was switched on in Settings).
-Someone who signed in through SSO may still use an authenticator code or a
-passkey as a second factor, but not a recovery code or a trusted browser: under
-enforcement recovery codes are refused after any first factor, including SSO.
+Someone who signed in through SSO may finish with an authenticator code, a
+passkey or a single-use recovery code as the second factor, but never a trusted
+browser. A recovery code still never finishes break-glass, which stays a fresh
+authenticator code or a user-verified passkey: it is the way back in for a
+person whose IdP does not vouch for MFA and who lost the phone their
+authenticator was on (#387).
 A passkey counts for break-glass only if it registered with user verification
 (a PIN or a biometric); Helpdock records this when the key is added, and keys
 added before 1.1 count as unverified. The Settings picker says so beside an

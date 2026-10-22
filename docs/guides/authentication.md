@@ -282,6 +282,8 @@ with `{ passkey: { ceremonyId, response } }`, answering the ceremony from
 `POST /api/me/passkeys/step-up/options`). Both spend the step-up budget. A recovery
 code answers a second-factor challenge only: it never opens a passwordless
 sign-in, and it is not a break-glass credential, even with a passkey on the account.
+Under SSO enforcement it may finish a sign-in that began with an SSO assertion
+(#387); it still never finishes break-glass, whose first factor is a password.
 
 Ten, shaped `RC-4KQ2-9XMT`, in an alphabet with no character that can be
 confused with another on paper. Each works once. They are stored as argon2
@@ -1266,7 +1268,11 @@ password invitation acceptance refuse sign-in. Discovery matches enabled
 provider domains without looking up accounts. Existing sessions stay open.
 Configured break-glass install admins may use their password followed by a fresh
 authenticator code or a user-verified passkey; trusted browsers, recovery codes
-and passwordless passkey sign-in do not qualify. Enforcement and
+and passwordless passkey sign-in do not qualify. A sign-in that began with an
+SSO assertion may still finish with a fresh authenticator code, a passkey or a
+single-use recovery code, which is the way back in for a person whose IdP does
+not vouch for MFA and who lost the phone their authenticator was on (#387); a
+trusted browser may not. Enforcement and
 connection status are rechecked for pending challenges. Completing SSO accepts
 an invitation only after its required factors and keeps manual membership grants.
 See [SSO policy and setup](sso.md#roles-mfa-and-enforcement).

@@ -220,6 +220,27 @@ describe('sessionOf', () => {
       service.sessionOf(userId, `Bearer ${await tokenFor(uuidv7())}`, tx),
     ).rejects.toThrow('Authentication');
   });
+
+  it('refuses a token that claims the principal but is signed by another key', async () => {
+    const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
+    const forged = await issueAccessToken(
+      { userId, sessionId: uuidv7(), familyId, brands: {}, installAdmin: false },
+      { kid: 'not-this-install', privateKey, publicKey },
+    );
+
+    await expect(service.sessionOf(userId, `Bearer ${forged}`, tx)).rejects.toThrow(
+      'Authentication',
+    );
+  });
+
+  it('refuses an unsigned token that claims the principal', async () => {
+    const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const unsigned = [part({ alg: 'none', typ: 'JWT' }), part({ sub: userId }), ''].join('.');
+
+    await expect(service.sessionOf(userId, `Bearer ${unsigned}`, tx)).rejects.toThrow(
+      'Authentication',
+    );
+  });
 });
 
 describe('beginRegistration', () => {

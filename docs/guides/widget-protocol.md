@@ -275,7 +275,7 @@ than `en` or `ar` is refused with `400`.
   "nextOpenAt": null,
   "timezone": "Asia/Riyadh",
   "agentsOnline": true,
-  "agents": [{ "name": "Karim", "avatarUrl": null }, { "name": "Lina", "avatarUrl": null }]
+  "agents": [{ "name": "Karim" }, { "name": "Lina" }]
 }
 ```
 
@@ -286,8 +286,9 @@ are online now" line. It is empty when nobody is online, and also when the
 brand turned off **Show the agent's name and photo**: `agentsOnline` still says
 whether anybody is there. It never carries a staff id, an email address or a
 full name. `name` is the **public name** the person set on Your account →
-Profile (their first name until then). `avatarUrl` is a presigned link to their
-64 px photo that lives five minutes, or `null` and the widget draws initials.
+Profile (their first name until then). There is no photo here: a presigned
+photo URL is issued only for the author of a message in the visitor's own
+conversation (DOMAIN-RULES §2.10.4), and the online stack draws the initials.
 
 `availability` is the brand's own calendar, read once when the widget loads.
 The hours of the team that answers a conversation, which can be its
@@ -438,8 +439,9 @@ replies and `null` for the visitor's own messages, `clientId` on the visitor's
 own messages only, and `agent` only when the brand shows agents: `{ name,
 title, avatarUrl }`, the public name, the job title in the contact's language
 (English when there is no Arabic one, `null` when there is none) and a presigned
-64 px photo link or `null`. The widget draws the photo in the header, beside the
-message and in the online stack, and falls back to initials when the link has
+64 px photo link or `null` — the photo of the person who wrote this message,
+which is the only way one reaches a visitor. The widget draws the photo in the
+header and beside the message, and falls back to initials when the link has
 expired. It has no field that could carry an internal note.
 
 ### Typing, read, queue, transcript

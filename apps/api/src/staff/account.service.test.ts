@@ -2,12 +2,15 @@ import type { DbTransaction, User } from '@helpdock/db';
 import sharp from 'sharp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../auth/auth.service.js';
+import type { RateLimiter } from '../auth/rate-limit.js';
+import { PROFILE_PHOTO_RULE } from '../auth/rate-limit.js';
 import type { SessionService } from '../auth/session/session.service.js';
+import { drainPostCommit } from '../context/after-commit.js';
+import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import { silentLogger } from '../testing/silent-logger.js';
 import { AccountService } from './account.service.js';
 import type { ProfilePhotoStore } from './profile-photo.store.js';
 import type { StaffRepository } from './staff.repository.js';
-import { StaffFailure } from './staff-failure.js';
 
 /**
  * Your account's profile for customers (M14-12), with the repository and the
@@ -46,6 +49,7 @@ let photos: {
   save: ReturnType<typeof vi.fn>;
   removeQuietly: ReturnType<typeof vi.fn>;
 };
+let limiter: { consume: ReturnType<typeof vi.fn> };
 let service: AccountService;
 
 beforeEach(() => {
@@ -64,14 +68,26 @@ beforeEach(() => {
     save: vi.fn(async () => 'install/users/u/new/'),
     removeQuietly: vi.fn(async () => undefined),
   };
+  limiter = { consume: vi.fn(async () => true) };
   service = new AccountService({
     staff: staff as unknown as StaffRepository,
     auth: { secondFactorRequiredFor: async () => false } as unknown as AuthService,
     sessions: {} as SessionService,
     photos: photos as unknown as ProfilePhotoStore,
+    limiter: limiter as unknown as RateLimiter,
     logger: silentLogger(),
   });
 });
+
+/** A request context for the calls that queue work for after the commit. */
+const inRequest = async <T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; context: RequestContext }> => {
+  const context = new RequestContext({ requestId: 'test', method: 'POST', path: '/api/test' });
+  const result = await runInRequestContext(context, fn);
+
+  return { result, context };
+};
 
 describe('profile', () => {
   it('shows the first name as what customers see until a public name is set', async () => {
@@ -160,16 +176,30 @@ describe('setPhoto', () => {
       .png()
       .toBuffer();
 
-  it('stores the re-encoded photo, points the account at it and deletes the one it replaced', async () => {
+  it('charges the upload to its own bucket, per account', async () => {
+    await inRequest(async () => service.setPhoto(tx, USER, await png(), 'image/png'));
+
+    expect(limiter.consume).toHaveBeenCalledExactlyOnceWith(PROFILE_PHOTO_RULE, USER);
+  });
+
+  it('stores the re-encoded photo, points the account at it, and deletes the old folder only after the commit', async () => {
     staff.replacePhoto.mockResolvedValueOnce('install/users/u/old/');
 
-    await service.setPhoto(tx, USER, await png(), 'image/png');
+    const { context } = await inRequest(async () =>
+      service.setPhoto(tx, USER, await png(), 'image/png'),
+    );
 
     expect(photos.save).toHaveBeenCalledWith(USER, {
       large: expect.any(Buffer),
       small: expect.any(Buffer),
     });
     expect(staff.replacePhoto).toHaveBeenCalledWith(tx, USER, 'install/users/u/new/');
+    // Still inside the transaction: the old folder must still be there if the
+    // request rolls back, so nothing has been deleted yet.
+    expect(photos.removeQuietly).not.toHaveBeenCalled();
+
+    await drainPostCommit(context);
+
     expect(photos.removeQuietly).toHaveBeenCalledWith('install/users/u/old/', expect.anything());
   });
 
@@ -178,27 +208,37 @@ describe('setPhoto', () => {
     ['an empty file', Buffer.alloc(0), 'image/png', 'photo-missing'],
     ['a type that is not an image', Buffer.from('x'), 'application/pdf', 'photo-unsupported-type'],
   ])(
-    'refuses %s without touching the bucket or the account',
+    'refuses %s without touching the bucket, the account or the budget',
     async (_name, bytes, mime, reason) => {
-      const refusal = await service
-        .setPhoto(tx, USER, bytes, mime)
-        .catch((error: unknown) => error);
-
-      expect(refusal).toBeInstanceOf(StaffFailure);
-      expect(refusal).toMatchObject({ reason });
+      await expect(service.setPhoto(tx, USER, bytes, mime)).rejects.toMatchObject({ reason });
+      expect(limiter.consume).not.toHaveBeenCalled();
       expect(photos.save).not.toHaveBeenCalled();
       expect(staff.replacePhoto).not.toHaveBeenCalled();
     },
   );
+
+  it('refuses an upload whose budget is spent, before anything is decoded', async () => {
+    limiter.consume.mockResolvedValueOnce(false);
+
+    await expect(service.setPhoto(tx, USER, await png(), 'image/png')).rejects.toMatchObject({
+      reason: 'photo-rate-limited',
+    });
+    expect(photos.save).not.toHaveBeenCalled();
+    expect(staff.replacePhoto).not.toHaveBeenCalled();
+  });
 });
 
 describe('removePhoto', () => {
-  it('clears the photo and deletes its objects', async () => {
+  it('clears the photo and queues its objects for deletion after the commit', async () => {
     staff.replacePhoto.mockResolvedValueOnce('install/users/u/old/');
 
-    await service.removePhoto(tx, USER);
+    const { context } = await inRequest(() => service.removePhoto(tx, USER));
 
     expect(staff.replacePhoto).toHaveBeenCalledWith(tx, USER, null);
+    expect(photos.removeQuietly).not.toHaveBeenCalled();
+
+    await drainPostCommit(context);
+
     expect(photos.removeQuietly).toHaveBeenCalledWith('install/users/u/old/', expect.anything());
   });
 });

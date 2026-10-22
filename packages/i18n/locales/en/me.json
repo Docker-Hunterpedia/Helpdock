@@ -270,6 +270,7 @@
     "photoTooLarge": "That photo is larger than 5 MB.",
     "photoUnsupported": "Use a JPG, PNG or WebP image.",
     "photoUnreadable": "That image could not be read. Try another one.",
+    "photoSlowDown": "Several photos in a row. Try again in a few minutes.",
     "photoFailed": "The photo was not changed.",
     "name": "Name",
     "publicName": "Public name",

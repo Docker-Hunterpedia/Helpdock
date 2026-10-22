@@ -25,6 +25,7 @@ const STATUS_BY_REASON: Readonly<Record<StaffRefusal, number>> = {
   'photo-too-large': HttpStatus.BAD_REQUEST,
   'photo-unsupported-type': HttpStatus.BAD_REQUEST,
   'photo-unreadable': HttpStatus.BAD_REQUEST,
+  'photo-rate-limited': HttpStatus.TOO_MANY_REQUESTS,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<StaffRefusal, string>> = {
@@ -37,6 +38,7 @@ const MESSAGE_BY_REASON: Readonly<Record<StaffRefusal, string>> = {
   'photo-too-large': 'The photo is larger than 5 MB',
   'photo-unsupported-type': 'The photo must be a JPEG, PNG or WebP image',
   'photo-unreadable': 'The photo could not be read as an image',
+  'photo-rate-limited': 'Too many photo uploads; try again a little later',
 };
 
 export class StaffFailure extends HttpException {

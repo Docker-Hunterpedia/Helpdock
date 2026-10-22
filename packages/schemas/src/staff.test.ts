@@ -40,6 +40,23 @@ describe('profileUpdateRequestSchema (M14-12)', () => {
     ).toBe(false);
   });
 
+  it.each([
+    ['a bidi override', '\u202Eexe\u202C'],
+    ['an isolated right-to-left mark', '\u2067mona\u2069'],
+    ['a newline', 'Lina\nHaddad'],
+    ['a zero-width space', 'Li\u200Bna'],
+    ['a soft hyphen', 'Li\u00ADna'],
+    ['a NUL byte', 'Li\u0000na'],
+  ])('refuses %s in a customer-visible field', (_what, value) => {
+    expect(profileUpdateRequestSchema.safeParse({ publicName: value }).success).toBe(false);
+    expect(profileUpdateRequestSchema.safeParse({ jobTitleAr: value }).success).toBe(false);
+  });
+
+  it('still takes Arabic and marks that render as themselves', () => {
+    expect(profileUpdateRequestSchema.parse({ publicName: 'لينا' }).publicName).toBe('لينا');
+    expect(profileUpdateRequestSchema.parse({ jobTitleEn: 'Lina H.' }).jobTitleEn).toBe('Lina H.');
+  });
+
   it('takes an IANA time zone or null, and refuses anything else', () => {
     expect(profileUpdateRequestSchema.parse({ timeZone: 'Asia/Riyadh' }).timeZone).toBe(
       'Asia/Riyadh',

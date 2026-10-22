@@ -66,12 +66,18 @@ const draftOf = (profile: Profile): Draft => ({
 
 const orNull = (value: string): string | null => (value.trim() === '' ? null : value.trim());
 
-type PhotoProblem = 'photoTooLarge' | 'photoUnsupported' | 'photoUnreadable' | 'photoFailed';
+type PhotoProblem =
+  | 'photoTooLarge'
+  | 'photoUnsupported'
+  | 'photoUnreadable'
+  | 'photoSlowDown'
+  | 'photoFailed';
 
 const PHOTO_PROBLEM = {
   'photo-too-large': 'photoTooLarge',
   'photo-unsupported-type': 'photoUnsupported',
   'photo-unreadable': 'photoUnreadable',
+  'photo-rate-limited': 'photoSlowDown',
   'photo-missing': 'photoFailed',
 } as const satisfies Record<string, PhotoProblem>;
 

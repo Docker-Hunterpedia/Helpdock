@@ -56,7 +56,9 @@ import {
   type OutboxRelay,
   outboxEventJob,
   outboxJobOrderingKeys,
+  PHOTO_SWEEP_CRON,
   parseJobPayloadOrFail,
+  photoSweepScheduleJob,
   QUEUE_NAMES,
   RETENTION_CRON,
   type RelayStatusStore,
@@ -206,6 +208,7 @@ import {
   type SlaWorkerDeps,
 } from '../sla/sla-worker.js';
 import { createSamlMetadataProcessor } from '../sso/saml-metadata.job.js';
+import { createPhotoSweepProcessor, S3UserPhotoFolders } from '../staff/photo-sweep.job.js';
 import { ProfilePhotoStore } from '../staff/profile-photo.store.js';
 import { telegramApiFactory } from '../telegram/bot-api-factory.js';
 import { createTelegramInboundService } from '../telegram/factory.js';
@@ -1080,14 +1083,16 @@ export const workerDependencies: WorkerDependencies = {
   createMaintenanceWorker: ({ redis, db, log, env, settings }) => {
     const maintenance = new Queue(QUEUE_NAMES.maintenance, { connection: redis });
     // M1-14's nightly retention, M8-04's hourly rollup, M8-07's nightly purge
-    // tick and M10-10's daily re-registration of the Meta health checks, each
-    // upserted on every boot for the reason above.
+    // tick, M10-10's daily re-registration of the Meta health checks and the
+    // M14-12 hourly photo sweep, each upserted on every boot for the reason
+    // above.
     for (const { job, cron } of [
       { job: maintenanceRetentionScheduleJob, cron: RETENTION_CRON },
       { job: statsRollupScheduleJob, cron: STATS_ROLLUP_CRON },
       { job: brandPurgeScheduleJob, cron: BRAND_PURGE_CRON },
       { job: metaHealthScheduleJob, cron: META_HEALTH_SCHEDULE_CRON },
       { job: samlMetadataRefreshJob, cron: SAML_METADATA_REFRESH_CRON },
+      { job: photoSweepScheduleJob, cron: PHOTO_SWEEP_CRON },
       { job: importRecoverJob, cron: IMPORT_RECOVERY_CRON },
     ]) {
       maintenance
@@ -1101,7 +1106,8 @@ export const workerDependencies: WorkerDependencies = {
         );
     }
 
-    const objects = new S3BrandObjects(createS3Client(env), env.S3_BUCKET);
+    const s3 = createS3Client(env);
+    const objects = new S3BrandObjects(s3, env.S3_BUCKET);
     const storageUsage = new StorageUsageStore(redis);
     const inbound = new Queue(QUEUE_NAMES.inbound, { connection: redis });
     const stats = createStatsProcessor({
@@ -1172,6 +1178,11 @@ export const workerDependencies: WorkerDependencies = {
       allowCidrs: env.OUTBOUND_ALLOW_CIDRS,
       log,
     });
+    const photoSweep = createPhotoSweepProcessor({
+      db,
+      folders: new S3UserPhotoFolders(s3, env.S3_BUCKET),
+      log,
+    });
     const worker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
@@ -1181,7 +1192,12 @@ export const workerDependencies: WorkerDependencies = {
           return;
         }
         // Retention fails a job it does not know, so it stays last.
-        await (stats(job) ?? purge(job) ?? metaHealth(job) ?? samlMetadata(job) ?? retention(job));
+        await (stats(job) ??
+          purge(job) ??
+          metaHealth(job) ??
+          samlMetadata(job) ??
+          photoSweep(job) ??
+          retention(job));
       },
       // One brand at a time: retention is background housekeeping, and two
       // brands purging at once would only compete for the same disk.

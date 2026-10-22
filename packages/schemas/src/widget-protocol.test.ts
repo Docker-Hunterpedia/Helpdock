@@ -85,6 +85,20 @@ describe('WIDGET_EVENT_PAYLOADS', () => {
       ].sort(),
     );
   });
+
+  it('lets a presence frame carry names and nothing else (M14-12 review: no photo online)', () => {
+    // DOMAIN-RULES §2.10.4: a presigned photo URL is issued only for the author
+    // of a message in the visitor's own conversation. The online line reaches
+    // every visitor of the brand, answered or not, so a photo there would leak
+    // five faces to strangers; anything smuggled under the name is stripped.
+    const payload = WIDGET_EVENT_PAYLOADS[WIDGET_EVENTS.presence].parse({
+      agentsOnline: true,
+      agents: [{ name: 'Lina', avatarUrl: 'https://bucket.test/lina/64.webp', id: 'u-1' }],
+    });
+
+    expect(payload).toEqual({ agentsOnline: true, agents: [{ name: 'Lina' }] });
+    expect(JSON.stringify(payload)).not.toContain('avatarUrl');
+  });
 });
 
 describe('hours on a conversation (M7-06)', () => {

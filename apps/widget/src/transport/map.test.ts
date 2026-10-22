@@ -191,17 +191,15 @@ describe('toAvailability', () => {
     const availability = toAvailability({
       open: true,
       agentsOnline: true,
-      agents: [
-        { name: 'Lina', avatarUrl: null },
-        { name: 'Sara', avatarUrl: 'https://cdn.acme.test/sara.webp' },
-      ],
+      // Names only: the online line carries no photo (DOMAIN-RULES §2.10.4).
+      agents: [{ name: 'Lina' }, { name: 'Sara' }],
       nextOpenAt: null,
       timezone: 'UTC',
     });
 
     expect(availability.agents_online).toEqual([
       { id: 'online-0', name: 'Lina', avatar_url: null },
-      { id: 'online-1', name: 'Sara', avatar_url: 'https://cdn.acme.test/sara.webp' },
+      { id: 'online-1', name: 'Sara', avatar_url: null },
     ]);
   });
 });

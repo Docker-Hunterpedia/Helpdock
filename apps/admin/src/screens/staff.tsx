@@ -112,6 +112,7 @@ export function StaffScreen(): ReactNode {
         'photo-too-large': 'staff:toast.failed',
         'photo-unsupported-type': 'staff:toast.failed',
         'photo-unreadable': 'staff:toast.failed',
+        'photo-rate-limited': 'staff:toast.failed',
       } as const;
 
       toast({ tone: 'danger', message: t(key[error.reason]) });

@@ -1591,10 +1591,13 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
           showAgentIdentity: true,
         });
         const shown = await widget<WidgetAvailability>('GET', '/availability');
+        // The online line names the agents; a photo is a message author's
+        // alone (DOMAIN-RULES §2.10.4), so an anonymous visitor is told none.
         expect(shown.body).toMatchObject({
           agentsOnline: true,
-          agents: [{ name: 'Tia', avatarUrl: null }],
+          agents: [{ name: 'Tia' }],
         });
+        expect(JSON.stringify(shown.body)).not.toContain('avatarUrl');
 
         await staff('PUT', `/api/brands/${seeded.brandId}/widget/conversation`, tia, {
           ...conversation,

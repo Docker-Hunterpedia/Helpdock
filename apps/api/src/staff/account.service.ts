@@ -10,12 +10,23 @@ import {
 import { NotFoundException } from '@nestjs/common';
 import type { AuthService } from '../auth/auth.service.js';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { PROFILE_PHOTO_RULE, type RateLimiter } from '../auth/rate-limit.js';
 import type { SessionService } from '../auth/session/session.service.js';
+import { runAfterCommit } from '../context/after-commit.js';
 import type { Logger } from '../logging/logger.js';
-import { type EncodedPhoto, encodeProfilePhoto, PhotoRefusal } from './profile-photo.js';
+import {
+  assertProfilePhotoUpload,
+  type EncodedPhoto,
+  encodeProfilePhoto,
+  PhotoRefusal,
+} from './profile-photo.js';
 import type { ProfilePhotoStore } from './profile-photo.store.js';
 import type { StaffRepository } from './staff.repository.js';
 import { StaffFailure } from './staff-failure.js';
+
+/** A photo the gates refused is a `staff.reason` the screen has a sentence for. */
+const refusalFailure = (error: unknown): unknown =>
+  error instanceof PhotoRefusal ? new StaffFailure(`photo-${error.reason}`) : error;
 
 /**
  * The four things a person may change about their own account: their name and
@@ -33,6 +44,7 @@ export interface AccountServiceOptions {
   readonly auth: AuthService;
   readonly sessions: SessionService;
   readonly photos: ProfilePhotoStore;
+  readonly limiter: Pick<RateLimiter, 'consume'>;
   readonly logger: Logger;
 }
 
@@ -88,7 +100,10 @@ export class AccountService {
 
   /**
    * Replaces the photo with `bytes`, re-encoded, and deletes the one it
-   * replaced. A photo that fails the gates (`PhotoRefusal`) changes nothing.
+   * replaced — after the commit, so a rollback leaves `users.photo_key`
+   * pointing at a folder that is still there. The folder the rollback orphaned
+   * is the photo sweep's (`staff/photo-sweep.job.ts`). A photo that fails the
+   * gates (`PhotoRefusal`) changes nothing, and neither does a spent budget.
    */
   async setPhoto(
     tx: DbTransaction,
@@ -96,21 +111,30 @@ export class AccountService {
     bytes: Uint8Array,
     declaredMime: string,
   ): Promise<Profile> {
-    const encoded: EncodedPhoto = await encodeProfilePhoto(bytes, declaredMime).catch(
-      (error: unknown) => {
-        throw error instanceof PhotoRefusal ? new StaffFailure(`photo-${error.reason}`) : error;
-      },
-    );
+    try {
+      // The cheap refusals cost no budget: a person fumbling the file type is
+      // not locked out. The budget buys the decode, which is what an abuser
+      // would be after.
+      assertProfilePhotoUpload(bytes, declaredMime);
+    } catch (error: unknown) {
+      throw refusalFailure(error);
+    }
+    if (!(await this.#parts.limiter.consume(PROFILE_PHOTO_RULE, userId))) {
+      throw new StaffFailure('photo-rate-limited');
+    }
+    const encoded: EncodedPhoto = await encodeProfilePhoto(bytes, declaredMime).catch((error) => {
+      throw refusalFailure(error);
+    });
     const folder = await this.#parts.photos.save(userId, encoded);
     const previous = await this.#parts.staff.replacePhoto(tx, userId, folder);
-    await this.#parts.photos.removeQuietly(previous, this.#parts.logger);
+    runAfterCommit(() => this.#parts.photos.removeQuietly(previous, this.#parts.logger));
 
     return this.profile(tx, userId);
   }
 
   async removePhoto(tx: DbTransaction, userId: string): Promise<Profile> {
     const previous = await this.#parts.staff.replacePhoto(tx, userId, null);
-    await this.#parts.photos.removeQuietly(previous, this.#parts.logger);
+    runAfterCommit(() => this.#parts.photos.removeQuietly(previous, this.#parts.logger));
 
     return this.profile(tx, userId);
   }

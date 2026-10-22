@@ -222,7 +222,6 @@ export class WidgetModule {
                 presence,
                 settings: settingsRepository,
                 widget,
-                cards: agents,
               }),
               captcha: captchaKeys,
               pow,

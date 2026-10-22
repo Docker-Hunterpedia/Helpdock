@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import type { Principal } from '../auth/principal.js';
+import { drainPostCommit } from '../context/after-commit.js';
 import { currentRequestContext, type RequestContext } from '../context/request-context.js';
 import { DB } from '../runtime/tokens.js';
 import { auditInstallScopeAccess } from './install-scope.js';
@@ -112,6 +113,9 @@ export class TenantInterceptor implements NestInterceptor {
     tenantContext: TenantContext;
     next: CallHandler;
   }): Promise<unknown> {
+    // The `.then` runs only when the transaction committed: `withTenant`
+    // resolves after the commit, and a rollback rejects past it, dropping
+    // everything the request queued (`context/after-commit.ts`).
     return withTenant(this.#db, tenantContext, async (tx) => {
       context.tx = tx;
       try {
@@ -122,6 +126,9 @@ export class TenantInterceptor implements NestInterceptor {
       } finally {
         context.tx = null;
       }
+    }).then(async (value) => {
+      await drainPostCommit(context);
+      return value;
     });
   }
 }

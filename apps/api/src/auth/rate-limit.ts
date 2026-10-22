@@ -199,6 +199,19 @@ export const MAGIC_LINK_LOOKUP_RULE: RateLimitRule = {
 };
 
 /**
+ * Per account, for profile photo uploads (M14-12). Every one costs a sharp
+ * decode and re-encode and writes two objects, and a person changes their face
+ * a handful of times a year: ten a quarter-hour keeps a loop from turning the
+ * api's CPUs and the bucket into somebody's hobby, and never catches a person
+ * picking between a few pictures of themselves.
+ */
+export const PROFILE_PHOTO_RULE: RateLimitRule = {
+  bucket: 'profile-photo',
+  limit: 10,
+  windowSeconds: 15 * 60,
+};
+
+/**
  * Trim, count, add, expire — in one round trip, so two requests racing cannot
  * both see a count below the limit.
  */

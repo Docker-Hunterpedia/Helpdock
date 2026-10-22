@@ -43,10 +43,13 @@ export interface EncodedPhoto {
 const isAllowedType = (mime: string): boolean =>
   (PROFILE_PHOTO_MIME_TYPES as readonly string[]).includes(mime);
 
-export const encodeProfilePhoto = async (
-  bytes: Uint8Array,
-  declaredMime: string,
-): Promise<EncodedPhoto> => {
+/**
+ * The checks that cost nothing: the size cap and the declared type against the
+ * magic bytes. The service runs these *before* it spends the upload's
+ * rate-limit budget, so fumbling the file type never locks anybody out; the
+ * budget is spent on what actually costs, the decode.
+ */
+export const assertProfilePhotoUpload = (bytes: Uint8Array, declaredMime: string): void => {
   if (bytes.length === 0) {
     throw new PhotoRefusal('missing');
   }
@@ -57,11 +60,24 @@ export const encodeProfilePhoto = async (
   if (!isAllowedType(declaredMime) || !bytesMatchMime(bytes, declaredMime)) {
     throw new PhotoRefusal('unsupported-type');
   }
+};
 
-  const square = async (edge: number): Promise<Buffer> =>
-    sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
-      // Applies the EXIF orientation, which the re-encode then drops.
-      .rotate()
+export const encodeProfilePhoto = async (
+  bytes: Uint8Array,
+  declaredMime: string,
+): Promise<EncodedPhoto> => {
+  assertProfilePhotoUpload(bytes, declaredMime);
+
+  // One decode, two writes: the pipeline is built once and cloned per size,
+  // so sharp parses the upload a single time (a clone shares the decoded
+  // pixels) instead of once per edge.
+  const base = sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+    // Applies the EXIF orientation, which the re-encode then drops.
+    .rotate();
+
+  const square = (edge: number): Promise<Buffer> =>
+    base
+      .clone()
       .resize(edge, edge, { fit: 'cover', position: 'centre' })
       .webp({ quality: IMAGE_QUALITY })
       .toBuffer();

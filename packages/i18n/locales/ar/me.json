@@ -286,6 +286,7 @@
     "photoTooLarge": "حجم الصورة أكبر من 5 ميغابايت.",
     "photoUnsupported": "استخدم صورة بصيغة JPG أو PNG أو WebP.",
     "photoUnreadable": "تعذّرت قراءة الصورة. جرّب صورة أخرى.",
+    "photoSlowDown": "عدة صور على التوالي. حاول بعد بضع دقائق.",
     "photoFailed": "لم تتغيّر الصورة.",
     "name": "الاسم",
     "publicName": "الاسم العام",

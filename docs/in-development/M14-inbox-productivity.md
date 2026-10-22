@@ -938,16 +938,21 @@ Built as above, with these differences and details:
   (`bytesMatchMime`), a sharp re-encode to square WebP at 256 and 64 px with EXIF
   dropped and a 64 megapixel decompression ceiling. Nothing but the re-encode is
   stored. Refusals are `staff.reason` `photo-missing`, `photo-too-large`,
-  `photo-unsupported-type` or `photo-unreadable` (all 400). The crop is made on
-  the server, from the centre; there is no crop dialog.
+  `photo-unsupported-type` or `photo-unreadable` (all 400), and uploads are rate
+  limited to ten per account per quarter-hour (`photo-rate-limited`, 429). The
+  crop is made on the server, from the centre; there is no crop dialog.
 - [x] **Reads are presigned.** The profile answers with 5-minute presigned URLs
   for both sizes (`ProfilePhotoStore`); the widget's messages carry a presigned
   64 px URL only for the person who wrote them, built after the visitor's own
-  conversation has been read under row-level security. There is no public photo
-  route. A replaced or removed photo's objects are deleted in the same request
-  (best effort: a failed delete is logged and leaves two orphaned objects, not a
-  failed request, because brand-scoped outbox purging does not fit an install-scope
-  file); an account's deletion clears the profile, the signature and the objects.
+  conversation has been read under row-level security. The online line and its
+  presence frames name the agents and carry **no photo** — they reach every
+  visitor of the brand, answered or not, so the widget draws initials there
+  (M14-12 review; DOMAIN-RULES §2.10.4). There is no public photo route. A
+  replaced or removed photo's old folder is deleted only **after the request's
+  transaction commits** (`context/after-commit.ts`), so a rollback never leaves
+  `photo_key` pointing at deleted objects; folders nothing references any more
+  are swept hourly by `maintenance.photo_sweep` (see the operations guide). An
+  account's deletion clears the profile, the signature and the objects.
 - [x] **Customer surfaces show the public name** (the first name until one is
   set): the widget's agent on a message and on the online line, the email's
   `From` display name, the transcript email, the CSAT page and email ("closed by"),
@@ -957,8 +962,9 @@ Built as above, with these differences and details:
   surface carries an email address.
 - [x] The widget's wire message gains `agent.title`, in the contact's language
   (then the brand's), English when there is no Arabic title. The widget draws
-  the photo in the header, the thread and the online stack (initials when there is
-  none or the link has expired) and puts the title first in the header's caption.
+  the photo in the header and the thread (initials when there is none or the
+  link has expired; the online stack always draws initials) and puts the title
+  first in the header's caption.
   The header names the latest agent message's author, because the live api does
   not put an agent on the conversation summary.
 - [x] **Placeholders.** `{{agent.name}}`, `{{agent.full_name}}`, `{{agent.title}}`,

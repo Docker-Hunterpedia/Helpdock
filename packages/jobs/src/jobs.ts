@@ -1652,6 +1652,33 @@ export const samlMetadataRefreshJob = defineJob({
   schedule: { cron: SAML_METADATA_REFRESH_CRON },
 });
 
+/**
+ * Hourly sweep of profile photo folders nobody points at (M14-12 review). A
+ * photo folder's deletion runs only after the request's transaction commits,
+ * so a rollback cannot leave `users.photo_key` at a deleted folder — but it
+ * then leaves the *new* folder uploaded and referenced by no row, and a
+ * best-effort delete that failed leaves the old one. This removes every
+ * `install/users/<user id>/<photo id>/` folder no `users.photo_key` names,
+ * skipping folders written within the grace window (`PHOTO_SWEEP_GRACE_MS`) so
+ * it never deletes the folder a request is mid-way through pointing at. The
+ * consumer is `apps/api/src/staff/photo-sweep.job.ts`.
+ */
+export const PHOTO_SWEEP_CRON = '23 * * * *';
+/** A folder younger than this is left for the next hour, in case its row is still coming. */
+export const PHOTO_SWEEP_GRACE_MS = 60 * 60 * 1000;
+/** One folder the sweep saw, and when its newest object was written. */
+export interface PhotoSweepFolder {
+  readonly folder: string;
+  readonly lastModified: Date;
+}
+export const photoSweepScheduleJob = defineJob({
+  name: 'maintenance.photo_sweep',
+  queue: QUEUE_NAMES.maintenance,
+  schema: z.object({}).strict(),
+  options: { attempts: 3, backoff: { type: 'exponential', delay: 60000 }, removeOnFail: 100 },
+  schedule: { cron: PHOTO_SWEEP_CRON },
+});
+
 /** Every job defined so far, by name. Bull Board and the metrics reader iterate it. */
 /** Import phases checkpoint their own short transactions; job payloads contain no credentials. */
 export const importRunPayloadSchema = z.strictObject({ brandId: z.uuid(), runId: z.uuid() });
@@ -1738,6 +1765,7 @@ export const JOB_DEFINITIONS = Object.freeze({
   [importAttachmentsJob.name]: importAttachmentsJob,
   [importFinishJob.name]: importFinishJob,
   [samlMetadataRefreshJob.name]: samlMetadataRefreshJob,
+  [photoSweepScheduleJob.name]: photoSweepScheduleJob,
   [outboxRelayJob.name]: outboxRelayJob,
   [outboxEventJob.name]: outboxEventJob,
   [maintenanceRetentionJob.name]: maintenanceRetentionJob,

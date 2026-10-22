@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
+import { StaffError } from '../../staff/api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 
@@ -133,6 +134,20 @@ describe('the Profile tab', () => {
       await user.upload(screen.getByTestId('profile-photo-input'), big);
 
       expect(await screen.findByRole('alert')).toHaveTextContent('That photo is larger than 5 MB.');
+    });
+
+    it('says so when the api rate-limits the upload', async () => {
+      const { user, staff } = await renderProfile();
+      staff.uploadPhoto = () => Promise.reject(new StaffError('photo-rate-limited'));
+
+      await user.upload(
+        screen.getByTestId('profile-photo-input'),
+        new File([PNG], 'me.png', { type: 'image/png' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Several photos in a row. Try again in a few minutes.',
+      );
     });
 
     it('reports a file the api refuses, as the api said it', async () => {

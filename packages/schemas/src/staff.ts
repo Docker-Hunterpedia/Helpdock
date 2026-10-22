@@ -52,6 +52,8 @@ export const staffRefusalSchema = z.enum([
   'photo-unsupported-type',
   /** The photo is the right type but will not decode (400). */
   'photo-unreadable',
+  /** Too many photo uploads in a row (429, M14-12 review). */
+  'photo-rate-limited',
 ]);
 export type StaffRefusal = z.infer<typeof staffRefusalSchema>;
 
@@ -250,6 +252,15 @@ const clearable = (max: number) =>
     .string()
     .trim()
     .max(max)
+    // A name or title a customer is shown carries no invisible state: control
+    // characters (newlines among them) and format characters — the bidi
+    // overrides U+202E and U+200F, zero-width spaces — can reorder or hide
+    // what renders beside it. They are refused, not stripped, so the person
+    // sees the field meant, not something quietly shorter.
+    .refine(
+      (value) => !/[\p{Cc}\p{Cf}]/u.test(value),
+      'Control and format characters are not allowed here',
+    )
     .nullable()
     .transform((value) => (value === '' ? null : value));
 

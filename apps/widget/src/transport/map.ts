@@ -40,8 +40,10 @@ export const VOICE_MAX_SECONDS = 120;
 
 /**
  * `open` is the calendar, `agentsOnline` the people: together, the header's
- * three states. `agents` is who, by first name, and empty when the brand hides
- * agents; the api sends no staff id, so the UI's key is the position.
+ * three states. `agents` is who, by public name, and empty when the brand
+ * hides agents; the api sends no staff id, so the UI's key is the position.
+ * No photo arrives with them — a presigned photo is a message author's alone
+ * (DOMAIN-RULES §2.10.4) — so the online stack draws the initials.
  */
 export const toAvailability = (wire: WireAvailability): Availability => ({
   state: !wire.open ? 'closed' : wire.agentsOnline ? 'online' : 'open_offline',
@@ -50,7 +52,7 @@ export const toAvailability = (wire: WireAvailability): Availability => ({
   agents_online: wire.agents.map((agent, index) => ({
     id: `online-${index}`,
     name: agent.name,
-    avatar_url: agent.avatarUrl,
+    avatar_url: null,
   })),
 });
 

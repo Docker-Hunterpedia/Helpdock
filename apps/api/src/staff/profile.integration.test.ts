@@ -9,12 +9,16 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { eq, sql } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PROFILE_PHOTO_RULE } from '../auth/rate-limit.js';
+import { hashSubject, rateLimitKey } from '../auth/redis-keys.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { RequestContext, runInRequestContext } from '../context/request-context.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { AccountService } from './account.service.js';
 import { anonymisedEmail } from './anonymise.js';
 
 /**
@@ -282,6 +286,34 @@ describe.skipIf(!hasDocker)('the profile for customers', () => {
       expect(storage.removed).toEqual([`${before}256.webp`, `${before}64.webp`]);
     });
 
+    it('keeps the old folder when the request rolls back, and the row pointing at it', async () => {
+      await upload({ bytes: await png(), type: 'image/png' });
+      const kept = (await row())?.photoKey ?? '';
+      storage.removed.length = 0;
+
+      // The upload itself runs inside the request's transaction; forcing one
+      // that replaces the photo and then fails proves the deletion of the
+      // folder it replaced waits for the commit (M14-12 review b).
+      const context = new RequestContext({
+        requestId: 'rollback-test',
+        method: 'POST',
+        path: '/api/me/profile/photo',
+      });
+      await expect(
+        runInRequestContext(context, () =>
+          runtime.db.transaction(async (tx) => {
+            await app.get(AccountService).setPhoto(tx, seeded.userId, await png(), 'image/png');
+            throw new Error('roll the request back');
+          }),
+        ),
+      ).rejects.toThrow('roll the request back');
+
+      expect(storage.removed).toEqual([]);
+      expect(await storage.head(`${kept}256.webp`)).toBeDefined();
+      expect(await storage.head(`${kept}64.webp`)).toBeDefined();
+      expect((await row())?.photoKey).toBe(kept);
+    });
+
     it.each([
       [
         'text posing as a PNG',
@@ -359,6 +391,28 @@ describe.skipIf(!hasDocker)('the profile for customers', () => {
       expect((response.json() as Profile).photo).toBeNull();
       expect((await row())?.photoKey).toBeNull();
       expect(storage.removed).toEqual([`${folder}256.webp`, `${folder}64.webp`]);
+    });
+
+    it('answers 429 once the account has uploaded ten photos in a quarter-hour', async () => {
+      await runtime.redis.del(rateLimitKey('profile-photo', hashSubject(seeded.userId)));
+
+      const small = await png(40);
+      const allowed = await Promise.all(
+        Array.from({ length: PROFILE_PHOTO_RULE.limit }, () =>
+          upload({ bytes: small, type: 'image/png' }),
+        ),
+      );
+      for (const response of allowed) {
+        expect(response.statusCode).toBe(201);
+      }
+
+      const refused = await upload({ bytes: small, type: 'image/png' });
+      expect(refused.statusCode).toBe(429);
+      expect(refused.json()).toMatchObject({
+        error: { staff: { reason: 'photo-rate-limited' } },
+      });
+      // The spent budget kept nothing: the photo it had is untouched.
+      expect((await row())?.photoKey).not.toBeNull();
     });
   });
 

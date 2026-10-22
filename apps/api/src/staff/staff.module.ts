@@ -143,12 +143,14 @@ export class StaffModule {
         { provide: ProfilePhotoStore, useValue: photos },
         {
           provide: AccountService,
-          inject: [StaffRepository, AuthService, SessionService],
+          inject: [StaffRepository, AuthService, SessionService, RateLimiter],
           useFactory: (
             staff: StaffRepository,
             auth: AuthService,
             sessions: SessionService,
-          ): AccountService => new AccountService({ staff, auth, sessions, photos, logger }),
+            limiter: RateLimiter,
+          ): AccountService =>
+            new AccountService({ staff, auth, sessions, photos, limiter, logger }),
         },
         {
           provide: InstallStaffService,

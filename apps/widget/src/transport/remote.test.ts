@@ -348,7 +348,7 @@ describe('the remote transport', () => {
     live.envelope('queue', { conversationId: CONVERSATION, position: null });
     live.envelope('typing', { conversationId: CONVERSATION, typing: true, agentName: null });
     live.envelope('receipt', { conversationId: CONVERSATION, kind: 'read', seq: 1 });
-    live.envelope('presence', { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] });
+    live.envelope('presence', { agentsOnline: true, agents: [{ name: 'Lina' }] });
     live.envelope('conversation', {
       conversationId: CONVERSATION,
       state: 'closed',

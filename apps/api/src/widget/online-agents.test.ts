@@ -1,7 +1,6 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import type { PresenceMap } from '@helpdock/schemas';
 import { describe, expect, it, vi } from 'vitest';
-import { AgentCards } from './agent-cards.js';
 import { OnlineAgents } from './online-agents.js';
 import { resolveWidgetSettings } from './resolved-settings.js';
 import type { StaffIdentityRow } from './widget.repository.js';
@@ -26,16 +25,14 @@ const row = (
 });
 
 const rows = new Map<string, StaffIdentityRow>([
-  [LINA, row(LINA, 'Lina Haddad', { photoKey: 'install/users/lina/' })],
+  [LINA, row(LINA, 'Lina Haddad', { photoKey: 'install/users/lina/photo/' })],
   [KARIM, row(KARIM, 'Karim Nasser')],
   [SARA, row(SARA, 'Sara Odeh', { publicName: 'Sara O' })],
 ]);
 
-const tx = {} as DbTransaction;
-
-const cards = new AgentCards({
-  smallUrl: async (folder) => (folder === null ? null : `https://bucket.test/${folder}64.webp`),
-});
+const tx = {
+  execute: async () => [],
+} as unknown as DbTransaction;
 
 const reader = (map: PresenceMap) => {
   const staffIdentities = vi.fn(async (_tx: DbTransaction, ids: readonly string[]) => {
@@ -51,7 +48,6 @@ const reader = (map: PresenceMap) => {
     presence: { mapOf: async () => map },
     settings: { row: async () => undefined },
     widget: { staffIdentities },
-    cards,
   });
   return { online, staffIdentities };
 };
@@ -62,16 +58,29 @@ const settings = (showAgentIdentity: boolean) => {
 };
 
 describe('OnlineAgents', () => {
-  it('names the online agents by public name with their photo, sorted, and leaves out the away', async () => {
+  it('names the online agents by public name, sorted, and leaves out the away', async () => {
     const { online } = reader({ [SARA]: 'online', [LINA]: 'online', [KARIM]: 'away' });
 
     await expect(online.presenceIn(tx, BRAND, settings(true))).resolves.toEqual({
       agentsOnline: true,
-      agents: [
-        { name: 'Lina', avatarUrl: 'https://bucket.test/install/users/lina/64.webp' },
-        { name: 'Sara O', avatarUrl: null },
-      ],
+      agents: [{ name: 'Lina' }, { name: 'Sara O' }],
     });
+  });
+
+  it('carries no photo: a visitor with no conversation is told names only, however many have one', async () => {
+    // DOMAIN-RULES §2.10.4: a presigned photo URL is issued for the author of a
+    // message in the visitor's own conversation, and the online line reaches
+    // every visitor of the brand. Lina has a photo; nobody here has been
+    // answered by anybody.
+    const { online } = reader({ [LINA]: 'online', [KARIM]: 'online', [SARA]: 'online' });
+
+    const page = await online.presenceIn(tx, BRAND, settings(true));
+    const frame = await online.presence(BRAND);
+
+    for (const presence of [page, frame]) {
+      expect(JSON.stringify(presence)).not.toContain('avatarUrl');
+      expect(JSON.stringify(presence)).not.toContain('install/users');
+    }
   });
 
   it('says somebody is there without saying who, when the brand hides agents', async () => {

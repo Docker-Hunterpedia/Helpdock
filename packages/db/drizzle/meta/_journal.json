@@ -467,8 +467,15 @@
     {
       "idx": 68,
       "version": "7",
-      "when": 1792546880370,
-      "tag": "0068_customer_profile",
+      "when": 1792546891966,
+      "tag": "0068_idle_away_minutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792711445850,
+      "tag": "0069_customer_profile",
       "breakpoints": true
     }
   ]

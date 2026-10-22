@@ -1,5 +1,5 @@
 {
-  "id": "8221b6ce-9193-4f60-b06c-c50b58a03482",
+  "id": "27a0401a-f7b3-40a5-8e4d-a226ac029f27",
   "prevId": "b3441736-d76d-4afd-83ad-a412c077dcb6",
   "version": "7",
   "dialect": "postgresql",
@@ -3577,6 +3577,12 @@
           "notNull": true,
           "default": 15
         },
+        "idle_away_minutes": {
+          "name": "idle_away_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "on_unassign": {
           "name": "on_unassign",
           "type": "on_unassign",
@@ -3638,6 +3644,10 @@
         "departments_auto_unassign_minutes_range": {
           "name": "departments_auto_unassign_minutes_range",
           "value": "\"departments\".\"auto_unassign_after_minutes\" BETWEEN 1 AND 1440"
+        },
+        "departments_idle_away_minutes_range": {
+          "name": "departments_idle_away_minutes_range",
+          "value": "\"departments\".\"idle_away_minutes\" IS NULL OR \"departments\".\"idle_away_minutes\" BETWEEN 10 AND 240"
         }
       },
       "isRLSEnabled": false
@@ -14976,42 +14986,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "public_name": {
-          "name": "public_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "job_title_en": {
-          "name": "job_title_en",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "job_title_ar": {
-          "name": "job_title_ar",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "public_phone": {
-          "name": "public_phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "photo_key": {
-          "name": "photo_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "time_zone": {
-          "name": "time_zone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {

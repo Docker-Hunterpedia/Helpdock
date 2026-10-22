@@ -512,7 +512,15 @@ Backlog or never:
   lands before 1.1; until then the card's caption and the notice emails say only that the passkey is saved and can confirm changes on this page, and M18-03 restores the wording about second factor and sign-in. Left for the other deliverables: recovery codes drawn with a
   first passkey (M18-03), the enrolment chooser and the sign-in and
   second-factor screens (M18-03, M18-06), and the Settings › Authentication
-  card (M18-06).
+  card (M18-06). Follow-up ([#386](https://github.com/Docker-Hunterpedia/Helpdock/issues/386)):
+  `PasskeyService.sessionOf` reads the browser session through one helper
+  (`#verifiedClaimsOfCaller`) that verifies the bearer token's signature and
+  expiry and compares its subject with the guard's principal, throwing on
+  anything less; the verification now runs unconditionally, with no branch on
+  the header deciding whether it runs, which is the structure CodeQL's
+  user-controlled-bypass alert 49 could not follow past. Unit and integration
+  tests pin that a token claiming the caller but signed by another key — or
+  not signed at all — is refused.
 - [x] **M18-08** Microsoft sign-in ([#282](https://github.com/Docker-Hunterpedia/Helpdock/issues/282)).
   `microsoft` is a third `oauth_provider` (migration
   `0064_oauth_microsoft_provider`) and built-in provider through

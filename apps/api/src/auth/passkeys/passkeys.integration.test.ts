@@ -12,6 +12,7 @@ import {
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { and, eq, gte, sql } from 'drizzle-orm';
+import { generateKeyPair } from 'jose';
 import { generate } from 'otplib';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
@@ -22,6 +23,7 @@ import { dockerAvailable } from '../../testing/docker-available.js';
 import { SoftwareAuthenticator } from '../../testing/software-authenticator.js';
 import { forgetUsedTotpSteps } from '../../testing/staff-sign-in.js';
 import { hashToken, webauthnCeremonyKey } from '../redis-keys.js';
+import { issueAccessToken } from '../session/access-token.js';
 import { refreshCookieOf } from '../session/cookies.js';
 
 /**
@@ -252,6 +254,24 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
       ['DELETE', `/api/me/passkeys/${uuidv7()}`],
     ] as const)('refuses %s %s without a session', async (method, path) => {
       const response = await call(method, path, {}, null);
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('refuses a token that claims the caller but is signed by another key', async () => {
+      const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
+      const forged = await issueAccessToken(
+        {
+          userId: seeded.userId,
+          sessionId: uuidv7(),
+          familyId: uuidv7(),
+          brands: {},
+          installAdmin: true,
+        },
+        { kid: 'not-this-install', privateKey, publicKey },
+      );
+
+      const response = await call('POST', '/api/me/passkeys/step-up/options', {}, forged);
 
       expect(response.statusCode).toBe(401);
     });

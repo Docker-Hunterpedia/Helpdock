@@ -10,6 +10,7 @@ import {
   type PasskeyStepUpOptions,
   type RecoveryCodes,
   type RegistrationResponse,
+  type SessionClaims,
 } from '@helpdock/schemas';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { currentRequestContext } from '../../context/request-context.js';
@@ -98,12 +99,31 @@ export class PasskeyService {
     authorization: string | undefined,
     tx: DbTransaction,
   ): Promise<PasskeySession> {
-    const token = bearerTokenOf(authorization);
-    const claims = token === null ? null : await verifyAccessToken(token, this.#parts.signingKeys);
+    const claims = await this.#verifiedClaimsOfCaller(userId, authorization);
+    return { userId, familyId: claims.fam, tx };
+  }
+
+  /**
+   * The verified claims of the caller's own token, or nothing. Reading the
+   * header, checking the signature and comparing the subject happen in this
+   * one function, so no claim an unverified token carried can ever reach the
+   * comparison: `verifyAccessToken` returns claims only for a token this
+   * install signed (ES256, pinned) that is still in date, and no bearer token
+   * verifies as nothing, like a bad one. `userId` is the guard's principal,
+   * never anything the request carried.
+   */
+  async #verifiedClaimsOfCaller(
+    userId: string,
+    authorization: string | undefined,
+  ): Promise<SessionClaims> {
+    const claims = await verifyAccessToken(
+      bearerTokenOf(authorization) ?? '',
+      this.#parts.signingKeys,
+    );
     if (claims === null || claims.sub !== userId) {
       throw new UnauthorizedException('Authentication is required for this route');
     }
-    return { userId, familyId: claims.fam, tx };
+    return claims;
   }
 
   async list(userId: string, tx: DbTransaction): Promise<PasskeyList> {

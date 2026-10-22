@@ -992,7 +992,11 @@ differences:
   second tab left alone turned a working person away. That timer is replaced by
   the activity report below: with no department limit nobody is marked away for
   being idle any more, and with one the server decides. Choosing Away in the
-  account menu is unchanged and is never undone by activity.
+  account menu is unchanged and is never undone by activity. Departments that
+  already existed when the setting arrived were backfilled to a **10-minute
+  idle limit** (migration `0068`) — the closest to that five-minute timer the
+  10-minute minimum allows; departments created after it default to off (NULL).
+  Admins can change it or turn it off per department on Ticketing › Assignment.
 - **Where the limit is read.** Presence is per brand, a department is not, so a
   person's limit is the **shortest** of the departments that set one and whose
   rotation includes them (they can work it and are in rotation). The sweep runs

@@ -128,6 +128,30 @@ describe.skipIf(!hasDocker)('migrations', () => {
     return url;
   };
 
+  /** Brings a database to the schema of an install that stopped at `lastIdx`. */
+  const migrateUpTo = async (url: string, lastIdx: number): Promise<void> => {
+    const folder = await mkdtemp(join(tmpdir(), 'helpdock-upgrade-'));
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      const journal = JSON.parse(
+        readFileSync(new URL('../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
+      );
+      journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= lastIdx);
+      await mkdir(join(folder, 'meta'));
+      await writeFile(join(folder, 'meta/_journal.json'), JSON.stringify(journal));
+      for (const entry of journal.entries)
+        await cp(
+          new URL(`../drizzle/${entry.tag}.sql`, import.meta.url),
+          join(folder, `${entry.tag}.sql`),
+        );
+      await owner`SELECT set_config('helpdock.app_password', ${APP_ROLE_PASSWORD}, false)`;
+      await migrate(drizzle(owner), { migrationsFolder: folder });
+    } finally {
+      await owner.end();
+      await rm(folder, { recursive: true, force: true });
+    }
+  };
+
   const open = (url: string): DbHandle => {
     const handle = createDb({ url, max: 2 });
     handles.push(handle);
@@ -174,22 +198,9 @@ describe.skipIf(!hasDocker)('migrations', () => {
     'upgrades an existing install at migration %s in one transaction without losing live history',
     async (prefix) => {
       const url = await freshDatabase(`pre_import_upgrade_${prefix}`);
-      const folder = await mkdtemp(join(tmpdir(), 'helpdock-upgrade-'));
       const owner = postgres(url, { max: 1, onnotice: () => {} });
       try {
-        const journal = JSON.parse(
-          readFileSync(new URL('../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
-        );
-        journal.entries = journal.entries.filter((entry: { idx: number }) => entry.idx <= prefix);
-        await mkdir(join(folder, 'meta'));
-        await writeFile(join(folder, 'meta/_journal.json'), JSON.stringify(journal));
-        for (const entry of journal.entries)
-          await cp(
-            new URL(`../drizzle/${entry.tag}.sql`, import.meta.url),
-            join(folder, `${entry.tag}.sql`),
-          );
-        await owner`SELECT set_config('helpdock.app_password', ${APP_ROLE_PASSWORD}, false)`;
-        await migrate(drizzle(owner), { migrationsFolder: folder });
+        await migrateUpTo(url, prefix);
         const [brand] =
           await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Existing install','OLD') RETURNING id`;
         const [department] =
@@ -221,10 +232,34 @@ describe.skipIf(!hasDocker)('migrations', () => {
         expect((await runMigrations({ migrationUrl: url, log: () => {} })).applied).toEqual([]);
       } finally {
         await owner.end();
-        await rm(folder, { recursive: true, force: true });
       }
     },
   );
+
+  it('backfills departments that predate the idle limit to 10 minutes, and only those', async () => {
+    const url = await freshDatabase('idle_away_backfill');
+    const owner = postgres(url, { max: 1, onnotice: () => {} });
+    try {
+      // 67 is everything before 0068: the state of an install that upgrades to it.
+      await migrateUpTo(url, 67);
+      const [brand] =
+        await owner`INSERT INTO brands(id,name,prefix) VALUES(gen_random_uuid(),'Existing install','OLD') RETURNING id`;
+      await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Support')`;
+      await runMigrations({ migrationUrl: url, appRolePassword: APP_ROLE_PASSWORD, log: () => {} });
+
+      expect(await owner`SELECT name, idle_away_minutes FROM departments ORDER BY name`).toEqual([
+        { name: 'Support', idle_away_minutes: 10 },
+      ]);
+
+      await owner`INSERT INTO departments(id,brand_id,name) VALUES(gen_random_uuid(),${brand?.id},'Billing')`;
+      expect(await owner`SELECT name, idle_away_minutes FROM departments ORDER BY name`).toEqual([
+        { name: 'Billing', idle_away_minutes: null },
+        { name: 'Support', idle_away_minutes: 10 },
+      ]);
+    } finally {
+      await owner.end();
+    }
+  });
 
   it('enforces one claimed import per brand and requires valid claim and pause metadata', async () => {
     const url = await migrated('import_claims');

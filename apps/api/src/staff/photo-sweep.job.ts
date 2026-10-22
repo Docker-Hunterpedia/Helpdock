@@ -54,6 +54,11 @@ export const folderOfKey = (key: string): string | null => {
     return null;
   }
   const segments = key.slice(PREFIX.length).split('/');
+  // Exactly user / photo / file: anything nested under a folder is not one of
+  // this api's photo objects and must not name the folder.
+  if (segments.length !== 3) {
+    return null;
+  }
   const userId = segments[0];
   const photoId = segments[1];
   const name = segments[2];

@@ -11,6 +11,7 @@ import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { TemplatesRepository } from '../ticketing/templates.repository.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
+import { snoozePresetResolver } from '../tickets/snooze/snooze-calendar.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
 import type { RulesEngineDeps } from './engine.js';
 import type { CannedResponseRenderer } from './ports.js';
@@ -54,6 +55,7 @@ export const createRulesEngineDeps = ({
     ),
     cannedResponses,
     businessHours: businessHoursProbe(new BusinessHoursService(slaRepository, sla)),
+    snooze: snoozePresetResolver(slaRepository),
     log,
   };
 };

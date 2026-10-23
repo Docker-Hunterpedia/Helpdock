@@ -148,6 +148,7 @@
     "notify": "Notify",
     "escalate": "Escalate",
     "close": "Close",
+    "snooze": "Snooze",
     "ai_triage": "AI triage"
   },
   "assignTargets": {
@@ -192,6 +193,7 @@
       "notify": "Notify {{who}}",
       "escalate": "Escalate",
       "close": "Close",
+      "snooze": "Snooze until {{preset}}",
       "ai_triage": {
         "suggest": "AI triage suggests {{fields}}",
         "apply": "AI triage sets {{fields}}"
@@ -270,6 +272,7 @@
     "note": "Note",
     "notifyWho": "Notify",
     "notifyMessage": "Message (optional)",
+    "snoozeFor": "Wake time",
     "incomplete": "Fill in every condition and action before saving.",
     "cancel": "Cancel",
     "save": "Save rule",

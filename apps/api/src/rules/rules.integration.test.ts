@@ -20,7 +20,7 @@ import {
   withSystem,
   workflowRuns,
 } from '@helpdock/db';
-import { type RulesEvaluatePayload, silentLogger } from '@helpdock/jobs';
+import { type RulesEvaluatePayload, silentLogger, ticketUnsnoozeJobId } from '@helpdock/jobs';
 import type {
   Macro,
   RuleBuilderOptions,
@@ -42,6 +42,7 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { createTicketSnoozedHandler } from '../tickets/snooze/snooze-worker.js';
 import { evaluateEventRules, runScheduledRules } from './engine.js';
 import { createRulesEngineDeps } from './engine-deps.js';
 import { createRulesSourceHandler } from './rules-jobs.js';
@@ -983,6 +984,130 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       ada,
     );
     expect(options.body.statuses.find((status) => status.id === snoozed?.id)?.isSnoozed).toBe(true);
+  });
+
+  it('snoozes with a rule, by a preset the server resolves like the menu’s (#368)', async () => {
+    await saveRule({
+      name: 'Snooze new tickets an hour',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: { match: 'all', groups: [] },
+      actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+    });
+
+    const ticket = await createTicket('Snooze me for a while');
+    await drain();
+
+    // The ticket is Snoozed, an hour ahead by the server's clock, with nobody
+    // as the person who snoozed it — a rule is nobody — and the status before
+    // the snooze remembered for the wake.
+    const [snoozed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemKey, 'snoozed')),
+    );
+    const row = await ticketRow(ticket.id);
+    expect(row?.statusId).toBe(snoozed?.id);
+    const until = row?.snoozedUntil;
+    expect(until).not.toBeNull();
+    const ahead = (until?.getTime() ?? 0) - Date.now();
+    expect(ahead).toBeGreaterThan(55 * 60_000);
+    expect(ahead).toBeLessThan(65 * 60_000);
+    expect(row?.snoozedBy).toBeNull();
+    expect(row?.snoozeResumeStatusId).not.toBeNull();
+
+    // The run log carries the action like any other's, with what it did.
+    const run = (await runsOf(ticket.id)).find(
+      (candidate) => candidate.ruleName === 'Snooze new tickets an hour',
+    );
+    expect(run?.result).toBe('applied');
+    expect(run?.details).toMatchObject({
+      actions: [{ action: { type: 'snooze', preset: 'in_1_hour' }, effect: 'changed' }],
+    });
+
+    // The activity and the outbox row are a person's snooze's, as §2.2 asks.
+    const activity = await inBrand((tx) =>
+      tx
+        .select()
+        .from(ticketActivity)
+        .where(
+          and(eq(ticketActivity.ticketId, ticket.id), eq(ticketActivity.action, 'ticket.snoozed')),
+        ),
+    );
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      actorType: 'system',
+      actorId: `rule:${run?.ruleId}`,
+      via: 'rule',
+    });
+    const snoozedEvent = await inBrand((tx) =>
+      tx
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.brandId, seeded.brandId), eq(outbox.event, 'ticket.snoozed'))),
+    );
+    const mine = snoozedEvent.find(
+      (candidate) => (candidate.payload as { ticketId?: string }).ticketId === ticket.id,
+    );
+    expect(mine?.payload).toMatchObject({ ticketId: ticket.id, version: row?.snoozeVersion });
+
+    // Its consumer plans the same delayed wake timer a person's snooze plans.
+    const planned: { jobId: string; fireAt: Date }[] = [];
+    await inBrand((tx) =>
+      createTicketSnoozedHandler({
+        snoozeTimers: {
+          upsert: async (timer) => {
+            planned.push({ jobId: timer.jobId, fireAt: timer.fireAt });
+          },
+          remove: async () => {},
+        },
+      })({
+        outboxId: mine?.id ?? '',
+        brandId: seeded.brandId,
+        event: 'ticket.snoozed',
+        payload: mine?.payload ?? {},
+        tx,
+        log: silentLogger,
+      }),
+    );
+    expect(planned).toEqual([
+      {
+        jobId: ticketUnsnoozeJobId({ ticketId: ticket.id, version: row?.snoozeVersion ?? 0 }),
+        fireAt: until,
+      },
+    ]);
+
+    await disableAll();
+  });
+
+  it('test-runs a snooze on a closed ticket as not carried out (#368)', async () => {
+    const [closed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemKey, 'closed')),
+    );
+    const ticket = await createTicket('Closed before it could be snoozed');
+    const moved = await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+      statusId: closed?.id,
+    });
+    expect(moved.status).toBe(200);
+
+    const outcome = await call<RuleTestRunResult>('POST', `${brandPath()}/rules/test-run`, ada, {
+      rule: {
+        name: 'Snooze the closed ones',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      },
+      ticket: String(ticket.number),
+    });
+    expect(outcome.status).toBe(200);
+    expect(outcome.body.outcome?.actions).toEqual([
+      { action: { type: 'snooze', preset: 'in_1_hour' }, effect: 'unavailable' },
+    ]);
   });
 
   it('refuses a rule that names another brand’s ids, and reorders a whole list only', async () => {

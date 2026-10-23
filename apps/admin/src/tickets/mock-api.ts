@@ -1401,6 +1401,14 @@ export class MockTicketsApi implements TicketsApi {
         tags = tags.includes(action.tagId) ? tags : [...tags, action.tagId];
       } else if (action.type === 'remove_tag') {
         tags = tags.filter((id) => id !== action.tagId);
+      } else if (action.type === 'snooze') {
+        // The fixture holds no business hours, so the preset resolves to an
+        // hour ahead; the row and its strip behave as a snoozed ticket's.
+        next = {
+          ...next,
+          status: this.#statuses.find((status) => status.isSnoozed) ?? next.status,
+          snoozedUntil: new Date(Date.now() + 3_600_000).toISOString(),
+        };
       } else {
         const { assignee } = action;
         next = {

@@ -53,6 +53,39 @@ describe('planMacro', () => {
       assigneeId: null,
     });
   });
+
+  it('keeps a snooze as a preset for the service to resolve, and wins over an earlier status', () => {
+    const plan = planMacro(
+      [
+        { type: 'set_status', statusId: STATUS },
+        { type: 'snooze', preset: 'next_business_day' },
+      ],
+      'me',
+    );
+
+    expect(plan).toEqual({
+      fields: {},
+      snoozePreset: 'next_business_day',
+      tagOps: [],
+      routeToTeam: false,
+    });
+  });
+
+  it('lets a later set status win over an earlier snooze, as over any field', () => {
+    const plan = planMacro(
+      [
+        { type: 'snooze', preset: 'in_1_hour' },
+        { type: 'set_status', statusId: STATUS },
+      ],
+      'me',
+    );
+
+    expect(plan).toEqual({
+      fields: { statusId: STATUS },
+      tagOps: [],
+      routeToTeam: false,
+    });
+  });
 });
 
 describe('tagsAfter', () => {

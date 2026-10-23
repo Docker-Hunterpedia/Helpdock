@@ -536,6 +536,72 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
       });
     });
 
+    it('snoozes by a preset the server resolves against the calendar (#368)', async () => {
+      const later = await createMacro(ada, {
+        kind: 'macro',
+        name: 'Snooze it',
+        scope: 'shared',
+        departmentId: billing,
+        bodies: { en: '', ar: '' },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      });
+      const target = await createTicket(billing);
+
+      const response = await call<MacroRunResponse>(
+        'POST',
+        `${brandPath()}/tickets/${target.ticket.id}/macro-runs`,
+        ada,
+        { macroId: later.id, actions: later.actions },
+      );
+      expect(response.status).toBe(201);
+      expect(response.body.message).toBeNull();
+
+      // The ticket is Snoozed about an hour ahead, and the person who applied
+      // the macro is the one who snoozed it.
+      const after = await call<TicketDetail>(
+        'GET',
+        `${brandPath()}/tickets/${target.ticket.id}`,
+        ada,
+      );
+      expect(after.body.ticket.status.isSnoozed).toBe(true);
+      const until = after.body.ticket.snoozedUntil;
+      expect(until).not.toBeNull();
+      const ahead = Date.parse(until ?? '') - Date.now();
+      expect(ahead).toBeGreaterThan(55 * 60_000);
+      expect(ahead).toBeLessThan(65 * 60_000);
+      expect(after.body.ticket.snoozedBy).toBe(ada.id);
+
+      // The activity is the snooze's own, beside the macro's one entry.
+      const activity = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({
+            action: ticketActivity.action,
+            actorId: ticketActivity.actorId,
+            to: ticketActivity.to,
+          })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, target.ticket.id)),
+      );
+      expect(activity.filter((row) => row.action === 'ticket.macro_applied')).toHaveLength(1);
+      expect(activity.find((row) => row.action === 'ticket.snoozed')).toMatchObject({
+        actorId: ada.id,
+        to: { snoozedUntil: until, resumeStatusId: expect.any(String) },
+      });
+
+      // And the wake timer's outbox row is the snooze's own.
+      const snoozedEvents = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ payload: outbox.payload })
+          .from(outbox)
+          .where(
+            sql`${outbox.event} = 'ticket.snoozed' AND ${outbox.payload}->>'ticketId' = ${target.ticket.id}`,
+          ),
+      );
+      expect(snoozedEvents.map((row) => row.payload)).toEqual([
+        expect.objectContaining({ ticketId: target.ticket.id, snoozedUntil: until }),
+      ]);
+    });
+
     it('refuses the whole run, reply included, when an action is refused', async () => {
       const handOff = await createMacro(ada, {
         kind: 'macro',

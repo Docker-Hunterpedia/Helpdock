@@ -184,7 +184,7 @@ export function CustomFieldsTab(): ReactNode {
                   }}
                 >
                   {t('ticketing:customFields.addTo', {
-                    target: t(`ticketing:customFields.targets.${target}`).toLocaleLowerCase(),
+                    target: t(`ticketing:customFields.targets.${target}`).toLowerCase(),
                   })}
                 </Button>
               </Box>

@@ -1066,7 +1066,20 @@ export class AuthService {
     }
 
     if (proof.recoveryCode !== undefined) {
-      await this.#requireRecoveryCodeProof(user, proof.currentPassword, proof.recoveryCode, tx);
+      // Two recovery-code shapes, each a complete proof of its own (DOMAIN-RULES
+      // §12.1 rule 6): the shape that also names the password has both halves
+      // checked inside its helper, and the bare shape spends the code inside
+      // its own — so whichever door the caller picks, it is locked the same way.
+      if (proof.currentPassword !== undefined) {
+        await this.#requirePasswordAndRecoveryCode(
+          user,
+          proof.currentPassword,
+          proof.recoveryCode,
+          tx,
+        );
+      } else {
+        await this.#requireRecoveryCodeAlone(user, proof.recoveryCode, tx);
+      }
       return;
     }
 
@@ -1076,37 +1089,49 @@ export class AuthService {
   }
 
   /**
-   * A recovery code as the step-up, alone or beside the current password. The
-   * code is spent exactly as one spent to sign in is — every hash is tried, the
-   * remainder is stored, the use is audited — because it *is* a credential: a
-   * rotation is worth one recovery code as much as a sign-in is. The password,
-   * when presented, is the fresh first factor of the pair; one wrong half
-   * refuses the whole proof.
+   * The recovery-code shape with both halves: the current password and the
+   * code. Both are verified on every call — a null hash and a wrong password
+   * refuse identically — so one wrong half refuses the whole proof.
    */
-  async #requireRecoveryCodeProof(
+  async #requirePasswordAndRecoveryCode(
     user: StaffUser,
-    currentPassword: string | undefined,
+    currentPassword: string,
     recoveryCode: string,
     tx?: DbTransaction,
   ): Promise<void> {
     await this.#spendStepUp(user.id);
 
-    // The recovery code below is the proof and is spent and verified whatever
-    // the caller named: the schema makes the bare code a proof of its own, so
-    // this branch is not a gate on authentication — the password is an
-    // additional half, and the shape that names it is refused unless it is
-    // right. (CodeQL flags the user-controlled condition here; see the PR.)
-    if (currentPassword !== undefined) {
-      if (user.passwordHash === null) {
-        throw new AuthFailure('invalid-credentials');
-      }
-      const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
-      if (!verification.valid) {
-        await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
-        throw new AuthFailure('invalid-credentials');
-      }
+    if (
+      user.passwordHash === null ||
+      !(await this.#parts.hasher.verify(user.passwordHash, currentPassword)).valid
+    ) {
+      await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
+      throw new AuthFailure('invalid-credentials');
     }
 
+    await this.#spendRecoveryCodeAsProof(user, recoveryCode, tx);
+  }
+
+  /** The bare recovery-code shape: the spent code is the whole proof. */
+  async #requireRecoveryCodeAlone(
+    user: StaffUser,
+    recoveryCode: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    await this.#spendStepUp(user.id);
+    await this.#spendRecoveryCodeAsProof(user, recoveryCode, tx);
+  }
+
+  /**
+   * Spends the code exactly as one spent to sign in is — every hash is tried,
+   * the remainder is stored, the use is audited — because it *is* a credential:
+   * a rotation is worth one recovery code as much as a sign-in is.
+   */
+  async #spendRecoveryCodeAsProof(
+    user: StaffUser,
+    recoveryCode: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
     const match = await spendRecoveryCode(
       recoveryCode,
       user.recoveryCodesHashed,

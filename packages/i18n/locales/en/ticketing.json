@@ -379,7 +379,9 @@
         "body": "Choose a field to edit its label, its type and its options."
       },
       "pinned": "Pin on rows and the ticket header",
-      "pinnedHint": "One select field per brand can be pinned."
+      "pinnedHint": "One select field per brand can be pinned.",
+      "requiredToClose": "Required to close",
+      "requiredToCloseHint": "Agents cannot close a ticket while this field is empty. Rules, merges and spam still close, and the activity log says so."
     },
     "confirm": {
       "delete": {

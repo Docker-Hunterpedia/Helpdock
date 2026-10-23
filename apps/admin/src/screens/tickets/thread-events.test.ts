@@ -143,3 +143,44 @@ describe('snooze activity (M14-02)', () => {
     ).toContain('its time came');
   });
 });
+
+describe('the closed-without line in the thread (M14-17)', () => {
+  const closed: TicketActivityEntry = {
+    id: '0193b000-0000-7000-8000-000000000907',
+    ticketId: '0193b000-0000-7000-8000-000000000908',
+    actorType: 'system',
+    actorId: 'rule:0193b000-0000-7000-8000-000000000909',
+    action: 'ticket.closed',
+    from: { statusId: '0193b000-0000-7000-8000-000000000910' },
+    to: {
+      statusId: '0193b000-0000-7000-8000-000000000911',
+      closedAt: '2026-10-01T10:00:00.000Z',
+      closedWithout: ['loss_reason', 'carrier'],
+    },
+    via: 'rule',
+    createdAt: '2026-10-01T10:00:00.000Z',
+  };
+
+  it('names what the system close went without, in both languages', () => {
+    const now = Date.parse('2026-10-01T10:01:00.000Z');
+
+    expect(describeEvent(closed, names, en, 'en', now)).toMatch(
+      /^Someone closed the ticket without loss_reason, carrier /,
+    );
+    expect(describeEvent(closed, names, ar, 'ar', now)).toMatch(/loss_reason, carrier/);
+  });
+
+  it('draws an ordinary close when the detail carries no list', () => {
+    const now = Date.parse('2026-10-01T10:01:00.000Z');
+
+    expect(
+      describeEvent(
+        { ...closed, to: { statusId: closed.to?.statusId } },
+        names,
+        en,
+        now ? 'en' : 'en',
+        now,
+      ),
+    ).not.toContain('without');
+  });
+});

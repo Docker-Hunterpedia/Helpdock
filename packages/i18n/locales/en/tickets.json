@@ -178,7 +178,8 @@
       "sla": "The ticket woke up: an SLA was about to run out",
       "status_changed": "The ticket woke up: its status changed",
       "manual": "{{actor}} woke the ticket"
-    }
+    },
+    "closedWithout": "{{actor}} closed the ticket without {{fields}}"
   },
   "composer": {
     "label": "Reply or internal note",
@@ -531,7 +532,8 @@
     "snooze-requires-time": "Snoozed needs a wake time. Use the Snooze button to choose one.",
     "bulk-changed": "Something in this change was edited since you previewed it. Preview it again.",
     "bulk-undo-expired": "A bulk change can be undone for 60 seconds, and those have passed.",
-    "bulk-already-undone": "This bulk change was already undone."
+    "bulk-already-undone": "This bulk change was already undone.",
+    "fields-required-to-close": "Fill in the required fields before closing: {{fields}}."
   },
   "summary": {
     "me": "me",

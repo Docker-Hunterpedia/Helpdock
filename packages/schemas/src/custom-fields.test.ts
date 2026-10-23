@@ -7,6 +7,8 @@ import {
   customFieldUpdateRequestSchema,
   customValuesSchema,
   mergeCustomValues,
+  missingRequiredToClose,
+  type RequiredToCloseRule,
   visibleCustomValues,
 } from './custom-fields.js';
 
@@ -219,6 +221,7 @@ describe('visibleCustomValues', () => {
     type: 'text',
     options: [],
     required: false,
+    requiredToClose: false,
     agentVisible: true,
     pinned: false,
     sortOrder: 0,
@@ -252,6 +255,7 @@ describe('customFieldCreateRequestSchema', () => {
     expect(customFieldCreateRequestSchema.parse(valid)).toMatchObject({
       options: [],
       required: false,
+      requiredToClose: false,
       agentVisible: true,
       pinned: false,
     });
@@ -306,5 +310,65 @@ describe('customFieldUpdateRequestSchema', () => {
     expect(customFieldUpdateRequestSchema.safeParse({ type: 'select', options: [] }).success).toBe(
       false,
     );
+  });
+});
+
+describe('missingRequiredToClose (M14-17)', () => {
+  const gate = (over: Partial<RequiredToCloseRule> = {}): RequiredToCloseRule => ({
+    key: 'plan',
+    type: 'text',
+    requiredToClose: true,
+    ...over,
+  });
+
+  it('names the fields a close would leave empty, in definition order', () => {
+    const rules = [gate({ key: 'loss_reason' }), gate({ key: 'plan' })];
+
+    expect(missingRequiredToClose(rules, { plan: 'gold' })).toEqual(['loss_reason']);
+    expect(missingRequiredToClose(rules, {})).toEqual(['loss_reason', 'plan']);
+    expect(missingRequiredToClose(rules, { plan: 'gold', loss_reason: 'shipping' })).toEqual([]);
+  });
+
+  it('leaves a field the brand has not gated out of the answer', () => {
+    expect(missingRequiredToClose([gate({ requiredToClose: false })], {})).toEqual([]);
+  });
+
+  it('reads a null as empty, because clearing is not filling in', () => {
+    expect(missingRequiredToClose([gate()], { plan: null })).toEqual(['plan']);
+  });
+
+  it('reads a blank text as empty', () => {
+    expect(missingRequiredToClose([gate()], { plan: '   ' })).toEqual(['plan']);
+  });
+
+  it('reads an empty multi-select as empty', () => {
+    const rules = [gate({ key: 'carriers', type: 'multi_select' })];
+
+    expect(missingRequiredToClose(rules, { carriers: [] })).toEqual(['carriers']);
+    expect(missingRequiredToClose(rules, { carriers: ['dhl'] })).toEqual([]);
+  });
+
+  it('reads an unticked checkbox as empty: the gate is something a person acts on', () => {
+    const rules = [gate({ key: 'refunded', type: 'checkbox' })];
+
+    expect(missingRequiredToClose(rules, { refunded: false })).toEqual(['refunded']);
+    expect(missingRequiredToClose(rules, { refunded: true })).toEqual([]);
+  });
+
+  it('reads a zero and a chosen option as filled', () => {
+    const rules = [
+      gate({ key: 'attempts', type: 'number' }),
+      gate({ key: 'carrier', type: 'select' }),
+      gate({ key: 'by', type: 'date' }),
+    ];
+
+    expect(
+      missingRequiredToClose(rules, { attempts: 0, carrier: 'dhl', by: '2026-01-02' }),
+    ).toEqual([]);
+  });
+
+  it('answers an empty list for values that are not there at all', () => {
+    expect(missingRequiredToClose([gate()], null)).toEqual(['plan']);
+    expect(missingRequiredToClose([], undefined)).toEqual([]);
   });
 });

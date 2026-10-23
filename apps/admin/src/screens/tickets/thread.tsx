@@ -495,6 +495,18 @@ function SentMessage({
  * Medium → High via a rule" is the whole sentence, and a generic "updated the
  * ticket" is the fallback for a field this screen has no wording for yet.
  */
+/**
+ * M14-17. The `closedWithout` keys a system close records in its activity
+ * detail, or nothing when the entry does not carry a well-formed list of them.
+ */
+const closedWithoutKeys = (entry: TicketActivityEntry): readonly string[] => {
+  const detail = entry.to?.closedWithout;
+
+  return Array.isArray(detail) && detail.every((key) => typeof key === 'string')
+    ? (detail as string[])
+    : [];
+};
+
 export const describeEvent = (
   entry: TicketActivityEntry,
   names: ThreadNames,
@@ -596,6 +608,14 @@ export const describeEvent = (
   // M5-08: "Still need help?" from a help center article.
   if (entry.action === 'ticket.source_article') {
     return `${t('tickets:event.sourceArticle', { title: String(entry.to?.title ?? '') })} · ${at}`;
+  }
+
+  // M14-17: a close the system made through empty required-to-close fields —
+  // by a rule, a merge or spam — says which. The keys are the field's own
+  // spelling, the one exports and rule conditions use.
+  const closedWithout = closedWithoutKeys(entry);
+  if (closedWithout.length > 0) {
+    return `${t('tickets:event.closedWithout', { actor, fields: closedWithout.join(', ') })} ${via} · ${at}`;
   }
 
   const sentence = (): string => {

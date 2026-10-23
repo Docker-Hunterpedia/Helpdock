@@ -187,11 +187,17 @@ export interface TicketsApi {
  */
 export class TicketLifecycleError extends Error {
   readonly reason: TicketLifecycleRefusal;
+  /**
+   * M14-17. On `fields-required-to-close`, the custom field keys that are
+   * still empty; empty for every other refusal.
+   */
+  readonly fields: readonly string[];
 
-  constructor(reason: TicketLifecycleRefusal) {
+  constructor(reason: TicketLifecycleRefusal, fields?: readonly string[]) {
     super(`ticket: ${reason}`);
     this.name = 'TicketLifecycleError';
     this.reason = reason;
+    this.fields = fields ?? [];
   }
 }
 

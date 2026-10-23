@@ -34,14 +34,19 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketLifecycleRefusal, string>> = {
   'bulk-already-undone': 'This bulk edit was already undone',
   'merge-primary-deleted':
     'The ticket this one was merged into has been deleted, so the merge cannot be undone',
+  // The keys travel in the body's `lifecycle.fields`; the sentence is for curl and the log.
+  'fields-required-to-close': 'Required fields are still empty',
 };
 
 export class TicketLifecycleFailure extends HttpException {
   readonly reason: TicketLifecycleRefusal;
+  /** M14-17. The custom field keys the close was refused for; empty for every other refusal. */
+  readonly fields: readonly string[];
 
-  constructor(reason: TicketLifecycleRefusal) {
+  constructor(reason: TicketLifecycleRefusal, fields: readonly string[] = []) {
     super(MESSAGE_BY_REASON[reason], HttpStatus.CONFLICT);
     this.name = 'TicketLifecycleFailure';
     this.reason = reason;
+    this.fields = fields;
   }
 }

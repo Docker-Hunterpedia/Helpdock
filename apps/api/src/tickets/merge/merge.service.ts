@@ -25,6 +25,7 @@ import type { Principal } from '../../auth/principal.js';
 import { getTx } from '../../context/request-context.js';
 import { MediaRepository } from '../../media/media.repository.js';
 import { replaceTicketTags, tagsOfTicket } from '../../ticketing/ticket-tags.js';
+import { missingRequiredToCloseKeys } from '../close-requirements.js';
 import { ticketWithSource } from '../imported-ticket-sources.js';
 import { TicketLifecycleHooks } from '../lifecycle/hooks.js';
 import { TicketLifecycleRepository } from '../lifecycle/lifecycle.repository.js';
@@ -415,12 +416,20 @@ export class MergeService {
       throw new ConflictException('That ticket moved while it was being merged');
     }
 
+    // M14-17: a merge closes the secondary through an empty required-to-close
+    // field, and the close says which fields it went without — a refusal here
+    // would turn "merge these two" into an unexplainable no.
+    const closedWithout = await missingRequiredToCloseKeys(context.tx, moved.custom);
     await this.#recordPair(context, {
       action: 'ticket.merged',
       from: ticket,
       to: merge.primary,
       fromDetail: { statusId: status.id, departmentId: ticket.departmentId },
-      toDetail: { statusId: merge.merged.id, departmentId: moved.departmentId },
+      toDetail: {
+        statusId: merge.merged.id,
+        departmentId: moved.departmentId,
+        ...(closedWithout.length === 0 ? {} : { closedWithout }),
+      },
     });
     await this.#logStatusChange(context, moved, status.id, merge.merged.id);
     if (snoozedBefore) {

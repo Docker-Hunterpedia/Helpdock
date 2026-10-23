@@ -243,6 +243,16 @@ A key whose definition has since been deleted is filtered out on the way to a
 screen rather than rewritten out of the row, so deleting a definition is not a
 migration over the whole brand and re-creating it brings its values back.
 
+A ticket field marked **required to close** (M14-17,
+[Ticketing settings](ticketing-settings.md#required-to-close) has the full
+rule) stops a person's close: a `PATCH` that moves the ticket into a closed
+state while the field is empty answers **409** with
+`error.lifecycle.reason = 'fields-required-to-close'` and
+`error.lifecycle.fields` naming the keys that are still empty. Filling the
+field and closing in one request goes through. The system's closes — a rule, a
+time-based rule, a merge, a mark as spam — are never stopped, and their
+activity row records `closedWithout` with the keys it went without.
+
 ## Messages and `seq`
 
 [DOMAIN-RULES §7](../planning/DOMAIN-RULES.md#7-realtime-delivery-contract):

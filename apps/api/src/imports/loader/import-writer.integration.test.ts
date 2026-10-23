@@ -2542,6 +2542,7 @@ describe.skipIf(!hasDocker)('M11 direct history writer', () => {
               type: 'text',
               options: [],
               required: false,
+              requiredToClose: false,
               agentVisible: true,
               pinned: false,
             },

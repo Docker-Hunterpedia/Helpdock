@@ -7,6 +7,7 @@ import { withWidenedDepartments } from '@helpdock/db';
 import { createI18n, type Locale } from '@helpdock/i18n';
 import { type BrandSettings, BULK_UNDO_WINDOW_SECONDS, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { missingRequiredToCloseKeys } from '../close-requirements.js';
 import { type ArrivalEntryPoint, arrivalOf, continuationArrival } from '../routing/arrival.js';
 import { isSnoozedStatus, type WakeReason, writeWokeActivity } from '../snooze/snooze-wake.js';
 import type { ActivityActor } from '../ticket-activity.js';
@@ -360,6 +361,11 @@ export class TicketLifecycleService {
     });
 
     await this.#noteWoke(context, ticket, status, spam, 'status_changed');
+    // M14-17: spam closes through empty required-to-close fields, and the row
+    // says which — the report shows the gap instead of a refusal nobody asked for.
+    const closedWithout = closing
+      ? await missingRequiredToCloseKeys(context.tx, updated.custom)
+      : [];
     await writeTicketActivity(context.tx, {
       brandId: context.brandId,
       ticketId: ticket.id,
@@ -367,7 +373,10 @@ export class TicketLifecycleService {
       actor: context.actor,
       action: 'ticket.marked_spam',
       from: { statusId: status.id },
-      to: { statusId: spam.id },
+      to: {
+        statusId: spam.id,
+        ...(closedWithout.length === 0 ? {} : { closedWithout }),
+      },
     });
 
     if (closing) {

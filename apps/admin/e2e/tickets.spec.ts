@@ -1,9 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN } from '../src/tickets/mock-api.js';
 import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
-import { openTicket, openTickets, signIn } from './flows.js';
+import { openTicket, openTicketingTab, openTickets, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -456,6 +457,61 @@ test.describe('one ticket', () => {
     await page.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
 
     await expect(page.getByText(t('tickets:newTicket.subjectRequired'))).toBeVisible();
+  });
+});
+
+test.describe('fields required to close (M14-17)', () => {
+  const renewsOn = (locale: Locale): string => (locale === 'ar' ? 'يتجدد في' : 'Renews on');
+  const closedName = (locale: Locale): string => (locale === 'ar' ? 'مغلقة' : 'Closed');
+
+  test('refuses a close while the field is empty, names it, and the filled field closes', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+
+    // Gate the seeded date field for this page's fixture brand.
+    await openTicketingTab(page, locale, 'custom-fields');
+    await page
+      .getByRole('button', {
+        name: t('ticketing:customFields.table.select', { name: 'Renews on' }),
+      })
+      .click();
+    await page
+      .getByRole('checkbox', { name: t('ticketing:customFields.editor.requiredToClose') })
+      .check();
+    await page
+      .getByRole('button', { name: t('ticketing:customFields.editor.save'), exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: t('ticketing:toast.fieldUpdated', { name: 'Renews on' }) }),
+    ).toBeVisible();
+
+    await openTicket(page, locale);
+
+    await page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }).click();
+    await page.getByRole('option', { name: closedName(locale) }).click();
+
+    await expect(
+      page.getByRole('status').filter({
+        hasText: t('tickets:lifecycle.fields-required-to-close', { fields: renewsOn(locale) }),
+      }),
+    ).toBeVisible();
+
+    // Fill it in, and the same close goes through.
+    const renew = page.getByRole('textbox', { name: renewsOn(locale) });
+    await renew.fill('2026-12-01');
+    await renew.press('Tab');
+
+    await page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }).click();
+    await page.getByRole('option', { name: closedName(locale) }).click();
+
+    await expect(
+      page.getByRole('status').filter({ hasText: t('tickets:toast.updated') }),
+    ).toBeVisible();
   });
 });
 

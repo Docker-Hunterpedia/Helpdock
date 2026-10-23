@@ -45,6 +45,8 @@ export interface CustomFieldDraft {
   readonly type: CustomFieldType;
   readonly options: readonly string[];
   readonly required: boolean;
+  /** Only ever sent for a ticket field: nothing else closes (M14-17). */
+  readonly requiredToClose?: boolean;
   readonly agentVisible: boolean;
   /** M14-16: shown as a chip on the rows and in the ticket header. */
   readonly pinned: boolean;
@@ -91,6 +93,7 @@ export function CustomFieldEditor({
   const [type, setType] = useState<CustomFieldType>(field?.type ?? 'text');
   const [options, setOptions] = useState<readonly string[]>(field?.options ?? []);
   const [required, setRequired] = useState(field?.required ?? false);
+  const [requiredToClose, setRequiredToClose] = useState(field?.requiredToClose ?? false);
   const [agentVisible, setAgentVisible] = useState(field?.agentVisible ?? true);
   const [pinned, setPinned] = useState(field?.pinned ?? false);
   const [placement, setPlacement] = useState<CustomFieldTarget>(field?.target ?? target);
@@ -104,6 +107,7 @@ export function CustomFieldEditor({
     setType(field?.type ?? 'text');
     setOptions(field?.options ?? []);
     setRequired(field?.required ?? false);
+    setRequiredToClose(field?.requiredToClose ?? false);
     setAgentVisible(field?.agentVisible ?? true);
     setPinned(field?.pinned ?? false);
     setPlacement(field?.target ?? target);
@@ -130,6 +134,9 @@ export function CustomFieldEditor({
       type,
       options: choice ? options.map((option) => option.trim()).filter(Boolean) : [],
       required,
+      // A flag about closing means nothing on a target that never closes, so
+      // the request stays silent about it there.
+      ...(placement === 'ticket' ? { requiredToClose } : {}),
       agentVisible,
       pinned: pinned && pinnable,
     });
@@ -248,6 +255,25 @@ export function CustomFieldEditor({
         }
         label={t('ticketing:customFields.editor.required')}
       />
+
+      {placement === 'ticket' ? (
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={requiredToClose}
+                onChange={(event) => {
+                  setRequiredToClose(event.target.checked);
+                }}
+              />
+            }
+            label={t('ticketing:customFields.editor.requiredToClose')}
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', marginBlockStart: -4 }}>
+            {t('ticketing:customFields.editor.requiredToCloseHint')}
+          </Typography>
+        </Box>
+      ) : null}
 
       <Field id={placementId} label={t('ticketing:customFields.editor.placement')}>
         <Select

@@ -91,6 +91,7 @@ export class CustomFieldsService {
       type: request.type,
       options: [...request.options],
       required: request.required,
+      requiredToClose: request.requiredToClose,
       agentVisible: request.agentVisible,
       pinned: false,
       sortOrder: await this.#repository.nextSortOrder(context.tx, request.target),
@@ -164,6 +165,9 @@ export class CustomFieldsService {
         ...(request.type === undefined ? {} : { type: request.type }),
         ...(options === undefined ? {} : { options }),
         ...(request.required === undefined ? {} : { required: request.required }),
+        ...(request.requiredToClose === undefined
+          ? {}
+          : { requiredToClose: request.requiredToClose }),
         ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
         ...(request.pinned === undefined ? {} : { pinned: request.pinned }),
       }),
@@ -182,6 +186,9 @@ export class CustomFieldsService {
         ...(request.type === undefined ? {} : { type: request.type, wasTyped: def.type }),
         ...(options === undefined ? {} : { options, wasOptioned: def.options }),
         ...(request.required === undefined ? {} : { required: request.required }),
+        ...(request.requiredToClose === undefined
+          ? {}
+          : { requiredToClose: request.requiredToClose }),
         ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
         ...(request.pinned === undefined || request.pinned === def.pinned
           ? {}
@@ -376,6 +383,7 @@ const toDef = (row: CustomFieldDefRow): CustomFieldDef => ({
   type: row.type,
   options: row.options,
   required: row.required,
+  requiredToClose: row.requiredToClose,
   agentVisible: row.agentVisible,
   pinned: row.pinned,
   sortOrder: row.sortOrder,

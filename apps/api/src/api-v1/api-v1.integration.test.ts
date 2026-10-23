@@ -549,6 +549,69 @@ describe.skipIf(!hasDocker)('public API, API keys and webhooks', () => {
       ).toBe(404);
     });
 
+    it('refuses an api key closing a ticket with an empty required-to-close field (M14-17, D-30)', async () => {
+      const { key } = await issueKey(['tickets:read', 'tickets:write']);
+      const gate = await call<{ key: string }>(
+        'POST',
+        `/api/brands/${seeded.brandId}/custom-fields`,
+        staffToken,
+        {
+          target: 'ticket',
+          key: 'v1_closure_code',
+          label: 'V1 closure code',
+          type: 'text',
+          requiredToClose: true,
+        },
+      );
+      expect(gate.status).toBe(201);
+
+      try {
+        const created = await call<V1TicketDetail>(
+          'POST',
+          '/api/v1/tickets',
+          key,
+          newTicket('Lost'),
+        );
+        expect(created.status).toBe(201);
+        const ticketId = created.body.ticket.id;
+
+        const statuses = await call<{ statuses: { id: string; systemState: string }[] }>(
+          'GET',
+          `/api/brands/${seeded.brandId}/ticket-statuses`,
+          staffToken,
+        );
+        const closed = statuses.body.statuses.find((status) => status.systemState === 'closed');
+        if (closed === undefined) {
+          throw new Error('no closed status');
+        }
+
+        const refused = await call<ErrorResponse>('PATCH', `/api/v1/tickets/${ticketId}`, key, {
+          statusId: closed.id,
+        });
+        expect(refused.status).toBe(409);
+        expect(refused.body.error?.lifecycle).toEqual({
+          reason: 'fields-required-to-close',
+          fields: [gate.body.key],
+        });
+
+        const filled = await call('PATCH', `/api/v1/tickets/${ticketId}`, key, {
+          statusId: closed.id,
+          custom: { [gate.body.key]: 'CR-9' },
+        });
+        expect(filled.status).toBe(200);
+      } finally {
+        const list = await call<{ fields: { id: string; key: string }[] }>(
+          'GET',
+          `/api/brands/${seeded.brandId}/custom-fields?target=ticket`,
+          staffToken,
+        );
+        const id = list.body.fields.find((field) => field.key === 'v1_closure_code')?.id;
+        if (id !== undefined) {
+          await call('DELETE', `/api/brands/${seeded.brandId}/custom-fields/${id}`, staffToken);
+        }
+      }
+    });
+
     it('lists snoozed tickets by default, so a sync by listing loses none, and hides them on request (M14-02)', async () => {
       const { key } = await issueKey(['tickets:read', 'tickets:write']);
       const created = await call<V1TicketDetail>('POST', '/api/v1/tickets', key, newTicket('Away'));

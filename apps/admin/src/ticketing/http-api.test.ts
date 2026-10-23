@@ -225,6 +225,7 @@ const field = {
   type: 'select',
   options: ['gold'],
   required: false,
+  requiredToClose: false,
   agentVisible: true,
   pinned: false,
   sortOrder: 0,
@@ -328,6 +329,7 @@ describe('custom fields', () => {
       type: 'select',
       options: ['gold'],
       required: false,
+      requiredToClose: false,
       agentVisible: true,
       pinned: false,
     });

@@ -428,8 +428,37 @@ export function TicketView({
    * A refusal a person can act on gets its sentence: the lifecycle's (M1-08,
    * M1-09) or the ticketing settings' (M1-07's assignee rules); anything else,
    * the one for failure.
+   *
+   * A close the required-to-close fields stopped (M14-17) also names the
+   * fields — by label where the brand's definitions are loaded — and opens the
+   * details panel where they are edited, which is what the Close button and
+   * `e` leave the person looking at.
    */
   const refused = (error: unknown): void => {
+    if (isTicketLifecycleError(error) && error.reason === 'fields-required-to-close') {
+      const labels = error.fields.map((key) => {
+        const def = (fieldDefs.data?.fields ?? []).find((field) => field.key === key);
+
+        return def === undefined
+          ? key
+          : locale === 'ar' && def.labelAr !== null
+            ? def.labelAr
+            : def.label;
+      });
+      const list = new Intl.ListFormat(locale, { type: 'conjunction' });
+      toast({
+        tone: 'danger',
+        message: t('tickets:lifecycle.fields-required-to-close', {
+          fields: list.format(labels),
+        }),
+      });
+      if (detailsInDrawer) {
+        onDetailsOpenChange(true);
+      }
+
+      return;
+    }
+
     toast({
       tone: 'danger',
       message: isTicketLifecycleError(error)

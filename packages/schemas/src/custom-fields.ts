@@ -92,6 +92,11 @@ export const customFieldDefSchema = z.object({
   /** Empty for every type but `select` and `multi_select`. */
   options: z.array(z.string()),
   required: z.boolean(),
+  /**
+   * A ticket field the brand will not let a person close a ticket without
+   * (M14-17). Empty for the contact and account targets, where nothing closes.
+   */
+  requiredToClose: z.boolean(),
   /** Whether an Agent sees it. A display rule, never a security boundary. */
   agentVisible: z.boolean(),
   /**
@@ -154,6 +159,7 @@ export const customFieldCreateRequestSchema = z
     type: customFieldTypeSchema,
     options: customFieldOptionsSchema.default([]),
     required: z.boolean().default(false),
+    requiredToClose: z.boolean().default(false),
     agentVisible: z.boolean().default(true),
     /** M14-16. Pins the new field (and unpins the brand's previous one). */
     pinned: z.boolean().default(false),
@@ -178,6 +184,7 @@ export const customFieldUpdateRequestSchema = z
     type: customFieldTypeSchema.optional(),
     options: customFieldOptionsSchema.optional(),
     required: z.boolean().optional(),
+    requiredToClose: z.boolean().optional(),
     agentVisible: z.boolean().optional(),
     /** Pins this select field (and unpins the brand's previous one), or unpins it. */
     pinned: z.boolean().optional(),
@@ -384,3 +391,55 @@ export const visibleCustomValues = (
 
   return Object.fromEntries(Object.entries(values).filter(([key]) => known.has(key)));
 };
+
+// --------------------------------------------------------------------------
+// Required to close (M14-17)
+// --------------------------------------------------------------------------
+
+/**
+ * Whether a stored value counts as **empty** for the required-to-close gate.
+ *
+ * Absent and `null` are empty for every type, and so are the two values that
+ * carry nothing in them: a text field of only spaces, and a multi-select of no
+ * choices. A checkbox is empty when it is **unticked** — `required_to_close` is
+ * a gate a person has to act on, and "I saw the box" is not acting on it; this
+ * is deliberately stricter than `required` at creation, where `false` is an
+ * answer.
+ */
+export const customValueIsEmpty = (type: CustomFieldType, value: unknown): boolean => {
+  if (value === undefined || value === null) {
+    return true;
+  }
+
+  switch (type) {
+    case 'text':
+      return typeof value !== 'string' || value.trim() === '';
+    case 'checkbox':
+      return value !== true;
+    case 'multi_select':
+      return !Array.isArray(value) || value.length === 0;
+    case 'number':
+    case 'date':
+    case 'select':
+      return false;
+  }
+};
+
+/** What {@link missingRequiredToClose} needs of a definition. */
+export interface RequiredToCloseRule {
+  readonly key: string;
+  readonly type: CustomFieldType;
+  readonly requiredToClose: boolean;
+}
+
+/**
+ * The keys of `values` the gate refuses, in definition order — the list a close
+ * refusal names and an agent fills in.
+ */
+export const missingRequiredToClose = (
+  rules: readonly RequiredToCloseRule[],
+  values: Record<string, unknown> | null | undefined,
+): string[] =>
+  rules
+    .filter((rule) => rule.requiredToClose && customValueIsEmpty(rule.type, values?.[rule.key]))
+    .map((rule) => rule.key);

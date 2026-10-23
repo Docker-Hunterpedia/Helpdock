@@ -36,6 +36,12 @@ export const totpLockKey = (userId: string): string => `auth:totp-lock:${userId}
 /** Wrong second-factor values of one account, across challenges; reaching the limit sets the lock. */
 export const totpFailuresKey = (userId: string): string => `auth:totp-failures:${userId}`;
 
+/**
+ * A staged secret waiting to replace an enabled authenticator (#373), keyed by
+ * the rotation id the step-up proof was answered with.
+ */
+export const totpRotationKey = (rotationId: string): string => `auth:totp-rotate:${rotationId}`;
+
 /** The last time step an authenticator code of this account was accepted at. */
 export const totpUsedStepKey = (userId: string): string => `auth:totp-step:${userId}`;
 

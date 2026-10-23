@@ -23,6 +23,7 @@ export const SECURITY_CHANGES = [
   'passwordReset',
   'twoFactorEnabled',
   'twoFactorDisabled',
+  'twoFactorRotated',
   'recoveryCodes',
   'oauthConnected',
   'oauthDisconnected',

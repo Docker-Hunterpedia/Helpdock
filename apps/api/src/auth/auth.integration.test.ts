@@ -1,5 +1,5 @@
 import type { EmailMessage } from '@helpdock/channels';
-import { createKeyring, type Env } from '@helpdock/config';
+import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
 import {
   auditLog,
   createDb,
@@ -761,6 +761,115 @@ describe.skipIf(!hasDocker)('the auth service', () => {
       );
 
       expect(again.json()).toMatchObject({ kind: 'session' });
+    });
+  });
+
+  describe('replacing the authenticator app (#373)', () => {
+    it('rotates the app in one confirmed step, and the old code stops working', async () => {
+      const { accessToken } = await signIn();
+      await email.clear();
+
+      const started = await post(
+        '/api/me/totp/rotate/start',
+        { code: await totpCode() },
+        bearer(accessToken),
+      );
+      expect(started.statusCode).toBe(201);
+      const { rotationId, secret, uri } = started.json() as {
+        rotationId: string;
+        secret: string;
+        uri: string;
+      };
+      expect(rotationId).toBeTruthy();
+      expect(uri).toContain('otpauth://');
+
+      // The old app cannot confirm its own replacement, and says nothing yet.
+      const wrong = await post(
+        '/api/me/totp/rotate/confirm',
+        { rotationId, code: await totpCode() },
+        bearer(accessToken),
+      );
+      expect(wrong.statusCode).toBe(401);
+      expect(wrong.json()).toMatchObject({ error: { auth: { code: 'totp-mismatch' } } });
+      expect(await email.all()).toHaveLength(0);
+
+      // A code from the new app swaps the secret in one request.
+      const right = await post(
+        '/api/me/totp/rotate/confirm',
+        { rotationId, code: await generate({ secret, period: 30 }) },
+        bearer(accessToken),
+      );
+      expect(right.statusCode).toBe(204);
+
+      // The holder is told, and the api wrote the audit row.
+      const messages = await email.all();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.text).toContain('was replaced');
+      const rotated = await withTenant(
+        runtime.db,
+        {
+          brandIds: [INSTALL_SCOPE_BRAND_ID],
+          departmentIds: 'all',
+          principalType: 'system',
+          principalId: 'test',
+        },
+        (tx) => tx.select().from(auditLog).where(eq(auditLog.action, 'auth.second_factor.rotated')),
+      );
+      expect(rotated.filter((row) => row.targetId === seeded.userId)).toHaveLength(1);
+
+      // Spent: the same rotation answers nothing a second time.
+      const again = await post(
+        '/api/me/totp/rotate/confirm',
+        { rotationId, code: await generate({ secret, period: 30 }) },
+        bearer(accessToken),
+      );
+      expect(again.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+
+      // Sign-in now refuses the old app and takes the new one.
+      const first = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const oldCode = await post('/api/auth/totp', {
+        challengeId: (first.json() as { challengeId: string }).challengeId,
+        code: await totpCode(),
+        trustDevice: false,
+      });
+      expect(oldCode.json()).toMatchObject({ error: { auth: { code: 'totp-mismatch' } } });
+
+      const second = await post('/api/auth/sign-in', {
+        email: seeded.email,
+        password: seeded.password,
+      });
+      const newCode = await post('/api/auth/totp', {
+        challengeId: (second.json() as { challengeId: string }).challengeId,
+        code: await generate({ secret, period: 30 }),
+        trustDevice: false,
+      });
+      expect(newCode.statusCode).toBe(201);
+
+      // The suite shares this account: put the seeded secret back, so the
+      // tests after this one sign in with the authenticator they expect.
+      await runtime.db
+        .update(users)
+        .set({
+          totpSecretEncrypted: encryptSecret(
+            seeded.totpSecret ?? '',
+            createKeyring({ APP_MASTER_KEY: MASTER_KEY }),
+          ),
+        })
+        .where(eq(users.id, seeded.userId));
+    });
+
+    it('still refuses to turn the required second factor off after a rotation', async () => {
+      const { accessToken } = await signIn();
+
+      const refused = await post(
+        '/api/me/totp/disable',
+        { code: await totpCode() },
+        bearer(accessToken),
+      );
+      expect(refused.json()).toMatchObject({ error: { auth: { code: 'unavailable' } } });
     });
   });
 

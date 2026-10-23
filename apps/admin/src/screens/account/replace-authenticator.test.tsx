@@ -1,0 +1,112 @@
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it } from 'vitest';
+import { AppRoutes } from '../../app/routes.tsx';
+import { MOCK_ENROLMENT_CODE, MOCK_TOTP_SECRET } from '../../staff/mock-api.js';
+import { renderApp } from '../../test/render.tsx';
+import { signedInMockApis } from '../../test/signed-in.js';
+
+/**
+ * Replacing the authenticator on `/me/security` (#373), against the fixture:
+ * the proof step, the staged secret, and the confirmation that swaps the app.
+ * The browser tests walk the same flow in both languages.
+ */
+
+const renderWith = async () => {
+  const apis = await signedInMockApis();
+  const rendered = renderApp(<AppRoutes />, {
+    authApi: apis.auth,
+    staffApi: apis.staff,
+    initialEntries: ['/me/security'],
+  });
+  await screen.findByRole('heading', { name: 'Your account', level: 1 });
+
+  return { ...rendered, staff: apis.staff };
+};
+
+const openDialog = async (): Promise<HTMLElement> => {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Replace app' }));
+  const dialog = await screen.findByRole('dialog');
+  await within(dialog).findByText('Replace your authenticator app?');
+
+  return dialog;
+};
+
+describe('replacing the authenticator app (#373)', () => {
+  it('walks proof, scan and confirm, and says the old app stopped working', async () => {
+    const user = userEvent.setup();
+    const { staff } = await renderWith();
+    const dialog = await openDialog();
+
+    await user.type(
+      within(dialog).getByLabelText('Code from your current app, or a recovery code'),
+      MOCK_ENROLMENT_CODE,
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+
+    await within(dialog).findByText('Scan the new code');
+    expect(within(dialog).getByText(MOCK_TOTP_SECRET)).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText('Code from your new app'), MOCK_ENROLMENT_CODE);
+    await user.click(within(dialog).getByRole('button', { name: 'Replace app' }));
+
+    expect(
+      await screen.findByText('Authenticator app replaced. Your old app no longer works.'),
+    ).toBeInTheDocument();
+    await expect(staff.profile()).resolves.toMatchObject({ twoFactorEnabled: true });
+  });
+
+  it('says a wrong proof in the field and stages nothing', async () => {
+    const user = userEvent.setup();
+    await renderWith();
+    const dialog = await openDialog();
+
+    await user.type(
+      within(dialog).getByLabelText('Code from your current app, or a recovery code'),
+      '000000',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+
+    expect(
+      await within(dialog).findByText('That password or code did not match.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('Scan the new code')).not.toBeInTheDocument();
+  });
+
+  it('takes the password with a recovery code when the phone is gone', async () => {
+    const user = userEvent.setup();
+    await renderWith();
+    const dialog = await openDialog();
+
+    await user.click(
+      within(dialog).getByRole('button', {
+        name: 'Use your password and a recovery code instead',
+      }),
+    );
+    await user.type(within(dialog).getByLabelText('Current password'), 'correct horse');
+    await user.type(within(dialog).getByLabelText('Recovery code'), 'RC-4KQ2-9XMT');
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+
+    expect(await within(dialog).findByText('Scan the new code')).toBeInTheDocument();
+  });
+
+  it('refuses a wrong code from the new app and keeps the staged secret', async () => {
+    const user = userEvent.setup();
+    await renderWith();
+    const dialog = await openDialog();
+
+    await user.type(
+      within(dialog).getByLabelText('Code from your current app, or a recovery code'),
+      MOCK_ENROLMENT_CODE,
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    await within(dialog).findByText('Scan the new code');
+
+    await user.type(within(dialog).getByLabelText('Code from your new app'), '000000');
+    await user.click(within(dialog).getByRole('button', { name: 'Replace app' }));
+
+    expect(await within(dialog).findByText('That code did not match.')).toBeInTheDocument();
+    expect(within(dialog).getByText(MOCK_TOTP_SECRET)).toBeInTheDocument();
+  });
+});

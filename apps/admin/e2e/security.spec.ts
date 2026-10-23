@@ -74,6 +74,46 @@ test.describe('the security page', () => {
     await expect(page.getByText(t('me:twoFactor.disabled'))).toBeVisible();
   });
 
+  test('replaces the authenticator app: proof, then a code from the new app (#373)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText(t('me:twoFactor.replaceTitle'))).toBeVisible();
+
+    await dialog.getByLabel(t('me:twoFactor.replaceProofLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog.getByRole('button', { name: t('me:passkeys.continue') }).click();
+
+    await expect(dialog.getByText(t('me:twoFactor.scanTitle'))).toBeVisible();
+    // The fixture answers its one code for the new app, as the real api takes
+    // a live code from whichever app was scanned.
+    await dialog.getByLabel(t('me:twoFactor.newCodeLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+
+    await expect(page.getByText(t('me:twoFactor.replaced'))).toBeVisible();
+  });
+
+  test('says so in the field when the proof to replace the app is wrong (#373)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(t('me:twoFactor.replaceProofLabel')).fill('000000');
+    await dialog.getByRole('button', { name: t('me:passkeys.continue') }).click();
+
+    await expect(dialog.getByText(t('me:passkeys.proofWrong'))).toBeVisible();
+  });
+
   test('lists the signed-in browsers and ends one of them', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);

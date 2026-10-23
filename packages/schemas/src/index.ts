@@ -68,6 +68,7 @@ export * from './ticket-routing.js';
 export * from './ticket-templates.js';
 export * from './ticketing.js';
 export * from './time-entries.js';
+export * from './totp-rotation.js';
 export * from './views.js';
 export * from './web-form.js';
 export * from './webhook-events.js';

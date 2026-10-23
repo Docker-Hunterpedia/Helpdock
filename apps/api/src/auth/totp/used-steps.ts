@@ -46,7 +46,16 @@ export class TotpStepStore {
       String(timeStep),
       String(USED_STEP_TTL_SECONDS),
     );
-
     return claimed === 1;
+  }
+
+  /**
+   * Forgets the record, so the next code of any step is accepted. Called when
+   * an authenticator is replaced (#373): the claim in the record belongs to the
+   * secret that no longer verifies, and without this the new app's first code
+   * — often on the very same time step — would be refused as a replay.
+   */
+  async forget(userId: string): Promise<void> {
+    await this.#redis.del(totpUsedStepKey(userId));
   }
 }

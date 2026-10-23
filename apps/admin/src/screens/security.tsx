@@ -18,6 +18,7 @@ import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
 import { AccountCard } from './account/account-card.tsx';
 import { PasskeysCard } from './account/passkeys-card.tsx';
+import { ReplaceAuthenticatorDialog } from './account/replace-authenticator.tsx';
 import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
 /**
@@ -36,7 +37,7 @@ import { SignInProvidersCard } from './account/sign-in-providers.tsx';
  * signed in, not that the person at the keyboard now is the account holder.
  */
 
-type Confirming = 'disable' | 'regenerate' | null;
+type Confirming = 'disable' | 'regenerate' | 'replace' | null;
 
 export function SecurityScreen(): ReactNode {
   const t = useT();
@@ -324,6 +325,14 @@ export function SecurityScreen(): ReactNode {
                 >
                   {t('me:twoFactor.regenerate')}
                 </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setConfirming('replace');
+                  }}
+                >
+                  {t('me:twoFactor.replace')}
+                </Button>
                 {profile.data.twoFactorRequired ? null : (
                   <Button
                     variant="outlined"
@@ -463,8 +472,15 @@ export function SecurityScreen(): ReactNode {
         </AccountCard>
       </Box>
 
+      <ReplaceAuthenticatorDialog
+        open={confirming === 'replace'}
+        onClose={() => {
+          setConfirming(null);
+        }}
+      />
+
       <ConfirmDialog
-        open={confirming !== null}
+        open={confirming === 'disable' || confirming === 'regenerate'}
         destructive={confirming === 'disable'}
         busy={disableTotp.isPending || regenerate.isPending}
         title={

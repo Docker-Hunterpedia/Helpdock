@@ -348,6 +348,8 @@ breached-list check.
 | `DELETE /api/me/profile/photo` | `@Authenticated()` | Removes the photo and its files. Answers with the profile |
 | `POST /api/me/password` | `@Authenticated()` | Current plus new |
 | `POST /api/me/totp/disable` | `@Authenticated()` | A live code. Refused while `auth.require2fa` is on, and always for an Admin or install admin |
+| `POST /api/me/totp/rotate/start` | `@Authenticated()` | One step-up proof (app code, recovery code, passkey, or password with recovery code) stages a fresh secret: `{ rotationId, secret, uri }`. See [authentication](authentication.md#replacing-the-app-373) |
+| `POST /api/me/totp/rotate/confirm` | `@Authenticated()` | `{ rotationId, code }` from the new app swaps the secret, under the account-row lock |
 | `POST /api/me/recovery-codes/regenerate` | `@Authenticated()` | A live code |
 | `GET /api/me/sessions` | `@Authenticated()` | |
 | `DELETE /api/me/sessions/:family` | `@Authenticated()` | |

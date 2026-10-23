@@ -276,6 +276,24 @@ describe('the account the person owns', () => {
     expect(redrawn.recoveryCodes).toEqual(['RC-1']);
   });
 
+  it('sends the proof to start a rotation and the new code to confirm it', async () => {
+    fetchMock.mockResolvedValue(
+      json({ rotationId: FAMILY_ID, secret: 'JBSW', uri: 'otpauth://totp/x' }),
+    );
+    const staged = await staff.startTotpRotation({ code: '123456' });
+    expect(lastCall().url).toBe('/api/me/totp/rotate/start');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ code: '123456' });
+    expect(staged.rotationId).toBe(FAMILY_ID);
+
+    fetchMock.mockResolvedValue(noContent());
+    await staff.confirmTotpRotation(FAMILY_ID, '654321');
+    expect(lastCall().url).toBe('/api/me/totp/rotate/confirm');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({
+      rotationId: FAMILY_ID,
+      code: '654321',
+    });
+  });
+
   it('lists and ends one browser', async () => {
     fetchMock.mockResolvedValue(json({ sessions: [] }));
     await staff.sessions();

@@ -27,6 +27,7 @@ import { SessionService } from './session/session.service.js';
 import type { SigningKeys } from './session/signing-keys.js';
 import { StaffRepository } from './staff.repository.js';
 import { TotpChallengeStore } from './totp/challenge-store.js';
+import { TotpRotationStore } from './totp/rotation-store.js';
 import { TrustedDeviceStore } from './totp/trusted-device.js';
 import { TotpStepStore } from './totp/used-steps.js';
 import { WebAuthnCeremonyStore } from './webauthn/ceremony-store.js';
@@ -134,6 +135,7 @@ export const createAuthRuntime = ({
     hasher,
     challenges: new TotpChallengeStore(redis),
     steps: new TotpStepStore(redis),
+    rotations: new TotpRotationStore(redis),
     trustedDevices: new TrustedDeviceStore({ redis, masterKey }),
     tokens: new EmailTokenStore(redis),
     exchanges: new ExchangeStore(redis),
@@ -235,7 +237,14 @@ export class AuthModule {
           useFactory: (runtime: AuthRuntime): PasswordHasher => runtime.hasher,
         },
       ],
-      exports: [AuthService, SessionService, PasswordHasher, SsoIdentityService, SsoSignInPolicy],
+      exports: [
+        AuthService,
+        PasskeyService,
+        SessionService,
+        PasswordHasher,
+        SsoIdentityService,
+        SsoSignInPolicy,
+      ],
     };
   }
 }

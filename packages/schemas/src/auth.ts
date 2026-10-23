@@ -464,6 +464,8 @@ const authErrorCodes = [
   'passkey-duplicate',
   /** An authenticator app is already on; staging a new secret would replace it with no proof (M18-03). */
   'totp-already-enabled',
+  /** There is no authenticator app to replace; the account goes through enrolment instead (#373). */
+  'totp-not-enabled',
   /** A passkey assertion that did not verify, as a second factor or when enrolling (M18-03). Carries `attemptsLeft`. */
   'passkey-invalid',
 ] as const;

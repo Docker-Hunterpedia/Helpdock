@@ -50,7 +50,20 @@
     "regenerateSubmit": "Regenerate",
     "regenerated": "New recovery codes. The old ones no longer work.",
     "newCodesTitle": "Your new recovery codes",
-    "newCodesBody": "Each works once, and this is the only time they are shown."
+    "newCodesBody": "Each works once, and this is the only time they are shown.",
+    "replace": "Replace app",
+    "replaceTitle": "Replace your authenticator app?",
+    "replaceBody": "Confirm it's you, then scan the new code. Your current app keeps working until you confirm the new one.",
+    "replaceProofLabel": "Code from your current app, or a recovery code",
+    "replaceProofRequired": "Enter a code from your current app, or a recovery code.",
+    "usePassword": "Use your password and a recovery code instead",
+    "useCode": "Use an app code or a recovery code instead",
+    "recoveryLabel": "Recovery code",
+    "scanTitle": "Scan the new code",
+    "scanBody": "In your new authenticator app, add a new account and scan this code, or type the key by hand.",
+    "scanNote": "Your current app still works. The new one replaces it only after you type a code from it below.",
+    "newCodeLabel": "Code from your new app",
+    "replaced": "Authenticator app replaced. Your old app no longer works."
   },
   "passkeys": {
     "title": "Passkeys",

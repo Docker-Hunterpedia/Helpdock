@@ -18,6 +18,8 @@ import type {
   SecondFactorOptions,
   Session,
   TotpEnrolment,
+  TotpRotationProof,
+  TotpRotationStart,
 } from '@helpdock/schemas';
 import {
   isLastSignInMethod,
@@ -59,6 +61,7 @@ import type { IssuedSession, SessionService } from './session/session.service.js
 import type { Queryable, StaffRepository, StaffUser } from './staff.repository.js';
 import type { TotpChallengeStore } from './totp/challenge-store.js';
 import { hashRecoveryCodes, newRecoveryCodes, spendRecoveryCode } from './totp/recovery-codes.js';
+import type { TotpRotationStore } from './totp/rotation-store.js';
 import { matchTotpStep, newTotpSecret, totpUri } from './totp/totp.js';
 import type { TrustedDeviceStore } from './totp/trusted-device.js';
 import type { TotpStepStore } from './totp/used-steps.js';
@@ -179,6 +182,8 @@ export interface AuthServiceOptions {
   readonly challenges: TotpChallengeStore;
   /** The last authenticator step each account used, so no code is accepted twice. */
   readonly steps: TotpStepStore;
+  /** The secret staged to replace an enabled authenticator, until a code from the new app confirms it (#373). */
+  readonly rotations: TotpRotationStore;
   readonly trustedDevices: TrustedDeviceStore;
   readonly tokens: EmailTokenStore;
   readonly exchanges: ExchangeStore;
@@ -901,6 +906,224 @@ export class AuthService {
     this.#parts.logger.warn({ userId: user.id }, 'Disabled the second factor for a staff account');
     await this.#audit('auth.second_factor.disabled', user.id, 'staff');
     await this.#notifySecurityChange(user.id, 'twoFactorDisabled', tx);
+  }
+
+  // ------------------------------------------------------------------
+  // Replacing the authenticator app (#373)
+  //
+  // An account that must have a second factor and holds only the app can
+  // neither turn it off (no factor would remain) nor enrol over it (one is
+  // on), so a lost phone left no way to rotate. The rotation swaps the secret
+  // in one confirmed step: a step-up proof starts it, the new app's code
+  // finishes it, and the swap itself is one guarded UPDATE inside the request
+  // transaction, so a failure anywhere keeps the old app working.
+  // ------------------------------------------------------------------
+
+  /**
+   * Whether this account has an app that a rotation could replace. Checked
+   * before any proof is spent, so a refusal costs no attempt — the same order
+   * {@link disconnectOauth} keeps for its own cheap refusal.
+   */
+  async assertTotpRotatable(userId: string, tx?: Queryable): Promise<StaffUser> {
+    const user = await this.#requireUser(userId, tx);
+    if (!user.totpEnabled) {
+      throw new AuthFailure('totp-not-enabled');
+    }
+
+    return user;
+  }
+
+  /**
+   * Step 1 of the rotation, for every proof but a passkey: verify the step-up
+   * (the current app's code, a recovery code, or the password with a recovery
+   * code — DOMAIN-RULES §12.1) and stage a fresh secret. Nothing is replaced
+   * until {@link confirmTotpRotation} verifies a code the new app produced, so
+   * a scan that did not save cannot lock anybody out. The staged secret waits
+   * in Redis, sealed, for fifteen minutes.
+   *
+   * A passkey proof is verified by `PasskeyService` first, which then calls
+   * {@link stageTotpRotation} — the same hand-back `regenerateRecoveryCodes`
+   * after a passkey takes.
+   */
+  async startTotpRotation({
+    userId,
+    proof,
+    tx,
+  }: {
+    readonly userId: string;
+    readonly proof: TotpRotationProof;
+    readonly tx?: DbTransaction;
+  }): Promise<TotpRotationStart> {
+    const user = await this.assertTotpRotatable(userId, tx);
+    await this.#requireRotationProof(user, proof, tx);
+
+    return this.stageTotpRotation(userId, tx);
+  }
+
+  /** Stages the secret a confirmed rotation will swap in; the caller has proved the step-up. */
+  async stageTotpRotation(userId: string, tx?: Queryable): Promise<TotpRotationStart> {
+    const user = await this.assertTotpRotatable(userId, tx);
+    const secret = newTotpSecret();
+    const rotationId = await this.#parts.rotations.create({
+      userId,
+      secretEncrypted: encryptSecret(secret, this.#parts.keyring),
+    });
+
+    return {
+      rotationId,
+      secret,
+      uri: totpUri({ secret, email: user.email, issuer: new URL(this.#parts.appUrl).host }),
+    };
+  }
+
+  /**
+   * Step 2: a live code from the *new* app swaps the secret, once, under the
+   * account-row lock the other factor changes take. The staged code is checked
+   * before anything is written, the swap is one UPDATE that refuses an account
+   * whose app is no longer on, and the row joins the request's transaction —
+   * so a failure anywhere leaves the old secret (and only the old secret) in
+   * place. Each confirm costs the step-up budget, so the six digits cannot be
+   * walked while the staged secret waits.
+   */
+  async confirmTotpRotation({
+    userId,
+    rotationId,
+    code,
+    tx,
+  }: {
+    readonly userId: string;
+    readonly rotationId: string;
+    readonly code: string;
+    readonly tx?: DbTransaction;
+  }): Promise<void> {
+    // The lock disableTotp and the passkey changes take: the account must not
+    // lose its last factor, or gain one, while the swap is being decided.
+    if (tx !== undefined) await this.#parts.passkeys.lockAccount(userId, tx);
+    await this.#spendStepUp(userId);
+
+    const staged = await this.#parts.rotations.read(rotationId);
+    // Gone, another account's, or the app it was to replace was turned off
+    // while the staged secret waited: either way there is nothing to confirm.
+    const current = await this.#requireUser(userId, tx);
+    if (staged.status !== 'ok' || staged.rotation.userId !== userId || !current.totpEnabled) {
+      throw new AuthFailure('challenge-expired');
+    }
+
+    let secret: string | null = null;
+    try {
+      secret = decryptSecret(staged.rotation.secretEncrypted, this.#parts.keyring);
+    } catch (error) {
+      // As with a stored secret that will not open: an operator problem, said
+      // in the log, not a "wrong code" the person is blamed for.
+      this.#parts.logger.error(
+        { err: error, userId },
+        'Could not decrypt a staged TOTP secret; check APP_MASTER_KEY and DOMAIN-RULES §10',
+      );
+    }
+    // The staged secret — never the live one — decides the code, so the old
+    // app cannot confirm its own replacement. The used-step record is not
+    // consulted here on purpose: the code that proves the new app is frequently
+    // on the same time step as the code that proved the old one, which the
+    // record cannot tell apart, and this confirmation is its own single-use
+    // context — the staged record is spent below, so a replayed request finds
+    // nothing to confirm.
+    if (secret === null || (await matchTotpStep({ secret, code })) === null) {
+      await this.#audit('auth.second_factor.failed', userId, 'system', {
+        factor: 'totp',
+        during: 'rotation',
+      });
+      throw new AuthFailure('totp-mismatch');
+    }
+
+    const rotated = await this.#parts.staff.rotateTotpSecret(
+      userId,
+      staged.rotation.secretEncrypted,
+      tx,
+    );
+    if (!rotated) {
+      throw new AuthFailure('challenge-expired');
+    }
+
+    await this.#parts.rotations.consume(rotationId, userId);
+    // The start proof claimed this time step for the old secret, which can no
+    // longer verify; forgetting it lets the new app sign in at once, in the
+    // same window the confirmation ran in.
+    await this.#parts.steps.forget(userId);
+    this.#parts.logger.info({ userId }, 'Replaced the authenticator app of a staff account');
+    await this.#audit('auth.second_factor.rotated', userId, 'staff');
+    await this.#notifySecurityChange(userId, 'twoFactorRotated', tx);
+  }
+
+  /** The proof matrix of DOMAIN-RULES §12.1 for a rotation: one of four, each spent where checked. */
+  async #requireRotationProof(
+    user: StaffUser,
+    proof: TotpRotationProof,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    if (proof.code !== undefined) {
+      await this.#requireLiveCode(user.id, proof.code, tx);
+      return;
+    }
+
+    if (proof.recoveryCode !== undefined) {
+      await this.#requireRecoveryCodeProof(user, proof.currentPassword, proof.recoveryCode, tx);
+      return;
+    }
+
+    // Unreachable through the schema, which allows a bare password nowhere:
+    // this names the shape that is missing rather than failing later.
+    throw new AuthFailure('invalid-credentials');
+  }
+
+  /**
+   * A recovery code as the step-up, alone or beside the current password. The
+   * code is spent exactly as one spent to sign in is — every hash is tried, the
+   * remainder is stored, the use is audited — because it *is* a credential: a
+   * rotation is worth one recovery code as much as a sign-in is. The password,
+   * when presented, is the fresh first factor of the pair; one wrong half
+   * refuses the whole proof.
+   */
+  async #requireRecoveryCodeProof(
+    user: StaffUser,
+    currentPassword: string | undefined,
+    recoveryCode: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    await this.#spendStepUp(user.id);
+
+    if (currentPassword !== undefined) {
+      if (user.passwordHash === null) {
+        throw new AuthFailure('invalid-credentials');
+      }
+      const verification = await this.#parts.hasher.verify(user.passwordHash, currentPassword);
+      if (!verification.valid) {
+        await this.#audit('auth.step_up.refused', user.id, 'system', { reason: 'wrong-password' });
+        throw new AuthFailure('invalid-credentials');
+      }
+    }
+
+    const match = await spendRecoveryCode(
+      recoveryCode,
+      user.recoveryCodesHashed,
+      this.#parts.hasher,
+    );
+    if (match === null) {
+      await this.#audit('auth.second_factor.failed', user.id, 'system', {
+        factor: 'recovery-code',
+        during: 'step-up',
+      });
+      throw new AuthFailure('recovery-invalid');
+    }
+
+    await this.#parts.staff.replaceRecoveryCodes(user.id, match.remaining, tx);
+    this.#parts.logger.warn(
+      { userId: user.id, remaining: match.remaining.length },
+      'A recovery code was spent to prove a credential change',
+    );
+    await this.#audit('auth.recovery_code.used', user.id, 'staff', {
+      remaining: match.remaining.length,
+      during: 'step-up',
+    });
   }
 
   /**

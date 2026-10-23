@@ -2,6 +2,7 @@ import type { DbTransaction, User } from '@helpdock/db';
 import sharp from 'sharp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthService } from '../auth/auth.service.js';
+import type { PasskeyService } from '../auth/passkeys/passkey.service.js';
 import type { RateLimiter } from '../auth/rate-limit.js';
 import { PROFILE_PHOTO_RULE } from '../auth/rate-limit.js';
 import type { SessionService } from '../auth/session/session.service.js';
@@ -72,6 +73,7 @@ beforeEach(() => {
   service = new AccountService({
     staff: staff as unknown as StaffRepository,
     auth: { secondFactorRequiredFor: async () => false } as unknown as AuthService,
+    passkeys: {} as PasskeyService,
     sessions: {} as SessionService,
     photos: photos as unknown as ProfilePhotoStore,
     limiter: limiter as unknown as RateLimiter,

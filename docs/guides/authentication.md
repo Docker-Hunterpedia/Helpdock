@@ -248,23 +248,41 @@ server to draw it would put it in a second place. [Staff and
 roles](staff-and-roles.md#two-factor-enrolment) walks through it.
 
 `POST /api/auth/totp/enrol` never replaces an authenticator that is on: it answers
-`409 totp-already-enabled`. Changing one is not a step-up the plan defines, so the
-way is to turn it off with a live code and enrol again.
+`409 totp-already-enabled`. Replacing one is the **rotation** below, done from the
+security page; for an account that need not keep a second factor, turning it off
+with a live code and enrolling again also works.
 
-**Known gap: replacing the app of an account that must have a second factor.**
-For such an account (an Admin, an install admin, `auth.require2fa`) whose only
-factor is the app, turning it off is refused and so is enrolling over it, so the
-app cannot be rotated in place. The workaround is to add a passkey, turn the app
-off with a live code, then enrol the new app. With a lost phone only the recovery
-codes remain. The path that was removed was the vulnerability itself (a bare
-session could switch the required app off with no proof), and no screen ever
-offered it. An atomic "Replace authenticator" (current code or recovery code, plus
-the new code) is tracked in the follow-up issue.
+### Replacing the app (#373)
+
+An account that must have a second factor and holds only the app can neither turn
+it off (no factor would remain) nor enrol over it (one is on), so the security
+page offers **Replace app**, which swaps the secret in one confirmed step:
+
+1. `POST /api/me/totp/rotate/start` with one proof: a live code from the current
+   app, a single-use recovery code, an assertion from a passkey the account
+   holds (in answer to `POST /api/me/passkeys/step-up/options`), or the current
+   password **with** a recovery code (DOMAIN-RULES §12.1 rule 6). It answers
+   `{ rotationId, secret, uri }` — the staged secret for the QR code.
+2. `POST /api/me/totp/rotate/confirm` with `{ rotationId, code }`, where `code`
+   is a live code from the **new** app. Only then is the secret swapped, in one
+   transaction under the account-row lock, so a failure anywhere leaves the old
+   app working and nothing half-done. The staged secret waits fifteen minutes
+   in Redis, sealed, and is spent by the confirmation.
+
+The holder is emailed (`securityChange`, `twoFactorRotated`) through the outbox,
+the api writes `auth.second_factor.rotated`, and the recovery codes stay. Each
+of the two requests costs the step-up budget (five per fifteen minutes), so the
+staged secret's six digits cannot be walked. The confirm code is checked against
+the staged secret only, so the old app cannot confirm its own replacement; the
+old app's codes stop working at the swap, and the new app can sign in at once.
+
+With a lost phone the recovery code (alone, or with the password) proves the
+step-up; with a passkey, the passkey does.
 
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed
 in, not that the person at the keyboard now is the account holder. Turning it
-off is not offered to an account that must have one.
+off is not offered to an account that must have one — replacing the app is.
 
 ### Recovery codes
 
@@ -284,6 +302,9 @@ code answers a second-factor challenge only: it never opens a passwordless
 sign-in, and it is not a break-glass credential, even with a passkey on the account.
 Under SSO enforcement it may finish a sign-in that began with an SSO assertion
 (#387); it still never finishes break-glass, whose first factor is a password.
+It also proves the step-up that starts replacing the authenticator app
+([Replacing the app](#replacing-the-app-373)), alone or with the password —
+the one path a person whose phone is gone and who holds no passkey can still take.
 
 Ten, shaped `RC-4KQ2-9XMT`, in an alphabet with no character that can be
 confused with another on paper. Each works once. They are stored as argon2

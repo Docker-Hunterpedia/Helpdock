@@ -42,12 +42,12 @@
     "react-i18next": "17.0.14",
     "react-router": "8.4.0",
     "socket.io-client": "4.8.3",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
-    "@helpdock/importers": "workspace:*",
     "@axe-core/playwright": "4.13.0",
     "@helpdock/channels": "workspace:*",
+    "@helpdock/importers": "workspace:*",
     "@peculiar/x509": "2.1.0",
     "@playwright/test": "1.63.0",
     "@testcontainers/postgresql": "12.1.0",

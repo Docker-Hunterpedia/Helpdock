@@ -2,17 +2,35 @@ import { initials, nextOpening } from '../format.js';
 import type { Translate } from '../i18n/translator.js';
 import type { WidgetState } from '../state/controller.js';
 import { closedUntil, teamHours } from '../state/hours.js';
-import type { ArticleSummary, WidgetLocale } from '../transport/types.js';
+import type { AgentSummary, ArticleSummary, WidgetLocale } from '../transport/types.js';
+import { Avatar } from './Avatar.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
+
+/**
+ * Who the header names: the conversation's agent when it carries one, otherwise
+ * whoever wrote the latest agent message (the live api does not put an agent on
+ * the conversation, but every agent message names its author).
+ */
+const agentOf = (state: WidgetState): AgentSummary | null => {
+  if (state.conversation?.agent) {
+    return state.conversation.agent;
+  }
+  const last = state.thread.confirmed.findLast((message) => message.author.kind === 'agent');
+
+  return last?.author.kind === 'agent' && last.author.agent.id !== 'brand'
+    ? last.author.agent
+    : null;
+};
 
 /** Title, caption and avatar for the header, from the "Header caption by state" note on `WidgetStatesEN`. */
 export function headerContent(
   state: WidgetState,
   t: Translate,
   locale: WidgetLocale,
-): { title: string; caption: string; avatar: string } {
+): { title: string; caption: string; avatar: string; avatarUrl: string | null } {
   const { config, conversation, availability } = state;
+  const agent = agentOf(state);
   const brand = config?.brand.name ?? '';
   const team = t('header.chatTitle', { brand });
   const brandAvatar = initials(brand).slice(0, 1);
@@ -22,6 +40,7 @@ export function headerContent(
       title: t('header.formTitle', { brand }),
       caption: t('header.caption.form'),
       avatar: brandAvatar,
+      avatarUrl: null,
     };
   }
   if (config?.mode === 'helpcenter') {
@@ -29,33 +48,62 @@ export function headerContent(
       title: t('header.helpTitle', { brand }),
       caption: t('header.caption.help'),
       avatar: brandAvatar,
+      avatarUrl: null,
     };
   }
   if (conversation?.status === 'ended') {
-    return { title: team, caption: t('header.caption.ended'), avatar: brandAvatar };
-  }
-  if (conversation?.agent) {
     return {
-      title: conversation.agent.name,
-      caption: conversation.department
-        ? t('header.agentCaption', { department: conversation.department, team })
-        : team,
-      avatar: initials(conversation.agent.name),
+      title: team,
+      caption: t('header.caption.ended'),
+      avatar: brandAvatar,
+      avatarUrl: null,
+    };
+  }
+  if (agent) {
+    const where = conversation?.department
+      ? t('header.agentCaption', { department: conversation.department, team })
+      : team;
+    return {
+      title: agent.name,
+      // M14-12: the job title leads when the person has one.
+      caption: agent.title ? `${agent.title} · ${where}` : where,
+      avatar: initials(agent.name),
+      avatarUrl: agent.avatar_url,
     };
   }
   if (conversation?.status === 'queued' && availability?.state === 'online') {
-    return { title: team, caption: t('header.caption.queued'), avatar: brandAvatar };
+    return {
+      title: team,
+      caption: t('header.caption.queued'),
+      avatar: brandAvatar,
+      avatarUrl: null,
+    };
   }
   // The hours of the team that answers: the same ones the handoff line reads (M7-06).
   const closure = closedUntil(teamHours(conversation, availability), new Date());
   if (closure?.next_open_at) {
     const { day, time } = nextOpening(closure.next_open_at, closure.timezone, locale);
-    return { title: team, caption: t('header.caption.closed', { day, time }), avatar: brandAvatar };
+    return {
+      title: team,
+      caption: t('header.caption.closed', { day, time }),
+      avatar: brandAvatar,
+      avatarUrl: null,
+    };
   }
   if (availability?.state === 'open_offline') {
-    return { title: team, caption: t('header.caption.openOffline'), avatar: brandAvatar };
+    return {
+      title: team,
+      caption: t('header.caption.openOffline'),
+      avatar: brandAvatar,
+      avatarUrl: null,
+    };
   }
-  return { title: team, caption: t('header.caption.online'), avatar: brandAvatar };
+  return {
+    title: team,
+    caption: t('header.caption.online'),
+    avatar: brandAvatar,
+    avatarUrl: null,
+  };
 }
 
 export function Header({
@@ -84,9 +132,12 @@ export function Header({
           <Icon name="chevronStart" />
         </button>
       ) : (
-        <span class="hd-header-avatar" aria-hidden="true">
-          {content.avatar}
-        </span>
+        <Avatar
+          name={content.title}
+          url={content.avatarUrl}
+          text={content.avatar}
+          class="hd-header-avatar"
+        />
       )}
       <div class="hd-header-text">
         <h2 id="hd-window-title">{article ? article.title : content.title}</h2>

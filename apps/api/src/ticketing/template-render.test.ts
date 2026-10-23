@@ -1,3 +1,4 @@
+import { CANNED_PLACEHOLDERS } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
   isTemplatePlaceholder,
@@ -170,5 +171,73 @@ describe('paragraphsFrom', () => {
 
   it('handles Windows line endings', () => {
     expect(paragraphsFrom('One.\r\n\r\nTwo.')).toBe('<p>One.</p><p>Two.</p>');
+  });
+});
+
+describe('the sender as a customer meets them (M14-12)', () => {
+  const lina = {
+    name: 'Lina Haddad',
+    publicName: 'Lina H',
+    jobTitleEn: 'Billing specialist',
+    jobTitleAr: 'أخصائية الفوترة',
+    phone: '+966551234567',
+  };
+  const render = (text: string, subject: Parameters<typeof templateValues>[0]) =>
+    renderTemplate(text, templateValues(subject));
+
+  it('fills the agent placeholders from the public profile', () => {
+    const signed = render(
+      '{{agent.name}} | {{agent.full_name}} | {{agent.title}} | {{agent.phone}} | {{department.name}}',
+      { brand: { name: 'Helpdock' }, agent: lina, department: { name: 'Billing' } },
+    );
+
+    expect(signed.text).toBe('Lina H | Lina Haddad | Billing specialist | +966551234567 | Billing');
+    expect(signed.unknown).toEqual([]);
+  });
+
+  it('says the title in the language of the reply, English when there is no Arabic one', () => {
+    expect(
+      render('{{agent.title}}', { brand: { name: 'H' }, agent: lina, language: 'ar' }).text,
+    ).toBe('أخصائية الفوترة');
+    expect(
+      render('{{agent.title}}', {
+        brand: { name: 'H' },
+        agent: { ...lina, jobTitleAr: null },
+        language: 'ar',
+      }).text,
+    ).toBe('Billing specialist');
+  });
+
+  it('defaults the name to the first name and renders unset fields as nothing', () => {
+    const plain = render('{{agent.name}}|{{agent.title}}|{{agent.phone}}', {
+      brand: { name: 'H' },
+      agent: { name: 'Lina Haddad' },
+    });
+
+    expect(plain.text).toBe('Lina||');
+    expect(plain.unknown).toEqual([]);
+  });
+
+  it('leaves them spelled out when nobody is sending, and the department when there is none', () => {
+    const none = render('{{agent.name}} {{agent.title}} {{department.name}}', {
+      brand: { name: 'H' },
+    });
+
+    expect(none.unknown).toEqual(['agent.name', 'agent.title', 'department.name']);
+    expect(render('{{department.name}}', { brand: { name: 'H' }, agent: lina }).unknown).toEqual([
+      'department.name',
+    ]);
+  });
+
+  it('never prints the email address of the sender', () => {
+    const everything = render(CANNED_PLACEHOLDERS.map((name) => `{{${name}}}`).join(' '), {
+      brand: { name: 'H' },
+      agent: { ...lina, email: 'lina@helpdock.com' } as typeof lina,
+    });
+
+    expect(everything.text).not.toContain('lina@helpdock.com');
+    expect(
+      CANNED_PLACEHOLDERS.some((name) => name.includes('email') && name.startsWith('agent')),
+    ).toBe(false);
   });
 });

@@ -56,7 +56,11 @@ export interface WidgetFontFile {
 
 export interface AgentSummary {
   readonly id: string;
+  /** The public name the person chose, drawn as it is: never split into a first name here. */
   readonly name: string;
+  /** Their job title in the conversation's language (M14-12); absent when they have none. */
+  readonly title?: string | null;
+  /** A short-lived URL for the 64 px photo; initials are drawn when it is null or fails to load. */
   readonly avatar_url: string | null;
 }
 

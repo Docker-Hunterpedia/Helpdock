@@ -19,7 +19,19 @@ const canned = {
 describe('CANNED_PLACEHOLDERS', () => {
   it('is M1’s template list plus the sender', () => {
     expect(CANNED_PLACEHOLDERS).toContain('ticket.number');
-    expect(CANNED_PLACEHOLDERS.at(-1)).toBe('agent.first_name');
+    expect(CANNED_PLACEHOLDERS).toEqual(
+      expect.arrayContaining([
+        'agent.first_name',
+        'agent.name',
+        'agent.full_name',
+        'agent.title',
+        'agent.phone',
+        'department.name',
+      ]),
+    );
+    expect(
+      CANNED_PLACEHOLDERS.some((name) => name.includes('email') && name.startsWith('agent')),
+    ).toBe(false);
   });
 });
 

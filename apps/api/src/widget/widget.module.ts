@@ -35,9 +35,11 @@ import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
 import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
+import { ProfilePhotoStore } from '../staff/profile-photo.store.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
 import { TicketRepository } from '../tickets/tickets.repository.js';
+import { AgentCards } from './agent-cards.js';
 import { OnlineAgents } from './online-agents.js';
 import { WidgetController } from './widget.controller.js';
 import { WidgetGateway } from './widget.gateway.js';
@@ -157,6 +159,7 @@ export class WidgetModule {
     const slaRepository = new SlaRepository();
     const businessHours = new BusinessHoursService(slaRepository, new SlaService(slaRepository));
     const media = new MediaRepository();
+    const agents = new AgentCards(new ProfilePhotoStore(storage));
     const captchaKeys = new DbCaptchaKeys(db, keyring);
     const captchaTransport =
       options.captchaTransport ?? safeCaptchaTransport(env.OUTBOUND_ALLOW_CIDRS);
@@ -245,6 +248,7 @@ export class WidgetModule {
             new WidgetConversationsService({
               gate,
               widget,
+              agents,
               tickets,
               lifecycle: new TicketLifecycleService(
                 lifecycleReads,

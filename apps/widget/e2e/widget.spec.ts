@@ -133,7 +133,7 @@ for (const locale of LOCALES) {
         page,
         `mock.assign(agent, 'Billing'); mock.agentReply(agent, 'Hi Omar'); mock.emit({ type: 'typing', typing: true, agent });`,
       );
-      await expect(page.getByRole('heading', { name: 'Lina Haddad' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Lina' })).toBeVisible();
       await expect(page.getByText(t('thread.typing', { name: 'Lina' }))).toBeVisible();
       expect(await violations(page)).toEqual([]);
 
@@ -147,6 +147,39 @@ for (const locale of LOCALES) {
       await page.getByRole('button', { name: t('ended.newConversation') }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByRole('heading', { name: t('prechat.title') })).toBeVisible();
+    });
+
+    test('chat: the agent appears with their photo, public name and job title (M14-12)', async ({
+      page,
+    }) => {
+      await openWidget(page, locale);
+      await page.keyboard.type('Hello');
+      await page.keyboard.press('Enter');
+      await expect(page.getByText(t('message.sent'))).toBeVisible();
+
+      // A 1 x 1 PNG as a data URL stands in for the presigned link.
+      await server(
+        page,
+        `const lina = { ...agent, title: 'Billing specialist', avatar_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' };
+         mock.assign(lina, 'Billing'); mock.agentReply(lina, 'I am looking at your refund now.');`,
+      );
+
+      const header = page.locator('.hd-header');
+      await expect(header.getByRole('heading', { name: 'Lina' })).toBeVisible();
+      await expect(header.getByText(/Billing specialist/)).toBeVisible();
+      await expect(header.locator('img')).toBeVisible();
+      await expect(page.getByRole('log').locator('img')).toBeVisible();
+      expect(await violations(page)).toEqual([]);
+
+      // A link that has expired falls back to the initials rather than a broken image.
+      await server(
+        page,
+        `mock.agentReply({ ...agent, avatar_url: 'https://invalid.test/gone.webp' }, 'And one more thing.');`,
+      );
+      await expect(page.getByText('And one more thing.')).toBeVisible();
+      await expect(
+        page.getByRole('log').locator('img[src="https://invalid.test/gone.webp"]'),
+      ).toHaveCount(0);
     });
 
     test('chat: out of hours with the next opening, and a refused attachment', async ({ page }) => {

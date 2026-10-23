@@ -244,6 +244,15 @@ button:disabled {
   background: var(--hd-action-primary-active);
   font-size: 12px;
   font-weight: 600;
+  overflow: hidden;
+}
+
+.hd-header-avatar img,
+.hd-avatar img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .hd-header-text {
@@ -747,6 +756,7 @@ button:disabled {
   color: var(--hd-text-primary);
   font-size: 11px;
   font-weight: 600;
+  overflow: hidden;
 }
 
 .hd-avatar-md {

@@ -1,4 +1,6 @@
 import {
+  type AgentIdentity,
+  agentPlaceholderValues,
   type CannedPlaceholder,
   renderTemplate,
   splitName,
@@ -22,8 +24,16 @@ export interface TemplateSubject {
   readonly contact?: { readonly name: string; readonly email: string | null } | undefined;
   /** Absent leaves `{{ticket.number}}` spelled out, which a preview has to. */
   readonly ticket?: { readonly number: string } | undefined;
-  /** M3-06: whoever sends the reply. Absent leaves `{{agent.first_name}}` spelled out. */
-  readonly agent?: { readonly name: string } | undefined;
+  /**
+   * M3-06: whoever sends the reply. Absent leaves the `agent.*` placeholders
+   * spelled out. `name` is the full name; the rest is what M14-12 lets a
+   * person set for customers, and any of it may be absent.
+   */
+  readonly agent?: (Omit<AgentIdentity, 'fullName'> & { readonly name: string }) | undefined;
+  /** M14-12: the ticket's department, in the reply's language. Absent leaves `{{department.name}}` spelled out. */
+  readonly department?: { readonly name: string } | undefined;
+  /** The language the reply is written in, which picks the job title. Default `en`. */
+  readonly language?: 'en' | 'ar' | undefined;
 }
 
 /**
@@ -51,6 +61,21 @@ export const templateValues = (subject: TemplateSubject): ReadonlyMap<string, st
 
   if (subject.agent !== undefined) {
     values.set('agent.first_name', splitName(subject.agent.name).first);
+    const { name, ...profile } = subject.agent;
+    for (const [key, value] of agentPlaceholderValues(
+      { fullName: name, ...profile },
+      subject.language ?? 'en',
+      null,
+    )) {
+      // The department is the ticket's, not the agent's; it is set below when known.
+      if (key !== 'department.name') {
+        values.set(key, value);
+      }
+    }
+  }
+
+  if (subject.department !== undefined) {
+    values.set('department.name', subject.department.name);
   }
 
   return values;

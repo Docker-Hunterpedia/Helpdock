@@ -1,11 +1,12 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { dayLabel, formatTime, initials } from '../format.js';
+import { dayLabel, formatTime } from '../format.js';
 import { closedUntil, teamHours } from '../state/hours.js';
 import { deliveryOf, type PendingMessage } from '../state/thread.js';
 import type { AgentSummary, WidgetMessage } from '../transport/types.js';
 import { AssistantMessage, HandoffLine, type OpenArticle } from './Assistant.js';
 import { AttachmentView } from './Attachments.js';
+import { Avatar } from './Avatar.js';
 import { CsatCard } from './CsatCard.js';
 import { useWidget, useWidgetState } from './context.js';
 import { Icon } from './icons.js';
@@ -213,18 +214,18 @@ export const handoffPosition = (messages: readonly WidgetMessage[], handedOff: b
   return agent >= 0 ? agent : messages.length;
 };
 
-function Avatar({ name, size }: { name: string; size: 'sm' | 'md' }) {
-  return (
-    <span class={`hd-avatar hd-avatar-${size}`} aria-hidden="true">
-      {initials(name)}
-    </span>
-  );
-}
-
-function AgentBubble({ name, children }: { name: string; children: ComponentChildren }) {
+function AgentBubble({
+  name,
+  avatarUrl,
+  children,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  children: ComponentChildren;
+}) {
   return (
     <>
-      <Avatar name={name} size="md" />
+      <Avatar name={name} url={avatarUrl} class="hd-avatar hd-avatar-md" />
       <div class="hd-stack">
         <span class="hd-author">{name}</span>
         {children}
@@ -281,7 +282,9 @@ function MessageItem({
   if (message.author.kind === 'agent') {
     return (
       <li class="hd-row hd-row-agent">
-        <AgentBubble name={message.author.agent.name}>{content}</AgentBubble>
+        <AgentBubble name={message.author.agent.name} avatarUrl={message.author.agent.avatar_url}>
+          {content}
+        </AgentBubble>
       </li>
     );
   }
@@ -346,15 +349,13 @@ function Typing({ agent }: { agent: AgentSummary }) {
   const { t } = useWidget();
   return (
     <div class="hd-typing">
-      <Avatar name={agent.name} size="sm" />
+      <Avatar name={agent.name} url={agent.avatar_url} class="hd-avatar hd-avatar-sm" />
       <span class="hd-typing-dots" aria-hidden="true">
         <span />
         <span />
         <span />
       </span>
-      <span class="hd-caption">
-        {t('thread.typing', { name: agent.name.split(' ')[0] ?? agent.name })}
-      </span>
+      <span class="hd-caption">{t('thread.typing', { name: agent.name })}</span>
     </div>
   );
 }

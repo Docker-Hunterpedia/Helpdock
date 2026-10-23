@@ -46,6 +46,8 @@ export interface OpenSheetOptions {
 interface KeyboardContextValue {
   register(id: ShortcutId, run: ShortcutHandler): () => void;
   readonly singleKeys: boolean;
+  /** A save of the switch is on its way to the account. */
+  readonly saving: boolean;
   setSingleKeys(on: boolean): void;
   openSheet(options?: OpenSheetOptions): void;
   permits(permission: ShortcutPermission | undefined): boolean;
@@ -262,6 +264,7 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
     () => ({
       register,
       singleKeys,
+      saving,
       setSingleKeys,
       openSheet: (options) => {
         fallbackFocus.current =
@@ -274,7 +277,7 @@ export function KeyboardProvider({ children }: { readonly children: ReactNode })
       isAvailable,
       run,
     }),
-    [register, singleKeys, setSingleKeys, permits, isAvailable, run],
+    [register, singleKeys, saving, setSingleKeys, permits, isAvailable, run],
   );
 
   return (
@@ -354,6 +357,9 @@ export function useShortcutHandlers<Id extends ShortcutId>(
  */
 export function useKeyboard(): {
   readonly singleKeys: boolean;
+  /** Turns the single-key shortcuts on or off for the account; `saving` is true meanwhile. */
+  readonly setSingleKeys: (on: boolean) => void;
+  readonly saving: boolean;
   readonly openSheet: (options?: OpenSheetOptions) => void;
   readonly permits: (permission: ShortcutPermission | undefined) => boolean;
   readonly isAvailable: (id: ShortcutId) => boolean;
@@ -362,6 +368,8 @@ export function useKeyboard(): {
   const context = useContext(KeyboardContext);
   return {
     singleKeys: context?.singleKeys ?? SINGLE_KEYS_BY_DEFAULT,
+    setSingleKeys: context?.setSingleKeys ?? (() => {}),
+    saving: context?.saving ?? false,
     openSheet: context?.openSheet ?? (() => {}),
     permits: context?.permits ?? (() => true),
     isAvailable: context?.isAvailable ?? (() => false),

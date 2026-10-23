@@ -307,18 +307,18 @@ export class EmailSettingsService {
     const row = await this.#repository.settings(tx, brandId);
     const install = await this.#installSmtp.read();
     const senders = senderOptions(row, install?.from);
-    const own = await this.#repository.signature(tx, userId);
-    const name = (await this.#repository.userName(tx, userId)) ?? '';
+    const author = (await this.#repository.author(tx, userId)) ?? null;
+    const brand = await this.#repository.brand(tx, brandId);
     const deliveries = await this.#repository.deliveriesForTicket(tx, ticketId);
 
     return {
       senders,
       selectedKey: selectedSenderKey(addressing.departmentId, senders),
       to: addressing.contact,
-      signature: signatureFor(
-        { name, signatureEn: own?.en ?? null, signatureAr: own?.ar ?? null },
-        addressing.locale,
-      ),
+      signature: signatureFor(author, addressing.locale, {
+        brandName: brand?.name ?? '',
+        departmentName: addressing.departmentName,
+      }),
       locale: addressing.locale,
       deliveries: deliveries.flatMap((delivery) =>
         delivery.ticketMessageId === null

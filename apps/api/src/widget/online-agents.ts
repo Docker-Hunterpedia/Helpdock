@@ -1,11 +1,11 @@
 import type { Db, DbTransaction } from '@helpdock/db';
 import {
   type PresenceMap,
+  publicNameOf,
   WIDGET_ONLINE_AGENTS_MAX,
   type WidgetOnlineAgent,
   type WidgetPresence,
 } from '@helpdock/schemas';
-import { firstNameOf } from '../csat/csat.service.js';
 import { withSystemJob } from '../tenant/system-job.js';
 import { type ResolvedWidgetSettings, resolveWidgetSettings } from './resolved-settings.js';
 import type { WidgetRepository } from './widget.repository.js';
@@ -17,22 +17,24 @@ export interface PresenceReader {
 
 /**
  * "Lina, Karim and Sara are online now" (M4-08): who of the brand is online,
- * as a visitor may see them — first names, sorted so the line does not shuffle
- * between frames, and nothing at all when the brand turned off "Show the
- * agent's name and photo". Staff have no stored photo, so `avatarUrl` is null
- * and the widget draws initials.
+ * as a visitor may see them — public names (M14-12), sorted so the line does
+ * not shuffle between frames, and nothing at all when the brand turned off
+ * "Show the agent's name and photo". Names only: a photo is presigned solely
+ * for the author of a message in the visitor's own conversation
+ * (DOMAIN-RULES §2.10.4), and this line reaches every visitor of the brand,
+ * including those nobody has answered, so the widget draws the initials.
  */
 export class OnlineAgents {
   readonly #db: Db;
   readonly #presence: PresenceReader;
   readonly #settings: Pick<WidgetSettingsRepository, 'row'>;
-  readonly #widget: Pick<WidgetRepository, 'staffNames'>;
+  readonly #widget: Pick<WidgetRepository, 'staffIdentities'>;
 
   constructor(deps: {
     readonly db: Db;
     readonly presence: PresenceReader;
     readonly settings: Pick<WidgetSettingsRepository, 'row'>;
-    readonly widget: Pick<WidgetRepository, 'staffNames'>;
+    readonly widget: Pick<WidgetRepository, 'staffIdentities'>;
   }) {
     this.#db = deps.db;
     this.#presence = deps.presence;
@@ -83,11 +85,15 @@ export class OnlineAgents {
     if (online.length === 0 || !settings.conversation.showAgentIdentity) {
       return [];
     }
-    const names = await this.#widget.staffNames(tx, online);
-    return [...names.values()]
-      .flatMap((name) => firstNameOf(name) ?? [])
+    // The cards the thread builds are not read here: they presign a photo per
+    // person, and a photo may be issued only for a message's author in the
+    // visitor's own conversation. The name alone is this line's to say.
+    const identities = await this.#widget.staffIdentities(tx, online);
+    return [...identities.values()]
+      .map((row) => publicNameOf(row))
+      .filter((name) => name !== '')
       .sort((a, b) => a.localeCompare(b))
       .slice(0, WIDGET_ONLINE_AGENTS_MAX)
-      .map((name) => ({ name, avatarUrl: null }));
+      .map((name) => ({ name }));
   }
 }

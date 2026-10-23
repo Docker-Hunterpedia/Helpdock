@@ -274,6 +274,39 @@ a second place.
 
 ## Your own account
 
+Your account has four tabs: **Profile** (first, `/me/profile`), **Security**,
+**Notifications** and **Email signature**.
+
+### Profile for customers
+
+**Profile** is how you appear to customers, in replies, chat and the widget
+(M14-12). Nothing here changes how colleagues see you.
+
+| Field | |
+|---|---|
+| Photo | JPG, PNG or WebP up to 5 MB, saved the moment you choose it. It is cropped to a square from the centre and re-encoded (256 and 64 px, location data removed); the file you chose is not kept. **Remove** goes back to initials. |
+| Name | Your name as colleagues see it. |
+| Public name | What customers see in place of your name: "Lina", "Lina H." or even "Support team". Empty means your first name. Customers never see your full name unless a reply uses `{{agent.full_name}}`. |
+| Job title (English, Arabic) | Shown under your name in the widget and available as `{{agent.title}}`. A reply in Arabic with no Arabic title says the English one. |
+| Phone | In international form (`+966 55 123 4567`; `00966…` and Arabic digits are accepted). Shown only where a signature or a reply uses `{{agent.phone}}`. |
+| Time zone | Used for the snooze menu's presets and for your digest emails. It starts as the browser's. |
+
+**Working in Helpdock** holds the single-key shortcuts switch
+([Keyboard shortcuts](keyboard-shortcuts.md)); only you see it.
+
+Customers see your public name (your first name until you set one) in the
+widget, as the sender of an email reply ("Lina via Support"), in the survey
+("closed by Lina") and as the opening line of a reply on WhatsApp, Messenger and
+Instagram. Your email address is never shown to a customer. The placeholders a
+reply or a signature can use are in [Macros](macros.md#placeholders).
+
+Photos are stored in the bucket under `install/users/<your id>/`, are served
+only through links that last five minutes, and are deleted when you replace or
+remove the photo or the account is deleted. The widget draws your photo only on
+messages you wrote in that visitor's own conversation.
+
+### Security
+
 **Security** in the account menu, at `/me/security`:
 
 | Card | |
@@ -309,8 +342,10 @@ breached-list check.
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise. Audited |
 | `GET /api/auth/invites/:token` | `@Public()` | Read an invitation. Rate-limited |
 | `POST /api/auth/invites/:token/accept` | `@Public()` | Spend it. Rate-limited |
-| `GET /api/me/profile` | `@Authenticated()` | |
-| `PATCH /api/me/profile` | `@Authenticated()` | Name and language |
+| `GET /api/me/profile` | `@Authenticated()` | Name, language, two-factor state and, since 1.1, `publicName`, `displayName`, `jobTitleEn`, `jobTitleAr`, `phone`, `timeZone` and `photo` (`{ small, large }`, presigned) |
+| `PATCH /api/me/profile` | `@Authenticated()` | A partial update of name, language, `publicName`, `jobTitleEn`, `jobTitleAr`, `phone` (normalised to E.164) and `timeZone`; a field left out is kept, `null` clears it. A phone that is not international is refused with `staff.reason = invalid-phone` (400) |
+| `POST /api/me/profile/photo` | `@Authenticated()` | The `photo` file of a multipart form. Over 5 MB, not a JPEG, PNG or WebP by its bytes, or unreadable: 400 with `staff.reason` `photo-too-large`, `photo-unsupported-type` or `photo-unreadable`; no file: `photo-missing`. Answers with the profile |
+| `DELETE /api/me/profile/photo` | `@Authenticated()` | Removes the photo and its files. Answers with the profile |
 | `POST /api/me/password` | `@Authenticated()` | Current plus new |
 | `POST /api/me/totp/disable` | `@Authenticated()` | A live code. Refused while `auth.require2fa` is on, and always for an Admin or install admin |
 | `POST /api/me/recovery-codes/regenerate` | `@Authenticated()` | A live code |

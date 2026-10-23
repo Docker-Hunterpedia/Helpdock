@@ -133,8 +133,9 @@ read meanwhile drops out.
 
 **Digests are per brand.** A person in three brands gets up to three digests,
 each naming its brand in the subject (owner decision D-26). The daily digest's
-hour is read in the person's time zone; until M14-12 gives each person their
-own, it is the brand's time zone. On the day summer time ends, an hour that
+hour is read in the person's own time zone (Your account › Profile, M14-12),
+or the brand's until they choose one; the times in the email use the same zone.
+On the day summer time ends, an hour that
 happens twice sends one digest; on the day it starts, an hour that does not
 exist sends none, and its rows wait for the next day's.
 
@@ -313,5 +314,5 @@ notifications can open a fresh batch.
 
 - The schedule, digest hour and pause have an API but no screen until M14-11,
   which also adds one-click unsubscribe and *Send me a test email*.
-- The daily digest uses the brand's time zone until M14-12 gives each person
-  their own.
+- The daily digest uses the brand's time zone for anyone who has not chosen
+  their own on Your account › Profile.

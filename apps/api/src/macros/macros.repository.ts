@@ -96,15 +96,18 @@ export class MacrosRepository {
       .where(eq(cannedResponses.id, id));
   }
 
-  /** A staff member's name. `users` is global, so it is read by id. */
-  async staffName(tx: DbTransaction, userId: string): Promise<string | null> {
+  /**
+   * A staff member as a reply's `agent.*` placeholders need them (M14-12).
+   * `users` is global, so it is read by id.
+   */
+  async staffIdentity(tx: DbTransaction, userId: string): Promise<RenderAgent | null> {
     const rows = await tx
-      .select({ name: users.name })
+      .select(renderAgentColumns)
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    return rows[0]?.name ?? null;
+    return rows[0] ?? null;
   }
 
   async departmentExists(tx: DbTransaction, departmentId: string): Promise<boolean> {
@@ -177,6 +180,23 @@ export class MacrosRepository {
   }
 }
 
+/** Who sends a reply, with what the placeholders can say about them. */
+export interface RenderAgent {
+  readonly name: string;
+  readonly publicName: string | null;
+  readonly jobTitleEn: string | null;
+  readonly jobTitleAr: string | null;
+  readonly phone: string | null;
+}
+
+const renderAgentColumns = {
+  name: users.name,
+  publicName: users.publicName,
+  jobTitleEn: users.jobTitleEn,
+  jobTitleAr: users.jobTitleAr,
+  phone: users.publicPhone,
+} as const;
+
 /** What filling a reply in for one ticket reads, beyond what `TemplatesRepository.subject` does. */
 export interface RenderTicket {
   readonly brandId: string;
@@ -185,8 +205,10 @@ export interface RenderTicket {
   readonly contactId: string | null;
   /** The contact's language, then the brand's: who the reply is written to. */
   readonly locale: MacroLocale;
-  /** The assignee's name, which a reply sent by a rule signs with. */
-  readonly assigneeName: string | null;
+  /** The department's name in `locale`, for `{{department.name}}`. */
+  readonly departmentName: string;
+  /** The assignee, whom a reply sent by a rule speaks as. */
+  readonly assignee: RenderAgent | null;
 }
 
 /**
@@ -210,10 +232,14 @@ export const readRenderTicket = async (
       contactId: tickets.contactId,
       contactLocale: contacts.locale,
       brandLocale: brands.defaultLocale,
-      assigneeName: users.name,
+      departmentName: departments.name,
+      departmentNameAr: departments.nameAr,
+      assigneeId: users.id,
+      ...renderAgentColumns,
     })
     .from(tickets)
     .innerJoin(brands, eq(brands.id, tickets.brandId))
+    .innerJoin(departments, eq(departments.id, tickets.departmentId))
     .leftJoin(contacts, eq(contacts.id, tickets.contactId))
     .leftJoin(users, eq(users.id, tickets.assigneeId))
     .where(eq(tickets.id, ticketId))
@@ -223,14 +249,26 @@ export const readRenderTicket = async (
   if (row === undefined) {
     return undefined;
   }
+  const locale: MacroLocale = row.contactLocale ?? row.brandLocale;
 
   return {
     brandId: row.brandId,
     departmentId: row.departmentId,
     reference: `${row.prefix}-${String(row.number)}`,
     contactId: row.contactId,
-    locale: row.contactLocale ?? row.brandLocale,
-    assigneeName: row.assigneeName,
+    locale,
+    departmentName:
+      locale === 'ar' && row.departmentNameAr !== null ? row.departmentNameAr : row.departmentName,
+    assignee:
+      row.assigneeId === null
+        ? null
+        : {
+            name: row.name ?? '',
+            publicName: row.publicName,
+            jobTitleEn: row.jobTitleEn,
+            jobTitleAr: row.jobTitleAr,
+            phone: row.phone,
+          },
   };
 };
 

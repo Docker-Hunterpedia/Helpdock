@@ -170,13 +170,15 @@
     "previewHeading": "Preview",
     "previewCaption": "The end of a reply as the customer sees it. Updates as you type.",
     "sampleGreeting": "Hi Mona,",
-    "sampleBody": "…it should appear by 11 September."
+    "sampleBody": "…it should appear by 11 September.",
+    "placeholdersHint": "You can use {{placeholders}}. They are filled in from your Profile when the reply is sent."
   },
   "account": {
     "title": "Your account",
     "caption": "Only you see these settings",
     "tabList": "Your account",
     "tabs": {
+      "profile": "Profile",
       "security": "Security",
       "notifications": "Notifications",
       "signature": "Email signature"
@@ -255,5 +257,39 @@
       "email": "email",
       "push": "browser push"
     }
+  },
+  "profile": {
+    "heading": "Profile for customers",
+    "caption": "How you appear in replies, chat and the widget.",
+    "photoAlt": "Your photo",
+    "photoUpload": "Upload photo",
+    "photoRemove": "Remove",
+    "photoHint": "JPG, PNG or WebP, up to 5 MB. Cropped to a square; location data is removed.",
+    "photoUpdated": "Photo updated.",
+    "photoRemoved": "Photo removed.",
+    "photoTooLarge": "That photo is larger than 5 MB.",
+    "photoUnsupported": "Use a JPG, PNG or WebP image.",
+    "photoUnreadable": "That image could not be read. Try another one.",
+    "photoSlowDown": "Several photos in a row. Try again in a few minutes.",
+    "photoFailed": "The photo was not changed.",
+    "name": "Name",
+    "publicName": "Public name",
+    "publicNameHint": "What customers see. Defaults to your first name.",
+    "jobTitleEn": "Job title (English)",
+    "jobTitleAr": "Job title (Arabic)",
+    "phone": "Phone",
+    "phoneHint": "Shown only where a signature uses {{placeholder}}.",
+    "phoneInvalid": "Enter an international number, like +966 55 123 4567.",
+    "timeZone": "Time zone",
+    "timeZoneHint": "Used for snooze times and digests.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saved": "Profile saved.",
+    "failed": "That did not work. Nothing was changed.",
+    "loadFailed": "Your profile could not be loaded. Reload the page to try again.",
+    "workingHeading": "Working in Helpdock",
+    "workingCaption": "Only you see these.",
+    "singleKeys": "Single-key shortcuts",
+    "singleKeysHint": "j, k, r, e and the others. Turn off if they get in the way of a screen reader or voice control."
   }
 }

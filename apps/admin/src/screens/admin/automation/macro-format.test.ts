@@ -1,3 +1,4 @@
+import { CANNED_PLACEHOLDERS } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { lastUsedLabel, sampleValues } from './macro-format.js';
 
@@ -32,6 +33,19 @@ describe('sampleValues', () => {
       'ticket.number': 'HD-1042',
       'brand.name': 'Helpdock',
       'agent.first_name': 'Lina',
+      'agent.name': 'Lina',
+      'agent.full_name': 'Lina Haddad',
+      'agent.title': 'Billing specialist',
+      'agent.phone': '+966 55 123 4567',
+      'department.name': 'Billing',
     });
+  });
+
+  it('has a sample for every placeholder the picker offers, so none shows an empty sample', () => {
+    const values = sampleValues({ brand: 'Helpdock', agent: 'Lina Haddad' });
+
+    for (const name of CANNED_PLACEHOLDERS) {
+      expect(values.has(name), name).toBe(true);
+    }
   });
 });

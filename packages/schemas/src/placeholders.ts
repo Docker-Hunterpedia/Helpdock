@@ -99,3 +99,103 @@ export const renderSegments = (
 
   return { segments, unknown: [...unknown] };
 };
+
+// --------------------------------------------------------------------------
+// The sender as a customer meets them (M14-12)
+// --------------------------------------------------------------------------
+
+/**
+ * The placeholders that describe the person sending a reply and the desk they
+ * answer for. `agent.first_name` predates them and stays in the canned list
+ * beside these; it is the first word of the full name, whereas `agent.name` is
+ * what the person chose to be called.
+ */
+export const AGENT_PLACEHOLDERS = [
+  'agent.name',
+  'agent.full_name',
+  'agent.title',
+  'agent.phone',
+  'department.name',
+] as const;
+export type AgentPlaceholder = (typeof AGENT_PLACEHOLDERS)[number];
+
+/** The language a customer reads a reply in. */
+export type ReplyLanguage = 'en' | 'ar';
+
+/** What `users` holds about how a person appears; every field but the full name may be unset. */
+export interface AgentIdentity {
+  readonly fullName: string;
+  readonly publicName?: string | null | undefined;
+  readonly jobTitleEn?: string | null | undefined;
+  readonly jobTitleAr?: string | null | undefined;
+  readonly phone?: string | null | undefined;
+}
+
+const filled = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim() ?? '';
+
+  return trimmed === '' ? null : trimmed;
+};
+
+/**
+ * The name a customer sees: the public name when one is set, otherwise the
+ * first word of the full name, which is what every customer surface showed
+ * before the public name existed.
+ */
+export const publicNameOf = (identity: AgentIdentity): string =>
+  filled(identity.publicName) ?? splitName(identity.fullName).first;
+
+/**
+ * The job title in the language of the reply. An Arabic reply from someone with
+ * no Arabic title says the English one rather than nothing; null when neither
+ * is set.
+ */
+export const jobTitleFor = (identity: AgentIdentity, language: ReplyLanguage): string | null => {
+  const english = filled(identity.jobTitleEn);
+
+  return language === 'ar' ? (filled(identity.jobTitleAr) ?? english) : english;
+};
+
+/**
+ * The values of {@link AGENT_PLACEHOLDERS}. Each is present even when empty, so
+ * an unset title or phone renders as nothing and not as the placeholder spelled
+ * out, which is what a customer would otherwise read.
+ */
+export const agentPlaceholderValues = (
+  identity: AgentIdentity,
+  language: ReplyLanguage,
+  departmentName: string | null,
+): ReadonlyMap<AgentPlaceholder, string> =>
+  new Map<AgentPlaceholder, string>([
+    ['agent.name', publicNameOf(identity)],
+    ['agent.full_name', identity.fullName],
+    ['agent.title', jobTitleFor(identity, language) ?? ''],
+    ['agent.phone', filled(identity.phone) ?? ''],
+    ['department.name', departmentName ?? ''],
+  ]);
+
+/** Separators a line may be left holding at its ends once a placeholder in it rendered empty. */
+const DANGLING = /^[\s·|/,\-–—]+|[\s·|/,\-–—]+$/gu;
+
+/**
+ * A signature with its placeholders filled, one line at a time.
+ *
+ * A line that held a placeholder and came out empty is dropped, and one that
+ * came out with a separator hanging off it (`" · Helpdock"`, from an unset
+ * title) loses the separator, so a person without a phone number has no blank
+ * line where it would have been. A line without placeholders is kept as typed,
+ * and so are the blank lines a person left on purpose.
+ */
+export const renderSignature = (text: string, values: ReadonlyMap<string, string>): string =>
+  text
+    .split(/\r?\n/u)
+    .flatMap((line) => {
+      if (!line.includes('{{')) {
+        return [line];
+      }
+      const rendered = renderTemplate(line, values).text;
+      const tidy = rendered === line ? rendered : rendered.replace(DANGLING, '');
+
+      return tidy.trim() === '' ? [] : [tidy];
+    })
+    .join('\n');

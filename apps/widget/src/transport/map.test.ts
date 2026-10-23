@@ -191,17 +191,15 @@ describe('toAvailability', () => {
     const availability = toAvailability({
       open: true,
       agentsOnline: true,
-      agents: [
-        { name: 'Lina', avatarUrl: null },
-        { name: 'Sara', avatarUrl: 'https://cdn.acme.test/sara.webp' },
-      ],
+      // Names only: the online line carries no photo (DOMAIN-RULES §2.10.4).
+      agents: [{ name: 'Lina' }, { name: 'Sara' }],
       nextOpenAt: null,
       timezone: 'UTC',
     });
 
     expect(availability.agents_online).toEqual([
       { id: 'online-0', name: 'Lina', avatar_url: null },
-      { id: 'online-1', name: 'Sara', avatar_url: 'https://cdn.acme.test/sara.webp' },
+      { id: 'online-1', name: 'Sara', avatar_url: null },
     ]);
   });
 });
@@ -264,13 +262,27 @@ describe('toMessage', () => {
   });
 
   it('names the agent when the brand shows agents, and the brand when it does not', () => {
-    const named = toMessage(wireMessage({ agent: { name: 'Lina', avatarUrl: null } }), 'Acme');
+    const named = toMessage(
+      wireMessage({
+        agent: {
+          name: 'Lina',
+          title: 'Billing specialist',
+          avatarUrl: 'https://bucket.test/l.webp',
+        },
+      }),
+      'Acme',
+    );
     const hidden = toMessage(wireMessage({ agent: null }), 'Acme');
     const ai = toMessage(wireMessage({ author: 'ai' }), 'Acme');
 
     expect(named.author).toEqual({
       kind: 'agent',
-      agent: { id: 'agent:Lina', name: 'Lina', avatar_url: null },
+      agent: {
+        id: 'agent:Lina',
+        name: 'Lina',
+        title: 'Billing specialist',
+        avatar_url: 'https://bucket.test/l.webp',
+      },
     });
     expect(hidden.author).toEqual({
       kind: 'agent',

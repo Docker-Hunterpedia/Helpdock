@@ -1043,6 +1043,32 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(sent.at(-1)?.subject).toBe('[Globex] Your daily digest for Sun 25 Oct');
     });
 
+    it("uses the person's own time zone for the digest's hour, and the brand's until they choose one (M14-12)", async () => {
+      await setEmail({ emailSchedule: 'daily', digestHour: 8 });
+      await runtime.db
+        .update(brands)
+        .set({ timezone: 'Europe/Berlin' })
+        .where(eq(brands.id, seeded.brandId));
+      await runtime.db.update(users).set({ timeZone: 'Asia/Riyadh' }).where(eq(users.id, sam.id));
+      try {
+        clock = new Date('2026-10-23T22:00:00.000Z');
+        await notify();
+
+        // 08:00 in Berlin is 06:00 UTC; 08:00 in Riyadh (UTC+3) is 05:00 UTC.
+        expect(await tick(new Date('2026-10-24T06:00:00.000Z'))).toEqual([]);
+        const own = await tick(new Date('2026-10-24T05:00:00.000Z'));
+        expect(own).toHaveLength(1);
+
+        await runtime.db.update(users).set({ timeZone: null }).where(eq(users.id, sam.id));
+        clock = new Date('2026-10-24T22:00:00.000Z');
+        await notify();
+        expect(await tick(new Date('2026-10-25T05:00:00.000Z'))).toEqual([]);
+        expect(await tick(new Date('2026-10-25T07:00:00.000Z'))).toHaveLength(1);
+      } finally {
+        await runtime.db.update(users).set({ timeZone: null }).where(eq(users.id, sam.id));
+      }
+    });
+
     it('does not send a second daily digest in a repeated local hour', async () => {
       await setEmail({ emailSchedule: 'daily', digestHour: 2 });
       await runtime.db

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import { MockEmailApi } from '../../email/mock-api.js';
@@ -46,6 +46,36 @@ describe('the Email signature tab', () => {
     expect(within(preview).getAllByText('Omar').length).toBeGreaterThan(0);
     expect(within(preview).getByText('Hi Mona,')).toBeVisible();
     expect(within(preview).getByText('مرحباً سارة،')).toBeVisible();
+  });
+
+  it('fills the placeholders in the preview from the profile, in each language (M14-12)', async () => {
+    await renderSignature();
+    const preview = screen.getByRole('complementary', { name: 'Preview' });
+    const english = await screen.findByLabelText('English');
+
+    fireEvent.change(english, {
+      target: { value: '{{agent.name}}\n{{agent.title}} · {{brand.name}}\n{{agent.phone}}' },
+    });
+    fireEvent.change(screen.getByLabelText(/Arabic/), {
+      target: { value: '{{agent.name}}\n{{agent.title}} · {{brand.name}}\n{{agent.phone}}' },
+    });
+
+    // The seeded profile: first name until a public name is set, a title in each language, a phone.
+    await waitFor(() => {
+      expect(within(preview).getAllByText('Lina').length).toBe(2);
+    });
+    expect(within(preview).getByText(/^Billing specialist · /)).toBeVisible();
+    expect(within(preview).getByText(/^أخصائية الفوترة · /)).toBeVisible();
+    expect(within(preview).getAllByText('+966551234567')).toHaveLength(2);
+    expect(within(preview).queryByText(/\{\{/)).toBeNull();
+  });
+
+  it('names the placeholders a signature may use', async () => {
+    await renderSignature();
+
+    expect(
+      screen.getByText(/\{\{agent\.name\}\}, \{\{agent\.full_name\}\}, \{\{agent\.title\}\}/),
+    ).toBeVisible();
   });
 
   it('refuses a seventh line and saves six', async () => {

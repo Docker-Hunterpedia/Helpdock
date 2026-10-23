@@ -914,6 +914,78 @@ agent. For a rule's canned reply the agent is the assignee, as today. Customer
 surfaces (email, widget, Telegram, Meta) show the public name instead of the
 full name from M14 on.
 
+**Status: built, in review** (issue [#299](https://github.com/Docker-Hunterpedia/Helpdock/issues/299)).
+Built as above, with these differences and details:
+
+- [x] `users` gains `public_name`, `job_title_en`, `job_title_ar`, `public_phone`,
+  `photo_key`, `time_zone` (migration `0068_customer_profile`; `single_key_shortcuts`
+  came with M14-01). **`photo_key` replaces `photo_media_id`**: a photo is two
+  files in the bucket, not an attachment row, so the column holds the folder
+  (`install/users/<user id>/<photo id>/`, with `256.webp` and `64.webp`).
+  `users` is an install table, so there is no tenant table and nothing to add to
+  the RLS suite.
+- [x] `GET /api/me/profile` returns the new fields (`publicName`, `displayName`,
+  `jobTitleEn`, `jobTitleAr`, `phone`, `timeZone`, `photo`); **`PATCH`**, not
+  `PUT`, because that route already shipped with M0-06 and takes a partial body
+  (a field left out is kept, `null` or blank clears it). A phone is normalised to
+  E.164 as a contact's is and refused with `staff.reason = invalid-phone` (400);
+  a time zone must be an IANA name.
+- [x] `POST /api/me/profile/photo` takes the file as the `photo` part of a
+  multipart form (no new dependency: the body is read with the platform's
+  `FormData`, as the web form and inbound-parse routes are) and `DELETE` removes
+  it. The upload goes through the AGENTS.md rules: 5 MB cap (Fastify's body limit
+  is the cap plus the multipart envelope), JPEG, PNG or WebP by the magic bytes
+  (`bytesMatchMime`), a sharp re-encode to square WebP at 256 and 64 px with EXIF
+  dropped and a 64 megapixel decompression ceiling. Nothing but the re-encode is
+  stored. Refusals are `staff.reason` `photo-missing`, `photo-too-large`,
+  `photo-unsupported-type` or `photo-unreadable` (all 400), and uploads are rate
+  limited to ten per account per quarter-hour (`photo-rate-limited`, 429). The
+  crop is made on the server, from the centre; there is no crop dialog.
+- [x] **Reads are presigned.** The profile answers with 5-minute presigned URLs
+  for both sizes (`ProfilePhotoStore`); the widget's messages carry a presigned
+  64 px URL only for the person who wrote them, built after the visitor's own
+  conversation has been read under row-level security. The online line and its
+  presence frames name the agents and carry **no photo** — they reach every
+  visitor of the brand, answered or not, so the widget draws initials there
+  (M14-12 review; DOMAIN-RULES §2.10.4). There is no public photo route. A
+  replaced or removed photo's old folder is deleted only **after the request's
+  transaction commits** (`context/after-commit.ts`), so a rollback never leaves
+  `photo_key` pointing at deleted objects; folders nothing references any more
+  are swept hourly by `maintenance.photo_sweep` (see the operations guide). An
+  account's deletion clears the profile, the signature and the objects.
+- [x] **Customer surfaces show the public name** (the first name until one is
+  set): the widget's agent on a message and on the online line, the email's
+  `From` display name, the transcript email, the CSAT page and email ("closed by"),
+  the Meta opening line and the composer's character count for it. Every one of
+  them goes through `publicNameOf` (`packages/schemas/src/placeholders.ts`). The
+  full name reaches a customer only through `{{agent.full_name}}`, and no
+  surface carries an email address.
+- [x] The widget's wire message gains `agent.title`, in the contact's language
+  (then the brand's), English when there is no Arabic title. The widget draws
+  the photo in the header and the thread (initials when there is none or the
+  link has expired; the online stack always draws initials) and puts the title
+  first in the header's caption.
+  The header names the latest agent message's author, because the live api does
+  not put an agent on the conversation summary.
+- [x] **Placeholders.** `{{agent.name}}`, `{{agent.full_name}}`, `{{agent.title}}`,
+  `{{agent.phone}}`, `{{department.name}}` join the canned allow-list
+  (`AGENT_PLACEHOLDERS`); an unset value renders as nothing, never as the
+  placeholder. **Signatures accept them** (and `{{brand.name}}`), still six
+  plain lines: `renderSignature` fills each line and drops one whose placeholder
+  came out empty (and the separator it leaves, `" · Helpdock"`). The composer's
+  signature, the sent email and the signature tab's preview use the same code.
+  For a rule's canned reply the agent is the assignee, as before.
+- [x] **Time zone** is stored and used by the daily digest's hour and its times
+  (the person's, then the brand's) and by the snooze menu's presets (the picker
+  still reads what is typed in the browser's zone and says so).
+- [x] The Profile tab (`Admin/Account-Profile`, en and ar) is first on Your
+  account and `/me` opens it; the single-key switch lives under "Working in
+  Helpdock" and in the shortcut sheet. Palette: a page entry.
+- Not built: the staff list, ticket header and other admin `Avatar`s still draw
+  initials (the photo is read only through the profile endpoint); M19-03's
+  team faces will read it the way the widget does. No migration of existing
+  signatures: a signature without placeholders renders as typed.
+
 ### M14-13 Setup checklist
 
 For Admins of a brand (`brand:manage`), a "Get set up 3 of 9" entry at the foot
@@ -1265,7 +1337,7 @@ Changed tables:
 | `ticket_statuses` | built-in key `snoozed`, seeded for every brand by `seedBrandStatuses` (`packages/db/src/ticket-statuses.ts`) and backfilled by the migration; its state and flags fixed like the other system statuses |
 | `notifications` | `email_state` enum (`pending`, `sent`, `skipped_read`, `skipped_paused`, `skipped_off`, `skipped_scope`, `skipped_unconfigured`, `skipped_failed`, `withdrawn` (M14-03: an Undo takes back an email still waiting)), `email_batch_id`, `emailed_at`, `bulk_operation_id`; kind enum gains `snooze_ended` |
 | `notification_prefs` (install scope, per person) | `email_schedule`, `digest_hour`, `paused_until`, `email_unsubscribed_at` |
-| `users` (install scope) | `public_name`, `job_title_en`, `job_title_ar`, `public_phone`, `photo_media_id`, `time_zone`, `single_key_shortcuts boolean default true` |
+| `users` (install scope) | `public_name`, `job_title_en`, `job_title_ar`, `public_phone`, `photo_key` (a bucket folder; built as `photo_key`, not `photo_media_id`), `time_zone`, `single_key_shortcuts boolean default true` |
 | `canned_responses` (macros share it) | `shortcut text` unique per owner scope, `use_count int` |
 | `custom_field_defs` | `required_to_close boolean default false`, `pinned boolean` (at most one per brand, partial unique index) |
 | `departments` | `idle_away_minutes int null` |
@@ -1295,7 +1367,7 @@ All under `/api/brands/:brandId` unless noted; Zod in and out; OpenAPI from Zod
 | `GET /routing` | `ticketing:manage` | The pipeline's entry points and their departments |
 | `GET /setup-checklist`, `POST /setup-checklist/dismiss` | `brand:manage` | The checklist |
 | `GET /tickets/:id/mention-candidates?q=` | `ticket:write` | The picker's people |
-| `GET`, `PUT /api/me/profile`; `POST /api/me/profile/photo` | signed in | Profile for customers |
+| `GET`, `PATCH /api/me/profile`; `POST`, `DELETE /api/me/profile/photo` | signed in | Profile for customers (`PATCH`: the route shipped as such in M0-06) |
 | `GET`, `PUT /api/me/notification-preferences` (extended) | signed in | Schedule, hour, pause, unsubscribe state |
 | `POST /api/me/notification-preferences/test-email` | signed in | A test notification email, 5 an hour |
 | `GET`, `POST /api/notifications/unsubscribe?token=` | public, token, rate-limited | Confirm page data; RFC 8058 POST |

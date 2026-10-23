@@ -95,11 +95,13 @@ export const ROUTES = {
   /** Where "Open queue dashboard" goes until Bull Board is embedded (M8-05, ADR 0004). */
   systemQueues: '/admin/system/queues',
   /**
-   * Your account (M3-07): one page, three tabs. `/me` alone redirects to the
+   * Your account (M3-07): one page, four tabs. `/me` alone redirects to the
    * first; Security keeps the path it always had.
    */
   me: '/me',
   meTab: '/me/:tab',
+  /** How a person appears to customers: public name, title, phone, photo, time zone (M14-12). */
+  meProfile: '/me/profile',
   /** A person's own account: password, second factor, signed-in browsers. */
   security: '/me/security',
   /** What they are told about, and where (M3-07). */

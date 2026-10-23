@@ -106,6 +106,13 @@ export function StaffScreen(): ReactNode {
         'out-of-scope': 'staff:toast.outOfScope',
         'viewer-disabled': 'staff:toast.viewerDisabled',
         'last-install-admin': 'staff:toast.lastInstallAdmin',
+        // The profile's refusals never come from this screen.
+        'invalid-phone': 'staff:toast.failed',
+        'photo-missing': 'staff:toast.failed',
+        'photo-too-large': 'staff:toast.failed',
+        'photo-unsupported-type': 'staff:toast.failed',
+        'photo-unreadable': 'staff:toast.failed',
+        'photo-rate-limited': 'staff:toast.failed',
       } as const;
 
       toast({ tone: 'danger', message: t(key[error.reason]) });

@@ -237,7 +237,11 @@ export class AppModule implements NestModule {
           signingKeys: options.auth.signingKeys,
         }),
         realtime,
-        StaffModule.forRoot({ logger: options.logger }),
+        StaffModule.forRoot({
+          logger: options.logger,
+          env: options.env,
+          ...(options.objectStorage === undefined ? {} : { storage: options.objectStorage }),
+        }),
         contacts,
         ticketing,
         csat,

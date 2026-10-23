@@ -1,8 +1,12 @@
 import type { Locale } from '@helpdock/i18n';
 import {
+  AGENT_PLACEHOLDERS,
+  agentPlaceholderValues,
   EMAIL_SIGNATURE_MAX_LENGTH,
   EMAIL_SIGNATURE_MAX_LINES,
   type EmailSignature,
+  type Profile,
+  renderSignature,
 } from '@helpdock/schemas';
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +14,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useTranslation } from 'react-i18next';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { useEmailApi } from '../../auth/session.tsx';
+import { currentBrand, useEmailApi, useSession, useStaffApi } from '../../auth/session.tsx';
 import { emailKeys } from '../../email/api.js';
 import { Field } from '../../ui/field.tsx';
 import { useEmailAction } from '../admin/channels/section-card.tsx';
@@ -31,6 +35,42 @@ const lines = (value: string): readonly string[] =>
     .map((line) => line.trim())
     .filter((line) => line !== '');
 
+/**
+ * What the preview fills a placeholder with: the person's own profile, in the
+ * language of the block. The department is the ticket's, which a signature
+ * being edited has none of, so `{{department.name}}` is left spelled out.
+ */
+const previewValues = (
+  profile: Profile | undefined,
+  language: Locale,
+  brandName: string | undefined,
+): ReadonlyMap<string, string> => {
+  const values = new Map<string, string>();
+  if (profile !== undefined) {
+    const filled = agentPlaceholderValues(
+      {
+        fullName: profile.name,
+        publicName: profile.publicName,
+        jobTitleEn: profile.jobTitleEn,
+        jobTitleAr: profile.jobTitleAr,
+        phone: profile.phone,
+      },
+      language,
+      null,
+    );
+    for (const [key, value] of filled) {
+      if (key !== 'department.name') {
+        values.set(key, value);
+      }
+    }
+  }
+  if (brandName !== undefined) {
+    values.set('brand.name', brandName);
+  }
+
+  return values;
+};
+
 export const tooManyLines = (value: string): boolean =>
   value.replace(/\s+$/u, '').split(/\r?\n/).length > EMAIL_SIGNATURE_MAX_LINES;
 
@@ -42,6 +82,9 @@ export function SignatureTab(): ReactNode {
   const id = useId();
 
   const stored = useQuery({ queryKey: emailKeys.signature(), queryFn: () => api.signature() });
+  const staffApi = useStaffApi();
+  const brand = currentBrand(useSession());
+  const profile = useQuery({ queryKey: ['me', 'profile'], queryFn: () => staffApi.profile() });
   const [draft, setDraft] = useState<EmailSignature>({ en: '', ar: '' });
   const [checked, setChecked] = useState(false);
 
@@ -104,6 +147,17 @@ export function SignatureTab(): ReactNode {
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 13 }}>
             {t('me:signature.caption')}
+          </Typography>
+          <Typography
+            variant="caption"
+            component="p"
+            sx={{ color: 'text.secondary', fontSize: 13, marginBlockStart: 1 }}
+          >
+            {t('me:signature.placeholdersHint', {
+              placeholders: [...AGENT_PLACEHOLDERS, 'brand.name']
+                .map((name) => `{{${name}}}`)
+                .join(', '),
+            })}
           </Typography>
         </Box>
 
@@ -206,8 +260,16 @@ export function SignatureTab(): ReactNode {
             {t('me:signature.previewCaption')}
           </Typography>
         </Box>
-        <PreviewBlock locale="en" signature={draft.en} />
-        <PreviewBlock locale="ar" signature={draft.ar.trim() === '' ? draft.en : draft.ar} />
+        <PreviewBlock
+          locale="en"
+          signature={draft.en}
+          values={previewValues(profile.data, 'en', brand?.name)}
+        />
+        <PreviewBlock
+          locale="ar"
+          signature={draft.ar.trim() === '' ? draft.en : draft.ar}
+          values={previewValues(profile.data, 'ar', brand?.name)}
+        />
       </Box>
     </Box>
   );
@@ -217,15 +279,17 @@ export function SignatureTab(): ReactNode {
 function PreviewBlock({
   locale,
   signature,
+  values,
 }: {
   readonly locale: Locale;
   readonly signature: string;
+  readonly values: ReadonlyMap<string, string>;
 }): ReactNode {
   const t = useT();
   const { i18n } = useTranslation();
   const tokens = useSemanticTokens();
   const sample = i18n.getFixedT(locale, 'me');
-  const signatureLines = lines(signature);
+  const signatureLines = lines(renderSignature(signature, values));
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

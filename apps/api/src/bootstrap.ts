@@ -47,6 +47,7 @@ import { RedisIoAdapter } from './realtime/redis-io.adapter.js';
 import { waitForMigrations } from './runtime/wait-for-migrations.js';
 import { backfillBuiltInViews } from './seed/backfill-built-in-views.js';
 import { SAML_ACS_ROUTE } from './sso/sso-saml.controller.js';
+import { PROFILE_PHOTO_ROUTE } from './staff/profile-photo-body.js';
 import { resolveAdminDist } from './static/admin-assets.js';
 import { WEB_FORM_ROUTE } from './web-form/web-form-page.controller.js';
 import { registerWidgetCors } from './widget/widget-cors.js';
@@ -372,6 +373,7 @@ export const createApiApp = async ({
     INBOUND_PARSE_ROUTE,
     WEB_FORM_ROUTE,
     SAML_ACS_ROUTE,
+    PROFILE_PHOTO_ROUTE,
   ]);
 
   // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's

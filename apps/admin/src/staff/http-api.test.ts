@@ -188,6 +188,13 @@ describe('the account the person owns', () => {
       twoFactorEnabled: false,
       recoveryCodesLeft: 0,
       twoFactorRequired: false,
+      publicName: null,
+      displayName: 'Omar',
+      jobTitleEn: null,
+      jobTitleAr: null,
+      phone: null,
+      timeZone: null,
+      photo: null,
     };
     fetchMock.mockImplementation(() => Promise.resolve(json(profile)));
 
@@ -196,6 +203,53 @@ describe('the account the person owns', () => {
 
     await staff.updateProfile({ locale: 'ar' });
     expect(lastCall()).toMatchObject({ url: '/api/me/profile', init: { method: 'PATCH' } });
+  });
+
+  it('sends the photo as the `photo` file of a multipart form, and parses the profile it answers with', async () => {
+    const photo = { small: 'https://bucket.test/64', large: 'https://bucket.test/256' };
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        json({
+          id: USER_ID,
+          name: 'Omar',
+          email: 'omar@helpdock.com',
+          locale: 'en',
+          twoFactorEnabled: false,
+          recoveryCodesLeft: 0,
+          twoFactorRequired: false,
+          publicName: null,
+          displayName: 'Omar',
+          jobTitleEn: null,
+          jobTitleAr: null,
+          phone: null,
+          timeZone: null,
+          photo,
+        }),
+      ),
+    );
+
+    const updated = await staff.uploadPhoto(new File(['x'], 'me.png', { type: 'image/png' }));
+
+    const { url, init } = lastCall();
+    expect([url, init.method]).toEqual(['/api/me/profile/photo', 'POST']);
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get('photo')).toBeInstanceOf(File);
+    expect(updated.photo).toEqual(photo);
+  });
+
+  it('turns a refused photo into the api’s reason', async () => {
+    fetchMock.mockResolvedValue(staffFailure('photo-too-large', 400));
+
+    await expect(
+      staff.uploadPhoto(new File(['x'], 'me.png', { type: 'image/png' })),
+    ).rejects.toSatisfy((error) => isStaffError(error) && error.reason === 'photo-too-large');
+  });
+
+  it('removes the photo with a DELETE', async () => {
+    fetchMock.mockResolvedValue(staffFailure('photo-missing', 400));
+
+    await expect(staff.removePhoto()).rejects.toBeDefined();
+    expect(lastCall()).toMatchObject({ url: '/api/me/profile/photo', init: { method: 'DELETE' } });
   });
 
   it('sends both passwords on a change', async () => {

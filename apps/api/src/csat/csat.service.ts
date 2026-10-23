@@ -46,16 +46,6 @@ export const CSAT_PUBLIC_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
-/**
- * "Lina" from "Lina Haddad": the part of a display name before the first
- * space. A name with no space is used whole. Exported for its test.
- */
-export const firstNameOf = (name: string): string | null => {
-  const [first = ''] = name.trim().split(/\s+/u);
-
-  return first === '' ? null : first;
-};
-
 export interface CsatServiceOptions {
   readonly db: Db;
   readonly repository: CsatRepository;
@@ -221,7 +211,7 @@ export class CsatService {
     return {
       state: 'open',
       brand,
-      ticket: { reference, subject, closedBy: closer === undefined ? null : firstNameOf(closer) },
+      ticket: { reference, subject, closedBy: closer ?? null },
       ...(tapped && survey.rating !== null ? { rating: survey.rating } : {}),
     };
   }

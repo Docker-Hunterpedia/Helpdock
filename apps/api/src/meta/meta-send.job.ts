@@ -31,11 +31,11 @@ import {
 } from '@helpdock/jobs';
 import {
   type DownloadVariant,
-  firstWordOf,
   META_ATTACHMENT_LIMITS,
   META_ERROR_MAX_LENGTH,
   type MetaPlatform,
   metaOpeningLine,
+  publicNameOf,
 } from '@helpdock/schemas';
 import { DelayedError, type Job, UnrecoverableError } from 'bullmq';
 import { and, eq, sql } from 'drizzle-orm';
@@ -323,6 +323,7 @@ interface LoadedReply {
   readonly message: {
     readonly bodyText: string;
     readonly authorType: (typeof ticketMessages.$inferSelect)['authorType'];
+    /** The name the sender chose for customers (M14-12); null for a reply nobody sent by hand. */
     readonly authorName: string | null;
     readonly brandName: string;
   };
@@ -355,11 +356,12 @@ const loadReply = async (
     delivery.accountId,
     delivery.customerId,
   );
-  const [message] = await tx
+  const [row] = await tx
     .select({
       bodyText: ticketMessages.bodyText,
       authorType: ticketMessages.authorType,
-      authorName: users.name,
+      authorFullName: users.name,
+      authorPublicName: users.publicName,
       brandName: brands.name,
     })
     .from(ticketMessages)
@@ -375,11 +377,16 @@ const loadReply = async (
     .where(eq(ticketMessages.id, delivery.ticketMessageId))
     .limit(1);
   /* c8 ignore next 3 -- each cascade-deletes the delivery with it. */
-  if (account === undefined || conversation === undefined || message === undefined) {
+  if (account === undefined || conversation === undefined || row === undefined) {
     return undefined;
   }
+  const { authorFullName, authorPublicName, ...rest } = row;
+  const authorName =
+    authorFullName === null
+      ? null
+      : publicNameOf({ fullName: authorFullName, publicName: authorPublicName });
 
-  return { delivery, account, conversation, message };
+  return { delivery, account, conversation, message: { ...rest, authorName } };
 };
 
 /** What a part needs that is not the part itself. */
@@ -466,7 +473,7 @@ const planParts = async (
   const files = await replyAttachments(env.tx, env.delivery.ticketMessageId);
   // "Lina · Helpdock" for a person, the brand alone for the assistant or a rule.
   const openingLine = metaOpeningLine({
-    firstName: message.authorName === null ? null : firstWordOf(message.authorName),
+    firstName: message.authorName === null || message.authorName === '' ? null : message.authorName,
     brand: message.brandName,
   });
 

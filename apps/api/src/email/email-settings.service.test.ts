@@ -296,6 +296,24 @@ describe('the ticket view', () => {
     ]);
   });
 
+  it("fills the reader's signature placeholders from their profile, in the reply's language (M14-12)", async () => {
+    const { service, tx, repository } = setup();
+    repository.settingsRow = settingsRow();
+    repository.signatures.set(USER, {
+      en: '{{agent.name}}\n{{agent.title}} · {{department.name}}\n{{agent.phone}}',
+      ar: null,
+    });
+    repository.profiles.set(USER, {
+      publicName: 'Lina',
+      jobTitleEn: 'Billing specialist',
+      publicPhone: '+966551234567',
+    });
+
+    const context = await service.ticketContext(tx, BRAND, TICKET, USER);
+
+    expect(context.signature).toBe('Lina\nBilling specialist · Billing\n+966551234567');
+  });
+
   it('is a 404 for a ticket the reader cannot see', async () => {
     const { service, tx, repository } = setup();
     repository.addressingRow = undefined;

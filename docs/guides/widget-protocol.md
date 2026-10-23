@@ -275,17 +275,20 @@ than `en` or `ar` is refused with `400`.
   "nextOpenAt": null,
   "timezone": "Asia/Riyadh",
   "agentsOnline": true,
-  "agents": [{ "name": "Karim", "avatarUrl": null }, { "name": "Lina", "avatarUrl": null }]
+  "agents": [{ "name": "Karim" }, { "name": "Lina" }]
 }
 ```
 
 `nextOpenAt` is `null` while the brand is open, and also when the brand has no
 business hours. `agents` lists up to five of the brand's agents who are online
-right now (not away), by first name and sorted, for the "Lina, Karim and Sara
+right now (not away), by public name and sorted, for the "Lina, Karim and Sara
 are online now" line. It is empty when nobody is online, and also when the
 brand turned off **Show the agent's name and photo**: `agentsOnline` still says
-whether anybody is there. It never carries a staff id or a surname. Staff have
-no stored photo yet, so `avatarUrl` is `null` and the widget draws initials.
+whether anybody is there. It never carries a staff id, an email address or a
+full name. `name` is the **public name** the person set on Your account →
+Profile (their first name until then). There is no photo here: a presigned
+photo URL is issued only for the author of a message in the visitor's own
+conversation (DOMAIN-RULES §2.10.4), and the online stack draws the initials.
 
 `availability` is the brand's own calendar, read once when the widget loads.
 The hours of the team that answers a conversation, which can be its
@@ -433,8 +436,13 @@ does not trigger a catch-up again. When `hasMore` is true, ask again with
 A message (`widgetMessageSchema`) carries `author` (`visitor`, `agent`,
 `system` or `ai`), plain `text` for every author, sanitised `html` for agent
 replies and `null` for the visitor's own messages, `clientId` on the visitor's
-own messages only, and `agent` (a first name and avatar) only when the brand
-shows agents. It has no field that could carry an internal note.
+own messages only, and `agent` only when the brand shows agents: `{ name,
+title, avatarUrl }`, the public name, the job title in the contact's language
+(English when there is no Arabic one, `null` when there is none) and a presigned
+64 px photo link or `null` — the photo of the person who wrote this message,
+which is the only way one reaches a visitor. The widget draws the photo in the
+header and beside the message, and falls back to initials when the link has
+expired. It has no field that could carry an internal note.
 
 ### Typing, read, queue, transcript
 

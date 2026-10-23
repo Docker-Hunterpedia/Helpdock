@@ -140,7 +140,7 @@ export function AppRoutes(): ReactNode {
           {/* Your account: Security (M0-06), Notifications (M3-07) and Email
               signature (M2-05) are tabs of one page, and `/me` alone opens
               the first. */}
-          <Route path={ROUTES.me} element={<Navigate to={ROUTES.security} replace />} />
+          <Route path={ROUTES.me} element={<Navigate to={ROUTES.meProfile} replace />} />
           <Route path={ROUTES.meTab} element={<YourAccountPage />} />
         </Route>
 

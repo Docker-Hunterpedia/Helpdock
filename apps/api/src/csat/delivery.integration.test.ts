@@ -74,6 +74,7 @@ import { FakeStorage } from '../testing/media.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { AgentCards } from '../widget/agent-cards.js';
 import { registerWidgetEventHandlers } from '../widget/widget-events.js';
 import { RedisWidgetBroadcast } from '../widget/widget-relay.js';
 import { CsatRepository } from './csat.repository.js';
@@ -362,9 +363,11 @@ describe.skipIf(!hasDocker)('CSAT delivery on close (M8-06)', () => {
       new SlaRepository(),
       new SlaService(new SlaRepository()),
     );
-    registerWidgetEventHandlers(widgetBroadcast, {
-      calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx),
-    });
+    registerWidgetEventHandlers(
+      widgetBroadcast,
+      { calendarsFor: (brandId, tx) => hours.calendarsFor(brandId, tx) },
+      new AgentCards({ smallUrl: async () => null }),
+    );
     registerCsatEventHandlers({
       repository: csatRepository,
       tokens: csatTokens(),

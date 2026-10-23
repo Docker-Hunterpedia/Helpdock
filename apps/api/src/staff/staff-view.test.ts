@@ -40,6 +40,12 @@ const user = (overrides: Partial<User> = {}): User => ({
   signatureAr: null,
   webauthnUserHandle: null,
   singleKeyShortcuts: true,
+  publicName: null,
+  jobTitleEn: null,
+  jobTitleAr: null,
+  publicPhone: null,
+  photoKey: null,
+  timeZone: null,
   ...overrides,
 });
 

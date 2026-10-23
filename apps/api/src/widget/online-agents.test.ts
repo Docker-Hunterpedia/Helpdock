@@ -3,31 +3,53 @@ import type { PresenceMap } from '@helpdock/schemas';
 import { describe, expect, it, vi } from 'vitest';
 import { OnlineAgents } from './online-agents.js';
 import { resolveWidgetSettings } from './resolved-settings.js';
+import type { StaffIdentityRow } from './widget.repository.js';
 
 const BRAND = '01937f5e-7e53-7000-8000-00000000000a';
 const LINA = '01937f5e-7e53-7000-8000-000000000001';
 const KARIM = '01937f5e-7e53-7000-8000-000000000002';
 const SARA = '01937f5e-7e53-7000-8000-000000000003';
 
-const names = new Map([
-  [LINA, 'Lina Haddad'],
-  [KARIM, 'Karim Nasser'],
-  [SARA, 'Sara Odeh'],
+const row = (
+  id: string,
+  fullName: string,
+  overrides: Partial<StaffIdentityRow> = {},
+): StaffIdentityRow => ({
+  id,
+  fullName,
+  publicName: null,
+  jobTitleEn: null,
+  jobTitleAr: null,
+  photoKey: null,
+  ...overrides,
+});
+
+const rows = new Map<string, StaffIdentityRow>([
+  [LINA, row(LINA, 'Lina Haddad', { photoKey: 'install/users/lina/photo/' })],
+  [KARIM, row(KARIM, 'Karim Nasser')],
+  [SARA, row(SARA, 'Sara Odeh', { publicName: 'Sara O' })],
 ]);
 
-const tx = {} as DbTransaction;
+const tx = {
+  execute: async () => [],
+} as unknown as DbTransaction;
 
 const reader = (map: PresenceMap) => {
-  const staffNames = vi.fn(async (_tx: DbTransaction, ids: readonly string[]) => {
-    return new Map(ids.flatMap((id) => (names.has(id) ? [[id, names.get(id) ?? '']] : [])));
+  const staffIdentities = vi.fn(async (_tx: DbTransaction, ids: readonly string[]) => {
+    return new Map(
+      ids.flatMap((id) => {
+        const found = rows.get(id);
+        return found === undefined ? [] : [[id, found] as const];
+      }),
+    );
   });
   const online = new OnlineAgents({
     db: { transaction: (run: (inner: DbTransaction) => unknown) => run(tx) } as unknown as Db,
     presence: { mapOf: async () => map },
     settings: { row: async () => undefined },
-    widget: { staffNames },
+    widget: { staffIdentities },
   });
-  return { online, staffNames };
+  return { online, staffIdentities };
 };
 
 const settings = (showAgentIdentity: boolean) => {
@@ -36,32 +58,45 @@ const settings = (showAgentIdentity: boolean) => {
 };
 
 describe('OnlineAgents', () => {
-  it('names the online agents by first name, sorted, and leaves out the away', async () => {
+  it('names the online agents by public name, sorted, and leaves out the away', async () => {
     const { online } = reader({ [SARA]: 'online', [LINA]: 'online', [KARIM]: 'away' });
 
     await expect(online.presenceIn(tx, BRAND, settings(true))).resolves.toEqual({
       agentsOnline: true,
-      agents: [
-        { name: 'Lina', avatarUrl: null },
-        { name: 'Sara', avatarUrl: null },
-      ],
+      agents: [{ name: 'Lina' }, { name: 'Sara O' }],
     });
   });
 
+  it('carries no photo: a visitor with no conversation is told names only, however many have one', async () => {
+    // DOMAIN-RULES §2.10.4: a presigned photo URL is issued for the author of a
+    // message in the visitor's own conversation, and the online line reaches
+    // every visitor of the brand. Lina has a photo; nobody here has been
+    // answered by anybody.
+    const { online } = reader({ [LINA]: 'online', [KARIM]: 'online', [SARA]: 'online' });
+
+    const page = await online.presenceIn(tx, BRAND, settings(true));
+    const frame = await online.presence(BRAND);
+
+    for (const presence of [page, frame]) {
+      expect(JSON.stringify(presence)).not.toContain('avatarUrl');
+      expect(JSON.stringify(presence)).not.toContain('install/users');
+    }
+  });
+
   it('says somebody is there without saying who, when the brand hides agents', async () => {
-    const { online, staffNames } = reader({ [LINA]: 'online' });
+    const { online, staffIdentities } = reader({ [LINA]: 'online' });
 
     await expect(online.presenceIn(tx, BRAND, settings(false))).resolves.toEqual({
       agentsOnline: true,
       agents: [],
     });
-    expect(staffNames).not.toHaveBeenCalled();
+    expect(staffIdentities).not.toHaveBeenCalled();
   });
 
   it('opens no transaction for a brand with nobody online', async () => {
-    const { online, staffNames } = reader({ [KARIM]: 'away' });
+    const { online, staffIdentities } = reader({ [KARIM]: 'away' });
 
     await expect(online.presence(BRAND)).resolves.toEqual({ agentsOnline: false, agents: [] });
-    expect(staffNames).not.toHaveBeenCalled();
+    expect(staffIdentities).not.toHaveBeenCalled();
   });
 });

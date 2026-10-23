@@ -127,12 +127,15 @@ export type WidgetPrechatFieldView = z.infer<typeof widgetPrechatFieldViewSchema
 export const WIDGET_ONLINE_AGENTS_MAX = 5;
 
 /**
- * An online agent as a visitor may see them: a first name, never an id or a
- * surname (DOMAIN-RULES §1.3, layer 4).
+ * An online agent as a visitor may see them: the public name the person chose
+ * (their first name until they do), never an id, an email or a full name
+ * (DOMAIN-RULES §1.3, layer 4). No photo: a presigned photo URL is issued only
+ * for the author of a message in the visitor's own conversation
+ * (DOMAIN-RULES §2.10.4), and somebody who is merely online has not written
+ * one, so the widget draws the initials.
  */
 export const widgetOnlineAgentSchema = z.object({
   name: z.string(),
-  avatarUrl: z.url().nullable(),
 });
 export type WidgetOnlineAgent = z.infer<typeof widgetOnlineAgentSchema>;
 
@@ -491,10 +494,19 @@ export const widgetMessageSchema = z.object({
   clientId: z.uuid().nullable(),
   author: z.enum(['visitor', 'agent', 'system', 'ai']),
   /**
-   * The agent's first name and avatar when the brand shows them (M4-08);
-   * otherwise null and the widget shows the brand.
+   * The agent's public name, job title (in the conversation's language) and
+   * photo when the brand shows them (M4-08, M14-12); otherwise null and the
+   * widget shows the brand. `avatarUrl` is a presigned URL that lives five
+   * minutes, so the widget draws it when the message arrives and falls back to
+   * initials if it has expired by the time the image loads again.
    */
-  agent: z.object({ name: z.string(), avatarUrl: z.url().nullable() }).nullable(),
+  agent: z
+    .object({
+      name: z.string(),
+      title: z.string().nullable(),
+      avatarUrl: z.url().nullable(),
+    })
+    .nullable(),
   text: z.string(),
   /** Sanitised HTML for agent replies; null for a visitor's plain text. */
   html: z.string().nullable(),

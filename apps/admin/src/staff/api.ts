@@ -35,6 +35,9 @@ export interface StaffApi {
 
   profile(): Promise<Profile>;
   updateProfile(request: ProfileUpdateRequest): Promise<Profile>;
+  /** M14-12. Sniffed, cropped square and re-encoded by the api; resolves to the profile with its new URLs. */
+  uploadPhoto(file: File): Promise<Profile>;
+  removePhoto(): Promise<Profile>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
   disableTotp(code: string): Promise<void>;
   regenerateRecoveryCodes(code: string): Promise<RecoveryCodes>;

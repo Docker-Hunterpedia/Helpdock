@@ -98,7 +98,9 @@ describe('parseWidgetMessage', () => {
         JSON.stringify({
           room: brandVisitorsRoom(BRAND),
           event: 'presence',
-          data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] },
+          // A frame that smuggles a photo URL is stripped to the names the
+          // schema allows; the online line carries no avatar (§2.10.4).
+          data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: 'https://x.test/p' }] },
           seq: null,
         }),
       ),
@@ -108,7 +110,7 @@ describe('parseWidgetMessage', () => {
       event: 'presence',
       envelope: {
         seq: null,
-        data: { agentsOnline: true, agents: [{ name: 'Lina', avatarUrl: null }] },
+        data: { agentsOnline: true, agents: [{ name: 'Lina' }] },
       },
     });
   });

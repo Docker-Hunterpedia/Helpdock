@@ -72,5 +72,12 @@ export const sampleValues = ({
     ['ticket.number', SAMPLE_TICKET],
     ['brand.name', brand],
     ['agent.first_name', splitName(agent).first],
+    // M14-12: what the sender chose to show customers. A sample, because the
+    // preview does not know who will send the reply.
+    ['agent.name', splitName(agent).first],
+    ['agent.full_name', agent],
+    ['agent.title', 'Billing specialist'],
+    ['agent.phone', '+966 55 123 4567'],
+    ['department.name', 'Billing'],
   ]);
 };

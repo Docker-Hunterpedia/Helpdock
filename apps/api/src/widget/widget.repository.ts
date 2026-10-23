@@ -1,6 +1,8 @@
 import {
   type Attachment as AttachmentRow,
   attachments,
+  brands,
+  contacts,
   type DbTransaction,
   departments,
   type TicketMessage as TicketMessageRow,
@@ -56,6 +58,16 @@ const queuedSince = sql<string | null>`CASE
       AND m.import_source_account_key IS NULL
   )
 END`;
+
+/** The columns a customer-facing agent card is made from. */
+export interface StaffIdentityRow {
+  readonly id: string;
+  readonly fullName: string;
+  readonly publicName: string | null;
+  readonly jobTitleEn: string | null;
+  readonly jobTitleAr: string | null;
+  readonly photoKey: string | null;
+}
 
 export class WidgetRepository {
   // ------------------------------------------------------------- visitors
@@ -276,17 +288,47 @@ export class WidgetRepository {
     return grouped;
   }
 
-  /** Staff display names by id, for "Lina" on an agent's reply (M4-08). */
-  async staffNames(tx: DbTransaction, userIds: readonly string[]): Promise<Map<string, string>> {
+  /**
+   * What a customer may be told about the staff who wrote to them (M4-08,
+   * M14-12): the columns that make a public name, a title and a photo, and none
+   * of the email, the role or the sign-in state beside them.
+   */
+  async staffIdentities(
+    tx: DbTransaction,
+    userIds: readonly string[],
+  ): Promise<Map<string, StaffIdentityRow>> {
     const ids = userIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id));
     if (ids.length === 0) {
       return new Map();
     }
     const rows = await tx
-      .select({ id: users.id, name: users.name })
+      .select({
+        id: users.id,
+        fullName: users.name,
+        publicName: users.publicName,
+        jobTitleEn: users.jobTitleEn,
+        jobTitleAr: users.jobTitleAr,
+        photoKey: users.photoKey,
+      })
       .from(users)
       .where(inArray(users.id, ids));
-    return new Map(rows.map((row) => [row.id, row.name]));
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
+  /**
+   * The language a ticket's replies are written in, for the title under an
+   * agent's name: the contact's, then the brand's (as `readRenderTicket` does).
+   */
+  async ticketLanguage(tx: DbTransaction, ticketId: string): Promise<'en' | 'ar'> {
+    const [row] = await tx
+      .select({ contact: contacts.locale, brand: brands.defaultLocale })
+      .from(tickets)
+      .innerJoin(brands, eq(brands.id, tickets.brandId))
+      .leftJoin(contacts, eq(contacts.id, tickets.contactId))
+      .where(eq(tickets.id, ticketId))
+      .limit(1);
+
+    return (row?.contact ?? row?.brand) === 'ar' ? 'ar' : 'en';
   }
 
   /** The department a new widget conversation is filed in: the brand's first. */

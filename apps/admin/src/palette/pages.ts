@@ -116,6 +116,13 @@ export const PAGES: readonly PageEntry[] = [
   primary('reports', 'reports', ROUTES.reports),
 
   {
+    id: 'accountProfile',
+    area: 'account',
+    path: ROUTES.meProfile,
+    title: ['me:account.title', 'me:account.tabs.profile'],
+    group: 'settings',
+  },
+  {
     id: 'accountSecurity',
     area: 'account',
     path: ROUTES.security,

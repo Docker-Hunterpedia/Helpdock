@@ -148,12 +148,33 @@ describe('header, queue and hours', () => {
     expect(screen.getByText('Finding someone for you')).toBeTruthy();
 
     act(() => mock.assign(LINA, 'Billing'));
-    expect(screen.getByRole('heading', { name: 'Lina Haddad' })).toBeTruthy();
-    expect(screen.getByText('Billing · Helpdock support')).toBeTruthy();
-    expect(screen.getByText(/Lina Haddad joined/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Lina' })).toBeTruthy();
+    expect(screen.getByText('Billing specialist · Billing · Helpdock support')).toBeTruthy();
+    expect(screen.getByText(/Lina joined/)).toBeTruthy();
 
     act(() => mock.emit({ type: 'typing', typing: true, agent: LINA }));
     expect(screen.getByText('Lina is typing…')).toBeTruthy();
+  });
+
+  it('names the agent in the header with their photo and job title once they have written (M14-12)', async () => {
+    const { controller, mock } = await renderWidget();
+    await open();
+    await act(() => controller.startConversation({}));
+
+    await act(async () => {
+      mock.agentReply(
+        { ...LINA, avatar_url: 'https://bucket.test/lina/64.webp' },
+        'Hi, I am looking at your refund now.',
+      );
+    });
+
+    expect(screen.getByRole('heading', { name: 'Lina' })).toBeTruthy();
+    expect(screen.getByText(/^Billing specialist · /)).toBeTruthy();
+    const header = screen.getByRole('heading', { name: 'Lina' }).closest('header') as HTMLElement;
+    expect(header.querySelector('img')?.getAttribute('src')).toBe(
+      'https://bucket.test/lina/64.webp',
+    );
+    expect(header.querySelector('img')?.getAttribute('alt')).toBe('');
   });
 
   it('shows the closed notice with the next opening (WidgetStatesEN column 4)', async () => {

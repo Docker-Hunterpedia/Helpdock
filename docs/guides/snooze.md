@@ -17,7 +17,7 @@ offers four times, each with the exact day and time on the right:
 | Item | Time |
 |---|---|
 | In 1 hour, In 4 hours | That long from now |
-| Next business day | The next opening of the ticket's department after today ends; 09:00 tomorrow in your time zone if nobody has set business hours |
+| Next business day | The next opening of the ticket's department after today ends; 09:00 tomorrow in your time zone if nobody has set business hours. "Your time zone" is the one on Your account › Profile, the browser's until you choose one |
 | Next week | The first opening after the calendar's coming weekend: Sunday in Asia/Riyadh, Monday in Europe/Berlin; Monday 09:00 in your zone without business hours |
 | Pick a date and time… | A date and time of your own, 5 minutes to 90 days ahead |
 

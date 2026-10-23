@@ -193,6 +193,57 @@ describe('the account a person owns', () => {
     expect(updated).toMatchObject({ name: 'Lina H.', locale: 'ar' });
   });
 
+  it('keeps a public name, titles, a normalised phone and a zone, and shows the first name until a public name is set', async () => {
+    await expect(staff.profile()).resolves.toMatchObject({ publicName: null, displayName: 'Lina' });
+
+    const updated = await staff.updateProfile({
+      publicName: 'Lina H',
+      jobTitleEn: 'Support lead',
+      phone: '00966 55 987 6543',
+      timeZone: 'Asia/Dubai',
+    });
+
+    expect(updated).toMatchObject({
+      displayName: 'Lina H',
+      jobTitleEn: 'Support lead',
+      phone: '+966559876543',
+      timeZone: 'Asia/Dubai',
+    });
+    await expect(staff.updateProfile({ publicName: null })).resolves.toMatchObject({
+      displayName: 'Lina',
+    });
+  });
+
+  it('refuses a phone that is not international the way the api does', async () => {
+    await expect(staff.updateProfile({ phone: '0551234567' })).rejects.toSatisfy(
+      (error) => isStaffError(error) && error.reason === 'invalid-phone',
+    );
+  });
+
+  it('takes a photo that is an image by its bytes and refuses the rest like the api does', async () => {
+    const png = new File(
+      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0, 0, 0])],
+      'a.png',
+      {
+        type: 'image/png',
+      },
+    );
+    expect((await staff.uploadPhoto(png)).photo).not.toBeNull();
+    expect((await staff.removePhoto()).photo).toBeNull();
+
+    const reason = async (file: File): Promise<string | undefined> =>
+      staff.uploadPhoto(file).then(
+        () => undefined,
+        (error: unknown) => (isStaffError(error) ? error.reason : 'other'),
+      );
+    expect(await reason(new File(['<svg/>'], 'a.png', { type: 'image/png' }))).toBe(
+      'photo-unsupported-type',
+    );
+    expect(
+      await reason(new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'a.png', { type: 'image/png' })),
+    ).toBe('photo-too-large');
+  });
+
   it('signs one browser out', async () => {
     const { sessions } = await staff.sessions();
     await staff.revokeSession(sessions[1]?.familyId ?? '');

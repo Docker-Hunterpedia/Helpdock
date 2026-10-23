@@ -63,6 +63,13 @@ export class RequestContext {
    * writes its own audit rows outside the request transaction reads it here.
    */
   client: ClientFacts | null = null;
+  /**
+   * Side effects to run once the request's transaction has committed
+   * (`after-commit.ts`), drained by the tenant interceptor. A rollback drops
+   * them, which is the point: nothing queued here may be needed for the
+   * request's writes to make sense.
+   */
+  readonly postCommit: (() => Promise<void>)[] = [];
 
   constructor(options: { requestId: string; method: string; path: string }) {
     this.requestId = options.requestId;

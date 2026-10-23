@@ -65,6 +65,24 @@ export const users = pgTable(
      * them to another browser; on by default (owner decision D-32).
      */
     singleKeyShortcuts: boolean('single_key_shortcuts').notNull().default(true),
+    /**
+     * M14-12. How the person appears to customers, apart from `name`, which
+     * only colleagues see. Every one is null until set; `publicName` null means
+     * the first word of `name`, so existing accounts keep appearing as they did.
+     */
+    publicName: text('public_name'),
+    jobTitleEn: text('job_title_en'),
+    jobTitleAr: text('job_title_ar'),
+    /** E.164, normalised as a contact's phone is (ADR 0008). Shown only where a signature uses it. */
+    publicPhone: text('public_phone'),
+    /**
+     * The folder in the bucket holding the 256 and 64 px WebP variants
+     * (`install/users/<id>/<photo id>/`). Null when there is no photo and
+     * initials are drawn. Never returned: clients get presigned URLs.
+     */
+    photoKey: text('photo_key'),
+    /** IANA name; used for snooze presets and the daily digest's hour. Null until chosen. */
+    timeZone: text('time_zone'),
   },
   (table) => [
     // Addresses are compared case-insensitively. A unique index on `lower(email)`

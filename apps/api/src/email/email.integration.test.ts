@@ -172,6 +172,12 @@ describe.skipIf(!hasDocker)('outbound email', () => {
     return (await response.json()) as Record<string, string[]>;
   };
 
+  const mailpitText = async (id: string): Promise<string> => {
+    const response = await fetch(`${mailpitApi}/api/v1/message/${id}`);
+    // Mail is CRLF on the wire; compare it as lines.
+    return ((await response.json()) as { Text: string }).Text.replaceAll('\r\n', '\n');
+  };
+
   const clearMailpit = async (): Promise<void> => {
     await fetch(`${mailpitApi}/api/v1/messages`, { method: 'DELETE' });
   };
@@ -458,10 +464,60 @@ describe.skipIf(!hasDocker)('outbound email', () => {
     expect(delivered[0]).toMatchObject({
       MessageID: `hd.m.${message.id}@helpdock.test`,
       Subject: expect.stringMatching(/^Re: \[.+-\d+\] Refund not received after 10 days$/),
-      From: { Address: 'billing@helpdock.test', Name: 'Dev Admin via Helpdock Billing' },
+      From: { Address: 'billing@helpdock.test', Name: 'Dev via Helpdock Billing' },
     });
     expect(delivered[0]?.Cc?.map((address) => address.Address)).toEqual(['karim@acme.test']);
     expect((await deliveryFor(message.id)).status).toBe('sent');
+  });
+
+  it("signs a reply with the sender's public profile and shows customers the public name (M14-12)", async () => {
+    await useSmtp(mailpit.getMappedPort(MAILPIT_SMTP_PORT));
+    await clearMailpit();
+    await owner.db
+      .update(users)
+      .set({
+        publicName: 'Lina H',
+        jobTitleEn: 'Billing specialist',
+        publicPhone: '+966551234567',
+      })
+      .where(eq(users.id, admin.id));
+    await call<EmailSignature>('PUT', '/api/me/signature', admin, {
+      en: '{{agent.name}}\n{{agent.title}} · {{brand.name}}\n{{agent.phone}}\n{{department.name}}',
+      ar: '',
+    });
+    try {
+      const ticketId = await createTicket(billing);
+      const message = await reply(ticketId);
+      const delivery = await deliveryFor(message.id);
+      const [event] = await sendEvents(delivery.id);
+      await processor()(await jobFor(event?.id ?? '', delivery.id));
+
+      const [delivered] = await mailpitMessages();
+      expect(delivered?.From.Name).toBe('Lina H via Helpdock Billing');
+      const text = await mailpitText(delivered?.ID ?? '');
+      expect(text).toContain('Lina H\nBilling specialist · Helpdock Dev\n+966551234567\nBilling');
+      expect(text).not.toContain('{{');
+      expect(text).not.toContain(admin.email);
+
+      // The composer previews the very same signature (the ticket's email context).
+      const context = await call<{ signature: string | null }>(
+        'GET',
+        `${brandPath()}/tickets/${ticketId}/email`,
+        admin,
+      );
+      expect(context.body.signature).toBe(
+        'Lina H\nBilling specialist · Helpdock Dev\n+966551234567\nBilling',
+      );
+    } finally {
+      await owner.db
+        .update(users)
+        .set({ publicName: null, jobTitleEn: null, publicPhone: null })
+        .where(eq(users.id, admin.id));
+      await call<EmailSignature>('PUT', '/api/me/signature', admin, {
+        en: 'Lina Haddad\nBilling team · Helpdock',
+        ar: '',
+      });
+    }
   });
 
   it('sends nothing for a chat ticket, and nothing for an internal note', async () => {

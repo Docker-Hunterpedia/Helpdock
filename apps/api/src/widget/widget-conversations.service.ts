@@ -41,6 +41,7 @@ import { arrivalOf, WIDGET_ENTRY } from '../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { TicketRepository } from '../tickets/tickets.repository.js';
+import type { AgentCards } from './agent-cards.js';
 import { conversationAccess } from './conversation-access.js';
 import { hostnamesOf } from './origin.js';
 import { plainTextToHtml, subjectFrom } from './plain-text.js';
@@ -72,6 +73,8 @@ import { toWidgetConversation, toWidgetMessage } from './widget-view.js';
 export interface WidgetConversationsDependencies {
   readonly gate: WidgetGate;
   readonly widget: WidgetRepository;
+  /** Public names, titles and photos of the staff who answer. */
+  readonly agents: AgentCards;
   readonly tickets: TicketRepository;
   readonly lifecycle: TicketLifecycleService;
   readonly lifecycleReads: TicketLifecycleRepository;
@@ -198,7 +201,7 @@ export class WidgetConversationsService {
       const updated = { ...meta, feedback };
       await autoReplies.saveFeedback(scope.tx, row.id, updated);
       return toWidgetMessage({ ...row, aiMeta: updated }, [], {
-        staffNames: new Map(),
+        agents: new Map(),
         showAgentIdentity: false,
       });
     });
@@ -778,16 +781,20 @@ export class WidgetConversationsService {
       scope.tx,
       rows.map((row) => row.id),
     );
-    const staffNames = await this.#deps.widget.staffNames(
-      scope.tx,
-      rows.flatMap((row) =>
-        row.authorType === 'staff' && row.authorId !== null ? [row.authorId] : [],
-      ),
+    const authorIds = rows.flatMap((row) =>
+      row.authorType === 'staff' && row.authorId !== null ? [row.authorId] : [],
     );
+    const agents =
+      authorIds.length === 0 || rows[0] === undefined
+        ? new Map()
+        : await this.#deps.agents.of(
+            await this.#deps.widget.staffIdentities(scope.tx, authorIds),
+            await this.#deps.widget.ticketLanguage(scope.tx, rows[0].ticketId),
+          );
 
     return rows.map((row) =>
       toWidgetMessage(row, files.get(row.id) ?? [], {
-        staffNames,
+        agents,
         showAgentIdentity: scope.settings.conversation.showAgentIdentity,
       }),
     );

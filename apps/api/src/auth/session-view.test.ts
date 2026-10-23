@@ -27,6 +27,12 @@ const user: StaffUser = {
   signatureAr: null,
   webauthnUserHandle: null,
   singleKeyShortcuts: true,
+  publicName: null,
+  jobTitleEn: null,
+  jobTitleAr: null,
+  publicPhone: null,
+  photoKey: null,
+  timeZone: null,
 };
 
 const brand = (id: string, name: string, prefix: string): Brand => ({

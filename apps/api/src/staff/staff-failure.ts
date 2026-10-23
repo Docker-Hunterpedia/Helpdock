@@ -20,6 +20,12 @@ const STATUS_BY_REASON: Readonly<Record<StaffRefusal, number>> = {
   'out-of-scope': HttpStatus.FORBIDDEN,
   'viewer-disabled': HttpStatus.CONFLICT,
   'last-install-admin': HttpStatus.CONFLICT,
+  'invalid-phone': HttpStatus.BAD_REQUEST,
+  'photo-missing': HttpStatus.BAD_REQUEST,
+  'photo-too-large': HttpStatus.BAD_REQUEST,
+  'photo-unsupported-type': HttpStatus.BAD_REQUEST,
+  'photo-unreadable': HttpStatus.BAD_REQUEST,
+  'photo-rate-limited': HttpStatus.TOO_MANY_REQUESTS,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<StaffRefusal, string>> = {
@@ -27,6 +33,12 @@ const MESSAGE_BY_REASON: Readonly<Record<StaffRefusal, string>> = {
   'out-of-scope': 'That person, or that role, is outside the departments you lead',
   'viewer-disabled': 'The Viewer role is turned off on this install',
   'last-install-admin': 'This is the last install administrator and must keep its access',
+  'invalid-phone': 'The phone number must be international, like +966 55 123 4567',
+  'photo-missing': 'Send the photo as the "photo" file of a multipart form',
+  'photo-too-large': 'The photo is larger than 5 MB',
+  'photo-unsupported-type': 'The photo must be a JPEG, PNG or WebP image',
+  'photo-unreadable': 'The photo could not be read as an image',
+  'photo-rate-limited': 'Too many photo uploads; try again a little later',
 };
 
 export class StaffFailure extends HttpException {

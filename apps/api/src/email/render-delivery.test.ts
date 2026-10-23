@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { deliveryRow, MESSAGE, TICKET } from '../testing/email-fixtures.js';
-import type { SendFacts } from './email.repository.js';
+import type { EmailAuthor, SendFacts } from './email.repository.js';
 import { autoRepliesFrom, templatesFor } from './outgoing-settings.js';
 import { renderDelivery, signatureFor } from './render-delivery.js';
+
+const LINA: EmailAuthor = {
+  name: 'Lina Haddad',
+  publicName: null,
+  jobTitleEn: null,
+  jobTitleAr: null,
+  publicPhone: null,
+  signatureEn: 'Lina Haddad\nBilling team',
+  signatureAr: null,
+};
 
 const facts: SendFacts = {
   ticket: { id: TICKET, reference: 'HD-1042', subject: 'Refund not received', contactId: null },
@@ -15,11 +25,7 @@ const facts: SendFacts = {
     authorId: 'lina',
     authorType: 'staff',
   },
-  author: {
-    name: 'Lina Haddad',
-    signatureEn: 'Lina Haddad\nBilling team',
-    signatureAr: null,
-  },
+  author: LINA,
   transcript: [],
 };
 
@@ -32,7 +38,7 @@ describe('renderDelivery, an agent reply', () => {
   it('goes out as "Agent via Department" with the frozen addressing', () => {
     expect(message.from).toEqual({
       address: 'billing@helpdock.io',
-      name: 'Lina Haddad via Helpdock Billing',
+      name: 'Lina via Helpdock Billing',
     });
     expect(message.to).toEqual({ address: 'mona@example.com', name: 'Mona Khalil' });
     expect(message.cc).toEqual([{ address: 'karim@acme.de' }]);
@@ -102,16 +108,61 @@ describe('renderDelivery, an auto-reply', () => {
 });
 
 describe('signatureFor', () => {
+  const author = (overrides: Partial<EmailAuthor> = {}): EmailAuthor => ({ ...LINA, ...overrides });
+  const context = { brandName: 'Helpdock', departmentName: 'Billing' };
+
   it('falls back from an empty Arabic signature to the English one', () => {
-    expect(signatureFor(facts.author, 'ar')).toBe('Lina Haddad\nBilling team');
-    expect(signatureFor({ name: 'Lina', signatureEn: 'Lina', signatureAr: 'لينا' }, 'ar')).toBe(
+    expect(signatureFor(LINA, 'ar', context)).toBe('Lina Haddad\nBilling team');
+    expect(signatureFor(author({ signatureEn: 'Lina', signatureAr: 'لينا' }), 'ar', context)).toBe(
       'لينا',
     );
   });
 
   it('is null when the author has none, or there is no author', () => {
-    expect(signatureFor({ name: 'Lina', signatureEn: '  ', signatureAr: null }, 'en')).toBeNull();
-    expect(signatureFor(null, 'en')).toBeNull();
+    expect(signatureFor(author({ signatureEn: '  ' }), 'en', context)).toBeNull();
+    expect(signatureFor(null, 'en', context)).toBeNull();
+  });
+
+  it('fills the agent placeholders from the public profile (M14-12)', () => {
+    const signed = author({
+      publicName: 'Lina',
+      jobTitleEn: 'Billing specialist',
+      jobTitleAr: 'أخصائية الفوترة',
+      publicPhone: '+966551234567',
+      signatureEn: '{{agent.name}}\n{{agent.title}} · {{brand.name}}\n{{agent.phone}}',
+      signatureAr: '{{agent.name}}\n{{agent.title}} · {{department.name}}',
+    });
+
+    expect(signatureFor(signed, 'en', context)).toBe(
+      'Lina\nBilling specialist · Helpdock\n+966551234567',
+    );
+    expect(signatureFor(signed, 'ar', context)).toBe('Lina\nأخصائية الفوترة · Billing');
+  });
+
+  it('drops the line of a placeholder the person left empty, and never prints the full name unasked', () => {
+    const signed = author({
+      signatureEn: '{{agent.name}}\n{{agent.title}} · {{brand.name}}\n{{agent.phone}}',
+    });
+
+    expect(signatureFor(signed, 'en', context)).toBe('Lina\nHelpdock');
+    expect(signatureFor(signed, 'en', context)).not.toContain('Haddad');
+  });
+});
+
+describe('the From name of an agent reply (M14-12)', () => {
+  it('shows the public name and never the full one', () => {
+    const named = { ...facts, author: { ...LINA, publicName: 'Lina H' } };
+    const message = renderDelivery({ delivery: deliveryRow(), facts: named, thread, templates });
+
+    expect(message.from?.name).toContain('Lina H');
+    expect(message.from?.name).not.toContain('Haddad');
+  });
+
+  it('falls back to the first name when no public name is set', () => {
+    const message = renderDelivery({ delivery: deliveryRow(), facts, thread, templates });
+
+    expect(message.from?.name).toContain('Lina');
+    expect(message.from?.name).not.toContain('Haddad');
   });
 });
 

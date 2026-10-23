@@ -103,6 +103,44 @@ describe('HttpTransport on a 401', () => {
   });
 });
 
+describe('a form body', () => {
+  it('is sent as it is, with no JSON content type, so the browser writes the multipart boundary', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: true }));
+    const form = new FormData();
+    form.append('photo', new File(['x'], 'me.png', { type: 'image/png' }));
+
+    await signedIn().request('POST', '/me/profile/photo', form);
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.body).toBe(form);
+    expect(init.headers).not.toHaveProperty('content-type');
+  });
+
+  it('is repeated whole after a refresh', async () => {
+    fetchMock
+      .mockResolvedValueOnce(tokenRefused())
+      .mockResolvedValueOnce(fresh())
+      .mockResolvedValueOnce(json({ ok: true }));
+    const form = new FormData();
+    form.append('photo', new File(['x'], 'me.png', { type: 'image/png' }));
+
+    await signedIn().request('POST', '/me/profile/photo', form);
+
+    const repeat = fetchMock.mock.calls[2]?.[1] as RequestInit | undefined;
+    expect(repeat?.body).toBe(form);
+  });
+
+  it('still sends everything else as JSON', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: true }));
+
+    await signedIn().request('PATCH', '/me/profile', { publicName: 'Lina' });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toMatchObject({ 'content-type': 'application/json' });
+    expect(init.body).toBe('{"publicName":"Lina"}');
+  });
+});
+
 describe('cancelling a request', () => {
   it("hands the caller's signal to fetch, and again to the repeat after a refresh", async () => {
     const controller = new AbortController();

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
+import { snoozeActionSchema, ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
 
 /**
  * Workflow rules (M3-03, M3-04, M3-05; REQUIREMENTS §4.3):
@@ -306,6 +306,14 @@ export const ruleActionSchema = z.discriminatedUnion('type', [
   /** Moves the ticket to the brand's Closed status, as an agent closing it would. */
   z.object({ type: z.literal('close') }),
   /**
+   * #368: snoozes with one of the Snooze menu's presets, which the server
+   * resolves against the ticket's department calendar when the rule runs — the
+   * same instant the menu would offer, and the same wake timer, activity and
+   * outbox event a person's snooze writes (DOMAIN-RULES §2.2). A closed ticket
+   * is refused, as a person's snooze is.
+   */
+  snoozeActionSchema,
+  /**
    * M7-07: the assistant reads the ticket and suggests or sets the fields
    * named, after the rule's transaction commits (the `ai.classify` job). Only
    * existing tags and departments; the result is written back to the run's
@@ -339,6 +347,7 @@ export const RULE_ACTION_TYPES = [
   'notify',
   'escalate',
   'close',
+  'snooze',
   'ai_triage',
 ] as const satisfies readonly RuleActionType[];
 

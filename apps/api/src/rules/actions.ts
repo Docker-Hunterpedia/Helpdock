@@ -11,6 +11,7 @@ import {
   type RuleAction,
   type RuleNotifyRecipient,
   ruleNotifyPayloadSchema,
+  type SnoozeAction,
 } from '@helpdock/schemas';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../assignment/assignment-events.js';
@@ -23,7 +24,10 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
-import { isSnoozedStatus, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
+import { transitionFor } from '../tickets/lifecycle/transitions.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
+import { enqueueTicketSnoozed } from '../tickets/snooze/snooze-events.js';
+import { isSnoozedStatus, snoozeValues, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
 import { applyStatusChange } from '../tickets/status-change.js';
 import { type ActivityActor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import {
@@ -88,6 +92,8 @@ export interface RuleActionDeps {
   readonly assignment: AssignmentRepository;
   readonly lifecycle: LifecycleMoments;
   readonly cannedResponses: CannedResponseRenderer;
+  /** Resolves the `snooze` action's preset against the ticket's department calendar (#368). */
+  readonly snooze: SnoozeResolver;
 }
 
 export interface RuleActionContext {
@@ -613,6 +619,92 @@ const moveDepartment = async (
   return CHANGED;
 };
 
+/**
+ * #368. Snoozes with one of the Snooze menu's presets, resolved against the
+ * ticket's department calendar as `SnoozeService` resolves the menu's. The
+ * columns, the `ticket.snoozed` activity and the `ticket.snoozed` outbox event
+ * are a person's snooze's, so the wake timer and the notification are too
+ * (DOMAIN-RULES §2.2: "Time-based rules and workflow actions use the same
+ * transitions"). `snoozed_by` stays null: a rule is nobody, so a wake tells
+ * the assignee, or nobody when there is none.
+ */
+const snooze = async (
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  state: RunState,
+  preset: SnoozeAction['preset'],
+): Promise<Effect> => {
+  const { ticket, status } = state;
+  const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.snooze');
+  if (outcome.kind === 'refused') {
+    return UNAVAILABLE;
+  }
+  const snoozed = await deps.rules.statusByKey(context.tx, 'snoozed');
+  if (snoozed === undefined) {
+    return UNAVAILABLE;
+  }
+
+  const until = await deps.snooze.at(
+    context.tx,
+    context.brandId,
+    ticket.departmentId,
+    preset,
+    context.now,
+  );
+  // A scheduled rule that matched a ticket it has already put away to the same
+  // minute writes nothing, so it never sets off another rule.
+  if (isSnoozedStatus(status) && ticket.snoozedUntil?.getTime() === until.getTime()) {
+    return UNCHANGED;
+  }
+
+  const updated = await deps.tickets.updateTicket(
+    context.tx,
+    ticket.id,
+    snoozeValues({ ticket, snoozedStatusId: snoozed.id, until, snoozedBy: null }),
+  );
+  /* c8 ignore next 3 -- the system transaction read the row a moment ago. */
+  if (updated === undefined) {
+    throw new Error('The ticket a rule was acting on disappeared');
+  }
+  const actor = actorOf(context);
+  const base = {
+    brandId: context.brandId,
+    ticketId: updated.id,
+    departmentId: updated.departmentId,
+    actor,
+  };
+  // A person's snooze writes this beside `ticket.snoozed` when the status
+  // moved; the activity writer turns it into the status webhook.
+  if (snoozed.id !== status.id) {
+    await writeTicketActivity(context.tx, {
+      ...base,
+      action: 'ticket.status.changed',
+      from: { statusId: status.id },
+      to: { statusId: snoozed.id },
+    });
+  }
+  await writeTicketActivity(context.tx, {
+    ...base,
+    action: 'ticket.snoozed',
+    from: { snoozedUntil: ticket.snoozedUntil?.toISOString() ?? null },
+    to: {
+      snoozedUntil: updated.snoozedUntil?.toISOString() ?? null,
+      resumeStatusId: updated.snoozeResumeStatusId,
+    },
+  });
+  await enqueueTicketSnoozed(context.tx, context.brandId, {
+    ticketId: updated.id,
+    departmentId: updated.departmentId,
+    version: updated.snoozeVersion,
+    snoozedUntil: until.toISOString(),
+  });
+
+  state.ticket = updated;
+  state.status = snoozed;
+  state.changes.add('status');
+  return CHANGED;
+};
+
 const runOne = async (
   deps: RuleActionDeps,
   context: RuleActionContext,
@@ -636,6 +728,8 @@ const runOne = async (
       );
     case 'close':
       return moveStatus(deps, context, state, await deps.rules.statusByKey(context.tx, 'closed'));
+    case 'snooze':
+      return snooze(deps, context, state, action.preset);
     case 'set_priority':
       if (state.ticket.priority === action.priority) {
         return UNCHANGED;

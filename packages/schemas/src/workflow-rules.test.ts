@@ -87,6 +87,17 @@ describe('ruleActionSchema', () => {
     });
   });
 
+  it('takes the snooze action as one of the Snooze menu presets (#368)', () => {
+    expect(ruleActionSchema.parse({ type: 'snooze', preset: 'next_business_day' })).toEqual({
+      type: 'snooze',
+      preset: 'next_business_day',
+    });
+    expect(ruleActionSchema.safeParse({ type: 'snooze', preset: 'tomorrow_morning' }).success).toBe(
+      false,
+    );
+    expect(ruleActionSchema.safeParse({ type: 'snooze' }).success).toBe(false);
+  });
+
   it('refuses an action that does not exist, which is how v1 keeps webhooks and AI out', () => {
     expect(ruleActionSchema.safeParse({ type: 'call_webhook', url: 'https://x' }).success).toBe(
       false,

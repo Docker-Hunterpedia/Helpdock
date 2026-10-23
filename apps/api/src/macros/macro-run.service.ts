@@ -1,5 +1,10 @@
 import { tickets } from '@helpdock/db';
-import type { MacroRunRequest, MacroRunResponse, TicketMessage } from '@helpdock/schemas';
+import type {
+  MacroRunRequest,
+  MacroRunResponse,
+  SnoozePresetKey,
+  TicketMessage,
+} from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
@@ -9,14 +14,18 @@ import type { Principal } from '../auth/principal.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { getTx } from '../context/request-context.js';
 import { replaceTicketTags, tagsOfTicket } from '../ticketing/ticket-tags.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import { activityActorFor, writeTicketActivity } from '../tickets/ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import type { ActivityBundle, TicketsService } from '../tickets/tickets.service.js';
-import { actionsBelongTo, planMacro, tagsAfter } from './macro-actions.js';
+import { actionsBelongTo, type MacroPlan, planMacro, tagsAfter } from './macro-actions.js';
 import { type MacroActor, seesMacro, usableIn } from './macro-rules.js';
 import type { MacrosRepository } from './macros.repository.js';
 import { readRenderTicket } from './macros.repository.js';
 import { actionsOf } from './macros.service.js';
+
+/** The update a macro's actions come to: the planner's fields, plus the snooze's resolved instant. */
+type MacroRunFields = MacroPlan['fields'] & { readonly snoozedUntil?: string };
 
 /**
  * A macro or canned response applied to a ticket (M3-06).
@@ -38,11 +47,18 @@ export class MacroRunService {
   readonly #macros: MacrosRepository;
   readonly #tickets: TicketsService;
   readonly #assignment: AssignmentRepository;
+  readonly #snooze: SnoozeResolver;
 
-  constructor(macros: MacrosRepository, tickets: TicketsService, assignment: AssignmentRepository) {
+  constructor(
+    macros: MacrosRepository,
+    tickets: TicketsService,
+    assignment: AssignmentRepository,
+    snooze: SnoozeResolver,
+  ) {
     this.#macros = macros;
     this.#tickets = tickets;
     this.#assignment = assignment;
+    this.#snooze = snooze;
   }
 
   async run(
@@ -84,10 +100,19 @@ export class MacroRunService {
     const bundle: ActivityBundle = { from: {}, to: {} };
     const plan = planMacro(request.actions, actor.userId);
 
+    // #368. The `snooze` action's preset becomes an instant here, against the
+    // ticket's department calendar, and the rest is the one update's work —
+    // activity, outbox event, wake timer, `snoozed_by` — exactly as the
+    // sender's own snooze through the same method.
+    const fields =
+      plan.snoozePreset === undefined
+        ? plan.fields
+        : await this.#withSnooze(brandId, targetId, plan.fields, plan.snoozePreset);
+
     const departmentId =
-      Object.keys(plan.fields).length === 0
+      Object.keys(fields).length === 0
         ? (await readRenderTicket(tx, targetId))?.departmentId
-        : (await this.#tickets.update(brandId, principal, targetId, plan.fields, { bundle }))
+        : (await this.#tickets.update(brandId, principal, targetId, fields, { bundle }))
             .departmentId;
     /* c8 ignore next 3 -- the ticket was read above, inside this transaction. */
     if (departmentId === undefined) {
@@ -118,6 +143,27 @@ export class MacroRunService {
     });
 
     return { message };
+  }
+
+  /**
+   * The ticket the actions land on, for the instant's calendar: the same
+   * read the update itself will make, so a ticket that is not there refuses
+   * before anything is resolved.
+   */
+  async #withSnooze(
+    brandId: string,
+    ticketId: string,
+    fields: MacroPlan['fields'],
+    preset: SnoozePresetKey,
+  ): Promise<MacroRunFields> {
+    const tx = getTx();
+    const target = await readRenderTicket(tx, ticketId);
+    if (target === undefined) {
+      throw new NotFoundException('No such ticket');
+    }
+    const until = await this.#snooze.at(tx, brandId, target.departmentId, preset, new Date());
+
+    return { ...fields, snoozedUntil: until.toISOString() };
   }
 
   async #applyTags(

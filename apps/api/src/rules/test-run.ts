@@ -82,6 +82,22 @@ const previewOne = async (
       return moveStatusTo(tx, deps, sim, (await deps.rules.statusByKey(tx, 'escalated'))?.id);
     case 'close':
       return moveStatusTo(tx, deps, sim, (await deps.rules.statusByKey(tx, 'closed'))?.id);
+    case 'snooze': {
+      // #368. A closed ticket cannot be snoozed, and a brand without the
+      // Snoozed status has nothing to move to; otherwise the move stands,
+      // at whatever instant the run resolves the preset to.
+      const current = await deps.rules.status(tx, sim.facts.statusId);
+      const snoozed = await deps.rules.statusByKey(tx, 'snoozed');
+      if (current === undefined || current.systemState === 'closed' || snoozed === undefined) {
+        return UNAVAILABLE;
+      }
+      if (snoozed.id !== sim.facts.statusId) {
+        sim.facts = { ...sim.facts, statusId: snoozed.id };
+        sim.changes.add('status');
+      }
+      // Already snoozed: the wake time moves all the same.
+      return CHANGED;
+    }
     case 'set_priority':
       if (facts.priority === action.priority) {
         return UNCHANGED;

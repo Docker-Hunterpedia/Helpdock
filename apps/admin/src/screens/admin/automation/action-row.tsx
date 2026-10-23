@@ -6,6 +6,7 @@ import {
   type RuleAction,
   type RuleActionType,
   type RuleBuilderOptions,
+  snoozePresetKeySchema,
   ticketPrioritySchema,
 } from '@helpdock/schemas';
 import { Box, Checkbox, IconButton, TextField, Typography } from '@mui/material';
@@ -41,6 +42,7 @@ const UI_TYPES = [
   'notify',
   'escalate',
   'close',
+  'snooze',
   'ai_triage',
 ] as const;
 type UiType = (typeof UI_TYPES)[number];
@@ -293,6 +295,25 @@ export function ActionRow({
               sx={{ flex: 1, minWidth: 160 }}
             />
           </>
+        );
+      case 'snooze':
+        return (
+          <Choice
+            label={t('rules:builder.snoozeFor')}
+            value={action.preset}
+            onChange={(value) => {
+              const preset = snoozePresetKeySchema.safeParse(value);
+              if (preset.success) {
+                onChange({ ...action, preset: preset.data });
+              }
+            }}
+          >
+            {snoozePresetKeySchema.options.map((preset) => (
+              <option key={preset} value={preset}>
+                {t(`tickets:snooze.preset.${preset}`)}
+              </option>
+            ))}
+          </Choice>
         );
       case 'ai_triage':
         return (

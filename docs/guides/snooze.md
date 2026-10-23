@@ -89,7 +89,15 @@ answers the menu's four instants, the department's name and its zone. It needs
 The list filter is `snoozed=exclude|only|include` on
 `GET /api/brands/:brandId/tickets` (default `exclude`) and on `GET /api/v1/tickets` (default `include`).
 
-A rule, a macro or an import mapping cannot target the Snoozed status: the api refuses it at save, and the editors do not offer it, because it needs a wake time.
+A rule or a macro cannot target the Snoozed status as a bare status: the api
+refuses it at save, and the editors do not offer it. Both can snooze on their
+own, though: the **Snooze** action (#368) picks one of the menu's four times —
+in 1 hour, in 4 hours, next business day, next week — and the server works the
+instant out when the rule runs or the macro is applied, against the ticket's
+department calendar, exactly as the menu above does. A rule's snooze is
+recorded as nobody (`snoozedBy` is null, so a wake tells the assignee); a
+macro's snooze is the person who applied it. An import mapping still cannot
+target the Snoozed status at all.
 
 ## How it works
 
@@ -115,6 +123,6 @@ A rule, a macro or an import mapping cannot target the Snoozed status: the api r
 
 - Snoozing from the bulk bar and from the command palette arrives with M14-04
   and M14-05.
-- There is no "snooze" action for rules or macros in 1.1.
-- A brand with no business hours set gets 09:00 in the agent's time zone for the
-  calendar presets.
+- A brand with no business hours set gets 09:00 in the agent's time zone for
+  the calendar presets; a rule's or a macro's snooze falls back to the brand's
+  own time zone, because a rule runs as nobody.

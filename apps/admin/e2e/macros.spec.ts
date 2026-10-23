@@ -94,6 +94,46 @@ test.describe('the Macros tab', () => {
     await expect(page.getByRole('alert')).toHaveText(t('macros:editor.problems.actionIncomplete'));
     expect(await violations(page)).toEqual([]);
   });
+
+  test('snoozes with the Snooze menu’s times, never the bare Snoozed status (#368)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openMacros(page, locale);
+    await page.getByRole('button', { name: /Close as duplicate/ }).click();
+
+    // The macro already holds two actions, so the new row is the third. The
+    // editor's selects are MUI listboxes, not native ones.
+    await page.getByRole('button', { name: t('macros:actions.add') }).click();
+    const pick = async (name: string, label: string): Promise<void> => {
+      await page.getByRole('combobox', { name, exact: true }).click();
+      await page.getByRole('option', { name: label, exact: true }).click();
+    };
+    await pick(t('macros:actions.type', { position: 3 }), t('macros:actions.types.snooze'));
+
+    // The four items of the Snooze menu, which the server resolves. The open
+    // listbox is the only one mounted, so its options are read directly.
+    await page
+      .getByRole('combobox', { name: t('macros:actions.value.snooze', { position: 3 }) })
+      .click();
+    await expect(page.getByRole('option')).toHaveCount(4);
+    await page
+      .getByRole('option', { name: t('tickets:snooze.preset.in_1_hour'), exact: true })
+      .click();
+
+    // Set status still cannot pick the Snoozed status.
+    await pick(t('macros:actions.type', { position: 3 }), t('macros:actions.types.set_status'));
+    await page
+      .getByRole('combobox', { name: t('macros:actions.value.set_status', { position: 3 }) })
+      .click();
+    const snoozedName = locale === 'ar' ? 'مؤجَّلة' : 'Snoozed';
+    await expect(page.getByRole('option').filter({ hasText: snoozedName })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    expect(await violations(page)).toEqual([]);
+  });
 });
 
 test.describe('the composer’s macro picker', () => {

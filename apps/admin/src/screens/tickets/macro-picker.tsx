@@ -326,6 +326,8 @@ export const lineText = (line: StagedLine, t: ReturnType<typeof useT>): string =
       return t('macros:staged.priority', { from: line.from, to: line.to });
     case 'tag':
       return t(line.add ? 'macros:staged.tagAdd' : 'macros:staged.tagRemove', { name: line.name });
+    case 'snooze':
+      return t('macros:staged.snooze', { preset: t(`tickets:snooze.preset.${line.preset}`) });
     case 'assignee':
       return line.to === null
         ? t('macros:staged.unassign')

@@ -148,6 +148,7 @@
     "notify": "إشعار",
     "escalate": "تصعيد",
     "close": "إغلاق",
+    "snooze": "تأجيل",
     "ai_triage": "الفرز بالذكاء الاصطناعي"
   },
   "assignTargets": {
@@ -208,6 +209,7 @@
       "notify": "إشعار {{who}}",
       "escalate": "تصعيد",
       "close": "إغلاق",
+      "snooze": "تأجيل حتى {{preset}}",
       "ai_triage": {
         "suggest": "يقترح الفرز بالذكاء الاصطناعي {{fields}}",
         "apply": "يضبط الفرز بالذكاء الاصطناعي {{fields}}"
@@ -290,6 +292,7 @@
     "note": "الملاحظة",
     "notifyWho": "إشعار",
     "notifyMessage": "الرسالة (اختيارية)",
+    "snoozeFor": "وقت الاستيقاظ",
     "incomplete": "أكمل كل الشروط والإجراءات قبل الحفظ.",
     "cancel": "إلغاء",
     "save": "حفظ القاعدة",

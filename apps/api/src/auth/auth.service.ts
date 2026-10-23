@@ -1091,6 +1091,11 @@ export class AuthService {
   ): Promise<void> {
     await this.#spendStepUp(user.id);
 
+    // The recovery code below is the proof and is spent and verified whatever
+    // the caller named: the schema makes the bare code a proof of its own, so
+    // this branch is not a gate on authentication — the password is an
+    // additional half, and the shape that names it is refused unless it is
+    // right. (CodeQL flags the user-controlled condition here; see the PR.)
     if (currentPassword !== undefined) {
       if (user.passwordHash === null) {
         throw new AuthFailure('invalid-credentials');

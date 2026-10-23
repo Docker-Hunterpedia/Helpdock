@@ -55,6 +55,7 @@ import { paragraphsFrom } from '../ticketing/template-render.js';
 import type { TemplatesService } from '../ticketing/templates.service.js';
 import { replaceTicketTags, tagsOfTicket, tagsOfTickets } from '../ticketing/ticket-tags.js';
 import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
+import { refuseCloseForMissingFields } from './close-requirements.js';
 import { InvalidCursorError } from './cursor.js';
 import { importedTicketSources, ticketWithSource } from './imported-ticket-sources.js';
 import type { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
@@ -560,6 +561,22 @@ export class TicketsService {
       input.statusId === undefined
         ? undefined
         : await this.#changeStatus(tx, ticket, status, input.statusId, now);
+
+    // ---- M14-17 ------------------------------------------------------------
+    // A close by a person — staff or an API key (owner decision D-30) — is
+    // refused while a required-to-close field is still empty, before anything
+    // is written. The values judged are the ones this request would leave
+    // behind, so a patch that fills the field and closes in one body goes
+    // through. The bulk edit closes through this method, so its preview
+    // reports the refusal per ticket with the same code.
+    if (statusResult?.closing === true) {
+      // `values.custom` is an entry of a `Record<string, unknown>`, so the
+      // fallback reads as `{}` to the checker; both spellings are the same object.
+      const custom =
+        values.custom === undefined ? ticket.custom : (values.custom as Record<string, unknown>);
+      await refuseCloseForMissingFields(tx, custom);
+    }
+    // ------------------------------------------------------------------------
 
     // ---- M14-02 ------------------------------------------------------------
     if (input.snoozedUntil !== undefined && input.statusId !== undefined) {

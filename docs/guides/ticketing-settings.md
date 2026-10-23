@@ -390,6 +390,7 @@ the wrong field must not become the number one.
 | Type | Fixed while rows carry a value — see below. |
 | Options | Only for Select and Multi-select. One choice per row, reordered with the arrow buttons or with `↑`/`↓` inside the row. The order is the order the menu offers. |
 | Required | Enforced when a ticket is **created**, not when one is patched: a `PATCH` that names two fields says nothing about the other eight. |
+| Required to close | Ticket fields only. A person — an agent, or an API key acting for one — cannot close a ticket while the field is empty. See below. |
 | Placement | Which target the field hangs off. Fixed after creation. |
 | Visible to agents | Off keeps the field for administrators and rules. It **hides** the field; it does not protect it — the value sits in the same jsonb column either way. A hidden field is also not offered as a list filter to Agents, and the api refuses it from them (see [Filtering by a custom field](tickets.md#filtering-by-a-custom-field)). |
 | Pin on rows and the ticket header | Only for a **ticket Select** that Agents can see (M14-16). Its value is shown as a neutral chip on every list row and in the ticket header. **One field per brand:** pinning another lets the first go, and the table marks the pinned one. A pinned field cannot be hidden from Agents or retyped until it is unpinned (`400`). |
@@ -427,6 +428,28 @@ inside a request, for a change somebody may undo in a minute; reads filter by
 the definitions instead, so an orphaned key is invisible everywhere and a
 definition re-created with the same key brings its values back. The confirmation
 says how many rows are affected.
+
+### Required to close
+
+**Required to close** (M14-17) turns a ticket field into a gate on the Close
+button. A close **by a person** — an agent in the workspace, a macro, a bulk
+edit, or an API key acting for one — is refused with `fields-required-to-close`
+(409) while the field is empty, and the refusal names the keys that are still
+empty; the workspace shows them by label and opens the fields for filling. A
+checkbox counts as empty until it is ticked, and a blank text or an empty
+multi-select count too — the gate is something a person acts on. A ticket that
+predates the flag follows the same rule; there is no grandfathering.
+
+The system closes anyway. A workflow rule, a time-based rule, a merge and a
+mark as spam are never stopped by the gate, and their close records
+`closed without <field>` in the activity log, because a rule that silently
+stops closing tickets is worse than a gap the report can show. A bulk edit
+reports the refusal per ticket in its preview, with the same code, and closes
+the tickets it can.
+
+Turning the flag off lets tickets close again immediately; nothing is
+backfilled. Empty means empty at the moment of the close, so a request that
+fills the field and closes in one body goes through.
 
 ## Ticket templates
 

@@ -756,6 +756,88 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     await disableAll();
   });
 
+  it('closes through an empty required-to-close field and records what it went without (M14-17)', async () => {
+    const gate = await call<{ key: string }>('POST', `${brandPath()}/custom-fields`, ada, {
+      target: 'ticket',
+      key: 'rule_closure_code',
+      label: 'Rule closure code',
+      type: 'text',
+      requiredToClose: true,
+    });
+    expect(gate.status).toBe(201);
+
+    try {
+      const rule = await saveRule({
+        name: 'Close stale awaiting tickets',
+        kind: 'scheduled',
+        intervalMinutes: 15,
+        conditions: {
+          match: 'all',
+          groups: [
+            {
+              match: 'all',
+              conditions: [
+                { field: 'status', operator: 'is', values: [awaitingStatus] },
+                {
+                  field: 'time_in_status',
+                  operator: 'more_than',
+                  duration: { amount: 1, unit: 'days' },
+                },
+              ],
+            },
+          ],
+        },
+        actions: [{ type: 'close' }],
+      });
+
+      const ticket = await createTicket('Waiting on the customer');
+      await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+        statusId: awaitingStatus,
+      });
+      await drain();
+      await inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ statusChangedAt: sql`now() - make_interval(days => 3)` })
+          .where(eq(tickets.id, ticket.id)),
+      );
+      const tick = () =>
+        inBrand((tx) => runScheduledRules(engine(), tx, { brandId: seeded.brandId }));
+      await inBrand((tx) =>
+        tx.execute(sql`UPDATE workflow_rules SET last_scheduled_run_at = NULL`),
+      );
+
+      // The refusal is a person's; a rule closes and the activity says what it went without.
+      expect(await tick()).toEqual({ applied: 1, failed: 0 });
+      expect((await ticketRow(ticket.id))?.closedAt).not.toBeNull();
+
+      const [closed] = await inBrand((tx) =>
+        tx
+          .select({ to: ticketActivity.to })
+          .from(ticketActivity)
+          .where(
+            and(eq(ticketActivity.ticketId, ticket.id), eq(ticketActivity.action, 'ticket.closed')),
+          ),
+      );
+      expect(closed?.to).toMatchObject({
+        closedWithout: expect.arrayContaining([gate.body.key]),
+      });
+
+      await disableAll();
+      await inBrand((tx) => tx.execute(sql`DELETE FROM workflow_runs WHERE rule_id = ${rule.id}`));
+    } finally {
+      const list = await call<{ fields: { id: string; key: string }[] }>(
+        'GET',
+        `${brandPath()}/custom-fields?target=ticket`,
+        ada,
+      );
+      const id = list.body.fields.find((field) => field.key === 'rule_closure_code')?.id;
+      if (id !== undefined) {
+        await call('DELETE', `${brandPath()}/custom-fields/${id}`, ada);
+      }
+    }
+  });
+
   it('waits from import arrival before time-based actions, including broad candidate scans and delta timestamps', async () => {
     const rule = await saveRule({
       name: 'Reminder for old pending history',

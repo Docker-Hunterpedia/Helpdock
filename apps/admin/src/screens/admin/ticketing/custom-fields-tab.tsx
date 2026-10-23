@@ -87,7 +87,11 @@ export function CustomFieldsTab(): ReactNode {
 
   const create = useTicketingAction(
     (draft: CustomFieldDraft) =>
-      api.createCustomField(brand.id, { ...draft, options: [...draft.options] }),
+      api.createCustomField(brand.id, {
+        ...draft,
+        options: [...draft.options],
+        requiredToClose: draft.requiredToClose ?? false,
+      }),
     (draft) => t('ticketing:toast.fieldCreated', { name: draft.label }),
     refresh,
     report,
@@ -101,6 +105,7 @@ export function CustomFieldsTab(): ReactNode {
         type: input.draft.type,
         options: [...input.draft.options],
         required: input.draft.required,
+        requiredToClose: input.draft.requiredToClose,
         agentVisible: input.draft.agentVisible,
         // Sent only when it changes, so an edit of the label never unpins a field.
         ...(input.draft.pinned === input.field.pinned ? {} : { pinned: input.draft.pinned }),

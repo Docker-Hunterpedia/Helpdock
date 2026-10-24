@@ -50,10 +50,41 @@ the roadmap, and the recorded AI evaluation. No invented customers, figures,
 testimonials or logos. The roadmap section says that the 1.x releases are
 proposed and not started, as the PRD does; update both together.
 
-When a release changes what the site describes (a version number, the install
-commands, the evaluation figures, the roadmap), change both pages in the same
-pull request. The install commands are copied from the
-[install guide](install.md) and pinned to a release tag.
+When a change affects what the site describes (the install commands, the
+evaluation figures, the roadmap), change both pages in the same pull request.
+The install commands are copied from the [install guide](install.md); their
+version is stamped, see below.
+
+## The release number
+
+Nobody edits the version by hand. Both pages carry a real version, so a local
+preview and the page without script are correct, and mark it with
+`<meta name="helpdock-release" content="1.0.1">`, the single marker of the
+version the files currently hold. At deploy,
+[`scripts/site/stamp-release.mjs`](../../scripts/site/stamp-release.mjs)
+`<version> [site-dir]` rewrites every occurrence of that version in every
+`site/**/*.html` that has the meta: the `v` tags and release URLs, the image,
+the SBOM name, `HELPDOCK_VERSION`, `--branch`, the JSON-LD
+`softwareVersion` and `downloadUrl`, aria-labels and the Arabic `<bdi>` spans.
+It accepts only plain `x.y.z`, leaves other versions (`1.0.10`, `11.0.1`,
+`1.0.1-rc.1`) alone, does nothing when the files are already current, and exits
+non-zero when no page has the meta.
+
+The Pages workflow asks GitHub for the latest published non-prerelease Release
+and stamps it into the checked-out files before upload; if the lookup fails the
+build fails rather than publish a wrong version. `release.yml` dispatches the
+Pages workflow after it creates a stable Release (a Release made with
+`GITHUB_TOKEN` does not fire `release` events), so a release updates both pages
+without a site pull request. The committed version only moves when someone runs
+the script and commits, which is optional.
+
+Two rules follow for what you write on the pages:
+
+- Release prose must be true for any version. Say "read the release notes",
+  not what 1.0.1 fixed, and do not write "upgrading from X" notes.
+- A version that is a historical fact (the 1.0 release video, "before 1.0.0")
+  is still matched if it equals the stamped version. Keep such text on a
+  different version than the one the files hold, or write it without a number.
 
 ## Images
 
@@ -84,9 +115,10 @@ repository.
 
 [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) uploads `site/`
 with `actions/upload-pages-artifact` and publishes it with `actions/deploy-pages`
-on every push to `main` that changes `site/**` or the workflow, and on demand
-from **Actions › Pages › Run workflow**. Its token can only write Pages and
-request an OIDC token; the build job reads the repository and nothing else.
+on every push to `main` that changes `site/**`, `scripts/site/**` or the
+workflow, on demand from **Actions › Pages › Run workflow**, and after each
+release. Its token can only write Pages and request an OIDC token; the build
+job reads the repository and the Releases API and nothing else.
 
 A pull request that changes only `site/` starts none of the test suites, the
 image build or Semgrep: CI's path classifier,

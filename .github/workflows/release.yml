@@ -50,6 +50,8 @@ jobs:
       # A short-lived GitHub OIDC token is exchanged for the Fulcio signing
       # certificate. No signing key or signing secret is stored.
       id-token: write
+      # Dispatches the Pages workflow once the Release exists.
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -254,3 +256,12 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
           files: helpdock-${{ steps.version.outputs.version }}.cdx.json
           fail_on_unmatched_files: true
+
+      # A Release made with `GITHUB_TOKEN` does not fire `release` events, but
+      # `workflow_dispatch` is allowed. Only when this run created a stable
+      # Release; the signing-only path leaves the site as it is.
+      - name: Refresh the website
+        if: steps.existing.outputs.exists != 'true' && steps.version.outputs.prerelease != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

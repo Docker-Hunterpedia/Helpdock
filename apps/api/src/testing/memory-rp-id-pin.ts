@@ -9,7 +9,7 @@ export class MemoryRpIdPin implements RpIdPin {
     this.pinned = rpId === undefined ? null : { rpId, pinnedAt: new Date() };
   }
 
-  read(): Promise<PinnedRpId | null> {
+  read(_within?: DbTransaction): Promise<PinnedRpId | null> {
     return Promise.resolve(this.pinned);
   }
 

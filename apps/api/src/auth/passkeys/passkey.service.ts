@@ -138,12 +138,12 @@ export class PasskeyService {
   }
 
   /** Settings › Authentication: whether passkeys work, which RP ID they were made for, how many. */
-  async installStatus(): Promise<InstallPasskeys> {
-    const status = await this.#parts.webauthn.status();
-    const totals = await this.#parts.passkeys.totals();
+  async installStatus(tx?: DbTransaction): Promise<InstallPasskeys> {
+    const status = await this.#parts.webauthn.status(tx);
+    const totals = await this.#parts.passkeys.totals(tx);
     const blockers =
       status.state === 'paused'
-        ? await this.#moveBlockers(await this.#parts.passkeys.holders())
+        ? await this.#moveBlockers(await this.#parts.passkeys.holders(tx), tx)
         : { breakGlassAccounts: 0, secondFactorAccounts: 0 };
     const pinned = status.state === 'unavailable' ? null : status.pinned;
 
@@ -172,9 +172,12 @@ export class PasskeyService {
    * break-glass account under SSO enforcement, or leave an account that must have
    * a second factor with none: add an authenticator app first.
    */
-  async moveToCurrentHost(actorId: string): Promise<InstallPasskeysMoved> {
+  async moveToCurrentHost(
+    actorId: string,
+    requestTx?: DbTransaction,
+  ): Promise<InstallPasskeysMoved> {
     const { webauthn, passkeys, auth } = this.#parts;
-    const status = await webauthn.status();
+    const status = await webauthn.status(requestTx);
     if (status.state !== 'paused') {
       throw new PasskeysFailure('not-paused');
     }

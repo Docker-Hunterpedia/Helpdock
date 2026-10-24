@@ -126,12 +126,12 @@ class FakeRows {
   markUsed = vi.fn(() => Promise.resolve());
   /** Who `holders` reports as also having an authenticator app. */
   withApp = new Set<string>();
-  totals = () =>
+  totals = (_tx?: DbTransaction) =>
     Promise.resolve({
       passkeys: this.rows.length,
       holders: new Set(this.rows.map((row) => row.userId)).size,
     });
-  holders = () => {
+  holders = (_tx?: DbTransaction) => {
     const counts = new Map<string, number>();
     for (const row of this.rows) counts.set(row.userId, (counts.get(row.userId) ?? 0) + 1);
     return Promise.resolve(
@@ -767,6 +767,20 @@ describe('installStatus', () => {
     });
   });
 
+  it('reads the pin, the totals and the holders on the request transaction, not the pool', async () => {
+    pin.pinned = { rpId: 'admin.example.com', pinnedAt: null };
+    const requestTx = {} as DbTransaction;
+    const readPin = vi.spyOn(pin, 'read');
+    const totals = vi.spyOn(rows, 'totals');
+    const holders = vi.spyOn(rows, 'holders');
+
+    await service.installStatus(requestTx);
+
+    expect(readPin).toHaveBeenCalledWith(requestTx);
+    expect(totals).toHaveBeenCalledWith(requestTx);
+    expect(holders).toHaveBeenCalledWith(requestTx);
+  });
+
   it('reports a pin the environment holds as locked', async () => {
     pin.locked = true;
 
@@ -783,6 +797,16 @@ describe('moveToCurrentHost', () => {
   const moved = () => {
     pin.pinned = { rpId: 'admin.example.com', pinnedAt: null };
   };
+
+  it('reads the pin on the request transaction it is given', async () => {
+    moved();
+    const requestTx = {} as DbTransaction;
+    const readPin = vi.spyOn(pin, 'read');
+
+    await service.moveToCurrentHost(adminId, requestTx);
+
+    expect(readPin).toHaveBeenCalledWith(requestTx);
+  });
 
   it('removes every passkey, re-pins, audits and emails each holder once', async () => {
     moved();

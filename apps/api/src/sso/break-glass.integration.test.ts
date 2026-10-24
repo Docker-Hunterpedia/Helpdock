@@ -516,4 +516,99 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
       expect(response.statusCode).toBe(401);
     });
   });
+
+  describe('replacing the authenticator app with a recovery code (#373)', () => {
+    /** Signs in while enforcement is off, so the token exists to be used once it is on. */
+    const tokenFor = async (account: Account): Promise<string> => {
+      await setPolicy({ enforced: false });
+      const { body } = await signIn(account.email);
+      const answered = await answerTotp(body.challengeId);
+      expect(answered.statusCode).toBe(201);
+      return (answered.json() as { accessToken: string }).accessToken;
+    };
+
+    const startWith = (accessToken: string, proof: Json) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/me/totp/rotate/start',
+        headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+        payload: JSON.stringify(proof),
+      });
+
+    const codesLeft = async (id: string): Promise<number> => {
+      const [row] = await runtime.db
+        .select({ hashed: users.recoveryCodesHashed })
+        .from(users)
+        .where(eq(users.id, id));
+      return row?.hashed.length ?? 0;
+    };
+
+    it('refuses a break-glass admin a recovery code under enforcement, and spends nothing', async () => {
+      const account = await makeAccount({ installAdmin: true, totp: true, passkey: false });
+      const token = await tokenFor(account);
+      await setPolicy({ enforced: true, breakGlass: [account.id] });
+
+      const bare = await startWith(token, { recoveryCode: account.recoveryCodes[0] });
+      const paired = await startWith(token, {
+        recoveryCode: account.recoveryCodes[0],
+        currentPassword: PASSWORD,
+      });
+
+      expect(bare.statusCode).toBe(403);
+      expect(authOf(bare).code).toBe('recovery-code-not-allowed');
+      expect(authOf(paired).code).toBe('recovery-code-not-allowed');
+      expect(await codesLeft(account.id)).toBe(account.recoveryCodes.length);
+    });
+
+    it('refuses an eligible install admin who is not listed, and lets its app code through', async () => {
+      const account = await makeAccount({ installAdmin: true, totp: true, passkey: false });
+      const token = await tokenFor(account);
+      await setPolicy({ enforced: true, breakGlass: [] });
+
+      const refused = await startWith(token, { recoveryCode: account.recoveryCodes[0] });
+      const allowed = await startWith(token, { code: await totpCode() });
+
+      expect(authOf(refused).code).toBe('recovery-code-not-allowed');
+      expect(allowed.statusCode).toBe(201);
+    });
+
+    it('lets an ordinary account use a recovery code under enforcement', async () => {
+      const account = await makeAccount({ installAdmin: false, totp: true, passkey: false });
+      const token = await tokenFor(account);
+      await setPolicy({ enforced: true, breakGlass: [] });
+
+      const response = await startWith(token, { recoveryCode: account.recoveryCodes[0] });
+
+      expect(response.statusCode).toBe(201);
+      expect(await codesLeft(account.id)).toBe(account.recoveryCodes.length - 1);
+    });
+
+    it('lets a break-glass admin use a recovery code while enforcement is off', async () => {
+      const account = await makeAccount({ installAdmin: true, totp: true, passkey: false });
+      const token = await tokenFor(account);
+      await setPolicy({ enforced: false, breakGlass: [account.id] });
+
+      const response = await startWith(token, { recoveryCode: account.recoveryCodes[0] });
+
+      expect(response.statusCode).toBe(201);
+    });
+
+    it('tells the profile to hide the option for a break-glass account only while enforced', async () => {
+      const account = await makeAccount({ installAdmin: true, totp: true, passkey: false });
+      const token = await tokenFor(account);
+      const profile = async () =>
+        (
+          await app.inject({
+            method: 'GET',
+            url: '/api/me/profile',
+            headers: { authorization: `Bearer ${token}` },
+          })
+        ).json() as { recoveryCodeProofAllowed: boolean };
+
+      await setPolicy({ enforced: false, breakGlass: [account.id] });
+      expect((await profile()).recoveryCodeProofAllowed).toBe(true);
+      await setPolicy({ enforced: true, breakGlass: [account.id] });
+      expect((await profile()).recoveryCodeProofAllowed).toBe(false);
+    });
+  });
 });

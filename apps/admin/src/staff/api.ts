@@ -9,6 +9,8 @@ import type {
   StaffRefusal,
   StaffSessionList,
   StaffUpdateRequest,
+  TotpRotationProof,
+  TotpRotationStart,
 } from '@helpdock/schemas';
 
 /**
@@ -40,6 +42,10 @@ export interface StaffApi {
   removePhoto(): Promise<Profile>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
   disableTotp(code: string): Promise<void>;
+  /** Step 1 of replacing the authenticator (#373): a step-up proof stages a new secret. */
+  startTotpRotation(proof: TotpRotationProof): Promise<TotpRotationStart>;
+  /** Step 2: a code from the new app swaps the secret in. */
+  confirmTotpRotation(rotationId: string, code: string): Promise<void>;
   regenerateRecoveryCodes(code: string): Promise<RecoveryCodes>;
 
   sessions(): Promise<StaffSessionList>;

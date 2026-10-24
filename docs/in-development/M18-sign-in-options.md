@@ -619,8 +619,9 @@ Backlog or never:
     factor is the app can neither turn it off nor enrol over it. Workaround: add
     a passkey, turn the app off with a code, enrol the new app; with a lost
     phone only recovery codes remain. The removed path was the vulnerability and
-    no screen offered it. An atomic "Replace authenticator" (current code or
-    recovery code, plus the new code) is the follow-up issue.
+    no screen offered it. **Closed by #373**: the security page's Replace app
+    swaps the secret in one confirmed step (step-up, then a code from the new
+    app); see [DOMAIN-RULES §12.1 rule 7](../planning/DOMAIN-RULES.md).
 - [x] **M18-04** Passwordless sign-in ([#278](https://github.com/Docker-Hunterpedia/Helpdock/issues/278)).
   `POST /api/auth/passkey/options` and `/verify`
   (`AuthService.passkeySignInOptions`, `verifyPasskeySignIn`): a discoverable

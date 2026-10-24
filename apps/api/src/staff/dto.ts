@@ -18,6 +18,9 @@ import {
   staffUpdateRequestSchema,
   staffUserIdParamSchema,
   totpCodeRequestSchema,
+  totpRotationConfirmRequestSchema,
+  totpRotationProofSchema,
+  totpRotationStartSchema,
 } from '@helpdock/schemas';
 import { createZodDto } from 'nestjs-zod';
 
@@ -49,6 +52,9 @@ export class ProfileDto extends createZodDto(profileSchema) {}
 export class ProfileUpdateRequestDto extends createZodDto(profileUpdateRequestSchema) {}
 export class PasswordChangeRequestDto extends createZodDto(passwordChangeRequestSchema) {}
 export class TotpCodeRequestDto extends createZodDto(totpCodeRequestSchema) {}
+export class TotpRotationStartRequestDto extends createZodDto(totpRotationProofSchema) {}
+export class TotpRotationStartDto extends createZodDto(totpRotationStartSchema) {}
+export class TotpRotationConfirmRequestDto extends createZodDto(totpRotationConfirmRequestSchema) {}
 export class StaffSessionListDto extends createZodDto(staffSessionListSchema) {}
 export class SessionFamilyParamDto extends createZodDto(sessionFamilyParamSchema) {}
 export class RecoveryCodesDto extends createZodDto(recoveryCodesSchema) {}

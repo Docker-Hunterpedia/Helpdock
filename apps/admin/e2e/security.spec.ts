@@ -1,4 +1,10 @@
-import { MOCK_CURRENT_PASSWORD, MOCK_ENROLMENT_CODE } from '../src/staff/mock-api.js';
+import AxeBuilder from '@axe-core/playwright';
+import type { Page } from '@playwright/test';
+import {
+  MOCK_CURRENT_PASSWORD,
+  MOCK_ENROLMENT_CODE,
+  MOCK_STALE_ROTATION_CODE,
+} from '../src/staff/mock-api.js';
 import { expect, test } from './fixtures.js';
 import { openSecurity, signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -7,6 +13,16 @@ import { strings } from './strings.js';
  * `/me/security` in a browser, in both languages. Every action here weakens or
  * replaces a credential, so each test is really "does it ask for one first".
  */
+
+const axeViolations = async (page: Page): Promise<string[]> => {
+  const result = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  return result.violations.map((violation) => `${violation.id}: ${violation.help}`);
+};
+
+// A dialog still fading in is blended with the scrim, which axe reads as low contrast.
+test.use({ reducedMotion: 'reduce' });
 
 test.describe('the security page', () => {
   test('is reached from the account menu', async ({ page, appLocale: locale }) => {
@@ -72,6 +88,74 @@ test.describe('the security page', () => {
     await dialog.getByRole('button', { name: t('me:twoFactor.disableSubmit') }).click();
 
     await expect(page.getByText(t('me:twoFactor.disabled'))).toBeVisible();
+  });
+
+  test('replaces the authenticator app: proof, then a code from the new app (#373)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText(t('me:passkeys.stepUpTitle'))).toBeVisible();
+    await expect(axeViolations(page)).resolves.toEqual([]);
+
+    await dialog.getByLabel(t('me:twoFactor.replaceProofLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog.getByRole('button', { name: t('me:passkeys.continue') }).click();
+
+    await expect(dialog.getByText(t('me:twoFactor.scanTitle'))).toBeVisible();
+    // The key reads left to right in both languages.
+    await expect(dialog.getByText(t('me:twoFactor.keyLabel'))).toBeVisible();
+    await expect(dialog.getByText('JBSW Y3DP EHPK 3PXP')).toHaveAttribute('dir', 'ltr');
+    await expect(axeViolations(page)).resolves.toEqual([]);
+
+    // The fixture answers its one code for the new app, as the real api takes
+    // a live code from whichever app was scanned.
+    await dialog.getByLabel(t('me:twoFactor.newCodeLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+
+    await expect(page.getByText(t('me:twoFactor.replaced'))).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('says start again when the replacement went stale (#373)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(t('me:twoFactor.replaceProofLabel')).fill(MOCK_ENROLMENT_CODE);
+    await dialog.getByRole('button', { name: t('me:passkeys.continue') }).click();
+    await dialog.getByLabel(t('me:twoFactor.newCodeLabel')).fill(MOCK_STALE_ROTATION_CODE);
+    await dialog.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+
+    const banner = page.getByRole('status').filter({ hasText: t('me:twoFactor.replaceStale') });
+    await expect(banner).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(axeViolations(page)).resolves.toEqual([]);
+  });
+
+  test('says so in the field when the proof to replace the app is wrong (#373)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openSecurity(page, locale);
+
+    await page.getByRole('button', { name: t('me:twoFactor.replace') }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(t('me:twoFactor.replaceProofLabel')).fill('000000');
+    await dialog.getByRole('button', { name: t('me:passkeys.continue') }).click();
+
+    await expect(dialog.getByText(t('me:passkeys.proofWrong'))).toBeVisible();
   });
 
   test('lists the signed-in browsers and ends one of them', async ({ page, appLocale: locale }) => {

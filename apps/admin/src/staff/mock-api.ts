@@ -10,6 +10,8 @@ import type {
   StaffMember,
   StaffSessionList,
   StaffUpdateRequest,
+  TotpRotationProof,
+  TotpRotationStart,
 } from '@helpdock/schemas';
 import {
   normalisePhone,
@@ -61,6 +63,10 @@ export const MOCK_EXPIRED_INVITE_TOKEN = 'expired-invite-token';
 export const MOCK_CURRENT_PASSWORD = 'correct horse';
 export const MOCK_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 export const MOCK_ENROLMENT_CODE = '482913';
+/** What every rotation start answers, so a confirm can name it (and a second cannot). */
+/** A confirmation code the fixture answers as stale: the factors changed since the rotation began. */
+export const MOCK_STALE_ROTATION_CODE = '999999';
+export const MOCK_ROTATION_ID = '0192c3f0-1a2b-7c3d-8e4f-0000000000f0';
 
 const recoveryCodes = (seed: string): string[] =>
   Array.from({ length: 10 }, (_unused, index) => `RC-${seed}${index}-${1000 + index * 7}`);
@@ -142,6 +148,7 @@ const seedProfile = (): Profile => ({
   twoFactorEnabled: true,
   recoveryCodesLeft: 8,
   twoFactorRequired: false,
+  recoveryCodeProofAllowed: true,
   publicName: null,
   displayName: 'Lina',
   jobTitleEn: 'Billing specialist',
@@ -202,6 +209,8 @@ export class MockStaffApi implements StaffApi {
   #profile = seedProfile();
   #sessions = seedSessions();
   #viewerEnabled = true;
+  /** The rotation id a start answered, so a confirm can be refused as spent. */
+  #stagedRotationId: string | null = null;
   /** Tokens the accept screen can read, mapped to what they stand for. */
   readonly #invites = new Map<string, PublicInvite>([
     [
@@ -402,6 +411,50 @@ export class MockStaffApi implements StaffApi {
   async disableTotp(code: string): Promise<void> {
     this.#assertCode(code);
     this.#profile = { ...this.#profile, twoFactorEnabled: false, recoveryCodesLeft: 0 };
+  }
+
+  /** Plays a break-glass account under SSO enforcement: no recovery code may start a replacement. */
+  barRecoveryCodeProofs(): void {
+    this.#profile = { ...this.#profile, recoveryCodeProofAllowed: false };
+  }
+
+  async startTotpRotation(proof: TotpRotationProof): Promise<TotpRotationStart> {
+    if (proof.recoveryCode !== undefined && !this.#profile.recoveryCodeProofAllowed) {
+      throw new AuthError('recovery-code-not-allowed');
+    }
+    if (!this.#profile.twoFactorEnabled) {
+      throw new AuthError('totp-not-enabled');
+    }
+    // The same proofs the api takes, with the fixture's one password and code.
+    if (proof.code !== undefined) {
+      this.#assertCode(proof.code);
+    } else if (proof.recoveryCode !== undefined) {
+      if (proof.currentPassword !== undefined && proof.currentPassword !== MOCK_CURRENT_PASSWORD) {
+        throw new AuthError('invalid-credentials');
+      }
+    } else if (proof.passkey === undefined) {
+      throw new AuthError('invalid-credentials');
+    }
+
+    this.#stagedRotationId = MOCK_ROTATION_ID;
+
+    return {
+      rotationId: MOCK_ROTATION_ID,
+      secret: MOCK_TOTP_SECRET,
+      uri: `otpauth://totp/Helpdock:lina@helpdock.com?secret=${MOCK_TOTP_SECRET}&issuer=Helpdock`,
+    };
+  }
+
+  async confirmTotpRotation(rotationId: string, code: string): Promise<void> {
+    if (rotationId !== this.#stagedRotationId || this.#profile.twoFactorEnabled === false) {
+      throw new AuthError('challenge-expired');
+    }
+    if (code === MOCK_STALE_ROTATION_CODE) {
+      this.#stagedRotationId = null;
+      throw new AuthError('challenge-expired');
+    }
+    this.#assertCode(code);
+    this.#stagedRotationId = null;
   }
 
   async regenerateRecoveryCodes(code: string): Promise<RecoveryCodes> {

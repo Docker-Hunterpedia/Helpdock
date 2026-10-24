@@ -6,10 +6,14 @@ import {
   publicNameOf,
   type RecoveryCodes,
   type StaffSessionList,
+  type TotpRotationConfirmRequest,
+  type TotpRotationProof,
+  type TotpRotationStart,
 } from '@helpdock/schemas';
 import { NotFoundException } from '@nestjs/common';
 import type { AuthService } from '../auth/auth.service.js';
 import { AuthFailure } from '../auth/auth-failure.js';
+import type { PasskeyService } from '../auth/passkeys/passkey.service.js';
 import { PROFILE_PHOTO_RULE, type RateLimiter } from '../auth/rate-limit.js';
 import type { SessionService } from '../auth/session/session.service.js';
 import { runAfterCommit } from '../context/after-commit.js';
@@ -42,6 +46,8 @@ const refusalFailure = (error: unknown): unknown =>
 export interface AccountServiceOptions {
   readonly staff: StaffRepository;
   readonly auth: AuthService;
+  /** Verifies a passkey step-up for the authenticator rotation (#373). */
+  readonly passkeys: PasskeyService;
   readonly sessions: SessionService;
   readonly photos: ProfilePhotoStore;
   readonly limiter: Pick<RateLimiter, 'consume'>;
@@ -70,6 +76,7 @@ export class AccountService {
       twoFactorEnabled: user.totpEnabled,
       recoveryCodesLeft: user.recoveryCodesHashed.length,
       twoFactorRequired: await this.#parts.auth.secondFactorRequiredFor(userId, tx),
+      recoveryCodeProofAllowed: await this.#parts.auth.recoveryCodeProofAllowed(userId, tx),
       publicName: user.publicName,
       displayName: publicNameOf({ fullName: user.name, publicName: user.publicName }),
       jobTitleEn: user.jobTitleEn,
@@ -181,6 +188,45 @@ export class AccountService {
 
   disableTotp(tx: DbTransaction, userId: string, code: string): Promise<void> {
     return this.#parts.auth.disableTotp(userId, code, tx);
+  }
+
+  /**
+   * Step 1 of replacing the authenticator app (#373). The passkey proof is
+   * verified by `PasskeyService`, against the step-up ceremony this browser
+   * began, before anything is staged; the other proofs go to `AuthService`,
+   * which owns the step-up budget. Either way the staged secret answers here
+   * and nothing is replaced until the new app confirms a code.
+   */
+  async startTotpRotation(
+    tx: DbTransaction,
+    userId: string,
+    authorization: string | undefined,
+    proof: TotpRotationProof,
+  ): Promise<TotpRotationStart> {
+    if (proof.passkey !== undefined) {
+      // Before the proof, so an account with nothing to replace spends no attempt.
+      await this.#parts.auth.assertTotpRotatable(userId, tx);
+      const session = await this.#parts.passkeys.sessionOf(userId, authorization, tx);
+      await this.#parts.passkeys.confirmStepUp(session, proof.passkey);
+
+      return this.#parts.auth.stageTotpRotation(userId, tx);
+    }
+
+    return this.#parts.auth.startTotpRotation({ userId, proof, tx });
+  }
+
+  /** Step 2: a code from the new app swaps the secret, under the account-row lock. */
+  confirmTotpRotation(
+    tx: DbTransaction,
+    userId: string,
+    request: TotpRotationConfirmRequest,
+  ): Promise<void> {
+    return this.#parts.auth.confirmTotpRotation({
+      userId,
+      rotationId: request.rotationId,
+      code: request.code,
+      tx,
+    });
   }
 
   regenerateRecoveryCodes(tx: DbTransaction, userId: string, code: string): Promise<RecoveryCodes> {

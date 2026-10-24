@@ -38,6 +38,7 @@
     "body_passwordReset": "The password of {{email}} was reset with an emailed link. Every browser was signed out.",
     "body_twoFactorEnabled": "Two-factor sign-in was turned on for {{email}}.",
     "body_twoFactorDisabled": "Two-factor sign-in was turned off for {{email}}. Signing in now needs only the password.",
+    "body_twoFactorRotated": "The authenticator app of {{email}} was replaced. The old app no longer works; the recovery codes are unchanged.",
     "body_recoveryCodes": "New recovery codes were made for {{email}}. The old ones no longer work.",
     "action": "Review your security page",
     "warning": "If it was not you, reset your password now and tell your administrator.",

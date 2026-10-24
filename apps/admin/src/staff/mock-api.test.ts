@@ -180,6 +180,31 @@ describe('the account a person owns', () => {
     await expect(staff.profile().then((p) => p.twoFactorEnabled)).resolves.toBe(false);
   });
 
+  it('stages a rotation behind a proof and confirms it with the new app', async () => {
+    const staged = await staff.startTotpRotation({ code: MOCK_ENROLMENT_CODE });
+    expect(staged.uri).toContain('otpauth://');
+
+    await expect(staff.confirmTotpRotation(staged.rotationId, '000000')).rejects.toThrow();
+    await staff.confirmTotpRotation(staged.rotationId, MOCK_ENROLMENT_CODE);
+    // Spent: the same rotation answers nothing a second time.
+    await expect(
+      staff.confirmTotpRotation(staged.rotationId, MOCK_ENROLMENT_CODE),
+    ).rejects.toThrow();
+  });
+
+  it('takes a recovery code, alone or with the password, and refuses the wrong half', async () => {
+    await expect(
+      staff.startTotpRotation({ currentPassword: 'wrong', recoveryCode: 'RC-4KQ2-9XMT' }),
+    ).rejects.toThrow();
+
+    await expect(
+      staff.startTotpRotation({ currentPassword: MOCK_CURRENT_PASSWORD, recoveryCode: 'RC-4KQ2' }),
+    ).resolves.toMatchObject({ rotationId: expect.any(String) });
+    await expect(staff.startTotpRotation({ recoveryCode: 'RC-4KQ2-9XMT' })).resolves.toMatchObject({
+      rotationId: expect.any(String),
+    });
+  });
+
   it('hands over ten new recovery codes', async () => {
     const { recoveryCodes } = await staff.regenerateRecoveryCodes(MOCK_ENROLMENT_CODE);
 

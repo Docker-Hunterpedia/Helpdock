@@ -36,6 +36,14 @@ browser, session opening) asks it. A break-glass passkey ceremony has its own
 purpose (`break-glass`), which requires user verification; the other second
 factors keep user presence only.
 
+Recovery codes stay out of break-glass in the other direction too (#373): while
+enforcement is on, an account that is on the break-glass list or eligible for it
+cannot use a recovery code as the step-up proof that starts replacing its
+authenticator app, because that would install the next break-glass factor with a
+credential that cannot open break-glass. `SsoSignInPolicy.recoveryCodeBarred`
+decides it; the start answers `403 recovery-code-not-allowed`. Everyone else, and
+everyone while enforcement is off, may still use one.
+
 ## Consequences
 
 - Operators can keep a hardware key as the break-glass factor instead of, or

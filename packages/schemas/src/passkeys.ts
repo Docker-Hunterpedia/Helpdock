@@ -26,7 +26,8 @@ const base64Url = (maxLength: number) =>
 /** The longest credential id the specification allows is 1,023 bytes. */
 const CREDENTIAL_ID = base64Url(1400);
 
-const CEREMONY_ID = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+/** The id of one WebAuthn ceremony, as every request that names one carries it. */
+export const CEREMONY_ID = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 
 const CLIENT_DATA = base64Url(4096);
 

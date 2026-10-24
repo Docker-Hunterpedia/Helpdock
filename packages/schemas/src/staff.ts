@@ -232,6 +232,8 @@ export const profileSchema = z.object({
   recoveryCodesLeft: z.number().int().nonnegative(),
   /** `auth.require2fa`. On, the disable button is not offered. */
   twoFactorRequired: z.boolean(),
+  /** False for a break-glass account while SSO is enforced: a recovery code may not start a replacement of the app (ADR 0053). */
+  recoveryCodeProofAllowed: z.boolean(),
   /** M14-12. What the person chose to be called by customers; null means the first name. */
   publicName: z.string().nullable(),
   /** What customers see today: the public name, or the first word of `name`. */

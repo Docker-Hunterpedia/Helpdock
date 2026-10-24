@@ -477,6 +477,20 @@ export class PasskeyService {
   }
 
   /**
+   * The passkey half of "confirm it's you", for a change that lives outside
+   * this card: replacing the authenticator app (#373) asks for the same
+   * assertion in answer to the same step-up ceremony. The account service
+   * proves the session, then hands the proof here before asking
+   * `AuthService` to stage anything.
+   */
+  async confirmStepUp(
+    session: PasskeySession,
+    proof: NonNullable<PasskeyProof['passkey']>,
+  ): Promise<void> {
+    await this.#confirmWithPasskey(session, proof);
+  }
+
+  /**
    * An assertion from a passkey the account already holds, in answer to the
    * step-up ceremony this session began. Every refusal is `invalid-credentials`
    * to the caller and keeps its reason for the audit trail.

@@ -46,7 +46,16 @@ export class TotpStepStore {
       String(timeStep),
       String(USED_STEP_TTL_SECONDS),
     );
-
     return claimed === 1;
+  }
+
+  /**
+   * Records `timeStep` as the last one used, whatever the record held. Called
+   * when an authenticator is replaced (#373): the old record belongs to the
+   * secret that no longer verifies, and the code that confirmed the new app is
+   * now spent — so it cannot sign in, while the next step still can.
+   */
+  async record(userId: string, timeStep: number): Promise<void> {
+    await this.#redis.set(totpUsedStepKey(userId), String(timeStep), 'EX', USED_STEP_TTL_SECONDS);
   }
 }

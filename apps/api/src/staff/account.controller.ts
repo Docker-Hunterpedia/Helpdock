@@ -1,10 +1,16 @@
 import type { Env } from '@helpdock/config';
-import type { Profile, RecoveryCodes, StaffSessionList } from '@helpdock/schemas';
+import type {
+  Profile,
+  RecoveryCodes,
+  StaffSessionList,
+  TotpRotationStart,
+} from '@helpdock/schemas';
 import {
   Body,
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Inject,
@@ -29,6 +35,9 @@ import {
   SessionFamilyParamDto,
   StaffSessionListDto,
   TotpCodeRequestDto,
+  TotpRotationConfirmRequestDto,
+  TotpRotationStartDto,
+  TotpRotationStartRequestDto,
 } from './dto.js';
 import { readPhotoUpload } from './profile-photo-body.js';
 
@@ -118,6 +127,32 @@ export class AccountController {
     @Body(new ZodValidationPipe(TotpCodeRequestDto)) body: TotpCodeRequestDto,
   ): Promise<void> {
     await this.#account.disableTotp(getTx(), this.#userId(), body.code);
+  }
+
+  /**
+   * Step 1 of replacing the authenticator app (#373): a step-up proof stages a
+   * fresh secret, which the answer names with the id its confirmation needs.
+   * The access token is read again only when the proof is a passkey, whose
+   * ceremony is bound to this browser's session.
+   */
+  @Post('totp/rotate/start')
+  @Authenticated()
+  @ZodSerializerDto(TotpRotationStartDto)
+  startTotpRotation(
+    @Body(new ZodValidationPipe(TotpRotationStartRequestDto)) body: TotpRotationStartRequestDto,
+    @Headers('authorization') authorization: string | undefined,
+  ): Promise<TotpRotationStart> {
+    return this.#account.startTotpRotation(getTx(), this.#userId(), authorization, body);
+  }
+
+  /** Step 2: a code from the new app swaps the secret in one transaction. */
+  @Post('totp/rotate/confirm')
+  @Authenticated()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async confirmTotpRotation(
+    @Body(new ZodValidationPipe(TotpRotationConfirmRequestDto)) body: TotpRotationConfirmRequestDto,
+  ): Promise<void> {
+    await this.#account.confirmTotpRotation(getTx(), this.#userId(), body);
   }
 
   @Post('recovery-codes/regenerate')

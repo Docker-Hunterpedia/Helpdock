@@ -4,6 +4,7 @@ import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { AuthService } from '../auth/auth.service.js';
 import { EmailTokenStore } from '../auth/email-token.store.js';
+import { PasskeyService } from '../auth/passkeys/passkey.service.js';
 import { RateLimiter } from '../auth/rate-limit.js';
 import { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
@@ -143,14 +144,15 @@ export class StaffModule {
         { provide: ProfilePhotoStore, useValue: photos },
         {
           provide: AccountService,
-          inject: [StaffRepository, AuthService, SessionService, RateLimiter],
+          inject: [StaffRepository, AuthService, PasskeyService, SessionService, RateLimiter],
           useFactory: (
             staff: StaffRepository,
             auth: AuthService,
+            passkeys: PasskeyService,
             sessions: SessionService,
             limiter: RateLimiter,
           ): AccountService =>
-            new AccountService({ staff, auth, sessions, photos, limiter, logger }),
+            new AccountService({ staff, auth, passkeys, sessions, photos, limiter, logger }),
         },
         {
           provide: InstallStaffService,

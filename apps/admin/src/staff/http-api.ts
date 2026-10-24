@@ -8,6 +8,8 @@ import type {
   StaffMember,
   StaffSessionList,
   StaffUpdateRequest,
+  TotpRotationProof,
+  TotpRotationStart,
 } from '@helpdock/schemas';
 import {
   departmentListSchema,
@@ -16,6 +18,7 @@ import {
   staffListSchema,
   staffMemberSchema,
   staffSessionListSchema,
+  totpRotationStartSchema,
 } from '@helpdock/schemas';
 import { HttpTransport } from '../auth/http-transport.js';
 import type { StaffApi } from './api.js';
@@ -117,6 +120,16 @@ export class HttpStaffApi implements StaffApi {
 
   async disableTotp(code: string): Promise<void> {
     await this.#transport.request('POST', '/me/totp/disable', { code });
+  }
+
+  async startTotpRotation(proof: TotpRotationProof): Promise<TotpRotationStart> {
+    return totpRotationStartSchema.parse(
+      await this.#transport.request('POST', '/me/totp/rotate/start', proof),
+    );
+  }
+
+  async confirmTotpRotation(rotationId: string, code: string): Promise<void> {
+    await this.#transport.request('POST', '/me/totp/rotate/confirm', { rotationId, code });
   }
 
   async regenerateRecoveryCodes(code: string): Promise<RecoveryCodes> {

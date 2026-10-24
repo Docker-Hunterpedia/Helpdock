@@ -4,7 +4,7 @@ import { PASSWORD_MIN_LENGTH, totpCodeRequestSchema } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Chip, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, RotateCcw } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
@@ -17,6 +17,7 @@ import {
   passkeysSupported,
 } from '../auth/passkey-ceremony.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
+import { AlertBanner } from '../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
 import { formatDayTime } from '../ui/format.js';
 import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
@@ -24,6 +25,7 @@ import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
 import { AccountCard } from './account/account-card.tsx';
 import { PASSKEYS_KEY, PasskeysCard } from './account/passkeys-card.tsx';
+import { ReplaceAuthenticatorDialog } from './account/replace-authenticator.tsx';
 import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
 /**
@@ -42,7 +44,7 @@ import { SignInProvidersCard } from './account/sign-in-providers.tsx';
  * signed in, not that the person at the keyboard now is the account holder.
  */
 
-type Confirming = 'disable' | 'regenerate' | 'regeneratePasskey' | null;
+type Confirming = 'disable' | 'regenerate' | 'regeneratePasskey' | 'replace' | null;
 
 export function SecurityScreen(): ReactNode {
   const t = useT();
@@ -66,6 +68,7 @@ export function SecurityScreen(): ReactNode {
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [newPasswordRefusal, setNewPasswordRefusal] = useState<PasswordRefusal | null>(null);
+  const [replaceStale, setReplaceStale] = useState(false);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -343,6 +346,10 @@ export function SecurityScreen(): ReactNode {
             ) : null}
           </Box>
 
+          {replaceStale ? (
+            <AlertBanner tone="warning">{t('me:twoFactor.replaceStale')}</AlertBanner>
+          ) : null}
+
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             {profile.data?.twoFactorEnabled === true ? (
               <>
@@ -355,6 +362,16 @@ export function SecurityScreen(): ReactNode {
                   }}
                 >
                   {t('me:twoFactor.regenerate')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<RotateCcw size={16} aria-hidden="true" />}
+                  onClick={() => {
+                    setReplaceStale(false);
+                    setConfirming('replace');
+                  }}
+                >
+                  {t('me:twoFactor.replace')}
                 </Button>
                 {profile.data.twoFactorRequired ? null : (
                   <Button
@@ -505,6 +522,15 @@ export function SecurityScreen(): ReactNode {
           </Box>
         </AccountCard>
       </Box>
+
+      <ReplaceAuthenticatorDialog
+        open={confirming === 'replace'}
+        recoveryCodeAllowed={profile.data?.recoveryCodeProofAllowed !== false}
+        onClose={(outcome) => {
+          setConfirming(null);
+          setReplaceStale(outcome === 'stale');
+        }}
+      />
 
       <ConfirmDialog
         open={confirming === 'regeneratePasskey'}

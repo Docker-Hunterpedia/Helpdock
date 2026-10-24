@@ -10,6 +10,7 @@ import {
   withTenant,
 } from '@helpdock/db';
 import { and, eq, sql } from 'drizzle-orm';
+import { withInstallScope } from '../../tenant/install-scope.js';
 import { AUTH_SYSTEM_PRINCIPAL } from '../staff.repository.js';
 
 const KEY = 'auth.webauthn.rpId';
@@ -32,8 +33,9 @@ export interface PinnedRpId {
 
 /** What the passkey ceremonies need from the pin; {@link RpIdPinStore} is the real one. */
 export interface RpIdPin {
-  read(): Promise<PinnedRpId | null>;
-  pinIfUnset(rpId: string): Promise<PinnedRpId>;
+  /** Pass the caller's transaction when it holds one, so no second connection is taken. */
+  read(within?: DbTransaction): Promise<PinnedRpId | null>;
+  pinIfUnset(rpId: string, within?: DbTransaction): Promise<PinnedRpId>;
   /** True when `HD_AUTH_WEBAUTHN_RP_ID` pins it, so nothing here may change it. */
   isLocked(): boolean;
   /**
@@ -117,13 +119,25 @@ export class RpIdPinStore implements RpIdPin {
     );
   }
 
+  /**
+   * Runs `fn` on the caller's transaction, widened to the install scope, or on
+   * its own install-scope transaction when the caller holds none. A caller that
+   * holds a connection must pass it: a second one from the pool deadlocks the
+   * pool once as many requests as it has connections arrive together.
+   */
+  #inInstallScope<T>(within: DbTransaction | undefined, fn: (tx: DbTransaction) => Promise<T>) {
+    return within === undefined
+      ? withSystem(this.#db, INSTALL_SCOPE_BRAND_ID, fn)
+      : withInstallScope(within, () => fn(within));
+  }
+
   /** The pinned RP ID, or null before the first registration. */
-  async read(): Promise<PinnedRpId | null> {
+  async read(within?: DbTransaction): Promise<PinnedRpId | null> {
     if (this.#settings.isLockedByEnv(KEY)) {
       return { rpId: await this.#settings.get(KEY), pinnedAt: null };
     }
 
-    const [row] = await withSystem(this.#db, INSTALL_SCOPE_BRAND_ID, (tx) =>
+    const [row] = await this.#inInstallScope(within, (tx) =>
       tx
         .select({ value: settingsTable.value, updatedAt: settingsTable.updatedAt })
         .from(settingsTable)
@@ -142,9 +156,11 @@ export class RpIdPinStore implements RpIdPin {
    * pinned afterwards: the caller compares it with the RP ID it wanted, and a
    * replica that lost the race to another host learns so here.
    */
-  async pinIfUnset(rpId: string): Promise<PinnedRpId> {
+  async pinIfUnset(rpId: string, within?: DbTransaction): Promise<PinnedRpId> {
     if (!this.#settings.isLockedByEnv(KEY)) {
-      await withSystem(this.#db, INSTALL_SCOPE_BRAND_ID, async (tx) => {
+      // The one install-settings write made from inside a request transaction:
+      // it is audited right below as `auth.passkey.rp_pinned`.
+      await this.#inInstallScope(within, async (tx) => {
         const pinned = await tx
           .insert(settingsTable)
           .values({
@@ -174,7 +190,7 @@ export class RpIdPinStore implements RpIdPin {
       });
     }
 
-    const pinned = await this.read();
+    const pinned = await this.read(within);
     /* c8 ignore next 3 -- the statement above leaves a non-empty row behind, or the env pins one. */
     if (pinned === null) {
       throw new Error('auth.webauthn.rpId is still unset after pinning it');

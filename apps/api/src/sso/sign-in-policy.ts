@@ -6,11 +6,11 @@ import {
   ssoConnections,
   type User,
   users,
-  withInstallScope,
   withSystem,
 } from '@helpdock/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { withInstallScope } from '../tenant/install-scope.js';
 import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
 import { readSsoSetting } from './sso-settings.js';
 
@@ -18,10 +18,14 @@ import { readSsoSetting } from './sso-settings.js';
 export class SsoSignInPolicy {
   constructor(private readonly options: { db: Db; settings: Settings; keyring: Keyring }) {}
 
-  async enforced(): Promise<boolean> {
-    return withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
-      readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced'),
-    );
+  /** Pass the caller's transaction when it holds one: see {@link withInstallScope}. */
+  async enforced(within?: DbTransaction): Promise<boolean> {
+    const read = (tx: DbTransaction) =>
+      readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced');
+
+    return within === undefined
+      ? withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, read)
+      : withInstallScope(within, () => read(within));
   }
 
   async assertLocal(email: string, method: string): Promise<void> {

@@ -420,12 +420,12 @@ export class WebAuthnService {
     this.#pin = options.pin;
   }
 
-  async status(): Promise<PasskeyStatus> {
+  async status(within?: DbTransaction): Promise<PasskeyStatus> {
     const relyingParty = relyingPartyFor(this.#appUrl);
     if (relyingParty === null) {
       return { state: 'unavailable' };
     }
-    const pinned = await this.#pin.read();
+    const pinned = await this.#pin.read(within);
     if (pinned !== null && pinned.rpId !== relyingParty.id) {
       return { state: 'paused', rpId: relyingParty.id, pinned };
     }
@@ -456,8 +456,9 @@ export class WebAuthnService {
     readonly user: { readonly handle: Uint8Array; readonly email: string; readonly name: string };
     readonly existing: readonly PasskeyDescriptor[];
     readonly binding: Required<PersonBinding>;
+    readonly tx?: DbTransaction;
   }): Promise<CeremonyOptions<PublicKeyCredentialCreationOptionsJSON>> {
-    const relyingParty = await this.#relyingParty();
+    const relyingParty = await this.#relyingParty(input.tx);
 
     const options = await generateRegistrationOptions({
       rpName: RELYING_PARTY_NAME,
@@ -497,9 +498,10 @@ export class WebAuthnService {
     readonly ceremonyId: string;
     readonly binding: Required<PersonBinding>;
     readonly response: RegistrationResponseJSON;
+    readonly tx?: DbTransaction;
   }): Promise<RegisteredPasskey> {
     const ceremony = await this.#spend(input.ceremonyId, 'register', input.binding);
-    const relyingParty = await this.#relyingPartyOf(ceremony);
+    const relyingParty = await this.#relyingPartyOf(ceremony, input.tx);
 
     const info = await verifyAttestation(input.response, ceremony, relyingParty);
     const registered = info === null ? null : toRegisteredPasskey(info, input.response);
@@ -507,7 +509,7 @@ export class WebAuthnService {
       throw new AuthFailure('invalid-credentials');
     }
 
-    const pinned = await this.#pin.pinIfUnset(relyingParty.id);
+    const pinned = await this.#pin.pinIfUnset(relyingParty.id, input.tx);
     if (pinned.rpId !== relyingParty.id) {
       throw new AuthFailure('passkeys-rp-changed');
     }
@@ -520,7 +522,10 @@ export class WebAuthnService {
    * the options are the same for every caller and name nobody.
    */
   async authenticationOptions(
-    input: AssertionPurpose & { readonly allow?: readonly PasskeyDescriptor[] },
+    input: AssertionPurpose & {
+      readonly allow?: readonly PasskeyDescriptor[];
+      readonly tx?: DbTransaction;
+    },
   ): Promise<CeremonyOptions<PublicKeyCredentialRequestOptionsJSON>> {
     const binding =
       input.purpose === 'passwordless' ? {} : requirePerson(input.purpose, input.binding);
@@ -555,10 +560,11 @@ export class WebAuthnService {
       readonly ceremonyId: string;
       readonly response: AuthenticationResponseJSON;
       readonly findCredential: (credentialId: Uint8Array) => Promise<StoredPasskey | undefined>;
+      readonly tx?: DbTransaction;
     },
   ): Promise<AssertionCheck> {
     const ceremony = await this.#spend(input.ceremonyId, input.purpose, input.binding ?? {});
-    const relyingParty = await this.#relyingPartyOf(ceremony);
+    const relyingParty = await this.#relyingPartyOf(ceremony, input.tx);
     // A bound purpose names its person; a ceremony that somehow names nobody
     // would let any passkey answer it.
     if (input.purpose !== 'passwordless' && ceremony.userId === undefined) {
@@ -610,12 +616,12 @@ export class WebAuthnService {
    * another host. Nothing is written here; only a registration pins, so an
    * install opened somewhere temporary before anyone registers stays unpinned.
    */
-  async #relyingParty(): Promise<RelyingParty> {
+  async #relyingParty(within?: DbTransaction): Promise<RelyingParty> {
     const relyingParty = relyingPartyFor(this.#appUrl);
     if (relyingParty === null) {
       throw new AuthFailure('passkeys-unavailable');
     }
-    const pinned = await this.#pin.read();
+    const pinned = await this.#pin.read(within);
     if (pinned !== null && pinned.rpId !== relyingParty.id) {
       throw new AuthFailure('passkeys-rp-changed');
     }
@@ -623,8 +629,8 @@ export class WebAuthnService {
   }
 
   /** The relying party for finishing a ceremony: the one it began under, and still allowed. */
-  async #relyingPartyOf(ceremony: WebAuthnCeremony): Promise<RelyingParty> {
-    const relyingParty = await this.#relyingParty();
+  async #relyingPartyOf(ceremony: WebAuthnCeremony, within?: DbTransaction): Promise<RelyingParty> {
+    const relyingParty = await this.#relyingParty(within);
     if (ceremony.rpId !== relyingParty.id) {
       throw new AuthFailure('passkeys-rp-changed');
     }

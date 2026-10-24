@@ -883,6 +883,15 @@ only when a test passes it as an extra controller.
   restored in a `finally`, and the audit row is written *outside* the window
   because `audit_log` does not need it. Afterwards the ticket answers 404 to the
   actor who moved it.
+- **A request that needs an install-wide value reads it inside its own
+  transaction.** Taking `withSystem` on the pool while the request holds a
+  connection deadlocks the pool once as many requests as it has connections
+  arrive together. `withInstallScope` (`apps/api/src/tenant/install-scope.ts`)
+  adds the install scope to `app.brand_ids` for one read (`sso.enforced`, the
+  pinned passkey RP ID) and restores it in a `finally`. It is for reads; the one
+  write made through it is the audited RP ID pin. `SsoSignInPolicy.enforced`,
+  `recoveryCodeBarred` and `RpIdPin.read`/`pinIfUnset` take the caller's
+  transaction for this.
 - **`tickets.contact_id` and `tickets.team_id` carry no foreign key** until
   M1-04 and M1-01 create the tables they point at. The columns are here so that
   neither milestone has to backfill every row already written.

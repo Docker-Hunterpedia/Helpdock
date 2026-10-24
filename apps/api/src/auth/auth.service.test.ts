@@ -343,6 +343,10 @@ let oauthIdentities: FakeOauthIdentities;
 let mail: CollectingAuthMail;
 let audit: RecordingAudit;
 let settings: Settings;
+/** Transactions the fake pool opened; a route that holds a transaction must add none. */
+let poolTransactions = 0;
+/** A request transaction whose queries find nothing. */
+let requestTx: DbTransaction;
 let service: AuthService;
 let hasher: PasswordHasher;
 let sessions: SessionService;
@@ -518,10 +522,14 @@ beforeEach(async () => {
   // identity.integration.test.ts; no query behavior is asserted here.
   const emptyRows = () => Object.assign(Promise.resolve([]), { where: () => Promise.resolve([]) });
   const emptyTx = { select: () => ({ from: emptyRows }), execute: () => Promise.resolve([]) };
+  requestTx = emptyTx as unknown as DbTransaction;
+  poolTransactions = 0;
   const emptyDb = {
     ...emptyTx,
-    transaction: (callback: (tx: DbTransaction) => Promise<unknown>) =>
-      callback(emptyTx as unknown as DbTransaction),
+    transaction: (callback: (tx: DbTransaction) => Promise<unknown>) => {
+      poolTransactions += 1;
+      return callback(emptyTx as unknown as DbTransaction);
+    },
   } as unknown as Db;
   rotations = new TotpRotationStore(created.redis);
   webauthn = new WebAuthnService({
@@ -3513,13 +3521,13 @@ describe('replacing the authenticator app (#373)', () => {
 
   // The routes always hold a transaction, and the account-row lock is taken
   // only when one is passed: without it these tests would not run that line.
-  const tx = {} as DbTransaction;
+  const tx = (): DbTransaction => requestTx;
 
   const start = (userId: string, proof: Parameters<AuthService['startTotpRotation']>[0]['proof']) =>
-    service.startTotpRotation({ userId, proof, tx });
+    service.startTotpRotation({ userId, proof, tx: tx() });
 
   const confirm = (userId: string, rotationId: string, code: string): Promise<void> =>
-    service.confirmTotpRotation({ userId, rotationId, code, tx });
+    service.confirmTotpRotation({ userId, rotationId, code, tx: tx() });
 
   const liveSecretOf = (userId: string): string | null => {
     const encrypted = staff.users.get(userId)?.totpSecretEncrypted ?? null;
@@ -3562,6 +3570,18 @@ describe('replacing the authenticator app (#373)', () => {
       });
       expect(staff.users.get(userId)?.recoveryCodesHashed).toHaveLength(codes.length - 1);
       expect(audit.actions()).toContain('auth.recovery_code.used');
+    });
+
+    it('reads the SSO policy inside the request transaction, never from the pool', async () => {
+      const { userId } = await requiredAccount();
+      const user = staff.users.get(userId);
+      if (user === undefined) throw new Error('no user');
+      user.recoveryCodesHashed = await hashRecoveryCodes(['RC-4KQ2-9XMT'], hasher);
+      poolTransactions = 0;
+
+      await start(userId, { recoveryCode: 'RC-4KQ2-9XMT' });
+
+      expect(poolTransactions).toBe(0);
     });
 
     describe('under SSO enforcement', () => {
@@ -3792,9 +3812,9 @@ describe('replacing the authenticator app (#373)', () => {
 
       // A required account may turn the app off only while a passkey remains.
       passkeyCounts.set(userId, 1);
-      await service.disableTotp(userId, await generate({ secret }), tx);
+      await service.disableTotp(userId, await generate({ secret }), tx());
       const enrolment = await service.enrolTotp(userId);
-      await service.confirmTotp(userId, await nextCode(enrolment.secret), tx);
+      await service.confirmTotp(userId, await nextCode(enrolment.secret), tx());
 
       await expect(
         confirm(userId, staged.rotationId, await generate({ secret: staged.secret })),
@@ -3807,7 +3827,7 @@ describe('replacing the authenticator app (#373)', () => {
       const staged = await start(userId, { code: await generate({ secret }) });
       passkeyCounts.set(userId, 1);
 
-      await service.disableTotp(userId, await nextCode(secret), tx);
+      await service.disableTotp(userId, await nextCode(secret), tx());
 
       await expect(rotations.read(staged.rotationId)).resolves.toEqual({ status: 'expired' });
     });

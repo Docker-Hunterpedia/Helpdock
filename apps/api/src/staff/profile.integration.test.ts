@@ -159,6 +159,19 @@ describe.skipIf(!hasDocker)('the profile for customers', () => {
     }
   });
 
+  describe('under load', () => {
+    // Three times the database pool's default of ten connections.
+    const CONCURRENT_READS = 30;
+
+    it('answers more concurrent reads than the database pool has connections', async () => {
+      const responses = await Promise.all(
+        Array.from({ length: CONCURRENT_READS }, () => json('GET', '/api/me/profile')),
+      );
+
+      expect(responses.map((response) => response.statusCode)).toEqual(responses.map(() => 200));
+    }, 30_000);
+  });
+
   describe('the fields', () => {
     it('starts with no public name, and shows the first name as what customers see', async () => {
       const initial = await profile();

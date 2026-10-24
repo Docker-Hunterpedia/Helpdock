@@ -1,4 +1,10 @@
-import { auditLog, type DbTransaction, INSTALL_SCOPE_BRAND_ID, isUuid } from '@helpdock/db';
+import {
+  auditLog,
+  type DbTransaction,
+  INSTALL_SCOPE_BRAND_ID,
+  isUuid,
+  SESSION_SETTINGS,
+} from '@helpdock/db';
 import { sql } from 'drizzle-orm';
 import type { Principal } from '../auth/principal.js';
 import { principalIdOf } from '../auth/principal.js';
@@ -64,4 +70,56 @@ export const widenInstallScope = async (
   await tx.execute(
     sql`SELECT set_config('app.brand_ids', ${`{${[INSTALL_SCOPE_BRAND_ID, ...brandIds].join(',')}}`}, true)`,
   );
+};
+
+/**
+ * Runs `fn` with the install scope added to the transaction's brands, and puts
+ * the brands back afterwards.
+ *
+ * It exists for a request that holds a pooled connection and needs one
+ * install-wide value (`sso.enforced`, the pinned passkey RP ID). The
+ * alternative, `withSystem` on the pool, takes a second connection while the
+ * first is held; as many such requests as the pool has connections then wait
+ * on each other for good.
+ *
+ * Rules for `fn`:
+ * - **Read.** The one write allowed is the audited RP ID pin of
+ *   `RpIdPin.pinIfUnset`; the install scope's policy would accept any other
+ *   install-settings write, so nothing else writes in here.
+ * - **One call at a time per transaction.** A nested call sees the scope
+ *   already present and does nothing, and the outer call's restore then
+ *   narrows it under the inner caller.
+ *
+ * The setting is transaction-local, so even a lost restore ends with the
+ * transaction. A restore that fails after `fn` threw (an aborted transaction)
+ * does not hide the original error.
+ */
+export const withInstallScope = async <T>(tx: DbTransaction, fn: () => Promise<T>): Promise<T> => {
+  const [current] = await tx.execute<{ value: string | null }>(
+    sql`SELECT current_setting(${SESSION_SETTINGS.brandIds}, true) AS value`,
+  );
+  const literal = current?.value ?? '';
+  const held = literal.startsWith('{') && literal.endsWith('}') ? literal.slice(1, -1) : '';
+  const brandIds = held === '' ? [] : held.split(',');
+  if (brandIds.includes(INSTALL_SCOPE_BRAND_ID)) {
+    return fn();
+  }
+  if (!brandIds.every(isUuid)) {
+    throw new TypeError('A brand id must be a UUID before it reaches a session setting');
+  }
+
+  const setBrands = (value: string): Promise<unknown> =>
+    tx.execute(sql`SELECT set_config(${SESSION_SETTINGS.brandIds}, ${value}, true)`);
+
+  await setBrands(`{${[...brandIds, INSTALL_SCOPE_BRAND_ID].join(',')}}`);
+  let result: T;
+  try {
+    result = await fn();
+  } catch (error) {
+    await setBrands(literal).catch(() => undefined);
+    throw error;
+  }
+  await setBrands(literal);
+
+  return result;
 };

@@ -2,4 +2,4 @@
 "@helpdock/api": patch
 ---
 
-Fix the profile endpoints hanging when as many requests as the database pool has connections arrive together: the "hide the recovery code option" check took a second connection while the request held one.
+Fix requests hanging when as many arrive together as the database pool has connections: the profile, authenticator-app replacement, OAuth connect and passkey routes took a second pooled connection for install-wide settings while holding one.

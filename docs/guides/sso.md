@@ -101,6 +101,9 @@ refused for break-glass. A break-glass admin who holds only a passkey is locked 
 address (`APP_URL`) changes and pauses passkeys, so keep an authenticator app on
 the account too, or set `HD_SSO_ENFORCED=false` in the environment to turn enforcement off
 (unsetting the variable does nothing when enforcement was switched on in Settings).
+Settings › Authentication › Passkeys refuses "Move passkeys" while enforcement is on
+and a break-glass admin relies on a passkey, since the move removes every passkey:
+add an authenticator app to that account first.
 Someone who signed in through SSO may finish with an authenticator code, a
 passkey or a single-use recovery code as the second factor, but never a trusted
 browser. A recovery code still never finishes break-glass, which stays a fresh
@@ -109,8 +112,9 @@ person whose IdP does not vouch for MFA and who lost the phone their
 authenticator was on (#387).
 A passkey counts for break-glass only if it registered with user verification
 (a PIN or a biometric); Helpdock records this when the key is added, and keys
-added before 1.1 count as unverified. The Settings picker says so beside an
-admin whose only keys are unverified.
+added before this release count as unverified, so an admin who relied on one
+must re-register it with a PIN or biometric, or keep an authenticator app. The
+Settings picker says so beside an admin whose only keys are unverified.
 The Settings picker lists an install admin as ineligible until they have a
 password and an app or a passkey. Discovery matches domains, never account existence.
 Settings pinned by `HD_SSO_ENFORCED` or `HD_SSO_BREAK_GLASS_USER_IDS` are read-only.

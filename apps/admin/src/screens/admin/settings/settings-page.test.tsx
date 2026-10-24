@@ -11,10 +11,10 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeVisible();
     expect(
       screen.getByRole('checkbox', {
-        name: /Require two-factor authentication for all staff/,
+        name: /Require a second factor for all staff/,
       }),
     ).toBeChecked();
-    expect(screen.getByLabelText('Magic link validity (minutes)')).toHaveValue(10);
+    expect(screen.getByLabelText('Sign-in link validity (minutes)')).toHaveValue(10);
     expect(screen.getByDisplayValue('8123.apps.googleusercontent.com')).toHaveAttribute('readonly');
     expect(screen.getByText(/HD_OAUTH_GOOGLE_CLIENT_ID/)).toBeVisible();
     expect(screen.getByText('http://localhost:5273/api/auth/oauth/google/callback')).toBeVisible();
@@ -190,7 +190,7 @@ describe('SettingsPage', () => {
     const api = new MockSettingsApi();
     const save = vi.spyOn(api, 'saveAuthentication');
     const { user } = renderApp(<SettingsPage />, { settingsApi: api });
-    const validity = await screen.findByLabelText('Magic link validity (minutes)');
+    const validity = await screen.findByLabelText('Sign-in link validity (minutes)');
 
     await user.clear(validity);
     await user.type(validity, '61');

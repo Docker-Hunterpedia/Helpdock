@@ -18,7 +18,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LockKeyhole, Settings2 } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
@@ -33,6 +33,8 @@ import { SecretField } from '../../../ui/secret-field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { SectionCard } from '../channels/section-card.tsx';
 import { AllowedDomainsField } from './allowed-domains-field.tsx';
+import { EnvironmentLock } from './environment-lock.tsx';
+import { PasskeysSection } from './passkeys-section.tsx';
 import { RedirectUrl } from './redirect-url.tsx';
 import { SsoTab } from './sso-tab.tsx';
 
@@ -287,6 +289,10 @@ function AuthenticationSettingsForm({
             />
           </Field>
         </Box>
+
+        <Box sx={{ height: '1px', backgroundColor: tokens['border.default'] }} />
+
+        <PasskeysSection />
 
         <Box sx={{ height: '1px', backgroundColor: tokens['border.default'] }} />
 
@@ -567,17 +573,6 @@ function TenantIdField({
         }}
       />
     </Field>
-  );
-}
-
-function EnvironmentLock(): ReactNode {
-  const t = useT();
-  return (
-    <Chip
-      size="small"
-      icon={<LockKeyhole size={12} aria-hidden="true" />}
-      label={t('settings:lock.badge')}
-    />
   );
 }
 

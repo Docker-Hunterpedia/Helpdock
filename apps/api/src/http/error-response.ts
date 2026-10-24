@@ -14,6 +14,7 @@ import type {
   KnowledgeRefusal,
   MetaRefusal,
   MetaRefusalDetails,
+  PasskeysRefusal,
   SetupRefusal,
   SsoRefusal,
   StaffRefusal,
@@ -29,6 +30,7 @@ import { ZodError } from 'zod';
 import { AiFailure } from '../ai/ai-failure.js';
 import { AssistFailure } from '../assist/assist-failure.js';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { PasskeysFailure } from '../auth/passkeys/passkeys-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { ChannelsFailure } from '../channels/channels-failure.js';
 import { ContactFailure } from '../contacts/contact-failure.js';
@@ -79,6 +81,8 @@ export interface MappedError {
   readonly channels?: ChannelsRefusal;
   /** Only on a refused custom-domain action; see `domains/domains-failure.ts`. */
   readonly domains?: DomainsRefusal;
+  /** Only on a refused move of the install's passkeys; see `auth/passkeys/passkeys-failure.ts`. */
+  readonly passkeys?: PasskeysRefusal;
   /** Only on a refused Telegram bot action; see `telegram/telegram-failure.ts`. */
   readonly telegram?: TelegramRefusal;
   /** Only on a refused Meta channel action; see `meta/meta-failure.ts`. */
@@ -262,6 +266,16 @@ export const mapError = (error: unknown): MappedError => {
     };
   }
 
+  if (error instanceof PasskeysFailure) {
+    return {
+      status: error.getStatus(),
+      code: 'conflict',
+      message: error.message,
+      passkeys: error.reason,
+      unexpected: false,
+    };
+  }
+
   if (error instanceof WebhooksFailure) {
     return {
       status: error.getStatus(),
@@ -404,6 +418,7 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),
+    ...(mapped.passkeys === undefined ? {} : { passkeys: { reason: mapped.passkeys } }),
     ...(mapped.telegram === undefined ? {} : { telegram: { reason: mapped.telegram } }),
     ...(mapped.meta === undefined ? {} : { meta: mapped.meta }),
     ...(mapped.widget === undefined ? {} : { widget: { reason: mapped.widget } }),

@@ -110,7 +110,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
     expect(screen.getByText('Install-wide · applies to every brand')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Magic link validity (minutes)')).toHaveValue(10);
+    expect(screen.getByLabelText('Sign-in link validity (minutes)')).toHaveValue(10);
     expect(screen.queryByText('Nothing here yet')).not.toBeInTheDocument();
   });
 

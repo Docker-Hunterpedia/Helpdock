@@ -1,5 +1,12 @@
-import type { DbTransaction, WebauthnCredential } from '@helpdock/db';
 import {
+  auditLog,
+  type DbTransaction,
+  INSTALL_SCOPE_BRAND_ID,
+  type WebauthnCredential,
+} from '@helpdock/db';
+import {
+  type InstallPasskeys,
+  type InstallPasskeysMoved,
   MAX_PASSKEYS_PER_ACCOUNT,
   type Passkey,
   type PasskeyAdded,
@@ -15,6 +22,7 @@ import {
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { currentRequestContext } from '../../context/request-context.js';
 import type { Logger } from '../../logging/logger.js';
+import type { SsoSignInPolicy } from '../../sso/sign-in-policy.js';
 import type { AuthService } from '../auth.service.js';
 import { AuthFailure } from '../auth-failure.js';
 import { describeClient } from '../client-description.js';
@@ -22,8 +30,10 @@ import type { RateLimiter, RateLimitRule } from '../rate-limit.js';
 import { bearerTokenOf, verifyAccessToken } from '../session/access-token.js';
 import type { SigningKeys } from '../session/signing-keys.js';
 import type { StaffUser } from '../staff.repository.js';
+import { RpIdPinChangedError } from '../webauthn/rp-id-pin.js';
 import type { WebAuthnService } from '../webauthn/webauthn.service.js';
 import type { PasskeyRepository } from './passkey.repository.js';
+import { PasskeysFailure } from './passkeys-failure.js';
 import { toAuthenticationJson, toRegistrationJson, toStored } from './webauthn-json.js';
 
 /**
@@ -60,6 +70,7 @@ export interface PasskeyServiceOptions {
   readonly auth: AuthService;
   readonly webauthn: WebAuthnService;
   readonly passkeys: PasskeyRepository;
+  readonly ssoPolicy: Pick<SsoSignInPolicy, 'breakGlassLosingPasskeys'>;
   readonly limiter: RateLimiter;
   /** Verifies the request's access token again, to read the browser session it belongs to. */
   readonly signingKeys: SigningKeys;
@@ -124,6 +135,112 @@ export class PasskeyService {
       throw new UnauthorizedException('Authentication is required for this route');
     }
     return claims;
+  }
+
+  /** Settings › Authentication: whether passkeys work, which RP ID they were made for, how many. */
+  async installStatus(): Promise<InstallPasskeys> {
+    const status = await this.#parts.webauthn.status();
+    const totals = await this.#parts.passkeys.totals();
+    const blockers =
+      status.state === 'paused'
+        ? await this.#moveBlockers(await this.#parts.passkeys.holders())
+        : { breakGlassAccounts: 0, secondFactorAccounts: 0 };
+    const pinned = status.state === 'unavailable' ? null : status.pinned;
+
+    return {
+      state: status.state,
+      rpId: status.state === 'unavailable' ? null : status.rpId,
+      pinnedRpId: pinned?.rpId ?? null,
+      pinnedAt: pinned?.pinnedAt?.toISOString() ?? null,
+      pinLocked: this.#parts.webauthn.isPinLocked(),
+      passkeyCount: totals.passkeys,
+      holderCount: totals.holders,
+      blockers,
+    };
+  }
+
+  /**
+   * "Move passkeys to <new host>": the install's address changed for good, so
+   * every passkey made for the old one is removed and the RP ID is pinned to the
+   * new host. The pin, the deletions, the forgotten recovery codes, the audit row
+   * and the holders' notices are one transaction: a failure in any leaves the
+   * install as it was, and a crash after commit leaves all of it. Holders' account
+   * rows are locked first (DOMAIN-RULES §12.1 rule 3), and the pin moves only while
+   * it still holds the old host, so two moves cannot both run.
+   *
+   * Refused (`move-blocked`) while it would lock out a configured
+   * break-glass account under SSO enforcement, or leave an account that must have
+   * a second factor with none: add an authenticator app first.
+   */
+  async moveToCurrentHost(actorId: string): Promise<InstallPasskeysMoved> {
+    const { webauthn, passkeys, auth } = this.#parts;
+    const status = await webauthn.status();
+    if (status.state !== 'paused') {
+      throw new PasskeysFailure('not-paused');
+    }
+    if (webauthn.isPinLocked()) {
+      throw new PasskeysFailure('pin-locked');
+    }
+    const from = status.pinned.rpId;
+    const to = status.rpId;
+
+    try {
+      return await webauthn.moveRpId({ from, to, actorId }, async (tx) => {
+        for (const { userId } of await passkeys.holders(tx)) {
+          await passkeys.lockAccount(userId, tx);
+        }
+        const holders = await passkeys.holders(tx);
+        const blockers = await this.#moveBlockers(holders, tx);
+        if (blockers.breakGlassAccounts > 0 || blockers.secondFactorAccounts > 0) {
+          throw new PasskeysFailure('move-blocked');
+        }
+
+        await passkeys.removeAll(tx);
+        for (const holder of holders.filter((person) => !person.totpEnabled)) {
+          await auth.clearRecoveryCodes(holder.userId, tx);
+        }
+        const removed = holders.reduce((sum, holder) => sum + holder.passkeys, 0);
+        await tx.insert(auditLog).values({
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          actorType: 'staff',
+          actorId,
+          action: 'auth.passkey.rp_moved',
+          targetType: 'setting',
+          targetId: 'auth.webauthn.rpId',
+          meta: { from, to, passkeys: removed, holders: holders.length },
+        });
+        for (const holder of holders) {
+          await auth.notifyCredentialChange(holder.userId, 'passkeysMoved', tx, {
+            account: to,
+            totp: holder.totpEnabled ? '1' : '0',
+          });
+        }
+        this.#parts.logger.warn({ from, to, removed }, 'Moved passkeys');
+        return { rpId: to, passkeysRemoved: removed, holdersNotified: holders.length };
+      });
+    } catch (error) {
+      if (error instanceof RpIdPinChangedError) {
+        throw new PasskeysFailure('not-paused');
+      }
+      throw error;
+    }
+  }
+
+  /** What a move would break; see {@link moveToCurrentHost}. */
+  async #moveBlockers(
+    holders: readonly { userId: string; totpEnabled: boolean }[],
+    tx?: DbTransaction,
+  ): Promise<InstallPasskeys['blockers']> {
+    const { auth, ssoPolicy } = this.#parts;
+    let secondFactorAccounts = 0;
+    for (const holder of holders.filter((person) => !person.totpEnabled)) {
+      // Memberships are per brand, so the required-ness is read on its own connection.
+      if (await auth.secondFactorRequiredFor(holder.userId)) secondFactorAccounts += 1;
+    }
+    return {
+      breakGlassAccounts: await ssoPolicy.breakGlassLosingPasskeys(tx),
+      secondFactorAccounts,
+    };
   }
 
   async list(userId: string, tx: DbTransaction): Promise<PasskeyList> {

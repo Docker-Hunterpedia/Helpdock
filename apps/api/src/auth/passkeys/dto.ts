@@ -1,4 +1,6 @@
 import {
+  installPasskeysMovedSchema,
+  installPasskeysSchema,
   passkeyAddedSchema,
   passkeyBeginRequestSchema,
   passkeyFinishRequestSchema,
@@ -26,3 +28,5 @@ export class PasskeyRenameRequestDto extends createZodDto(passkeyRenameRequestSc
 export class PasskeyRemoveRequestDto extends createZodDto(passkeyRemoveRequestSchema) {}
 export class PasskeyRegistrationOptionsDto extends createZodDto(passkeyRegistrationOptionsSchema) {}
 export class PasskeyStepUpOptionsDto extends createZodDto(passkeyStepUpOptionsSchema) {}
+export class InstallPasskeysDto extends createZodDto(installPasskeysSchema) {}
+export class InstallPasskeysMovedDto extends createZodDto(installPasskeysMovedSchema) {}

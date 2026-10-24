@@ -89,6 +89,15 @@
       "body_one": "Every session and trusted browser was signed out. Your {{count}} passkey was kept: a password reset only proves you can read this mailbox, so it never removes it. Check it on your security page and remove it if you don't recognise it.",
       "body_other": "Every session and trusted browser was signed out. Your {{count}} passkeys were kept: a password reset only proves you can read this mailbox, so it never removes them. Check them on your security page and remove any you don't recognise.",
       "action": "Review your passkeys"
+    },
+    "passkeysMoved": {
+      "subject": "Your passkeys were removed",
+      "eyebrow": "Security · passkeys",
+      "heading": "Your passkeys were removed",
+      "body": "This install now runs at {{account}}, so the passkeys registered for its old address could no longer work and were removed. Add a passkey again from your security page.",
+      "action": "Open your security page",
+      "withApp": "Your authenticator app still works.",
+      "noApp": "Your recovery codes were forgotten with them. Set up a second factor again from your security page."
     }
   },
   "smtpTest": {

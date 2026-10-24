@@ -420,6 +420,31 @@ describe('HttpAuthApi', () => {
 
       expect(added.recoveryCodes).toEqual(['AAAA-1111']);
     });
+
+    it('redraws the recovery codes with an assertion, and refuses a malformed answer', async () => {
+      const request = {
+        passkey: {
+          ceremonyId: CEREMONY,
+          response: {
+            id: 'AQID',
+            rawId: 'AQID',
+            type: 'public-key' as const,
+            response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+            clientExtensionResults: {},
+          },
+        },
+      };
+      fetchMock.mockResolvedValueOnce(json({ recoveryCodes: ['AAAA-1111'] }));
+
+      await expect(new HttpAuthApi().regenerateRecoveryCodesWithPasskey(request)).resolves.toEqual({
+        recoveryCodes: ['AAAA-1111'],
+      });
+      expect(calls()[0]?.url).toBe('/api/me/passkeys/recovery-codes');
+      expect(calls()[0]?.init.method).toBe('POST');
+
+      fetchMock.mockResolvedValueOnce(json({ recoveryCodes: 'none' }));
+      await expect(new HttpAuthApi().regenerateRecoveryCodesWithPasskey(request)).rejects.toThrow();
+    });
   });
 
   describe('signing in with a passkey (M18-04)', () => {

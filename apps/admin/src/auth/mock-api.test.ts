@@ -285,6 +285,47 @@ describe('MockAuthApi passkeys (M18-02)', () => {
   });
 });
 
+describe('MockAuthApi redrawing the recovery codes with a passkey (M18-06)', () => {
+  it('needs a passkey, accepts an assertion for an issued ceremony once, and draws codes', async () => {
+    const api = new MockAuthApi();
+    const request = (ceremonyId: string) => ({
+      passkey: {
+        ceremonyId,
+        response: {
+          id: 'AQID',
+          rawId: 'AQID',
+          type: 'public-key' as const,
+          response: { clientDataJSON: 'e30', authenticatorData: 'AAAA', signature: 'AAAA' },
+          clientExtensionResults: {},
+        },
+      },
+    });
+    await expect(api.regenerateRecoveryCodesWithPasskey(request('unset'))).rejects.toMatchObject({
+      code: 'invalid-credentials',
+    });
+    const begun = await api.beginPasskey({ currentPassword: MOCK_PASSWORD });
+    await api.finishPasskey({
+      ceremonyId: begun.ceremonyId,
+      name: 'Laptop',
+      response: {
+        id: 'AQID',
+        rawId: 'AQID',
+        type: 'public-key',
+        response: { clientDataJSON: 'e30', attestationObject: 'o2NmbXRkbm9uZQ' },
+        clientExtensionResults: {},
+      },
+    });
+    const { ceremonyId } = await api.passkeyStepUpOptions();
+
+    const drawn = await api.regenerateRecoveryCodesWithPasskey(request(ceremonyId));
+
+    expect(drawn.recoveryCodes).toHaveLength(10);
+    await expect(api.regenerateRecoveryCodesWithPasskey(request(ceremonyId))).rejects.toMatchObject(
+      { code: 'challenge-expired' },
+    );
+  });
+});
+
 describe('MockAuthApi passkey as the second factor (M18-03)', () => {
   const answer = (id = 'AQID') => ({
     ceremonyId: 'unset',

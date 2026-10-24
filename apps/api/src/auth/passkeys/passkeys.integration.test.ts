@@ -4,6 +4,8 @@ import {
   createDb,
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
+  settings as settingsTable,
+  userBrandRoles,
   users,
   uuidv7,
   webauthnCredentials,
@@ -18,6 +20,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../../bootstrap.js';
 import { createLogger } from '../../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../../seed/dev-seed.js';
+import { writeSsoSetting } from '../../sso/sso-settings.js';
 import { QueuedAuthMail } from '../../testing/auth-mail.js';
 import { dockerAvailable } from '../../testing/docker-available.js';
 import { SoftwareAuthenticator } from '../../testing/software-authenticator.js';
@@ -813,6 +816,266 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
     });
   });
 
+  describe("the install admin's view on /api/install/passkeys", () => {
+    /** The move's audit rows since this test began (its target is the setting, not a person). */
+    const movedAudit = () =>
+      withTenant(runtime.db, system, (tx) =>
+        tx
+          .select()
+          .from(auditLog)
+          .where(and(eq(auditLog.action, 'auth.passkey.rp_moved'), gte(auditLog.createdAt, since))),
+      );
+
+    // A failing test must not leave the install on another host for the rest.
+    afterEach(async () => {
+      await pinTo('support.example.com');
+      await runtime.db.update(users).set({ installAdmin: true }).where(eq(users.id, seeded.userId));
+    });
+
+    /** What another host would have left behind, written the way the first registration writes it. */
+    const pinTo = (rpId: string) =>
+      withTenant(runtime.db, system, (tx) =>
+        tx
+          .insert(settingsTable)
+          .values({
+            key: 'auth.webauthn.rpId',
+            brandId: INSTALL_SCOPE_BRAND_ID,
+            value: JSON.stringify(rpId),
+            updatedBy: 'test',
+          })
+          .onConflictDoUpdate({
+            target: [settingsTable.key, settingsTable.brandId],
+            set: { value: JSON.stringify(rpId) },
+          }),
+      );
+
+    it.each([
+      ['GET', '/api/install/passkeys'],
+      ['POST', '/api/install/passkeys/move'],
+    ] as const)('refuses %s %s without a session', async (method, path) => {
+      expect((await call(method, path, undefined, null)).statusCode).toBe(401);
+    });
+
+    it('counts passkeys and the people holding them, and names the pinned RP ID', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'One');
+      await addPasskey(new SoftwareAuthenticator(), 'Two');
+      await strangerWith(new SoftwareAuthenticator());
+
+      const response = await call('GET', '/api/install/passkeys');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        state: 'available',
+        rpId: 'support.example.com',
+        pinnedRpId: 'support.example.com',
+        pinLocked: false,
+        passkeyCount: 3,
+        holderCount: 2,
+      });
+    });
+
+    it('refuses to move when nothing is paused, and removes nothing', async () => {
+      await addPasskey(new SoftwareAuthenticator());
+
+      const response = await call('POST', '/api/install/passkeys/move');
+
+      expect(response.statusCode).toBe(409);
+      expect(await storedFor(seeded.userId)).toHaveLength(1);
+    });
+
+    it('moves: removes every passkey, re-pins, audits, and tells the holder', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'One');
+      await addPasskey(new SoftwareAuthenticator(), 'Two');
+      await email.clear();
+      await pinTo('admin.example.com');
+
+      const paused = await call('GET', '/api/install/passkeys');
+      expect(paused.json()).toMatchObject({
+        state: 'paused',
+        rpId: 'support.example.com',
+        pinnedRpId: 'admin.example.com',
+      });
+
+      const moved = await call('POST', '/api/install/passkeys/move');
+
+      expect(moved.statusCode).toBe(200);
+      expect(moved.json()).toEqual({
+        rpId: 'support.example.com',
+        passkeysRemoved: 2,
+        holdersNotified: 1,
+      });
+      expect(await storedFor(seeded.userId)).toHaveLength(0);
+      const after = await call('GET', '/api/install/passkeys');
+      expect(after.json()).toMatchObject({
+        state: 'available',
+        pinnedRpId: 'support.example.com',
+        passkeyCount: 0,
+      });
+      const [moveAudit] = await movedAudit();
+      expect(moveAudit?.meta).toEqual({
+        from: 'admin.example.com',
+        to: 'support.example.com',
+        passkeys: 2,
+        holders: 1,
+      });
+      expect((await email.last()).subject).toBe('Your passkeys were removed');
+      expect((await addPasskey(new SoftwareAuthenticator(), 'Again')).statusCode).toBe(201);
+    });
+
+    /** A holder with a brand to be emailed through, no authenticator app and some recovery codes. */
+    const appLessAgent = async (): Promise<string> => {
+      const id = await strangerWith(new SoftwareAuthenticator());
+      await withTenant(runtime.db, { ...system, brandIds: [seeded.brandId] }, (tx) =>
+        tx
+          .insert(userBrandRoles)
+          .values({ userId: id, brandId: seeded.brandId, role: 'agent', departmentIds: [] }),
+      );
+      await runtime.db
+        .update(users)
+        .set({ totpEnabled: false, recoveryCodesHashed: ['hash-1', 'hash-2'] })
+        .where(eq(users.id, id));
+      return id;
+    };
+
+    const recoveryCodesOf = async (id: string) =>
+      (await runtime.db.select().from(users).where(eq(users.id, id)))[0]?.recoveryCodesHashed;
+
+    it('forgets the recovery codes of a holder with no authenticator app, and keeps the others', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'Admin key');
+      const agent = await appLessAgent();
+      const [before] = await runtime.db.select().from(users).where(eq(users.id, seeded.userId));
+      await email.clear();
+      await pinTo('admin.example.com');
+
+      const moved = await call('POST', '/api/install/passkeys/move');
+
+      expect(moved.statusCode).toBe(200);
+      expect(await recoveryCodesOf(agent)).toEqual([]);
+      expect(await recoveryCodesOf(seeded.userId)).toEqual(before?.recoveryCodesHashed);
+      const notices = await email.all();
+      expect(notices).toHaveLength(2);
+      expect(notices.some((n) => n.text.includes('Your recovery codes were forgotten'))).toBe(true);
+      expect(notices.some((n) => n.text.includes('authenticator app still works'))).toBe(true);
+      await runtime.db.delete(users).where(eq(users.id, agent));
+    });
+
+    it('refuses while an Admin whose only second factor is a passkey would be left with none', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'Only key');
+      await runtime.db.update(users).set({ totpEnabled: false }).where(eq(users.id, seeded.userId));
+      await pinTo('admin.example.com');
+
+      const status = await call('GET', '/api/install/passkeys');
+      const refused = await call('POST', '/api/install/passkeys/move');
+
+      expect(status.json()).toMatchObject({ blockers: { secondFactorAccounts: 1 } });
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({ error: { passkeys: { reason: 'move-blocked' } } });
+      expect(await storedFor(seeded.userId)).toHaveLength(1);
+      expect(await movedAudit()).toHaveLength(0);
+    });
+
+    it('refuses while SSO enforcement would lock out a break-glass admin who relies on a passkey', async () => {
+      const keyring = createKeyring(envFor());
+      await addPasskey(new SoftwareAuthenticator(), 'Only key');
+      await runtime.db.update(users).set({ totpEnabled: false }).where(eq(users.id, seeded.userId));
+      await withTenant(runtime.db, system, async (tx) => {
+        await writeSsoSetting(tx, keyring, { key: 'sso.enforced', value: true, actorId: 'test' });
+        await writeSsoSetting(tx, keyring, {
+          key: 'sso.breakGlassUserIds',
+          value: [seeded.userId],
+          actorId: 'test',
+        });
+      });
+      await pinTo('admin.example.com');
+      try {
+        const status = await call('GET', '/api/install/passkeys');
+        const refused = await call('POST', '/api/install/passkeys/move');
+
+        expect(status.json()).toMatchObject({ blockers: { breakGlassAccounts: 1 } });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json()).toMatchObject({ error: { passkeys: { reason: 'move-blocked' } } });
+        expect(await storedFor(seeded.userId)).toHaveLength(1);
+      } finally {
+        await withTenant(runtime.db, system, async (tx) => {
+          await writeSsoSetting(tx, keyring, {
+            key: 'sso.enforced',
+            value: false,
+            actorId: 'test',
+          });
+          await writeSsoSetting(tx, keyring, {
+            key: 'sso.breakGlassUserIds',
+            value: [],
+            actorId: 'test',
+          });
+        });
+      }
+    });
+
+    it('is all or nothing: a notice that cannot be queued leaves every passkey, the pin and the audit alone', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'Kept');
+      await pinTo('admin.example.com');
+      const ddl = createDb({ url: envFor().DATABASE_MIGRATION_URL, max: 1 });
+      await ddl.db.execute(
+        sql.raw(
+          `CREATE FUNCTION refuse_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'outbox refused'; END $$`,
+        ),
+      );
+      await ddl.db.execute(
+        sql.raw(
+          'CREATE TRIGGER refuse_outbox BEFORE INSERT ON outbox FOR EACH ROW EXECUTE FUNCTION refuse_outbox()',
+        ),
+      );
+      try {
+        const response = await call('POST', '/api/install/passkeys/move');
+
+        expect(response.statusCode).toBe(500);
+      } finally {
+        await ddl.db.execute(sql.raw('DROP TRIGGER refuse_outbox ON outbox'));
+        await ddl.db.execute(sql.raw('DROP FUNCTION refuse_outbox()'));
+        await ddl.close();
+      }
+      expect(await storedFor(seeded.userId)).toHaveLength(1);
+      expect(await movedAudit()).toHaveLength(0);
+      const status = await call('GET', '/api/install/passkeys');
+      expect(status.json()).toMatchObject({ state: 'paused', pinnedRpId: 'admin.example.com' });
+    });
+
+    it('lets one of two parallel moves win and answers the other with a conflict', async () => {
+      await addPasskey(new SoftwareAuthenticator(), 'One');
+      await pinTo('admin.example.com');
+
+      const answers = await Promise.all([
+        call('POST', '/api/install/passkeys/move'),
+        call('POST', '/api/install/passkeys/move'),
+      ]);
+
+      expect(answers.map((answer) => answer.statusCode).sort()).toEqual([200, 409]);
+      expect(await movedAudit()).toHaveLength(1);
+      expect(await storedFor(seeded.userId)).toHaveLength(0);
+    });
+
+    it('refuses a signed-in staff member who is not an install admin', async () => {
+      await runtime.db
+        .update(users)
+        .set({ installAdmin: false })
+        .where(eq(users.id, seeded.userId));
+      try {
+        const token = await signIn();
+
+        expect((await call('GET', '/api/install/passkeys', undefined, token)).statusCode).toBe(403);
+        expect(
+          (await call('POST', '/api/install/passkeys/move', undefined, token)).statusCode,
+        ).toBe(403);
+      } finally {
+        await runtime.db
+          .update(users)
+          .set({ installAdmin: true })
+          .where(eq(users.id, seeded.userId));
+      }
+    });
+  });
+
+  // Last on purpose: a reset ends every session of the account.
   describe('what a password reset leaves', () => {
     it('keeps the passkeys, and the notice names how many', async () => {
       await addPasskey(new SoftwareAuthenticator());

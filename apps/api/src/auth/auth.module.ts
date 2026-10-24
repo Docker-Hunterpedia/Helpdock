@@ -18,7 +18,7 @@ import { OauthService } from './oauth/oauth.service.js';
 import { OauthIdentityRepository } from './oauth/oauth-identity.repository.js';
 import { PasskeyRepository } from './passkeys/passkey.repository.js';
 import { PasskeyService } from './passkeys/passkey.service.js';
-import { PasskeysController } from './passkeys/passkeys.controller.js';
+import { InstallPasskeysController, PasskeysController } from './passkeys/passkeys.controller.js';
 import { PasswordHasher } from './password.js';
 import { RateLimiter } from './rate-limit.js';
 import { sessionLifetime } from './session/lifetime.js';
@@ -160,6 +160,7 @@ export const createAuthRuntime = ({
     auth,
     webauthn,
     passkeys: passkeyRows,
+    ssoPolicy,
     limiter,
     signingKeys,
     logger,
@@ -186,7 +187,7 @@ export class AuthModule {
        * a second call would silently produce that second graph.
        */
       global: true,
-      controllers: [AuthController, PasskeysController],
+      controllers: [AuthController, PasskeysController, InstallPasskeysController],
       providers: [
         {
           provide: SsoIdentityService,

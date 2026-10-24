@@ -125,5 +125,5 @@
       "domainsHint": "Enter the verified domains of your Entra tenant, for example example.com."
     }
   },
-  "ineligibleUnverified": "Its passkeys have no PIN or biometric. Add an authenticator app or a passkey that has one"
+  "ineligibleUnverified": "Their passkeys have no PIN or biometric. Add an authenticator app or a passkey that has one"
 }

@@ -13,6 +13,7 @@ import type {
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
+  PasskeyRecoveryRedrawRequest,
   PasskeyRegistrationOptions,
   PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
@@ -559,6 +560,16 @@ export class MockAuthApi implements AuthApi {
     const entry = this.#mockPasskey(request.name, request.response.rawId);
     this.#passkeys.push(entry);
     return first ? { ...entry.passkey, recoveryCodes: MOCK_RECOVERY_CODES } : entry.passkey;
+  }
+
+  async regenerateRecoveryCodesWithPasskey(
+    request: PasskeyRecoveryRedrawRequest,
+  ): Promise<RecoveryCodes> {
+    if (this.#passkeys.length === 0) {
+      throw new AuthError('invalid-credentials');
+    }
+    this.#assertPasskeyProof({ passkey: request.passkey });
+    return { recoveryCodes: MOCK_RECOVERY_CODES };
   }
 
   async renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey> {

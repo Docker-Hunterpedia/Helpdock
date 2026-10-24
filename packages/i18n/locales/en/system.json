@@ -262,5 +262,8 @@
     "next": "Next brands",
     "latest": "Return to latest snapshot",
     "waitForSnapshot": "More brands will be available when the worker publishes a paged snapshot."
+  },
+  "passkeysDrift": {
+    "link": "Open Settings › Authentication"
   }
 }

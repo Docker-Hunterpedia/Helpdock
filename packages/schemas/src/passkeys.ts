@@ -228,3 +228,49 @@ export const passkeyRecoveryRedrawRequestSchema = z.object({
   passkey: z.object({ ceremonyId: CEREMONY_ID, response: authenticationResponseSchema }),
 });
 export type PasskeyRecoveryRedrawRequest = z.infer<typeof passkeyRecoveryRedrawRequestSchema>;
+
+/**
+ * Passkeys as the install admin sees them on Settings › Authentication
+ * (M18-06): whether they work, the RP ID they were made for, and how many
+ * there are. Counts only: whose passkeys they are stays with their holders.
+ */
+export const installPasskeysSchema = z.strictObject({
+  state: z.enum(['available', 'paused', 'unavailable']),
+  /** The host `APP_URL` implies; null when passkeys cannot run there. */
+  rpId: z.string().nullable(),
+  /** The RP ID the passkeys were made for; null before the first one. */
+  pinnedRpId: z.string().nullable(),
+  /** When the first registration pinned it; null when unpinned or set by the environment. */
+  pinnedAt: z.string().datetime().nullable(),
+  /** `HD_AUTH_WEBAUTHN_RP_ID` pins it, so it cannot be moved from here. */
+  pinLocked: z.boolean(),
+  passkeyCount: z.number().int().nonnegative(),
+  holderCount: z.number().int().nonnegative(),
+  /**
+   * What moving the passkeys would break, counted while paused (zero otherwise).
+   * Any non-zero count makes the move refuse (`move-blocked`).
+   */
+  blockers: z.strictObject({
+    /** Configured SSO break-glass accounts that rely on a verified passkey. */
+    breakGlassAccounts: z.number().int().nonnegative(),
+    /** Accounts that must have a second factor and have only passkeys. */
+    secondFactorAccounts: z.number().int().nonnegative(),
+  }),
+});
+export type InstallPasskeys = z.infer<typeof installPasskeysSchema>;
+
+/** What moving the passkeys to the new address removed. */
+export const installPasskeysMovedSchema = z.strictObject({
+  rpId: z.string(),
+  passkeysRemoved: z.number().int().nonnegative(),
+  holdersNotified: z.number().int().nonnegative(),
+});
+export type InstallPasskeysMoved = z.infer<typeof installPasskeysMovedSchema>;
+
+/**
+ * Why moving the passkeys was refused, on `error.passkeys.reason`: nothing is
+ * paused, the environment pins the RP ID, or the move would lock accounts out
+ * (the counts are on `GET /api/install/passkeys`).
+ */
+export const passkeysRefusalSchema = z.enum(['not-paused', 'pin-locked', 'move-blocked']);
+export type PasskeysRefusal = z.infer<typeof passkeysRefusalSchema>;

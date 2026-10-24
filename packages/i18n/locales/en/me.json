@@ -50,7 +50,12 @@
     "regenerateSubmit": "Regenerate",
     "regenerated": "New recovery codes. The old ones no longer work.",
     "newCodesTitle": "Your new recovery codes",
-    "newCodesBody": "Each works once, and this is the only time they are shown."
+    "newCodesBody": "Each works once, and this is the only time they are shown.",
+    "regenerateWithPasskey": "Regenerate with a passkey",
+    "regenerateWithPasskeyTitle": "Regenerate recovery codes with a passkey?",
+    "regenerateWithPasskeyBody": "Your browser will ask for a passkey. The codes you have now stop working at once.",
+    "regenerateWithPasskeySubmit": "Use my passkey",
+    "regenerateWithPasskeyFailed": "Couldn't confirm with your passkey. Try again or use a code."
   },
   "passkeys": {
     "title": "Passkeys",

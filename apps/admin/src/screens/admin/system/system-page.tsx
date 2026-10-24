@@ -9,6 +9,7 @@ import { secondsSince } from './format.js';
 import { HealthCards } from './health-cards.js';
 import { ImportsCard } from './imports-card.js';
 import { LlmSpendCard } from './llm-spend-card.js';
+import { PasskeysDrift } from './passkeys-drift.tsx';
 import { PendingDeletionsCard } from './pending-deletions-card.js';
 import { ProductMetricsRow } from './product-metrics-row.js';
 import { QueueDashboardButton } from './queue-dashboard-button.js';
@@ -135,6 +136,8 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
       />
 
       <Box sx={{ display: 'grid', gap: 6 }}>
+        <PasskeysDrift />
+
         <HealthCards status={data} />
 
         <ProductMetricsRow api={client} />

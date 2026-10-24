@@ -1,4 +1,6 @@
 import type {
+  InstallPasskeys,
+  InstallPasskeysMoved,
   Passkey,
   PasskeyAdded,
   PasskeyList,
@@ -23,8 +25,10 @@ import { ZodSerializerDto, ZodValidationPipe } from 'nestjs-zod';
 import { getTx, requireRequestContext } from '../../context/request-context.js';
 import { RecoveryCodesDto } from '../dto.js';
 import { requireStaffPrincipalId } from '../principal.js';
-import { Authenticated } from '../route-declaration.js';
+import { Authenticated, Requires } from '../route-declaration.js';
 import {
+  InstallPasskeysDto,
+  InstallPasskeysMovedDto,
   PasskeyAddedDto,
   PasskeyBeginRequestDto,
   PasskeyDto,
@@ -137,5 +141,36 @@ export class PasskeysController {
 
   #session(authorization: string | undefined) {
     return this.#passkeys.sessionOf(this.#userId(), authorization, getTx());
+  }
+}
+
+/**
+ * The install admin's view of passkeys, on Settings › Authentication (M18-06):
+ * the same status for everyone with `install:admin`, and one action, moving the
+ * passkeys when the install's address changed for good.
+ */
+@Controller('api/install/passkeys')
+export class InstallPasskeysController {
+  readonly #passkeys: PasskeyService;
+
+  constructor(@Inject(PasskeyService) passkeys: PasskeyService) {
+    this.#passkeys = passkeys;
+  }
+
+  @Get()
+  @Requires('install:admin')
+  @ZodSerializerDto(InstallPasskeysDto)
+  status(): Promise<InstallPasskeys> {
+    return this.#passkeys.installStatus();
+  }
+
+  @Post('move')
+  @Requires('install:admin')
+  @HttpCode(HttpStatus.OK)
+  @ZodSerializerDto(InstallPasskeysMovedDto)
+  move(): Promise<InstallPasskeysMoved> {
+    return this.#passkeys.moveToCurrentHost(
+      requireStaffPrincipalId(requireRequestContext().principal),
+    );
   }
 }

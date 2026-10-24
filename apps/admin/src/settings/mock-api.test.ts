@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MockSettingsApi } from './mock-api.js';
+import { MOCK_INSTALL_PASSKEYS_STORAGE, MockSettingsApi } from './mock-api.js';
 
 describe('MockSettingsApi', () => {
   it('keeps an omitted secret and enables a newly configured provider', async () => {
@@ -45,5 +45,41 @@ describe('MockSettingsApi', () => {
       tenantId: '3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
       enabled: true,
     });
+  });
+});
+
+describe('MockSettingsApi passkeys', () => {
+  it('reports the seeded status and starts available', async () => {
+    const api = new MockSettingsApi();
+
+    expect(await api.passkeys()).toMatchObject({ state: 'available', passkeyCount: 12 });
+  });
+
+  it('moves: no passkeys, pinned to the current host, and says how many went', async () => {
+    window.localStorage.setItem(
+      MOCK_INSTALL_PASSKEYS_STORAGE,
+      JSON.stringify({
+        state: 'paused',
+        rpId: 'desk.helpdock.com',
+        pinnedRpId: 'old.helpdock.com',
+      }),
+    );
+    try {
+      const api = new MockSettingsApi();
+
+      expect(await api.movePasskeys()).toEqual({
+        rpId: 'desk.helpdock.com',
+        passkeysRemoved: 12,
+        holdersNotified: 7,
+      });
+      expect(await api.passkeys()).toMatchObject({
+        state: 'available',
+        pinnedRpId: 'desk.helpdock.com',
+        passkeyCount: 0,
+        holderCount: 0,
+      });
+    } finally {
+      window.localStorage.removeItem(MOCK_INSTALL_PASSKEYS_STORAGE);
+    }
   });
 });

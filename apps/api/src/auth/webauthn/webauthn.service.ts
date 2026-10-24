@@ -1,4 +1,5 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import type { DbTransaction } from '@helpdock/db';
 import {
   type AuthenticationResponseJSON,
   generateAuthenticationOptions,
@@ -429,6 +430,22 @@ export class WebAuthnService {
       return { state: 'paused', rpId: relyingParty.id, pinned };
     }
     return { state: 'available', rpId: relyingParty.id, pinned };
+  }
+
+  /** True when `HD_AUTH_WEBAUTHN_RP_ID` pins the RP ID, so it cannot be moved. */
+  isPinLocked(): boolean {
+    return this.#pin.isLocked();
+  }
+
+  /**
+   * Moves the pin from `from` to `to` in one transaction with `within` (M18-06,
+   * "Move passkeys"). Throws `RpIdPinChangedError` when the pin is no longer `from`.
+   */
+  moveRpId<T>(
+    move: { readonly from: string; readonly to: string; readonly actorId: string },
+    within: (tx: DbTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.#pin.moveTo(move, within);
   }
 
   /**

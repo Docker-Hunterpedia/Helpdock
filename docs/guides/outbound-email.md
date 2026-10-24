@@ -23,7 +23,7 @@ on the ticket.
 
 ## The server: Channels › Outgoing email
 
-**Admin → Channels → Outgoing email** (Admin only, `brand:manage`).
+**Settings → Channels → Outgoing email** (Admin only, `brand:manage`).
 
 | Section | What it sets |
 |---|---|

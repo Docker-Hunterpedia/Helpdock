@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSecurity, openTicket, signIn } from './flows.js';
+import { openSecurity, openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -29,9 +29,9 @@ async function violations(page: Page): Promise<string[]> {
 
 const openOutgoing = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
+  await openSettingsArea(page, t, 'channels');
   // Channels opens on Mailboxes; Outgoing email is the second tab.
-  await page.getByRole('tab', { name: t('channels:tabs.outgoing') }).click();
+  await settingsTab(page, t, 'channels:tabs.outgoing').click();
   await page.getByRole('heading', { name: t('channels:smtp.heading') }).waitFor();
 };
 
@@ -44,9 +44,9 @@ test.describe('Channels › Outgoing email', () => {
     await signIn(page, locale);
     await openOutgoing(page, locale);
 
-    await expect(page.getByRole('tab', { name: t('channels:tabs.outgoing') })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await expect(settingsTab(page, t, 'channels:tabs.outgoing')).toHaveAttribute(
+      'aria-current',
+      'page',
     );
     expect(await violations(page)).toEqual([]);
 
@@ -149,8 +149,8 @@ test.describe('Your account › Email signature', () => {
     const t = strings(locale);
     await signIn(page, locale);
     await openSecurity(page, locale);
-    await page.getByRole('tab', { name: t('me:account.tabs.signature') }).click();
-    await page.getByRole('heading', { name: t('me:signature.heading') }).waitFor();
+    await settingsTab(page, t, 'me:account.tabs.signature').click();
+    await page.getByRole('heading', { name: t('me:signature.heading'), level: 2 }).waitFor();
     expect(await violations(page)).toEqual([]);
 
     const english = page.getByLabel(t('me:signature.en'), { exact: true });

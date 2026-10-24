@@ -1,8 +1,8 @@
 import type { RetentionUpdateRequest, SessionBrand } from '@helpdock/schemas';
-import { Box, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { brandRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -33,21 +33,27 @@ import { RetentionCard } from './retention-card.tsx';
 export const BRAND_TABS = [
   { key: 'general', segment: 'general' },
   { key: 'domains', segment: 'domains' },
-  { key: 'import', segment: 'import' },
   { key: 'danger', segment: 'danger' },
 ] as const;
 const DEFAULT_BRAND_TAB = BRAND_TABS[0];
 
-export function BrandPage(): ReactNode {
+/** The Install group's Imports page, which the brand's deletion grace also locks (M14-21). */
+const IMPORT_TAB = { key: 'import', segment: 'import' } as const;
+
+/**
+ * General, Domains and Danger zone are pages of the Brand group; `imports`
+ * draws the import overview or one run, which are the brand's data and so share
+ * this page's read-only grace, under Install › Imports.
+ */
+export function BrandPage({ imports = false }: { readonly imports?: boolean } = {}): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
   const { tab: segment, runId } = useParams();
   const deletion = useBrandDeletion(brand.id, session.user.installAdmin);
   const pending = deletion.data?.status === 'deleting';
 
-  const tab = BRAND_TABS.find((candidate) => candidate.segment === (runId ? 'import' : segment));
+  const tab = imports ? IMPORT_TAB : BRAND_TABS.find((candidate) => candidate.segment === segment);
   if (tab === undefined) {
     return <Navigate to={brandRoute(DEFAULT_BRAND_TAB.segment)} replace />;
   }
@@ -60,33 +66,6 @@ export function BrandPage(): ReactNode {
           brand: brand.name,
         })}
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs
-          value={tab.key}
-          aria-label={t('brand:tabList')}
-          slotProps={{
-            indicator: {
-              sx: tab.key === 'danger' ? { backgroundColor: tokens['status.danger'] } : {},
-            },
-          }}
-        >
-          {BRAND_TABS.map((candidate) => (
-            <Tab
-              key={candidate.key}
-              value={candidate.key}
-              label={t(`brand:tabs.${candidate.key}`)}
-              component={Link}
-              to={brandRoute(candidate.segment)}
-              sx={
-                candidate.key === 'danger'
-                  ? { '&.Mui-selected': { color: tokens['status.danger.text'] } }
-                  : {}
-              }
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       {deletion.data === undefined ? null : (
         <PendingDeletionBanner brand={brand} deletion={deletion.data} />
@@ -156,7 +135,7 @@ function DangerZone({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 720px) 300px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 720px) 300px' },
         gap: 8,
         alignContent: 'start',
       }}

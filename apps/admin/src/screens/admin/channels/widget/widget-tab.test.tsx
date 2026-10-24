@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../../app/routes.tsx';
 import { MockChannelsApi } from '../../../../channels/mock-api.js';
 import { renderApp } from '../../../../test/render.tsx';
+import { settingsLink } from '../../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../../test/signed-in.js';
 import { embedSnippet } from './widget-tab.tsx';
 
@@ -28,7 +29,7 @@ const renderWidget = async (role: 'admin' | 'teamLeader' = 'admin') => {
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
     channelsApi,
-    initialEntries: ['/admin/channels/widget'],
+    initialEntries: ['/settings/channels/widget'],
   });
   await screen.findByRole('heading', { name: 'Appearance' }, { timeout: 10_000 });
   return { ...rendered, channelsApi };
@@ -40,7 +41,7 @@ describe('Channels › Widget', () => {
   it('shows an Admin every card, and the snippet for this brand', async () => {
     await renderWidget();
 
-    expect(screen.getByRole('tab', { name: 'Widget' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Chat widget')).toHaveAttribute('aria-current', 'page');
     for (const heading of [
       'Embed code',
       'Conversation',
@@ -56,9 +57,9 @@ describe('Channels › Widget', () => {
   it('shows a Team Leader the widget alone, without the Admin cards or the email tabs', async () => {
     await renderWidget('teamLeader');
 
-    expect(screen.getByRole('tab', { name: 'Widget' })).toBeVisible();
-    expect(screen.queryByRole('tab', { name: 'Mailboxes' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Outgoing email' })).toBeNull();
+    expect(settingsLink('Chat widget')).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Email' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Outgoing email' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Where the widget may run' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Signed identity' })).toBeNull();
   });

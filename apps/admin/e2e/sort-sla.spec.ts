@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openTicketing, openTickets, signIn } from './flows.js';
+import { openTicketing, openTickets, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test.use({ reducedMotion: 'reduce' });
@@ -54,7 +54,7 @@ test('saves SLA due in the view editor and opens the view in that order', async 
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t('ticketing:tabs.views') }).click();
+  await settingsTab(page, t, 'ticketing:tabs.views').click();
   await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
   const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
   await card

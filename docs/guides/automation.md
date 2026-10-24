@@ -4,7 +4,7 @@ How a brand acts on tickets without a person doing it: rules that run when
 something happens to a ticket, rules that run on a schedule over tickets that
 have waited too long, the depth guard that keeps rules from looping, the
 execution log, the test run, and the Routing tab that explains how a new ticket
-is routed and tests it. The screen is **Admin → Automation**
+is routed and tests it. The screens are **Settings → Inbox → Rules, Time-based, Routing and Macros**
 (M3-03, M3-04, M3-05, M14-09; [REQUIREMENTS §4.3](../planning/REQUIREMENTS.md#43-automation)).
 
 The **Macros** tab is M3-06's and has its own guide, [macros.md](macros.md).

@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicket, openTicketing, signIn } from './flows.js';
+import { openTicket, openTicketing, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -24,7 +24,7 @@ const openAssignment = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t('ticketing:tabs.assignment') }).click();
+  await settingsTab(page, t, 'ticketing:tabs.assignment').click();
   await page
     .getByRole('heading', {
       name: t('ticketing:assignment.editor.heading', { department: support(locale) }),

@@ -203,7 +203,7 @@ export class MockSsoApi implements SsoApi {
     this.#connection(id);
     return {
       startUrl: new URL(
-        `/admin/settings/sso/${id}?test=${'m'.repeat(43)}`,
+        `/settings/install/sso/${id}?test=${'m'.repeat(43)}`,
         window.location.origin,
       ).toString(),
     };

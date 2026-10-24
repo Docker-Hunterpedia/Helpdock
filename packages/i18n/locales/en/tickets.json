@@ -231,8 +231,8 @@
       "search": "Find a tag",
       "list": "Tags",
       "remove": "Remove tag {{name}}",
-      "noMatch": "No tag called \"{{term}}\". Tags are created in Ticketing › Tags.",
-      "none": "This brand has no tags yet. Tags are created in Ticketing › Tags.",
+      "noMatch": "No tag called \"{{term}}\". Tags are created in Inbox › Tags.",
+      "none": "This brand has no tags yet. Tags are created in Inbox › Tags.",
       "footer": "Enter toggles, Esc closes. Changes save as you pick."
     },
     "custom": "Custom fields",
@@ -435,7 +435,7 @@
     "title": "Mark {{ticket}} as spam?",
     "body": "The ticket closes with the Spam status. No auto-reply and no CSAT are sent, and it is left out of reports.",
     "block": "Block",
-    "blockHint": "Their next messages are dropped. Undo from Ticketing › Spam.",
+    "blockHint": "Their next messages are dropped. Undo from Inbox › Spam.",
     "submit": "Mark as spam"
   },
   "time": {

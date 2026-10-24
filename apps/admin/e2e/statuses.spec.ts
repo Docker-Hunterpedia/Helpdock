@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { openTicketing, signIn } from './flows.js';
+import { openTicketing, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -34,7 +34,7 @@ const openStatuses = async (
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t('ticketing:tabs.statuses') }).click();
+  await settingsTab(page, t, 'ticketing:tabs.statuses').click();
   await expect(
     page.getByRole('button', { name: t('ticketing:statuses.table.select', { name: 'Open' }) }),
   ).toBeVisible();

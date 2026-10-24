@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { MOCK_WEB_FORM, MockChannelsApi } from '../../../channels/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 import { updateFrom, withShown } from './web-form-tab.tsx';
 
@@ -19,7 +20,7 @@ const renderWebForm = async (channelsApi = new MockChannelsApi()) => {
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
     channelsApi,
-    initialEntries: ['/admin/channels/web-form'],
+    initialEntries: ['/settings/channels/web-form'],
   });
   await screen.findByRole('heading', { name: 'Hosted form' });
   return { ...rendered, channelsApi };
@@ -33,7 +34,7 @@ describe('Channels › Web form', () => {
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 
-    expect(screen.getByRole('tab', { name: 'Web form' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Web form')).toHaveAttribute('aria-current', 'page');
     const hosted = section('Hosted form');
     expect(within(hosted).getByLabelText('Public address')).toHaveValue(MOCK_WEB_FORM.publicUrl);
     expect(within(hosted).getByRole('link', { name: 'Open' })).toHaveAttribute(
@@ -143,7 +144,7 @@ describe('Channels › Web form', () => {
       staffApi: apis.staff,
       ticketingApi: apis.ticketing,
       channelsApi,
-      initialEntries: ['/admin/channels/web-form'],
+      initialEntries: ['/settings/channels/web-form'],
     });
 
     expect(await screen.findByText(/The web form could not be loaded/)).toBeVisible();

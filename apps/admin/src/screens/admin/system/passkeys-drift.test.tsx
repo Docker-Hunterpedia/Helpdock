@@ -22,10 +22,9 @@ describe('PasskeysDrift', () => {
     expect(await screen.findByText("This install's address changed")).toBeVisible();
     expect(screen.getByText('admin.helpdock.com')).toBeVisible();
     expect(screen.getByText('desk.helpdock.com')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Open Settings › Authentication' })).toHaveAttribute(
-      'href',
-      '/admin/settings',
-    );
+    expect(
+      screen.getByRole('link', { name: 'Open Settings › Install › Authentication' }),
+    ).toHaveAttribute('href', '/settings/install/authentication');
   });
 
   it.each([

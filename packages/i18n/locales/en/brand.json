@@ -124,7 +124,7 @@
       "stateFailed": "Failed: the reason is shown under the domain.",
       "widgetHeading": "Chat widget sites",
       "widgetBefore": "The sites allowed to embed the widget are set on",
-      "widgetLink": "Channels › Widget",
+      "widgetLink": "Channels › Chat widget",
       "widgetAfter": ". They need no DNS records.",
       "whoHeading": "Who can change this",
       "whoBody": "Admins of this brand. Adding, verifying and removing a domain is written to the audit log."

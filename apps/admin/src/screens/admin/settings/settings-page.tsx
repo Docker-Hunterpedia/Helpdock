@@ -12,15 +12,13 @@ import {
   FormControlLabel,
   Link,
   Paper,
-  Tab,
-  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Settings2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
-import { Link as RouterLink, useSearchParams } from 'react-router';
+import { Link as RouterLink } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { ROUTES } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
@@ -40,11 +38,18 @@ import { SsoTab } from './sso-tab.tsx';
 
 const MASKED_SECRET = '••••••••••••';
 
-export function SettingsPage(): ReactNode {
+/**
+ * The install's sign-in settings: Authentication, or the Single sign-on
+ * connections. They are two pages of the Settings area's Install group
+ * (M14-21), each at a url of its own.
+ */
+export function SettingsPage({
+  page = 'authentication',
+}: {
+  readonly page?: 'authentication' | 'sso';
+} = {}): ReactNode {
   const t = useT();
   const api = useSettingsApi();
-  const [search, setSearch] = useSearchParams();
-  const tab = search.get('tab') === 'sso' ? 'sso' : 'authentication';
   const query = useQuery({
     queryKey: SETTINGS_AUTHENTICATION_QUERY_KEY,
     queryFn: () => api.authentication(),
@@ -53,16 +58,7 @@ export function SettingsPage(): ReactNode {
   return (
     <>
       <PageHeader title={t('settings:title')} caption={t('settings:scope')} />
-      <Tabs
-        value={tab}
-        onChange={(_event, selected: string) => setSearch({ tab: selected })}
-        sx={{ marginBlockStart: -5, marginBlockEnd: 6 }}
-      >
-        <Tab value="authentication" label={t('settings:tabs.authentication')} />
-        <Tab value="sso" label={t('sso:title')} />
-      </Tabs>
-
-      {tab === 'sso' ? (
+      {page === 'sso' ? (
         <SsoTab />
       ) : query.isPending ? (
         <Box role="status" sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -202,7 +198,7 @@ function AuthenticationSettingsForm({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 720px) 300px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 720px) 300px' },
         gap: 8,
         alignItems: 'start',
       }}

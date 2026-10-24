@@ -1,12 +1,11 @@
 import type { EmailOutgoingSettings } from '@helpdock/schemas';
-import { Box, Button, Tab, Tabs } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { channelsRoute, ROUTES } from '../../../app/route-paths.js';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useEmailApi, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { emailKeys } from '../../../email/api.js';
 import { PageHeader } from '../../../shell/page-header.tsx';
@@ -37,7 +36,6 @@ import { WidgetTab } from './widget/widget-tab.tsx';
  */
 export function ChannelsPage(): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
   const { tab: segment, botId, accountId } = useParams();
@@ -95,23 +93,6 @@ export function ChannelsPage(): ReactNode {
           ) : undefined
         }
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs value={tab.key} aria-label={t('channels:tabList')}>
-          {tabs.map(({ key, segment: path, icon: Icon }) => (
-            <Tab
-              key={key}
-              value={key}
-              icon={<Icon size={14} aria-hidden="true" />}
-              iconPosition="start"
-              label={t(`channels:tabs.${key}`)}
-              component={Link}
-              to={channelsRoute(path)}
-              sx={{ minHeight: 40 }}
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       <TabBody
         tab={tab}

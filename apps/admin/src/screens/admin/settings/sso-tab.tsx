@@ -64,7 +64,7 @@ export function SsoTab() {
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 320px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 320px' },
         gap: 8,
         alignItems: 'start',
       }}

@@ -26,7 +26,7 @@ export const TICKETING_TABS = [
 export type TicketingTab = (typeof TICKETING_TABS)[number];
 export type TicketingTabKey = TicketingTab['key'];
 
-/** Where `/admin/ticketing` with no tab goes. */
+/** Where `/settings/inbox` with no tab goes. */
 export const DEFAULT_TICKETING_TAB: TicketingTab = TICKETING_TABS[0];
 
 export const tabForSegment = (segment: string | undefined): TicketingTab | undefined =>

@@ -1,3 +1,4 @@
+import { openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -35,7 +36,7 @@ const DEPARTMENT = `Billing ${RUN}`;
 const TEAM = `Front line ${RUN}`;
 
 const openTicketing = async (page: import('@playwright/test').Page): Promise<void> => {
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.ticketing')) }).click();
+  await openSettingsArea(page, t, 'ticketing');
   await page.getByRole('table').waitFor();
 };
 

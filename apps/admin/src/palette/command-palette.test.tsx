@@ -182,7 +182,7 @@ describe('the empty palette', () => {
       within(group)
         .getAllByRole('option')
         .map((option) => option.textContent),
-    ).toEqual(['HD-1042Refund for order 42 has not arrived', 'Ticketing › SLAs']);
+    ).toEqual(['HD-1042Refund for order 42 has not arrived', 'Inbox › SLA policies']);
   });
 
   it.each([403, 404])('drops a recent the api answers %i for, and forgets it', async (status) => {
@@ -284,11 +284,11 @@ describe('typing', () => {
     await user.type(input(), 'اتفاقيه مستوي');
 
     const group = await within(palette()).findByRole('group', { name: 'Go to' });
-    expect(within(group).getAllByRole('option')[0]).toHaveTextContent('Ticketing › SLAs');
+    expect(within(group).getAllByRole('option')[0]).toHaveTextContent('Inbox › SLA policies');
 
     await user.keyboard('{Enter}');
     await waitFor(() => {
-      expect(where()).toBe('/admin/ticketing/slas');
+      expect(where()).toBe('/settings/inbox/slas');
     });
   });
 
@@ -300,7 +300,7 @@ describe('typing', () => {
     await user.type(input(), 'working hours');
 
     await waitFor(() => {
-      expect(optionNames()).toContain('Ticketing › Business hours');
+      expect(optionNames()).toContain('Inbox › Business hours');
     });
   });
 
@@ -431,7 +431,7 @@ describe('when something goes wrong', () => {
     expect(
       await within(palette()).findByText("Search couldn't load. Pages and actions still work."),
     ).toBeVisible();
-    expect(optionNames()).toContain('Automation › Macros');
+    expect(optionNames()).toContain('Inbox › Macros');
   });
 });
 

@@ -7,7 +7,7 @@ import { FileText, Inbox, type LucideIcon, MessageCircle, Network, Send } from '
  * Web form (M4-09), Telegram (M6-05) and Meta (M10-07: WhatsApp, Messenger and
  * Instagram). Mailboxes, Outgoing email, Web form, Telegram and Meta are the
  * Admin's; a Team Leader owns the widget's look, conversation and content
- * policy (DOMAIN-RULES §1.2), so `/admin/channels` lands on the first tab the
+ * policy (DOMAIN-RULES §1.2), so `/settings/channels` lands on the first tab the
  * viewer may open.
  */
 export interface ChannelsTab {

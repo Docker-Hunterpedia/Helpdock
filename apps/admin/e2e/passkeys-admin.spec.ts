@@ -8,7 +8,7 @@ import {
 } from '../src/screens/admin/system/fixtures.js';
 import { MOCK_INSTALL_PASSKEYS_STORAGE } from '../src/settings/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openSecurity, openSettings, signIn } from './flows.js';
+import { openSecurity, openSettings, openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -198,7 +198,7 @@ test('the System page repeats the address warning and links to Settings', async 
   );
   await seedInstallPasskeys(page, PAUSED);
   await signIn(page, locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.system')) }).click();
+  await openSettingsArea(page, t, 'system');
 
   await expect(page.getByText(t('settings:passkeys.pausedTitle'))).toBeVisible();
   expect(await violations(page)).toEqual([]);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import { MockEmailApi } from '../../email/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
+import { settingsLink } from '../../test/settings-nav.js';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { tooManyLines } from './signature-page.tsx';
 
@@ -14,9 +15,9 @@ const renderSignature = async (emailApi = new MockEmailApi()) => {
     authApi: apis.auth,
     staffApi: apis.staff,
     emailApi,
-    initialEntries: ['/me/signature'],
+    initialEntries: ['/settings/account/signature'],
   });
-  await screen.findByRole('heading', { name: 'Email signature' });
+  await screen.findByRole('heading', { name: 'Email signature', level: 2 });
   return { ...rendered, emailApi };
 };
 
@@ -24,11 +25,8 @@ describe('the Email signature tab', () => {
   it('sits beside Security and shows the stored signature in both languages', async () => {
     await renderSignature();
 
-    expect(screen.getByRole('tab', { name: 'Email signature' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('tab', { name: 'Security' })).toHaveAttribute('href', '/me/security');
+    expect(settingsLink('Email signature')).toHaveAttribute('aria-current', 'page');
+    expect(settingsLink('Security')).toHaveAttribute('href', '/settings/account/security');
     expect(await screen.findByLabelText('English')).toHaveValue(
       'Lina Haddad\nBilling team · Helpdock',
     );

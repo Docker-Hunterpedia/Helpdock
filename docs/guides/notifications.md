@@ -74,10 +74,11 @@ notification or triggering a new-notification sound.
 
 ## Your account › Notifications
 
-Your account (`/me`) is one page with three tabs, each a URL of its own:
-Security (`/me/security`, where `/me` lands), Notifications
-(`/me/notifications`) and Email signature (`/me/signature`, see
-[outbound email](outbound-email.md)).
+Your account is the first group of **Settings** (since M14-21), with four pages, each a URL of its own:
+Profile (`/settings/account/profile`, where `/settings/account` lands), Notifications
+(`/settings/account/notifications`), Security (`/settings/account/security`) and Email
+signature (`/settings/account/signature`, see [outbound email](outbound-email.md)). The old
+`/me/…` addresses redirect there.
 
 The Notifications tab is reached from the account menu or the panel's
 "Notification settings" link. One checkbox per event and channel; nothing is saved until
@@ -85,7 +86,7 @@ The Notifications tab is reached from the account menu or the panel's
 to the person, not the brand: they are the same in every brand they work in.
 
 The caption says where email goes and in which language: the person's app
-language, set on the Security tab. Above the matrix is the **Email schedule**
+language, set on the Security page. Above the matrix is the **Email schedule**
 card (M14-11, see [Email schedule](#email-schedule) and [Pause](#pause)), and
 the three kinds that can cut a Right away wait (a mention, an SLA breach, an
 escalation) carry an *Urgent* caption in the matrix.

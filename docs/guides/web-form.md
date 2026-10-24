@@ -17,7 +17,7 @@ The page is plain HTML with no script of its own, so it works with JavaScript of
 
 ## Channels › Web form
 
-**Admin → Channels → Web form** (Admin only, `brand:manage`). Two cards, each with its own Save.
+**Settings → Channels → Web form** (Admin only, `brand:manage`). Two cards, each with its own Save.
 
 | Setting | What it does |
 |---|---|

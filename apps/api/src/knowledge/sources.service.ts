@@ -102,7 +102,7 @@ export interface KnowledgeSourcesOptions {
 }
 
 /** Where the admin lands after an OAuth round trip; the M7-10 screen reads the query. */
-export const KNOWLEDGE_ADMIN_PATH = '/admin/ai/knowledge';
+export const KNOWLEDGE_ADMIN_PATH = '/settings/ai/knowledge';
 export const OAUTH_CALLBACK_PATH = '/api/knowledge/oauth/callback';
 
 const configView = (source: KnowledgeSource): KnowledgeSourceConfigView => {

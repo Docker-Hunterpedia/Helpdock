@@ -1,8 +1,9 @@
 import { Box, Drawer, IconButton, Typography, useMediaQuery } from '@mui/material';
 import { Menu as MenuIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useMatch } from 'react-router';
 import { useT } from '../app/i18n.js';
+import { ROUTES } from '../app/route-paths.js';
 import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
 import { useGlobalShortcuts } from '../keyboard/global-shortcuts.js';
@@ -47,6 +48,8 @@ export function AppShell({ flush = false }: { readonly flush?: boolean } = {}): 
 }
 
 function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
+  // Settings pads itself (M14-21): its navigation column runs edge to edge.
+  const bleed = useMatch({ path: ROUTES.settings, end: false }) !== null;
   const t = useT();
   const tokens = useSemanticTokens();
   const session = useSession();
@@ -68,7 +71,11 @@ function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
         flex: 1,
         minWidth: 0,
         backgroundColor: tokens['bg.canvas'],
-        ...(flush ? { display: 'flex', minHeight: 0, overflow: 'hidden' } : { padding: 8 }),
+        ...(flush
+          ? { display: 'flex', minHeight: 0, overflow: 'hidden' }
+          : bleed
+            ? {}
+            : { padding: 8 }),
       }}
     >
       <Outlet />

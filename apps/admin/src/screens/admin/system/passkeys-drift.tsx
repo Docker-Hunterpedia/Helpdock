@@ -30,7 +30,7 @@ export function PasskeysDrift(): ReactNode {
   return (
     <PasskeysDriftBanner from={data.pinnedRpId} to={data.rpId}>
       {' '}
-      <Link component={RouterLink} to={ROUTES.settings}>
+      <Link component={RouterLink} to={ROUTES.authentication}>
         {t('system:passkeysDrift.link')}
       </Link>
     </PasskeysDriftBanner>

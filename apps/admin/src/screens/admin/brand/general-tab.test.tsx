@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /** Brand › General against the fixture: the Identity card and what it sends. */
@@ -12,17 +13,17 @@ const renderGeneral = async () => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketing,
-    initialEntries: ['/admin/brand'],
+    initialEntries: ['/settings/brand'],
   });
   await screen.findByRole('heading', { name: 'Identity' }, { timeout: 10_000 });
   return rendered;
 };
 
 describe('Brand › General', () => {
-  it('is where /admin/brand opens, with the prefix read-only', async () => {
+  it('is where /settings/brand opens, with the prefix read-only', async () => {
     await renderGeneral();
 
-    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('General')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByLabelText('Ticket prefix')).toHaveAttribute('readonly');
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   });

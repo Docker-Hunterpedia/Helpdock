@@ -177,7 +177,7 @@ export function ImportsCard({
         ) : null}
         {session?.user.role === 'admin' ? (
           <Box>
-            <Button component={Link} to={ROUTES.brandImport}>
+            <Button component={Link} to={ROUTES.imports}>
               {t('system:imports.openCurrent')}
             </Button>
           </Box>

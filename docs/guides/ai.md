@@ -759,7 +759,7 @@ closed or has been quiet for 24 hours.
 | `POST /api/brands/:brandId/knowledge/files` | `ai:manage` | Presign a file upload; creates the source |
 | `POST …/knowledge/sources/:sourceId/confirm` | `ai:manage` | The upload is done; the sync starts. 409 `upload-missing` |
 | `POST …/knowledge/sources/:sourceId/oauth/:provider` | `ai:manage` | The Notion or Google consent URL. 409 `oauth-not-configured` |
-| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/admin/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the token request carries no code verifier.) |
+| `GET /api/knowledge/oauth/callback` | public, signed state | Where the provider returns; redirects to `/settings/ai/knowledge?source=…&oauth=connected`. The `state` is signed, good for ten minutes and **single-use**: a second callback with the same `state` answers 400 `oauth-state-invalid` and exchanges nothing. (No PKCE yet: the token request carries no code verifier.) |
 
 A refusal carries `error.ai.reason`, as `aiRefusalSchema` in `@helpdock/schemas`
 declares, for knowledge `error.knowledge.reason` (`knowledgeRefusalSchema`), and
@@ -768,7 +768,7 @@ and response shapes are the `ai*`, `knowledge*` and `assist.ts` schemas there.
 
 ## The screens
 
-**AI** sits in the Admin group of the sidebar for Admins and Team Leaders.
+**AI** is a group of the Settings area (sidebar → Settings → AI) for Admins and Team Leaders.
 
 - **Providers** (install admins only, `Admin/AI-Providers`): the providers
   table, the open provider's form — kind, base URL, credential type, the key

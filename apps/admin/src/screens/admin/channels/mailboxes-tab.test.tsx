@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { MockChannelsApi } from '../../../channels/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /** The first render builds the shell, the brand and three queries; a busy machine needs longer than 1 s. */
@@ -39,11 +40,11 @@ const rowFor = (address: string): HTMLElement => {
 };
 
 describe('Channels › Mailboxes', () => {
-  it('redirects /admin/channels to the Mailboxes tab and draws each health state', async () => {
-    await open('/admin/channels');
+  it('redirects /settings/channels to the Mailboxes tab and draws each health state', async () => {
+    await open('/settings/channels');
 
     expect(await screen.findByText('support@helpdock.io')).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Mailboxes' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Email')).toHaveAttribute('aria-current', 'page');
     expect(within(rowFor('support@helpdock.io')).getByText('Healthy')).toBeVisible();
     expect(within(rowFor('billing@helpdock.io')).getByText('IMAP sign-in failed')).toBeVisible();
     expect(
@@ -55,7 +56,7 @@ describe('Channels › Mailboxes', () => {
   });
 
   it('deletes a mailbox after asking', async () => {
-    const { user } = await open('/admin/channels/mailboxes');
+    const { user } = await open('/settings/channels/mailboxes');
     await screen.findByText('returns@helpdock.io');
 
     await user.click(
@@ -72,7 +73,7 @@ describe('Channels › Mailboxes', () => {
   });
 
   it('copies an endpoint, and shows a replaced secret exactly once', async () => {
-    const { user } = await open('/admin/channels/mailboxes');
+    const { user } = await open('/settings/channels/mailboxes');
     await screen.findByText('Inbound parse endpoints');
 
     await user.click(screen.getByRole('button', { name: 'Copy the SendGrid URL' }));
@@ -97,7 +98,7 @@ describe('Channels › Mailboxes', () => {
 
 describe('the mailbox form', { timeout: 60_000 }, () => {
   it('adds an IMAP mailbox after checking the fields, then opens it', async () => {
-    const { user, channelsApi } = await open('/admin/channels/mailboxes/new');
+    const { user, channelsApi } = await open('/settings/channels/mailboxes/new');
     await screen.findByRole('heading', { name: 'Add mailbox', level: 1 });
 
     await user.click(screen.getByRole('button', { name: 'Add mailbox' }));
@@ -125,7 +126,7 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
   });
 
   it('keeps an address another mailbox has on the form, as a refusal', async () => {
-    const { user } = await open('/admin/channels/mailboxes/new');
+    const { user } = await open('/settings/channels/mailboxes/new');
     await screen.findByRole('heading', { name: 'Add mailbox', level: 1 });
 
     await user.click(screen.getByRole('radio', { name: /Inbound parse webhook/ }));
@@ -139,7 +140,9 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
   });
 
   it('tests IMAP with the stored password, and draws what the server refused', async () => {
-    const { user } = await open('/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e1');
+    const { user } = await open(
+      '/settings/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e1',
+    );
     expect(
       await screen.findByRole('heading', { name: 'billing@helpdock.io', level: 1 }),
     ).toBeVisible();
@@ -213,7 +216,7 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
 
   it('saves a change, discards another, and deletes the mailbox', async () => {
     const { user, channelsApi } = await open(
-      '/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e4',
+      '/settings/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e4',
     );
     await screen.findByRole('heading', { name: 'support@helpdock.io', level: 1 });
     expect(screen.getByRole('button', { name: 'Save mailbox' })).toBeDisabled();
@@ -236,11 +239,11 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
     await user.click(screen.getByRole('button', { name: 'Delete mailbox' }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Delete mailbox' }));
-    expect(await screen.findByRole('heading', { name: 'Channels', level: 1 })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Email', level: 1 })).toBeVisible();
   });
 
   it('says so when the mailbox does not exist', async () => {
-    await open('/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000ff');
+    await open('/settings/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000ff');
 
     expect(await screen.findByText('No such mailbox')).toBeVisible();
   });

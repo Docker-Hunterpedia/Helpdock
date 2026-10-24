@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test('maps a manual export, saves a preset and blocks extraction after an invalid edit', async ({
@@ -9,8 +9,8 @@ test('maps a manual export, saves a preset and blocks extraction after an invali
 }) => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.import') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.import').click();
   await page
     .getByRole('button')
     .filter({ hasText: t('imports:sources.file') })

@@ -26,7 +26,7 @@ import { QrCode } from '../../ui/qr-code.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 
 /**
- * Replacing the authenticator app on `/me/security` (#373, artboard
+ * Replacing the authenticator app on `/settings/account/security` (#373, artboard
  * `Admin/Profile-Security-ReplaceApp`). An account that must have a second
  * factor and holds only the app can neither turn it off nor enrol over it, so
  * this is the one way to move to a new phone: confirm it's you (a code from the

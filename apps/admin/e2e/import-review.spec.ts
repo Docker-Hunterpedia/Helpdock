@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test.use({ reducedMotion: 'reduce' });
@@ -12,8 +12,8 @@ test('reviews file availability and warnings before starting a quiet import', as
   test.setTimeout(60000);
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.import') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.import').click();
   await page.getByRole('button', { name: /Zoho Desk/ }).click();
   const progress = page.getByRole('navigation', { name: t('imports:wizard.label') });
   await expect(progress.locator('[aria-current="step"]')).toContainText(

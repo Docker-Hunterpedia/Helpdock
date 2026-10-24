@@ -6,7 +6,6 @@
     "contacts": "Contacts",
     "helpCenter": "Help center",
     "reports": "Reports",
-    "adminGroup": "Admin",
     "ticketing": "Ticketing",
     "automation": "Automation",
     "settings": "Settings",
@@ -21,6 +20,26 @@
     "expand": "Expand sidebar",
     "withCount": "{{label}} · {{count}}",
     "ctrlKey": "Ctrl"
+  },
+  "settings": {
+    "navLabel": "Settings",
+    "groups": {
+      "account": "Your account",
+      "brand": "Brand",
+      "inbox": "Inbox",
+      "channels": "Channels",
+      "ai": "AI",
+      "developers": "Developers",
+      "install": "Install"
+    },
+    "entries": {
+      "slas": "SLA policies",
+      "mailboxes": "Email",
+      "widget": "Chat widget",
+      "meta": "WhatsApp, Messenger, Instagram",
+      "imports": "Imports"
+    },
+    "breadcrumb": "Breadcrumb"
   },
   "brandSwitcher": {
     "caption": "Brand · switch",
@@ -213,9 +232,10 @@
       "reports": "analytics, metrics, volume, csat, response time, dashboard",
       "accountProfile": "profile, public name, job title, phone, photo, avatar, time zone, shortcuts",
       "accountSecurity": "password, two-factor, 2fa, passkeys, sessions, sign in, shortcuts",
-      "accountNotifications": "email alerts, push, digests, mentions, bell",
+      "yourNotifications": "email alerts, push, digests, mentions, bell",
       "accountSignature": "email signature, reply signature",
       "settings": "install, sso, authentication, smtp, oauth, global",
+      "sso": "single sign-on, saml, oidc, identity provider, okta, entra, login",
       "brandGeneral": "brand name, prefix, timezone, language, logo",
       "brandDomains": "custom domain, dns, tls, host, cname",
       "brandImport": "migrate, zendesk, freshdesk, zoho, import tickets",

@@ -20,7 +20,7 @@ const renderStatuses = async (ticketingApi?: MockTicketingApi) => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketingApi ?? ticketing,
-    initialEntries: ['/admin/ticketing/statuses'],
+    initialEntries: ['/settings/inbox/statuses'],
   });
 
   // The table element appears before its rows do; waiting for a row means a

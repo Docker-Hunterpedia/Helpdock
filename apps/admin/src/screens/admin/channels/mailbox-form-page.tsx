@@ -29,6 +29,7 @@ import {
 } from '../../../auth/session.tsx';
 import { isChannelsError } from '../../../channels/api.js';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { SettingsBreadcrumb } from '../../../shell/page-header.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
@@ -277,6 +278,7 @@ function MailboxForm({
           <ArrowLeft size={16} aria-hidden="true" className="mirror-in-rtl" />
         </IconButton>
         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <SettingsBreadcrumb />
           <Typography variant="h1" component="h1">
             {creating ? t('channels:form.addTitle') : <bdi>{mailbox.address}</bdi>}
           </Typography>
@@ -338,7 +340,7 @@ function MailboxForm({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' },
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'repeat(2, minmax(0, 1fr))' },
           gap: 6,
           alignItems: 'start',
         }}

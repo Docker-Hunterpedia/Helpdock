@@ -64,7 +64,7 @@ describe('the composer on an email ticket', () => {
     expect(within(form).getByText('Billing team · Helpdock')).toBeVisible();
     expect(within(form).getByRole('link', { name: 'Edit' })).toHaveAttribute(
       'href',
-      '/me/signature',
+      '/settings/account/signature',
     );
     expect(within(form).getByRole('button', { name: 'Send email' })).toBeVisible();
   });

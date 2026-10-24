@@ -78,11 +78,11 @@ test.describe('the command palette', () => {
     const dialog = page.getByRole('dialog', { name: t('admin:palette.label') });
     await dialog.getByRole('combobox').fill('اتفاقية مستوى الخدمة');
 
-    const title = `${t('admin:nav.ticketing')} › ${t('ticketing:tabs.slas')}`;
+    const title = `${t('admin:settings.groups.inbox')} › ${t('admin:settings.entries.slas')}`;
     await expect(dialog.getByRole('option', { name: title })).toBeVisible();
     await page.keyboard.press('Enter');
 
-    await expect(page).toHaveURL(/\/admin\/ticketing\/slas$/);
+    await expect(page).toHaveURL(/\/settings\/inbox\/slas$/);
   });
 
   test('moves with the arrows, and Esc closes and returns focus to where it was', async ({

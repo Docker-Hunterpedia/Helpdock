@@ -49,7 +49,7 @@ navigation only, and the api refuses a change whatever the keys do.
 | `g` then `c` | Contacts | everyone |
 | `g` then `k` | Help center | everyone |
 | `g` then `r` | Reports | everyone who is offered Reports |
-| `g` then `s` | Settings | everyone who is offered a page of the Admin group |
+| `g` then `s` | Settings | everyone (opens the first page of Settings they have) |
 
 ### List
 

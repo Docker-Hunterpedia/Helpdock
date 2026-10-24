@@ -4,6 +4,7 @@ import { AiError } from '../../../../ai/api.js';
 import { MockAiApi } from '../../../../ai/mock-api.js';
 import { AppRoutes } from '../../../../app/routes.tsx';
 import { renderApp } from '../../../../test/render.tsx';
+import { settingsLink } from '../../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../../test/signed-in.js';
 
 /**
@@ -19,7 +20,7 @@ const renderProviders = async (aiApi = new MockAiApi()) => {
     authApi: auth,
     staffApi: staff,
     aiApi,
-    initialEntries: ['/admin/ai'],
+    initialEntries: ['/settings/ai'],
   });
   await screen.findByRole('table', { name: 'Providers' });
   return { ...rendered, aiApi };
@@ -31,7 +32,7 @@ describe('AI › Providers', () => {
   it('opens on Providers for an install admin, with every provider and no credential shown', async () => {
     await renderProviders();
 
-    expect(screen.getByRole('tab', { name: 'Providers' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Providers')).toHaveAttribute('aria-current', 'page');
     const rows = within(screen.getByRole('table', { name: 'Providers' })).getAllByRole('row');
     expect(rows).toHaveLength(6);
     expect(screen.getByText('http://ollama:11434/v1')).toBeVisible();

@@ -151,7 +151,7 @@ describe('the shortcut registry', () => {
 const WHO: Record<ShortcutPermission, string> = {
   'ticket:write': 'everyone but a Viewer',
   'report:read': 'everyone who is offered Reports',
-  settings: 'everyone who is offered a page of the Admin group',
+  settings: 'everyone (opens the first page of Settings they have)',
 };
 
 const GROUP_HEADINGS = {

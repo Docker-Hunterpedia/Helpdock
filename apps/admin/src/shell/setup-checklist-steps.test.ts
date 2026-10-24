@@ -1,6 +1,8 @@
 import { SETUP_CHECKLIST_STEPS } from '@helpdock/schemas';
+import { matchPath } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { ROUTES } from '../app/route-paths.js';
+import { SETTINGS_ENTRIES } from './settings-nav.js';
 import { setupStepRoute } from './setup-checklist-steps.js';
 
 describe('setupStepRoute', () => {
@@ -20,5 +22,20 @@ describe('setupStepRoute', () => {
     expect(setupStepRoute('article')).toBe(ROUTES.helpCenter);
     expect(setupStepRoute('aiProvider')).toBe(ROUTES.ai);
     expect(setupStepRoute('firstTicket')).toBe(ROUTES.tickets);
+  });
+
+  it('sends every step to a route the router has, and settings steps to Settings pages', () => {
+    const patterns = Object.values(ROUTES);
+    const settingsPaths = new Set<string>(SETTINGS_ENTRIES.map((entry) => entry.path));
+    const groupRoots = new Set<string>([ROUTES.channels, ROUTES.ai]);
+
+    for (const step of SETUP_CHECKLIST_STEPS) {
+      const path = setupStepRoute(step);
+
+      expect(patterns.some((pattern) => matchPath({ path: pattern, end: true }, path))).toBe(true);
+      if (path.startsWith('/settings')) {
+        expect(settingsPaths.has(path) || groupRoots.has(path)).toBe(true);
+      }
+    }
   });
 });

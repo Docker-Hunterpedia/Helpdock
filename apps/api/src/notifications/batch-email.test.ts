@@ -176,7 +176,7 @@ describe('renderBatchEmail (M14-10, artboard Email/NotificationBatch)', () => {
     const email = renderBatchEmail(input());
 
     expect(email.text).toContain(
-      'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',
+      'You get these because of your notification settings. Change them: https://desk.example.com/settings/account/notifications',
     );
     expect(email.text).toContain(
       'unsubscribe from notification emails: https://desk.example.com/unsubscribe/token?lang=en',

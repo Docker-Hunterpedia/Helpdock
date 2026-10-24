@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { openSettingsArea, settingsTab } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -33,8 +34,8 @@ const ENDPOINT = `https://hooks.example.com/helpdock/${RUN}`;
 let page: Page;
 
 const openDevelopers = async (): Promise<void> => {
-  await page.getByRole('link', { name: t('admin:nav.developers'), exact: true }).click();
-  await page.getByRole('heading', { level: 1, name: t('developers:title') }).waitFor();
+  await openSettingsArea(page, t, 'developers');
+  await page.getByRole('heading', { level: 1, name: t('developers:tabs.apiKeys') }).waitFor();
 };
 
 test.beforeAll(async ({ adminContext }) => {
@@ -81,7 +82,7 @@ test('an API key shown once answers /api/v1, and is refused once revoked', async
 });
 
 test('an endpoint is refused for a private address and plain http, then added and pinged', async () => {
-  await page.getByRole('tab', { name: t('developers:tabs.webhooks') }).click();
+  await settingsTab(page, t, 'developers:tabs.webhooks').click();
   await page
     .getByRole('button', { name: t('developers:webhooks.add') })
     .first()

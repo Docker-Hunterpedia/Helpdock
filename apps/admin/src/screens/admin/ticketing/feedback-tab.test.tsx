@@ -16,7 +16,7 @@ const renderFeedback = async () => {
     authApi: apis.auth,
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
-    initialEntries: ['/admin/ticketing/feedback'],
+    initialEntries: ['/settings/inbox/feedback'],
   });
 
   await screen.findByRole('form', { name: 'Feedback and time settings' });

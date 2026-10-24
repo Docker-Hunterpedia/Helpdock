@@ -1,6 +1,6 @@
 # Audit log
 
-**Admin → System → Audit log · Open** (`/admin/system/audit-log`, deliverable
+**Settings → Install → System → Audit log · Open** (`/settings/install/system/audit-log`, deliverable
 M3-08) shows who changed what across the whole install, newest first. It is
 read-only; retention removes rows after each brand's audit window (two years by
 default, never under 90 days, DOMAIN-RULES §11).

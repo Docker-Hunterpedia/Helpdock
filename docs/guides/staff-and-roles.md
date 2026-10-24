@@ -26,7 +26,7 @@ an install admin reaches a brand's data by being given a role in it.
 
 ### Departments
 
-Departments are created, named, ordered and given teams on **Admin → Ticketing**
+Departments are created, named, ordered and given teams on **Settings → Inbox → Departments**
 (M1-01) — see [ticketing settings](ticketing-settings.md). This page is where
 they are *assigned*, and the rule that decides what an assignment means is:
 
@@ -285,8 +285,9 @@ enforced, and when the person's factors changed while you were confirming. See
 
 ## Your own account
 
-Your account has four tabs: **Profile** (first, `/me/profile`), **Security**,
-**Notifications** and **Email signature**.
+Your account is the first group of **Settings** (sidebar → Settings), with four
+pages: **Profile** (first, `/settings/account/profile`), **Notifications**,
+**Security** and **Email signature**. The old `/me/…` addresses redirect to them.
 
 ### Profile for customers
 
@@ -318,7 +319,7 @@ messages you wrote in that visitor's own conversation.
 
 ### Security
 
-**Security** in the account menu, at `/me/security`:
+**Security** in the account menu, at `/settings/account/security`:
 
 | Card | |
 |---|---|

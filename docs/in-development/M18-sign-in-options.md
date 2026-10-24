@@ -501,7 +501,7 @@ Backlog or never:
   (with a "From" row: browser, system, truncated address) and a removal (what
   still protects the account), and the password-reset notice naming the
   passkeys kept (`Email/SecurityChange-M18`, en and ar); the Passkeys card on
-  `/me/security` with its step-up, prompt, name, rename, remove and limit
+  `/settings/account/security` with its step-up, prompt, name, rename, remove and limit
   dialogs (`Admin/Profile-Security-Passkeys`, en and ar), built on
   `@simplewebauthn/browser` 14.0.0 in the admin bundle only. Three differences
   from the plan and the board, all small: a rename is audited but not emailed

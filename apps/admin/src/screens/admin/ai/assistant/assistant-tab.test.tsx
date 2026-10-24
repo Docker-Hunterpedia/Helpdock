@@ -22,7 +22,7 @@ const renderAssistant = async (aiApi = new MockAiApi()) => {
     authApi: auth,
     staffApi: staff,
     aiApi,
-    initialEntries: ['/admin/ai/assistant'],
+    initialEntries: ['/settings/ai/assistant'],
   });
   await screen.findByRole('region', { name: 'Modes' });
   return { ...rendered, aiApi };

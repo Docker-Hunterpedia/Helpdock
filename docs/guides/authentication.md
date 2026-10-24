@@ -594,7 +594,7 @@ a counter alarm.
 
 ### Adding, renaming and removing passkeys
 
-A person manages their own passkeys on **Security** (`/me/security`, the
+A person manages their own passkeys on **Security** (`/settings/account/security`, the
 Passkeys card), through `/api/me/passkeys`. Every route is `@Authenticated()`,
 names no user, and treats a passkey that is not the caller's exactly like one
 that does not exist (`404`).
@@ -948,7 +948,7 @@ the person who holds it here.
 ### Connecting and disconnecting a provider
 
 A signed-in person connects a provider account from **Your account → Security
-→ Sign-in methods** (`/me/security`; the card was called "Sign-in providers"
+→ Sign-in methods** (`/settings/account/security`; the card was called "Sign-in providers"
 in 1.0.2). The card lists each
 provider the install has configured; with none configured it is not shown.
 Each row says whether the provider is connected, with the address it had and
@@ -970,7 +970,7 @@ Under the card, the API does the following:
 2. The provider sends the browser back to the usual callback, which binds
    whichever provider account came back to the person who started the flow
    (the flow's state carries their id), audits `auth.oauth.linked`
-   (`via: connect`), emails them, and redirects to `/me/security?connected=<provider>`.
+   (`via: connect`), emails them, and redirects to `/settings/account/security?connected=<provider>`.
    A provider account bound to somebody else lands on `/oauth/callback` with
    `oauth-identity-conflict`.
 
@@ -1095,7 +1095,7 @@ the same.
 
 ### Configuring a provider
 
-An install admin sets these under **Admin → Settings → Authentication** (or
+An install admin sets these under **Settings → Install → Authentication** (or
 with the matching `HD_*` environment variable). The page shows the exact
 redirect URLs derived from `APP_URL`. A provider with no client id or client
 secret is reported as disabled and its button is not drawn.
@@ -1229,8 +1229,8 @@ lock. It covers `POST /api/me/password`, `POST /api/me/totp/disable` and
 
 ## Settings
 
-The authentication values below are edited by an install admin under **Admin →
-Settings → Authentication** and stored in the `settings` table. Any of them can
+The authentication values below are edited by an install admin under **Settings →
+Install → Authentication** and stored in the `settings` table. Any of them can
 be pinned from the environment with its `HD_*` name, which also locks it in the
 UI ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-model)). The
 Viewer toggle remains on **Staff and roles**; the signing key is generated and

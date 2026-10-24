@@ -99,7 +99,7 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' },
               gap: 4,
             }}
           >
@@ -162,7 +162,7 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1.6fr) minmax(0, 1fr)' },
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1.6fr) minmax(0, 1fr)' },
             gap: 4,
             alignItems: 'start',
           }}
@@ -188,7 +188,7 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' },
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'repeat(2, minmax(0, 1fr))' },
             gap: 4,
             alignItems: 'start',
           }}

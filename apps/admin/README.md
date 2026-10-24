@@ -218,10 +218,11 @@ shows.
 
 | Route | Artboard | |
 |---|---|---|
-| `/admin/staff` | `Admin/Staff` | The table, the invite dialog with its role cards and department chips, and every row action of DOMAIN-RULES §12. Visible to an Admin and a Team Leader; the sidebar hides it from everybody else, and the api refuses it whatever the sidebar draws. |
+| `/settings` | `Admin/Settings-Shell` | M14-21. The grouped Settings navigation (Your account, Brand, Inbox, Channels, AI, Developers, Install) beside the page; opens the first page the reader has. Every address under `/admin/…` and `/me/…` redirects into it (`LEGACY_REDIRECTS` in `src/app/route-paths.ts`). |
+| `/settings/install/staff` | `Admin/Staff` | The table, the invite dialog with its role cards and department chips, and every row action of DOMAIN-RULES §12. Visible to an Admin and a Team Leader; the sidebar hides it from everybody else, and the api refuses it whatever the sidebar draws. |
 | `/sign-in/enrol` | `Admin/Enrol2FA` | Two steps: scan, then save the recovery codes behind a checkbox. |
 | `/invite/:token` | `Admin/AcceptInvite` | Public, outside the shell: the only screen somebody without an account ever sees. |
-| `/me/security` | the `Admin/Settings` card and field patterns | Details, password, second factor, signed-in browsers. |
+| `/settings/account/security` | the `Admin/Settings` card and field patterns | Details, password, second factor, signed-in browsers. |
 
 The QR code is encoded in the browser by `src/ui/qr-encode.ts` — byte mode,
 error-correction level M, versions 1 to 10, which is what an `otpauth://` URI
@@ -331,11 +332,11 @@ Five things M1-15 should know:
 
 | Route | Artboard | |
 |---|---|---|
-| `/admin/ticketing` | `Admin/Ticketing` | The tab row of the whole of M1's settings, redirecting to the first tab. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
-| `/admin/ticketing/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
-| `/admin/ticketing/priorities` | `Admin/Ticketing` | The routed placeholder that names the deliverable filling it, M1-02. Any other segment redirects to the first tab. |
-| `/admin/ticketing/views` | `Admin/Ticketing-Views` | M1-05. The brand's shared views in sidebar order — built-in ones marked — with what each shows, who sees it and its count; the side editor (`view-editor.tsx`, its selects in `view-draft.ts`). |
-| `/admin/ticketing/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
+| `/settings/inbox` | `Admin/Ticketing` | The Inbox group of Settings (M14-21): M1's settings and Automation's pages, redirecting to the first page the reader has. Visible to an Admin and a Team Leader; the api refuses it whatever the sidebar draws. |
+| `/settings/inbox/departments` | `Admin/Ticketing` | The 820 px list, the 300 px side editor, and the selected department's teams inline underneath. |
+| `/settings/inbox/priorities` | `Admin/Ticketing` | The routed placeholder that names the deliverable filling it, M1-02. Any other segment redirects to the first tab. |
+| `/settings/inbox/views` | `Admin/Ticketing-Views` | M1-05. The brand's shared views in sidebar order — built-in ones marked — with what each shows, who sees it and its count; the side editor (`view-editor.tsx`, its selects in `view-draft.ts`). |
+| `/settings/inbox/assignment` | `Admin/Ticketing-Assignment` | M1-07. The departments with their mode, cap, timer and agents online; the selected department's agents with presence, load, skills and rotation; the side editor. The ticket workspace's assignee picker is `screens/tickets/assignee-picker.tsx` (`AdminTicketDialogs`, panel 3). |
 
 Reordering has three ways in and one path out. The drag handle is a real button
 — so it is reachable by Tab and answers `↑`/`↓` — and the row menu offers **Move
@@ -353,8 +354,8 @@ milestone placeholder with no artboard. The guide says so
 
 | Route | Artboard | |
 |---|---|---|
-| `/admin/brand` | `AdminBrandDanger` | Redirects to the only built tab. The **Brand** item in the sidebar's Admin group is drawn for an Admin alone. |
-| `/admin/brand/danger` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run. The artboard's General, Domains and Theme tabs and its "Delete this brand" section have no deliverable yet and are not drawn. |
+| `/settings/brand` | `AdminBrandDanger` | Redirects to General. The Brand group of Settings is drawn for an Admin alone. |
+| `/settings/brand/danger` | `AdminBrandDanger` | The Data retention card: the windows, the "next purge" count per row and the last run. The artboard's General, Domains and Theme tabs and its "Delete this brand" section have no deliverable yet and are not drawn. |
 
 The form's rules — which day counts are valid, what a draft sends, whether it is
 dirty — are `src/screens/admin/brand/retention-form.ts`, tested without a DOM.
@@ -369,10 +370,10 @@ opens it is drawn for an Admin alone (`src/screens/contacts/anonymise-dialog.tsx
 
 | Route | Artboard | |
 |---|---|---|
-| `/admin/ticketing/tags` | `Admin/Ticketing` | The list — chip, name, Arabic name, ticket count — and the side editor with the eight-swatch colour picker. |
-| `/admin/ticketing/custom-fields` | `Admin/Ticketing` | One table per target (Ticket, Contact, Account), because the three are separate lists with separate orders, and one shared side editor. |
-| `/admin/ticketing/templates` | `Admin/Ticketing` | The list — name, department, priority, usage — and the side editor with the api-rendered preview. |
-| `/admin/ticketing/spam` | `Admin/Ticketing › Spam` | M1-11. The block list with its dropped counter and search, the "Spam status" card with `offerBlockSender`, and the "Block a sender" card whose refusals are drawn beside the field. |
+| `/settings/inbox/tags` | `Admin/Ticketing` | The list — chip, name, Arabic name, ticket count — and the side editor with the eight-swatch colour picker. |
+| `/settings/inbox/custom-fields` | `Admin/Ticketing` | One table per target (Ticket, Contact, Account), because the three are separate lists with separate orders, and one shared side editor. |
+| `/settings/inbox/templates` | `Admin/Ticketing` | The list — name, department, priority, usage — and the side editor with the api-rendered preview. |
+| `/settings/inbox/spam` | `Admin/Ticketing › Spam` | M1-11. The block list with its dropped counter and search, the "Spam status" card with `offerBlockSender`, and the "Block a sender" card whose refusals are drawn beside the field. |
 
 Three things in these tabs are worth knowing before changing them.
 
@@ -406,7 +407,7 @@ rows that carry it, and answering it sends the same request again with `force`.
 
 | Route | Artboard | |
 |---|---|---|
-| `/admin/ticketing/feedback` | `AdminTicketingFeedback` | CSAT on or off, time tracking on or off, and whether the timer starts with the composer. One form, one save. |
+| `/settings/inbox/feedback` | `AdminTicketingFeedback` | CSAT on or off, time tracking on or off, and whether the timer starts with the composer. One form, one save. |
 | `/tickets/:id` | `AdminTicketDialogs` panels 2, 6, 8 | The Time card in the details panel, the Log time dialog, and "Log time…" in the header's ⋯ menu — all drawn only while the brand tracks time. A Satisfaction card shows the survey's state and copies its link. |
 | `/csat/:token` | `CsatEN`, `CsatAR` | The public rating page. |
 

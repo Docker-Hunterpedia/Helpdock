@@ -5,6 +5,7 @@ import { expect, test } from './fixtures.js';
 import {
   openContact,
   openContacts,
+  openSettingsArea,
   openTicket,
   openTickets,
   signIn,
@@ -103,7 +104,7 @@ test.describe('reference screens @screenshot', () => {
     const t = strings(locale);
 
     await signInToShell(page, locale);
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.settings')) }).click();
+    await openSettingsArea(page, t, 'settings');
     // The page heading is part of the shell and renders before the settings
     // request settles. Wait for loaded form content so the baseline can never
     // capture the transient loading state.

@@ -120,7 +120,7 @@ describe('recentAt', () => {
   });
 
   it('remembers a settings page by its registry id', () => {
-    expect(recentAt('/admin/ticketing/slas')).toEqual({ kind: 'page', id: 'ticketingSlas' });
+    expect(recentAt('/settings/inbox/slas')).toEqual({ kind: 'page', id: 'ticketingSlas' });
   });
 
   it('does not remember the list, a primary page or a path nobody knows', () => {

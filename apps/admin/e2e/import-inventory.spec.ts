@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 // UI-fixture coverage: the real sealing, CSV validation and scope-fingerprint
@@ -11,8 +11,8 @@ test('connects Freshdesk, maps native IDs and requires renewed inventory confirm
 }) => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.import') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.import').click();
   await page.getByRole('button', { name: /Freshdesk/ }).click();
   await page.getByLabel(t('imports:connection.freshdeskDomain')).fill('https://invalid.example');
   await page.getByLabel(t('imports:connection.freshdeskKey')).fill('synthetic-test-key');

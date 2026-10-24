@@ -2134,7 +2134,7 @@ describe('telling the account holder a credential changed (ASVS 2.2.3, 2.5.5)', 
       expect.objectContaining({
         userId: user.id,
         brandId: BRAND_ID,
-        url: `${APP_URL}/me/security`,
+        url: `${APP_URL}/settings/account/security`,
         values: { change: 'password', occurredAt: expect.any(String) },
       }),
     ]);

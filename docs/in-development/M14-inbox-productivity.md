@@ -1292,6 +1292,59 @@ in a scrolling row, and "Settings" means install authentication only.
 Artboard: `Admin/Settings-Shell` (the shell with each group, a Team Leader's
 and a Viewer's variant, and RTL per DESIGN §7).
 
+- [x] `/settings` is the shell (`SettingsShell`, `shell/settings-shell.tsx`):
+  a 220 px navigation beside the page, seven groups, and `/settings` itself
+  lands on the first page the person has. Pages: `/settings/account/<tab>`,
+  `/settings/brand/<tab>`, `/settings/inbox/<segment>` (the twelve ticketing
+  settings and Rules, Time-based, Routing and Macros), `/settings/channels/…`,
+  `/settings/ai/…`, `/settings/developers/…`, and `/settings/install/…`
+  (`authentication`, `sso`, `staff`, `system`, `imports`).
+- [x] The map of the area is `shell/settings-nav.ts`. Each entry asks the
+  function the page already used (`navFor`, `tabsFor`, `channelsTabsFor`,
+  `aiTabsFor`), so a lower role loses exactly what it lost before; nothing was
+  re-derived from the authorization matrix.
+- [x] `LEGACY_REDIRECTS` and `legacyRedirect` in `route-paths.ts` map every old
+  path (`/me/*`, `/admin/*`), keeping the query string and fragment, and turning
+  `/admin/settings?tab=sso` into `/settings/install/sso`. `route-paths.test.ts`
+  lists every old address with its target, checks that each target is a route
+  the router has and that every row of the table is exercised.
+- [x] Pages lose their tab strip and header title to the shell: `PageHeader`
+  draws the breadcrumb (`Settings › Inbox`) and the entry's name as the one h1,
+  and keeps the page's caption and action.
+- [x] The command palette's settings pages are the same entries (`Inbox › SLA
+  policies`); `pages.test.ts` still walks `ROUTES`.
+- [x] The sidebar's Admin group is one Settings entry; Views sit under Tickets
+  as on the board and fold under their label, remembered per person in this
+  browser (`helpdock.admin.views.<userId>`).
+- [x] The api's own links into the admin app (security notices, notification
+  footers, the knowledge OAuth return, the SSO test sign-in, the OAuth connect
+  return) use the new paths; emails already sent keep working through the
+  redirects.
+- [x] Tests: `route-paths.test.ts`, `settings-nav.test.ts`, `settings-shell.test.tsx`,
+  `views-collapse.test.ts`, `sidebar.test.tsx`, and
+  `apps/admin/e2e/settings-shell.spec.ts` (en and ar, axe, keyboard, a Team
+  Leader and a Viewer, an old address). Every other settings spec was moved to
+  the shell's navigation.
+
+Where the build departs from the board, and why:
+
+- **Pages the board does not list.** The board's Inbox group omits Departments,
+  Templates and Time-based rules, and its Channels group omits Outgoing email.
+  They exist and are in the plan's "every admin setting is reachable", so they
+  are entries too (Departments first in Inbox, Templates after Custom fields,
+  Time-based after Rules, Outgoing email after Email). The board should gain
+  them.
+- **Role variants.** The board's Team Leader sees three Inbox pages; the build
+  shows what the Team Leader could open before (every ticketing setting, the
+  rules and the macros), because the plan says to reuse the existing checks.
+- **No narrow layout.** The board defines none; below 900 px the navigation is
+  stacked above the page. Phone layouts are M17-07.
+- **Padding.** The board's 28 px page padding is drawn at 24 px, the nearest
+  step of DESIGN §4; the group label is `text.secondary` rather than the
+  board's lighter grey, which fails contrast on white.
+- **Views.** The board shows Views directly under Tickets and the build now
+  does the same (it was after Reports).
+
 ### M14-22 List-first tickets on narrow screens
 
 From [UX-13](../completed/ux-review-1-0.md#findings). Below 1024 px

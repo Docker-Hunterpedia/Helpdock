@@ -1,5 +1,5 @@
 import { type ReactNode, useMemo } from 'react';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { RequireSession } from '../auth/require-session.tsx';
 import { readPublicInstallInfo } from '../install/public-info.js';
 import { AcceptInvite } from '../screens/accept-invite.tsx';
@@ -10,12 +10,12 @@ import { BrandPage } from '../screens/admin/brand/brand-page.tsx';
 import { ChannelsPage } from '../screens/admin/channels/channels-page.tsx';
 import { MailboxFormPage } from '../screens/admin/channels/mailbox-form-page.tsx';
 import { DevelopersPage } from '../screens/admin/developers/developers-page.tsx';
+import { InboxPage } from '../screens/admin/inbox/inbox-page.tsx';
 import { SettingsPage } from '../screens/admin/settings/settings-page.tsx';
 import { SsoConnectionPage } from '../screens/admin/settings/sso-connection-page.tsx';
 import { AuditLogPage } from '../screens/admin/system/audit-log-page.tsx';
 import { SystemPage } from '../screens/admin/system/system-page.tsx';
 import { SystemQueuesPage } from '../screens/admin/system/system-queues-page.tsx';
-import { TicketingPage } from '../screens/admin/ticketing/ticketing-page.tsx';
 import { AuthComplete } from '../screens/auth-complete.tsx';
 import { AccountPage } from '../screens/contacts/account-page.tsx';
 import { ContactPage } from '../screens/contacts/contact-page.tsx';
@@ -35,7 +35,8 @@ import { TicketsPage } from '../screens/tickets/tickets-page.tsx';
 import { Totp } from '../screens/totp.tsx';
 import { TotpEnrolment } from '../screens/totp-enrolment.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
-import { DEFAULT_SIGNED_IN_ROUTE, ROUTES } from './route-paths.js';
+import { SettingsLanding, SettingsShell } from '../shell/settings-shell.tsx';
+import { DEFAULT_SIGNED_IN_ROUTE, legacyRedirect, ROUTES } from './route-paths.js';
 
 /**
  * Two groups: the public auth screens, and everything else behind
@@ -81,20 +82,65 @@ export function AppRoutes(): ReactNode {
       <Route path={ROUTES.acceptInvite} element={<AcceptInvite />} />
 
       <Route element={<RequireSession />}>
+        {/* M14-21. Every settings page lives under /settings, in the shell's
+            grouped navigation, and draws edge to edge so that navigation can
+            run the height of the window beside the sidebar. */}
         <Route element={<AppShell />}>
-          {/* M0-10. The nav item is install-admin only, but the route is not
-              hidden: a non-admin who types the path gets the api's 403 drawn
-              as "Not allowed", which is one answer in one place. */}
-          <Route path={ROUTES.system} element={<SystemPage />} />
-          <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
-          {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
-          <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
-          {/* M0-02: install-wide settings, with environment locks and write-only secrets. */}
-          <Route path={ROUTES.settings} element={<SettingsPage />} />
-          <Route path={ROUTES.ssoConnection} element={<SsoConnectionPage />} />
+          <Route element={<SettingsShell />}>
+            <Route path={ROUTES.settings} element={<SettingsLanding />} />
+
+            {/* Your account: Profile (M14-12), Notifications (M3-07), Security
+                (M0-06) and Email signature (M2-05). */}
+            <Route path={ROUTES.myAccount} element={<Navigate to={ROUTES.meProfile} replace />} />
+            <Route path={ROUTES.myAccountTab} element={<YourAccountPage />} />
+
+            {/* General, Domains (M5-07) and Danger zone (M1-14). */}
+            <Route path={ROUTES.brand} element={<BrandPage />} />
+            <Route path={ROUTES.brandTab} element={<BrandPage />} />
+
+            {/* The ticketing settings (M1-01) and automation (M3-03 to
+                M3-06) share the prefix. The builder's path is deeper than a
+                page's, so the two never compete for a url. */}
+            <Route path={ROUTES.inbox} element={<InboxPage />} />
+            <Route path={ROUTES.inboxTab} element={<InboxPage />} />
+            <Route path={ROUTES.automationRule} element={<AutomationPage />} />
+
+            {/* M2-08. The mailbox form is static-first (`new`) and deeper than
+                the tab route, so neither shadows the other. */}
+            <Route path={ROUTES.channels} element={<ChannelsPage />} />
+            <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
+            <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
+            <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
+            <Route path={ROUTES.telegramBot} element={<ChannelsPage />} />
+            <Route path={ROUTES.metaAccount} element={<ChannelsPage />} />
+
+            {/* M7-10. `/settings/ai` alone opens the first page the reader has. */}
+            <Route path={ROUTES.ai} element={<AiPage />} />
+            <Route path={ROUTES.aiTab} element={<AiPage />} />
+
+            {/* M8-01, M8-03: API keys and Webhooks. */}
+            <Route path={ROUTES.developers} element={<DevelopersPage />} />
+            <Route path={ROUTES.developersTab} element={<DevelopersPage />} />
+
+            {/* Install. M0-02: install-wide settings, with environment locks
+                and write-only secrets. The nav item is install-admin only, but
+                the route is not hidden: a non-admin who types the path gets
+                the api's 403 drawn as "Not allowed", which is one answer in
+                one place. */}
+            <Route path={ROUTES.authentication} element={<SettingsPage />} />
+            <Route path={ROUTES.sso} element={<SettingsPage page="sso" />} />
+            <Route path={ROUTES.ssoConnection} element={<SsoConnectionPage />} />
+            <Route path={ROUTES.staff} element={<StaffScreen />} />
+            <Route path={ROUTES.system} element={<SystemPage />} />
+            <Route path={ROUTES.systemQueues} element={<SystemQueuesPage />} />
+            {/* M3-08. Install-wide like the rest of System; the api refuses anybody else. */}
+            <Route path={ROUTES.systemAuditLog} element={<AuditLogPage />} />
+            <Route path={ROUTES.imports} element={<BrandPage imports />} />
+            <Route path={ROUTES.importRun} element={<BrandPage imports />} />
+          </Route>
+
           {/* M8-04. Offered to the roles holding `report:read`; the api refuses anyone else. */}
           <Route path={ROUTES.reports} element={<ReportsPage />} />
-          <Route path={ROUTES.staff} element={<StaffScreen />} />
           {/* M1-04. `new` and `accounts/:id` are static-first, which React
               Router ranks above `:contactId`, so a contact can never be
               shadowed by a word. */}
@@ -102,46 +148,11 @@ export function AppRoutes(): ReactNode {
           <Route path={ROUTES.contactNew} element={<NewContactPage />} />
           <Route path={ROUTES.account} element={<AccountPage />} />
           <Route path={ROUTES.contact} element={<ContactPage />} />
-          {/* M1-01. `/admin/ticketing` with no tab redirects to the first one,
-              which the page itself does, so both paths are one component. */}
-          <Route path={ROUTES.ticketing} element={<TicketingPage />} />
-          <Route path={ROUTES.ticketingTab} element={<TicketingPage />} />
-          {/* M3-03 to M3-06. `/admin/automation` alone redirects to the first
-              tab the reader has. The builder's path is deeper than a tab's, so
-              the two never compete for a url. */}
-          <Route path={ROUTES.automation} element={<AutomationPage />} />
-          <Route path={ROUTES.automationTab} element={<AutomationPage />} />
-          <Route path={ROUTES.automationRule} element={<AutomationPage />} />
-          {/* M2-08. The mailbox form is static-first (`new`) and deeper than
-              the tab route, so neither shadows the other. */}
-          <Route path={ROUTES.channels} element={<ChannelsPage />} />
-          <Route path={ROUTES.channelsTab} element={<ChannelsPage />} />
-          <Route path={ROUTES.mailboxNew} element={<MailboxFormPage />} />
-          <Route path={ROUTES.mailbox} element={<MailboxFormPage />} />
-          {/* M7-10. `/admin/ai` alone opens the first tab the reader has. */}
-          <Route path={ROUTES.ai} element={<AiPage />} />
-          <Route path={ROUTES.aiTab} element={<AiPage />} />
-          <Route path={ROUTES.telegramBot} element={<ChannelsPage />} />
-          <Route path={ROUTES.metaAccount} element={<ChannelsPage />} />
           {/* M5-01, M5-02, M5-09. `/help-center` alone opens Articles. */}
           <Route path={ROUTES.helpCenter} element={<HelpCenterPage />} />
           <Route path={ROUTES.helpCenterTab} element={<HelpCenterPage />} />
           {/* M5-03: "View help center", "Preview" and the internal-only wall land here. */}
           <Route path={ROUTES.helpCenterOpen} element={<OpenHelpCenter />} />
-          {/* General, Domains (M5-07) and Danger zone (M1-14); `/admin/brand`
-              with no tab redirects to General, as `/admin/ticketing` does to
-              its first. */}
-          <Route path={ROUTES.brand} element={<BrandPage />} />
-          <Route path={ROUTES.brandTab} element={<BrandPage />} />
-          <Route path={ROUTES.importRun} element={<BrandPage />} />
-          {/* M8-01, M8-03: API keys and Webhooks; `/admin/developers` alone opens API keys. */}
-          <Route path={ROUTES.developers} element={<DevelopersPage />} />
-          <Route path={ROUTES.developersTab} element={<DevelopersPage />} />
-          {/* Your account: Security (M0-06), Notifications (M3-07) and Email
-              signature (M2-05) are tabs of one page, and `/me` alone opens
-              the first. */}
-          <Route path={ROUTES.me} element={<Navigate to={ROUTES.meProfile} replace />} />
-          <Route path={ROUTES.meTab} element={<YourAccountPage />} />
         </Route>
 
         {/* M1-15. Its own shell, without the page padding: the workspace is
@@ -156,7 +167,18 @@ export function AppRoutes(): ReactNode {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to={DEFAULT_SIGNED_IN_ROUTE} replace />} />
+      {/* An address from before the Settings area goes to its new home, with
+          its query string and fragment; anything else goes to the default. */}
+      <Route path="*" element={<UnknownPath />} />
     </Routes>
+  );
+}
+
+/** M14-21: the old admin urls redirect (`LEGACY_REDIRECTS`); an unknown path goes to the default screen. */
+function UnknownPath(): ReactNode {
+  const { pathname, search, hash } = useLocation();
+
+  return (
+    <Navigate to={legacyRedirect(pathname, search, hash) ?? DEFAULT_SIGNED_IN_ROUTE} replace />
   );
 }

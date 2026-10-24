@@ -49,7 +49,8 @@ function NavItemLink({
     // NavLink puts `aria-current="page"` on the anchor itself when it matches.
     <NavLink
       to={item.path}
-      end
+      // Settings is the entry for a whole area, so it stays current on every page under it.
+      end={item.key !== 'settings'}
       onClick={onNavigate}
       style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
     >
@@ -108,7 +109,7 @@ function RailLink({
     <RailTooltip title={label}>
       <NavLink
         to={item.path}
-        end
+        end={item.key !== 'settings'}
         aria-label={count === undefined ? label : t('admin:nav.withCount', { label, count })}
         style={{ textDecoration: 'none', color: 'inherit', display: 'block', borderRadius: 6 }}
       >
@@ -131,19 +132,6 @@ function RailLink({
         )}
       </NavLink>
     </RailTooltip>
-  );
-}
-
-/** A 24 px hairline between the rail's groups, where the expanded column has captions. */
-function RailDivider(): ReactNode {
-  const tokens = useSemanticTokens();
-
-  return (
-    <Box
-      component="li"
-      aria-hidden="true"
-      sx={{ width: 24, height: '1px', marginBlock: 2, backgroundColor: tokens['border.default'] }}
-    />
   );
 }
 
@@ -209,7 +197,7 @@ function RailViews(): ReactNode {
           },
         }}
       >
-        <TicketViewsNav onNavigate={close} />
+        <TicketViewsNav onNavigate={close} foldable={false} />
       </Popover>
     </>
   );
@@ -401,7 +389,6 @@ export function Sidebar({
   readonly collapse?: SidebarCollapse | undefined;
 } = {}): ReactNode {
   const t = useT();
-  const { locale } = usePreferences();
   const tokens = useSemanticTokens();
   const session = useSession();
   const sidebarId = useId();
@@ -411,8 +398,10 @@ export function Sidebar({
   // Chrome only: the api refuses the request whatever the sidebar draws.
   // "Staff and roles" is for the two roles that hold `staff:manage`; "System"
   // is install-wide and is offered to an install admin alone.
-  const primaryNav = navFor(PRIMARY_NAV, session.user);
-  const adminNav = navFor(ADMIN_NAV, session.user);
+  // Views hang under Tickets (`Admin/Settings-Shell`), so the primary group is
+  // drawn in two runs around them, and Settings closes the last.
+  const [ticketsNav, ...otherNav] = navFor(PRIMARY_NAV, session.user);
+  const lowerNav = [...otherNav, ...navFor(ADMIN_NAV, session.user)];
 
   return (
     <Box
@@ -546,17 +535,15 @@ export function Sidebar({
                   gap: 1,
                 }}
               >
-                {primaryNav.map((item) => (
-                  <Box component="li" key={item.key}>
-                    <RailLink item={item} count={counts[item.key]} />
+                {ticketsNav === undefined ? null : (
+                  <Box component="li">
+                    <RailLink item={ticketsNav} count={counts[ticketsNav.key]} />
                   </Box>
-                ))}
-                <RailDivider />
+                )}
                 <Box component="li">
                   <RailViews />
                 </Box>
-                <RailDivider />
-                {adminNav.map((item) => (
+                {lowerNav.map((item) => (
                   <Box component="li" key={item.key}>
                     <RailLink item={item} count={counts[item.key]} />
                   </Box>
@@ -564,36 +551,27 @@ export function Sidebar({
               </Box>
             ) : (
               <>
-                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {primaryNav.map((item) => (
-                    <Box component="li" key={item.key}>
-                      <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
+                {ticketsNav === undefined ? null : (
+                  <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    <Box component="li">
+                      <NavItemLink
+                        item={ticketsNav}
+                        count={counts[ticketsNav.key]}
+                        onNavigate={onNavigate}
+                      />
                     </Box>
-                  ))}
-                </Box>
+                  </Box>
+                )}
 
-                {/* DESIGN §6.5: the "Views" group sits under the primary nav, because
-                it is a set of ways into the destination above it (M1-15). */}
+                {/* DESIGN §6.5: the "Views" group sits under Tickets, because it
+                is a set of ways into that destination (M1-15), and folds. */}
                 <TicketViewsNav onNavigate={onNavigate} />
 
-                <Typography
-                  component="p"
-                  variant="caption"
-                  sx={{
-                    color: 'text.secondary',
-                    paddingInline: 3,
-                    marginBlock: '16px 4px',
-                    fontSize: 12,
-                    // DESIGN §3.2: uppercase section labels are regular case in Arabic.
-                    textTransform: locale === 'ar' ? 'none' : 'uppercase',
-                    letterSpacing: locale === 'ar' ? 0 : '0.06em',
-                  }}
+                <Box
+                  component="ul"
+                  sx={{ listStyle: 'none', margin: 0, padding: 0, marginBlockStart: 2 }}
                 >
-                  {t('admin:nav.adminGroup')}
-                </Typography>
-
-                <Box component="ul" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {adminNav.map((item) => (
+                  {lowerNav.map((item) => (
                     <Box component="li" key={item.key}>
                       <NavItemLink item={item} count={counts[item.key]} onNavigate={onNavigate} />
                     </Box>

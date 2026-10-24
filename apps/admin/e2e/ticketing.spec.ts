@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.js';
-import { openTicketing, openTicketingTab, signIn } from './flows.js';
+import { openTicketing, openTicketingTab, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -43,9 +43,11 @@ test.describe('ticketing settings', () => {
     await signIn(page, locale);
     await openTicketing(page, locale);
 
-    await expect(page.getByRole('heading', { name: t('ticketing:title'), level: 1 })).toBeVisible();
-    await expect(page.getByRole('tab', { name: t('ticketing:tabs.statuses') })).toBeVisible();
-    await expect(page.getByRole('tab', { name: t('ticketing:tabs.assignment') })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: t('ticketing:tabs.departments'), level: 1 }),
+    ).toBeVisible();
+    await expect(settingsTab(page, t, 'ticketing:tabs.statuses')).toBeVisible();
+    await expect(settingsTab(page, t, 'ticketing:tabs.assignment')).toBeVisible();
 
     await expect(
       page.getByRole('button', {
@@ -64,7 +66,7 @@ test.describe('ticketing settings', () => {
 
     // Priorities, the one tab no deliverable has filled since M1-05 filled
     // Views.
-    await page.getByRole('tab', { name: t('ticketing:tabs.priorities') }).click();
+    await settingsTab(page, t, 'ticketing:tabs.priorities').click();
 
     await expect(
       page.getByText(

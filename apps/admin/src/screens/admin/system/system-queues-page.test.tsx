@@ -36,7 +36,7 @@ describe('SystemQueuesPage', () => {
 
     expect(await screen.findByRole('link', { name: 'Back' })).toHaveAttribute(
       'href',
-      '/admin/system',
+      '/settings/install/system',
     );
   });
 

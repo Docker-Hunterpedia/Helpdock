@@ -45,7 +45,7 @@ test.describe('the unsubscribe page', () => {
     await expect(page.getByText(t('unsubscribe:done.body'))).toBeVisible();
     await expect(page.getByRole('link', { name: t('unsubscribe:done.settings') })).toHaveAttribute(
       'href',
-      '/me/notifications',
+      '/settings/account/notifications',
     );
     expect(await violations(page)).toEqual([]);
   });

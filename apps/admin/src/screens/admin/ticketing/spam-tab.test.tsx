@@ -17,7 +17,7 @@ const renderSpam = async () => {
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
     ticketsApi: apis.tickets,
-    initialEntries: ['/admin/ticketing/spam'],
+    initialEntries: ['/settings/inbox/spam'],
   });
 
   await screen.findByText('promo-deals.biz');

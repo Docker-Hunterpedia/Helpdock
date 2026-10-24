@@ -4,6 +4,7 @@ import { AppRoutes } from '../../../app/routes.tsx';
 import { type EmailApi, SmtpPasswordRequiredError } from '../../../email/api.js';
 import { MockEmailApi } from '../../../email/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 import { capOf } from './auto-replies-card.tsx';
 import { sendersRequestOf } from './senders-card.tsx';
@@ -18,7 +19,7 @@ import { fillSample } from './template-dialog.tsx';
 
 const renderOutgoing = async (
   emailApi: EmailApi = new MockEmailApi(),
-  path = '/admin/channels/outgoing',
+  path = '/settings/channels/outgoing',
 ) => {
   const apis = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -39,11 +40,8 @@ describe('Channels', () => {
   it('opens the Outgoing email tab by its url, beside Mailboxes, without "Add mailbox"', async () => {
     await renderOutgoing();
 
-    expect(screen.getByRole('tab', { name: 'Outgoing email' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('tab', { name: 'Mailboxes' })).toBeVisible();
+    expect(settingsLink('Outgoing email')).toHaveAttribute('aria-current', 'page');
+    expect(settingsLink('Email')).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Add mailbox' })).toBeNull();
   });
 });

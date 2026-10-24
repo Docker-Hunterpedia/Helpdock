@@ -22,7 +22,7 @@ export const renderTestEmail = (input: TestEmailInput): EmailMessage => {
   const i18n = createI18n({ lng: locale });
   const t = i18n.getFixedT(locale, 'email', 'notificationTest');
   const brand = i18n.getFixedT(locale, 'email', 'staffNotification')('brand');
-  const settingsUrl = link(input.appUrl, '/me/notifications');
+  const settingsUrl = link(input.appUrl, '/settings/account/notifications');
   const footer = notificationFooter({
     locale,
     appUrl: input.appUrl,

@@ -132,7 +132,8 @@ describe('the ? sheet', () => {
       'All shortcuts',
       'Command palette',
     ]);
-    expect(terms('Go to')).not.toContain('Settings');
+    // Settings holds Your account, which every role has (M14-21).
+    expect(terms('Go to')).toContain('Settings');
     expect(terms('Go to')).toContain('Reports');
     expect(terms('List')).toEqual(['Next ticket', 'Previous ticket']);
   });

@@ -5,7 +5,7 @@ placeholders and in both languages. A **macro** is the same reply (optional)
 plus actions: set the status, set the priority, add or remove a tag, assign,
 snooze by one of the Snooze menu's times ([snooze.md](snooze.md)).
 Both are deliverable M3-06 (REQUIREMENTS §4.1), and both live on
-**Admin → Automation → Macros**.
+**Settings → Inbox → Macros**.
 
 ## Who may do what
 

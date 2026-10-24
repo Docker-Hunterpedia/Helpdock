@@ -6,7 +6,7 @@ erasing one person does (M1-14), and how a whole brand is deleted (M8-07,
 
 ## The windows
 
-Each brand sets its own windows on **Admin → Brand → Danger zone**, in the Data
+Each brand sets its own windows on **Settings → Brand → Danger zone**, in the Data
 retention card. Only an Admin sees the page and only an Admin may change it
 (`brand:manage`).
 

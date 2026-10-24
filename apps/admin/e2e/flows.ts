@@ -1,5 +1,5 @@
 import type { Locale } from '@helpdock/i18n';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { MOCK_EMAIL, MOCK_PASSWORD, MOCK_TOTP_CODE } from '../src/auth/mock-api.js';
 import { strings } from './strings.js';
 
@@ -47,6 +47,61 @@ export async function signIn(page: Page, locale: Locale): Promise<void> {
   await page.getByRole('navigation', { name: t('admin:nav.label') }).waitFor();
 }
 
+type Translate = ReturnType<typeof strings>;
+
+/**
+ * The words a settings page carries in the Settings area's navigation (M14-21).
+ * Most are the tab labels they had; the board renamed a few.
+ */
+const SETTINGS_LABELS: Readonly<Record<string, string>> = {
+  'ticketing:tabs.slas': 'admin:settings.entries.slas',
+  'channels:tabs.mailboxes': 'admin:settings.entries.mailboxes',
+  'channels:tabs.widget': 'admin:settings.entries.widget',
+  'channels:tabs.meta': 'admin:settings.entries.meta',
+  'brand:tabs.import': 'admin:settings.entries.imports',
+};
+
+/** The page each area of the old Admin group opened on, now an entry of the Settings navigation. */
+const AREA_LANDINGS = {
+  brand: 'brand:tabs.general',
+  settings: 'settings:tabs.authentication',
+  ticketing: 'ticketing:tabs.departments',
+  automation: 'rules:tabs.rules',
+  channels: 'channels:tabs.mailboxes',
+  ai: 'aiSettings:tabs.providers',
+  developers: 'developers:tabs.apiKeys',
+  staff: 'admin:nav.staff',
+  system: 'admin:nav.system',
+} as const;
+
+/** A link of the Settings navigation, by the catalog key of the page's old tab label or name. */
+export const settingsTab = (root: Page | Locator, t: Translate, key: string): Locator =>
+  root
+    .getByRole('navigation', { name: t('admin:settings.navLabel') })
+    .getByRole('link', { name: say(t, SETTINGS_LABELS[key] ?? key), exact: true });
+
+/** `t` for a key that is a value here rather than a literal, which the catalogs' key type would refuse. */
+const say = (t: Translate, key: string): string => (t as (key: string) => string)(key);
+
+/**
+ * Opens one area of what used to be the Admin group: the sidebar's single
+ * Settings entry first, then the page that area opened on.
+ */
+export async function openSettingsArea(
+  page: Page | Locator,
+  t: Translate,
+  area: keyof typeof AREA_LANDINGS,
+): Promise<void> {
+  const nav = page.getByRole('navigation', { name: t('admin:settings.navLabel') });
+  if (!(await nav.isVisible())) {
+    await page
+      .getByRole('navigation', { name: t('admin:nav.label') })
+      .getByRole('link', { name: t('admin:nav.settings'), exact: true })
+      .click();
+  }
+  await settingsTab(page, t, AREA_LANDINGS[area]).click();
+}
+
 /**
  * Opens a screen inside the shell by clicking, never with `page.goto`.
  *
@@ -57,7 +112,7 @@ export async function signIn(page: Page, locale: Locale): Promise<void> {
 export async function openStaff(page: Page, locale: Locale): Promise<void> {
   const t = strings(locale);
 
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
+  await openSettingsArea(page, t, 'staff');
   await page.getByRole('table').waitFor();
 }
 
@@ -84,7 +139,7 @@ export async function openContact(page: Page, locale: Locale, name: string): Pro
 export async function openTicketing(page: Page, locale: Locale): Promise<void> {
   const t = strings(locale);
 
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.ticketing')) }).click();
+  await openSettingsArea(page, t, 'ticketing');
   await page.getByRole('table').waitFor();
 }
 
@@ -121,7 +176,7 @@ export async function openTicketingTab(
   } as const;
 
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t(`ticketing:tabs.${tab[segment]}`) }).click();
+  await settingsTab(page, t, `ticketing:tabs.${tab[segment]}`).click();
   await page.getByRole('button', { name: arrived[segment], exact: true }).waitFor();
 }
 
@@ -166,13 +221,13 @@ export async function openSecurity(
 
   await page.getByRole('button', { name: t('admin:currentUser.menuLabel', { name }) }).click();
   await page.getByRole('menuitem', { name: t('me:security.title') }).click();
-  await page.getByRole('heading', { name: t('me:account.title'), level: 1 }).waitFor();
+  await page.getByRole('heading', { name: t('me:account.tabs.security'), level: 1 }).waitFor();
 }
 
 /** Opens the install-admin Settings page through the shell. */
 export async function openSettings(page: Page, locale: Locale): Promise<void> {
   const t = strings(locale);
 
-  await page.getByRole('link', { name: t('admin:nav.settings'), exact: true }).click();
+  await openSettingsArea(page, t, 'settings');
   await page.getByRole('heading', { name: t('settings:signInMethods.title'), level: 2 }).waitFor();
 }

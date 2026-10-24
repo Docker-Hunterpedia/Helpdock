@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -19,9 +19,9 @@ type Locale = 'en' | 'ar';
 const openBrand = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
+  await openSettingsArea(page, t, 'brand');
   // The page opens on General; the retention card is on the last tab.
-  await page.getByRole('tab', { name: t('brand:tabs.danger') }).click();
+  await settingsTab(page, t, 'brand:tabs.danger').click();
   await page.getByRole('heading', { name: t('brand:retention.heading') }).waitFor();
 };
 
@@ -44,10 +44,7 @@ test.describe('data retention', () => {
     const t = strings(locale);
     await openBrand(page, locale);
 
-    await expect(page.getByRole('tab', { name: t('brand:tabs.danger') })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    await expect(settingsTab(page, t, 'brand:tabs.danger')).toHaveAttribute('aria-current', 'page');
     await expect(
       rowFor(page, t('brand:retention.rows.spamTickets')).getByText(
         t('brand:retention.rowCount', { count: 62 }),

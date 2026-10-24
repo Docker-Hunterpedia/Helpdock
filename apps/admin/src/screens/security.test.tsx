@@ -7,7 +7,7 @@ import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
 
 /**
- * `/me/security`. Everything here weakens or replaces a credential, so what is
+ * `/settings/account/security`. Everything here weakens or replaces a credential, so what is
  * asserted is that each one asks for a credential of its own first.
  */
 
@@ -16,10 +16,10 @@ const renderSecurity = async () => {
   const rendered = renderApp(<AppRoutes />, {
     authApi: auth,
     staffApi: staff,
-    initialEntries: ['/me/security'],
+    initialEntries: ['/settings/account/security'],
   });
 
-  await screen.findByRole('heading', { name: 'Your account', level: 1 });
+  await screen.findByRole('heading', { name: 'Security', level: 1 });
 
   return rendered;
 };
@@ -189,7 +189,7 @@ describe('the sign-in providers card (Admin/Me-SignInProviders)', () => {
     const rendered = renderApp(<AppRoutes />, {
       authApi: auth,
       staffApi: apis.staff,
-      initialEntries: ['/me/security'],
+      initialEntries: ['/settings/account/security'],
     });
     await screen.findByRole('heading', { name: 'Active sessions', level: 2 });
 

@@ -20,7 +20,7 @@ const renderViews = async (tickets = new MockTicketsApi()) => {
     staffApi: staff,
     ticketingApi: ticketing,
     ticketsApi: tickets,
-    initialEntries: ['/admin/ticketing/views'],
+    initialEntries: ['/settings/inbox/views'],
   });
 
   await screen.findByRole('button', { name: 'Edit VIP refunds' });

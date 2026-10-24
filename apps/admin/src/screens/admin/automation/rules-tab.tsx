@@ -115,7 +115,7 @@ export function RulesTab({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) 420px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 1fr) 420px' },
         gap: 6,
         alignItems: 'start',
       }}

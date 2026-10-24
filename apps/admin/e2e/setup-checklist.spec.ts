@@ -86,7 +86,7 @@ test('takes a step’s link to the page where it is done, and the panel closes w
     })
     .click();
 
-  await expect(page).toHaveURL(/\/admin\/ticketing\/slas$/);
+  await expect(page).toHaveURL(/\/settings\/inbox\/slas$/);
 
   await entry.click();
   await expect(page.getByRole('dialog', { name: t('admin:setupChecklist.title') })).toBeVisible();

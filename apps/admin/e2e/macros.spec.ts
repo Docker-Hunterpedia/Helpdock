@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicket, signIn } from './flows.js';
+import { openSettingsArea, openTicket, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -29,8 +29,8 @@ const violations = async (page: Page): Promise<string[]> => {
 /** Through the nav and the tab row, since a reload would sign the fixture out. */
 const openMacros = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
-  await page.getByRole('tab', { name: t('rules:tabs.macros') }).click();
+  await openSettingsArea(page, t, 'automation');
+  await settingsTab(page, t, 'rules:tabs.macros').click();
   await page.getByRole('heading', { name: t('macros:list.heading') }).waitFor();
 };
 

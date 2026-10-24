@@ -18,6 +18,7 @@ import {
   openTicketing,
   openTicketingTab,
   openTickets,
+  settingsTab,
   signIn,
   submitPassword,
 } from './flows.js';
@@ -107,7 +108,7 @@ test.describe('accessibility', () => {
     // From the icon before it, so the focus is a keyboard one and draws the tooltip.
     await page.getByRole('link', { name: t('admin:nav.tickets'), exact: true }).focus();
     await page.keyboard.press('Tab');
-    await page.getByRole('tooltip', { name: t('admin:nav.contacts') }).waitFor();
+    await page.getByRole('tooltip', { name: t('tickets:views.label') }).waitFor();
     expect(await violations(page)).toEqual([]);
 
     await page.getByRole('button', { name: t('tickets:views.label') }).click();
@@ -168,7 +169,7 @@ test.describe('accessibility', () => {
 
     await signIn(page, locale);
     await openTicketing(page, locale);
-    await page.getByRole('tab', { name: t('ticketing:tabs.statuses') }).click();
+    await settingsTab(page, t, 'ticketing:tabs.statuses').click();
     await page
       .getByRole('button', { name: t('ticketing:statuses.table.select', { name: 'Open' }) })
       .waitFor();

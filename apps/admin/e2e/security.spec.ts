@@ -10,7 +10,7 @@ import { openSecurity, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
- * `/me/security` in a browser, in both languages. Every action here weakens or
+ * `/settings/account/security` in a browser, in both languages. Every action here weakens or
  * replaces a credential, so each test is really "does it ask for one first".
  */
 
@@ -32,7 +32,7 @@ test.describe('the security page', () => {
     await openSecurity(page, locale);
 
     await expect(
-      page.getByRole('heading', { name: t('me:account.title'), level: 1 }),
+      page.getByRole('heading', { name: t('me:account.tabs.security'), level: 1 }),
     ).toBeVisible();
   });
 
@@ -222,7 +222,7 @@ test.describe('the security page', () => {
     await expect(
       page.getByText(t('me:signInProviders.connectedToast', { provider })),
     ).toBeVisible();
-    await expect(page).toHaveURL(/\/me\/security$/);
+    await expect(page).toHaveURL(/\/settings\/account\/security$/);
     await expect(card.getByText(t('me:signInProviders.notice'))).toBeHidden();
 
     await card

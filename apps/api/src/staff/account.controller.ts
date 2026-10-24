@@ -43,7 +43,7 @@ import { readPhotoUpload } from './profile-photo-body.js';
 
 /**
  * A person's own account: their details, their password, their second factor
- * and the browsers they are signed in on. The screen is `/me/security`.
+ * and the browsers they are signed in on. The screen is `/settings/account/security`.
  *
  * Every route is `@Authenticated()` and none takes a user id: the account acted
  * on is always the one making the request. There is nothing to authorise beyond

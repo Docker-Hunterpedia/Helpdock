@@ -117,7 +117,7 @@ export function BusinessHoursTab(): ReactNode {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) minmax(0, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) minmax(0, 1fr)' },
           gap: 6,
           alignItems: 'start',
         }}

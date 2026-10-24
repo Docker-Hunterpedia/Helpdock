@@ -474,7 +474,7 @@ export class MockAuthApi implements AuthApi {
       lastUsedAt: null,
     });
 
-    return `/me/security?connected=${provider}`;
+    return `/settings/account/security?connected=${provider}`;
   }
 
   async disconnectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<void> {

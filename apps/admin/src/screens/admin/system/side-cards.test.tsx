@@ -117,7 +117,7 @@ describe('AuditCard', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute(
       'href',
-      '/admin/system/audit-log',
+      '/settings/install/system/audit-log',
     );
   });
 });

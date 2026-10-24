@@ -70,7 +70,7 @@ export function RoutingTab(): ReactNode {
         display: 'grid',
         gap: 6,
         alignItems: 'start',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'repeat(2, minmax(0, 1fr))' },
       }}
     >
       <RoutingSteps overview={overview.data} text={text} />

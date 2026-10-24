@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -28,8 +28,8 @@ async function violations(page: Page): Promise<string[]> {
 
 const openWebForm = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
-  await page.getByRole('tab', { name: t('channels:tabs.webForm') }).click();
+  await openSettingsArea(page, t, 'channels');
+  await settingsTab(page, t, 'channels:tabs.webForm').click();
   await page.getByRole('heading', { name: t('channels:webForm.hosted.heading') }).waitFor();
 };
 

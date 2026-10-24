@@ -43,7 +43,7 @@ describe('renderStaffNotificationEmail', () => {
     expect(email.text).toContain('Assigned to: You');
     expect(email.text).toContain('Priority: Urgent');
     expect(email.text).toContain(`Open HD-1042: https://desk.example.com/tickets/${TICKET}`);
-    expect(email.text).toContain('https://desk.example.com/me/notifications');
+    expect(email.text).toContain('https://desk.example.com/settings/account/notifications');
     expect(email.html).toContain('lang="en" dir="ltr"');
     expect(email.html).toContain('#B3261E');
     expect(email.html).toContain(`font-family:${escapeHtml(fontFallbacks.sans)}`);
@@ -54,7 +54,7 @@ describe('renderStaffNotificationEmail', () => {
     const email = renderStaffNotificationEmail(input());
 
     expect(email.text).toContain(
-      'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',
+      'You get these because of your notification settings. Change them: https://desk.example.com/settings/account/notifications',
     );
     expect(email.text).toContain('Helpdock · sent to lina@helpdock.test');
     expect(email.text).toContain(

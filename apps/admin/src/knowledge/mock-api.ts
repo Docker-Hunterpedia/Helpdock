@@ -382,7 +382,7 @@ export class MockKnowledgeApi implements KnowledgeApi {
     if (!this.#oauth[provider]) {
       return Promise.reject(new KnowledgeError('oauth-not-configured'));
     }
-    return Promise.resolve(`/admin/ai/knowledge?source=${sourceId}&oauth=connected`);
+    return Promise.resolve(`/settings/ai/knowledge?source=${sourceId}&oauth=connected`);
   }
 
   #rows(brandId: string): KnowledgeSourceView[] {

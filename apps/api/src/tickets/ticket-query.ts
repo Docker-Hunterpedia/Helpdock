@@ -30,6 +30,7 @@ import {
 } from 'drizzle-orm';
 import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cursor.js';
+import { fieldFilterClause, type ResolvedFieldFilter } from './field-filters.js';
 
 /**
  * The ticket list's `WHERE` and `ORDER BY`, built from the parsed query.
@@ -400,6 +401,13 @@ export interface TicketFilterInput extends Pick<TicketListQuery, 'sort' | 'direc
   readonly cursor: string | undefined;
   /** Which half of the search answers `q`; `exact` unless the list fell back. */
   readonly search?: SearchMode;
+  /**
+   * M14-16: `filters.fieldFilter` after `resolveFieldFilters` has checked it
+   * against the brand's definitions. Required whenever the query has any: a
+   * raw filter is never compiled here, because its type is the definition's to
+   * say and a caller that skipped the check would be guessing.
+   */
+  readonly fieldFilters?: readonly ResolvedFieldFilter[];
 }
 
 /** What every list read asks, whatever the view: this brand, and no deleted ticket. */
@@ -450,7 +458,11 @@ export const ticketFilters = ({
   direction,
   cursor,
   search = 'exact',
+  fieldFilters,
 }: TicketFilterInput): SQL | undefined => {
+  if ((filters.fieldFilter?.length ?? 0) > 0 && fieldFilters === undefined) {
+    throw new Error('A query with field filters has to be resolved against the brand first');
+  }
   const clauses: (SQL | undefined)[] = [...liveTicketsOf(brandId)];
 
   if (filters.statusId !== undefined && filters.statusId.length > 0) {
@@ -490,6 +502,9 @@ export const ticketFilters = ({
   const tagIds = [...(filters.tagId ?? []), ...(filters.tagIds ?? [])];
   if (tagIds.length > 0) {
     clauses.push(tagFilter(tagIds));
+  }
+  for (const resolved of fieldFilters ?? []) {
+    clauses.push(fieldFilterClause(resolved));
   }
   if (filters.q !== undefined) {
     clauses.push(searchFilter(brandId, filters.q, search));

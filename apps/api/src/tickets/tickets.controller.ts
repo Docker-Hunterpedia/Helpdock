@@ -89,9 +89,16 @@ export class TicketsController {
     @Param(new ZodValidationPipe(TicketBrandParamDto)) { brandId }: TicketBrandParamDto,
     @Query(new ZodValidationPipe(TicketListQueryDto)) query: TicketListQueryDto,
   ): Promise<TicketList> {
-    return this.#tickets.list({ brandId, viewerId: principalIdOf(this.#principal()) }, query, {
-      withContacts: this.#readsContacts(brandId),
-    });
+    return this.#tickets.list(
+      {
+        brandId,
+        viewerId: principalIdOf(this.#principal()),
+        // M14-16: whoever may edit a field's visibility may filter on a hidden one.
+        seesHiddenFields: principalHasPermission(this.#principal(), brandId, 'ticketing:manage'),
+      },
+      query,
+      { withContacts: this.#readsContacts(brandId) },
+    );
   }
 
   @Post('tickets')

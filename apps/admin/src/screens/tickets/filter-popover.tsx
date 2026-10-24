@@ -1,10 +1,17 @@
-import type { Department, TagSummary, TicketStatus, TicketSystemState } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  Department,
+  TagSummary,
+  TicketStatus,
+  TicketSystemState,
+} from '@helpdock/schemas';
 import { ticketPrioritySchema, ticketSystemStateSchema } from '@helpdock/schemas';
 import { Box, Button, Chip, Popover, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
+import { FieldFilterEditor } from './field-filter-editor.tsx';
 import { statusName } from './format.js';
 
 /**
@@ -83,6 +90,7 @@ export function FilterPopover({
   departments,
   tags,
   staff,
+  fields,
   viewerId,
   onChange,
   onClose,
@@ -93,6 +101,8 @@ export function FilterPopover({
   readonly departments: readonly Department[];
   readonly tags: readonly TagSummary[];
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
+  /** M14-16: the ticket fields the reader may filter by. */
+  readonly fields: readonly CustomFieldDef[];
   readonly viewerId: string;
   onChange(filters: WorkspaceFilters): void;
   onClose(): void;
@@ -109,7 +119,7 @@ export function FilterPopover({
       // and centre is the one value that means the same in both directions.
       anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       transformOrigin={{ vertical: 'top', horizontal: 'center' }}
-      slotProps={{ paper: { sx: { width: 320, padding: 4 } } }}
+      slotProps={{ paper: { sx: { width: 520, maxWidth: 'calc(100vw - 32px)', padding: 4 } } }}
     >
       <Box
         component="section"
@@ -247,6 +257,24 @@ export function FilterPopover({
             }
           />
         </Group>
+
+        {fields.length === 0 ? null : (
+          <Box component="fieldset" sx={{ border: 0, margin: 0, padding: 0 }}>
+            <Typography component="legend" variant="caption" sx={{ color: 'text.secondary' }}>
+              {t('tickets:fieldFilters.legend')}
+            </Typography>
+            <Box sx={{ marginBlockStart: 2 }}>
+              <FieldFilterEditor
+                fields={fields}
+                value={filters.fieldFilter}
+                applyLabel={t('tickets:fieldFilters.apply')}
+                onChange={(fieldFilter) => {
+                  onChange({ ...filters, fieldFilter });
+                }}
+              />
+            </Box>
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button

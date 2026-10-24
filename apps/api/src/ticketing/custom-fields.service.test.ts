@@ -1,5 +1,6 @@
 import type { CustomFieldDefRow, DbTransaction, NewCustomFieldDef } from '@helpdock/db';
 import type { CustomFieldTarget } from '@helpdock/schemas';
+import { BadRequestException } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import type { CustomFieldsRepository, FieldUsage } from './custom-fields.repository.js';
@@ -19,6 +20,8 @@ let rows: CustomFieldDefRow[];
 let usage: Record<string, FieldUsage>;
 let cleared: { key: string; option: string }[];
 let ordered: readonly string[];
+let locked: number;
+let failNextWrite: Error | undefined;
 
 const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefRow => ({
   brandId: '01937f5e-7e53-7000-8000-0000000000b1',
@@ -30,6 +33,7 @@ const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefR
   options: [],
   required: false,
   agentVisible: true,
+  pinned: false,
   webForm: false,
   sortOrder: 0,
   createdAt: new Date(),
@@ -58,10 +62,24 @@ const repository = {
     if (row === undefined) {
       return undefined;
     }
+    if (failNextWrite !== undefined) {
+      const failure = failNextWrite;
+      failNextWrite = undefined;
+      throw failure;
+    }
     const updated = { ...row, ...values } as CustomFieldDefRow;
     rows = rows.map((candidate) => (candidate.id === id ? updated : candidate));
 
     return updated;
+  },
+  lockFields: async () => {
+    locked += 1;
+  },
+  unpinOthers: async (_tx: DbTransaction, id: string) => {
+    const others = rows.filter((row) => row.pinned && row.id !== id);
+    rows = rows.map((row) => (row.id === id ? row : { ...row, pinned: false }));
+
+    return others.map((row) => row.key);
   },
   delete: async (_tx: DbTransaction, id: string) => {
     rows = rows.filter((row) => row.id !== id);
@@ -87,6 +105,8 @@ beforeEach(() => {
   usage = { tier: { rows: 7, optionRows: { gold: 4 } } };
   cleared = [];
   ordered = [];
+  locked = 0;
+  failNextWrite = undefined;
   service = new CustomFieldsService(repository);
   transaction = fakeTransaction();
 });
@@ -129,6 +149,7 @@ describe('create', () => {
       options: [],
       required: false,
       agentVisible: true,
+      pinned: false,
     });
 
     expect(transaction.audit[0]).toMatchObject({
@@ -147,6 +168,7 @@ describe('create', () => {
         options: [],
         required: false,
         agentVisible: true,
+        pinned: false,
       }),
     ).rejects.toThrow(TicketingFailure);
   });
@@ -161,6 +183,7 @@ describe('create', () => {
         options: [],
         required: false,
         agentVisible: true,
+        pinned: false,
       }),
     ).resolves.toMatchObject({ key: 'tier' });
   });
@@ -282,5 +305,160 @@ describe('reorder', () => {
     await expect(
       service.reorder(contextFor(transaction.tx), { target: 'contact', fieldIds: ['tier'] }),
     ).rejects.toThrow(/exactly once/i);
+  });
+});
+
+describe('pinning (M14-16)', () => {
+  const create = (over: Record<string, unknown>) =>
+    service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'severity',
+      label: 'Severity',
+      type: 'select',
+      options: ['Sev 1'],
+      required: false,
+      agentVisible: true,
+      pinned: false,
+      ...over,
+    });
+
+  it('pins a ticket select that Agents see, and says so in the audit row', async () => {
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).resolves.toMatchObject({ pinned: true });
+
+    expect(transaction.audit[0]).toMatchObject({
+      action: 'custom_field.updated',
+      meta: { key: 'tier', pinned: true },
+    });
+    expect(transaction.audit[0]?.meta).not.toHaveProperty('unpinned');
+  });
+
+  it('lets the previously pinned field go, and names it in the audit row', async () => {
+    rows.push(def({ id: 'plan', key: 'plan', type: 'select', options: ['Pro'], pinned: true }));
+
+    await service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false });
+
+    expect(rows.filter((row) => row.pinned).map((row) => row.key)).toEqual(['tier']);
+    expect(transaction.audit[0]?.meta).toMatchObject({ pinned: true, unpinned: ['plan'] });
+  });
+
+  it('refuses to pin a field that is not a ticket select', async () => {
+    // `seats` is a number on the contact target: wrong type and wrong target.
+    await expect(
+      service.update(contextFor(transaction.tx), 'seats', { pinned: true, force: false }),
+    ).rejects.toThrow(/select field that Agents can see/);
+  });
+
+  it('refuses to pin a field Agents cannot see', async () => {
+    rows.push(
+      def({ id: 'hidden', key: 'hidden', type: 'select', options: ['a'], agentVisible: false }),
+    );
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'hidden', { pinned: true, force: false }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('refuses to hide a pinned field from Agents or to retype it, unless the same edit unpins it', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+    usage = {};
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { agentVisible: false, force: false }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', {
+        type: 'text',
+        options: [],
+        force: false,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', {
+        agentVisible: false,
+        pinned: false,
+        force: false,
+      }),
+    ).resolves.toMatchObject({ agentVisible: false, pinned: false });
+  });
+
+  it('does not touch the pin when an edit does not mention it', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+
+    await service.update(contextFor(transaction.tx), 'tier', { label: 'Tier', force: false });
+
+    expect(rows.find((row) => row.id === 'tier')?.pinned).toBe(true);
+    expect(transaction.audit[0]?.meta).not.toHaveProperty('pinned');
+  });
+
+  it('creates a field pinned, and unpins the previous one', async () => {
+    rows = rows.map((row) => (row.id === 'tier' ? { ...row, pinned: true } : row));
+
+    await expect(create({ pinned: true })).resolves.toMatchObject({
+      key: 'severity',
+      pinned: true,
+    });
+
+    expect(rows.filter((row) => row.pinned).map((row) => row.key)).toEqual(['severity']);
+    expect(transaction.audit[0]?.meta).toMatchObject({ pinned: true, unpinned: ['tier'] });
+  });
+
+  it('refuses to create a pinned field that cannot be pinned', async () => {
+    await expect(create({ pinned: true, type: 'text', options: [] })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(create({ pinned: true, agentVisible: false })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(create({ pinned: true, target: 'contact' })).rejects.toThrow(BadRequestException);
+    expect(rows.some((row) => row.key === 'severity')).toBe(false);
+  });
+});
+
+describe('concurrent pins (M14-16)', () => {
+  it('locks the brand’s fields before it judges an update, and before a create that pins', async () => {
+    await service.update(contextFor(transaction.tx), 'tier', { label: 'Tier', force: false });
+    expect(locked).toBe(1);
+
+    await service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'plain',
+      label: 'Plain',
+      type: 'text',
+      options: [],
+      required: false,
+      agentVisible: true,
+      pinned: false,
+    });
+    expect(locked).toBe(1);
+
+    await service.create(contextFor(transaction.tx), {
+      target: 'ticket',
+      key: 'severity',
+      label: 'Severity',
+      type: 'select',
+      options: ['Sev 1'],
+      required: false,
+      agentVisible: true,
+      pinned: true,
+    });
+    expect(locked).toBe(2);
+  });
+
+  it('answers a unique-index refusal as a 409 pin-conflict, not a 500', async () => {
+    failNextWrite = Object.assign(new Error('duplicate key'), { code: '23505' });
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).rejects.toMatchObject({ reason: 'pin-conflict', status: 409 });
+  });
+
+  it('lets any other write failure through unchanged', async () => {
+    failNextWrite = new Error('connection lost');
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'tier', { pinned: true, force: false }),
+    ).rejects.toThrow('connection lost');
   });
 });

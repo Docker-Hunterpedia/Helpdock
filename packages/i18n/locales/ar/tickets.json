@@ -551,7 +551,14 @@
     "sort": "الترتيب: {{value}}",
     "everything": "كل التذاكر",
     "snoozedOnly": "المؤجَّلة فقط",
-    "snoozedInclude": "تشمل المؤجَّلة"
+    "snoozedInclude": "تشمل المؤجَّلة",
+    "fieldNotSet": "{{field}} غير معيّن",
+    "fieldTicked": "{{field}} محدَّد",
+    "fieldUnticked": "{{field}} غير محدَّد",
+    "fieldBefore": "{{field}} قبل {{value}}",
+    "fieldAfter": "{{field}} بعد {{value}}",
+    "fieldBetween": "{{field}} بين {{from}} و{{to}}",
+    "fieldContains": "{{field}} تحتوي على \"{{value}}\""
   },
   "sort": {
     "updatedAt": {
@@ -1377,5 +1384,31 @@
     "announce_few": "{{count}} تذاكر محددة",
     "announce_many": "{{count}} تذكرة محددة",
     "announce_other": "{{count}} تذكرة محددة"
+  },
+  "fieldFilters": {
+    "legend": "الحقول المخصصة",
+    "none": "لا توجد تصفية بالحقول بعد.",
+    "add": "إضافة تصفية",
+    "apply": "تطبيق",
+    "remove": "إزالة تصفية {{field}}",
+    "operatorOf": "عامل المقارنة لـ {{field}}",
+    "valueOf": "قيمة {{field}}",
+    "from": "{{field}} من",
+    "to": "{{field}} إلى",
+    "ticked": "محدَّد",
+    "unticked": "غير محدَّد",
+    "incomplete": "أكمل التصفيات التي لا قيمة لها بعد أو أزلها.",
+    "ops": {
+      "any_of": "هي إحدى",
+      "not_set": "غير معيّنة",
+      "is": "هي",
+      "before": "قبل",
+      "after": "بعد",
+      "between": "بين",
+      "contains": "تحتوي على"
+    }
+  },
+  "pinned": {
+    "name": "{{field}}:"
   }
 }

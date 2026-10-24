@@ -391,7 +391,8 @@ the wrong field must not become the number one.
 | Options | Only for Select and Multi-select. One choice per row, reordered with the arrow buttons or with `↑`/`↓` inside the row. The order is the order the menu offers. |
 | Required | Enforced when a ticket is **created**, not when one is patched: a `PATCH` that names two fields says nothing about the other eight. |
 | Placement | Which target the field hangs off. Fixed after creation. |
-| Visible to agents | Off keeps the field for administrators and rules. It **hides** the field; it does not protect it — the value sits in the same jsonb column either way. |
+| Visible to agents | Off keeps the field for administrators and rules. It **hides** the field; it does not protect it — the value sits in the same jsonb column either way. A hidden field is also not offered as a list filter to Agents, and the api refuses it from them (see [Filtering by a custom field](tickets.md#filtering-by-a-custom-field)). |
+| Pin on rows and the ticket header | Only for a **ticket Select** that Agents can see (M14-16). Its value is shown as a neutral chip on every list row and in the ticket header. **One field per brand:** pinning another lets the first go, and the table marks the pinned one. A pinned field cannot be hidden from Agents or retyped until it is unpinned (`400`). |
 
 ### The two rules that exist because values are already stored
 

@@ -8,7 +8,7 @@ import {
   tickets,
 } from '@helpdock/db';
 import type { CustomFieldTarget } from '@helpdock/schemas';
-import { and, asc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 
 /**
@@ -78,6 +78,22 @@ export class CustomFieldsRepository {
     return rows[0];
   }
 
+  /**
+   * Locks every field definition of the brand until the transaction ends
+   * (M14-16). Pinning and hiding read a field, check a rule about it and then
+   * write, so two requests that interleave could each pass the check and leave
+   * a hidden field pinned, or two fields pinned. A brand has at most a few
+   * hundred rows here and edits them rarely, so one lock per brand is the
+   * simplest thing that is right. Ordered by id so two lockers cannot deadlock.
+   */
+  async lockFields(tx: DbTransaction): Promise<void> {
+    await tx
+      .select({ id: customFieldDefs.id })
+      .from(customFieldDefs)
+      .orderBy(asc(customFieldDefs.id))
+      .for('update');
+  }
+
   async keyTaken(tx: DbTransaction, target: CustomFieldTarget, key: string): Promise<boolean> {
     const rows = await tx
       .select({ id: customFieldDefs.id })
@@ -121,6 +137,21 @@ export class CustomFieldsRepository {
       .returning();
 
     return rows[0];
+  }
+
+  /**
+   * Unpins every other field of the brand and returns their keys (M14-16). The
+   * partial unique index allows one pinned field, so the previous one has to
+   * go before the new one is written.
+   */
+  async unpinOthers(tx: DbTransaction, fieldId: string): Promise<string[]> {
+    const rows = await tx
+      .update(customFieldDefs)
+      .set({ pinned: false })
+      .where(and(eq(customFieldDefs.pinned, true), ne(customFieldDefs.id, fieldId)))
+      .returning({ key: customFieldDefs.key });
+
+    return rows.map((row) => row.key);
   }
 
   /**

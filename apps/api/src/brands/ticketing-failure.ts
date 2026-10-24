@@ -44,6 +44,8 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'view-is-built-in': HttpStatus.CONFLICT,
   // M3-06. The macro moved under the agent, not their role.
   'macro-changed': HttpStatus.CONFLICT,
+  // M14-16. Two changes to the pinned field raced; the later one retries.
+  'pin-conflict': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -67,6 +69,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
   'view-is-built-in':
     'A built-in view may be renamed, reordered or hidden, never deleted, refiltered or reshared',
   'macro-changed': 'That macro has changed since it was applied; apply it again',
+  'pin-conflict': 'The brand’s pinned field changed at the same moment; try again',
 };
 
 export class TicketingFailure extends HttpException {

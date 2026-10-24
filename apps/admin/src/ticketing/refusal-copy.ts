@@ -32,6 +32,7 @@ export const REFUSAL_COPY = {
   'time-tracking-off': 'ticketing:toast.timeTrackingOff',
   'view-is-built-in': 'ticketing:toast.viewIsBuiltIn',
   'macro-changed': 'ticketing:toast.macroChanged',
+  'pin-conflict': 'ticketing:toast.pinConflict',
 } as const satisfies Record<TicketingRefusal, string>;
 
 /** The catalog key for one refusal, keeping the literal type `useT()` needs. */

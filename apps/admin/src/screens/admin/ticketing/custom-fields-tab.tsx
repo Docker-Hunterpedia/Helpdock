@@ -33,6 +33,7 @@ import { currentBrand, useSession, useTicketingApi } from '../../../auth/session
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { isTicketingError } from '../../../ticketing/api.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { Label } from '../../../ui/label.tsx';
 import { type CustomFieldDraft, CustomFieldEditor } from './custom-field-editor.tsx';
 import { moveBy, moveTo } from './reorder.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
@@ -101,6 +102,8 @@ export function CustomFieldsTab(): ReactNode {
         options: [...input.draft.options],
         required: input.draft.required,
         agentVisible: input.draft.agentVisible,
+        // Sent only when it changes, so an edit of the label never unpins a field.
+        ...(input.draft.pinned === input.field.pinned ? {} : { pinned: input.draft.pinned }),
         force: input.force ?? false,
       }),
     (input) => t('ticketing:toast.fieldUpdated', { name: input.draft.label }),
@@ -278,6 +281,11 @@ export function CustomFieldsTab(): ReactNode {
                             >
                               {field.label}
                             </Button>
+                            {field.pinned ? (
+                              <Box component="span" sx={{ marginInlineStart: 2 }}>
+                                <Label>{t('ticketing:customFields.pinned')}</Label>
+                              </Box>
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             <Typography

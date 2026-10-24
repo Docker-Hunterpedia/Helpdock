@@ -226,6 +226,7 @@ const field = {
   options: ['gold'],
   required: false,
   agentVisible: true,
+  pinned: false,
   sortOrder: 0,
 };
 
@@ -328,6 +329,7 @@ describe('custom fields', () => {
       options: ['gold'],
       required: false,
       agentVisible: true,
+      pinned: false,
     });
 
     expect(lastCall().init.method).toBe('POST');

@@ -1,6 +1,14 @@
-import type { Department, StaffMember, TagSummary, TicketStatus } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  Department,
+  StaffMember,
+  TagSummary,
+  TicketFieldFilter,
+  TicketStatus,
+} from '@helpdock/schemas';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
+import { fieldLabel } from '../../tickets/custom-values.js';
 import { EMPTY_FILTERS, LIVE_STATES, type WorkspaceFilters } from '../../tickets/views.js';
 import { shortId } from './directory.js';
 import { statusName } from './format.js';
@@ -21,6 +29,8 @@ export interface FilterDirectory {
   readonly departments: readonly Department[];
   readonly tags: readonly TagSummary[];
   readonly staff: readonly Pick<StaffMember, 'userId' | 'name'>[];
+  /** M14-16: what a custom-field filter names its field by. A key not among them prints as itself. */
+  readonly fields?: readonly CustomFieldDef[];
 }
 
 /** One chip: what it says, and the filters without it. */
@@ -71,6 +81,34 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       return t('tickets:summary.nobody');
     }
     return directory.staff.find((member) => member.userId === id)?.name ?? shortId(id);
+  };
+
+  /** One custom-field filter in words: "Severity is Sev 1 or Sev 2", "Order id is not set". */
+  const fieldFilterText = (filter: TicketFieldFilter): string => {
+    const def = directory.fields?.find((candidate) => candidate.key === filter.key);
+    const field = def === undefined ? filter.key : fieldLabel(def, locale);
+
+    switch (filter.op) {
+      case 'any_of':
+        return t('tickets:summary.is', {
+          field,
+          value: filter.values.join(t('tickets:summary.or')),
+        });
+      case 'not_set':
+        return t('tickets:summary.fieldNotSet', { field });
+      case 'is':
+        return t(filter.value ? 'tickets:summary.fieldTicked' : 'tickets:summary.fieldUnticked', {
+          field,
+        });
+      case 'before':
+        return t('tickets:summary.fieldBefore', { field, value: filter.value });
+      case 'after':
+        return t('tickets:summary.fieldAfter', { field, value: filter.value });
+      case 'between':
+        return t('tickets:summary.fieldBetween', { field, from: filter.from, to: filter.to });
+      case 'contains':
+        return t('tickets:summary.fieldContains', { field, value: filter.value });
+    }
   };
 
   const fields = (filters: WorkspaceFilters) => [
@@ -130,6 +168,16 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
           },
         })),
       );
+      for (const filter of filters.fieldFilter) {
+        parts.push({
+          key: `field:${filter.key}`,
+          label: fieldFilterText(filter),
+          without: {
+            ...filters,
+            fieldFilter: filters.fieldFilter.filter((other) => other.key !== filter.key),
+          },
+        });
+      }
       if (filters.overdue) {
         parts.push({
           key: 'overdue',
@@ -177,6 +225,7 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
             : t('tickets:summary.is', { field: name, value: joined }),
         ];
       });
+      phrases.push(...filters.fieldFilter.map(fieldFilterText));
       if (filters.overdue) {
         phrases.push(t('tickets:summary.overdue'));
       }

@@ -15,7 +15,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { writeTicketingAudit } from '../ticketing/audit.js';
 import type { TicketReader } from '../tickets/tickets.repository.js';
-import { editsSharedView, seesSharedView, type ViewActor } from './view-rules.js';
+import { editsSharedView, managesViews, seesSharedView, type ViewActor } from './view-rules.js';
 import type { ViewsRepository } from './views.repository.js';
 
 /**
@@ -51,6 +51,12 @@ export interface TicketCounter {
     filters: readonly TicketViewFilters[],
     cap: number,
   ): Promise<number[]>;
+  /** Throws a 400 when a custom-field filter does not fit the brand's fields (M14-16). */
+  resolveFieldFilters(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: TicketViewFilters['fieldFilter'],
+  ): Promise<unknown>;
 }
 
 export class ViewsService {
@@ -76,7 +82,11 @@ export class ViewsService {
     const shown = (await this.#visible(context)).filter((row) => !row.hidden);
     const matched = await this.#tickets.countTickets(
       context.tx,
-      { brandId: context.brandId, viewerId: context.actor.userId },
+      {
+        brandId: context.brandId,
+        viewerId: context.actor.userId,
+        seesHiddenFields: managesViews(context.actor),
+      },
       shown.map(filtersOf),
       VIEW_COUNT_CAP,
     );
@@ -98,6 +108,8 @@ export class ViewsService {
     if (request.visibility.kind !== 'personal') {
       await this.#assertMayShare(context, request.visibility);
     }
+
+    await this.#assertFieldFiltersFit(context, request.filters, request.visibility);
 
     const ownerId = personal ? context.actor.userId : null;
     const row = await this.#repository.create(context.tx, {
@@ -140,6 +152,14 @@ export class ViewsService {
     }
     if (request.visibility !== undefined && request.visibility.kind !== 'personal') {
       await this.#assertMayShare(context, request.visibility);
+    }
+
+    if (request.filters !== undefined || request.visibility !== undefined) {
+      await this.#assertFieldFiltersFit(
+        context,
+        request.filters ?? filtersOf(row),
+        request.visibility ?? visibilityOf(row),
+      );
     }
 
     const becomesOwner =
@@ -292,6 +312,32 @@ export class ViewsService {
         throw new NotFoundException('No such department');
       }
     }
+  }
+
+  /**
+   * A view's custom-field filters have to fit the brand's fields when it is
+   * saved (M14-16): an unknown key is a typo somebody believes they saved. A
+   * shared view is checked as an Agent would read it, because a filter on a
+   * field hidden from Agents would be an error in their sidebar, not a result.
+   */
+  async #assertFieldFiltersFit(
+    context: ViewsContext,
+    filters: TicketViewFilters,
+    visibility: TicketViewVisibility,
+  ): Promise<void> {
+    if ((filters.fieldFilter?.length ?? 0) === 0) {
+      return;
+    }
+
+    await this.#tickets.resolveFieldFilters(
+      context.tx,
+      {
+        brandId: context.brandId,
+        viewerId: context.actor.userId,
+        seesHiddenFields: visibility.kind === 'personal' && managesViews(context.actor),
+      },
+      filters.fieldFilter,
+    );
   }
 
   async #audit(

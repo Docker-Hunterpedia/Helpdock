@@ -427,7 +427,8 @@ export const listQueryString = (query: TicketQuery): string => {
   for (const [key, value] of Object.entries(query)) {
     if (Array.isArray(value)) {
       for (const member of value) {
-        params.append(key, String(member));
+        // A filter is an object, and a query string carries it as JSON.
+        params.append(key, typeof member === 'object' ? JSON.stringify(member) : String(member));
       }
       continue;
     }

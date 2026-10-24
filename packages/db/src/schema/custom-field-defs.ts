@@ -6,6 +6,7 @@ import {
   pgTable,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -63,6 +64,12 @@ export const customFieldDefs = pgTable(
      */
     agentVisible: boolean('agent_visible').notNull().default(true),
     /**
+     * M14-16. The ticket select field whose value shows as a chip on the row
+     * and in the ticket header. The partial unique index below keeps it to one
+     * per brand; the service keeps it to a select field an Agent may see.
+     */
+    pinned: boolean('pinned').notNull().default(false),
+    /**
      * "Show on web form" (M4-09): a ticket field the brand's hosted form asks
      * the customer for. Meaningful for `target = 'ticket'` alone; the form's
      * own settings say where it goes and whether it is required there.
@@ -80,6 +87,7 @@ export const customFieldDefs = pgTable(
   // meanings for one entry of the same jsonb object.
   (table) => [
     unique('custom_field_defs_brand_target_key').on(table.brandId, table.target, table.key),
+    uniqueIndex('custom_field_defs_brand_pinned_key').on(table.brandId).where(sql`${table.pinned}`),
   ],
 );
 

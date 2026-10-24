@@ -33,9 +33,11 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketsApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { ticketFieldsFor } from '../../../tickets/custom-values.js';
 import { ticketKeys } from '../../../tickets/keys.js';
 import { filtersOfView, viewLabel } from '../../../tickets/views.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { Label } from '../../../ui/label.tsx';
 import { useFilterSummary } from '../../tickets/filter-summary.js';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
 import { moveBy, moveTo } from './reorder.js';
@@ -277,9 +279,9 @@ export function ViewsTab(): ReactNode {
                             {name}
                           </Button>
                           {view.builtIn === null ? null : (
-                            <Badge>{t('ticketing:views.builtIn')}</Badge>
+                            <Label>{t('ticketing:views.builtIn')}</Label>
                           )}
-                          {view.hidden ? <Badge>{t('ticketing:views.hidden')}</Badge> : null}
+                          {view.hidden ? <Label>{t('ticketing:views.hidden')}</Label> : null}
                         </Box>
                       </TableCell>
                       <TableCell
@@ -328,6 +330,8 @@ export function ViewsTab(): ReactNode {
             view={selected}
             departments={directory.departments}
             tags={directory.tags}
+            // A shared view is read by Agents, so it may only name fields they see.
+            fields={ticketFieldsFor(directory.fields, false)}
             busy={busy}
             onSubmit={(draft) => {
               if (selected === null) {
@@ -489,26 +493,5 @@ export function ViewsTab(): ReactNode {
         }}
       />
     </Box>
-  );
-}
-
-/** The small neutral label beside a view's name: "built-in", "hidden". */
-function Badge({ children }: { readonly children: ReactNode }): ReactNode {
-  const tokens = useSemanticTokens();
-
-  return (
-    <Typography
-      component="span"
-      variant="caption"
-      sx={{
-        paddingInline: 2,
-        borderRadius: '6px',
-        backgroundColor: tokens['bg.muted'],
-        color: tokens['text.secondary'],
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
-    </Typography>
   );
 }

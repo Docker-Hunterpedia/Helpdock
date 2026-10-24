@@ -1,4 +1,10 @@
-import type { Department, TagSummary, Ticket, TicketStatus } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  Department,
+  TagSummary,
+  Ticket,
+  TicketStatus,
+} from '@helpdock/schemas';
 import { Box, Button, Checkbox, Chip, InputAdornment, TextField, Typography } from '@mui/material';
 import { ListFilter, Search, TicketIcon } from 'lucide-react';
 import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
@@ -86,6 +92,8 @@ export function TicketList({
   departments,
   tags,
   staff,
+  fields,
+  pinnedField,
   viewerId,
   changes,
   openFiltersToken,
@@ -116,6 +124,10 @@ export function TicketList({
   readonly departments: readonly Department[];
   readonly tags: readonly TagSummary[];
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
+  /** M14-16: the ticket fields the reader may filter by. */
+  readonly fields: readonly CustomFieldDef[];
+  /** M14-16: the brand's pinned field, shown as a chip on each row. */
+  readonly pinnedField: CustomFieldDef | undefined;
   readonly viewerId: string;
   /**
    * Set when the list is a saved view whose filters the URL has replaced with
@@ -155,7 +167,7 @@ export function TicketList({
   const active = activeFilterCount(filters);
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
-  const summary = useFilterSummary({ statuses, departments, tags, staff });
+  const summary = useFilterSummary({ statuses, departments, tags, staff, fields });
   const chips = summary.chips(filters);
 
   const emptyAction =
@@ -365,6 +377,7 @@ export function TicketList({
                   selected={ticket.id === selectedId}
                   now={now}
                   search={linkSearch}
+                  pinnedField={pinnedField}
                   selection={
                     selection === undefined
                       ? undefined
@@ -404,6 +417,7 @@ export function TicketList({
         departments={departments}
         tags={tags}
         staff={staff}
+        fields={fields}
         viewerId={viewerId}
         onChange={onFiltersChange}
         onClose={() => {

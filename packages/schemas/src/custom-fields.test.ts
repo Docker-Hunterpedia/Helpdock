@@ -220,6 +220,7 @@ describe('visibleCustomValues', () => {
     options: [],
     required: false,
     agentVisible: true,
+    pinned: false,
     sortOrder: 0,
   });
 
@@ -252,7 +253,15 @@ describe('customFieldCreateRequestSchema', () => {
       options: [],
       required: false,
       agentVisible: true,
+      pinned: false,
     });
+  });
+
+  it('pins a field only when asked to, and an update may pin or unpin one (M14-16)', () => {
+    expect(customFieldCreateRequestSchema.parse({ ...valid, pinned: true }).pinned).toBe(true);
+    expect(customFieldUpdateRequestSchema.parse({ pinned: true }).pinned).toBe(true);
+    expect(customFieldUpdateRequestSchema.parse({ pinned: false }).pinned).toBe(false);
+    expect(customFieldUpdateRequestSchema.safeParse({ force: true }).success).toBe(false);
   });
 
   it('refuses a select with no options, which would show an empty menu', () => {

@@ -151,3 +151,47 @@ describe('the ⋯ menu', () => {
     expect(logTime).toHaveBeenCalledOnce();
   });
 });
+
+describe('the pinned field (M14-16)', () => {
+  const severity = {
+    id: 'f-severity',
+    target: 'ticket' as const,
+    key: 'severity',
+    label: 'Severity',
+    labelAr: 'الخطورة',
+    type: 'select' as const,
+    options: ['Sev 1', 'Sev 2'],
+    required: false,
+    agentVisible: true,
+    pinned: true,
+    sortOrder: 0,
+  };
+
+  const renderPinned = (custom: Record<string, unknown>) =>
+    renderApp(
+      <TicketHeader
+        ticket={testTicket({ custom })}
+        departmentName="Billing"
+        viewers={[]}
+        actions={[]}
+        now={NOW}
+        showDetailsButton={false}
+        pinnedField={severity}
+        onShowDetails={() => {}}
+      />,
+    );
+
+  it('shows the value as a chip beside the priority, named for a screen reader', () => {
+    renderPinned({ severity: 'Sev 1' });
+
+    expect(screen.getByText('Sev 1')).toBeInTheDocument();
+    expect(screen.getByText('Severity:')).toBeInTheDocument();
+  });
+
+  it('draws nothing for a ticket that has no value, or one that is not text', () => {
+    renderPinned({ severity: null, other: 'Sev 1' });
+
+    expect(screen.queryByText('Sev 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Severity:')).not.toBeInTheDocument();
+  });
+});

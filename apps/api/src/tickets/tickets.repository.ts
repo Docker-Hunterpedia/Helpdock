@@ -17,10 +17,16 @@ import {
   ticketStatuses,
   tickets,
 } from '@helpdock/db';
-import type { TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
+import type { TicketFieldFilter, TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { decodeTicketCursor, type TicketCursor } from './cursor.js';
+import {
+  FieldFilterFailure,
+  type ResolvedFieldFilter,
+  readFilterableFields,
+  resolveFieldFilters,
+} from './field-filters.js';
 import {
   fallsBackToFuzzy,
   namedTicketFilters,
@@ -52,6 +58,12 @@ import {
 export interface TicketReader {
   readonly brandId: string;
   readonly viewerId: string;
+  /**
+   * Whether the reader may filter on a custom field that is hidden from Agents
+   * (M14-16): an Admin or a Team Leader. Absent means they may not, which is
+   * what an API key and a quick search get.
+   */
+  readonly seesHiddenFields?: boolean;
 }
 
 export interface TicketWithStatus {
@@ -144,6 +156,7 @@ export class TicketRepository {
     query: TicketListQuery,
   ): Promise<TicketListPage> {
     const cursor = query.cursor === undefined ? undefined : decodeTicketCursor(query.cursor, query);
+    const fieldFilters = await this.resolveFieldFilters(tx, reader, query.fieldFilter);
     const named =
       query.q !== undefined && (cursor === undefined || cursor.named === true)
         ? (await this.namedTicketsStatement(tx, reader, { ...query, q: query.q })).map(withStatus)
@@ -162,6 +175,7 @@ export class TicketRepository {
         limit: query.limit - named.length,
       },
       viewCursor,
+      fieldFilters,
     );
 
     return { rows: [...named, ...view.rows], search: view.search, named: named.length };
@@ -173,9 +187,12 @@ export class TicketRepository {
     reader: TicketReader,
     query: TicketListQuery,
     cursor: TicketCursor | undefined,
+    fieldFilters: readonly ResolvedFieldFilter[],
   ): Promise<Omit<TicketListPage, 'named'>> {
     const read = async (search: SearchMode) => ({
-      rows: (await this.listTicketsStatement(tx, reader, query, search)).map(withStatus),
+      rows: (await this.listTicketsStatement(tx, reader, query, search, fieldFilters)).map(
+        withStatus,
+      ),
       search,
     });
 
@@ -191,6 +208,25 @@ export class TicketRepository {
     });
 
     return fallBack ? read('fuzzy') : exact;
+  }
+
+  /**
+   * The list's custom-field filters, checked against the brand's definitions
+   * (M14-16). One read of the definitions, and none at all when the query has
+   * no field filter, which is nearly every list.
+   */
+  async resolveFieldFilters(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketFieldFilter[] | undefined,
+  ): Promise<readonly ResolvedFieldFilter[]> {
+    if (filters === undefined || filters.length === 0) {
+      return [];
+    }
+
+    return resolveFieldFilters(filters, await readFilterableFields(tx), {
+      seesHidden: reader.seesHiddenFields === true,
+    });
   }
 
   /**
@@ -224,9 +260,18 @@ export class TicketRepository {
     reader: TicketReader,
     query: TicketListQuery,
     search: SearchMode = 'exact',
+    fieldFilters?: readonly ResolvedFieldFilter[],
   ) {
     const { sort, direction, cursor, limit, ...filters } = query;
-    const where = ticketFilters({ ...reader, filters, sort, direction, cursor, search });
+    const where = ticketFilters({
+      ...reader,
+      filters,
+      sort,
+      direction,
+      cursor,
+      search,
+      ...(fieldFilters === undefined ? {} : { fieldFilters }),
+    });
 
     return tx
       .select()
@@ -259,12 +304,44 @@ export class TicketRepository {
       return [];
     }
 
+    const resolved = await this.#resolveForCounts(tx, reader, filters);
     const rows = await tx.execute<Record<string, number>>(
-      this.countTicketsStatement(tx, reader, filters, cap),
+      this.countTicketsStatement(tx, reader, filters, cap, resolved),
     );
     const row = [...rows][0] ?? {};
 
     return filters.map((_filters, index) => Number(row[`c${index}`] ?? 0));
+  }
+
+  /**
+   * The field filters of each view, resolved one view at a time. A view whose
+   * filters no longer fit the brand's fields (the field was deleted or hidden
+   * from this reader since the view was saved) counts nothing instead of
+   * failing the sidebar's one statement: its list says why when it is opened.
+   * `null` is that view.
+   */
+  async #resolveForCounts(
+    tx: DbTransaction,
+    reader: TicketReader,
+    filters: readonly TicketViewFilters[],
+  ): Promise<(readonly ResolvedFieldFilter[] | null)[]> {
+    if (!filters.some(({ fieldFilter }) => (fieldFilter?.length ?? 0) > 0)) {
+      return filters.map(() => []);
+    }
+    const fields = await readFilterableFields(tx);
+
+    return filters.map(({ fieldFilter }) => {
+      try {
+        return resolveFieldFilters(fieldFilter, fields, {
+          seesHidden: reader.seesHiddenFields === true,
+        });
+      } catch (error) {
+        if (error instanceof FieldFilterFailure) {
+          return null;
+        }
+        throw error;
+      }
+    });
   }
 
   /** The statement {@link countTickets} runs, unexecuted, for the performance harness. */
@@ -273,13 +350,27 @@ export class TicketRepository {
     reader: TicketReader,
     filters: readonly TicketViewFilters[],
     cap: number,
+    resolved: readonly (readonly ResolvedFieldFilter[] | null)[] = [],
   ): SQL {
     const counts = filters.map(({ sort, direction, ...rest }, index) => {
+      const fieldFilters = resolved[index];
+      if (fieldFilters === null) {
+        return sql`0 AS ${sql.identifier(`c${index}`)}`;
+      }
       const matching = tx
         .select({ id: tickets.id })
         .from(tickets)
         .innerJoin(ticketStatuses, statusJoin)
-        .where(ticketFilters({ ...reader, filters: rest, sort, direction, cursor: undefined }))
+        .where(
+          ticketFilters({
+            ...reader,
+            filters: rest,
+            sort,
+            direction,
+            cursor: undefined,
+            ...(fieldFilters === undefined ? {} : { fieldFilters }),
+          }),
+        )
         .limit(cap + 1);
 
       return sql`(SELECT count(*)::int FROM (${matching}) AS matching) AS ${sql.identifier(`c${index}`)}`;

@@ -1,5 +1,6 @@
 import type {
   ContactSummary,
+  CustomFieldDef,
   Department,
   StaffMember,
   TagSummary,
@@ -41,6 +42,8 @@ export interface WorkspaceData {
   readonly staff: readonly StaffMember[];
   /** M1-05: what a tag filter and a view's summary are named from. */
   readonly tags: readonly TagSummary[];
+  /** M14-16: every custom field of the brand, which the filters and the pinned chip are drawn from. */
+  readonly fields: readonly CustomFieldDef[];
 }
 
 /**
@@ -94,11 +97,19 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
     staleTime: DIRECTORY_STALE_MS,
   });
 
+  // The Custom fields tab's key, for the same reason as the tags'.
+  const fields = useQuery({
+    queryKey: ['custom-fields', brandId],
+    queryFn: () => ticketingApi.customFields(brandId),
+    staleTime: DIRECTORY_STALE_MS,
+  });
+
   return {
     statuses: statuses.data?.statuses ?? [],
     departments,
     staff: staff.data?.staff ?? [],
     tags: tags.data?.tags ?? [],
+    fields: fields.data?.fields ?? [],
   };
 }
 

@@ -29,7 +29,10 @@ export const importFieldTargetSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('existing'), fieldId: z.uuid() }),
   z.strictObject({
     kind: z.literal('create'),
-    definition: customFieldCreateRequestSchema.strict(),
+    definition: customFieldCreateRequestSchema
+      .strict()
+      // The brand picks its one pinned field itself (M14-16); an import never does.
+      .refine((definition) => !definition.pinned, { message: 'An import cannot pin a field' }),
   }),
   z.strictObject({ kind: z.literal('skip') }),
 ]);

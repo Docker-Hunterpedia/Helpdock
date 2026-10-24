@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
@@ -139,6 +139,53 @@ describe('editing', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText(/Rows already carry values for this field/)).toBeInTheDocument();
+  });
+});
+
+describe('pinning a field (M14-16)', () => {
+  const pinBox = () =>
+    screen.queryByRole('checkbox', { name: 'Pin on rows and the ticket header' });
+
+  it('offers the pin for a ticket select that Agents see, and for no other field', async () => {
+    const { user } = await renderFields();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Plan tier' }));
+    expect(await screen.findByLabelText('Key')).toBeDisabled();
+    expect(pinBox()).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Visible to agents' }));
+    expect(pinBox()).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Order id' }));
+    expect(await screen.findByLabelText('Key')).toHaveValue('order_id');
+    expect(pinBox()).not.toBeInTheDocument();
+  });
+
+  it('pins a field and marks its row', async () => {
+    const { user } = await renderFields();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Plan tier' }));
+    await user.click(
+      await screen.findByRole('checkbox', { name: 'Pin on rows and the ticket header' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Pinned')).toBeInTheDocument();
+    expect(
+      within(rowFor('Custom fields on a Ticket', 'tier')).getByText('Pinned'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not send the pin when only the label changed', async () => {
+    const { user, ticketingApi } = await renderFields();
+    const update = vi.spyOn(ticketingApi, 'updateCustomField');
+
+    await user.click(screen.getByRole('button', { name: 'Edit Plan tier' }));
+    await user.type(await screen.findByLabelText('Label'), ' (v2)');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Plan tier (v2) saved')).toBeInTheDocument();
+    expect(update.mock.calls[0]?.[2]).not.toHaveProperty('pinned');
   });
 });
 

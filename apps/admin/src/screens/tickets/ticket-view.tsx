@@ -954,6 +954,7 @@ export function TicketView({
           departmentName={departmentName}
           channelHandle={telegramChat?.username ?? undefined}
           channelAccount={ticketMeta.account}
+          pinnedField={fieldDefs.data?.fields.find((def) => def.pinned && def.target === 'ticket')}
           viewers={headerViewers}
           now={now}
           showDetailsButton={detailsInDrawer}

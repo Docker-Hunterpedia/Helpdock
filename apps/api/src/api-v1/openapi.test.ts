@@ -132,6 +132,46 @@ describe('M14-07 public sort contract', () => {
   });
 });
 
+describe('M14-16 fieldFilter', () => {
+  const operation = () =>
+    buildOpenApiDocument().paths['/api/v1/tickets']?.get as {
+      parameters: {
+        name: string;
+        schema?: unknown;
+        content?: Record<string, { schema: { oneOf?: { properties: Record<string, unknown> }[] } }>;
+        description?: string;
+      }[];
+    };
+
+  it('is a JSON-encoded parameter, so a generated client does not form-encode it', () => {
+    const parameter = operation().parameters.find((candidate) => candidate.name === 'fieldFilter');
+
+    // `content`, not `schema`: OpenAPI serialises `schema` by form/explode rules.
+    expect(parameter?.schema).toBeUndefined();
+    expect(Object.keys(parameter?.content ?? {})).toEqual(['application/json']);
+    expect(parameter?.description).toContain('Repeat the parameter');
+  });
+
+  it('describes one filter, with the seven operators the api answers', () => {
+    const parameter = operation().parameters.find((candidate) => candidate.name === 'fieldFilter');
+    const variants = parameter?.content?.['application/json']?.schema.oneOf ?? [];
+    const ops = variants.map(
+      (variant) => (variant.properties.op as { const?: string } | undefined)?.const,
+    );
+
+    expect(ops.sort()).toEqual(
+      ['after', 'any_of', 'before', 'between', 'contains', 'is', 'not_set'].sort(),
+    );
+  });
+
+  it('leaves the other query parameters as plain schemas', () => {
+    const sort = operation().parameters.find((candidate) => candidate.name === 'sort');
+
+    expect(sort?.schema).toBeDefined();
+    expect(sort?.content).toBeUndefined();
+  });
+});
+
 it('documents every subscribed webhook payload and the notes opt-in', () => {
   const document = buildOpenApiDocument();
   expect(Object.keys(document.webhooks).sort()).toEqual([...WEBHOOK_EVENTS].sort());

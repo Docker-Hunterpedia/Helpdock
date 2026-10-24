@@ -315,6 +315,17 @@ const jsonSchema = (schema: z.ZodType, io: 'input' | 'output'): JsonSchema => {
   return rest;
 };
 
+/**
+ * Query parameters that carry a JSON object rather than a scalar (M14-16). A
+ * parameter with a `schema` is serialised by OpenAPI's form/explode rules,
+ * which would send `fieldFilter[key]=...`; one with `content` is sent as the
+ * JSON text it says, once per use, which is what the api parses.
+ */
+const JSON_QUERY_PARAMETERS: Readonly<Record<string, string>> = {
+  fieldFilter:
+    'One custom-field filter as a URL-encoded JSON object. Repeat the parameter to require several; all must match.',
+};
+
 const parametersOf = (schema: ObjectSchema | undefined, location: 'path' | 'query') => {
   if (schema === undefined) {
     return [];
@@ -323,12 +334,16 @@ const parametersOf = (schema: ObjectSchema | undefined, location: 'path' | 'quer
     properties?: Record<string, JsonSchema>;
     required?: string[];
   };
-  return Object.entries(object.properties ?? {}).map(([name, property]) => ({
-    name,
-    in: location,
-    required: location === 'path' || (object.required ?? []).includes(name),
-    schema: property,
-  }));
+  return Object.entries(object.properties ?? {}).map(([name, property]) => {
+    const required = location === 'path' || (object.required ?? []).includes(name);
+    const description = location === 'query' ? JSON_QUERY_PARAMETERS[name] : undefined;
+    if (description !== undefined) {
+      const item = (property as { items?: JsonSchema }).items ?? property;
+      return { name, in: location, required, description, content: json(item) };
+    }
+
+    return { name, in: location, required, schema: property };
+  });
 };
 
 const json = (schema: JsonSchema) => ({ 'application/json': { schema } });

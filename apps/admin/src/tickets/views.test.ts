@@ -1,4 +1,4 @@
-import type { TicketView } from '@helpdock/schemas';
+import type { TicketFieldFilter, TicketView } from '@helpdock/schemas';
 import { ticketViewFiltersSchema } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
@@ -312,5 +312,59 @@ describe('snoozed (M14-02)', () => {
 
   it('ignores a snoozed value it does not know', () => {
     expect(filtersFromParams(new URLSearchParams('snoozed=sometimes')).snoozed).toBe('exclude');
+  });
+});
+
+describe('custom-field filters (M14-16)', () => {
+  const severity: TicketFieldFilter = { key: 'severity', op: 'any_of', values: ['Sev 1', 'Sev 2'] };
+  const total: TicketFieldFilter = { key: 'total', op: 'between', from: 10, to: 20 };
+  const filters = { ...EMPTY_FILTERS, fieldFilter: [severity, total] };
+
+  it('travels in the URL, one JSON parameter each, and survives a round trip', () => {
+    const params = withFilters(new URLSearchParams(), filters);
+
+    expect(params.getAll('field')).toEqual([JSON.stringify(severity), JSON.stringify(total)]);
+    expect(filtersFromParams(params).fieldFilter).toEqual([severity, total]);
+    expect(filtersFromParams(withoutFilters(params)).fieldFilter).toEqual([]);
+  });
+
+  it('drops a parameter that is not a filter instead of failing on a link edited by hand', () => {
+    const params = new URLSearchParams();
+    params.append('field', 'not json');
+    params.append('field', JSON.stringify({ key: 'Bad Key', op: 'not_set' }));
+    params.append('field', JSON.stringify({ key: 'vip', op: 'is', value: true }));
+
+    expect(filtersFromParams(params).fieldFilter).toEqual([{ key: 'vip', op: 'is', value: true }]);
+  });
+
+  it('is saved with a view and read back from it', () => {
+    const saved = ticketViewFiltersSchema.parse(viewFiltersOf(filters));
+
+    expect(saved.fieldFilter).toEqual([severity, total]);
+    expect(filtersOfView(saved).fieldFilter).toEqual([severity, total]);
+    expect(viewFiltersOf(EMPTY_FILTERS)).not.toHaveProperty('fieldFilter');
+  });
+
+  it('is asked of the list as it is, and left off when there is none', () => {
+    expect(queryOf(filters).fieldFilter).toEqual([severity, total]);
+    expect(queryOf(EMPTY_FILTERS)).not.toHaveProperty('fieldFilter');
+  });
+
+  it('counts one per filter and tells a changed filter from the same one in another order', () => {
+    expect(activeFilterCount(filters)).toBe(2);
+    expect(sameFilters(filters, { ...filters, fieldFilter: [total, severity] })).toBe(true);
+    expect(
+      sameFilters(filters, {
+        ...filters,
+        fieldFilter: [{ key: 'severity', op: 'any_of', values: ['Sev 2', 'Sev 1'] }, total],
+      }),
+    ).toBe(true);
+    expect(sameFilters(filters, { ...filters, fieldFilter: [severity] })).toBe(false);
+    expect(
+      sameFilters(filters, {
+        ...filters,
+        fieldFilter: [{ key: 'severity', op: 'any_of', values: ['Sev 3'] }, total],
+      }),
+    ).toBe(false);
   });
 });

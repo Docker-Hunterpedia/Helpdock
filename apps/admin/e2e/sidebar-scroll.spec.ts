@@ -11,14 +11,18 @@ test.use({
   },
 });
 
-// #340: short windows must keep the last admin destination reachable in both layouts.
+// #340: short windows must keep the last destination reachable in both layouts. Since
+// M14-21 the admin group is one Settings item, so the rail needs a shorter window than the
+// column to overflow at all.
+const RAIL_HEIGHT = 340;
+
 for (const collapsed of [false, true]) {
   test(`short sidebar scrolls without horizontal overflow (${collapsed ? 'rail' : 'column'})`, async ({
     page,
     appLocale,
     browserName,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 560 });
+    await page.setViewportSize({ width: 1280, height: collapsed ? RAIL_HEIGHT : 560 });
     await page.addInitScript(({ key, choice }) => localStorage.setItem(key, choice), {
       key: SIDEBAR_STORAGE_KEY,
       choice: collapsed ? 'collapsed' : 'expanded',
@@ -197,13 +201,13 @@ test('overflowing rail paints its thumb without hover or focus', async ({
   browserName,
 }, testInfo) => {
   test.skip(browserName !== 'chromium', 'Native gutter pixels are asserted in Chromium.');
-  await page.setViewportSize({ width: 1280, height: 560 });
+  await page.setViewportSize({ width: 1280, height: RAIL_HEIGHT });
   await page.addInitScript((key) => localStorage.setItem(key, 'collapsed'), SIDEBAR_STORAGE_KEY);
   await signIn(page, appLocale);
   const nav = page.getByRole('navigation', { name: strings(appLocale)('admin:nav.label') });
   await expect(nav).toHaveCSS('overflow-y', 'auto');
   await expect(nav).toHaveAttribute('data-scroll-bottom', 'true');
-  await page.mouse.move(640, 400);
+  await page.mouse.move(640, 200);
   const gutter = await nav.evaluate((el: HTMLElement) => {
     const bounds = el.getBoundingClientRect();
     return {
@@ -220,15 +224,28 @@ test('overflowing rail paints its thumb without hover or focus', async ({
   expect(color).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
   const rgb = color.match(/\d+/g)?.map(Number);
   if (rgb === undefined) throw new Error('missing opaque thumb color');
-  const screenshot = await page.screenshot({ clip: gutter, scale: 'css' });
-  await testInfo.attach('rail-gutter', { body: screenshot, contentType: 'image/png' });
-  const { data, info } = await sharp(screenshot)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  let painted = 0;
-  for (let pixel = 0; pixel < data.length; pixel += info.channels) {
-    if (rgb.every((channel, index) => data[pixel + index] === channel)) painted++;
+  // The rail hides its scrolling for the 200 ms of its own animation, so the thumb
+  // is painted a moment after the nav is there: look until it is.
+  let latest: Buffer | undefined;
+  await expect
+    .poll(
+      async () => {
+        const screenshot = await page.screenshot({ clip: gutter, scale: 'css' });
+        latest = screenshot;
+        const { data, info } = await sharp(screenshot)
+          .removeAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        let painted = 0;
+        for (let pixel = 0; pixel < data.length; pixel += info.channels) {
+          if (rgb.every((channel, index) => data[pixel + index] === channel)) painted++;
+        }
+        return painted;
+      },
+      { message: 'the gutter must contain painted border.strong thumb pixels' },
+    )
+    .toBeGreaterThan(20);
+  if (latest !== undefined) {
+    await testInfo.attach('rail-gutter', { body: latest, contentType: 'image/png' });
   }
-  expect(painted, 'the gutter must contain painted border.strong thumb pixels').toBeGreaterThan(20);
 });

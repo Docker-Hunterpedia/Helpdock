@@ -106,7 +106,7 @@ const ticketing = (id: string, segment: string, labelKey: CatalogKey): SettingsE
 export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
   entry('accountProfile', 'account', ROUTES.meProfile, 'me:account.tabs.profile', everyone),
   entry(
-    'accountNotifications',
+    'yourNotifications',
     'account',
     ROUTES.meNotifications,
     'me:account.tabs.notifications',

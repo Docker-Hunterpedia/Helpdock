@@ -147,7 +147,7 @@ function SettingsGroup({
         variant="caption"
         sx={{
           color: 'text.secondary',
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 600,
           paddingBlock: '12px 4px',
           paddingInline: 3,

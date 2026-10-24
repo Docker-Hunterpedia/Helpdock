@@ -55,7 +55,7 @@ describe('settingsFor', () => {
 
   it('offers an agent their account and the macros', () => {
     expect(groups(agent)).toEqual({
-      account: ['accountProfile', 'accountNotifications', 'accountSecurity', 'accountSignature'],
+      account: ['accountProfile', 'yourNotifications', 'accountSecurity', 'accountSignature'],
       inbox: ['automationMacros'],
     });
   });

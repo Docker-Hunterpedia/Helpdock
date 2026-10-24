@@ -231,7 +231,7 @@
       "reports": "analytics, metrics, volume, csat, response time, dashboard",
       "accountProfile": "profile, public name, job title, phone, photo, avatar, time zone, shortcuts",
       "accountSecurity": "password, two-factor, 2fa, passkeys, sessions, sign in, shortcuts",
-      "accountNotifications": "email alerts, push, digests, mentions, bell",
+      "yourNotifications": "email alerts, push, digests, mentions, bell",
       "accountSignature": "email signature, reply signature",
       "settings": "install, sso, authentication, smtp, oauth, global",
       "sso": "single sign-on, saml, oidc, identity provider, okta, entra, login",

@@ -12,6 +12,7 @@ export function OidcFields({
   linked,
   secret,
   secretConfigured,
+  secretError,
   onSecretChange,
   issuerHint,
   issuerInvalid = false,
@@ -21,6 +22,8 @@ export function OidcFields({
   linked: boolean;
   secret: string | null;
   secretConfigured: boolean;
+  /** The api asked for the secret again because the issuer changed. */
+  secretError?: string | undefined;
   onSecretChange: (secret: string | null) => void;
   /** A preset's note under the issuer, such as the Entra tenant template (M18-09). */
   issuerHint?: string | undefined;
@@ -57,6 +60,7 @@ export function OidcFields({
         label={t('sso:clientSecret')}
         stored={secretConfigured}
         value={secret}
+        error={secretError}
         replaceLabel={t('settings:oauth.replaceLabel', { provider: 'OIDC' })}
         onChange={onSecretChange}
       />

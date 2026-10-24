@@ -14,6 +14,13 @@ The protocol cannot change afterwards. Once identities are linked, issuer/client
 ID (OIDC) or entity ID/NameID format (SAML) cannot change; create a different
 connection when changing identity authority.
 
+The OIDC client secret is write-only. A save that leaves it out keeps the stored
+one only while the issuer is unchanged (scheme, host, port and path, ignoring
+case and a trailing slash). Change the issuer and the secret must be typed again:
+the save is refused with 400 `sso-client-secret-required` (field
+`body.clientSecret`) and nothing is stored, so a changed issuer cannot receive
+the old secret.
+
 | Value | Where to copy it |
 |---|---|
 | OIDC redirect URI | The saved connection's service provider details |

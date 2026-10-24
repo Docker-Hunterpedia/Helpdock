@@ -326,6 +326,56 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       expect(JSON.stringify(audit)).not.toContain('sk-live-secret');
     });
 
+    it('sends the stored key only to the address it was saved for (#399)', async () => {
+      const path = '/api/install/ai/providers/bound';
+      const provider = {
+        kind: 'openai-compatible',
+        label: 'Bound',
+        baseUrl: 'https://bound.example.com/v1',
+      };
+      const stored = async () =>
+        (await runtime.settings.get('ai.providers')).find((candidate) => candidate.id === 'bound');
+      await call('PUT', path, adminToken, {
+        ...provider,
+        auth: { type: 'apiKey', apiKey: 'sk-bound' },
+      });
+      const requestsBefore = discovery.requests.length;
+
+      const moved = await call<ErrorResponse>('PUT', path, adminToken, {
+        ...provider,
+        baseUrl: 'https://evil.example.net/v1',
+        auth: { type: 'apiKey' },
+      });
+      expect(moved.status).toBe(400);
+      expect(moved.body.error.ai?.reason).toBe('credential-required');
+      expect(moved.body.error.fields?.[0]?.path).toBe('body.auth.apiKey');
+      expect(await stored()).toMatchObject({
+        baseUrl: 'https://bound.example.com/v1',
+        auth: { apiKey: 'sk-bound' },
+      });
+      expect(discovery.requests).toHaveLength(requestsBefore);
+
+      const respelled = await call('PUT', path, adminToken, {
+        ...provider,
+        baseUrl: 'https://BOUND.example.com/v1/',
+        auth: { type: 'apiKey' },
+      });
+      expect(respelled.status).toBe(200);
+      expect((await stored())?.auth).toEqual({ type: 'apiKey', apiKey: 'sk-bound' });
+
+      const retyped = await call('PUT', path, adminToken, {
+        ...provider,
+        baseUrl: 'https://new.example.com/v1',
+        auth: { type: 'apiKey', apiKey: 'sk-new' },
+      });
+      expect(retyped.status).toBe(200);
+      expect(await stored()).toMatchObject({
+        baseUrl: 'https://new.example.com/v1',
+        auth: { apiKey: 'sk-new' },
+      });
+      await call('DELETE', path, adminToken);
+    });
+
     it('accepts subscription credentials and reports when they expire', async () => {
       const expires = Date.parse('2026-12-01T00:00:00Z');
       const saved = await call<AiProviderView>(
@@ -1033,6 +1083,44 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       expect((await modelsIn(otherBrandId)).every((row) => row.model === 'other-embedding')).toBe(
         true,
       );
+    });
+
+    it('sends the stored embeddings key only to the address it was saved for (#399)', async () => {
+      const path = '/api/install/ai/embedding';
+      const current = (await call<EmbeddingSettingsView>('GET', path, adminToken)).body;
+      const same = {
+        provider: current.provider,
+        baseUrl: current.baseUrl,
+        model: current.model,
+        dims: current.dims,
+        pricePerMillionTokens: current.pricePerMillionTokens,
+      };
+      await call('PUT', path, adminToken, { ...same, apiKey: 'sk-bound' });
+
+      const moved = await call<ErrorResponse>('PUT', path, adminToken, {
+        ...same,
+        baseUrl: 'https://evil.example.net/v1',
+      });
+      expect(moved.status).toBe(400);
+      expect(moved.body.error.ai?.reason).toBe('embedding-key-required');
+      expect(moved.body.error.fields?.[0]?.path).toBe('body.apiKey');
+      expect(await runtime.settings.get('embedding.baseUrl')).toBe(same.baseUrl);
+      expect(await runtime.settings.get('embedding.apiKey')).toBe('sk-bound');
+
+      const respelled = await call('PUT', path, adminToken, {
+        ...same,
+        baseUrl: `${same.baseUrl}/`,
+      });
+      expect(respelled.status).toBe(200);
+      expect(await runtime.settings.get('embedding.apiKey')).toBe('sk-bound');
+
+      const retyped = await call('PUT', path, adminToken, {
+        ...same,
+        baseUrl: 'https://new.example.com/v1',
+        apiKey: 'sk-new',
+      });
+      expect(retyped.status).toBe(200);
+      expect(await runtime.settings.get('embedding.apiKey')).toBe('sk-new');
     });
 
     it('stops without opening the space when the target changes under it', async () => {

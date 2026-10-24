@@ -277,6 +277,7 @@
     "unknown-kind": "Helpdock does not know that kind of provider.",
     "unknown-model": "That provider does not offer the model.",
     "credential-required": "This provider needs a credential. Enter the API key or the sign-in credentials.",
+    "embedding-key-required": "Enter the embeddings API key again. A saved key is only used with the address it was saved for.",
     "oauth-unsupported": "This provider does not offer subscription sign-in. Use an API key.",
     "provider-in-use": "The install default or a brand still uses this provider. Choose another model first.",
     "discovery-failed": "The provider could not be asked for its models. Check the key and the address.",
@@ -373,7 +374,8 @@
       "baseUrlRequired": "Enter the server's address.",
       "baseUrlInvalid": "Enter an address starting with http:// or https://.",
       "apiKeyRequired": "Enter the API key.",
-      "oauthInvalid": "Paste the JSON with access, refresh and expires."
+      "oauthInvalid": "Paste the JSON with access, refresh and expires.",
+      "credentialRetype": "Enter the credential again. A saved one is only used with the kind and address it was saved for."
     }
   },
   "chatModel": {
@@ -435,7 +437,8 @@
       "modelRequired": "Enter the model.",
       "dimsInvalid": "Enter a whole number from 1 to 2000.",
       "dimsTooMany": "{{dims}} is above the 2000 the vector index supports. Pick a smaller model, or one that can shorten its output (for example 1536).",
-      "priceInvalid": "Enter a price from 0 to 1000."
+      "priceInvalid": "Enter a price from 0 to 1000.",
+      "keyRetype": "Enter the API key again. A saved key is only used with the address it was saved for."
     },
     "dialog": {
       "title": "Change the embedding model?",

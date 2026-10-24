@@ -139,6 +139,11 @@ function ConnectionForm({
     staleTime: Infinity,
   });
   const save = useMutation({
+    onError: (error) => {
+      // The api will not send the stored client secret to an issuer it was not saved for.
+      if (isSsoError(error) && error.reason === 'sso-client-secret-required')
+        setSecret((held) => held ?? '');
+    },
     mutationFn: async (input: SsoConnectionInput) => {
       const updated = await api.saveConfiguration(id === 'new' ? null : id, {
         connection: input,
@@ -163,6 +168,7 @@ function ConnectionForm({
   });
   const test = useMutation({ mutationFn: () => api.test(id) });
   const refusal = isSsoError(save.error) ? save.error : null;
+  const secretRefused = refusal?.reason === 'sso-client-secret-required';
   const domainsTaken = refusal?.reason === 'sso-email-domain-taken' ? refusal.domains : null;
   const submit = () => {
     const parsed = ssoConnectionCreateSchema.safeParse({
@@ -219,7 +225,7 @@ function ConnectionForm({
       </Link>
       <PageHeader title={connection?.name ?? t('sso:add')} caption={t('sso:providerHint')} />
       {invalid ? <AlertBanner tone="danger">{t('sso:invalid')}</AlertBanner> : null}
-      {save.isError || remove.isError ? (
+      {(save.isError && !secretRefused) || remove.isError ? (
         <AlertBanner tone="danger">
           {refusal?.reason === 'sso-metadata-confirm-certificates'
             ? t('sso:refusals.sso-metadata-confirm-certificates')
@@ -301,7 +307,13 @@ function ConnectionForm({
                 linked={linked}
                 secret={secret}
                 secretConfigured={connection?.secretConfigured ?? false}
-                onSecretChange={setSecret}
+                secretError={
+                  secretRefused ? t('sso:refusals.sso-client-secret-required') : undefined
+                }
+                onSecretChange={(next) => {
+                  setSecret(next);
+                  if (secretRefused) save.reset();
+                }}
                 issuerHint={presetHint('issuerHint')}
                 issuerInvalid={invalid && hasIssuerPlaceholder(draft)}
               />

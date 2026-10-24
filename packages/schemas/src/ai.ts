@@ -24,8 +24,10 @@ export const aiRefusalSchema = z.enum([
   'unknown-kind',
   /** The provider does not offer that model. */
   'unknown-model',
-  /** A new provider, or a change of credential type, came without a credential. */
+  /** A new provider, a change of credential type, kind or base URL came without a credential. */
   'credential-required',
+  /** The embeddings base URL changed and the stored key was not typed again. */
+  'embedding-key-required',
   /** pi-ai has no subscription (OAuth) flow for that kind. */
   'oauth-unsupported',
   /** The default model or a brand still uses the provider. */

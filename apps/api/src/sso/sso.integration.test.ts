@@ -209,6 +209,54 @@ describe.skipIf(!hasDocker)('M11-01 install SSO configuration', () => {
     expect(JSON.stringify(audits)).not.toContain('private-client-secret');
   });
 
+  it('reuses the stored client secret only while the issuer is unchanged (#399)', async () => {
+    const keyring = createKeyring({ APP_MASTER_KEY: MASTER_KEY });
+    const secretOf = async (id: string): Promise<string> => {
+      const [row] = await owner.db.select().from(ssoConnections).where(eq(ssoConnections.id, id));
+      return decryptSecret(row?.secretEncrypted ?? '', keyring);
+    };
+    const withIssuer = (issuer: string) => {
+      const { clientSecret: _, ...keepSecret } = connection('Bound');
+      return { ...keepSecret, config: { ...connection().config, issuer } };
+    };
+    const id: string = (await request('POST', 'connections', connection('Bound'))).json().id;
+
+    const spelled = await request('PUT', `connections/${id}`, withIssuer('http://127.0.0.1:3098/'));
+    expect(spelled.statusCode).toBe(200);
+    expect(await secretOf(id)).toBe('private-client-secret');
+
+    for (const path of [`connections/${id}`, `connections/${id}/configuration`]) {
+      const body = withIssuer('http://127.0.0.1:3099');
+      const refused = await request(
+        'PUT',
+        path,
+        path.endsWith('configuration') ? { connection: body, mappings: [] } : body,
+      );
+      expect(refused.statusCode).toBe(400);
+      expect(refused.json()).toMatchObject({
+        error: {
+          sso: { reason: 'sso-client-secret-required' },
+          fields: [{ path: 'body.clientSecret' }],
+        },
+      });
+    }
+    expect(await secretOf(id)).toBe('private-client-secret');
+    const [unchanged] = await owner.db
+      .select()
+      .from(ssoConnections)
+      .where(eq(ssoConnections.id, id));
+    expect(unchanged?.config).toMatchObject({ issuer: 'http://127.0.0.1:3098/' });
+
+    const replaced = await request('PUT', `connections/${id}`, {
+      ...withIssuer('http://127.0.0.1:3099'),
+      clientSecret: 'typed-again',
+    });
+    expect(replaced.statusCode).toBe(200);
+    expect(await secretOf(id)).toBe('typed-again');
+    expect(replaced.body).not.toContain('typed-again');
+    await request('DELETE', `connections/${id}`);
+  });
+
   it('denies unauthenticated and brand-admin access and validates route input', async () => {
     expect((await request('GET', 'connections', undefined, null)).statusCode).toBe(401);
     expect(

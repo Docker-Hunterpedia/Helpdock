@@ -20,9 +20,10 @@ export type EmbeddingProblem =
   | 'modelRequired'
   | 'dimsInvalid'
   | 'dimsTooMany'
-  | 'priceInvalid';
+  | 'priceInvalid'
+  | 'keyRetype';
 
-export type EmbeddingField = 'provider' | 'baseUrl' | 'model' | 'dims' | 'price';
+export type EmbeddingField = 'provider' | 'baseUrl' | 'model' | 'dims' | 'price' | 'apiKey';
 
 export const embeddingDraftOf = (settings: EmbeddingSettingsView): EmbeddingDraft => ({
   provider: settings.provider,

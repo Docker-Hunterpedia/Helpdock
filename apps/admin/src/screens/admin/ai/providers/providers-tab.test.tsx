@@ -122,4 +122,50 @@ describe('AI › Providers', () => {
       ).toHaveAttribute('aria-valuenow', '0');
     });
   });
+
+  it('asks for the key again, on its field, when a provider’s address changes (#399)', async () => {
+    const { user, aiApi } = await renderProviders();
+    const form = card('OpenAI');
+
+    fireEvent.change(within(form).getByLabelText(/^Base URL/), {
+      target: { value: 'https://proxy.example.net/v1' },
+    });
+    await user.click(within(form).getByRole('button', { name: 'Save provider' }));
+
+    const key = await within(form).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the credential again/);
+    });
+    expect(key).toHaveAttribute('aria-invalid', 'true');
+    expect(key).not.toHaveAttribute('readonly');
+    expect(screen.queryByText('Provider saved.')).toBeNull();
+    expect(
+      (await aiApi.providers()).providers.find((row) => row.id === 'openai')?.baseUrl,
+    ).toBeNull();
+
+    await user.type(key, 'sk-new');
+    await user.click(within(form).getByRole('button', { name: 'Save provider' }));
+    expect(await screen.findByText('Provider saved.')).toBeVisible();
+  });
+
+  it('asks for the embeddings key again, on its field, when the address changes (#399)', async () => {
+    const { user, aiApi } = await renderProviders();
+    const embeddings = card('Embeddings');
+
+    fireEvent.change(within(embeddings).getByLabelText('Endpoint'), {
+      target: { value: 'https://embeddings.example.net/v1' },
+    });
+    await user.click(within(embeddings).getByRole('button', { name: 'Save' }));
+
+    const key = await within(embeddings).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the API key again/);
+    });
+    expect(key).not.toHaveAttribute('readonly');
+    expect((await aiApi.embedding()).baseUrl).toBe('https://api.openai.com/v1');
+
+    await user.type(key, 'sk-new');
+    await user.click(within(embeddings).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Embedding settings saved.')).toBeVisible();
+  });
 });

@@ -197,7 +197,8 @@
       "required": "Required",
       "email": "Enter an email address",
       "port": "Enter a port from 1 to 65535",
-      "password": "An IMAP mailbox needs a password"
+      "password": "An IMAP mailbox needs a password",
+      "passwordRetype": "Type the password again. It is only used with the server it was saved for."
     },
     "notFound": {
       "heading": "No such mailbox",
@@ -206,7 +207,7 @@
   },
   "refusal": {
     "address-taken": "Another mailbox already receives mail for that address.",
-    "password-required": "Enter the IMAP password: none is stored for this mailbox yet.",
+    "password-required": "Enter the IMAP password. None is stored for this mailbox, or the server, port, username or security changed.",
     "department-not-found": "That department no longer exists. Pick another."
   },
   "toast": {

@@ -10,12 +10,15 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 const STATUS_BY_REASON: Readonly<Record<SsoRefusal, number>> = {
   'sso-email-domain-taken': HttpStatus.CONFLICT,
   'sso-metadata-confirm-certificates': HttpStatus.BAD_REQUEST,
+  'sso-client-secret-required': HttpStatus.BAD_REQUEST,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<SsoRefusal, string>> = {
   'sso-email-domain-taken': 'Another enabled connection already lists one of these email domains',
   'sso-metadata-confirm-certificates':
     'The identity provider metadata lists a signing certificate that has not been saved',
+  'sso-client-secret-required':
+    'The stored client secret is only used with the issuer it was saved for; type it again',
 };
 
 export class SsoFailure extends HttpException {

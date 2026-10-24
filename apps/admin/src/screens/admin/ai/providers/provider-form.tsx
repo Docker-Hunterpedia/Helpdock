@@ -19,7 +19,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, KeyRound, LogIn, RefreshCw, Server } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
-import { aiKeys } from '../../../../ai/api.js';
+import { aiKeys, isAiError } from '../../../../ai/api.js';
 import { useAiApi } from '../../../../ai/context.tsx';
 import { useT } from '../../../../app/i18n.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
@@ -71,6 +71,20 @@ export function ProviderForm({
   const refresh = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: aiKeys.providers });
   };
+  /**
+   * The api will not send a stored credential to a kind or address it was not
+   * saved for: open the credential field and say so on it. True when it was that.
+   */
+  const retypeCredential = (error: unknown): boolean => {
+    if (!isAiError(error) || error.reason !== 'credential-required') {
+      return false;
+    }
+    const field = draft.authType === 'oauth' ? 'oauth' : 'apiKey';
+    setDraft((held) => (held[field] === null ? { ...held, [field]: '' } : held));
+    setProblems({ [field]: 'credentialRetype' } as Partial<Record<ProviderField, ProviderProblem>>);
+
+    return true;
+  };
   const save = useAiAction(
     ({ providerId, request }: { providerId: string; request: AiProviderUpsert }) =>
       api.saveProvider(providerId, request),
@@ -79,6 +93,7 @@ export function ProviderForm({
       await refresh();
       onSaved(saved.id);
     },
+    (error) => retypeCredential(error),
   );
   const remove = useAiAction(
     (providerId: string) => api.removeProvider(providerId),
@@ -98,6 +113,10 @@ export function ProviderForm({
 
   const set = (patch: Partial<ProviderDraft>): void => {
     setDraft((held) => ({ ...held, ...patch }));
+    setProblems((held) => {
+      const { apiKey: _key, oauth: _oauth, ...rest } = held;
+      return 'apiKey' in patch || 'oauth' in patch ? rest : held;
+    });
   };
 
   const chooseAuth = (authType: AiAuthType): void => {

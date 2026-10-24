@@ -1,9 +1,12 @@
 import type { SsoConnectionInput } from '@helpdock/schemas';
 import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { ssoConnectionRoute } from '../../../app/route-paths.js';
+import { AppRoutes } from '../../../app/routes.tsx';
 import { MockAuthApi } from '../../../auth/mock-api.js';
 import { MockSsoApi } from '../../../sso/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { signedInMockApis } from '../../../test/signed-in.js';
 import { SsoConnectionPage } from './sso-connection-page.tsx';
 import { SsoTab } from './sso-tab.tsx';
 
@@ -93,6 +96,39 @@ describe('SSO administration', () => {
     expect((await sso.connections()).connections.map(({ name }) => name)).toEqual(['Existing']);
     await user.type(domains, 'x');
     expect(domains).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('asks for the client secret again, on its field, when the issuer changes (#399)', async () => {
+    const sso = new MockSsoApi();
+    const { id } = await sso.create(input);
+    const apis = await signedInMockApis();
+    const { user } = renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      ssoApi: sso,
+      initialEntries: [ssoConnectionRoute(id)],
+    });
+    const issuer = await screen.findByLabelText('Issuer URL');
+
+    await user.clear(issuer);
+    await user.type(issuer, 'https://other-idp.example.net');
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+
+    const secret = await screen.findByLabelText('Client secret');
+    await waitFor(() => expect(secret).toHaveAttribute('aria-invalid', 'true'));
+    expect(secret).toHaveAccessibleDescription(/Enter the client secret again/);
+    expect(secret).not.toHaveAttribute('readonly');
+    expect(screen.queryByText(/Could not save/)).not.toBeInTheDocument();
+    expect((await sso.connection(id)).config).toMatchObject({ issuer: 'https://idp.example.com' });
+
+    await user.type(secret, 'typed-again');
+    expect(secret).toHaveAttribute('aria-invalid', 'false');
+    await user.click(screen.getByRole('button', { name: 'Save connection' }));
+    await waitFor(async () =>
+      expect((await sso.connection(id)).config).toMatchObject({
+        issuer: 'https://other-idp.example.net',
+      }),
+    );
   });
 
   it('fills a preset once, keeps edits made afterwards and saves no preset', async () => {

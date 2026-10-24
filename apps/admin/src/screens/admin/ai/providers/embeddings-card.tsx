@@ -3,7 +3,7 @@ import { Box, Button, TextField, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Check } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
-import { aiKeys } from '../../../../ai/api.js';
+import { aiKeys, isAiError } from '../../../../ai/api.js';
 import { useAiApi } from '../../../../ai/context.tsx';
 import { useT } from '../../../../app/i18n.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
@@ -56,6 +56,17 @@ export function EmbeddingsCard({
     (saved) => {
       setConfirming(null);
       queryClient.setQueryData(aiKeys.embedding, saved);
+    },
+    (error) => {
+      // The api will not send a stored key to an address it was not saved for.
+      if (!isAiError(error) || error.reason !== 'embedding-key-required') {
+        return false;
+      }
+      setConfirming(null);
+      setDraft((held) => (held.apiKey === null ? { ...held, apiKey: '' } : held));
+      setProblems({ apiKey: 'keyRetype' });
+
+      return true;
     },
   );
 
@@ -190,9 +201,11 @@ export function EmbeddingsCard({
           label={t('aiSettings:embeddings.apiKey')}
           stored={settings.hasApiKey}
           value={draft.apiKey}
+          error={problemText('apiKey')}
           replaceLabel={t('aiSettings:embeddings.replaceKey')}
           onChange={(apiKey) => {
             set({ apiKey });
+            setProblems(({ apiKey: _cleared, ...rest }) => rest);
           }}
         />
       </Box>

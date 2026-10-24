@@ -22,6 +22,7 @@ import type {
   AiProviderView,
 } from '@helpdock/schemas';
 import { ne } from 'drizzle-orm';
+import { sameEndpoint } from '../http/same-endpoint.js';
 import { widenInstallScope } from '../tenant/install-scope.js';
 import { AiRepository } from './ai.repository.js';
 import type { AiDestinationCheck } from './ai-destination.js';
@@ -115,7 +116,7 @@ export class InstallAiService {
       kind: body.kind,
       label: body.label,
       baseUrl: body.baseUrl,
-      auth: credentialFor(body.auth, existing),
+      auth: credentialFor(body.auth, storedCredential(existing, body)),
     });
 
     await this.#settings.set(
@@ -242,14 +243,29 @@ export class InstallAiService {
   }
 }
 
+/**
+ * The stored provider whose credential may be reused for this save: only while
+ * its kind and base URL are unchanged, so a changed address cannot be pointed
+ * at a server that then receives the stored key (#399).
+ */
+const storedCredential = (
+  existing: AiProviderConfig | undefined,
+  body: AiProviderUpsert,
+): AiProviderConfig | undefined =>
+  existing !== undefined &&
+  existing.kind === body.kind &&
+  sameEndpoint(existing.baseUrl, body.baseUrl)
+    ? existing
+    : undefined;
+
 const hasNewCredential = (auth: AiProviderUpsert['auth']): boolean =>
   (auth.type === 'apiKey' && auth.apiKey !== undefined) ||
   (auth.type === 'oauth' && auth.credentials !== undefined);
 
 /**
  * The credential to store: the one sent, or the stored one when none was sent
- * and the type did not change. A new provider, or a change of type, must
- * bring its own.
+ * and the type did not change. A new provider, a change of type, or a stored
+ * provider that {@link storedCredential} withholds must bring its own.
  */
 const credentialFor = (
   auth: AiProviderUpsert['auth'],
@@ -265,7 +281,7 @@ const credentialFor = (
       if (existing?.auth.type === 'apiKey') {
         return existing.auth;
       }
-      throw new AiFailure('credential-required');
+      throw new AiFailure('credential-required', 'body.auth.apiKey');
     case 'oauth':
       if (auth.credentials !== undefined) {
         return { type: 'oauth', credentials: auth.credentials };
@@ -273,7 +289,7 @@ const credentialFor = (
       if (existing?.auth.type === 'oauth') {
         return existing.auth;
       }
-      throw new AiFailure('credential-required');
+      throw new AiFailure('credential-required', 'body.auth.credentials');
   }
 };
 

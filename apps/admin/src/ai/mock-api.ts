@@ -119,6 +119,9 @@ const callsFixture = (now: number): AiCallSummary[] => {
 
 const PAGE = 20;
 
+const sameAddress = (a: string | null, b: string | null): boolean =>
+  (a ?? '').replace(/\/+$/, '').toLowerCase() === (b ?? '').replace(/\/+$/, '').toLowerCase();
+
 export class MockAiApi implements AiApi {
   readonly #now: () => number;
   readonly #providers = new Map<string, StoredProvider>([
@@ -195,7 +198,12 @@ export class MockAiApi implements AiApi {
     const sent =
       (request.auth.type === 'apiKey' && request.auth.apiKey !== undefined) ||
       (request.auth.type === 'oauth' && request.auth.credentials !== undefined);
-    const kept = existing?.view.authType === request.auth.type && existing.hasCredential;
+    // The api reuses a stored credential only for the kind and address it was saved for (#399).
+    const kept =
+      existing?.view.authType === request.auth.type &&
+      existing.hasCredential &&
+      existing.view.kind === request.kind &&
+      sameAddress(existing.view.baseUrl, request.baseUrl);
     if (request.auth.type !== 'none' && !sent && !kept) {
       return Promise.reject(new AiError('credential-required'));
     }
@@ -269,6 +277,13 @@ export class MockAiApi implements AiApi {
       request.model !== this.#embedding.model || request.dims !== this.#embedding.dims;
     if (changes && request.confirmReembed !== true) {
       return Promise.reject(new AiError('reembed-not-confirmed'));
+    }
+    if (
+      request.apiKey === undefined &&
+      this.#embedding.hasApiKey &&
+      !sameAddress(this.#embedding.baseUrl, request.baseUrl)
+    ) {
+      return Promise.reject(new AiError('embedding-key-required'));
     }
     this.#embedding = {
       ...this.#embedding,

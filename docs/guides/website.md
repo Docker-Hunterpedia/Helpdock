@@ -75,7 +75,11 @@ and stamps it into the checked-out files before upload; if the lookup fails the
 build fails rather than publish a wrong version. `release.yml` dispatches the
 Pages workflow after it creates a stable Release (a Release made with
 `GITHUB_TOKEN` does not fire `release` events), so a release updates both pages
-without a site pull request. The committed version only moves when someone runs
+without a site pull request. If that dispatch fails, the release run stays
+green with a warning; run **Actions › Pages › Run workflow** by hand. GitHub's
+latest Release is the most recently created one, so a backport patch to an
+older line published after a newer release makes the site show the older
+number until Pages runs again after the newer one. The committed version only moves when someone runs
 the script and commits, which is optional.
 
 Two rules follow for what you write on the pages:

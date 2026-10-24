@@ -41,6 +41,10 @@ jobs:
   release:
     name: release
     runs-on: ubuntu-latest
+    # Read by the `website` job: whether this run created a stable Release.
+    outputs:
+      created: ${{ steps.existing.outputs.exists != 'true' }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     permissions:
       # The Release, its notes and the SBOM asset.
       contents: write
@@ -50,8 +54,6 @@ jobs:
       # A short-lived GitHub OIDC token is exchanged for the Fulcio signing
       # certificate. No signing key or signing secret is stored.
       id-token: write
-      # Dispatches the Pages workflow once the Release exists.
-      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -257,11 +259,25 @@ jobs:
           files: helpdock-${{ steps.version.outputs.version }}.cdx.json
           fail_on_unmatched_files: true
 
-      # A Release made with `GITHUB_TOKEN` does not fire `release` events, but
-      # `workflow_dispatch` is allowed. Only when this run created a stable
-      # Release; the signing-only path leaves the site as it is.
-      - name: Refresh the website
-        if: steps.existing.outputs.exists != 'true' && steps.version.outputs.prerelease != 'true'
+  # Its own job so that only this step holds `actions: write`; the build and
+  # signing steps above keep the token they had. A Release made with
+  # `GITHUB_TOKEN` does not fire `release` events, but `workflow_dispatch` is
+  # allowed. Only when this run created a stable Release; the signing-only path
+  # leaves the site as it is. A failed dispatch is a warning, not a red release:
+  # the Release is already published, and Pages can be run by hand.
+  website:
+    name: refresh the website
+    needs: release
+    if: needs.release.outputs.created == 'true' && needs.release.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the Pages workflow
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: |
+          if ! gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main; then
+            echo "::warning title=Website not refreshed::The Pages dispatch failed. Run Actions › Pages › Run workflow by hand."
+          fi

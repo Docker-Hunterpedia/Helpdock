@@ -102,6 +102,7 @@
   },
   "actions": {
     "legend": "Actions",
+    "snoozeNote": "A macro resolves times in your own time zone (Profile), else the brand's.",
     "caption": "Staged when the macro is applied and run in this order when the reply is sent; at once if there is no reply.",
     "type": "Action {{position}}",
     "types": {
@@ -109,14 +110,16 @@
       "set_priority": "Set priority",
       "add_tag": "Add tag",
       "remove_tag": "Remove tag",
-      "assign": "Assign to"
+      "assign": "Assign to",
+      "snooze": "Snooze"
     },
     "value": {
       "set_status": "Status for action {{position}}",
       "set_priority": "Priority for action {{position}}",
       "add_tag": "Tag for action {{position}}",
       "remove_tag": "Tag for action {{position}}",
-      "assign": "Assignee for action {{position}}"
+      "assign": "Assignee for action {{position}}",
+      "snooze": "Wake time for action {{position}}"
     },
     "assignee": {
       "self": "The agent applying it",
@@ -176,6 +179,7 @@
     "priority": "Priority {{from}} → {{to}}",
     "tagAdd": "Tag + {{name}}",
     "tagRemove": "Tag − {{name}}",
+    "snooze": "Snoozes · {{preset}}",
     "assignee": "Assignee → {{name}}",
     "assigneeStays": "Assignee stays {{name}}",
     "unassign": "Assignee → nobody",

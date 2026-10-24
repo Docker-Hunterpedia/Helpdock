@@ -1,11 +1,12 @@
-import type {
-  Macro,
-  MacroAction,
-  MacroActionType,
-  MacroCreateRequest,
-  MacroKind,
-  MacroScope,
-  TicketPriority,
+import {
+  type Macro,
+  type MacroAction,
+  type MacroActionType,
+  type MacroCreateRequest,
+  type MacroKind,
+  type MacroScope,
+  snoozePresetKeySchema,
+  type TicketPriority,
 } from '@helpdock/schemas';
 
 /**
@@ -54,6 +55,8 @@ const selectValueOf = (action: MacroAction): string => {
     case 'add_tag':
     case 'remove_tag':
       return action.tagId;
+    case 'snooze':
+      return action.preset;
     case 'assign': {
       const { assignee } = action;
       return assignee.kind === 'user'
@@ -93,6 +96,10 @@ export const actionOf = ({ type, value }: DraftAction): MacroAction | null => {
     case 'add_tag':
     case 'remove_tag':
       return { type, tagId: value };
+    case 'snooze':
+      return snoozePresetKeySchema.safeParse(value).success
+        ? { type, preset: value as (typeof snoozePresetKeySchema.options)[number] }
+        : null;
     case 'assign': {
       if (value === 'self' || value === 'unassigned') {
         return { type, assignee: { kind: value } };

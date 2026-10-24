@@ -66,8 +66,8 @@ department: its own hours and holidays if it has them, otherwise the brand's
 
 **Then.** Actions run in order: set status, set priority, set a custom field,
 assign to a team, an agent or the department's round-robin, add or remove a tag,
-send a canned response, add an internal note, notify, escalate, close, and AI
-triage.
+send a canned response, add an internal note, notify, escalate, close, snooze,
+and AI triage.
 
 - Assigning to a team in another department **moves the ticket there**, and
   takes it off an assignee who cannot follow; a ticket left unassigned is handed
@@ -76,6 +76,23 @@ triage.
   ([DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions)): a close
   schedules the survey an agent's close would, and a change of status, priority
   or department moves the [SLA clocks](slas.md) as an agent's change would.
+- **Snooze** (#368) picks one of the [Snooze menu's](snooze.md) four times —
+  in 1 hour, in 4 hours, next business day, next week — and the **server**
+  resolves it to an instant against the ticket's department calendar when the
+  rule runs, so a rule and the menu offer the same wake time. Everything the
+  wake needs is a person's snooze's: the same activity, the same `ticket.snoozed`
+  outbox event and wake timer, the same clocks. A closed ticket is recorded as
+  *not carried out*, as a person's is refused. Setting the Snoozed status with
+  *Set status* is still refused at save, because a bare status carries no wake
+  time; the snooze action is the way to put a ticket away. The action goes
+  through the same planner as the menu, so the bounds are the menu's too: a time
+  under 5 minutes or over 90 days ahead is recorded as *not carried out*.
+  **It never runs on a wake.** A run started by a snooze ending by itself (its
+  time came, an SLA step fired, or the customer replied) and every run that
+  chain sets off record the action as *not carried out* with the reason *the
+  ticket was just woken*, so a `ticket_updated` rule cannot put the ticket back
+  to sleep for ever and a customer's reply is never hidden
+  ([DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions)).
 - A canned reply is a public message written by the system. It **does not stop
   the first-response clock** unless the action's *Counts as first response* box
   is ticked (`counts_as_response`, DOMAIN-RULES §3.1). The builder offers the

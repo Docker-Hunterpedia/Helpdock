@@ -4,6 +4,7 @@ import {
   enqueueTicketAssigned,
   enqueueTicketEvent,
   TICKET_EVENTS,
+  type WakeCause,
 } from '../tickets/ticket-events.js';
 import type { AssignedTicket, AssignmentRepository } from './assignment.repository.js';
 import { type PickInput, pickAssignee } from './rotation.js';
@@ -67,6 +68,8 @@ export interface AutoAssignRequest {
    * the `assigned` event it leads to carries the chain the depth guard counts.
    */
   readonly ruleChain?: readonly string[] | undefined;
+  /** #368. Carried to the `assigned` event when the chain started at a wake. */
+  readonly wokeBy?: WakeCause | undefined;
 }
 
 /** The rotation a department runs for this trigger, or null for "leave it alone". */
@@ -88,7 +91,7 @@ const rotationFor = (
 export const autoAssign = async (
   { repository, presence }: AutoAssignDeps,
   tx: DbTransaction,
-  { brandId, ticketId, trigger, now, ruleChain }: AutoAssignRequest,
+  { brandId, ticketId, trigger, now, ruleChain, wokeBy }: AutoAssignRequest,
 ): Promise<AutoAssignOutcome> => {
   await repository.lockBrandRotation(tx, brandId);
 
@@ -153,6 +156,7 @@ export const autoAssign = async (
     departmentId: department.id,
     changes: ['assignee'],
     ...(ruleChain === undefined || ruleChain.length === 0 ? {} : { ruleChain: [...ruleChain] }),
+    ...(wokeBy === undefined ? {} : { wokeBy }),
   });
   // M3-07: the person picked is told, as they would be by a person's choice.
   // A pick a workflow rule asked for (M3-03) is the rule's doing.

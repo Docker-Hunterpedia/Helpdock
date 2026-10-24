@@ -18,6 +18,8 @@ const BILLING = '0199f4b2-0000-7000-8000-0000000000d2';
 const TEAM = '0199f4b2-0000-7000-8000-0000000000e1';
 const AGENT = '0199f4b2-0000-7000-8000-0000000000a1';
 const tx = {} as DbTransaction;
+const UNTIL = new Date('2026-10-01T11:00:00.000Z');
+const SNOOZED = '0199f4b2-0000-7000-8000-0000000000f2';
 
 const facts = (overrides: Partial<TicketFacts> = {}): TicketFacts => ({
   id: '0199f4b2-0000-7000-8000-0000000000c1',
@@ -56,6 +58,7 @@ const deps = (
     }),
     department: async () => ({ assignmentMode: mode }),
   } as unknown as AssignmentRepository,
+  snooze: { at: async () => UNTIL },
 });
 
 const run = (d: ReturnType<typeof deps>, actions: RuleAction[], start: TicketFacts = facts()) =>
@@ -108,5 +111,53 @@ describe('previewActions assignment', () => {
 
     expect(outcomes[0]?.effect).toBe('unavailable');
     expect(simulation.facts.assigneeId).toBe(AGENT);
+  });
+});
+
+describe('previewActions snooze', () => {
+  const snoozeDeps = (open = true) => ({
+    ...deps([SUPPORT]),
+    rules: {
+      status: async (_tx: DbTransaction, id: string) => ({
+        id,
+        systemState: open ? 'open' : 'closed',
+      }),
+      statusByKey: async () => ({ id: SNOOZED }),
+    } as unknown as RulesRepository,
+  });
+  const action: RuleAction = { type: 'snooze', preset: 'in_1_hour' };
+
+  it('moves the ticket to Snoozed and remembers when it wakes', async () => {
+    const { outcomes, simulation } = await run(snoozeDeps(), [action]);
+
+    expect(outcomes[0]?.effect).toBe('changed');
+    expect(simulation.facts).toMatchObject({ statusId: SNOOZED, snoozedUntil: UNTIL });
+    expect(simulation.changes.has('status')).toBe(true);
+  });
+
+  it('says unchanged when the ticket already sleeps until that minute, as the engine does', async () => {
+    const { outcomes } = await run(
+      snoozeDeps(),
+      [action],
+      facts({ statusId: SNOOZED, snoozedUntil: UNTIL }),
+    );
+
+    expect(outcomes[0]?.effect).toBe('unchanged');
+  });
+
+  it('moves the wake time of a ticket asleep until another minute', async () => {
+    const { outcomes } = await run(
+      snoozeDeps(),
+      [action],
+      facts({ statusId: SNOOZED, snoozedUntil: new Date(UNTIL.getTime() + 60_000) }),
+    );
+
+    expect(outcomes[0]?.effect).toBe('changed');
+  });
+
+  it('cannot snooze a closed ticket', async () => {
+    const { outcomes } = await run(snoozeDeps(false), [action]);
+
+    expect(outcomes[0]?.effect).toBe('unavailable');
   });
 });

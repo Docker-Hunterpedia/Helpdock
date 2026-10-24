@@ -1,4 +1,4 @@
-import type { Macro, MacroAction, Ticket } from '@helpdock/schemas';
+import type { Macro, MacroAction, SnoozePresetKey, Ticket } from '@helpdock/schemas';
 
 /**
  * What a macro will do to one ticket, in the words the composer shows
@@ -20,6 +20,8 @@ export type StagedLine =
   | { readonly field: 'status'; readonly from: string; readonly to: string }
   | { readonly field: 'priority'; readonly from: string; readonly to: string }
   | { readonly field: 'tag'; readonly add: boolean; readonly name: string }
+  /** #368: the preset the server resolves when the reply is sent. */
+  | { readonly field: 'snooze'; readonly preset: SnoozePresetKey }
   | {
       readonly field: 'assignee';
       readonly to: string | null;
@@ -57,6 +59,8 @@ export const describeAction = (
     case 'add_tag':
     case 'remove_tag':
       return { field: 'tag', add: action.type === 'add_tag', name: lookups.tagName(action.tagId) };
+    case 'snooze':
+      return { field: 'snooze', preset: action.preset };
     case 'assign': {
       const { assignee } = action;
       const userId =
@@ -77,9 +81,14 @@ export const describeAction = (
   }
 };
 
-/** Whether the staged macro sets the status, which wins over "Then set status". */
+/**
+ * Whether the staged macro moves the ticket's status — a set status, or a
+ * snooze (#368), which makes it Snoozed when the reply is sent — and so wins
+ * over "Then set status".
+ */
 export const setsStatus = (staged: StagedMacro | null): boolean =>
-  staged?.actions.some((action) => action.type === 'set_status') ?? false;
+  staged?.actions.some((action) => action.type === 'set_status' || action.type === 'snooze') ??
+  false;
 
 /** Staged text for the composer: the rendered reply, after whatever was already typed. */
 export const withInserted = (body: string, text: string): string =>

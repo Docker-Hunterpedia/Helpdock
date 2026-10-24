@@ -3,9 +3,9 @@ import type { SnoozePresets } from '@helpdock/schemas';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { getTx } from '../../context/request-context.js';
-import { buildCalendars } from '../../sla/calendars.js';
 import { SlaRepository } from '../../sla/sla.repository.js';
 import { TicketRepository } from '../tickets.repository.js';
+import { departmentCalendar } from './snooze-calendar.js';
 import { snoozePresets } from './snooze-presets.js';
 
 /**
@@ -39,8 +39,7 @@ export class SnoozeService {
 
     const { departmentId } = found.ticket;
     const rows = await this.#sla.calendarRows(tx, brandId);
-    const configured = rows.overrides.has(departmentId) || rows.brandWeekly !== null;
-    const calendar = configured ? buildCalendars(rows)('business', departmentId) : null;
+    const calendar = departmentCalendar(rows, departmentId);
     const [department] = await tx
       .select({ name: departments.name })
       .from(departments)

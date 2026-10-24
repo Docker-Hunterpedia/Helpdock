@@ -91,6 +91,60 @@ describe('createRulesSourceHandler', () => {
     expect(ruleReply).toEqual([]);
   });
 
+  it('marks the run when the event is a snooze ending by time or an SLA step, and keeps the mark for a chain', async () => {
+    const [byTime] = await handle('ticket.updated', {
+      ticketId: TICKET,
+      changes: ['status'],
+      wokeBy: 'time',
+    });
+    const [chained] = await handle('ticket.updated', {
+      ticketId: TICKET,
+      ruleChain: [RULE],
+      wokeBy: 'sla',
+    });
+
+    expect(byTime).toMatchObject({ wokeBy: 'time' });
+    expect(chained).toMatchObject({ wokeBy: 'sla', chain: [RULE] });
+  });
+
+  it('marks a customer reply that woke the ticket, and not one that did not', async () => {
+    const sequence = (...answers: unknown[][]) => {
+      const queue = [...answers];
+      const next = () => {
+        const rows = queue.shift() ?? [];
+        return Object.assign(Promise.resolve(rows), { limit: () => Promise.resolve(rows) });
+      };
+      const query = { from: () => query, where: next };
+      return { select: () => query };
+    };
+    const message = {
+      kind: 'public',
+      authorType: 'contact',
+      ticketId: TICKET,
+      createdAt: new Date(),
+    };
+
+    const woke = await handle(
+      'ticket.replied',
+      { ticketId: TICKET, messageId: MESSAGE },
+      sequence([message], [{ id: OUTBOX }]),
+    );
+    const plain = await handle(
+      'ticket.replied',
+      { ticketId: TICKET, messageId: MESSAGE },
+      sequence([message], []),
+    );
+    const agent = await handle(
+      'ticket.replied',
+      { ticketId: TICKET, messageId: MESSAGE },
+      sequence([{ ...message, authorType: 'staff' }]),
+    );
+
+    expect(woke[0]).toMatchObject({ triggers: ['customer_replied'], wokeBy: 'customer_reply' });
+    expect(plain[0]).not.toHaveProperty('wokeBy');
+    expect(agent[0]).not.toHaveProperty('wokeBy');
+  });
+
   it('ignores an event with no ticket in it', async () => {
     expect(await handle('sla.breached', { clock: 'resolution' })).toEqual([]);
   });

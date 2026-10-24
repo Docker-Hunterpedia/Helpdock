@@ -1,6 +1,8 @@
 import { type DynamicModule, Module } from '@nestjs/common';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
+import { SlaRepository } from '../sla/sla.repository.js';
 import { TemplatesRepository } from '../ticketing/templates.repository.js';
+import { snoozePresetResolver } from '../tickets/snooze/snooze-calendar.js';
 import { TicketsService } from '../tickets/tickets.service.js';
 import { CannedResponsesService } from './canned-responses.service.js';
 import { MacroRunService } from './macro-run.service.js';
@@ -45,7 +47,12 @@ export class MacrosModule {
           provide: MacroRunService,
           inject: [TicketsService],
           useFactory: (ticketsService: TicketsService) =>
-            new MacroRunService(repository, ticketsService, new AssignmentRepository()),
+            new MacroRunService(
+              repository,
+              ticketsService,
+              new AssignmentRepository(),
+              snoozePresetResolver(new SlaRepository()),
+            ),
         },
       ],
       exports: [CannedResponsesService],

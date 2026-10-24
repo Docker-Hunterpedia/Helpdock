@@ -145,4 +145,72 @@ test.describe('the builder and its test run', () => {
     ).toBeVisible();
     expect(await violations(page)).toEqual([]);
   });
+
+  test('snoozes with the Snooze menu’s times, never the bare Snoozed status (#368)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openAutomation(page, locale);
+    await page.getByRole('link', { name: t('rules:newRule') }).click();
+
+    const type = page.getByRole('combobox', { name: t('rules:builder.action', { n: 1 }) });
+    await type.selectOption({ label: t('rules:actionTypes.snooze') });
+
+    // The four items of the Snooze menu, which the server resolves.
+    const wakeTime = page.getByRole('combobox', { name: t('rules:builder.snoozeFor') });
+    await expect(wakeTime).toBeVisible();
+    for (const preset of ['in_1_hour', 'in_4_hours', 'next_business_day', 'next_week'] as const) {
+      await expect(
+        wakeTime.locator('option', { hasText: t(`rules:builder.snoozeOption.${preset}`) }),
+      ).toHaveCount(1);
+    }
+    await wakeTime.selectOption({ label: t('rules:builder.snoozeOption.next_business_day') });
+    await expect(page.getByText(t('rules:builder.snoozeNote'))).toBeVisible();
+
+    // Set status still cannot pick the Snoozed status: the action needs no
+    // wake time, only the snooze one has it.
+    await type.selectOption({ label: t('rules:actionTypes.set_status') });
+    const statusPick = page.getByRole('combobox', { name: t('rules:fields.status') });
+    const snoozedName = locale === 'ar' ? 'مؤجَّلة' : 'Snoozed';
+    await expect(statusPick.locator('option').filter({ hasText: snoozedName })).toHaveCount(0);
+
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('saves a rule with the snooze action and reads it back as a sentence (#368)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await openAutomation(page, locale);
+    await page.getByRole('link', { name: t('rules:newRule') }).click();
+
+    // The failure path first: an incomplete rule is refused, snooze action or not.
+    await page
+      .getByRole('combobox', { name: t('rules:builder.action', { n: 1 }) })
+      .selectOption({ label: t('rules:actionTypes.snooze') });
+    await page.getByRole('button', { name: t('rules:builder.save') }).click();
+    await expect(page.getByText(t('rules:builder.incomplete'))).toBeVisible();
+
+    await page
+      .getByLabel(`${t('rules:builder.name')} · ${t('rules:builder.required')}`)
+      .fill('Park awaiting tickets');
+    await page.getByRole('combobox', { name: t('rules:builder.field') }).selectOption('priority');
+    await page.getByRole('combobox', { name: t('rules:builder.value') }).selectOption('urgent');
+    await page
+      .getByRole('combobox', { name: t('rules:builder.snoozeFor') })
+      .selectOption({ label: t('rules:builder.snoozeOption.next_business_day') });
+    await page.getByRole('button', { name: t('rules:builder.save') }).click();
+    await expect(
+      page.getByRole('form', {
+        name: t('rules:builder.formLabel', { name: 'Park awaiting tickets' }),
+      }),
+    ).toBeVisible();
+
+    await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
+    const row = page.getByRole('listitem').filter({ hasText: 'Park awaiting tickets' });
+    await expect(row).toContainText(t('rules:text.action.snooze.next_business_day'));
+    expect(await violations(page)).toEqual([]);
+  });
 });

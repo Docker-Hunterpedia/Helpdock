@@ -852,6 +852,18 @@ export const snoozePresetKeySchema = z.enum([
 ]);
 export type SnoozePresetKey = z.infer<typeof snoozePresetKeySchema>;
 
+/**
+ * The `snooze` action of a workflow rule or a macro (#368): one of the Snooze
+ * menu's four presets, which the server resolves to an instant against the
+ * ticket's department calendar when the rule runs or the macro is applied —
+ * never a timestamp computed on the client.
+ */
+export const snoozeActionSchema = z.object({
+  type: z.literal('snooze'),
+  preset: snoozePresetKeySchema,
+});
+export type SnoozeAction = z.infer<typeof snoozeActionSchema>;
+
 export const snoozePresetsQuerySchema = z.object({
   /** The agent's IANA time zone, from the browser; the fallback when a department has no calendar. */
   timeZone: z.string().min(1).max(64).refine(isTimeZone, 'must be an IANA time zone'),

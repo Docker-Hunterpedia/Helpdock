@@ -7,7 +7,9 @@ import { RulesRepository } from '../rules/rules.repository.js';
 import { REDIS } from '../runtime/tokens.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
+import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
+import { snoozePresetResolver } from '../tickets/snooze/snooze-calendar.js';
 import { RoutingController } from './routing.controller.js';
 import { RoutingRepository } from './routing.repository.js';
 import { RoutingService } from './routing.service.js';
@@ -46,6 +48,7 @@ export class RoutingModule {
               businessHours: businessHoursProbe(businessHours),
               sla: slaService,
               presence: new StorePresenceReader(new PresenceStore(redis)),
+              snooze: snoozePresetResolver(new SlaRepository()),
             }),
         },
       ],

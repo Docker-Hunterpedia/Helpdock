@@ -27,6 +27,7 @@ import type { TicketFacts } from '../rules/ticket-facts.js';
 import { startClock } from '../sla/clock.js';
 import { matchPolicy } from '../sla/policy-match.js';
 import type { SlaService } from '../sla/sla.service.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import { subjectFor as formSubjectFor } from '../web-form/web-form-ticket.writer.js';
 import { subjectFrom } from '../widget/plain-text.js';
 import type { ResolvedEntry } from './entry-points.js';
@@ -55,6 +56,7 @@ export interface RoutingTestDeps {
   readonly businessHours: BusinessHoursProbe;
   readonly sla: Pick<SlaService, 'brandContext'>;
   readonly presence: PresenceReader;
+  readonly snooze: SnoozeResolver;
   readonly now?: () => Date;
 }
 

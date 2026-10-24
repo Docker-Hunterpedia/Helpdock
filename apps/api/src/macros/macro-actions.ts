@@ -1,4 +1,4 @@
-import type { MacroAction, TicketPriority } from '@helpdock/schemas';
+import type { MacroAction, SnoozePresetKey, TicketPriority } from '@helpdock/schemas';
 
 /**
  * What a macro's actions come to, worked out before anything is written
@@ -18,6 +18,13 @@ export interface MacroPlan {
     assigneeId?: string | null;
     teamId?: string | null;
   };
+  /**
+   * The `snooze` action's preset (#368), when one survives: a snooze and a set
+   * status both move the ticket out of its status, the api takes one or the
+   * other, and the last of the two in the list wins as for any field. The
+   * service resolves it to an instant against the department calendar.
+   */
+  readonly snoozePreset?: SnoozePresetKey;
   /** Tags to put on and take off, in the order the actions named them. */
   readonly tagOps: readonly { readonly tagId: string; readonly add: boolean }[];
   /** A team was assigned: the department's rotation picks the person (M1-07). */
@@ -28,11 +35,17 @@ export const planMacro = (actions: readonly MacroAction[], actorId: string): Mac
   const fields: MacroPlan['fields'] = {};
   const tagOps: { tagId: string; add: boolean }[] = [];
   let routeToTeam = false;
+  let snoozePreset: SnoozePresetKey | undefined;
 
   for (const action of actions) {
     switch (action.type) {
       case 'set_status':
         fields.statusId = action.statusId;
+        snoozePreset = undefined;
+        break;
+      case 'snooze':
+        snoozePreset = action.preset;
+        delete fields.statusId;
         break;
       case 'set_priority':
         fields.priority = action.priority;
@@ -56,7 +69,7 @@ export const planMacro = (actions: readonly MacroAction[], actorId: string): Mac
     }
   }
 
-  return { fields, tagOps, routeToTeam };
+  return { fields, ...(snoozePreset === undefined ? {} : { snoozePreset }), tagOps, routeToTeam };
 };
 
 /** The ticket's tags after the plan's operations, in the order the ticket had them. */

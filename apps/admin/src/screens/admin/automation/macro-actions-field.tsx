@@ -1,4 +1,9 @@
-import { MAX_MACRO_ACTIONS, type MacroActionType, type TicketStatus } from '@helpdock/schemas';
+import {
+  MAX_MACRO_ACTIONS,
+  type MacroActionType,
+  snoozePresetKeySchema,
+  type TicketStatus,
+} from '@helpdock/schemas';
 import { Box, Button, IconButton, MenuItem, TextField, Typography } from '@mui/material';
 import { Plus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -23,6 +28,7 @@ const ACTION_TYPES: readonly MacroActionType[] = [
   'add_tag',
   'remove_tag',
   'assign',
+  'snooze',
 ];
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
@@ -90,6 +96,13 @@ export function MacroActionsField({
           ...choices.people.map((person) => ({ value: `user:${person.id}`, label: person.name })),
           { value: 'unassigned', label: t('macros:actions.assignee.unassigned') },
         ];
+      case 'snooze':
+        // The Snooze menu's own words for its four items (#368): what the
+        // macro snoozes by is what the menu offers.
+        return snoozePresetKeySchema.options.map((preset) => ({
+          value: preset,
+          label: t(`tickets:snooze.preset.${preset}`),
+        }));
     }
   };
 
@@ -162,6 +175,12 @@ export function MacroActionsField({
           </Box>
         );
       })}
+
+      {actions.some((action) => action.type === 'snooze') ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {t('macros:actions.snoozeNote')}
+        </Typography>
+      ) : null}
 
       <Box>
         <Button

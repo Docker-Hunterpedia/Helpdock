@@ -1,6 +1,7 @@
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
+  brands,
   cannedResponses,
   createDb,
   type Db,
@@ -534,6 +535,120 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
         from: { statusId: quiet.ticket.status.id },
         to: { statusId: awaiting, macroName: 'Refund issued' },
       });
+    });
+
+    it('snoozes by a preset the server resolves against the calendar (#368)', async () => {
+      const later = await createMacro(ada, {
+        kind: 'macro',
+        name: 'Snooze it',
+        scope: 'shared',
+        departmentId: billing,
+        bodies: { en: '', ar: '' },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      });
+      const target = await createTicket(billing);
+
+      const response = await call<MacroRunResponse>(
+        'POST',
+        `${brandPath()}/tickets/${target.ticket.id}/macro-runs`,
+        ada,
+        { macroId: later.id, actions: later.actions },
+      );
+      expect(response.status).toBe(201);
+      expect(response.body.message).toBeNull();
+
+      // The ticket is Snoozed about an hour ahead, and the person who applied
+      // the macro is the one who snoozed it.
+      const after = await call<TicketDetail>(
+        'GET',
+        `${brandPath()}/tickets/${target.ticket.id}`,
+        ada,
+      );
+      expect(after.body.ticket.status.isSnoozed).toBe(true);
+      const until = after.body.ticket.snoozedUntil;
+      expect(until).not.toBeNull();
+      const ahead = Date.parse(until ?? '') - Date.now();
+      expect(ahead).toBeGreaterThan(55 * 60_000);
+      expect(ahead).toBeLessThan(65 * 60_000);
+      expect(after.body.ticket.snoozedBy).toBe(ada.id);
+
+      // The activity is the snooze's own, beside the macro's one entry.
+      const activity = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({
+            action: ticketActivity.action,
+            actorId: ticketActivity.actorId,
+            to: ticketActivity.to,
+          })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, target.ticket.id)),
+      );
+      expect(activity.filter((row) => row.action === 'ticket.macro_applied')).toHaveLength(1);
+      expect(activity.find((row) => row.action === 'ticket.snoozed')).toMatchObject({
+        actorId: ada.id,
+        to: { snoozedUntil: until, resumeStatusId: expect.any(String) },
+      });
+
+      // And the wake timer's outbox row is the snooze's own.
+      const snoozedEvents = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({ payload: outbox.payload })
+          .from(outbox)
+          .where(
+            sql`${outbox.event} = 'ticket.snoozed' AND ${outbox.payload}->>'ticketId' = ${target.ticket.id}`,
+          ),
+      );
+      expect(snoozedEvents.map((row) => row.payload)).toEqual([
+        expect.objectContaining({ ticketId: target.ticket.id, snoozedUntil: until }),
+      ]);
+    });
+
+    it('resolves the time in the applying person’s profile zone, else the brand’s (#368)', async () => {
+      const tomorrow = await createMacro(ada, {
+        kind: 'macro',
+        name: 'Snooze to tomorrow',
+        scope: 'shared',
+        departmentId: billing,
+        bodies: { en: '', ar: '' },
+        actions: [{ type: 'snooze', preset: 'next_business_day' }],
+      });
+      const localTime = (iso: string | null, timeZone: string): string =>
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).format(new Date(iso ?? ''));
+      const applyAndRead = async (): Promise<string | null> => {
+        const target = await createTicket(billing);
+        const run = await call<MacroRunResponse>(
+          'POST',
+          `${brandPath()}/tickets/${target.ticket.id}/macro-runs`,
+          ada,
+          { macroId: tomorrow.id, actions: tomorrow.actions },
+        );
+        expect(run.status).toBe(201);
+        const after = await call<TicketDetail>(
+          'GET',
+          `${brandPath()}/tickets/${target.ticket.id}`,
+          ada,
+        );
+        return after.body.ticket.snoozedUntil ?? null;
+      };
+      const setZone = (timeZone: string | null) =>
+        runtime.db.update(users).set({ timeZone }).where(eq(users.id, ada.id));
+
+      // Billing has no hours of its own here, so the preset is 09:00 tomorrow in
+      // the zone the person chose: 14 hours ahead of UTC, so not the brand's.
+      await setZone('Pacific/Kiritimati');
+      expect(localTime(await applyAndRead(), 'Pacific/Kiritimati')).toBe('09:00');
+
+      // With no profile zone it is the brand's own, as the Snooze menu falls back.
+      await setZone(null);
+      const [brand] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select({ timezone: brands.timezone }).from(brands).where(eq(brands.id, seeded.brandId)),
+      );
+      expect(localTime(await applyAndRead(), brand?.timezone ?? 'UTC')).toBe('09:00');
     });
 
     it('refuses the whole run, reply included, when an action is refused', async () => {

@@ -171,6 +171,7 @@ overrides:
   vite@>=8.3.0 <8.3.3: '>=8.3.3'
   undici@>=7.18.0 <7.30.1: 7.30.1
   undici@>=8.0.0 <8.12.2: 8.12.2
+  happy-dom@>=17.0.0 <21.0.4: 21.0.4
 
 importers:
 
@@ -208,7 +209,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 5.0.1
-        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@20.14.5)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
+        version: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
       yaml:
         specifier: 2.9.1
         version: 2.9.1
@@ -325,8 +326,8 @@ importers:
         specifier: 6.1.1
         version: 6.1.1(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
       happy-dom:
-        specifier: 20.14.5
-        version: 20.14.5
+        specifier: 21.0.4
+        version: 21.0.4
       otplib:
         specifier: 13.5.0
         version: 13.5.0
@@ -572,8 +573,8 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(preact@10.29.8)
       happy-dom:
-        specifier: 20.14.5
-        version: 20.14.5
+        specifier: 21.0.4
+        version: 21.0.4
       vite:
         specifier: 8.3.4
         version: 8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1)
@@ -4171,8 +4172,8 @@ packages:
     resolution: {integrity: sha512-/8Qw+iisrUdOMk+p2mjEHouMm/BBdBEN1DHh16wiTpRUZkxDG3PxexdjCvR+wvK3LWPdrEvnQbdrwpU954sPhg==}
     engines: {node: ^12.20.0 || >=14.13.1}
 
-  happy-dom@20.14.5:
-    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
 
   has-bigints@1.1.0:
@@ -5672,7 +5673,7 @@ packages:
       '@vitest/coverage-istanbul': 5.0.1
       '@vitest/coverage-v8': 5.0.1
       '@vitest/ui': 5.0.1
-      happy-dom: '*'
+      happy-dom: 21.0.4
       jsdom: '*'
       vite: '>=8.3.3'
     peerDependenciesMeta:
@@ -7812,7 +7813,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@20.14.5)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
+      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
 
   '@testing-library/preact@3.2.4(preact@10.29.8)':
     dependencies:
@@ -8237,7 +8238,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@20.14.5)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
+      vitest: 5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
 
   '@vitest/istanbul-lib-coverage@1.0.1': {}
 
@@ -9292,7 +9293,7 @@ snapshots:
       - encoding
       - supports-color
 
-  happy-dom@20.14.5:
+  happy-dom@21.0.4:
     dependencies:
       '@types/node': 24.13.5
       '@types/whatwg-mimetype': 3.0.2
@@ -10881,7 +10882,7 @@ snapshots:
       tsx: 4.23.13
       yaml: 2.9.1
 
-  vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@20.14.5)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1)):
+  vitest@5.0.1(@opentelemetry/api@1.9.1)(@types/node@24.13.5)(@vitest/coverage-v8@5.0.1)(happy-dom@21.0.4)(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.0.1(vite@8.3.4(@types/node@24.13.5)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.1))
@@ -10901,7 +10902,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@types/node': 24.13.5
       '@vitest/coverage-v8': 5.0.1(vitest@5.0.1)
-      happy-dom: 20.14.5
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
 

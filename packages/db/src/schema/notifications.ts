@@ -128,6 +128,8 @@ export const notificationPrefs = pgTable(
     pausedUntil: timestamp('paused_until', { withTimezone: true }),
     /** M14-11's one-click unsubscribe. Leaves the matrix as it was. */
     emailUnsubscribedAt: timestamp('email_unsubscribed_at', { withTimezone: true }),
+    /** When "Turn email back on" last lifted an unsubscribe; unsubscribe links issued before it are refused. */
+    emailResubscribedAt: timestamp('email_resubscribed_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow()

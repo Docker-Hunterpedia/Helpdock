@@ -616,11 +616,14 @@ export class NotificationsRepository {
       readonly pausedUntil?: Date | null | undefined;
       /** `null` is "Turn email back on"; an unsubscribe goes through {@link unsubscribeEmail}. */
       readonly emailUnsubscribedAt?: null | undefined;
+      /** Stamped only when this save lifts an unsubscribe, so unsubscribe links issued before it stop working. */
+      readonly resubscribedAt?: Date | undefined;
     } = {},
   ): Promise<void> {
+    const { resubscribedAt, ...rest } = email;
     const choices = Object.fromEntries(
-      Object.entries(email).filter(([, value]) => value !== undefined),
-    ) as typeof email;
+      Object.entries(rest).filter(([, value]) => value !== undefined),
+    ) as typeof rest;
     await tx
       .insert(notificationPrefs)
       .values({ userId, preferences: preferences ?? {}, ...choices })
@@ -629,9 +632,25 @@ export class NotificationsRepository {
         set: {
           ...(preferences === undefined ? {} : { preferences }),
           ...choices,
+          ...(resubscribedAt === undefined
+            ? {}
+            : {
+                emailResubscribedAt: sql`case when ${notificationPrefs.emailUnsubscribedAt} is not null then ${resubscribedAt.toISOString()}::timestamptz else ${notificationPrefs.emailResubscribedAt} end`,
+              }),
           updatedAt: sql`now()`,
         },
       });
+  }
+
+  /** When "Turn email back on" last lifted an unsubscribe; null if it never has. */
+  async emailResubscribedAt(tx: DbTransaction, userId: string): Promise<Date | null> {
+    const [row] = await tx
+      .select({ at: notificationPrefs.emailResubscribedAt })
+      .from(notificationPrefs)
+      .where(eq(notificationPrefs.userId, userId))
+      .limit(1);
+
+    return row?.at ?? null;
   }
 
   /**

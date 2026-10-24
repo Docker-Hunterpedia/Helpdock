@@ -220,6 +220,7 @@ export class NotificationsService {
       digestHour: update.digestHour,
       pausedUntil,
       emailUnsubscribedAt: update.emailUnsubscribed === false ? null : undefined,
+      resubscribedAt: update.emailUnsubscribed === false ? this.#now() : undefined,
     });
 
     return this.preferences(tx, userId, brandId);

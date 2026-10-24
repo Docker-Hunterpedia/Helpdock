@@ -14,7 +14,7 @@ import {
   smtpSettingsFixture,
 } from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -135,7 +135,7 @@ async function stubSystem(page: Page, body: Fixture): Promise<void> {
 async function openSystem(page: Page, locale: Locale, body: Fixture): Promise<void> {
   await stubSystem(page, body);
   await signIn(page, locale);
-  await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+  await openSettingsArea(page, strings(locale), 'system');
 }
 
 async function violations(page: Page): Promise<string[]> {
@@ -198,7 +198,7 @@ test.describe('the System page', () => {
       ),
     );
     await signIn(page, locale);
-    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+    await openSettingsArea(page, strings(locale), 'system');
 
     // The banner names what is not being sent and anchors to the card.
     await expect(page.getByText(t('system:smtp.missingBanner'))).toBeVisible();
@@ -236,7 +236,7 @@ test.describe('the System page', () => {
       );
     });
     await signIn(page, locale);
-    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+    await openSettingsArea(page, strings(locale), 'system');
 
     // The stored password is a placeholder, and it is not sent back.
     await expect(page.getByLabel(t('system:smtp.password'))).toHaveAttribute(
@@ -274,7 +274,7 @@ test.describe('the System page', () => {
       }),
     );
     await signIn(page, locale);
-    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+    await openSettingsArea(page, strings(locale), 'system');
 
     await page.getByRole('button', { name: t('system:smtp.test') }).click();
 
@@ -302,7 +302,7 @@ test.describe('the System page', () => {
         : route.fulfill(json(smtpSettingsFixture())),
     );
     await signIn(page, locale);
-    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+    await openSettingsArea(page, strings(locale), 'system');
 
     const fromName = page.getByLabel(t('system:smtp.fromName'));
     await fromName.fill('Helpdock Support');
@@ -463,7 +463,7 @@ test.describe('the System page', () => {
     });
 
     await signIn(page, locale);
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.system')) }).click();
+    await openSettingsArea(page, t, 'system');
 
     await expect(page.getByRole('heading', { name: t('system:notAllowed.heading') })).toBeVisible();
   });

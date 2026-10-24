@@ -39,11 +39,11 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   helpCenterArticle: 'one article: found through quick search',
   helpCenterOpen: 'leaves for the public help center rather than showing a page',
   ssoConnection: 'one SSO connection, reached from Settings',
-  ticketingTab: 'the family of the Ticketing tabs, each in the registry',
-  automationTab: 'the family of the Automation tabs, each in the registry',
+  inboxTab: 'the family of the Inbox pages, each in the registry',
+  ticketing: 'the Inbox prefix under its old area name; every page is in the registry',
+  automation: 'the Inbox prefix under its old area name; every page is in the registry',
   automationRule: 'one rule’s builder, reached from the Rules tab',
-  brandImport: 'in the registry',
-  importRun: 'one import run, reached from Brand › Import',
+  importRun: 'one import run, reached from Install › Imports',
   brandTab: 'the family of the Brand tabs, each in the registry',
   channelsTab: 'the family of the Channels tabs, each in the registry',
   mailboxNew: 'a form reached from Channels › Mailboxes',
@@ -55,8 +55,8 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   developers: 'redirects to API keys',
   developersTab: 'the family of the Developers tabs, each in the registry',
   systemQueues: 'the queue dashboard, reached from System',
-  me: 'redirects to Security',
-  meTab: 'the family of the account tabs, each in the registry',
+  myAccount: 'redirects to Profile',
+  myAccountTab: 'the family of the account pages, each in the registry',
   csat: 'the public rating page, not a staff screen',
   unsubscribe: 'the public unsubscribe page, not a staff screen',
   // Destinations that ARE in the registry are listed as such below.
@@ -65,9 +65,11 @@ const NOT_A_DESTINATION: Readonly<Record<keyof typeof ROUTES, string>> = {
   contactNew: 'in the registry',
   helpCenter: 'in the registry',
   reports: 'in the registry',
-  settings: 'in the registry',
-  ticketing: 'redirects to the first tab; every tab is in the registry',
-  automation: 'redirects to the first tab; every tab is in the registry',
+  settings: 'redirects to the first page the reader is offered',
+  inbox: 'redirects to the first page the reader has; every page is in the registry',
+  authentication: 'in the registry',
+  sso: 'in the registry',
+  imports: 'in the registry',
   brand: 'redirects to the first tab; every tab is in the registry',
   channels: 'redirects to the first tab; every tab is in the registry',
   staff: 'in the registry',
@@ -107,8 +109,8 @@ describe('the page registry and the routes', () => {
 
   it('has a page for every tab of every settings page', () => {
     const tabPaths = [
-      ...TICKETING_TABS.map((tab) => `${ROUTES.ticketing}/${tab.segment}`),
-      ...AUTOMATION_TABS.map((tab) => `${ROUTES.automation}/${tab.segment}`),
+      ...TICKETING_TABS.map((tab) => `${ROUTES.inbox}/${tab.segment}`),
+      ...AUTOMATION_TABS.map((tab) => `${ROUTES.inbox}/${tab.segment}`),
       ...CHANNELS_TABS.map((tab) => `${ROUTES.channels}/${tab.segment}`),
       ...AI_TABS.map((tab) => `${ROUTES.ai}/${tab.segment}`),
       ...DEVELOPERS_TABS.map((tab) => `${ROUTES.developers}/${tab.segment}`),
@@ -120,25 +122,40 @@ describe('the page registry and the routes', () => {
     ];
 
     expect(tabPaths.filter((tab) => !paths.includes(tab))).toEqual([]);
-    expect(paths.filter((path) => path.startsWith('/admin/') && !tabPaths.includes(path))).toEqual([
-      ROUTES.settings,
+    expect(
+      paths.filter((path) => path.startsWith('/settings/') && !tabPaths.includes(path)),
+    ).toEqual([
+      ROUTES.authentication,
+      ROUTES.sso,
       ROUTES.staff,
       ROUTES.system,
+      ROUTES.imports,
       ROUTES.systemAuditLog,
     ]);
   });
 
-  it('names each tab’s roles as the tab row does', () => {
-    const rolesOf = (path: string) => PAGES.find((page) => page.path === path)?.roles;
+  it('offers each page to the roles its old tab row did', () => {
+    for (const role of ['admin', 'teamLeader', 'agent', 'viewer'] as const) {
+      for (const installAdmin of [false, true]) {
+        const viewer = { role, installAdmin };
+        const offered = pagesFor(viewer).map((page) => page.path);
 
-    for (const tab of AUTOMATION_TABS) {
-      expect(rolesOf(`${ROUTES.automation}/${tab.segment}`)).toEqual(tab.roles);
-    }
-    for (const tab of CHANNELS_TABS) {
-      expect(rolesOf(`${ROUTES.channels}/${tab.segment}`)).toEqual(tab.roles);
-    }
-    for (const tab of AI_TABS.filter((candidate) => !candidate.installAdminOnly)) {
-      expect(rolesOf(`${ROUTES.ai}/${tab.segment}`)).toEqual(tab.roles);
+        for (const tab of AUTOMATION_TABS) {
+          expect(offered.includes(`${ROUTES.inbox}/${tab.segment}`)).toBe(
+            (tab.roles as readonly string[]).includes(role),
+          );
+        }
+        for (const tab of CHANNELS_TABS) {
+          expect(offered.includes(`${ROUTES.channels}/${tab.segment}`)).toBe(
+            tab.roles.includes(role),
+          );
+        }
+        for (const tab of AI_TABS) {
+          expect(offered.includes(`${ROUTES.ai}/${tab.segment}`)).toBe(
+            tab.installAdminOnly ? installAdmin : tab.roles.includes(role),
+          );
+        }
+      }
     }
     for (const role of ['admin', 'teamLeader', 'agent', 'viewer'] as const) {
       const offered = pagesFor({ role, installAdmin: false })

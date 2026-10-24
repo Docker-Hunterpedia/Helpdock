@@ -2,7 +2,7 @@ import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { MOCK_BRANDS, MOCK_USER } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 const [firstBrand, secondBrand] = MOCK_BRANDS;
@@ -66,9 +66,18 @@ test.describe('the admin shell', () => {
 
     await expect(page.locator('a[aria-current="page"]')).toContainText(t('admin:nav.tickets'));
 
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
+    await openSettingsArea(page, t, 'staff');
 
-    await expect(page.locator('a[aria-current="page"]')).toContainText(t('admin:nav.staff'));
+    await expect(
+      page
+        .getByRole('navigation', { name: t('admin:settings.navLabel') })
+        .locator('a[aria-current="page"]'),
+    ).toContainText(t('admin:nav.staff'));
+    await expect(
+      page
+        .getByRole('navigation', { name: t('admin:nav.label') })
+        .getByRole('link', { name: t('admin:nav.settings'), exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
     // M0-06 replaced the placeholder with the real screen, which carries the
     // same title as its nav item.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('staff:title'));

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { MockDevelopersApi } from '../../../developers/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
@@ -19,9 +20,9 @@ const renderKeys = async (developers = new MockDevelopersApi(), ready = 'API key
     staffApi: staff,
     ticketingApi: ticketing,
     developersApi: developers,
-    initialEntries: ['/admin/developers'],
+    initialEntries: ['/settings/developers'],
   });
-  await screen.findByRole('heading', { name: ready });
+  await screen.findByRole('heading', { name: ready, level: 2 });
   return rendered;
 };
 
@@ -41,16 +42,12 @@ describe('Developers › API keys', () => {
   it('opens on API keys, beside Webhooks, from the Developers nav item', async () => {
     await renderKeys();
 
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      'API keys',
-      'Webhooks',
-    ]);
-    expect(screen.getByRole('tab', { name: 'API keys' })).toHaveAttribute('aria-selected', 'true');
     expect(
-      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
-        name: 'Developers',
-      }),
-    ).toHaveAttribute('href', '/admin/developers');
+      within(screen.getByRole('list', { name: 'Developers' }))
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['API keys', 'Webhooks']);
+    expect(settingsLink('API keys')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'API docs (opens /api/docs)' })).toHaveAttribute(
       'href',
       '/api/docs',

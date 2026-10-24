@@ -1,10 +1,9 @@
-import { Box, Button, Tab, Tabs } from '@mui/material';
+import { Box, Button } from '@mui/material';
 import { BookOpen, KeyRound, Plus, Webhook } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { developersRoute } from '../../../app/route-paths.js';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { ApiKeysTab } from './api-keys-tab.tsx';
@@ -30,7 +29,6 @@ export const API_DOCS_PATH = '/api/docs';
 
 export function DevelopersPage(): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const brand = currentBrand(useSession());
   const { tab: segment } = useParams();
   const [creating, setCreating] = useState(false);
@@ -75,24 +73,6 @@ export function DevelopersPage(): ReactNode {
           </Box>
         }
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs value={tab.key} aria-label={t('developers:tabList')}>
-          {DEVELOPERS_TABS.map((candidate) => (
-            <Tab
-              key={candidate.key}
-              value={candidate.key}
-              label={t(`developers:tabs.${candidate.key}`)}
-              icon={<candidate.icon size={14} aria-hidden="true" />}
-              iconPosition="start"
-              component={Link}
-              to={developersRoute(candidate.segment)}
-              onClick={close}
-              sx={{ minHeight: 44 }}
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       {tab.key === 'apiKeys' ? (
         <ApiKeysTab creating={creating} onCreate={open} onCreateClose={close} />

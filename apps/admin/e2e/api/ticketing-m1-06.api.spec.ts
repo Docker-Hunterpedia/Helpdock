@@ -1,3 +1,4 @@
+import { openSettingsArea, settingsTab } from '../flows.js';
 import { strings } from '../strings.js';
 import { expect, openAdmin, test } from './admin-session.js';
 import { SKIP_ENV } from './install.js';
@@ -50,9 +51,9 @@ const openTab = async (
   page: import('@playwright/test').Page,
   tab: 'tags' | 'customFields' | 'templates',
 ): Promise<void> => {
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.ticketing')) }).click();
+  await openSettingsArea(page, t, 'ticketing');
   await page.getByRole('table').first().waitFor();
-  await page.getByRole('tab', { name: t(`ticketing:tabs.${tab}`) }).click();
+  await settingsTab(page, t, `ticketing:tabs.${tab}`).click();
   await page.getByRole('button', { name: ADD_BUTTON[tab], exact: true }).waitFor();
 };
 

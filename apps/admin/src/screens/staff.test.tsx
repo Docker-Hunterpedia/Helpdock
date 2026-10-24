@@ -22,7 +22,7 @@ const renderStaff = async (staffApi?: MockStaffApi) => {
   const rendered = renderApp(<AppRoutes />, {
     authApi: auth,
     staffApi: staffApi ?? staff,
-    initialEntries: ['/admin/staff'],
+    initialEntries: ['/settings/install/staff'],
   });
 
   await screen.findByRole('heading', { name: 'Staff and roles', level: 1 });

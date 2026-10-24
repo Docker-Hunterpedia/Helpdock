@@ -34,7 +34,7 @@ const renderFields = async () => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketing,
-    initialEntries: ['/admin/ticketing/custom-fields'],
+    initialEntries: ['/settings/inbox/custom-fields'],
   });
 
   await screen.findByRole('button', { name: 'Edit Plan tier' });

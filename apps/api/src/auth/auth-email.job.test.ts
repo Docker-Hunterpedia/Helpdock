@@ -242,7 +242,10 @@ describe('the auth.email job', () => {
         sourceOutboxId: OUTBOX,
         kind: 'securityChange',
         userId: USER,
-        urlEncrypted: encryptSecret('https://support.example.com/me/security', keyring),
+        urlEncrypted: encryptSecret(
+          'https://support.example.com/settings/account/security',
+          keyring,
+        ),
         values: { change: 'password', occurredAt: '2026-10-21T06:14:00.000Z' },
       },
       brandId: BRAND,

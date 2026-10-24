@@ -1,12 +1,11 @@
 import type { RuleKind } from '@helpdock/schemas';
-import { Box, Button, Tab, Tabs } from '@mui/material';
+import { Button } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { automationRoute, ruleRoute } from '../../../app/route-paths.js';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { automationKeys } from '../../../automation/api.js';
 import { useAutomationApi } from '../../../automation/context.tsx';
@@ -31,7 +30,6 @@ import { tabForSegment, tabOfKind, tabsFor } from './tabs.js';
  */
 export function AutomationPage(): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
   const api = useAutomationApi();
@@ -86,20 +84,6 @@ export function AutomationPage(): ReactNode {
           )
         }
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs value={tab.key} aria-label={t('rules:tabList')}>
-          {tabs.map((candidate) => (
-            <Tab
-              key={candidate.key}
-              value={candidate.key}
-              label={t(`rules:tabs.${candidate.key}`)}
-              component={Link}
-              to={automationRoute(candidate.segment)}
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       {editing !== null ? (
         <RuleBuilder

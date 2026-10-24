@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 import {
   activeDeletion,
@@ -17,7 +18,7 @@ import { type SystemApi, SystemApiError } from '../system/system-api.js';
  */
 
 const renderBrand = async (
-  path = '/admin/brand/danger',
+  path = '/settings/brand/danger',
   systemApi: SystemApi = fakeSystemApi(),
 ) => {
   const { auth, staff, ticketing } = await signedInMockApis();
@@ -47,17 +48,14 @@ const rowFor = (label: string): HTMLElement => {
 };
 
 describe('the Brand page', () => {
-  it('opens the Danger zone tab by its path', async () => {
+  it('opens the Danger zone page by its path', async () => {
     await renderBrand();
 
-    expect(screen.getByRole('tab', { name: 'Danger zone' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(settingsLink('Danger zone')).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows each window with how many rows the next run would take', async () => {
-    await renderBrand('/admin/brand/danger');
+    await renderBrand('/settings/brand/danger');
 
     expect(within(rowFor('Closed tickets and their messages')).getByText('12 rows')).toBeVisible();
     expect(within(rowFor('Spam tickets')).getByText('62 rows')).toBeVisible();
@@ -133,7 +131,7 @@ describe('saving', () => {
 describe('deleting the brand (M8-07)', () => {
   it('asks for the ticket prefix, which is what the api checks, before it will delete', async () => {
     const deleteBrand = vi.fn(async (brandId: string) => pendingDeletion(brandId, Date.now()));
-    const { user } = await renderBrand('/admin/brand/danger', fakeSystemApi({ deleteBrand }));
+    const { user } = await renderBrand('/settings/brand/danger', fakeSystemApi({ deleteBrand }));
 
     const card = screen.getByRole('region', { name: 'Delete this brand' });
     const submit = within(card).getByRole('button', { name: 'Delete brand' });
@@ -154,7 +152,7 @@ describe('deleting the brand (M8-07)', () => {
 
   it('says why when the api refuses the prefix', async () => {
     const { user } = await renderBrand(
-      '/admin/brand/danger',
+      '/settings/brand/danger',
       fakeSystemApi({
         deleteBrand: async () => {
           throw new SystemApiError('the api answered 400', 400);
@@ -173,7 +171,7 @@ describe('deleting the brand (M8-07)', () => {
   it('shows the banner on every tab during the grace, read-only, and restores', async () => {
     const restoreBrand = vi.fn(async (brandId: string) => activeDeletion(brandId));
     const { user } = await renderBrand(
-      '/admin/brand/danger',
+      '/settings/brand/danger',
       fakeSystemApi({
         brandDeletion: async (brandId) => pendingDeletion(brandId, Date.now()),
         restoreBrand,

@@ -16,7 +16,7 @@ const renderTags = async () => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketing,
-    initialEntries: ['/admin/ticketing/tags'],
+    initialEntries: ['/settings/inbox/tags'],
   });
 
   await screen.findByRole('button', { name: 'Edit Refund' });

@@ -18,7 +18,7 @@ const renderDepartments = async (ticketingApi?: MockTicketingApi) => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketingApi ?? ticketing,
-    initialEntries: ['/admin/ticketing/departments'],
+    initialEntries: ['/settings/inbox/departments'],
   });
 
   // The table element appears before its rows do; waiting for a row means a

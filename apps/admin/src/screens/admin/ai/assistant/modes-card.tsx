@@ -314,7 +314,7 @@ export function ModesCard({
       >
         <Workflow size={14} aria-hidden="true" />
         {t('aiSettings:modes.triageNote')}{' '}
-        <RouterLink to={ROUTES.automation}>{t('admin:nav.automation')}</RouterLink>
+        <RouterLink to={ROUTES.inbox}>{t('admin:nav.automation')}</RouterLink>
       </Typography>
     </SectionCard>
   );

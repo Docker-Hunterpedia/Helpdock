@@ -16,6 +16,7 @@ import {
   MockMetaApi,
 } from '../../../../meta/mock-api.js';
 import { renderApp } from '../../../../test/render.tsx';
+import { settingsLink } from '../../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../../test/signed-in.js';
 
 /**
@@ -38,7 +39,7 @@ const fill = async (
 };
 
 const renderMeta = async ({
-  path = '/admin/channels/meta',
+  path = '/settings/channels/meta',
   metaApi = new MockMetaApi(),
   installAdmin = true,
 }: {
@@ -85,7 +86,7 @@ describe('Channels › Meta', () => {
     await renderMeta();
     const accounts = await table();
 
-    expect(screen.getByRole('tab', { name: 'Meta' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('WhatsApp, Messenger, Instagram')).toHaveAttribute('aria-current', 'page');
     const whatsapp = row(accounts, '+1 555 0142');
     expect(within(whatsapp).getByText('WhatsApp')).toBeVisible();
     expect(within(whatsapp).getByText('Helpdock Support')).toBeVisible();

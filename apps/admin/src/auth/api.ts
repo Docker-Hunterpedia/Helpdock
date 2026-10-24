@@ -72,7 +72,7 @@ export interface AuthApi {
   oauthIdentities(): Promise<OauthIdentityList>;
   /**
    * Behind a step-up, where the browser goes to connect `provider`. The
-   * provider sends it back to `/me/security?connected=<provider>`, or to the
+   * provider sends it back to `/settings/account/security?connected=<provider>`, or to the
    * callback screen with the failure.
    */
   connectOauth(provider: OauthProvider, proof: OauthStepUpRequest): Promise<string>;

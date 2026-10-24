@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -31,7 +31,7 @@ const violations = async (page: Page): Promise<string[]> => {
 const openAutomation = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
+  await openSettingsArea(page, t, 'automation');
   await page.getByRole('list', { name: t('rules:list.rules.caption') }).waitFor();
 };
 
@@ -52,10 +52,10 @@ test.describe('the Rules tab', () => {
     const t = strings(locale);
     await openAutomation(page, locale);
 
-    await expect(page.getByRole('heading', { name: t('rules:title'), level: 1 })).toBeVisible();
     await expect(
-      page.getByRole('tab', { name: t('rules:tabs.rules'), exact: true }),
-    ).toHaveAttribute('aria-selected', 'true');
+      page.getByRole('heading', { name: t('rules:tabs.rules'), level: 1 }),
+    ).toBeVisible();
+    await expect(settingsTab(page, t, 'rules:tabs.rules')).toHaveAttribute('aria-current', 'page');
     const list = page.getByRole('list', { name: t('rules:list.rules.caption') });
     await expect(list.getByRole('listitem')).toHaveCount(7);
     await expect(page.getByRole('status').filter({ hasText: 'HD-1041' })).toBeVisible();
@@ -208,7 +208,7 @@ test.describe('the builder and its test run', () => {
       }),
     ).toBeVisible();
 
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
+    await openSettingsArea(page, t, 'automation');
     const row = page.getByRole('listitem').filter({ hasText: 'Park awaiting tickets' });
     await expect(row).toContainText(t('rules:text.action.snooze.next_business_day'));
     expect(await violations(page)).toEqual([]);

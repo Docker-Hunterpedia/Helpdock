@@ -26,7 +26,7 @@ import { Pill } from '../tickets/badges.tsx';
 import { AccountCard } from './account-card.tsx';
 
 /**
- * Sign-in methods on `/me/security` (M18-07, artboard
+ * Sign-in methods on `/settings/account/security` (M18-07, artboard
  * `Admin/Profile-Security-SignInMethods`, which supersedes the 1.0.2
  * `Admin/Me-SignInProviders`): one row per provider the install has
  * configured, with its link state and a Connect or Disconnect that asks for the

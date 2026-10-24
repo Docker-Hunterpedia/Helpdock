@@ -40,7 +40,7 @@ const renderAccount = async (accountId: string, metaApi: MetaApi = new MockMetaA
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
     metaApi,
-    initialEntries: [`/admin/channels/meta/${accountId}`],
+    initialEntries: [`/settings/channels/meta/${accountId}`],
   });
   return { ...rendered, metaApi };
 };

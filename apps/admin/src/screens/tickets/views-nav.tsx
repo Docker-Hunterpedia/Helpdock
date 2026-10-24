@@ -1,7 +1,7 @@
 import type { TicketView, TicketViewCount } from '@helpdock/schemas';
 import { Box, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { Ellipsis, ListFilter, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
+import { ChevronDown, Ellipsis, ListFilter, Pencil, Plus, Share2, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -9,6 +9,7 @@ import { usePreferences } from '../../app/providers.tsx';
 import { ROUTES } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useSession, useTicketsApi } from '../../auth/session.tsx';
+import { useViewsCollapsed } from '../../shell/views-collapse.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import {
   ALL_VIEW,
@@ -43,8 +44,14 @@ const COUNT_STALE_MS = 30_000;
 
 export function TicketViewsNav({
   onNavigate,
+  foldable = true,
 }: {
   readonly onNavigate?: (() => void) | undefined;
+  /**
+   * The group folds under its label, and the fold is remembered per person
+   * (M14-21). The rail's popover lists the views and has nothing to fold.
+   */
+  readonly foldable?: boolean;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
@@ -55,8 +62,12 @@ export function TicketViewsNav({
   const [params] = useSearchParams();
   const labelId = useId();
   const mineId = useId();
+  const palette = useSemanticTokens();
   const brand = currentBrand(session);
   const actions = useViewActions();
+  const fold = useViewsCollapsed(session.user.id);
+  const folded = foldable && fold.collapsed;
+  const listId = useId();
 
   const [menuFor, setMenuFor] = useState<{ view: TicketView; anchor: HTMLElement } | null>(null);
   const [renaming, setRenaming] = useState<TicketView | null>(null);
@@ -135,14 +146,55 @@ export function TicketViewsNav({
           marginBlock: '16px 4px',
         }}
       >
-        <Typography
-          id={labelId}
-          component="p"
-          variant="caption"
-          sx={{ color: 'text.secondary', flex: 1 }}
-        >
-          {t('tickets:views.label')}
-        </Typography>
+        {foldable ? (
+          <Box
+            component="button"
+            type="button"
+            id={labelId}
+            aria-expanded={!folded}
+            aria-controls={listId}
+            onClick={fold.toggle}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              flex: 1,
+              minWidth: 0,
+              height: 24,
+              padding: 0,
+              border: 0,
+              background: 'none',
+              color: 'text.secondary',
+              font: 'inherit',
+              fontSize: 12,
+              textAlign: 'start',
+              cursor: 'pointer',
+              '&:focus-visible': {
+                outline: `2px solid ${palette['border.focus']}`,
+                outlineOffset: 2,
+              },
+            }}
+          >
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              style={{
+                flexShrink: 0,
+                transform: folded ? `rotate(${locale === 'ar' ? 90 : -90}deg)` : undefined,
+              }}
+            />
+            {t('tickets:views.label')}
+          </Box>
+        ) : (
+          <Typography
+            id={labelId}
+            component="p"
+            variant="caption"
+            sx={{ color: 'text.secondary', flex: 1 }}
+          >
+            {t('tickets:views.label')}
+          </Typography>
+        )}
         <IconButton
           size="small"
           component={Link}
@@ -156,6 +208,8 @@ export function TicketViewsNav({
       </Box>
 
       <Box
+        id={listId}
+        hidden={folded}
         component="ul"
         aria-labelledby={labelId}
         sx={{ listStyle: 'none', margin: 0, padding: 0 }}
@@ -169,7 +223,7 @@ export function TicketViewsNav({
         {shared.map(row)}
       </Box>
 
-      {mine.length === 0 ? null : (
+      {mine.length === 0 || folded ? null : (
         <>
           <Typography
             id={mineId}

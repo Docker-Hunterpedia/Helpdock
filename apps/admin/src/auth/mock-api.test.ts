@@ -163,7 +163,7 @@ describe('MockAuthApi', () => {
     });
     const landing = await api.connectOauth('github', { code: MOCK_TOTP_CODE });
 
-    expect(landing).toBe('/me/security?connected=github');
+    expect(landing).toBe('/settings/account/security?connected=github');
     expect((await api.oauthIdentities()).identities.map((row) => row.provider)).toEqual(['github']);
   });
 

@@ -13,6 +13,7 @@ import {
 } from '@helpdock/schemas';
 import { z } from 'zod';
 import { expect, test } from '../fixtures.js';
+import { openSettingsArea, settingsTab } from '../flows.js';
 import { strings } from '../strings.js';
 import { IMPORT_CONTROL_KEY_ENV, IMPORT_READY_ENV, IMPORT_SKIP_ENV } from './import-install.js';
 import { freshTotpCode } from './totp.js';
@@ -55,10 +56,10 @@ test('imports source history through the real wizard without sending anything', 
     return schema.parse(await response.json());
   };
 
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.import') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.import').click();
   await page.getByRole('button').filter({ hasText: 'Zendesk' }).click();
-  await page.waitForURL(/\/admin\/brand\/import\/[0-9a-f-]+$/);
+  await page.waitForURL(/\/settings\/install\/imports\/[0-9a-f-]+$/);
   const runId = z.uuid().parse(new URL(page.url()).pathname.split('/').at(-1));
   await page.getByLabel(t('imports:connection.subdomain')).fill('demo');
   await page.getByRole('radio', { name: t('imports:connection.oauthToken'), exact: true }).check();

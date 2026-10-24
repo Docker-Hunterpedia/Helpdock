@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicketing, openTickets, signIn } from './flows.js';
+import { openTicketing, openTickets, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -181,7 +181,7 @@ test.describe('the Views tab', () => {
     const t = strings(locale);
     await signIn(page, locale);
     await openTicketing(page, locale);
-    await page.getByRole('tab', { name: t('ticketing:tabs.views') }).click();
+    await settingsTab(page, t, 'ticketing:tabs.views').click();
     await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).waitFor();
   };
 

@@ -16,7 +16,7 @@ describe('RequireSession', () => {
   it('sends an anonymous visitor to sign-in', async () => {
     renderApp(<AppRoutes />, {
       authApi: new MockAuthApi(),
-      initialEntries: ['/admin/settings'],
+      initialEntries: ['/settings/install/authentication'],
     });
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('RequireSession', () => {
   it('comes back to the screen that was asked for after signing in', async () => {
     const { user } = renderApp(<AppRoutes />, {
       authApi: new MockAuthApi(),
-      initialEntries: ['/admin/settings?tab=email'],
+      initialEntries: ['/settings/install/authentication?tab=email'],
     });
 
     await user.type(await screen.findByLabelText('Email'), 'lina@helpdock.com');
@@ -34,7 +34,7 @@ describe('RequireSession', () => {
     await user.type(await screen.findByLabelText('Authentication code'), '482913');
     await user.click(screen.getByRole('button', { name: 'Verify' }));
 
-    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Authentication' })).toBeInTheDocument();
   });
 
   it('lets a signed-in session straight through', async () => {

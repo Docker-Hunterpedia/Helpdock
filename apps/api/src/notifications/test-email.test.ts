@@ -18,7 +18,7 @@ describe('renderTestEmail (M14-11)', () => {
     expect(email.subject).toBe('Helpdock test email');
     expect(email.to).toEqual({ address: 'lina@helpdock.test', name: 'Lina Haddad' });
     expect(email.text).toContain('You asked for this test.');
-    expect(email.text).toContain('https://desk.example.com/me/notifications');
+    expect(email.text).toContain('https://desk.example.com/settings/account/notifications');
   });
 
   it('has the footer and the one-click headers of a real notification', () => {

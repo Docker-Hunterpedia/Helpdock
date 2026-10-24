@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 import { MOCK_BRANDS } from '../src/auth/mock-api.js';
 import { activeDeletion, pendingDeletion } from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -47,8 +47,8 @@ async function stubDeletion(page: Page, refuse = false): Promise<void> {
 async function openDangerZone(page: Page, locale: Locale): Promise<void> {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.danger') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.danger').click();
   await page.getByRole('heading', { name: t('brand:deletion.heading') }).waitFor();
 }
 

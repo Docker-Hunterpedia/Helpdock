@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { openSettingsArea, settingsTab } from '../flows.js';
 import { strings } from '../strings.js';
 import { E2E_API_ORIGIN, E2E_WEB_ORIGIN, SKIP_ENV } from './install.js';
 import { expect, openAdmin, test } from './widget-helpers.js';
@@ -42,8 +43,8 @@ test.describe('the widget origin allow-list against the real api', () => {
     admin: page,
   }) => {
     await openAdmin(page);
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
-    await page.getByRole('tab', { name: t('channels:tabs.widget') }).click();
+    await openSettingsArea(page, t, 'channels');
+    await settingsTab(page, t, 'channels:tabs.widget').click();
     const snippet = await page
       .getByRole('region', { name: t('channels:widget.embed.heading') })
       .locator('pre')

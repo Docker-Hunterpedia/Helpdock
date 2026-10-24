@@ -44,7 +44,7 @@ import {
 import { PasskeyService } from './passkey.service.js';
 
 /**
- * A person's own passkeys, on `/me/security` (M18-02). Every route is
+ * A person's own passkeys, on `/settings/account/security` (M18-02). Every route is
  * `@Authenticated()` and none names a user: the account acted on is the one
  * making the request, and a passkey id that is not theirs is a 404 like one
  * that does not exist.

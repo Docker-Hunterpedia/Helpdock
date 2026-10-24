@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -19,14 +19,14 @@ test.use({ reducedMotion: 'reduce' });
 const openAi = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.ai'), exact: true }).click();
+  await openSettingsArea(page, t, 'ai');
   await page.getByRole('table', { name: t('aiSettings:providers.tableLabel') }).waitFor();
 };
 
 const openAssistant = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await openAi(page, locale);
-  await page.getByRole('tab', { name: t('aiSettings:tabs.assistant') }).click();
+  await settingsTab(page, t, 'aiSettings:tabs.assistant').click();
   await page.getByRole('region', { name: t('aiSettings:modes.heading') }).waitFor();
 };
 
@@ -147,7 +147,7 @@ test.describe('AI knowledge', () => {
   const openKnowledge = async (page: Page, locale: Locale): Promise<void> => {
     const t = strings(locale);
     await openAi(page, locale);
-    await page.getByRole('tab', { name: t('aiSettings:tabs.knowledge') }).click();
+    await settingsTab(page, t, 'aiSettings:tabs.knowledge').click();
     await page.getByRole('table', { name: t('aiSettings:knowledge.tableLabel') }).waitFor();
   };
 

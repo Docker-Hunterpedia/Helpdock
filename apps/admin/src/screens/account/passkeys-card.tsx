@@ -34,7 +34,7 @@ import { AccountCard } from './account-card.tsx';
 import { StepUpDialog } from './step-up-dialog.tsx';
 
 /**
- * Passkeys on `/me/security` (M18-02, artboard `Admin/Profile-Security-Passkeys`):
+ * Passkeys on `/settings/account/security` (M18-02, artboard `Admin/Profile-Security-Passkeys`):
  * one row per passkey with Rename and Remove, and Add in the header. Each of the
  * three asks "Confirm it's you" first (the passkey itself, the password or a
  * live code) and only then shows its own dialog; the api checks the proof with

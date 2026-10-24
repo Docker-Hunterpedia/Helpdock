@@ -1,16 +1,16 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
- * The page around the tabs: that the row is whole from the start, that a tab is
- * a url, and that a tab whose deliverable has not landed says which one it is
- * waiting for rather than pretending to be empty.
+ * The page around the settings: that every one is a link of the Inbox group,
+ * that a setting is a url, and that one whose deliverable has not landed says
+ * which one it is waiting for rather than pretending to be empty.
  */
 
-const renderTicketing = async (path = '/admin/ticketing') => {
+const renderTicketing = async (path = '/settings/inbox') => {
   const { auth, staff, ticketing } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
     authApi: auth,
@@ -19,14 +19,15 @@ const renderTicketing = async (path = '/admin/ticketing') => {
     initialEntries: [path],
   });
 
-  await screen.findByRole('heading', { name: 'Ticketing', level: 1 });
+  await screen.findByRole('heading', { level: 1 });
 
   return rendered;
 };
 
-describe('the tab row', () => {
-  it('offers every tab M1 will fill, so nothing has to be added later', async () => {
+describe('the Inbox settings', () => {
+  it('offers every setting M1 will fill as a link of the Inbox group', async () => {
     await renderTicketing();
+    const nav = screen.getByRole('navigation', { name: 'Settings' });
 
     for (const label of [
       'Departments',
@@ -37,8 +38,12 @@ describe('the tab row', () => {
       'Templates',
       'Views',
       'Assignment',
+      'Business hours',
+      'SLA policies',
+      'Spam',
+      'Feedback',
     ]) {
-      expect(await screen.findByRole('tab', { name: label })).toBeInTheDocument();
+      expect(within(nav).getByRole('link', { name: label })).toBeInTheDocument();
     }
   });
 
@@ -51,38 +56,44 @@ describe('the tab row', () => {
   });
 
   it.each([
-    ['names no tab', '/admin/ticketing'],
-    ['names a tab nobody has', '/admin/ticketing/nonsense'],
-    ['names it outright', '/admin/ticketing/departments'],
+    ['names no tab', '/settings/inbox'],
+    ['names a tab nobody has', '/settings/inbox/nonsense'],
+    ['names it outright', '/settings/inbox/departments'],
   ])('selects Departments when the url %s', async (_case, path) => {
     await renderTicketing(path);
 
-    expect(await screen.findByRole('tab', { name: 'Departments', selected: true })).toBeVisible();
+    expect(
+      within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', {
+        name: 'Departments',
+        current: 'page',
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Departments');
     expect(await screen.findByRole('table')).toBeInTheDocument();
   });
 
   it('names the deliverable a tab is waiting for', async () => {
-    await renderTicketing('/admin/ticketing/priorities');
+    await renderTicketing('/settings/inbox/priorities');
 
     expect(await screen.findByText('Priorities arrives with M1-02.')).toBeInTheDocument();
   });
 
   it('draws the Views tab rather than a placeholder, since M1-05 filled it', async () => {
-    await renderTicketing('/admin/ticketing/views');
+    await renderTicketing('/settings/inbox/views');
 
     expect(await screen.findByRole('button', { name: 'Add view' })).toBeInTheDocument();
   });
 
   it('draws the Statuses tab rather than a placeholder, since M1-08 filled it', async () => {
-    await renderTicketing('/admin/ticketing/statuses');
+    await renderTicketing('/settings/inbox/statuses');
 
     expect(await screen.findByRole('button', { name: 'Edit Open' })).toBeInTheDocument();
   });
 
   it.each([
-    ['/admin/ticketing/tags', 'Add tag'],
-    ['/admin/ticketing/custom-fields', 'Add ticket field'],
-    ['/admin/ticketing/templates', 'Add template'],
+    ['/settings/inbox/tags', 'Add tag'],
+    ['/settings/inbox/custom-fields', 'Add ticket field'],
+    ['/settings/inbox/templates', 'Add template'],
   ])('draws %s rather than a placeholder, since M1-06 filled it', async (route, control) => {
     await renderTicketing(route);
 
@@ -90,7 +101,7 @@ describe('the tab row', () => {
   });
 
   it('draws the Assignment tab rather than a placeholder, since M1-07 filled it', async () => {
-    await renderTicketing('/admin/ticketing/assignment');
+    await renderTicketing('/settings/inbox/assignment');
 
     expect(await screen.findByRole('button', { name: 'Edit Support' })).toBeInTheDocument();
   });

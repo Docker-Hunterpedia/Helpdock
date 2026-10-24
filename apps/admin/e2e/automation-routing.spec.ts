@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -32,8 +32,8 @@ const violations = async (page: Page): Promise<string[]> => {
 const openRouting = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.automation')) }).click();
-  await page.getByRole('tab', { name: t('rules:tabs.routing'), exact: true }).click();
+  await openSettingsArea(page, t, 'automation');
+  await settingsTab(page, t, 'rules:tabs.routing').click();
   await page.getByRole('heading', { name: t('rules:routing.heading') }).waitFor();
 };
 
@@ -49,13 +49,11 @@ test('explains the four steps, with the widget’s first department said plainly
   const t = strings(locale);
   await openRouting(page, locale);
 
-  await expect(
-    page.getByRole('tab', { name: t('rules:tabs.routing'), exact: true }),
-  ).toHaveAttribute('aria-selected', 'true');
+  await expect(settingsTab(page, t, 'rules:tabs.routing')).toHaveAttribute('aria-current', 'page');
   const steps = page.getByRole('list').filter({ hasText: 'billing@helpdock.com' }).first();
   await expect(steps).toContainText('billing@helpdock.com');
   await expect(
-    page.getByRole('link', { name: t('rules:routing.entry.widget'), exact: true }),
+    page.getByRole('link', { name: t('rules:routing.entry.widget'), exact: true }).last(),
   ).toBeVisible();
   await expect(
     page.getByText(

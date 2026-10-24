@@ -1,10 +1,9 @@
-import { Box, Button, Tab, Tabs } from '@mui/material';
+import { Button } from '@mui/material';
 import { Plus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { aiRoute } from '../../../app/route-paths.js';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AssistantTab } from './assistant/assistant-tab.tsx';
@@ -20,7 +19,6 @@ import { aiTabForSegment, aiTabsFor } from './tabs.js';
  */
 export function AiPage(): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
   const { tab: segment } = useParams();
@@ -58,23 +56,6 @@ export function AiPage(): ReactNode {
           ) : undefined
         }
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs value={tab.key} aria-label={t('aiSettings:tabList')}>
-          {tabs.map(({ key, segment: path, icon: Icon }) => (
-            <Tab
-              key={key}
-              value={key}
-              icon={<Icon size={14} aria-hidden="true" />}
-              iconPosition="start"
-              label={t(`aiSettings:tabs.${key}`)}
-              component={Link}
-              to={aiRoute(path)}
-              sx={{ minHeight: 40 }}
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       {tab.key === 'providers' ? <ProvidersTab /> : null}
       {tab.key === 'knowledge' ? (

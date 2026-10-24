@@ -44,7 +44,7 @@ const renderTab = async (api = new MockNotificationsApi({ pushConfigured: true }
     staffApi: staff,
     notificationsApi: api,
     browserPush: new MockBrowserPush(),
-    initialEntries: ['/me/notifications'],
+    initialEntries: ['/settings/account/notifications'],
   });
   await screen.findByRole('heading', { name: 'Email schedule' }, { timeout: FIRST_PAINT_MS });
 

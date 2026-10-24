@@ -17,7 +17,7 @@ const renderTemplates = async () => {
     authApi: auth,
     staffApi: staff,
     ticketingApi: ticketing,
-    initialEntries: ['/admin/ticketing/templates'],
+    initialEntries: ['/settings/inbox/templates'],
   });
 
   await screen.findByRole('button', { name: 'Edit Refund request' });

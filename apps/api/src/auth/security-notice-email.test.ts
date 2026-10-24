@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { escapeHtml } from './email-templates.js';
 import { renderSecurityNoticeEmail, SECURITY_CHANGES } from './security-notice-email.js';
 
-const SECURITY_PAGE = 'https://support.example.com/me/security';
+const SECURITY_PAGE = 'https://support.example.com/settings/account/security';
 const OCCURRED_AT = '2026-10-21T06:14:00.000Z';
 
 const notice = (

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { MOCK_AUTOMATION, MOCK_RULE_IDS, MockAutomationApi } from '../../../automation/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
@@ -36,10 +37,10 @@ const ruleNames = (): string[] =>
 
 describe('the Rules tab', () => {
   it('lists the event rules in the order they run, with what each does', async () => {
-    await renderAt('/admin/automation');
+    await renderAt('/settings/inbox/rules');
 
     await screen.findByRole('list', { name: 'Workflow rules, in the order they run' }, LOAD);
-    expect(screen.getByRole('tab', { name: 'Rules', selected: true })).toBeInTheDocument();
+    expect(settingsLink('Rules')).toHaveAttribute('aria-current', 'page');
     expect(ruleNames()).toEqual([
       'Refunds to Billing',
       'Telegram to Sales',
@@ -61,7 +62,7 @@ describe('the Rules tab', () => {
   });
 
   it('names the rules in a loop the depth guard stopped today', async () => {
-    await renderAt('/admin/automation/rules');
+    await renderAt('/settings/inbox/rules');
 
     const banner = (await screen.findByText(/keep setting each other off/, {}, LOAD)).closest(
       '[role="status"]',
@@ -71,7 +72,7 @@ describe('the Rules tab', () => {
   });
 
   it('turns a rule off from its switch', async () => {
-    const { user, automation } = await renderAt('/admin/automation/rules');
+    const { user, automation } = await renderAt('/settings/inbox/rules');
     const toggle = vi.spyOn(automation, 'setRuleEnabled');
 
     await user.click(await screen.findByRole('switch', { name: 'Enable Telegram to Sales' }, LOAD));
@@ -86,7 +87,7 @@ describe('the Rules tab', () => {
   });
 
   it('moves a rule with the keyboard and sends the whole order', async () => {
-    const { user, automation } = await renderAt('/admin/automation/rules');
+    const { user, automation } = await renderAt('/settings/inbox/rules');
     const reorder = vi.spyOn(automation, 'reorderRules');
 
     const handle = await screen.findByRole('button', { name: 'Reorder Telegram to Sales' }, LOAD);
@@ -104,7 +105,7 @@ describe('the Rules tab', () => {
   });
 
   it('deletes a rule after asking', async () => {
-    const { user } = await renderAt('/admin/automation/rules');
+    const { user } = await renderAt('/settings/inbox/rules');
 
     await user.click(
       await screen.findByRole('button', { name: 'Actions for Web form to Sales' }, LOAD),
@@ -120,7 +121,7 @@ describe('the Rules tab', () => {
 
 describe('the execution log', () => {
   it('opens a stopped run into the chain that led to it', async () => {
-    await renderAt('/admin/automation/rules');
+    await renderAt('/settings/inbox/rules');
 
     const log = await screen.findByRole('list', { name: 'Rule runs, newest first' }, LOAD);
     await within(log).findByText('Cycle found at depth 3 of 3', {}, LOAD);
@@ -134,7 +135,7 @@ describe('the execution log', () => {
   });
 
   it('filters by result', async () => {
-    const { user } = await renderAt('/admin/automation/rules');
+    const { user } = await renderAt('/settings/inbox/rules');
     const log = await screen.findByRole('list', { name: 'Rule runs, newest first' }, LOAD);
     await within(log).findAllByText('Applied');
 
@@ -149,7 +150,7 @@ describe('the execution log', () => {
 
 describe('the Time-based and Macros tabs', () => {
   it('lists the scheduled rules with their interval', async () => {
-    await renderAt('/admin/automation/time-based');
+    await renderAt('/settings/inbox/time-based');
 
     const list = await screen.findByRole(
       'list',
@@ -161,18 +162,17 @@ describe('the Time-based and Macros tabs', () => {
   });
 
   it('lists macros and canned responses under Macros, with no New rule', async () => {
-    await renderAt('/admin/automation/macros');
+    await renderAt('/settings/inbox/macros');
 
     expect(await screen.findByRole('button', { name: /Refund issued/ }, LOAD)).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Macros', selected: true })).toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(4);
+    expect(settingsLink('Macros')).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('button', { name: 'New rule' })).not.toBeInTheDocument();
   });
 });
 
 describe('the builder', () => {
   it('opens a saved rule with its conditions and actions', async () => {
-    await renderAt(`/admin/automation/rules/${MOCK_RULE_IDS[0] ?? ''}`);
+    await renderAt(`/settings/inbox/rules/${MOCK_RULE_IDS[0] ?? ''}`);
 
     expect(
       await screen.findByRole('form', { name: 'Edit rule Refunds to Billing' }, LOAD),
@@ -188,7 +188,7 @@ describe('the builder', () => {
   });
 
   it('refuses to save an incomplete rule, and saves it once it is whole', async () => {
-    const { user, automation } = await renderAt('/admin/automation/rules/new?kind=event');
+    const { user, automation } = await renderAt('/settings/inbox/rules/new?kind=event');
     const create = vi.spyOn(automation, 'createRule');
 
     await user.click(await screen.findByRole('button', { name: 'Save rule' }, LOAD));
@@ -220,7 +220,7 @@ describe('the builder', () => {
   });
 
   it('adds an AI triage action that suggests the fields ticked (M7-07)', async () => {
-    const { user, automation } = await renderAt('/admin/automation/rules/new?kind=event');
+    const { user, automation } = await renderAt('/settings/inbox/rules/new?kind=event');
     const create = vi.spyOn(automation, 'createRule');
 
     await user.type(await screen.findByLabelText('Rule name · required', {}, LOAD), 'Triage');
@@ -242,7 +242,7 @@ describe('the builder', () => {
   });
 
   it('turns an event rule into a scheduled one', async () => {
-    const { user } = await renderAt('/admin/automation/rules/new?kind=event');
+    const { user } = await renderAt('/settings/inbox/rules/new?kind=event');
 
     await user.click(await screen.findByRole('button', { name: 'On a schedule' }, LOAD));
 
@@ -253,7 +253,7 @@ describe('the builder', () => {
 
 describe('the test run', () => {
   it('says what the draft would do to a sample ticket, and what it could set off', async () => {
-    const { user } = await renderAt(`/admin/automation/rules/${MOCK_RULE_IDS[0] ?? ''}`);
+    const { user } = await renderAt(`/settings/inbox/rules/${MOCK_RULE_IDS[0] ?? ''}`);
 
     await user.type(await screen.findByLabelText('Sample ticket', {}, LOAD), 'HD-1042');
     await user.click(screen.getByRole('button', { name: 'Run test' }));
@@ -266,7 +266,7 @@ describe('the test run', () => {
   });
 
   it('says so when the ticket is not one the reader can see', async () => {
-    const { user } = await renderAt(`/admin/automation/rules/${MOCK_RULE_IDS[0] ?? ''}`);
+    const { user } = await renderAt(`/settings/inbox/rules/${MOCK_RULE_IDS[0] ?? ''}`);
 
     await user.type(await screen.findByLabelText('Sample ticket', {}, LOAD), 'HD-9999');
     await user.click(screen.getByRole('button', { name: 'Run test' }));
@@ -278,7 +278,7 @@ describe('the test run', () => {
   });
 
   it('says why a draft would not run', async () => {
-    const { user } = await renderAt(`/admin/automation/rules/${MOCK_RULE_IDS[0] ?? ''}`);
+    const { user } = await renderAt(`/settings/inbox/rules/${MOCK_RULE_IDS[0] ?? ''}`);
 
     await user.type(await screen.findByLabelText('Sample ticket', {}, LOAD), 'HD-1039');
     await user.click(screen.getByRole('button', { name: 'Run test' }));

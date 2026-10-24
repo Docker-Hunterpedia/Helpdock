@@ -23,7 +23,7 @@ const renderWebhooks = async (developers = new MockDevelopersApi(), ready = 'End
     staffApi: staff,
     ticketingApi: ticketing,
     developersApi: developers,
-    initialEntries: ['/admin/developers/webhooks'],
+    initialEntries: ['/settings/developers/webhooks'],
   });
   await screen.findByRole('heading', { name: ready });
   return rendered;

@@ -1,3 +1,4 @@
+import { openSettingsArea } from '../flows.js';
 import { strings } from '../strings.js';
 import { contextOptionsOf, expect, openAdmin, test } from './admin-session.js';
 import { INVITE_TOKEN_ENV, INVITEE_EMAIL, SKIP_ENV } from './install.js';
@@ -31,7 +32,7 @@ const NEW_PASSWORD = 'an invited person password';
 test.describe('staff and roles against the real api', () => {
   test('shows the seeded invitation as pending, and sends another', async ({ page }) => {
     await openAdmin(page);
-    await page.getByRole('link', { name: new RegExp(t('admin:nav.staff')) }).click();
+    await openSettingsArea(page, t, 'staff');
 
     const table = page.getByRole('table');
     await expect(table.getByText(INVITEE_EMAIL)).toBeVisible();

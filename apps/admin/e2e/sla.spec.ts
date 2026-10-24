@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicket, openTicketing, signIn } from './flows.js';
+import { openTicket, openTicketing, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -29,7 +29,7 @@ async function violations(page: Page): Promise<string[]> {
 const openTab = async (page: Page, locale: 'en' | 'ar', tab: 'businessHours' | 'slas') => {
   const t = strings(locale);
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t(`ticketing:tabs.${tab}`) }).click();
+  await settingsTab(page, t, `ticketing:tabs.${tab}`).click();
   if (tab === 'businessHours') {
     await page
       .getByRole('heading', { name: t('ticketing:businessHours.heading'), level: 2 })

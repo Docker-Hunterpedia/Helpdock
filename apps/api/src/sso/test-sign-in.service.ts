@@ -37,14 +37,14 @@ export class SsoTestSignInService {
     const key = randomBytes(32).toString('base64url');
     await this.#pending.put(key, { connectionId, actorId });
     const url = new URL(`/api/auth/sso/${connectionId}/start`, this.options.env.APP_URL);
-    url.searchParams.set('returnTo', `/admin/settings/sso/${connectionId}?test=${key}`);
+    url.searchParams.set('returnTo', `/settings/install/sso/${connectionId}?test=${key}`);
     return { startUrl: url.toString() };
   }
 
   async complete(flow: { assertion: SsoAssertion; returnTo: string }): Promise<string | null> {
     const destination = new URL(flow.returnTo, this.options.env.APP_URL);
     if (
-      destination.pathname !== `/admin/settings/sso/${flow.assertion.connectionId}` ||
+      destination.pathname !== `/settings/install/sso/${flow.assertion.connectionId}` ||
       !destination.searchParams.has('test')
     )
       return null;

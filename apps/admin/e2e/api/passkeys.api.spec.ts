@@ -3,7 +3,7 @@ import { expect, test } from './admin-session.js';
 import { ACCOUNT_PASSWORD_ENV, resetStepUpBudget, SKIP_ENV } from './install.js';
 
 /**
- * Passkeys on `/me/security` against the real api (M18-02): a Chromium virtual
+ * Passkeys on `/settings/account/security` against the real api (M18-02): a Chromium virtual
  * authenticator makes a real credential, the api verifies its attestation and
  * assertion, and the card shows what the database holds. The mock suite
  * (`passkeys.spec.ts`) covers the states; this covers the wiring: the options
@@ -36,7 +36,7 @@ test.describe('passkeys against the real api', () => {
     });
 
     try {
-      await page.goto('/me/security');
+      await page.goto('/settings/account/security');
       const card = page.getByRole('region', { name: t('me:passkeys.title') });
       await card.getByRole('button', { name: t('me:passkeys.add') }).waitFor();
 
@@ -94,7 +94,7 @@ test.describe('passkeys against the real api', () => {
       navigator.credentials.create = () =>
         Promise.reject(new DOMException('dismissed', 'NotAllowedError'));
     });
-    await page.goto('/me/security');
+    await page.goto('/settings/account/security');
     const card = page.getByRole('region', { name: t('me:passkeys.title') });
 
     await card.getByRole('button', { name: t('me:passkeys.add') }).click();

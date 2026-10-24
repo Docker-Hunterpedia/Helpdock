@@ -160,9 +160,9 @@ test.describe('signing in', () => {
   }) => {
     const t = strings(locale);
 
-    await page.goto('/admin/settings');
+    await page.goto('/settings/install/authentication');
 
-    await expect(page).toHaveURL(/returnTo=%2Fadmin%2Fsettings/);
+    await expect(page).toHaveURL(/returnTo=%2Fsettings%2Finstall%2Fauthentication/);
     await expect(
       page.getByRole('heading', { name: t('auth:signIn.title'), level: 1 }),
     ).toBeVisible();
@@ -170,6 +170,6 @@ test.describe('signing in', () => {
     await fillSignIn(page, locale);
     await submitTotp(page, locale);
 
-    await expect(page).toHaveURL(/\/admin\/settings$/);
+    await expect(page).toHaveURL(/\/settings\/install\/authentication$/);
   });
 });

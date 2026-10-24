@@ -29,7 +29,7 @@ import { ReplaceAuthenticatorDialog } from './account/replace-authenticator.tsx'
 import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
 /**
- * `/me/security`: a person's own account, the first tab of Your account.
+ * `/settings/account/security`: a person's own account, the first tab of Your account.
  *
  * It reuses the `Admin/Settings` artboard's layout — a page header, then one
  * bordered card per area with its own title, caption and fields — rather than

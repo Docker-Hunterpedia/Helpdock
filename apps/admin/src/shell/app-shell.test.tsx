@@ -70,9 +70,6 @@ describe('AppShell', () => {
     ).toEqual([
       // The api sends no primary counts in 1.0 (UX-24), so the fixture has none.
       'Tickets',
-      'Contacts',
-      'Help center',
-      'Reports',
       // The + beside "Views": an icon link, named by its aria-label.
       '',
       'All tickets',
@@ -86,28 +83,28 @@ describe('AppShell', () => {
       'Escalated1',
       'VIP refunds1',
       'Urgent, mine1',
-      'Brand',
+      'Contacts',
+      'Help center',
+      'Reports',
+      // The one entry for everything that was the Admin group (M14-21).
       'Settings',
-      'Ticketing',
-      'Automation',
-      'Channels',
-      'AI',
-      'Developers',
-      'Staff and roles',
-      'System',
     ]);
   });
 
   it('marks the open page for assistive technology, not only by shading it', async () => {
-    await renderShell('/admin/staff');
+    await renderShell('/settings/install/staff');
 
-    expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('Staff and roles');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', {
+        current: 'page',
+      }),
+    ).toHaveTextContent('Staff and roles');
   });
 
   it('opens the install-wide authentication settings instead of the M0 placeholder', async () => {
-    await renderShell('/admin/settings');
+    await renderShell('/settings/install/authentication');
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Authentication');
     expect(screen.getByText('Install-wide · applies to every brand')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeInTheDocument();
     expect(screen.getByLabelText('Sign-in link validity (minutes)')).toHaveValue(10);

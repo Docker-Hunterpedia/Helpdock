@@ -17,7 +17,7 @@ vi.mock('../../../../knowledge/leave.js', () => ({ leaveTo: vi.fn() }));
 
 const renderKnowledge = async (
   knowledgeApi = new MockKnowledgeApi(),
-  path = '/admin/ai/knowledge',
+  path = '/settings/ai/knowledge',
 ) => {
   const { auth, staff } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -188,7 +188,7 @@ describe('AI › Knowledge', () => {
   });
 
   it('says when a Notion or Drive connection did not complete', async () => {
-    await renderKnowledge(new MockKnowledgeApi(), '/admin/ai/knowledge?oauth=failed');
+    await renderKnowledge(new MockKnowledgeApi(), '/settings/ai/knowledge?oauth=failed');
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       'The connection was not completed. Try Connect again.',

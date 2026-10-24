@@ -44,7 +44,7 @@ describe('a valid link', () => {
     expect(screen.getByText(/the bell in Helpdock, push notifications/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open notification settings' })).toHaveAttribute(
       'href',
-      '/me/notifications',
+      '/settings/account/notifications',
     );
     expect((api as MockUnsubscribeApi).posts).toBe(1);
   });

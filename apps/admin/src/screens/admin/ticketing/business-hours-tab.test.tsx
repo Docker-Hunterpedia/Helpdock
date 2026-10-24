@@ -16,7 +16,7 @@ const renderHours = async () => {
     authApi: apis.auth,
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
-    initialEntries: ['/admin/ticketing/business-hours'],
+    initialEntries: ['/settings/inbox/business-hours'],
   });
 
   await screen.findByRole('heading', { name: 'Business hours', level: 2 });

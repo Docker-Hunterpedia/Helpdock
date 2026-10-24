@@ -2746,7 +2746,7 @@ export class AuthService {
     return {
       kind: 'securityChange',
       userId,
-      url: new URL('/me/security', this.#parts.appUrl).toString(),
+      url: new URL('/settings/account/security', this.#parts.appUrl).toString(),
       values: { ...values, change, occurredAt: new Date().toISOString() },
     };
   }

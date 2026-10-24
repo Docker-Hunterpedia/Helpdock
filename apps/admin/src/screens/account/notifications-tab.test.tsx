@@ -4,6 +4,7 @@ import { AppRoutes } from '../../app/routes.tsx';
 import { MockBrowserPush } from '../../notifications/browser-push.js';
 import { MockNotificationsApi } from '../../notifications/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
+import { settingsLink } from '../../test/settings-nav.js';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { PUSH_SUBSCRIPTION_STORAGE } from './notifications-tab.tsx';
 
@@ -22,7 +23,7 @@ const FIRST_PAINT_MS = 5_000;
 const renderTab = async ({
   api = new MockNotificationsApi({ pushConfigured: true }),
   push = new MockBrowserPush(),
-  path = '/me/notifications',
+  path = '/settings/account/notifications',
 } = {}) => {
   const { auth, staff } = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
@@ -46,32 +47,35 @@ afterEach(() => {
 });
 
 describe('Your account', () => {
-  it('opens Profile from /me, first of four tabs', async () => {
+  it('opens Profile from /settings/account, first of the four Your account pages', async () => {
     const { auth, staff } = await signedInMockApis();
-    renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me'] });
+    renderApp(<AppRoutes />, {
+      authApi: auth,
+      staffApi: staff,
+      initialEntries: ['/settings/account'],
+    });
 
-    await screen.findByRole(
-      'heading',
-      { name: 'Your account', level: 1 },
-      { timeout: FIRST_PAINT_MS },
-    );
-    const tabs = within(screen.getByRole('tablist', { name: 'Your account' })).getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
+    await screen.findByRole('heading', { name: 'Profile', level: 1 }, { timeout: FIRST_PAINT_MS });
+    const pages = within(screen.getByRole('list', { name: 'Your account' })).getAllByRole('link');
+    expect(pages.map((link) => link.textContent)).toEqual([
       'Profile',
-      'Security',
       'Notifications',
+      'Security',
       'Email signature',
     ]);
-    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Profile')).toHaveAttribute('aria-current', 'page');
   });
 
   it('sends an unknown tab to Profile', async () => {
     const { auth, staff } = await signedInMockApis();
-    renderApp(<AppRoutes />, { authApi: auth, staffApi: staff, initialEntries: ['/me/nothing'] });
+    renderApp(<AppRoutes />, {
+      authApi: auth,
+      staffApi: staff,
+      initialEntries: ['/settings/account/nothing'],
+    });
 
-    expect(
-      await screen.findByRole('tab', { name: 'Profile' }, { timeout: FIRST_PAINT_MS }),
-    ).toHaveAttribute('aria-selected', 'true');
+    await screen.findByRole('heading', { name: 'Profile', level: 1 }, { timeout: FIRST_PAINT_MS });
+    expect(settingsLink('Profile')).toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -130,7 +134,7 @@ describe('the preference matrix', () => {
       authApi: auth,
       staffApi: staff,
       notificationsApi: api,
-      initialEntries: ['/me/notifications'],
+      initialEntries: ['/settings/account/notifications'],
     });
 
     expect(

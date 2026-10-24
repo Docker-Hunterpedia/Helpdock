@@ -1,6 +1,6 @@
 import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
-import { openSettings, signIn } from './flows.js';
+import { openSettings, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test.describe('install settings', () => {
@@ -12,7 +12,7 @@ test.describe('install settings', () => {
     await signIn(page, locale);
     await openSettings(page, locale);
 
-    await expect(page.getByRole('tab', { name: t('settings:tabs.authentication') })).toBeVisible();
+    await expect(settingsTab(page, t, 'settings:tabs.authentication')).toBeVisible();
     await expect(page.getByText(t('settings:aside.redirectUrls.title'))).toBeVisible();
     await expect(
       page.getByText('http://localhost:5273/api/auth/oauth/google/callback'),

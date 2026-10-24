@@ -4,6 +4,7 @@ import { AppRoutes } from '../../../app/routes.tsx';
 import { MockAutomationApi } from '../../../automation/mock-api.js';
 import { MOCK_ROUTING } from '../../../automation/mock-routing.js';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
@@ -20,7 +21,7 @@ const renderRouting = async (automation = new MockAutomationApi()) => {
     staffApi: staff,
     ticketingApi: ticketing,
     automationApi: automation,
-    initialEntries: ['/admin/automation/routing'],
+    initialEntries: ['/settings/inbox/routing'],
   });
   return { ...rendered, automation };
 };
@@ -39,7 +40,7 @@ describe('the explainer', () => {
     await renderRouting();
 
     await screen.findByRole('heading', { name: 'How tickets are routed' }, LOAD);
-    expect(screen.getByRole('tab', { name: 'Routing', selected: true })).toBeInTheDocument();
+    expect(settingsLink('Routing')).toHaveAttribute('aria-current', 'page');
 
     const arrival = within(stepOf('Arrival'));
     expect(arrival.getByText('billing@helpdock.com')).toBeInTheDocument();
@@ -68,11 +69,11 @@ describe('the explainer', () => {
 
     expect(screen.getByRole('link', { name: 'Edit Assignment' })).toHaveAttribute(
       'href',
-      '/admin/ticketing/assignment',
+      '/settings/inbox/assignment',
     );
     expect(screen.getByRole('link', { name: /^Edit Rules on/ })).toHaveAttribute(
       'href',
-      '/admin/automation/rules',
+      '/settings/inbox/rules',
     );
   });
 

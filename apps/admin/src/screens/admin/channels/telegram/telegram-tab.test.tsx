@@ -11,6 +11,7 @@ import {
   MockTelegramApi,
 } from '../../../../telegram/mock-api.js';
 import { renderApp } from '../../../../test/render.tsx';
+import { settingsLink } from '../../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../../test/signed-in.js';
 
 /**
@@ -33,7 +34,7 @@ const fill = async (
 };
 
 const renderTelegram = async (
-  path = '/admin/channels/telegram',
+  path = '/settings/channels/telegram',
   telegramApi: TelegramApi = new MockTelegramApi(),
 ) => {
   const apis = await signedInMockApis();
@@ -59,7 +60,7 @@ describe('Channels › Telegram', () => {
     await renderTelegram();
     const bots = await table();
 
-    expect(screen.getByRole('tab', { name: 'Telegram' })).toHaveAttribute('aria-selected', 'true');
+    expect(settingsLink('Telegram')).toHaveAttribute('aria-current', 'page');
     const [, billing, support] = within(bots).getAllByRole('row');
     expect(within(support as HTMLElement).getByText('@helpdock_support_bot')).toBeVisible();
     expect(within(support as HTMLElement).getByText('Healthy')).toBeVisible();
@@ -180,7 +181,7 @@ describe('Channels › Telegram', () => {
 describe('a Telegram bot’s page', () => {
   it('shows the token as its last four characters, tests the connection and sets the webhook', async () => {
     const { user, telegramApi } = await renderTelegram(
-      `/admin/channels/telegram/${MOCK_SUPPORT_BOT}`,
+      `/settings/channels/telegram/${MOCK_SUPPORT_BOT}`,
     );
     const setWebhook = vi.spyOn(telegramApi, 'setWebhook');
 
@@ -205,7 +206,7 @@ describe('a Telegram bot’s page', () => {
 
   it('saves the department, the welcome and a replaced token together', async () => {
     const { user, telegramApi } = await renderTelegram(
-      `/admin/channels/telegram/${MOCK_SUPPORT_BOT}`,
+      `/settings/channels/telegram/${MOCK_SUPPORT_BOT}`,
     );
     const update = vi.spyOn(telegramApi, 'updateBot');
     await screen.findByLabelText('Saved token ending in 4f2a', {}, LOAD);
@@ -250,7 +251,7 @@ describe('a Telegram bot’s page', () => {
     const OWN_PROMPT = 'Acme: pick a language · اختر لغتك';
 
     const openSupportBot = async () => {
-      const rendered = await renderTelegram(`/admin/channels/telegram/${MOCK_SUPPORT_BOT}`);
+      const rendered = await renderTelegram(`/settings/channels/telegram/${MOCK_SUPPORT_BOT}`);
       await screen.findByLabelText('Saved token ending in 4f2a', {}, LOAD);
       return {
         ...rendered,
@@ -340,7 +341,7 @@ describe('a Telegram bot’s page', () => {
   });
 
   it('says a token of another bot is refused, in the footer', async () => {
-    const { user } = await renderTelegram(`/admin/channels/telegram/${MOCK_BILLING_BOT}`);
+    const { user } = await renderTelegram(`/settings/channels/telegram/${MOCK_BILLING_BOT}`);
     await screen.findByLabelText('Saved token ending in 91c0', {}, LOAD);
 
     await user.click(screen.getByRole('button', { name: 'Replace' }));
@@ -351,7 +352,7 @@ describe('a Telegram bot’s page', () => {
   });
 
   it('deletes the bot from its page and goes back to the list', async () => {
-    const { user } = await renderTelegram(`/admin/channels/telegram/${MOCK_BILLING_BOT}`);
+    const { user } = await renderTelegram(`/settings/channels/telegram/${MOCK_BILLING_BOT}`);
     await screen.findByLabelText('Saved token ending in 91c0', {}, LOAD);
 
     await user.click(screen.getByRole('button', { name: 'Delete bot…' }));
@@ -366,7 +367,7 @@ describe('a Telegram bot’s page', () => {
   });
 
   it('says so when the bot is gone', async () => {
-    await renderTelegram('/admin/channels/telegram/0192c3f0-1a2b-7c3d-8e4f-0000000007ff');
+    await renderTelegram('/settings/channels/telegram/0192c3f0-1a2b-7c3d-8e4f-0000000007ff');
 
     expect(await screen.findByRole('heading', { name: 'This bot is gone' }, LOAD)).toBeVisible();
   });

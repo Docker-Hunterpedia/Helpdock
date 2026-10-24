@@ -93,6 +93,6 @@ export function useGlobalShortcuts(): void {
     'goTo.contacts': go(ROUTES.contacts),
     'goTo.helpCenter': go(ROUTES.helpCenter),
     'goTo.reports': go(ROUTES.reports),
-    'goTo.settings': go(navFor(ADMIN_NAV, session.user)[0]?.path ?? ROUTES.me),
+    'goTo.settings': go(navFor(ADMIN_NAV, session.user)[0]?.path ?? ROUTES.meProfile),
   });
 }

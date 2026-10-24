@@ -24,7 +24,7 @@ describe('PasskeysDrift', () => {
     expect(screen.getByText('desk.helpdock.com')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open Settings › Authentication' })).toHaveAttribute(
       'href',
-      '/admin/settings',
+      '/settings/install/authentication',
     );
   });
 

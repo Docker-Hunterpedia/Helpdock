@@ -1,9 +1,7 @@
-import { Box, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
-import { Link, Navigate, useParams } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { ticketingRoute } from '../../../app/route-paths.js';
-import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession } from '../../../auth/session.tsx';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AssignmentTab } from './assignment-tab.tsx';
@@ -15,27 +13,23 @@ import { NotBuiltYetTab } from './not-built-yet-tab.tsx';
 import { SlasTab } from './slas-tab.tsx';
 import { SpamTab } from './spam-tab.tsx';
 import { StatusesTab } from './statuses-tab.tsx';
-import { DEFAULT_TICKETING_TAB, TICKETING_TABS, type TicketingTab, tabForSegment } from './tabs.js';
+import { DEFAULT_TICKETING_TAB, type TicketingTab, tabForSegment } from './tabs.js';
 import { TagsTab } from './tags-tab.tsx';
 import { TemplatesTab } from './templates-tab.tsx';
 import { ViewsTab } from './views-tab.tsx';
 
 /**
- * `Admin/Ticketing`: the page header, the tab row, and whichever tab the url
- * names. Eleven of the twelve are built — Departments (M1-01), Statuses (M1-08),
- * Tags, Custom fields and Templates (M1-06), Views (M1-05), Assignment (M1-07),
- * Spam (M1-11), Feedback (M1-12), Business hours (M3-01) and SLAs (M3-02); the
- * rest are the routed
- * placeholders their deliverables replace, which is why the row is whole from
- * the start.
- *
- * The tabs are links rather than state, so a tab is a url somebody can send to
- * a colleague, the browser's back button works, and a reload lands where it
- * left off.
+ * `Admin/Ticketing`: the page header and whichever setting the url names. Since
+ * M14-21 each of the twelve is a link of the Settings area's Inbox group
+ * (`/settings/inbox/<segment>`), so a setting is a url somebody can send to a
+ * colleague, the browser's back button works, and a reload lands where it left
+ * off. Eleven are built — Departments (M1-01), Statuses (M1-08), Tags, Custom
+ * fields and Templates (M1-06), Views (M1-05), Assignment (M1-07), Spam
+ * (M1-11), Feedback (M1-12), Business hours (M3-01) and SLAs (M3-02); the rest
+ * are the routed placeholders their deliverables replace.
  */
 export function TicketingPage(): ReactNode {
   const t = useT();
-  const tokens = useSemanticTokens();
   const session = useSession();
   const brand = currentBrand(session);
   const { tab: segment } = useParams();
@@ -51,25 +45,6 @@ export function TicketingPage(): ReactNode {
         title={t('ticketing:title')}
         caption={t('ticketing:subtitle', { brand: brand.name })}
       />
-
-      <Box sx={{ borderBlockEnd: `1px solid ${tokens['border.default']}`, marginBlockEnd: 6 }}>
-        <Tabs
-          value={tab.key}
-          variant="scrollable"
-          scrollButtons="auto"
-          aria-label={t('ticketing:tabList')}
-        >
-          {TICKETING_TABS.map((candidate) => (
-            <Tab
-              key={candidate.key}
-              value={candidate.key}
-              label={t(`ticketing:tabs.${candidate.key}`)}
-              component={Link}
-              to={ticketingRoute(candidate.segment)}
-            />
-          ))}
-        </Tabs>
-      </Box>
 
       <TabBody tab={tab} />
     </>

@@ -120,7 +120,7 @@ describe('AuditLogPage', () => {
 
     expect(await screen.findByRole('link', { name: 'Back to System' })).toHaveAttribute(
       'href',
-      '/admin/system',
+      '/settings/install/system',
     );
   });
 });

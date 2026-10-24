@@ -3,7 +3,7 @@ import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { MOCK_USER } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openTicketing, signIn } from './flows.js';
+import { openTicketing, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -26,7 +26,7 @@ const openAssignment = async (page: Page, locale: Locale, department = support(l
   const t = strings(locale);
   await signIn(page, locale);
   await openTicketing(page, locale);
-  await page.getByRole('tab', { name: t('ticketing:tabs.assignment') }).click();
+  await settingsTab(page, t, 'ticketing:tabs.assignment').click();
   if (department !== support(locale)) {
     await page
       .getByRole('button', { name: t('ticketing:assignment.table.edit', { name: department }) })

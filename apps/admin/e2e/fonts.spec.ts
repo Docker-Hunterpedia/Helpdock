@@ -1,6 +1,6 @@
 import { MOCK_USER } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
-import { openTicket, signIn } from './flows.js';
+import { openSettingsArea, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 // Exercise both caches and the reduced-motion theme composition, which must
@@ -70,7 +70,7 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
       // Unlike the ticket's Typography variant, this table cell uses the
       // family-only helper and therefore catches missing --hd-font-* variables.
       const otherT = strings(other);
-      await page.getByRole('link', { name: otherT('admin:nav.developers'), exact: true }).click();
+      await openSettingsArea(page, otherT, 'developers');
       const prefix = page
         .getByRole('table', { name: otherT('developers:keys.tableLabel') })
         .getByText(/^hd_live_/)

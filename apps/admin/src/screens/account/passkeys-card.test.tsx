@@ -13,7 +13,7 @@ import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 
 /**
- * The passkeys card on `/me/security` (M18-02, `Admin/Profile-Security-Passkeys`).
+ * The passkeys card on `/settings/account/security` (M18-02, `Admin/Profile-Security-Passkeys`).
  * The browser's ceremony is replaced: jsdom has no authenticator, and what is
  * under test here is what the card does with each answer.
  */
@@ -56,7 +56,7 @@ const renderWith = async (
   const rendered = renderApp(<AppRoutes />, {
     authApi: apis.auth,
     staffApi: apis.staff,
-    initialEntries: ['/me/security'],
+    initialEntries: ['/settings/account/security'],
   });
   await screen.findByRole('heading', { name: 'Active sessions', level: 2 });
 

@@ -28,7 +28,7 @@ export function ImportWizardProgress({ run, busy }: { run: ImportRunView; busy: 
   const completed = run.status === 'completed';
   const reviewing = ['awaiting_mapping', 'dry_run', 'ready'].includes(run.status);
   const targets: Partial<Record<(typeof STEPS)[number], string>> = {
-    source: ROUTES.brandImport,
+    source: ROUTES.imports,
     ...(current === 1 && ['draft', 'connecting'].includes(run.status)
       ? { connect: '#import-connect-heading' }
       : {}),

@@ -11,7 +11,7 @@ import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 
 /**
- * Replacing the authenticator on `/me/security` (#373), against the fixture:
+ * Replacing the authenticator on `/settings/account/security` (#373), against the fixture:
  * the proof step, the staged secret, and the confirmation that swaps the app.
  * The browser tests walk the same flow in both languages.
  */
@@ -21,9 +21,9 @@ const renderWith = async () => {
   const rendered = renderApp(<AppRoutes />, {
     authApi: apis.auth,
     staffApi: apis.staff,
-    initialEntries: ['/me/security'],
+    initialEntries: ['/settings/account/security'],
   });
-  await screen.findByRole('heading', { name: 'Your account', level: 1 });
+  await screen.findByRole('heading', { name: 'Security', level: 1 });
 
   return { ...rendered, staff: apis.staff };
 };
@@ -169,7 +169,7 @@ describe('replacing the authenticator app (#373)', () => {
     renderApp(<AppRoutes />, {
       authApi: apis.auth,
       staffApi: apis.staff,
-      initialEntries: ['/me/security'],
+      initialEntries: ['/settings/account/security'],
     });
     await user.click(await screen.findByRole('button', { name: 'Replace app' }));
     const dialog = await screen.findByRole('dialog');

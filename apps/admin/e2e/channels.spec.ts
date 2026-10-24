@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openTicket, signIn } from './flows.js';
+import { openSettingsArea, openTicket, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -29,7 +29,7 @@ async function violations(page: Page): Promise<string[]> {
 /** Through the sidebar, because the fixture's session lives in memory and a reload signs out. */
 async function openChannels(page: Page, locale: 'en' | 'ar'): Promise<void> {
   const t = strings(locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
+  await openSettingsArea(page, t, 'channels');
   await page.getByRole('heading', { name: t('channels:mailboxes.heading'), level: 2 }).waitFor();
 }
 

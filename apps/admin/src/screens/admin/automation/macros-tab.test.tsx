@@ -16,7 +16,7 @@ const renderMacros = async () => {
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
     ticketsApi: apis.tickets,
-    initialEntries: ['/admin/automation/macros'],
+    initialEntries: ['/settings/inbox/macros'],
   });
 
   await screen.findByRole('button', { name: /Refund issued/ });

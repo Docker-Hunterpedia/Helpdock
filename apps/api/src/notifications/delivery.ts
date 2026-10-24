@@ -78,7 +78,7 @@ export const testPushPayload = (locale: Locale, testId: string): PushPayload => 
   return {
     title: t('push.testTitle'),
     body: t('push.testBody'),
-    url: '/me/notifications',
+    url: '/settings/account/notifications',
     tag: testId,
   };
 };

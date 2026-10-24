@@ -103,7 +103,7 @@ export class NotificationsController {
 }
 
 /**
- * The Notifications tab of Your account (`/me/notifications`). Not brand-scoped:
+ * The Notifications tab of Your account (`/settings/account/notifications`). Not brand-scoped:
  * one person is told the same way in every brand, and a browser subscribes
  * once. Like the rest of `/api/me`, every route acts on the caller alone.
  */

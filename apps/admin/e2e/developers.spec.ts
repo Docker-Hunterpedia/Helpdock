@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -22,14 +22,14 @@ const ACME = 'https://ops.acme-shop.com/hooks/helpdock';
 const openDevelopers = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.developers'), exact: true }).click();
-  await page.getByRole('heading', { level: 1, name: t('developers:title') }).waitFor();
+  await openSettingsArea(page, t, 'developers');
+  await page.getByRole('heading', { level: 1, name: t('developers:tabs.apiKeys') }).waitFor();
 };
 
 const openWebhooks = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await openDevelopers(page, locale);
-  await page.getByRole('tab', { name: t('developers:tabs.webhooks') }).click();
+  await settingsTab(page, t, 'developers:tabs.webhooks').click();
   await page.getByRole('heading', { name: t('developers:webhooks.heading') }).waitFor();
 };
 

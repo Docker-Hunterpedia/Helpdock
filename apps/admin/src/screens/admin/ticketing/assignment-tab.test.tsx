@@ -20,7 +20,7 @@ const renderAssignment = async () => {
     authApi: apis.auth,
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
-    initialEntries: ['/admin/ticketing/assignment'],
+    initialEntries: ['/settings/inbox/assignment'],
   });
 
   await screen.findByRole('button', { name: 'Edit Support' });

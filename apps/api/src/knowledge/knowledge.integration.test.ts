@@ -840,7 +840,7 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
       });
       expect(callback.statusCode).toBe(302);
       expect(callback.headers.location).toBe(
-        `https://support.example.com/admin/ai/knowledge?source=${created.id}&oauth=connected`,
+        `https://support.example.com/settings/ai/knowledge?source=${created.id}&oauth=connected`,
       );
       const view = await ok<KnowledgeSourceView>('GET', base(`/knowledge/sources/${created.id}`));
       expect(view).toMatchObject({ config: { connected: true }, status: { state: 'queued' } });

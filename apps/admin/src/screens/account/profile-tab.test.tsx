@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
 import { StaffError } from '../../staff/api.js';
 import { renderApp } from '../../test/render.tsx';
+import { settingsLink } from '../../test/settings-nav.js';
 import { signedInMockApis } from '../../test/signed-in.js';
 
 /** Your account › Profile (artboard `Admin/Account-Profile`, M14-12). */
@@ -14,7 +15,7 @@ const renderProfile = async () => {
   const rendered = renderApp(<AppRoutes />, {
     authApi: apis.auth,
     staffApi: apis.staff,
-    initialEntries: ['/me/profile'],
+    initialEntries: ['/settings/account/profile'],
   });
   await screen.findByRole('heading', { name: 'Profile for customers' });
   // The fields fill from the stored profile a frame after the heading.
@@ -28,8 +29,8 @@ describe('the Profile tab', () => {
   it('is the first tab of Your account and shows what is stored', async () => {
     await renderProfile();
 
-    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Profile' })).toHaveAttribute('href', '/me/profile');
+    expect(settingsLink('Profile')).toHaveAttribute('aria-current', 'page');
+    expect(settingsLink('Profile')).toHaveAttribute('href', '/settings/account/profile');
     expect(screen.getByLabelText('Name')).toHaveValue('Lina Haddad');
     expect(screen.getByLabelText('Public name')).toHaveValue('');
     expect(screen.getByLabelText('Public name')).toHaveAttribute('placeholder', 'Lina');

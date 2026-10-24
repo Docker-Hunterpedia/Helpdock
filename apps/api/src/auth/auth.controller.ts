@@ -508,7 +508,7 @@ export class AuthController {
     }
 
     if (outcome.kind === 'connected') {
-      await this.#redirect(reply, '/me/security', { connected: known.data });
+      await this.#redirect(reply, '/settings/account/security', { connected: known.data });
       return;
     }
     if (outcome.kind === 'invite-mismatch') {

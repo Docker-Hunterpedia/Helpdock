@@ -2,7 +2,10 @@
 
 How a brand's tickets are shaped and routed: departments, the teams inside
 them, and the brand-level behaviour that later deliverables read. The screen is
-**Admin → Ticketing**, and this guide follows its tab row.
+**Settings → Inbox** (M14-21: the sidebar's single Settings entry opens a grouped
+navigation, and the ticketing settings are the first pages of its Inbox group,
+at `/settings/inbox/<page>`; the old `/admin/ticketing/…` addresses redirect).
+This guide follows them in their order.
 
 Nine tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
 **Custom fields** and **Templates** (M1-06), **Views** (M1-05), **Assignment**
@@ -731,8 +734,8 @@ name, default locale and time zone. **The prefix is not editable**: it is
 printed in every ticket number the brand has ever issued, so REQUIREMENTS §3
 fixes it at creation.
 
-> The screen for the brand's own fields belongs on **Admin → Settings**, as a
-> "Brand" tab, rather than in the Ticketing tab row. That page is still the
+> The screen for the brand's own fields belongs on **Settings → Brand**, rather than
+> among the Inbox pages. That page is still the
 > milestone placeholder and has no artboard yet, so M1-01 ships the endpoint and
 > leaves the tab to the deliverable that designs that screen.
 

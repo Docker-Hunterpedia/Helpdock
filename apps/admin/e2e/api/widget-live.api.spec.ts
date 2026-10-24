@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { BrowserContext, Page } from '@playwright/test';
+import { openSettingsArea, settingsTab } from '../flows.js';
 import { strings } from '../strings.js';
 import { E2E_API_ORIGIN, SKIP_ENV } from './install.js';
 import { expect, openAdmin, test } from './widget-helpers.js';
@@ -58,8 +59,8 @@ test.afterAll(async () => {
 
 /** The Channels › Widget tag for this install, with the site's origin allowed. */
 const embedFor = async (page: Page, origin: string): Promise<string> => {
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
-  await page.getByRole('tab', { name: t('channels:tabs.widget') }).click();
+  await openSettingsArea(page, t, 'channels');
+  await settingsTab(page, t, 'channels:tabs.widget').click();
   const snippet =
     (await page
       .getByRole('region', { name: t('channels:widget.embed.heading') })
@@ -209,8 +210,8 @@ test.describe('the widget against the real api', () => {
     ).toBeVisible();
 
     // The widget in help center mode.
-    await admin.getByRole('link', { name: new RegExp(t('admin:nav.channels')) }).click();
-    await admin.getByRole('tab', { name: t('channels:tabs.widget') }).click();
+    await openSettingsArea(admin, t, 'channels');
+    await settingsTab(admin, t, 'channels:tabs.widget').click();
     const appearance = admin.getByRole('region', { name: t('channels:widget.appearance.heading') });
     await appearance
       .getByRole('radio', {

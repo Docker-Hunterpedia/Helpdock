@@ -163,7 +163,7 @@ function ConnectionForm({
     mutationFn: () => api.remove(id),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ssoKeys.connections });
-      void navigate(`${ROUTES.settings}?tab=sso`);
+      void navigate(ROUTES.sso);
     },
   });
   const test = useMutation({ mutationFn: () => api.test(id) });
@@ -220,7 +220,7 @@ function ConnectionForm({
   );
   return (
     <>
-      <Link component={RouterLink} to={`${ROUTES.settings}?tab=sso`}>
+      <Link component={RouterLink} to={ROUTES.sso}>
         {t('sso:title')}
       </Link>
       <PageHeader title={connection?.name ?? t('sso:add')} caption={t('sso:providerHint')} />
@@ -396,7 +396,7 @@ function ConnectionForm({
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
             <Button
               onClick={() => {
-                void navigate(`${ROUTES.settings}?tab=sso`);
+                void navigate(ROUTES.sso);
               }}
             >
               {t('common:actions.discard')}

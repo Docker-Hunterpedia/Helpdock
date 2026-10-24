@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { fakeSamlSigningKey } from './api/fake-saml.js';
 import { expect, test } from './fixtures.js';
-import { openSettings, signIn } from './flows.js';
+import { openSettings, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 test('SSO settings validate, save a provider and mappings, and refuse invalid enforcement', async ({
@@ -11,7 +11,7 @@ test('SSO settings validate, save a provider and mappings, and refuse invalid en
   const t = strings(locale);
   await signIn(page, locale);
   await openSettings(page, locale);
-  await page.getByRole('tab', { name: t('sso:title') }).click();
+  await settingsTab(page, t, 'sso:title').click();
   await expect(page.getByText(t('sso:empty'))).toBeVisible();
   await page.getByRole('checkbox', { name: t('sso:require') }).check();
   await page.getByRole('button', { name: t('common:actions.save'), exact: true }).click();
@@ -43,7 +43,10 @@ test('SSO settings validate, save a provider and mappings, and refuse invalid en
   await expect(page.getByRole('button', { name: t('sso:test'), exact: true })).toBeEnabled();
   await page.getByLabel(t('sso:label')).fill('Changed unsaved');
   await expect(page.getByRole('button', { name: t('sso:test'), exact: true })).toBeDisabled();
-  await page.getByRole('link', { name: t('sso:title'), exact: true }).click();
+  await page
+    .getByRole('link', { name: t('sso:title'), exact: true })
+    .last()
+    .click();
   await expect(page.getByRole('link', { name: 'Work OIDC', exact: true })).toBeVisible();
 });
 
@@ -54,7 +57,7 @@ test('SSO refuses an email domain that another enabled connection lists', async 
   const t = strings(locale);
   await signIn(page, locale);
   await openSettings(page, locale);
-  await page.getByRole('tab', { name: t('sso:title') }).click();
+  await settingsTab(page, t, 'sso:title').click();
   for (const name of ['Work OIDC', 'Staging OIDC']) {
     await page.getByRole('link', { name: t('sso:add'), exact: true }).click();
     await page.getByLabel(t('sso:label')).fill(name);
@@ -66,7 +69,10 @@ test('SSO refuses an email domain that another enabled connection lists', async 
     await page.getByRole('button', { name: t('sso:saveConnection') }).click();
     if (name === 'Work OIDC') {
       await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
-      await page.getByRole('link', { name: t('sso:title'), exact: true }).click();
+      await page
+        .getByRole('link', { name: t('sso:title'), exact: true })
+        .last()
+        .click();
     }
   }
   const domains = page.getByLabel(t('sso:domains'), { exact: true });
@@ -92,7 +98,7 @@ test('SAML configuration and enforced discovery use bilingual controls', async (
   const certificate = (await fakeSamlSigningKey()).certificate;
   await signIn(page, locale);
   await openSettings(page, locale);
-  await page.getByRole('tab', { name: t('sso:title') }).click();
+  await settingsTab(page, t, 'sso:title').click();
   await page.getByRole('link', { name: t('sso:add'), exact: true }).click();
   await page.getByRole('button', { name: 'SAML 2.0', exact: true }).click();
   await page.getByLabel(t('sso:label')).fill('Work SAML');
@@ -111,7 +117,10 @@ test('SAML configuration and enforced discovery use bilingual controls', async (
     (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze())
       .violations,
   ).toEqual([]);
-  await page.getByRole('link', { name: t('sso:title'), exact: true }).click();
+  await page
+    .getByRole('link', { name: t('sso:title'), exact: true })
+    .last()
+    .click();
   await page.getByRole('checkbox', { name: t('sso:require') }).check();
   // Break-glass copy names an authenticator app or a passkey (ADR 0053).
   await expect(page.getByText(t('sso:enforcementHint'))).toBeVisible();
@@ -151,7 +160,7 @@ test('SSO presets fill the OpenID Connect fields and keep later edits (M18-09)',
   const t = strings(locale);
   await signIn(page, locale);
   await openSettings(page, locale);
-  await page.getByRole('tab', { name: t('sso:title') }).click();
+  await settingsTab(page, t, 'sso:title').click();
   await page.getByRole('link', { name: t('sso:add'), exact: true }).click();
   const startFrom = page.getByRole('combobox', { name: t('sso:presets.label') });
   const issuer = page.getByLabel(t('sso:issuer'));

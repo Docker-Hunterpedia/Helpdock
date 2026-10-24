@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
 import { renderApp } from '../../../test/render.tsx';
+import { settingsLink } from '../../../test/settings-nav.js';
 import { signedInMockApis } from '../../../test/signed-in.js';
 
 /**
@@ -17,7 +18,7 @@ const renderDomains = async () => {
     staffApi: staff,
     ticketingApi: ticketing,
     domainsApi: domains,
-    initialEntries: ['/admin/brand/domains'],
+    initialEntries: ['/settings/brand/domains'],
   });
   await screen.findByRole('heading', { name: 'Help center domains' });
   await screen.findByText('help.helpdock.com');
@@ -38,9 +39,11 @@ describe('Brand › Domains', () => {
   it('sits between General and Danger zone, and is selected', async () => {
     await renderDomains();
 
-    const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
-    expect(tabs).toEqual(['General', 'Domains', 'Import', 'Danger zone']);
-    expect(screen.getByRole('tab', { name: 'Domains' })).toHaveAttribute('aria-selected', 'true');
+    const brand = within(screen.getByRole('list', { name: 'Brand' }))
+      .getAllByRole('link')
+      .map((link) => link.textContent);
+    expect(brand).toEqual(['General', 'Domains', 'Danger zone']);
+    expect(settingsLink('Domains')).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows a verified primary domain, a pending one and a failed one, each in words', async () => {
@@ -172,7 +175,7 @@ describe('Brand › Domains', () => {
 
     expect(screen.getByRole('link', { name: 'Channels › Widget' })).toHaveAttribute(
       'href',
-      '/admin/channels/widget',
+      '/settings/channels/widget',
     );
   });
 
@@ -184,7 +187,7 @@ describe('Brand › Domains', () => {
       staffApi: staff,
       ticketingApi: ticketing,
       domainsApi: domains,
-      initialEntries: ['/admin/brand/domains'],
+      initialEntries: ['/settings/brand/domains'],
     });
 
     expect(await screen.findByText('The domains could not be loaded.')).toBeVisible();

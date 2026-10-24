@@ -261,7 +261,8 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
   const securityNotices = async (address: string) =>
     (await email.all()).filter(
       (message) =>
-        message.to.address === address && message.text.includes(`${APP_URL}/me/security`),
+        message.to.address === address &&
+        message.text.includes(`${APP_URL}/settings/account/security`),
     );
 
   beforeAll(async () => {
@@ -638,7 +639,7 @@ describe.skipIf(!hasDocker)('OAuth identities bound by subject', () => {
 
       expect(wrong.statusCode).toBe(401);
       expect(wrong.json()).toMatchObject({ error: { auth: { code: 'invalid-credentials' } } });
-      expect(connected.pathname).toBe('/me/security');
+      expect(connected.pathname).toBe('/settings/account/security');
       expect(connected.searchParams.get('connected')).toBe('github');
       expect(signedIn.searchParams.get('code')).not.toBeNull();
       expect((await get('/api/auth/oauth/identities', token)).json()).toEqual({

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { openSecurity, signIn } from './flows.js';
+import { openSecurity, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -36,7 +36,7 @@ async function openProfile(page: Page, locale: 'en' | 'ar'): Promise<void> {
   const t = strings(locale);
   await signIn(page, locale);
   await openSecurity(page, locale);
-  await page.getByRole('tab', { name: t('me:account.tabs.profile') }).click();
+  await settingsTab(page, t, 'me:account.tabs.profile').click();
   await page.getByRole('heading', { name: t('me:profile.heading'), level: 2 }).waitFor();
   // The fields fill from the stored profile a frame after the heading.
   await expect(page.getByLabel(t('me:profile.jobTitleEn'))).toHaveValue('Billing specialist');
@@ -69,8 +69,8 @@ test('saves the public name, a title and the phone in international form, and ke
   await expect(page.getByText(t('me:profile.saved'))).toBeVisible();
 
   // Away and back: what was saved is what comes back, with the phone normalised.
-  await page.getByRole('tab', { name: t('me:account.tabs.security') }).click();
-  await page.getByRole('tab', { name: t('me:account.tabs.profile') }).click();
+  await settingsTab(page, t, 'me:account.tabs.security').click();
+  await settingsTab(page, t, 'me:account.tabs.profile').click();
   await expect(page.getByLabel(t('me:profile.publicName'), { exact: true })).toHaveValue('Lina H');
   await expect(page.getByLabel(t('me:profile.jobTitleEn'))).toHaveValue('Support lead');
   await expect(page.getByLabel(t('me:profile.phone'))).toHaveValue('+966559876543');
@@ -161,8 +161,8 @@ test('holds the single-key shortcuts switch, which stays where it was put', asyn
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
-  await page.getByRole('tab', { name: t('me:account.tabs.security') }).click();
-  await page.getByRole('tab', { name: t('me:account.tabs.profile') }).click();
+  await settingsTab(page, t, 'me:account.tabs.security').click();
+  await settingsTab(page, t, 'me:account.tabs.profile').click();
   await expect(
     page
       .getByRole('region', { name: t('me:profile.workingHeading') })
@@ -176,8 +176,8 @@ test('the signature preview fills its placeholders from the profile', async ({
 }) => {
   const t = strings(locale);
   await openProfile(page, locale);
-  await page.getByRole('tab', { name: t('me:account.tabs.signature') }).click();
-  await page.getByRole('heading', { name: t('me:signature.heading') }).waitFor();
+  await settingsTab(page, t, 'me:account.tabs.signature').click();
+  await page.getByRole('heading', { name: t('me:signature.heading'), level: 2 }).waitFor();
 
   await page
     .getByLabel(t('me:signature.en'), { exact: true })

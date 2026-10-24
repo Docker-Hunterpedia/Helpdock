@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { auditLogPage, healthySystemStatus } from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -50,7 +50,7 @@ const stub = async (page: Page, status = 200): Promise<void> => {
 const openAuditLog = async (page: Page, locale: 'en' | 'ar'): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: new RegExp(t('admin:nav.system')) }).click();
+  await openSettingsArea(page, t, 'system');
   await page
     .getByRole('region', { name: t('system:audit.title') })
     .getByRole('link', { name: t('system:audit.open') })

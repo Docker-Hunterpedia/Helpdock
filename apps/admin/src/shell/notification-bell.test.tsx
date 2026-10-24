@@ -144,7 +144,7 @@ describe('NotificationBell', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Notification settings' })[0]).toHaveAttribute(
       'href',
-      '/me/notifications',
+      '/settings/account/notifications',
     );
   });
 

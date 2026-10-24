@@ -3,7 +3,7 @@ import { expect, test } from './admin-session.js';
 import { resetStepUpBudget, SKIP_ENV } from './install.js';
 
 /**
- * `/me/security` against the real api, for what the mock suite cannot see:
+ * `/settings/account/security` against the real api, for what the mock suite cannot see:
  * how many times a refused step-up goes over the wire (#271). The api answers a
  * wrong current password with a 401, and the transport used to take every 401
  * for an expired token, refresh, and send the same wrong password again — two
@@ -21,8 +21,8 @@ test.describe('the security page against the real api', () => {
   test.beforeEach(resetStepUpBudget);
 
   test('sends a wrong current password once, without refreshing the session', async ({ page }) => {
-    await page.goto('/me/security');
-    await page.getByRole('heading', { name: t('me:account.title'), level: 1 }).waitFor();
+    await page.goto('/settings/account/security');
+    await page.getByRole('heading', { name: t('me:account.tabs.security'), level: 1 }).waitFor();
 
     const sent: string[] = [];
     page.on('request', (request) => {

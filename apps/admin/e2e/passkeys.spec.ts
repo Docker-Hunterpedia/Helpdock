@@ -6,7 +6,7 @@ import { openSecurity, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
- * Passkeys on `/me/security` in a browser, in both languages (M18-02,
+ * Passkeys on `/settings/account/security` in a browser, in both languages (M18-02,
  * `Admin/Profile-Security-Passkeys`). The authenticator is Chromium's virtual
  * one, driven over the DevTools WebAuthn domain, so the real
  * `navigator.credentials` calls and `@simplewebauthn/browser` run; the api is

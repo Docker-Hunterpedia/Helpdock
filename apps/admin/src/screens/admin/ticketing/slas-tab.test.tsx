@@ -16,7 +16,7 @@ const renderSlas = async () => {
     authApi: apis.auth,
     staffApi: apis.staff,
     ticketingApi: apis.ticketing,
-    initialEntries: ['/admin/ticketing/slas'],
+    initialEntries: ['/settings/inbox/slas'],
   });
 
   await screen.findByRole('form', { name: 'SLA policy' });

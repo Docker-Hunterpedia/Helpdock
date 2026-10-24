@@ -456,7 +456,7 @@ describe.skipIf(!hasDocker)('Microsoft sign-in', () => {
         }),
       );
 
-      expect(landed.pathname).toBe('/me/security');
+      expect(landed.pathname).toBe('/settings/account/security');
       expect(await identitiesOf(fadi.id)).toEqual([
         { provider: 'microsoft', subject: `${TENANT}:${claims.oid}` },
       ]);
@@ -637,7 +637,7 @@ describe.skipIf(!hasDocker)('Microsoft sign-in', () => {
         }),
       );
 
-      expect(landed.pathname).toBe('/me/security');
+      expect(landed.pathname).toBe('/settings/account/security');
       expect(await identitiesOf(person.id)).toEqual([
         { provider: 'microsoft', subject: `${NEW_TENANT}:${next.oid}` },
       ]);
@@ -745,7 +745,7 @@ describe.skipIf(!hasDocker)('Microsoft sign-in', () => {
           },
         }),
       );
-      expect(connected.pathname).toBe('/me/security');
+      expect(connected.pathname).toBe('/settings/account/security');
       expect(await identitiesOf(nour.id)).toEqual([
         { provider: 'microsoft', subject: `${CONSUMERS}:${personal.oid}` },
       ]);

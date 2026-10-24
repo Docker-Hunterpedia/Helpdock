@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures.js';
-import { signIn } from './flows.js';
+import { openSettingsArea, settingsTab, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -19,8 +19,8 @@ test.use({ reducedMotion: 'reduce' });
 const openDomains = async (page: Page, locale: Locale): Promise<void> => {
   const t = strings(locale);
   await signIn(page, locale);
-  await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
-  await page.getByRole('tab', { name: t('brand:tabs.domains') }).click();
+  await openSettingsArea(page, t, 'brand');
+  await settingsTab(page, t, 'brand:tabs.domains').click();
   await page.getByRole('heading', { name: t('brand:domains.heading') }).waitFor();
 };
 
@@ -46,9 +46,9 @@ test.describe('custom domains', () => {
     const t = strings(locale);
     await openDomains(page, locale);
 
-    await expect(page.getByRole('tab', { name: t('brand:tabs.domains') })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await expect(settingsTab(page, t, 'brand:tabs.domains')).toHaveAttribute(
+      'aria-current',
+      'page',
     );
     await expect(
       itemFor(page, locale, 'help.helpdock.com').getByText(t('brand:domains.primary')),
@@ -157,7 +157,7 @@ test.describe('brand identity', () => {
   test('saves the brand’s name from the General tab', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);
-    await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
+    await openSettingsArea(page, t, 'brand');
     await page.getByRole('heading', { name: t('brand:general.heading') }).waitFor();
 
     await page.getByLabel(t('brand:general.name')).fill('Acme Support');
@@ -170,7 +170,7 @@ test.describe('brand identity', () => {
   test('refuses an empty name', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     await signIn(page, locale);
-    await page.getByRole('link', { name: t('admin:nav.brand'), exact: true }).click();
+    await openSettingsArea(page, t, 'brand');
 
     await page.getByLabel(t('brand:general.name')).fill('');
 

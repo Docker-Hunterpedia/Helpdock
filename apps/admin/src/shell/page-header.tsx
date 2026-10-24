@@ -1,9 +1,12 @@
 import { Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
+import { useSettingsHeader } from './settings-header.js';
 
 /**
  * DESIGN §6.5: h1 plus an optional caption, with the primary action at the
- * inline end. No breadcrumbs in admin — the sidebar is the map.
+ * inline end. Inside the Settings area (M14-21) a breadcrumb sits above the h1
+ * and the h1 is the navigation entry's name, so the page reads the same as the
+ * link that opened it.
  */
 export function PageHeader({
   title,
@@ -14,6 +17,8 @@ export function PageHeader({
   readonly caption?: string | undefined;
   readonly action?: ReactNode | undefined;
 }): ReactNode {
+  const settings = useSettingsHeader();
+
   return (
     <Box
       sx={{
@@ -25,8 +30,9 @@ export function PageHeader({
       }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <SettingsBreadcrumb />
         <Typography variant="h1" component="h1">
-          {title}
+          {settings?.title ?? title}
         </Typography>
         {caption ? (
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -36,5 +42,16 @@ export function PageHeader({
       </Box>
       {action}
     </Box>
+  );
+}
+
+/** `Settings › Inbox` above a page's h1; nothing outside the Settings area. */
+export function SettingsBreadcrumb(): ReactNode {
+  const settings = useSettingsHeader();
+
+  return settings === null ? null : (
+    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+      {settings.crumbs.join(' › ')}
+    </Typography>
   );
 }

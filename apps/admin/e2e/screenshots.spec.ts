@@ -1,3 +1,5 @@
+import type { Locale } from '@helpdock/i18n';
+import type { Page } from '@playwright/test';
 import { MOCK_EMAIL } from '../src/auth/mock-api.js';
 import { expect, test } from './fixtures.js';
 import {
@@ -16,6 +18,20 @@ import { strings } from './strings.js';
  * browser's clock first. Everything they print is then a fixed distance from a
  * fixed instant, and the pixels stop moving.
  */
+/**
+ * Signs in and waits for the sidebar's "Get set up" entry (M14-13), which fills
+ * in a moment after the sidebar does: a picture taken before it would differ
+ * from one taken after.
+ */
+async function signInToShell(page: Page, locale: Locale): Promise<void> {
+  await signIn(page, locale);
+  await page
+    .getByRole('button', {
+      name: strings(locale)('admin:setupChecklist.entryLabel', { done: 3, total: 9 }),
+    })
+    .waitFor();
+}
+
 const FIXED_CLOCK = new Date('2026-09-19T12:00:00.000Z');
 
 /**
@@ -57,13 +73,13 @@ test.describe('reference screens @screenshot', () => {
   });
 
   test('the shell', async ({ page, appLocale: locale }) => {
-    await signIn(page, locale);
+    await signInToShell(page, locale);
 
     await expect(page).toHaveScreenshot('shell-tickets.png', { fullPage: true });
   });
 
   test('the shell with the sidebar collapsed to its rail', async ({ page, appLocale: locale }) => {
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     await page.getByRole('button', { name: strings(locale)('admin:nav.collapse') }).click();
     // The pointer is still on the toggle, whose tooltip would be in the picture.
     await page.mouse.move(640, 400);
@@ -72,10 +88,21 @@ test.describe('reference screens @screenshot', () => {
     await expect(page).toHaveScreenshot('shell-collapsed.png', { fullPage: true });
   });
 
+  test('the setup checklist panel', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await signInToShell(page, locale);
+    await page
+      .getByRole('button', { name: t('admin:setupChecklist.entryLabel', { done: 3, total: 9 }) })
+      .click();
+    await page.getByRole('dialog', { name: t('admin:setupChecklist.title') }).waitFor();
+
+    await expect(page).toHaveScreenshot('setup-checklist.png', { fullPage: true });
+  });
+
   test('an admin page', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
 
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     await page.getByRole('link', { name: new RegExp(t('admin:nav.settings')) }).click();
     // The page heading is part of the shell and renders before the settings
     // request settles. Wait for loaded form content so the baseline can never
@@ -88,7 +115,7 @@ test.describe('reference screens @screenshot', () => {
   });
 
   test('the contact list', async ({ page, appLocale: locale }) => {
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     await openContacts(page, locale);
     // The heading renders before the rows do, so wait for the table itself.
     await page.getByRole('table').waitFor();
@@ -98,7 +125,7 @@ test.describe('reference screens @screenshot', () => {
 
   test('the ticket list', async ({ page, appLocale: locale }) => {
     await page.clock.setFixedTime(FIXED_CLOCK);
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     await openTickets(page, locale, 'all');
     // The rows arrive after the heading does.
     await page.getByRole('link', { name: /HD-1042/ }).waitFor();
@@ -113,7 +140,7 @@ test.describe('reference screens @screenshot', () => {
     const t = strings(locale);
 
     await page.clock.setFixedTime(FIXED_CLOCK);
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     // The fixture's fullest ticket: every badge, all four kinds of message, an
     // activity event between them and a colleague viewing it.
     await openTicket(page, locale);
@@ -133,7 +160,7 @@ test.describe('reference screens @screenshot', () => {
   test('one contact', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
 
-    await signIn(page, locale);
+    await signInToShell(page, locale);
     // The fixture's fullest contact: a verified identifier beside unverified
     // ones, an account, a note, every stat, an open duplicate suggestion, and
     // her tickets, which the timeline reads after the contact.

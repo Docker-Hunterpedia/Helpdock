@@ -6,6 +6,7 @@ import type {
   RecoveryCodes,
   SecondFactorReset,
   SecondFactorSummary,
+  SetupChecklist,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -46,6 +47,10 @@ export interface StaffApi {
     proof: PasskeyProof,
     digest: string,
   ): Promise<SecondFactorReset>;
+  /** M14-13. The Admin's "Get set up" checklist, computed by the api from the brand's own data. */
+  setupChecklist(brandId: string): Promise<SetupChecklist>;
+  /** Hides the checklist for this person in this brand; answers with it as it now reads. */
+  dismissSetupChecklist(brandId: string): Promise<SetupChecklist>;
 
   profile(): Promise<Profile>;
   updateProfile(request: ProfileUpdateRequest): Promise<Profile>;

@@ -94,6 +94,7 @@ describe('the schema', () => {
       'report_search_daily',
       'retention_settings',
       'settings',
+      'setup_checklist_dismissals',
       'sla_policies',
       'sso_connections',
       'sso_role_mappings',
@@ -164,7 +165,7 @@ describe('the schema', () => {
       )
       .map((column) => String(column.defaultFn?.()));
 
-    // Every table but twenty-five has a uuid primary key; `settings` is keyed by
+    // Every table but twenty-six has a uuid primary key; `settings` is keyed by
     // `(key, brand_id)`, `job_receipts` by the consumer's idempotency key,
     // `ticket_tags`, `assignment_agents` and `assignment_skills` by the rows
     // they join, `retention_settings`, `email_outbound_settings`,
@@ -174,11 +175,11 @@ describe('the schema', () => {
     // the article version it indexes and `hc_article_views` by the article,
     // the visitor and the day, `ai_settings` by its brand, `ai_budget_alerts`
     // by the brand, window and level, `notification_email_pacing` by the brand
-    // and the person, and `embedding_space` is a single row.
+    // and the person, `setup_checklist_dismissals` the same way, and `embedding_space` is a single row.
     // The four report rollups of M8-04 have no key: a run deletes and rewrites
     // a brand's days whole.
     // Import source identities use a composite key; import logs use a monotonic bigint id.
-    expect(generated).toHaveLength(byName.size - 25);
+    expect(generated).toHaveLength(byName.size - 26);
     for (const id of generated) {
       expect(id[14]).toBe('7');
     }

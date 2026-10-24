@@ -335,5 +335,45 @@ describe('resetting a second factor (#398)', () => {
     await expect(
       staff.resetSecondFactor(await omar(), { currentPassword: 'nope' }, MOCK_RESET_DIGEST),
     ).rejects.toMatchObject({ code: 'invalid-credentials' });
+describe('the setup checklist', () => {
+  const FINISHED = '0192c3f0-1a2b-7c3d-8e4f-000000000002';
+  const REFUSED = '0192c3f0-1a2b-7c3d-8e4f-000000000003';
+
+  it('starts a brand three steps in, with the optional one undone', async () => {
+    const checklist = await staff.setupChecklist(brand);
+
+    expect(checklist.steps.filter((step) => step.done).map((step) => step.id)).toEqual([
+      'channel',
+      'teammate',
+      'businessHours',
+    ]);
+    expect(checklist).toMatchObject({ doneCount: 3, total: 9, complete: false, dismissed: false });
+  });
+
+  it('ticks a step once its work is done, and is complete with the optional step still open', async () => {
+    for (const step of ['slaPolicy', 'assignment', 'reply', 'article', 'firstTicket'] as const) {
+      staff.completeSetupStep(brand, step);
+    }
+
+    const checklist = await staff.setupChecklist(brand);
+
+    expect(checklist).toMatchObject({ doneCount: 8, complete: true });
+    expect(checklist.steps.find((step) => step.id === 'aiProvider')).toMatchObject({
+      done: false,
+      optional: true,
+    });
+  });
+
+  it('hides the checklist for that brand only', async () => {
+    const hidden = await staff.dismissSetupChecklist(brand);
+
+    expect(hidden.dismissed).toBe(true);
+    expect((await staff.setupChecklist(FINISHED)).dismissed).toBe(false);
+  });
+
+  it('has one brand that has finished setup and one that refuses the checklist', async () => {
+    expect((await staff.setupChecklist(FINISHED)).complete).toBe(true);
+    await expect(staff.setupChecklist(REFUSED)).rejects.toThrow('forbidden');
+    await expect(staff.dismissSetupChecklist(REFUSED)).rejects.toThrow('forbidden');
   });
 });

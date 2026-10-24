@@ -177,7 +177,7 @@ L 6 d.
 | M14-10 | Notification pacing engine: batching with back-off, digests, pause, read re-check, presence hold | 8 d | — |
 | M14-11 | Notification settings and one-click unsubscribe | 4 d | M14-10 |
 | M14-12 | Profile for customers: public name, title, phone, photo, time zone; agent placeholders | 5 d | — |
-| M14-13 | Setup checklist | 3 d | M14-12 (one step reads it) |
+| M14-13 | Setup checklist — built, in review (#300) | 3 d | M14-12 (no step reads it in the end) |
 | M14-14 | Saved-reply and macro polish | 3 d | M14-12 (placeholders) |
 | M14-15 | `@` mention picker in notes | 2 d | — |
 | M14-16 | Custom-field filters in the list and views, pinned field chip (the Severity answer) — built, in review (#303) | 3 d | — |
@@ -1034,6 +1034,40 @@ never stored as ticked:
 (`setup_checklist_dismissals`); it hides itself for everyone once all required
 steps are done. Imported tickets do not count as the first ticket. Audience is
 owner decision D-31.
+
+**Status: built, in review** (issue [#300](https://github.com/Docker-Hunterpedia/Helpdock/issues/300)).
+- [x] `GET /api/brands/:brandId/setup-checklist` and `POST …/setup-checklist/dismiss`,
+  both `brand:manage`. The reply is step ids with `done` and `optional`, the counts,
+  `complete` (every required step done) and `dismissed`; the admin app owns each step's
+  words and its route, built from `route-paths.ts` and the tabs' own segments.
+- [x] Each step is one `EXISTS` over the brand's rows, under the request's row-level
+  security and with the brand named in the predicate: a channel is a mailbox, a Telegram
+  bot, a Meta account, a widget origin (the widget's allow-list or a `widget_origin`
+  domain); a teammate is a second role in the brand (a pending invitation holds one);
+  business hours and SLA policy are a row; assignment is a department whose mode is not
+  manual; a saved reply is any `canned_responses` row the Admin can see (shared, or their
+  own); an article is a version that is published and public; the AI provider is the
+  resolution `DbAiPorts.target` makes (the brand's pair or the install default, and a
+  provider still on the install's list); the first ticket is a ticket on a non-manual
+  channel with `imported_at` null.
+- [x] `setup_checklist_dismissals` (migration `0072_setup_checklist`): brand and owner
+  scoped, primary key `(brand_id, user_id)`, in `TENANT_TABLES` and `OWNER_SCOPED_TABLES`
+  and in the RLS isolation test.
+- [x] The entry sits above the sidebar toggle and opens a popover panel beside it
+  (`SetupChecklistEntry`). Playwright `en`/`ar`: `apps/admin/e2e/setup-checklist.spec.ts`;
+  a baseline of the open panel is in `screenshots.spec.ts`.
+- [x] Guide: `docs/guides/install.md` (Once it is finished › The setup checklist).
+- Differences from the text above, because the code is the source of truth:
+  **no step reads M14-12's profile**, the nine steps and the board have none, so the
+  dependency is not used. **The dismissal does not go with the role**: the owner policy
+  lets no Admin delete a colleague's row, so the row is compared with the role's own
+  `created_at` when read, and a role granted again shows the checklist again. **The
+  board's "all done" panel** is shown to an Admin who has it open when the last required
+  step is done (the panel refreshes every time it is opened); once it is closed the entry
+  is gone for everyone, as the plan says. **"n of 9" counts the optional AI step**, while
+  the checklist is complete when the eight required ones are. **The collapsed rail has no
+  entry**: the board draws none, so none was invented. The AI step's one-word reason is
+  the board's ("Optional.").
 
 ### M14-14 Saved-reply and macro polish
 

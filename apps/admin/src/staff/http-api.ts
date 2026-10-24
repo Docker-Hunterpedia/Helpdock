@@ -6,6 +6,7 @@ import type {
   RecoveryCodes,
   SecondFactorReset,
   SecondFactorSummary,
+  SetupChecklist,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -20,6 +21,7 @@ import {
   recoveryCodesSchema,
   secondFactorResetSchema,
   secondFactorSummarySchema,
+  setupChecklistSchema,
   staffListSchema,
   staffMemberSchema,
   staffSessionListSchema,
@@ -112,6 +114,15 @@ export class HttpStaffApi implements StaffApi {
         proof,
         digest,
       }),
+  async setupChecklist(brandId: string): Promise<SetupChecklist> {
+    return setupChecklistSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/setup-checklist`),
+    );
+  }
+
+  async dismissSetupChecklist(brandId: string): Promise<SetupChecklist> {
+    return setupChecklistSchema.parse(
+      await this.#transport.request('POST', `${this.#brand(brandId)}/setup-checklist/dismiss`),
     );
   }
 

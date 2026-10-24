@@ -338,6 +338,44 @@ describe('the account the person owns', () => {
   });
 });
 
+describe('the setup checklist', () => {
+  const checklist = {
+    steps: [{ id: 'channel', done: true, optional: false }],
+    doneCount: 1,
+    total: 9,
+    complete: false,
+    dismissed: false,
+  };
+
+  it('reads it for the brand', async () => {
+    fetchMock.mockResolvedValueOnce(json(checklist));
+
+    await expect(staff.setupChecklist(BRAND_ID)).resolves.toEqual(checklist);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/brands/${BRAND_ID}/setup-checklist`);
+    expect(init.method).toBe('GET');
+  });
+
+  it('hides it with a post and takes the checklist it answers with', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ...checklist, dismissed: true }));
+
+    await expect(staff.dismissSetupChecklist(BRAND_ID)).resolves.toMatchObject({ dismissed: true });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/brands/${BRAND_ID}/setup-checklist/dismiss`);
+    expect(init.method).toBe('POST');
+  });
+
+  it('refuses an answer that names a step it does not know', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json({ ...checklist, steps: [{ id: 'wizard', done: true, optional: false }] }),
+    );
+
+    await expect(staff.setupChecklist(BRAND_ID)).rejects.toThrow();
+  });
+});
+
 describe('sharing a transport with the auth adapter', () => {
   /**
    * One token in the app, not two. A staff request made after a sign-in has to

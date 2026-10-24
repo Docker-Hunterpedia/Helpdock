@@ -153,6 +153,9 @@ export const TENANT_TABLES: readonly TenantTable[] = [
   // to their owner below.
   { name: 'notification_email_batches', departmentScoped: false },
   { name: 'notification_email_pacing', departmentScoped: false },
+  // M14-13. Who hid the setup checklist: configuration of nobody's tickets, and
+  // owner-scoped below.
+  { name: 'setup_checklist_dismissals', departmentScoped: false },
   // M4-02, M4-03. A brand's widget configuration, like `mailboxes`, and its
   // visitors, who are brand-scoped like the contacts they become: a visitor
   // reaches a department only through a ticket, whose own policy decides.
@@ -261,6 +264,7 @@ export const OWNER_SCOPED_TABLES: readonly OwnerScopedTable[] = [
   { name: 'notification_email_batches', column: 'user_id', systemWrites: true },
   { name: 'notification_email_pacing', column: 'user_id', systemWrites: true },
   { name: 'ticket_bulk_operations', column: 'actor_id', systemWrites: true },
+  { name: 'setup_checklist_dismissals', column: 'user_id', systemWrites: true },
 ];
 
 /** The restrictive owner policy of {@link OWNER_SCOPED_TABLES}, as one statement. */

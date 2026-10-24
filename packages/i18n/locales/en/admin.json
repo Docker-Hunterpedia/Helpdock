@@ -251,5 +251,57 @@
       "system": "health, version, queues, storage, migrations, status",
       "systemAuditLog": "activity log, who changed, history, security log"
     }
+  },
+  "setupChecklist": {
+    "title": "Get set up",
+    "entry": "{{done}} of {{total}}",
+    "entryLabel": "Get set up, {{done}} of {{total}} done",
+    "progress": "{{done}} of {{total}} done",
+    "close": "Close",
+    "optional": "optional",
+    "go": "Go",
+    "goTo": "Go to: {{step}}",
+    "stepDone": "Done",
+    "hide": "Hide this checklist",
+    "hideFailed": "The checklist could not be hidden. Try again.",
+    "allDone": "Helpdock is set up. This checklist hides itself for everyone.",
+    "steps": {
+      "channel": {
+        "title": "Connect a channel",
+        "why": "A mailbox, Telegram bot, Meta account or the chat widget."
+      },
+      "teammate": {
+        "title": "Invite a teammate",
+        "why": "Nobody should answer alone."
+      },
+      "businessHours": {
+        "title": "Set business hours",
+        "why": "SLA clocks pause outside them."
+      },
+      "slaPolicy": {
+        "title": "Create an SLA policy",
+        "why": "Targets for first response and resolution."
+      },
+      "assignment": {
+        "title": "Set up assignment",
+        "why": "Round-robin or load-balanced, per department."
+      },
+      "reply": {
+        "title": "Add a saved reply or macro",
+        "why": "Answer common questions in one step."
+      },
+      "article": {
+        "title": "Publish a help center article",
+        "why": "Customers and the AI read it."
+      },
+      "aiProvider": {
+        "title": "Connect an AI provider",
+        "why": "Optional."
+      },
+      "firstTicket": {
+        "title": "Receive your first ticket",
+        "why": "From a customer, through any channel."
+      }
+    }
   }
 }

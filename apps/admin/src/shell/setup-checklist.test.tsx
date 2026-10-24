@@ -97,7 +97,7 @@ describe('the setup checklist entry (M14-13)', () => {
     expect(within(panel).getAllByRole('link')).toHaveLength(6);
     expect(
       within(panel).getByRole('link', { name: 'Go to: Create an SLA policy' }),
-    ).toHaveAttribute('href', '/admin/ticketing/slas');
+    ).toHaveAttribute('href', '/settings/inbox/slas');
     expect(
       within(panel).getByRole('link', { name: 'Go to: Receive your first ticket' }),
     ).toHaveAttribute('href', '/tickets');
@@ -115,7 +115,9 @@ describe('the setup checklist entry (M14-13)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Get set up' })).not.toBeInTheDocument();
     });
-    expect(await screen.findByRole('heading', { name: 'Ticketing', level: 1 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'SLA policies', level: 1 }),
+    ).toBeInTheDocument();
   });
 
   it('closes on Escape and returns focus to the entry', async () => {

@@ -66,6 +66,10 @@ import { AuthError } from './api.js';
  */
 const EXPIRY_SKEW_MS = 30_000;
 
+/** A 204, or any answer that says it is empty: `json()` throws on an empty body. */
+const hasNoContent = (response: Response): boolean =>
+  response.status === 204 || response.headers.get('content-length') === '0';
+
 export class HttpTransport {
   readonly #baseUrl: string;
   #accessToken: string | null = null;
@@ -151,7 +155,9 @@ export class HttpTransport {
       throw await toError(response);
     }
 
-    return response.status === 204 ? undefined : response.json();
+    // A 202 or 200 the api answers without a body (a queued test push) has
+    // nothing for `json()` to read; it would throw on the empty string.
+    return hasNoContent(response) ? undefined : response.json();
   }
 
   /**

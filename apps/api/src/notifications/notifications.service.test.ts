@@ -57,6 +57,7 @@ const service = ({
   subscriptionOwner = ME,
   smtp = true,
   allowTestEmail = true,
+  userZone = null,
 }: {
   vapid?: string | null;
   marked?: boolean;
@@ -64,6 +65,7 @@ const service = ({
   subscriptionOwner?: string;
   smtp?: boolean;
   allowTestEmail?: boolean;
+  userZone?: string | null;
 } = {}) => {
   const calls: Calls = { outbox: [], email: {} };
   const repository = {
@@ -93,7 +95,11 @@ const service = ({
       unsubscribedAt: null,
     }),
     brandTimeZone: async () => 'Asia/Riyadh',
-    account: async () => ({ email: 'lina@helpdock.test', locale: 'en' as const }),
+    account: async () => ({
+      email: 'lina@helpdock.test',
+      locale: 'en' as const,
+      timeZone: userZone,
+    }),
     subscriptionsOf: async () => [subscription],
     upsertSubscription: async (
       _tx: DbTransaction,
@@ -252,6 +258,14 @@ describe('NotificationsService — preferences', () => {
     expect(await notifications.preferences(tx, ME, BRAND)).toMatchObject({
       emailConfigured: false,
       digestTimeZone: 'Asia/Riyadh',
+    });
+  });
+
+  it("reads the digest hour in the person's own zone when they have chosen one", async () => {
+    const { notifications, tx } = service({ userZone: 'Europe/Berlin' });
+
+    expect(await notifications.preferences(tx, ME, BRAND)).toMatchObject({
+      digestTimeZone: 'Europe/Berlin',
     });
   });
 

@@ -765,8 +765,8 @@ and a resumable presence hold need; the hold's "away for 5 minutes" is
 measured from the last time the send found the person online, re-checked every
 minute; `bulk_operation_id` arrived with M14-03 (the column, stamped on an
 assignment a bulk edit made; the bell's and the batcher's folding on it was
-done in M14-04); the daily digest's hour is read in the brand's time zone until M14-12
-adds `users.time_zone`; opening a ticket (`GET /tickets/:id` by a person)
+done in M14-04); the daily digest's hour is read in the person's `users.time_zone` (M14-12),
+the brand's until they choose one; opening a ticket (`GET /tickets/:id` by a person)
 marks their notifications about it read; an install without SMTP marks rows
 `skipped_unconfigured` at scheduling rather than opening batches; the English
 catalog says
@@ -868,9 +868,9 @@ route is `/unsubscribe/<token>`, while the one-click address in
 `List-Unsubscribe` is the api's `POST /api/public/unsubscribe/<token>` (a
 mail client must POST to an address that answers POST, and the admin bundle's
 page does not); the confirmation shows the address to the token's holder, and
-every bad token is one `404`; the digest hour is shown in the current brand's
-time zone until M14-12 (`digestTimeZone` in the preferences view), and *Until
-tomorrow 09:00* and *Until a date…* use the browser's; the card's buttons read
+every bad token is one `404`; the digest hour, *Until tomorrow 09:00* and *Until a
+date…* are read in the person's own time zone from M14-12, the current brand's
+until they choose one (`digestTimeZone` in the preferences view); the card's buttons read
 *Save schedule* and *Discard* (accessible name *Discard schedule changes*)
 because the matrix beneath has *Save changes* and *Discard*; *Until a date…*
 opens a small date dialog that the board does not draw; the bell shows the

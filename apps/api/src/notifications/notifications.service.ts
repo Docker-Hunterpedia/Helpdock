@@ -196,7 +196,8 @@ export class NotificationsService {
       },
       emailDelivery,
       emailConfigured,
-      digestTimeZone: zone ?? null,
+      // The person's own zone (M14-12), the current brand's until they choose one.
+      digestTimeZone: account.timeZone ?? zone ?? null,
     };
   }
 

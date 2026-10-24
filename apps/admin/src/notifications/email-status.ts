@@ -1,5 +1,6 @@
 import type { Locale } from '@helpdock/i18n';
 import { NOTIFICATION_PAUSE_MAX_DAYS, type NotificationPreferencesView } from '@helpdock/schemas';
+import { fromWallClock, toWallClock } from '../screens/help-center/time.js';
 
 /**
  * What stops notification email for this person, and the pause choices (M14-11,
@@ -40,62 +41,65 @@ export const emailStatuses = (
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
-/** 09:00 on the given local day. */
-const nineOn = (day: Date): Date => {
-  const at = new Date(day);
-  at.setHours(9, 0, 0, 0);
-
-  return at;
-};
-
-/**
- * The presets of the pause menu, in the reader's own time zone (the person's
- * time zone arrives with M14-12; until then it is the browser's, which is where
- * M14-12 starts it). "Until tomorrow 09:00" is 09:00 of the next calendar day.
- */
-export const pausePresets = (now: Date): { hour: Date; tomorrow: Date; week: Date } => {
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  return {
-    hour: new Date(now.getTime() + HOUR_MS),
-    tomorrow: nineOn(tomorrow),
-    week: new Date(now.getTime() + 7 * DAY_MS),
-  };
-};
+/** The zone the browser reads in, for a view that names none. */
+export const browserZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
-/** `YYYY-MM-DD` in local time, which is what a date input holds. */
-export const localDate = (at: Date): string =>
-  `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+/** `YYYY-MM-DD` of the day `at` falls on in the zone, which is what a date input holds. */
+export const localDate = (at: Date, zone: string): string =>
+  toWallClock(at.toISOString(), zone).date;
+
+/** `YYYY-MM-DD` of the day after `date`, by the calendar. */
+const nextDay = (date: string, days = 1): string => {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const moved = new Date(Date.UTC(y, m - 1, d + days));
+
+  return `${moved.getUTCFullYear()}-${pad(moved.getUTCMonth() + 1)}-${pad(moved.getUTCDate())}`;
+};
+
+/** 09:00 on a `YYYY-MM-DD` day in the zone, or null when it is not a day. */
+const nineOn = (date: string, zone: string): Date | null => {
+  const iso = fromWallClock({ date, time: '09:00' }, zone);
+
+  return iso === null ? null : new Date(iso);
+};
+
+/**
+ * The presets of the pause menu, worked out in the zone given: the person's
+ * own (Your account › Profile, M14-12), the brand's until they choose one.
+ * "Until tomorrow 09:00" is 09:00 of the next calendar day there.
+ */
+export const pausePresets = (
+  now: Date,
+  zone: string,
+): { hour: Date; tomorrow: Date; week: Date } => ({
+  hour: new Date(now.getTime() + HOUR_MS),
+  // A day after a valid date is always a valid date, so the fallback never shows.
+  tomorrow: nineOn(nextDay(localDate(now, zone)), zone) ?? new Date(now.getTime() + DAY_MS),
+  week: new Date(now.getTime() + 7 * DAY_MS),
+});
 
 /** The first and last day "Until a date…" offers: tomorrow, and the api's limit less a day. */
-export const pauseDateBounds = (now: Date): { min: string; max: string } => {
-  const first = new Date(now);
-  first.setDate(first.getDate() + 1);
-  const last = new Date(now);
-  last.setDate(last.getDate() + NOTIFICATION_PAUSE_MAX_DAYS - 1);
+export const pauseDateBounds = (now: Date, zone: string): { min: string; max: string } => {
+  const today = localDate(now, zone);
 
-  return { min: localDate(first), max: localDate(last) };
+  return { min: nextDay(today), max: nextDay(today, NOTIFICATION_PAUSE_MAX_DAYS - 1) };
 };
 
 export type PauseDateProblem = 'invalid' | 'tooSoon' | 'tooFar';
 
-/** Why a typed day cannot end a pause, or `null`, with the instant it means (09:00 that day). */
+/** Why a typed day cannot end a pause, or `null`, with the instant it means (09:00 that day in the zone). */
 export const pauseDateEnd = (
   value: string,
   now: Date,
+  zone: string,
 ): { problem: PauseDateProblem } | { problem: null; end: Date } => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (match === null) {
+  const end = nineOn(value, zone);
+  if (end === null || Number.isNaN(end.getTime()) || nextDay(value, 0) !== value) {
     return { problem: 'invalid' };
   }
-  const end = nineOn(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
-  if (Number.isNaN(end.getTime())) {
-    return { problem: 'invalid' };
-  }
-  const { min, max } = pauseDateBounds(now);
+  const { min, max } = pauseDateBounds(now, zone);
   if (value < min) {
     return { problem: 'tooSoon' };
   }
@@ -109,14 +113,19 @@ const FORMAT_TAG: Record<Locale, string> = { en: 'en-GB', ar: 'ar-u-nu-latn' };
  * "17:00" for a time today, "Tue 27 Oct, 09:00" for another day: Latin digits
  * in both languages, as every artboard writes times.
  */
-export const whenLabel = (iso: string | Date, locale: Locale, now: number): string => {
+export const whenLabel = (
+  iso: string | Date,
+  locale: Locale,
+  now: number,
+  zone: string = browserZone(),
+): string => {
   const at = typeof iso === 'string' ? new Date(iso) : iso;
-  const sameDay = new Date(now).toDateString() === at.toDateString();
+  const sameDay = localDate(new Date(now), zone) === localDate(at, zone);
 
   return new Intl.DateTimeFormat(
     FORMAT_TAG[locale],
     sameDay
-      ? { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }
+      ? { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zone }
       : {
           weekday: 'short',
           day: 'numeric',
@@ -124,6 +133,7 @@ export const whenLabel = (iso: string | Date, locale: Locale, now: number): stri
           hour: '2-digit',
           minute: '2-digit',
           hourCycle: 'h23',
+          timeZone: zone,
         },
   ).format(at);
 };

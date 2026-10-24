@@ -653,7 +653,7 @@ export class NotificationsRepository {
     return changed.length > 0;
   }
 
-  /** The brand's time zone, which the daily digest's hour is read in until M14-12. */
+  /** The brand's time zone, which the daily digest's hour is read in for anyone who has not chosen their own. */
   async brandTimeZone(tx: DbTransaction, brandId: string): Promise<string | undefined> {
     const [row] = await tx
       .select({ timeZone: brands.timezone })
@@ -681,9 +681,9 @@ export class NotificationsRepository {
   async account(
     tx: DbTransaction,
     userId: string,
-  ): Promise<{ email: string; locale: 'en' | 'ar' } | undefined> {
+  ): Promise<{ email: string; locale: 'en' | 'ar'; timeZone: string | null } | undefined> {
     const [row] = await tx
-      .select({ email: users.email, locale: users.locale })
+      .select({ email: users.email, locale: users.locale, timeZone: users.timeZone })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);

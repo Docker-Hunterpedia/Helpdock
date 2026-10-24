@@ -116,7 +116,8 @@ Each person chooses one schedule, the same in every brand:
 
 The schedule is four cards on Your account › Notifications; choosing one, or
 the digest hour beside *Daily digest* (a drop-down of 00:00 to 23:00, read in
-the current brand's time zone until M14-12 gives people their own), is saved
+your own time zone from Your account › Profile, or the current brand's until
+you choose one), is saved
 with **Save schedule**, and **Discard** puts the saved one back. Changing the
 hour chooses *Daily digest* for you. **Send me a test email** sends one
 real-looking message to your own address (never to one you type), through the
@@ -205,8 +206,9 @@ in the bell, and nothing is sent when it ends.
 
 **Pause notifications** on the Email schedule card offers *For 1 hour*, *Until
 tomorrow 09:00*, *For 1 week* and *Until a date…* (09:00 on a day from tomorrow
-to a year ahead), in the browser's time zone until M14-12 gives people their
-own. While one runs, a line heads the card and the bell's panel: "Paused until
+to a year ahead), worked out in the same zone as the digest hour: yours from
+Your account › Profile, or the brand's until you choose one. While one runs, a line heads the card
+and the bell's panel: "Paused until
 17:00. Email and push resume then; the bell keeps everything." with **Resume
 now**.
 
@@ -344,7 +346,7 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 | `POST /api/brands/:brandId/notifications/test-email` | `ticket:read` | A test email to the caller's own address through the outbox (`204`); `409` on an install without SMTP, `429` past five an hour |
 | `GET /api/public/unsubscribe/:token` | public, signed token | What the confirmation page draws (`{ state: 'confirm', email, locale }`); changes nothing; `404` for any token that is no good |
 | `POST /api/public/unsubscribe/:token` | public, signed token | RFC 8058 one-click: body `List-Unsubscribe=One-Click` (`400` otherwise); unsubscribes, idempotently; `{ state: 'done', locale }` |
-| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour`, `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and `emailUnsubscribed: false` ("Turn email back on"; `true` is refused) and keeps the rest. The view also says whether the install can send email (`emailConfigured`) and the zone the digest hour is read in (`digestTimeZone`, the current brand's) |
+| `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour`, `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and `emailUnsubscribed: false` ("Turn email back on"; `true` is refused) and keeps the rest. The view also says whether the install can send email (`emailConfigured`) and the zone the digest hour and the pause presets are read in (`digestTimeZone`: the person's own, else the current brand's) |
 | `POST /api/me/push-subscriptions` | signed in | `PushSubscription.toJSON()` plus a label; `https` endpoints only |
 | `DELETE /api/me/push-subscriptions/:id` | signed in | Removes one of the caller's browsers |
 

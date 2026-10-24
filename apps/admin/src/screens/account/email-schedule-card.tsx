@@ -28,6 +28,7 @@ import { isAuthError } from '../../auth/api.js';
 import { currentBrand, useSession } from '../../auth/session.tsx';
 import { useNotificationsApi } from '../../notifications/context.tsx';
 import {
+  browserZone,
   hourLabel,
   hourOptions,
   pauseDateBounds,
@@ -67,6 +68,7 @@ export function EmailScheduleCard({
   const brandId = currentBrand(useSession()).id;
   const groupId = useId();
   const { emailDelivery } = view;
+  const zone = view.digestTimeZone ?? browserZone();
   const [schedule, setSchedule] = useState<EmailSchedule>(emailDelivery.schedule);
   const [hour, setHour] = useState(emailDelivery.digestHour);
   const [pauseAnchor, setPauseAnchor] = useState<HTMLElement | null>(null);
@@ -96,7 +98,7 @@ export function EmailScheduleCard({
             update.pausedUntil === null
               ? t('me:notifications.schedule.toast.resumed')
               : t('me:notifications.schedule.toast.paused', {
-                  when: whenLabel(update.pausedUntil, locale, Date.now()),
+                  when: whenLabel(update.pausedUntil, locale, Date.now(), zone),
                 }),
         });
       }
@@ -142,7 +144,7 @@ export function EmailScheduleCard({
   };
 
   const now = new Date();
-  const presets = pausePresets(now);
+  const presets = pausePresets(now, zone);
 
   return (
     <Box
@@ -297,7 +299,7 @@ export function EmailScheduleCard({
         <PauseItem
           label={t('me:notifications.schedule.pauseMenu.oneHour')}
           hint={t('me:notifications.schedule.pauseMenu.until', {
-            when: whenLabel(presets.hour, locale, now.getTime()),
+            when: whenLabel(presets.hour, locale, now.getTime(), zone),
           })}
           onPick={() => {
             pause(presets.hour);
@@ -312,7 +314,10 @@ export function EmailScheduleCard({
         <PauseItem
           label={t('me:notifications.schedule.pauseMenu.oneWeek')}
           hint={t('me:notifications.schedule.pauseMenu.until', {
-            when: whenLabel(presets.week, locale, now.getTime()).replace(/, \d{2}:\d{2}$/, ''),
+            when: whenLabel(presets.week, locale, now.getTime(), zone).replace(
+              /, \d{2}:\d{2}$/,
+              '',
+            ),
           })}
           onPick={() => {
             pause(presets.week);
@@ -334,6 +339,7 @@ export function EmailScheduleCard({
         onClose={() => {
           setDateOpen(false);
         }}
+        zone={zone}
         onPick={pause}
       />
     </Box>
@@ -422,11 +428,13 @@ function PauseItem({
 function PauseDateDialog({
   open,
   busy,
+  zone,
   onClose,
   onPick,
 }: {
   readonly open: boolean;
   readonly busy: boolean;
+  readonly zone: string;
   onClose(): void;
   onPick(end: Date): void;
 }): ReactNode {
@@ -435,8 +443,8 @@ function PauseDateDialog({
   const [value, setValue] = useState('');
   const [touched, setTouched] = useState(false);
   const now = new Date();
-  const bounds = pauseDateBounds(now);
-  const result = pauseDateEnd(value, now);
+  const bounds = pauseDateBounds(now, zone);
+  const result = pauseDateEnd(value, now, zone);
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();

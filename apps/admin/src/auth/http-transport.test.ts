@@ -213,3 +213,29 @@ describe('429 sign-in refusals', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('an answer with no body', () => {
+  it.each([
+    ['a 204', new Response(null, { status: 204 })],
+    ['an empty 202', new Response('', { status: 202, headers: { 'content-length': '0' } })],
+    ['an empty 200', new Response('', { status: 200, headers: { 'content-length': '0' } })],
+  ])('resolves to nothing for %s', async (_name, response) => {
+    fetchMock.mockResolvedValueOnce(response);
+
+    await expect(signedIn().request('POST', '/x')).resolves.toBeUndefined();
+  });
+
+  it('still reads the JSON of a 202 that has one', async () => {
+    fetchMock.mockResolvedValueOnce(json({ queued: true }, 202));
+
+    await expect(signedIn().request('POST', '/x')).resolves.toEqual({ queued: true });
+  });
+
+  it('still fails on an empty body that is an error', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('', { status: 500, headers: { 'content-length': '0' } }),
+    );
+
+    await expect(signedIn().request('POST', '/x')).rejects.toMatchObject({ status: 500 });
+  });
+});

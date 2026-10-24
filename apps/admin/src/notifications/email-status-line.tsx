@@ -90,7 +90,12 @@ function EmailStatusLine({
   > = {
     paused: () => ({
       text: t('me:notifications.schedule.status.paused', {
-        when: whenLabel(emailDelivery.pausedUntil ?? '', locale, now),
+        when: whenLabel(
+          emailDelivery.pausedUntil ?? '',
+          locale,
+          now,
+          view.digestTimeZone ?? undefined,
+        ),
       }),
       action: {
         label: t('me:notifications.schedule.status.resume'),

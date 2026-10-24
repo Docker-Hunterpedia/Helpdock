@@ -38,7 +38,8 @@
       "widget": "أداة المحادثة",
       "meta": "WhatsApp, Messenger, Instagram",
       "imports": "الاستيراد"
-    }
+    },
+    "breadcrumb": "مسار التنقل"
   },
   "brandSwitcher": {
     "caption": "العلامة التجارية · تبديل",

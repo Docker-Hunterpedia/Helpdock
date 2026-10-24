@@ -38,7 +38,8 @@
       "widget": "Chat widget",
       "meta": "WhatsApp, Messenger, Instagram",
       "imports": "Imports"
-    }
+    },
+    "breadcrumb": "Breadcrumb"
   },
   "brandSwitcher": {
     "caption": "Brand · switch",

@@ -157,7 +157,12 @@ describe('the page header', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'SLA policies' })).toBeVisible();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByText('Settings › Inbox')).toBeVisible();
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(crumbs).getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
+    expect(within(crumbs).getByText('Inbox')).toHaveAttribute('aria-current', 'page');
     expect(settingsLink('SLA policies')).toHaveAttribute('aria-current', 'page');
     expect(
       within(screen.getByRole('navigation', { name: 'Settings' })).getAllByRole('link', {
@@ -169,7 +174,9 @@ describe('the page header', () => {
   it('keeps a deeper page’s own title under its entry’s breadcrumb', async () => {
     await open('/settings/channels/mailboxes/new');
 
-    expect(await screen.findByText('Settings › Channels')).toBeVisible();
+    expect(
+      within(await screen.findByRole('navigation', { name: 'Breadcrumb' })).getByText('Channels'),
+    ).toHaveAttribute('aria-current', 'page');
     expect(settingsLink('Email')).toHaveAttribute('aria-current', 'page');
   });
 });
@@ -220,5 +227,24 @@ describe('the way in', () => {
     await waitFor(() => {
       expect(where()).toBe('/settings/inbox/departments');
     });
+  });
+});
+
+describe('dialogs opened from a settings page', () => {
+  it('keep the theme’s own widths: a maxWidth="md" dialog is at most 900 px wide', async () => {
+    const { user } = await open('/settings/ai/knowledge');
+
+    await user.click(await screen.findByRole('button', { name: 'Add source' }));
+    await screen.findByRole('dialog');
+
+    const css = [...document.querySelectorAll('style')].map((tag) => tag.textContent).join('\n');
+    // md is 900 px, so its small-screen rule is 964; a shifted theme would say 1184.
+    expect(css).not.toContain('1184px');
+    expect(css).not.toContain('1120px');
+    const paper = document.querySelector('.MuiDialog-paper');
+    expect(paper).not.toBeNull();
+    expect(Number.parseInt(getComputedStyle(paper as Element).maxWidth, 10)).toBeLessThanOrEqual(
+      900,
+    );
   });
 });

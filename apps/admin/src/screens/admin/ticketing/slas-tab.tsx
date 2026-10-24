@@ -231,7 +231,7 @@ export function SlasTab(): ReactNode {
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', lg: '340px minmax(0, 1fr)' },
+        gridTemplateColumns: { xs: '1fr', xl: '340px minmax(0, 1fr)' },
         gap: 6,
         alignItems: 'start',
       }}

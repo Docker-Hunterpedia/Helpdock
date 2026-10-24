@@ -1,5 +1,10 @@
 import { Box, Typography } from '@mui/material';
+import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
+import { useT } from '../app/i18n.js';
+import { usePreferences } from '../app/providers.tsx';
+import { ROUTES } from '../app/route-paths.js';
 import { useSettingsHeader } from './settings-header.js';
 
 /**
@@ -45,13 +50,61 @@ export function PageHeader({
   );
 }
 
-/** `Settings › Inbox` above a page's h1; nothing outside the Settings area. */
+/**
+ * `Settings › Inbox` above a page's h1, as a breadcrumb landmark; nothing
+ * outside the Settings area. "Settings" links to the area (which opens its
+ * first page), the group is the current level, and the separator is a chevron
+ * that turns in Arabic.
+ */
 export function SettingsBreadcrumb(): ReactNode {
+  const t = useT();
+  const { locale } = usePreferences();
   const settings = useSettingsHeader();
+  if (settings === null) {
+    return null;
+  }
 
-  return settings === null ? null : (
-    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-      {settings.crumbs.join(' › ')}
-    </Typography>
+  return (
+    <Box component="nav" aria-label={t('admin:settings.breadcrumb')}>
+      <Box
+        component="ol"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
+          fontSize: 12,
+          color: 'text.secondary',
+        }}
+      >
+        {settings.crumbs.map((crumb, index) => {
+          const last = index === settings.crumbs.length - 1;
+          return (
+            <Box
+              component="li"
+              key={crumb}
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+            >
+              {last ? (
+                <span aria-current="page">{crumb}</span>
+              ) : (
+                <Link to={ROUTES.settings} style={{ color: 'inherit' }}>
+                  {crumb}
+                </Link>
+              )}
+              {last ? null : (
+                <ChevronRight
+                  size={12}
+                  aria-hidden="true"
+                  style={{ transform: locale === 'ar' ? 'scaleX(-1)' : undefined }}
+                />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
   );
 }

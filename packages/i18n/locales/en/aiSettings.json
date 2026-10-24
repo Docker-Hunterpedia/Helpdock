@@ -494,7 +494,7 @@
       "paused": "Paused · budget"
     },
     "firstResponse": "AI reply satisfies first-response SLA",
-    "firstResponseBody": "The same setting as in Ticketing › SLAs. A handoff message never counts.",
+    "firstResponseBody": "The same setting as in Inbox › SLA policies. A handoff message never counts.",
     "slaLink": "Open SLA settings",
     "handoff": "Handoff message",
     "handoffBody": "Sent when the assistant hands off or a visitor asks for a person (“talk to a human” always works). After a handoff the assistant stays quiet for the rest of the conversation unless an agent returns it.",

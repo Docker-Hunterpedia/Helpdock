@@ -1,12 +1,5 @@
-import {
-  Box,
-  createTheme,
-  type Theme,
-  ThemeProvider,
-  Typography,
-  useMediaQuery,
-} from '@mui/material';
-import { type ReactNode, useCallback, useMemo } from 'react';
+import { Box, Typography } from '@mui/material';
+import { type ReactNode, useMemo } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
@@ -23,35 +16,6 @@ import {
 } from './settings-nav.js';
 
 const NAV_WIDTH = 220;
-/** The width from which the navigation sits beside the page instead of above it. */
-const BESIDE = '(min-width:900px)';
-
-/**
- * The pages were laid out against the whole window, so their two-column
- * breakpoints (`lg`, `xl`) are window widths. Beside the navigation a page has
- * `NAV_WIDTH` less, and a layout that fits at 1200 px of window would be
- * cramped at 1200 px with a 220 px column taken, so for everything below the
- * shell every breakpoint is that much further along. The pages stay as they
- * were.
- */
-function shiftBreakpoints(outer: Theme): Theme {
-  const { values } = outer.breakpoints;
-  // The values go in the options, not on the result: the breakpoint helpers
-  // (`up`, `down`) are built from them when the theme is created.
-  return createTheme({
-    ...outer,
-    breakpoints: {
-      values: {
-        xs: values.xs,
-        sm: values.sm + NAV_WIDTH,
-        md: values.md + NAV_WIDTH,
-        lg: values.lg + NAV_WIDTH,
-        xl: values.xl + NAV_WIDTH,
-      },
-    },
-  });
-}
-
 /**
  * The Settings area (M14-21, `Admin/Settings-Shell`): a grouped secondary
  * navigation beside the page. The pages keep their own content and header; the
@@ -68,11 +32,6 @@ export function SettingsShell(): ReactNode {
   const current = settingsEntryAt(pathname);
   const exact = current !== undefined && pathname.replace(/\/$/, '') === current.path;
   const settingsLabel = t('admin:nav.settings');
-  const beside = useMediaQuery(BESIDE, { noSsr: true });
-  const pageTheme = useCallback(
-    (outer: Theme): Theme => (beside ? shiftBreakpoints(outer) : outer),
-    [beside],
-  );
 
   const header = useMemo(
     () =>
@@ -115,11 +74,9 @@ export function SettingsShell(): ReactNode {
         component="div"
         sx={{ flex: 1, minWidth: 0, paddingBlock: 5, paddingInline: { xs: 4, md: 6 } }}
       >
-        <ThemeProvider theme={pageTheme}>
-          <SettingsHeaderContext.Provider value={header}>
-            <Outlet />
-          </SettingsHeaderContext.Provider>
-        </ThemeProvider>
+        <SettingsHeaderContext.Provider value={header}>
+          <Outlet />
+        </SettingsHeaderContext.Provider>
       </Box>
     </Box>
   );
@@ -201,7 +158,7 @@ function SettingsGroup({
 }
 
 /** `/settings` and a bare group path: the first page the person is offered. */
-export function SettingsLanding({ group }: { readonly group?: SettingsGroupId }): ReactNode {
+export function SettingsLanding(): ReactNode {
   const session = useSession();
-  return <Navigate to={firstSettingsPath(session.user, group)} replace />;
+  return <Navigate to={firstSettingsPath(session.user)} replace />;
 }

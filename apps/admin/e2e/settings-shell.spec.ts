@@ -48,7 +48,9 @@ test.describe('the Settings area', () => {
     await expect(page).toHaveURL(/\/settings\/account\/profile$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('me:account.tabs.profile'));
     await expect(
-      page.getByText(`${t('admin:nav.settings')} › ${t('admin:settings.groups.account')}`),
+      page
+        .getByRole('navigation', { name: t('admin:settings.breadcrumb') })
+        .locator('[aria-current="page"]'),
     ).toBeVisible();
 
     for (const [area, group, heading] of [
@@ -61,8 +63,10 @@ test.describe('the Settings area', () => {
 
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
       await expect(
-        page.getByText(`${t('admin:nav.settings')} › ${t(`admin:settings.groups.${group}`)}`),
-      ).toBeVisible();
+        page
+          .getByRole('navigation', { name: t('admin:settings.breadcrumb') })
+          .locator('[aria-current="page"]'),
+      ).toHaveText(t(`admin:settings.groups.${group}`));
       await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
     }
 

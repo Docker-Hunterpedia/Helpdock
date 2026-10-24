@@ -14,7 +14,7 @@ the canvas artboards `Widget/States-EN`, `Widget/States-AR`, `Widget/Modes-EN`,
 <script type="module" src="https://support.example.com/widget.js" data-brand="0192c3f0-…"></script>
 ```
 
-Channels › Widget in the admin shows this tag with the brand's id filled in.
+Channels › Chat widget in the admin shows this tag with the brand's id filled in.
 The page's origin must be one of the brand's allowed origins on that tab.
 
 - `type="module"` is required: the build is an ES module so it can load its

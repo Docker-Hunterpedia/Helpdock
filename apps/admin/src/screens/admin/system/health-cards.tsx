@@ -81,7 +81,7 @@ export function HealthCards({ status }: { readonly status: SystemStatus }): Reac
         gridTemplateColumns: {
           xs: '1fr',
           sm: 'repeat(2, 1fr)',
-          lg: 'repeat(5, minmax(0, 1fr))',
+          xl: 'repeat(5, minmax(0, 1fr))',
         },
         gap: 4,
         marginBlockEnd: 6,

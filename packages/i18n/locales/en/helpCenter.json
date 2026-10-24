@@ -22,7 +22,7 @@
       "en": "English",
       "ar": "Arabic"
     },
-    "retention": "Search terms are kept for the search log period in Brand › Data retention. Staff visits are not counted.",
+    "retention": "Search terms are kept for the search log period in Brand › Danger zone. Staff visits are not counted.",
     "failed": "Insights could not be loaded.",
     "retry": "Try again",
     "top": {
@@ -411,7 +411,7 @@
       "address": "The help center’s address and its certificate:",
       "domains": "Brand › Domains",
       "widgetTheme": "The widget’s own theme:",
-      "widget": "Channels › Widget",
+      "widget": "Channels › Chat widget",
       "cache": "Saving a card clears this help center’s cached pages."
     }
   },

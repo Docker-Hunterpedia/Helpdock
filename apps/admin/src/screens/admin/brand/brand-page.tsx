@@ -135,7 +135,7 @@ function DangerZone({
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 720px) 300px' },
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', xl: 'minmax(0, 720px) 300px' },
         gap: 8,
         alignContent: 'start',
       }}

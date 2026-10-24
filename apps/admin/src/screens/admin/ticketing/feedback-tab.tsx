@@ -99,7 +99,7 @@ export function FeedbackTab(): ReactNode {
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 820px) 300px' },
+        gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 820px) 300px' },
         gap: 8,
         alignItems: 'start',
       }}

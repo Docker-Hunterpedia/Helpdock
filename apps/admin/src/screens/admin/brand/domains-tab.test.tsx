@@ -170,10 +170,10 @@ describe('Brand › Domains', () => {
     expect(screen.queryByText('support.helpdock.com')).toBeNull();
   });
 
-  it('points widget sites at Channels › Widget', async () => {
+  it('points widget sites at Channels › Chat widget', async () => {
     await renderDomains();
 
-    expect(screen.getByRole('link', { name: 'Channels › Widget' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Channels › Chat widget' })).toHaveAttribute(
       'href',
       '/settings/channels/widget',
     );

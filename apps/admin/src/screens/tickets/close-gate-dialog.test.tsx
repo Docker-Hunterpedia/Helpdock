@@ -15,6 +15,7 @@ const def = (over: Partial<CustomFieldDef> & Pick<CustomFieldDef, 'key' | 'label
     required: false,
     requiredToClose: true,
     agentVisible: true,
+    pinned: false,
     sortOrder: 0,
     ...over,
   }) satisfies CustomFieldDef;

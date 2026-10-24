@@ -163,6 +163,7 @@ describe('the pinned field (M14-16)', () => {
     options: ['Sev 1', 'Sev 2'],
     required: false,
     agentVisible: true,
+    requiredToClose: false,
     pinned: true,
     sortOrder: 0,
   };

@@ -356,6 +356,7 @@ describe('pinning (M14-16)', () => {
       options: ['Sev 1'],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: false,
       ...over,
     });
@@ -415,6 +416,7 @@ describe('pinning (M14-16)', () => {
     await expect(
       service.update(contextFor(transaction.tx), 'tier', {
         agentVisible: false,
+        requiredToClose: false,
         pinned: false,
         force: false,
       }),
@@ -467,6 +469,7 @@ describe('concurrent pins (M14-16)', () => {
       options: [],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: false,
     });
     expect(locked).toBe(1);
@@ -479,6 +482,7 @@ describe('concurrent pins (M14-16)', () => {
       options: ['Sev 1'],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: true,
     });
     expect(locked).toBe(2);

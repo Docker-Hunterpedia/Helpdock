@@ -1125,7 +1125,7 @@ clarifications the implementation had to fix down:
   closing" dialog (`CloseGateDialog`), whose **Save and close** sends the
   values and the status in one `PATCH`. A bulk refusal also carries `missing`
   (key, label, Arabic label) so the preview names the field.
-  Migration `0070_required_to_close`.
+  Migration `0071_required_to_close`.
 - **Validation.** `requiredToClose: true` is refused on contact and account
   fields and on a field with `agentVisible: false` (create and update, judged
   on the resulting state).

@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import { uuidv7 } from '@helpdock/db';
 import type { Redis } from 'ioredis';
 import { z } from 'zod';
-import { totpRotationKey } from '../redis-keys.js';
+import { totpRotationKey, totpRotationOfUserKey } from '../redis-keys.js';
 
 /**
  * The staged secret between "the step-up was proved" and "the new app typed a
@@ -16,6 +17,14 @@ import { totpRotationKey } from '../redis-keys.js';
  * authenticator; the key carries a TTL, so an abandoned rotation ends itself.
  */
 
+/**
+ * What a staged secret is bound to: a digest of the sealed secret it replaces.
+ * A rotation started against one app must not finish against another, whatever
+ * happened to the account in between (turned off, re-enrolled, replaced).
+ */
+export const replacedSecretDigest = (secretEncrypted: string): string =>
+  createHash('sha256').update(secretEncrypted).digest('hex');
+
 /** Long enough to scan a QR and type a code; the enrolment challenge gets the same. */
 export const ROTATION_TTL_SECONDS = 900;
 
@@ -23,6 +32,8 @@ const rotationSchema = z.object({
   userId: z.uuid(),
   /** `APP_MASTER_KEY`-sealed; the store never sees it in the clear. */
   secretEncrypted: z.string().min(1),
+  /** {@link replacedSecretDigest} of the live secret when the rotation was staged. */
+  replaces: z.string().min(1),
   createdAt: z.number().int(),
 });
 
@@ -39,18 +50,26 @@ export class TotpRotationStore {
     this.#redis = redis;
   }
 
-  /** Stages the sealed secret and answers the id the confirmation will name. */
+  /**
+   * Stages the sealed secret and answers the id the confirmation will name.
+   * An account has one open rotation: staging another ends the first.
+   */
   async create({
     userId,
     secretEncrypted,
+    replaces,
   }: {
     readonly userId: string;
     readonly secretEncrypted: string;
+    /** {@link replacedSecretDigest} of the sealed secret now live. */
+    readonly replaces: string;
   }): Promise<string> {
+    await this.clearForUser(userId);
     const rotationId = uuidv7();
     const rotation: StagedRotation = {
       userId,
       secretEncrypted,
+      replaces,
       createdAt: Math.floor(Date.now() / 1000),
     };
 
@@ -60,6 +79,7 @@ export class TotpRotationStore {
       'EX',
       ROTATION_TTL_SECONDS,
     );
+    await this.#redis.set(totpRotationOfUserKey(userId), rotationId, 'EX', ROTATION_TTL_SECONDS);
 
     return rotationId;
   }
@@ -82,11 +102,14 @@ export class TotpRotationStore {
     return { status: 'ok', rotation: parsed };
   }
 
-  /** Spends the staged secret, only for the account it was staged for. */
-  async consume(rotationId: string, userId: string): Promise<void> {
-    const raw = await this.#redis.get(totpRotationKey(rotationId));
-    if (raw !== null && rotationSchema.safeParse(JSON.parse(raw)).data?.userId === userId) {
-      await this.#redis.del(totpRotationKey(rotationId));
-    }
+  /**
+   * Ends whatever rotation the account has open. Every change of factor calls
+   * it; the digest binding refuses a stale rotation anyway, so this is the
+   * second lock on the same door.
+   */
+  async clearForUser(userId: string): Promise<void> {
+    const open = await this.#redis.get(totpRotationOfUserKey(userId));
+    if (open !== null) await this.#redis.del(totpRotationKey(open));
+    await this.#redis.del(totpRotationOfUserKey(userId));
   }
 }

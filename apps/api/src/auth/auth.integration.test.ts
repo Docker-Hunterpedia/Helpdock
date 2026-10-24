@@ -1,5 +1,5 @@
 import type { EmailMessage } from '@helpdock/channels';
-import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
+import { createKeyring, decryptSecret, type Env, encryptSecret } from '@helpdock/config';
 import {
   auditLog,
   createDb,
@@ -859,6 +859,200 @@ describe.skipIf(!hasDocker)('the auth service', () => {
           ),
         })
         .where(eq(users.id, seeded.userId));
+    });
+
+    describe('under concurrency and staleness', () => {
+      const KEYRING = createKeyring({ APP_MASTER_KEY: MASTER_KEY });
+
+      const startWith = (accessToken: string, proof: Record<string, unknown>) =>
+        post('/api/me/totp/rotate/start', proof, bearer(accessToken));
+
+      const restoreSeededSecret = () =>
+        runtime.db
+          .update(users)
+          .set({
+            totpSecretEncrypted: encryptSecret(seeded.totpSecret ?? '', KEYRING),
+            recoveryCodesHashed: [],
+          })
+          .where(eq(users.id, seeded.userId));
+
+      const recoveryHashes = async (): Promise<string[]> => {
+        const [row] = await runtime.db
+          .select({ hashed: users.recoveryCodesHashed })
+          .from(users)
+          .where(eq(users.id, seeded.userId));
+        return row?.hashed ?? [];
+      };
+
+      const seedRecoveryCodes = async (codes: string[]): Promise<string[]> => {
+        const { PasswordHasher } = await import('./password.js');
+        const { hashRecoveryCodes } = await import('./totp/recovery-codes.js');
+        const hashed = await hashRecoveryCodes(
+          codes,
+          new PasswordHasher(Buffer.from(MASTER_KEY, 'base64')),
+        );
+        await runtime.db
+          .update(users)
+          .set({ recoveryCodesHashed: hashed })
+          .where(eq(users.id, seeded.userId));
+        return hashed;
+      };
+
+      afterEach(async () => {
+        await restoreSeededSecret();
+        const staged = await runtime.redis.keys('auth:totp-rotate*');
+        if (staged.length > 0) await runtime.redis.del(...staged);
+      });
+
+      it('lets one recovery code start one rotation, however many starts race with it', async () => {
+        const { accessToken } = await signIn();
+        await seedRecoveryCodes(['RC-AAAA-BBBB', 'RC-CCCC-DDDD']);
+
+        const responses = await Promise.all(
+          Array.from({ length: 4 }, () => startWith(accessToken, { recoveryCode: 'RC-AAAA-BBBB' })),
+        );
+
+        expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
+        expect(await recoveryHashes()).toHaveLength(1);
+      });
+
+      it('never brings back old recovery codes when a start races a redraw', async () => {
+        const { accessToken } = await signIn();
+        const old = await seedRecoveryCodes(['RC-AAAA-BBBB', 'RC-CCCC-DDDD']);
+        const code = await totpCode();
+
+        const [started, redrawn] = await Promise.all([
+          startWith(accessToken, { recoveryCode: 'RC-AAAA-BBBB' }),
+          post('/api/me/recovery-codes/regenerate', { code }, bearer(accessToken)),
+        ]);
+
+        expect(redrawn.statusCode).toBe(201);
+        expect([201, 401]).toContain(started.statusCode);
+        const finalHashes = await recoveryHashes();
+        expect(finalHashes).toHaveLength(10);
+        expect(finalHashes.some((hash) => old.includes(hash))).toBe(false);
+      });
+
+      it('refuses a staged rotation once another has replaced the app', async () => {
+        const { accessToken } = await signIn();
+        const first = (await startWith(accessToken, { code: await totpCode() })).json() as {
+          rotationId: string;
+          secret: string;
+        };
+        const second = (await startWith(accessToken, { code: await totpCode() })).json() as {
+          rotationId: string;
+          secret: string;
+        };
+        await forgetUsedTotpSteps(runtime.redis);
+
+        const swapped = await post(
+          '/api/me/totp/rotate/confirm',
+          { rotationId: second.rotationId, code: await generate({ secret: second.secret }) },
+          bearer(accessToken),
+        );
+        expect(swapped.statusCode).toBe(204);
+
+        const stale = await post(
+          '/api/me/totp/rotate/confirm',
+          { rotationId: first.rotationId, code: await generate({ secret: first.secret }) },
+          bearer(accessToken),
+        );
+        expect(stale.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+      });
+
+      it('refuses a staged rotation whose app was turned off and set up again meanwhile', async () => {
+        const { accessToken } = await signIn();
+        const staged = (await startWith(accessToken, { code: await totpCode() })).json() as {
+          rotationId: string;
+          secret: string;
+        };
+        // What disable-then-enrol leaves behind: an enabled app with another secret.
+        const reenrolled = encryptSecret('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', KEYRING);
+        await runtime.db
+          .update(users)
+          .set({ totpSecretEncrypted: reenrolled })
+          .where(eq(users.id, seeded.userId));
+
+        const response = await post(
+          '/api/me/totp/rotate/confirm',
+          { rotationId: staged.rotationId, code: await generate({ secret: staged.secret }) },
+          bearer(accessToken),
+        );
+
+        expect(response.json()).toMatchObject({ error: { auth: { code: 'challenge-expired' } } });
+        const [row] = await runtime.db
+          .select({ secret: users.totpSecretEncrypted })
+          .from(users)
+          .where(eq(users.id, seeded.userId));
+        expect(row?.secret).toBe(reenrolled);
+      });
+
+      it('does not let the confirming code sign in straight afterwards', async () => {
+        const { accessToken } = await signIn();
+        const staged = (await startWith(accessToken, { code: await totpCode() })).json() as {
+          rotationId: string;
+          secret: string;
+        };
+        const code = await generate({ secret: staged.secret, period: 30 });
+        const confirmed = await post(
+          '/api/me/totp/rotate/confirm',
+          { rotationId: staged.rotationId, code },
+          bearer(accessToken),
+        );
+        expect(confirmed.statusCode).toBe(204);
+
+        const first = await post('/api/auth/sign-in', {
+          email: seeded.email,
+          password: seeded.password,
+        });
+        const replay = await post('/api/auth/totp', {
+          challengeId: (first.json() as { challengeId: string }).challengeId,
+          code,
+          trustDevice: false,
+        });
+
+        expect(replay.statusCode).toBe(401);
+      });
+
+      it('rolls the whole swap back when a later write in the same transaction fails', async () => {
+        const { accessToken } = await signIn();
+        const staged = (await startWith(accessToken, { code: await totpCode() })).json() as {
+          rotationId: string;
+          secret: string;
+        };
+        // The security notice is queued in the swap's own transaction; failing
+        // it after the UPDATE is the real rollback, not a stubbed repository.
+        const admin = createDb({ url: envFor().DATABASE_MIGRATION_URL, max: 1 });
+        await admin.db.execute(
+          sql.raw(`CREATE FUNCTION fail_rotation_notice() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'notice refused'; END $$`),
+        );
+        await admin.db.execute(
+          sql.raw(`CREATE TRIGGER fail_rotation_notice BEFORE INSERT ON outbox
+            FOR EACH ROW WHEN (NEW.payload::text LIKE '%twoFactorRotated%')
+            EXECUTE FUNCTION fail_rotation_notice()`),
+        );
+        try {
+          const failed = await post(
+            '/api/me/totp/rotate/confirm',
+            { rotationId: staged.rotationId, code: await generate({ secret: staged.secret }) },
+            bearer(accessToken),
+          );
+          expect(failed.statusCode).toBe(500);
+        } finally {
+          await admin.db.execute(sql.raw('DROP TRIGGER fail_rotation_notice ON outbox'));
+          await admin.db.execute(sql.raw('DROP FUNCTION fail_rotation_notice()'));
+          await admin.close();
+        }
+
+        const [row] = await runtime.db
+          .select({ secret: users.totpSecretEncrypted })
+          .from(users)
+          .where(eq(users.id, seeded.userId));
+        expect(decryptSecret(row?.secret ?? '', KEYRING)).toBe(seeded.totpSecret);
+        // Nothing after the commit ran, so the staged secret is still there to retry.
+        expect(await runtime.redis.exists(`auth:totp-rotate:${staged.rotationId}`)).toBe(1);
+      });
     });
 
     it('still refuses to turn the required second factor off after a rotation', async () => {

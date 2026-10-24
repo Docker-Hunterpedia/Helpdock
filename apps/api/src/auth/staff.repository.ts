@@ -179,20 +179,27 @@ export class StaffRepository {
 
   /**
    * Swaps the live authenticator's secret for the staged one (#373), keeping
-   * the factor on. The `totp_enabled` guard makes the swap refuse an account
-   * whose app was turned off while the staged secret waited: a confirmation
-   * must never bring a second factor back after the holder, or a lock, has
-   * said no.
+   * the factor on. The swap names the secret it replaces: an account whose app
+   * was turned off, re-enrolled or already replaced since the rotation was
+   * staged no longer holds that secret, and a confirmation must never bring
+   * back a second factor the holder, or a lock, has said no to.
    */
   async rotateTotpSecret(
     userId: string,
+    replacing: string,
     totpSecretEncrypted: string,
     tx?: Queryable,
   ): Promise<boolean> {
     const rotated = await (tx ?? this.#db)
       .update(users)
       .set({ totpSecretEncrypted })
-      .where(and(eq(users.id, userId), eq(users.totpEnabled, true)))
+      .where(
+        and(
+          eq(users.id, userId),
+          eq(users.totpEnabled, true),
+          eq(users.totpSecretEncrypted, replacing),
+        ),
+      )
       .returning({ id: users.id });
     return rotated.length > 0;
   }

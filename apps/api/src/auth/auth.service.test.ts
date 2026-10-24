@@ -146,8 +146,13 @@ class FakeStaffRepository {
     return true;
   }
 
-  async rotateTotpSecret(userId: string, totpSecretEncrypted: string): Promise<boolean> {
-    if (!this.users.get(userId)?.totpEnabled) return false;
+  async rotateTotpSecret(
+    userId: string,
+    replacing: string,
+    totpSecretEncrypted: string,
+  ): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (!user?.totpEnabled || user.totpSecretEncrypted !== replacing) return false;
     this.#patch(userId, { totpSecretEncrypted });
     return true;
   }
@@ -346,6 +351,7 @@ let passkeyCounts: Map<string, number>;
 let passkeyRows: FakePasskeys;
 let webauthn: WebAuthnService;
 let limiter: RateLimiter;
+let rotations: TotpRotationStore;
 let signingKeys: SigningKeys;
 
 /**
@@ -517,6 +523,7 @@ beforeEach(async () => {
     transaction: (callback: (tx: DbTransaction) => Promise<unknown>) =>
       callback(emptyTx as unknown as DbTransaction),
   } as unknown as Db;
+  rotations = new TotpRotationStore(created.redis);
   webauthn = new WebAuthnService({
     appUrl: APP_URL,
     ceremonies: new WebAuthnCeremonyStore(created.redis),
@@ -534,7 +541,7 @@ beforeEach(async () => {
     hasher,
     challenges: new TotpChallengeStore(created.redis),
     steps: new TotpStepStore(created.redis),
-    rotations: new TotpRotationStore(created.redis),
+    rotations,
     trustedDevices: new TrustedDeviceStore({ redis: created.redis, masterKey: MASTER_KEY }),
     tokens: new EmailTokenStore(created.redis),
     exchanges: new ExchangeStore(created.redis),
@@ -3442,11 +3449,15 @@ describe('replacing the authenticator app (#373)', () => {
     return { userId: user.id, secret };
   };
 
+  // The routes always hold a transaction, and the account-row lock is taken
+  // only when one is passed: without it these tests would not run that line.
+  const tx = {} as DbTransaction;
+
   const start = (userId: string, proof: Parameters<AuthService['startTotpRotation']>[0]['proof']) =>
-    service.startTotpRotation({ userId, proof });
+    service.startTotpRotation({ userId, proof, tx });
 
   const confirm = (userId: string, rotationId: string, code: string): Promise<void> =>
-    service.confirmTotpRotation({ userId, rotationId, code });
+    service.confirmTotpRotation({ userId, rotationId, code, tx });
 
   const liveSecretOf = (userId: string): string | null => {
     const encrypted = staff.users.get(userId)?.totpSecretEncrypted ?? null;
@@ -3454,6 +3465,10 @@ describe('replacing the authenticator app (#373)', () => {
       ? null
       : decryptSecret(encrypted, createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }));
   };
+
+  /** A code from the step after this one: the used-step record refuses a second code on one step. */
+  const nextCode = (secret: string): Promise<string> =>
+    generate({ secret, epoch: Math.floor(Date.now() / 1000) + 30 });
 
   const rotatedAudited = (): boolean =>
     audit.entries.some((entry) => entry.action === 'auth.second_factor.rotated');
@@ -3607,22 +3622,102 @@ describe('replacing the authenticator app (#373)', () => {
       expect(mail.sent).toHaveLength(0);
     });
 
-    it('keeps the old secret when the swap itself fails, so the rollback loses nothing', async () => {
+    it('takes the account lock before it reads anything, at both steps', async () => {
+      const { userId, secret } = await requiredAccount();
+
+      const staged = await start(userId, { code: await generate({ secret }) });
+      expect(passkeyRows.calls.filter((call) => call === 'lock')).toHaveLength(1);
+
+      await confirm(userId, staged.rotationId, await generate({ secret: staged.secret }));
+      expect(passkeyRows.calls.filter((call) => call === 'lock')).toHaveLength(2);
+    });
+
+    it('spends the step-up budget at every confirmation, so the staged secret cannot be walked', async () => {
       const { userId, secret } = await requiredAccount();
       const staged = await start(userId, { code: await generate({ secret }) });
-      const repository = staff as unknown as { rotateTotpSecret(): Promise<boolean> };
-      const original = repository.rotateTotpSecret;
-      repository.rotateTotpSecret = () => Promise.reject(new Error('database gone'));
+      const wrong = ((Number.parseInt(await generate({ secret: staged.secret }), 10) % 999_983) + 1)
+        .toString()
+        .padStart(6, '0');
+
+      // The start took one attempt of five; four wrong confirmations take the rest.
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(confirm(userId, staged.rotationId, wrong)).rejects.toMatchObject({
+          auth: { code: 'totp-mismatch' },
+        });
+      }
+
+      // Even the right code is now refused, and nothing was swapped.
+      await expect(
+        confirm(userId, staged.rotationId, await generate({ secret: staged.secret })),
+      ).rejects.toMatchObject({ auth: { code: 'totp-locked' } });
+      expect(liveSecretOf(userId)).toBe(secret);
+    });
+
+    it('refuses a rotation staged before the app was replaced by another', async () => {
+      const { userId, secret } = await requiredAccount();
+      const first = await start(userId, { code: await generate({ secret }) });
+      const second = await start(userId, { code: await nextCode(secret) });
+
+      await confirm(userId, second.rotationId, await generate({ secret: second.secret }));
+
+      // The first was ended by the second; and even one that survived would
+      // name a secret that is no longer live.
+      await expect(
+        confirm(userId, first.rotationId, await generate({ secret: first.secret })),
+      ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+      expect(liveSecretOf(userId)).toBe(second.secret);
+    });
+
+    it('refuses a rotation staged before the app was turned off and set up again', async () => {
+      const { userId, secret } = await requiredAccount();
+      // A recovery code starts it, leaving the code steps free for the two
+      // changes after it, each of which spends one.
+      const user = staff.users.get(userId);
+      if (user === undefined) throw new Error('no user');
+      user.recoveryCodesHashed = await hashRecoveryCodes(['RC-4KQ2-9XMT'], hasher);
+      const staged = await start(userId, { recoveryCode: 'RC-4KQ2-9XMT' });
+
+      // A required account may turn the app off only while a passkey remains.
+      passkeyCounts.set(userId, 1);
+      await service.disableTotp(userId, await generate({ secret }), tx);
+      const enrolment = await service.enrolTotp(userId);
+      await service.confirmTotp(userId, await nextCode(enrolment.secret), tx);
 
       await expect(
         confirm(userId, staged.rotationId, await generate({ secret: staged.secret })),
-      ).rejects.toMatchObject({ message: 'database gone' });
-      repository.rotateTotpSecret = original;
+      ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+      expect(liveSecretOf(userId)).toBe(enrolment.secret);
+    });
 
-      expect(liveSecretOf(userId)).toBe(secret);
-      expect(staff.users.get(userId)?.totpEnabled).toBe(true);
-      expect(rotatedAudited()).toBe(false);
-      expect(mail.sent).toHaveLength(0);
+    it('ends an open rotation when the app is turned off', async () => {
+      const { userId, secret } = await requiredAccount();
+      const staged = await start(userId, { code: await generate({ secret }) });
+      passkeyCounts.set(userId, 1);
+
+      await service.disableTotp(userId, await nextCode(secret), tx);
+
+      await expect(rotations.read(staged.rotationId)).resolves.toEqual({ status: 'expired' });
+    });
+
+    it('marks the confirming code as used, so it cannot also sign in', async () => {
+      const { userId, secret } = await requiredAccount();
+      const email = staff.users.get(userId)?.email ?? '';
+      const staged = await start(userId, { code: await generate({ secret }) });
+      const code = await generate({ secret: staged.secret });
+      await confirm(userId, staged.rotationId, code);
+
+      const started = await signIn({ email });
+      if (started.kind !== 'totp-required') throw new Error('expected a challenge');
+      await expect(
+        service.verifyTotp({
+          challengeId: started.challengeId,
+          ip: '203.0.113.5',
+          code,
+          trustDevice: false,
+          userAgent: undefined,
+        }),
+      ).rejects.toMatchObject({ auth: { code: 'totp-mismatch' } });
+      expect(audit.actions()).toContain('auth.second_factor.replayed');
     });
 
     it('will not confirm a rotation whose app was turned off meanwhile', async () => {
@@ -3660,7 +3755,7 @@ describe('replacing the authenticator app (#373)', () => {
       const issued = await service.verifyTotp({
         challengeId: again.challengeId,
         ip: '203.0.113.5',
-        code: await generate({ secret: staged.secret }),
+        code: await nextCode(staged.secret),
         trustDevice: false,
         userAgent: undefined,
       });

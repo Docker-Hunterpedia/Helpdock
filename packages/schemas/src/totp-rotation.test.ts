@@ -60,6 +60,17 @@ describe('the rotation proof', () => {
     ).toBe(false);
   });
 
+  it('refuses a password beside a code or a passkey, and any field it does not know', () => {
+    expect(
+      totpRotationProofSchema.safeParse({ code: '482913', currentPassword: 'correct horse' })
+        .success,
+    ).toBe(false);
+    expect(
+      totpRotationProofSchema.safeParse({ passkey, currentPassword: 'correct horse' }).success,
+    ).toBe(false);
+    expect(totpRotationProofSchema.safeParse({ code: '482913', extra: true }).success).toBe(false);
+  });
+
   it('refuses an empty proof and a code with letters', () => {
     expect(totpRotationProofSchema.safeParse({}).success).toBe(false);
     expect(totpRotationProofSchema.safeParse({ code: '4829ab' }).success).toBe(false);

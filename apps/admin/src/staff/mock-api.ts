@@ -64,6 +64,8 @@ export const MOCK_CURRENT_PASSWORD = 'correct horse';
 export const MOCK_TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
 export const MOCK_ENROLMENT_CODE = '482913';
 /** What every rotation start answers, so a confirm can name it (and a second cannot). */
+/** A confirmation code the fixture answers as stale: the factors changed since the rotation began. */
+export const MOCK_STALE_ROTATION_CODE = '999999';
 export const MOCK_ROTATION_ID = '0192c3f0-1a2b-7c3d-8e4f-0000000000f0';
 
 const recoveryCodes = (seed: string): string[] =>
@@ -436,6 +438,10 @@ export class MockStaffApi implements StaffApi {
 
   async confirmTotpRotation(rotationId: string, code: string): Promise<void> {
     if (rotationId !== this.#stagedRotationId || this.#profile.twoFactorEnabled === false) {
+      throw new AuthError('challenge-expired');
+    }
+    if (code === MOCK_STALE_ROTATION_CODE) {
+      this.#stagedRotationId = null;
       throw new AuthError('challenge-expired');
     }
     this.#assertCode(code);

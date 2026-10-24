@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { authRedis } from '../../testing/auth-redis.js';
 import type { RedisStub } from '../../testing/redis-stub.js';
 import { totpRotationKey } from '../redis-keys.js';
-import { ROTATION_TTL_SECONDS, TotpRotationStore } from './rotation-store.js';
+import { ROTATION_TTL_SECONDS, replacedSecretDigest, TotpRotationStore } from './rotation-store.js';
 
 /**
  * The staged secret of a rotation (#373). What the tests here prove is the
@@ -15,6 +15,7 @@ import { ROTATION_TTL_SECONDS, TotpRotationStore } from './rotation-store.js';
 const USER_ID = uuidv7();
 const OTHER_ID = uuidv7();
 const SEALED = 'sealed.v1.whatever';
+const REPLACES = replacedSecretDigest('sealed.v1.live');
 
 let stub: RedisStub;
 let store: TotpRotationStore;
@@ -25,14 +26,18 @@ beforeEach(() => {
   store = new TotpRotationStore(created.redis);
 });
 
-const start = () => store.create({ userId: USER_ID, secretEncrypted: SEALED });
+const start = () => store.create({ userId: USER_ID, secretEncrypted: SEALED, replaces: REPLACES });
 
 describe('create', () => {
   it('stages the sealed secret against the account, never in the clear', async () => {
     const rotationId = await start();
 
     const raw = await stub.get(totpRotationKey(rotationId));
-    expect(JSON.parse(raw ?? '{}')).toMatchObject({ userId: USER_ID, secretEncrypted: SEALED });
+    expect(JSON.parse(raw ?? '{}')).toMatchObject({
+      userId: USER_ID,
+      secretEncrypted: SEALED,
+      replaces: REPLACES,
+    });
   });
 
   it('expires after fifteen minutes, like an enrolment challenge', async () => {
@@ -62,18 +67,37 @@ describe('read', () => {
   });
 });
 
-describe('consume', () => {
-  it('spends the rotation for its own account', async () => {
-    const rotationId = await start();
-    await store.consume(rotationId, USER_ID);
+describe('one open rotation per account', () => {
+  it('ends the first when a second is staged', async () => {
+    const first = await start();
+    const second = await start();
 
-    await expect(store.read(rotationId)).resolves.toEqual({ status: 'expired' });
+    await expect(store.read(first)).resolves.toEqual({ status: 'expired' });
+    await expect(store.read(second)).resolves.toMatchObject({ status: 'ok' });
   });
 
-  it('leaves it alone for another account', async () => {
-    const rotationId = await start();
-    await store.consume(rotationId, OTHER_ID);
+  it('leaves another account’s rotation alone', async () => {
+    const mine = await start();
+    const theirs = await store.create({
+      userId: OTHER_ID,
+      secretEncrypted: SEALED,
+      replaces: REPLACES,
+    });
 
-    expect(await stub.get(totpRotationKey(rotationId))).not.toBeNull();
+    await store.clearForUser(USER_ID);
+
+    await expect(store.read(mine)).resolves.toEqual({ status: 'expired' });
+    await expect(store.read(theirs)).resolves.toMatchObject({ status: 'ok' });
+  });
+
+  it('clearing an account with nothing open is harmless', async () => {
+    await expect(store.clearForUser(USER_ID)).resolves.toBeUndefined();
+  });
+});
+
+describe('replacedSecretDigest', () => {
+  it('differs for different secrets and never contains the secret', () => {
+    expect(replacedSecretDigest('a')).not.toBe(replacedSecretDigest('b'));
+    expect(replacedSecretDigest('sealed.v1.live')).not.toContain('live');
   });
 });

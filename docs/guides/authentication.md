@@ -272,9 +272,20 @@ page offers **Replace app**, which swaps the secret in one confirmed step:
 The holder is emailed (`securityChange`, `twoFactorRotated`) through the outbox,
 the api writes `auth.second_factor.rotated`, and the recovery codes stay. Each
 of the two requests costs the step-up budget (five per fifteen minutes), so the
-staged secret's six digits cannot be walked. The confirm code is checked against
-the staged secret only, so the old app cannot confirm its own replacement; the
-old app's codes stop working at the swap, and the new app can sign in at once.
+staged secret's six digits cannot be walked. The start takes the account-row lock
+before it reads the recovery codes, as turning the app off and redrawing the codes
+do, so one recovery code starts one rotation and a start racing a redraw cannot
+bring the old codes back.
+
+The staged secret is bound to the secret it replaces (a digest of the sealed live
+secret). An account has one open rotation: staging another, or turning the app
+off, enrolling, or completing a rotation, ends it, and a confirmation whose bound
+secret is no longer the live one is refused with `challenge-expired`, and the swap
+`UPDATE` names the old secret too. The confirm code is checked against the staged
+secret only, so the old app cannot confirm its own replacement; the old app's
+codes stop working at the swap. The confirm code's time step is then recorded as
+used, after the commit, so that code cannot also sign in; the new app's next code
+can.
 
 With a lost phone the recovery code (alone, or with the password) proves the
 step-up; with a passkey, the passkey does.

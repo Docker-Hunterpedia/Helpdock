@@ -8,16 +8,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  OutlinedInput,
-  Paper,
   TextField,
   Typography,
 } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, KeyRound } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
-import { useSemanticTokens } from '../../app/tokens.js';
 import { isAuthError } from '../../auth/api.js';
 import {
   assertPasskey,
@@ -25,7 +22,6 @@ import {
   passkeysSupported,
 } from '../../auth/passkey-ceremony.js';
 import { useAuthApi, useStaffApi } from '../../auth/session.tsx';
-import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { QrCode } from '../../ui/qr-code.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 
@@ -49,16 +45,8 @@ type Step = 'proof' | 'scan';
 /** Which proof fields the first step shows. */
 type ProofMode = 'secret' | 'password';
 
-const copyToClipboard = async (text: string): Promise<boolean> => {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // A browser with no clipboard permission is not a failure worth a banner:
-    // the key is on screen and can be selected.
-    return false;
-  }
-};
+/** The key as authenticator apps print it: groups of four, read aloud and typed by hand. */
+const groupsOf4 = (key: string): string => key.replace(/(.{4})(?=.)/g, '$1 ');
 
 /** A six-digit value is an app code; anything else is read as a recovery code. */
 const proofOf = (value: string): TotpRotationProof =>
@@ -69,14 +57,14 @@ export function ReplaceAuthenticatorDialog({
   onClose,
 }: {
   readonly open: boolean;
-  onClose(): void;
+  /** `stale` when the replacement expired or the factors changed under it: the page says "start again". */
+  onClose(outcome?: 'stale'): void;
 }): ReactNode {
   const t = useT();
   const api = useStaffApi();
   const authApi = useAuthApi();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const tokens = useSemanticTokens();
 
   const passkeyButtonId = useId();
   const proofId = useId();
@@ -91,7 +79,6 @@ export function ReplaceAuthenticatorDialog({
   const [staged, setStaged] = useState<TotpRotationStart | null>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [asking, setAsking] = useState(false);
 
   // Reopened from the button, not resumed: a half-finished proof is discarded,
@@ -106,7 +93,6 @@ export function ReplaceAuthenticatorDialog({
       setStaged(null);
       setCode('');
       setCodeError(null);
-      setCopied(false);
     }
   }, [open]);
 
@@ -115,14 +101,12 @@ export function ReplaceAuthenticatorDialog({
   };
 
   const fail = (error: unknown): void => {
+    if (isAuthError(error) && error.code === 'challenge-expired') {
+      onClose('stale');
+      return;
+    }
     close();
-    toast({
-      tone: 'danger',
-      message:
-        isAuthError(error) && error.code === 'challenge-expired'
-          ? t('me:passkeys.expired')
-          : t('me:security.failed'),
-    });
+    toast({ tone: 'danger', message: t('me:security.failed') });
   };
 
   const start = useMutation({
@@ -236,7 +220,7 @@ export function ReplaceAuthenticatorDialog({
       {step === 'proof' ? (
         <>
           <DialogTitle sx={{ fontSize: 16, fontWeight: 600 }}>
-            {t('me:twoFactor.replaceTitle')}
+            {t('me:passkeys.stepUpTitle')}
           </DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -347,44 +331,16 @@ export function ReplaceAuthenticatorDialog({
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {t('auth:enrolment.step1.manualLabel')}
+                {t('me:twoFactor.keyLabel')}
               </Typography>
-              <Paper
-                elevation={0}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 3,
-                  padding: 3,
-                  borderRadius: '8px',
-                  backgroundColor: tokens['bg.muted'],
-                }}
+              <Typography
+                variant="body2"
+                dir="ltr"
+                sx={{ ...monoFontStyle, wordBreak: 'break-all' }}
               >
-                <Typography variant="body2" sx={{ ...monoFontStyle, wordBreak: 'break-all' }}>
-                  <bdi>{staged?.secret ?? ''}</bdi>
-                </Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={copied ? <Check size={16} /> : <Copy size={16} />}
-                  onClick={() => {
-                    void copyToClipboard(staged?.secret ?? '').then((done) => {
-                      setCopied(done);
-                    });
-                  }}
-                >
-                  {t('auth:enrolment.step1.copyKey')}
-                </Button>
-              </Paper>
-              {copied ? (
-                <Typography role="status" variant="caption" sx={{ color: 'text.secondary' }}>
-                  {t('auth:enrolment.step1.keyCopied')}
-                </Typography>
-              ) : null}
+                {groupsOf4(staged?.secret ?? '')}
+              </Typography>
             </Box>
-
-            <AlertBanner tone="info">{t('me:twoFactor.scanNote')}</AlertBanner>
 
             <Box
               component="form"
@@ -394,38 +350,27 @@ export function ReplaceAuthenticatorDialog({
               }}
               sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
             >
-              <OutlinedInput
+              <TextField
                 id={codeId}
+                label={t('me:twoFactor.newCodeLabel')}
                 value={code}
                 onChange={(event) => {
                   setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
                 }}
                 error={codeError !== null}
+                helperText={codeError ?? ' '}
                 fullWidth
-                sx={{
-                  height: 44,
-                  '& input': {
-                    ...monoFontStyle,
-                    fontSize: 20,
-                    letterSpacing: '0.18em',
-                    textAlign: 'center',
-                  },
-                }}
                 slotProps={{
-                  input: {
+                  htmlInput: {
                     dir: 'ltr',
                     inputMode: 'numeric',
                     autoComplete: 'one-time-code',
                     maxLength: 6,
-                    'aria-label': t('me:twoFactor.newCodeLabel'),
+                    style: monoFontStyle,
                   },
+                  formHelperText: { role: codeError === null ? undefined : 'alert' },
                 }}
               />
-              {codeError === null ? null : (
-                <Typography variant="caption" sx={{ color: 'error.main' }} role="alert">
-                  {codeError}
-                </Typography>
-              )}
             </Box>
           </DialogContent>
           <DialogActions sx={{ padding: 4 }}>

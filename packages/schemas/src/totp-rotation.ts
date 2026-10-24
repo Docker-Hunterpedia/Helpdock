@@ -18,7 +18,7 @@ import { totpCodeRequestSchema } from './staff.js';
 const recoveryCode = z.string().min(1).max(32);
 
 export const totpRotationProofSchema = z
-  .object({
+  .strictObject({
     /** A live code from the authenticator being replaced. */
     code: totpCodeRequestSchema.shape.code.optional(),
     /** A single-use recovery code, for the day the phone is gone. Spent on success. */
@@ -30,16 +30,22 @@ export const totpRotationProofSchema = z
       .object({ ceremonyId: CEREMONY_ID, response: authenticationResponseSchema })
       .optional(),
   })
-  .refine(
-    (value) =>
-      [
-        value.code !== undefined,
-        value.recoveryCode !== undefined && value.currentPassword === undefined,
-        value.passkey !== undefined,
-        value.recoveryCode !== undefined && value.currentPassword !== undefined,
-      ].filter((shape) => shape).length === 1,
-    'Send an authentication code, a recovery code, a passkey assertion, or the password with a recovery code — one proof only',
-  );
+  .refine((value) => {
+    const has = {
+      code: value.code !== undefined,
+      recoveryCode: value.recoveryCode !== undefined,
+      currentPassword: value.currentPassword !== undefined,
+      passkey: value.passkey !== undefined,
+    };
+    // Exactly one of the four shapes, and nothing beside it: a stray field is
+    // a proof the server would otherwise ignore without saying so.
+    return (
+      (has.code && !has.recoveryCode && !has.currentPassword && !has.passkey) ||
+      (has.recoveryCode && !has.currentPassword && !has.code && !has.passkey) ||
+      (has.passkey && !has.code && !has.recoveryCode && !has.currentPassword) ||
+      (has.recoveryCode && has.currentPassword && !has.code && !has.passkey)
+    );
+  }, 'Send an authentication code, a recovery code, a passkey assertion, or the password with a recovery code — one proof only');
 export type TotpRotationProof = z.infer<typeof totpRotationProofSchema>;
 
 /** What a rotation start returns: the staged secret for the QR, and the id the confirmation names. */

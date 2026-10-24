@@ -42,6 +42,9 @@ export const totpFailuresKey = (userId: string): string => `auth:totp-failures:$
  */
 export const totpRotationKey = (rotationId: string): string => `auth:totp-rotate:${rotationId}`;
 
+/** The one rotation an account has open, so a change of factor can end it. */
+export const totpRotationOfUserKey = (userId: string): string => `auth:totp-rotate-of:${userId}`;
+
 /** The last time step an authenticator code of this account was accepted at. */
 export const totpUsedStepKey = (userId: string): string => `auth:totp-step:${userId}`;
 

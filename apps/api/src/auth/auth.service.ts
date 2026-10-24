@@ -27,6 +27,7 @@ import {
   MICROSOFT_CONSUMERS_TENANT_ID,
   OAUTH_PROVIDERS as OAUTH_PROVIDER_IDS,
 } from '@helpdock/schemas';
+import { runAfterCommit } from '../context/after-commit.js';
 import { currentRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
 import type { SsoIdentityService } from '../sso/identity.service.js';
@@ -61,7 +62,7 @@ import type { IssuedSession, SessionService } from './session/session.service.js
 import type { Queryable, StaffRepository, StaffUser } from './staff.repository.js';
 import type { TotpChallengeStore } from './totp/challenge-store.js';
 import { hashRecoveryCodes, newRecoveryCodes, spendRecoveryCode } from './totp/recovery-codes.js';
-import type { TotpRotationStore } from './totp/rotation-store.js';
+import { replacedSecretDigest, type TotpRotationStore } from './totp/rotation-store.js';
 import { matchTotpStep, newTotpSecret, totpUri } from './totp/totp.js';
 import type { TrustedDeviceStore } from './totp/trusted-device.js';
 import type { TotpStepStore } from './totp/used-steps.js';
@@ -902,6 +903,7 @@ export class AuthService {
     // The recovery codes belong to the account's second factor, not to the app:
     // while a passkey remains they still answer a challenge.
     await this.#parts.staff.disableTotp(user.id, tx, { keepRecoveryCodes: passkeys > 0 });
+    await this.#afterCommit(() => this.#parts.rotations.clearForUser(user.id));
     await this.#parts.trustedDevices.revokeAll(user.id);
     this.#parts.logger.warn({ userId: user.id }, 'Disabled the second factor for a staff account');
     await this.#audit('auth.second_factor.disabled', user.id, 'staff');
@@ -954,6 +956,10 @@ export class AuthService {
     readonly proof: TotpRotationProof;
     readonly tx?: DbTransaction;
   }): Promise<TotpRotationStart> {
+    // The lock disableTotp and regenerateRecoveryCodes take. A recovery code
+    // is read, argon2-checked and rewritten here; unlocked, two starts could
+    // spend one code twice, or write back codes a redraw had just replaced.
+    if (tx !== undefined) await this.#parts.passkeys.lockAccount(userId, tx);
     const user = await this.assertTotpRotatable(userId, tx);
     await this.#requireRotationProof(user, proof, tx);
 
@@ -967,6 +973,7 @@ export class AuthService {
     const rotationId = await this.#parts.rotations.create({
       userId,
       secretEncrypted: encryptSecret(secret, this.#parts.keyring),
+      replaces: replacedSecretDigest(user.totpSecretEncrypted ?? ''),
     });
 
     return {
@@ -1005,7 +1012,15 @@ export class AuthService {
     // Gone, another account's, or the app it was to replace was turned off
     // while the staged secret waited: either way there is nothing to confirm.
     const current = await this.#requireUser(userId, tx);
-    if (staged.status !== 'ok' || staged.rotation.userId !== userId || !current.totpEnabled) {
+    // Bound to the secret it was staged against: one started before the app
+    // was replaced, or turned off and set up again, replaces nothing.
+    if (
+      staged.status !== 'ok' ||
+      staged.rotation.userId !== userId ||
+      !current.totpEnabled ||
+      current.totpSecretEncrypted === null ||
+      replacedSecretDigest(current.totpSecretEncrypted) !== staged.rotation.replaces
+    ) {
       throw new AuthFailure('challenge-expired');
     }
 
@@ -1027,7 +1042,8 @@ export class AuthService {
     // record cannot tell apart, and this confirmation is its own single-use
     // context — the staged record is spent below, so a replayed request finds
     // nothing to confirm.
-    if (secret === null || (await matchTotpStep({ secret, code })) === null) {
+    const step = secret === null ? null : await matchTotpStep({ secret, code });
+    if (step === null) {
       await this.#audit('auth.second_factor.failed', userId, 'system', {
         factor: 'totp',
         during: 'rotation',
@@ -1037,6 +1053,7 @@ export class AuthService {
 
     const rotated = await this.#parts.staff.rotateTotpSecret(
       userId,
+      current.totpSecretEncrypted,
       staged.rotation.secretEncrypted,
       tx,
     );
@@ -1044,11 +1061,15 @@ export class AuthService {
       throw new AuthFailure('challenge-expired');
     }
 
-    await this.#parts.rotations.consume(rotationId, userId);
-    // The start proof claimed this time step for the old secret, which can no
-    // longer verify; forgetting it lets the new app sign in at once, in the
-    // same window the confirmation ran in.
-    await this.#parts.steps.forget(userId);
+    // After the commit, so a rollback neither spends the rotation nor marks a
+    // code used for a secret that never took. The record is overwritten, not
+    // claimed: the old one belongs to the secret just replaced and may sit on
+    // this very time step. Marking the confirm code's own step used is what
+    // stops it from signing in again straight afterwards.
+    await this.#afterCommit(async () => {
+      await this.#parts.rotations.clearForUser(userId);
+      await this.#parts.steps.record(userId, step);
+    });
     this.#parts.logger.info({ userId }, 'Replaced the authenticator app of a staff account');
     await this.#audit('auth.second_factor.rotated', userId, 'staff');
     await this.#notifySecurityChange(userId, 'twoFactorRotated', tx);
@@ -2282,6 +2303,7 @@ export class AuthService {
       tx,
     );
     await this.#parts.challenges.clearLock(user.id);
+    await this.#afterCommit(() => this.#parts.rotations.clearForUser(user.id));
     this.#parts.logger.info({ userId: user.id }, 'Enabled the second factor for a staff account');
     await this.#audit('auth.second_factor.enabled', user.id, 'staff');
     if (notify) await this.#notifySecurityChange(user.id, 'twoFactorEnabled', tx);
@@ -2563,6 +2585,19 @@ export class AuthService {
     return proof.code === undefined
       ? this.#requireCurrentPassword(userId, proof.currentPassword ?? '', tx)
       : this.#requireLiveCode(userId, proof.code, tx);
+  }
+
+  /**
+   * Runs `fn` once the request's transaction has committed. Outside a request
+   * (a job, a script) there is no transaction to wait for, so it runs at once.
+   */
+  async #afterCommit(fn: () => Promise<void>): Promise<void> {
+    const context = currentRequestContext();
+    if (context === undefined) {
+      await fn();
+      return;
+    }
+    runAfterCommit(fn);
   }
 
   /**

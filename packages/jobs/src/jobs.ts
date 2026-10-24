@@ -545,6 +545,12 @@ export const rulesEvaluatePayloadSchema = z.object({
    * guard counts from (REQUIREMENTS §4.3).
    */
   chain: z.array(z.uuid()).max(RULE_CHAIN_MAX),
+  /**
+   * #368. Set when the event is a snooze ending by itself (its time, an SLA
+   * step, the customer's reply), and carried down the chain: no rule it starts
+   * may snooze the ticket again.
+   */
+  wokeBy: z.enum(['time', 'sla', 'customer_reply']).optional(),
 });
 
 export type RulesEvaluatePayload = z.infer<typeof rulesEvaluatePayloadSchema>;
@@ -1387,6 +1393,8 @@ export const aiClassifyPayloadSchema = z.object({
     .max(3),
   /** The rule chain the run belongs to, carried on to the changes an `apply` makes. */
   chain: z.array(z.uuid()).max(10),
+  /** #368. The chain started at a snooze ending by itself, so the `apply` writes events that say so. */
+  wokeBy: z.enum(['time', 'sla', 'customer_reply']).optional(),
 });
 export type AiClassifyPayload = z.infer<typeof aiClassifyPayloadSchema>;
 

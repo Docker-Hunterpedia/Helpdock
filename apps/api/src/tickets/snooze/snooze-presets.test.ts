@@ -1,6 +1,6 @@
-import type { BusinessCalendar, WeeklyHours } from '@helpdock/schemas';
+import type { BusinessCalendar, SnoozePresetKey, WeeklyHours } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { snoozePresets } from './snooze-presets.js';
+import { snoozePresetAt, snoozePresets } from './snooze-presets.js';
 
 const range = (start: string, end: string) => [{ start, end }];
 
@@ -139,5 +139,28 @@ describe('snoozePresets', () => {
 
     expect(iso(presets.next_business_day)).toBe('2026-10-22T09:00:00.000Z');
     expect(iso(presets.next_week)).toBe('2026-10-26T09:00:00.000Z');
+  });
+});
+
+describe('snoozePresetAt', () => {
+  // What a rule's or a macro's `snooze` action is resolved to (#368): the same
+  // maths as the menu, so each preset is the menu's own instant.
+  const input = {
+    now: new Date('2026-10-21T13:00:00Z'),
+    agentTimeZone: 'Asia/Riyadh',
+    calendar: berlin,
+  };
+
+  it.each(['in_1_hour', 'in_4_hours', 'next_business_day', 'next_week'] as const)(
+    'resolves %s to the menu instant',
+    (preset: SnoozePresetKey) => {
+      expect(iso(snoozePresetAt({ ...input, preset }))).toBe(iso(snoozePresets(input)[preset]));
+    },
+  );
+
+  it('resolves next business day to Thursday morning after a Wednesday afternoon in Berlin', () => {
+    expect(iso(snoozePresetAt({ ...input, preset: 'next_business_day' }))).toBe(
+      '2026-10-22T07:00:00.000Z',
+    );
   });
 });

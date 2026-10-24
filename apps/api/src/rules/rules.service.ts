@@ -43,6 +43,7 @@ import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { writeTicketingAudit } from '../ticketing/audit.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import type { BusinessHoursProbe, CannedResponseCatalog } from './ports.js';
 import type { RulesRepository, RunRow } from './rules.repository.js';
 import { followOnsOf, previewActions, ticketNumberOf } from './test-run.js';
@@ -134,6 +135,7 @@ export interface RulesServiceDeps {
   readonly assignment: AssignmentRepository;
   readonly businessHours: BusinessHoursProbe;
   readonly cannedResponses: CannedResponseCatalog;
+  readonly snooze: SnoozeResolver;
 }
 
 export class RulesService {

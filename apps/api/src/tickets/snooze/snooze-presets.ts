@@ -79,3 +79,11 @@ export const snoozePresets = ({
     next_week: opening(weekStart, localTimeToUtc(timeZone, weekStart, NINE_AM)),
   };
 };
+
+/**
+ * One preset as an instant: what a `snooze` action of a rule or a macro is
+ * resolved to (#368). The same maths as {@link snoozePresets}, so a rule and
+ * the menu offer the same wake time for the same moment and calendar.
+ */
+export const snoozePresetAt = (input: PresetInput & { readonly preset: SnoozePresetKey }): Date =>
+  snoozePresets(input)[input.preset];

@@ -20,7 +20,7 @@ import {
   withSystem,
   workflowRuns,
 } from '@helpdock/db';
-import { type RulesEvaluatePayload, silentLogger } from '@helpdock/jobs';
+import { type RulesEvaluatePayload, silentLogger, ticketUnsnoozeJobId } from '@helpdock/jobs';
 import type {
   Macro,
   RuleBuilderOptions,
@@ -42,6 +42,10 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { wakeStatusFor, wakeTicket, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
+import { createTicketSnoozedHandler } from '../tickets/snooze/snooze-worker.js';
+import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
+import { applyTriageActions } from './actions.js';
 import { evaluateEventRules, runScheduledRules } from './engine.js';
 import { createRulesEngineDeps } from './engine-deps.js';
 import { createRulesSourceHandler } from './rules-jobs.js';
@@ -196,7 +200,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
    * brand transaction of its own, as the rules worker runs it. Bounded, so a
    * loop the guard failed to stop fails the test instead of hanging it.
    */
-  const drain = async (): Promise<number> => {
+  const drain = async (deps: ReturnType<typeof engine> = engine()): Promise<number> => {
     let evaluations = 0;
     for (let round = 0; round < 20; round += 1) {
       const rows = await inBrand(async (tx) => {
@@ -236,7 +240,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         );
       }
       for (const job of jobs) {
-        await inBrand((tx) => evaluateEventRules(engine(), tx, job));
+        await inBrand((tx) => evaluateEventRules(deps, tx, job));
         evaluations += 1;
       }
     }
@@ -983,6 +987,341 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       ada,
     );
     expect(options.body.statuses.find((status) => status.id === snoozed?.id)?.isSnoozed).toBe(true);
+  });
+
+  it('snoozes with a rule, by a preset the server resolves like the menu’s (#368)', async () => {
+    await saveRule({
+      name: 'Snooze new tickets an hour',
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: { match: 'all', groups: [] },
+      actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+    });
+
+    const ticket = await createTicket('Snooze me for a while');
+    await drain();
+
+    // The ticket is Snoozed, an hour ahead by the server's clock, with nobody
+    // as the person who snoozed it — a rule is nobody — and the status before
+    // the snooze remembered for the wake.
+    const [snoozed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemKey, 'snoozed')),
+    );
+    const row = await ticketRow(ticket.id);
+    expect(row?.statusId).toBe(snoozed?.id);
+    const until = row?.snoozedUntil;
+    expect(until).not.toBeNull();
+    const ahead = (until?.getTime() ?? 0) - Date.now();
+    expect(ahead).toBeGreaterThan(55 * 60_000);
+    expect(ahead).toBeLessThan(65 * 60_000);
+    expect(row?.snoozedBy).toBeNull();
+    expect(row?.snoozeResumeStatusId).not.toBeNull();
+
+    // The run log carries the action like any other's, with what it did.
+    const run = (await runsOf(ticket.id)).find(
+      (candidate) => candidate.ruleName === 'Snooze new tickets an hour',
+    );
+    expect(run?.result).toBe('applied');
+    expect(run?.details).toMatchObject({
+      actions: [{ action: { type: 'snooze', preset: 'in_1_hour' }, effect: 'changed' }],
+    });
+
+    // The activity and the outbox row are a person's snooze's, as §2.2 asks.
+    const activity = await inBrand((tx) =>
+      tx
+        .select()
+        .from(ticketActivity)
+        .where(
+          and(eq(ticketActivity.ticketId, ticket.id), eq(ticketActivity.action, 'ticket.snoozed')),
+        ),
+    );
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      actorType: 'system',
+      actorId: `rule:${run?.ruleId}`,
+      via: 'rule',
+    });
+    const snoozedEvent = await inBrand((tx) =>
+      tx
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.brandId, seeded.brandId), eq(outbox.event, 'ticket.snoozed'))),
+    );
+    const mine = snoozedEvent.find(
+      (candidate) => (candidate.payload as { ticketId?: string }).ticketId === ticket.id,
+    );
+    expect(mine?.payload).toMatchObject({ ticketId: ticket.id, version: row?.snoozeVersion });
+
+    // Its consumer plans the same delayed wake timer a person's snooze plans.
+    const planned: { jobId: string; fireAt: Date }[] = [];
+    await inBrand((tx) =>
+      createTicketSnoozedHandler({
+        snoozeTimers: {
+          upsert: async (timer) => {
+            planned.push({ jobId: timer.jobId, fireAt: timer.fireAt });
+          },
+          remove: async () => {},
+        },
+      })({
+        outboxId: mine?.id ?? '',
+        brandId: seeded.brandId,
+        event: 'ticket.snoozed',
+        payload: mine?.payload ?? {},
+        tx,
+        log: silentLogger,
+      }),
+    );
+    expect(planned).toEqual([
+      {
+        jobId: ticketUnsnoozeJobId({ ticketId: ticket.id, version: row?.snoozeVersion ?? 0 }),
+        fireAt: until,
+      },
+    ]);
+
+    await disableAll();
+  });
+
+  describe('a snooze that ends by itself is never undone by a rule (#368)', () => {
+    const resnoozeRule = (
+      trigger: 'ticket_created' | 'ticket_updated' | 'customer_replied',
+      name: string,
+    ) =>
+      saveRule({
+        name,
+        kind: 'event',
+        trigger,
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      });
+
+    /** A ticket asleep by a person's `PATCH`, with the outbox empty and no rule running. */
+    const sleepingTicket = async (subject: string): Promise<Ticket> => {
+      await disableAll();
+      const ticket = await createTicket(subject);
+      const slept = await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+        snoozedUntil: new Date(Date.now() + 30 * 60_000).toISOString(),
+      });
+      expect(slept.status).toBe(200);
+      await drain();
+      return ticket;
+    };
+
+    const isAsleep = async (ticketId: string): Promise<boolean> => {
+      const row = await ticketRow(ticketId);
+      return row?.snoozedUntil !== null;
+    };
+
+    it.each(['time', 'sla'] as const)(
+      'refuses to snooze on the run a %s wake starts, and says why in the log',
+      async (cause) => {
+        const ticket = await sleepingTicket(`Woken by ${cause}`);
+        await resnoozeRule('ticket_updated', `Snooze on update after ${cause}`);
+
+        const asleep = await ticketRow(ticket.id);
+        await inBrand((tx) => {
+          /* c8 ignore next 3 -- the ticket was snoozed above. */
+          if (asleep === undefined) {
+            throw new Error('the ticket is gone');
+          }
+          return wakeTicket(tx, { ticket: asleep, cause, now: new Date() });
+        });
+        await drain();
+
+        expect(await isAsleep(ticket.id)).toBe(false);
+        const run = (await runsOf(ticket.id)).find(
+          (candidate) => candidate.ruleName === `Snooze on update after ${cause}`,
+        );
+        expect(run?.result).toBe('applied');
+        expect(run?.details).toMatchObject({
+          actions: [
+            {
+              action: { type: 'snooze', preset: 'in_1_hour' },
+              effect: 'unavailable',
+              reason: 'woken',
+            },
+          ],
+        });
+        await disableAll();
+      },
+    );
+
+    /** What every channel does for a customer's reply to a snoozed ticket, in one transaction. */
+    const customerWritesBack = async (ticketId: string, wakes: boolean): Promise<void> => {
+      await inBrand(async (tx) => {
+        const row = (await tx.select().from(tickets).where(eq(tickets.id, ticketId)))[0];
+        /* c8 ignore next 3 -- the ticket was created above. */
+        if (row === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        if (wakes) {
+          const open = await wakeStatusFor(tx, row.snoozeResumeStatusId);
+          await tx
+            .update(tickets)
+            .set({ statusId: open?.id ?? row.statusId })
+            .where(eq(tickets.id, ticketId));
+          await writeWokeActivity(tx, {
+            brandId: seeded.brandId,
+            ticket: row,
+            actor: { actorType: 'system', actorId: 'test', via: 'system' },
+            reason: 'customer_reply',
+            statusId: open?.id ?? row.statusId,
+          });
+        }
+        const [message] = await tx
+          .insert(ticketMessages)
+          .values({
+            brandId: seeded.brandId,
+            ticketId,
+            departmentId: row.departmentId,
+            seq: 99,
+            kind: 'public',
+            authorType: 'contact',
+            authorId: row.contactId ?? uuidv7(),
+            bodyHtml: '<p>Any news?</p>',
+            bodyText: 'Any news?',
+            channel: row.channel,
+          })
+          .returning();
+        await enqueueTicketEvent(tx, seeded.brandId, TICKET_EVENTS.replied, {
+          ticketId,
+          departmentId: row.departmentId,
+          messageId: message?.id ?? uuidv7(),
+          seq: 99,
+          kind: 'public',
+        });
+      });
+    };
+
+    it('refuses to snooze on the run a customer reply wakes the ticket for', async () => {
+      const ticket = await sleepingTicket('Woken by the customer');
+      await resnoozeRule('customer_replied', 'Snooze on reply');
+
+      await customerWritesBack(ticket.id, true);
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze on reply',
+      );
+      expect(run?.details).toMatchObject({
+        actions: [{ effect: 'unavailable', reason: 'woken' }],
+      });
+      await disableAll();
+    });
+
+    it.each([
+      ['under 5 minutes', 60_000],
+      ['over 90 days', 91 * 24 * 3_600_000],
+    ])('refuses a preset that resolves to %s, as PATCH does', async (_name, ahead) => {
+      await disableAll();
+      await resnoozeRule('ticket_created', 'Snooze out of bounds');
+      const ticket = await createTicket('A preset the bounds refuse');
+      await drain({
+        ...engine(),
+        snooze: {
+          at: async (_tx, _brand, _department, _preset, now) => new Date(now.getTime() + ahead),
+        },
+      });
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze out of bounds',
+      );
+      expect(run?.details).toMatchObject({ actions: [{ effect: 'unavailable' }] });
+      await disableAll();
+    });
+
+    it('keeps the mark through an AI triage that applies, so the chain cannot re-snooze either', async () => {
+      const ticket = await sleepingTicket('Woken, then triaged');
+      await resnoozeRule('ticket_updated', 'Snooze after triage');
+      const asleep = await ticketRow(ticket.id);
+      await inBrand((tx) => {
+        /* c8 ignore next 3 -- the ticket was snoozed above. */
+        if (asleep === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        return wakeTicket(tx, { ticket: asleep, cause: 'time', now: new Date() });
+      });
+      await drain();
+      expect(await isAsleep(ticket.id)).toBe(false);
+
+      // The triage job's apply, as the worker runs it for a rule started by the wake.
+      await inBrand(async (tx) => {
+        const deps = engine();
+        const target = await deps.tickets.findTicket(tx, ticket.id);
+        /* c8 ignore next 3 -- the ticket exists. */
+        if (target === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        await applyTriageActions(
+          deps,
+          {
+            tx,
+            brandId: seeded.brandId,
+            ruleId: uuidv7(),
+            runId: uuidv7(),
+            chain: [uuidv7()],
+            now: new Date(),
+            wokeBy: 'time',
+          },
+          target,
+          [{ type: 'set_priority', priority: 'urgent' }],
+        );
+      });
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze after triage',
+      );
+      expect(run?.details).toMatchObject({ actions: [{ effect: 'unavailable', reason: 'woken' }] });
+      await disableAll();
+    });
+
+    it('still snoozes on a reply that woke nothing', async () => {
+      await disableAll();
+      const ticket = await createTicket('Not asleep when the customer wrote');
+      await drain();
+      await resnoozeRule('customer_replied', 'Snooze on plain reply');
+
+      await customerWritesBack(ticket.id, false);
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(true);
+      await disableAll();
+    });
+  });
+
+  it('test-runs a snooze on a closed ticket as not carried out (#368)', async () => {
+    const [closed] = await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx
+        .select({ id: ticketStatuses.id })
+        .from(ticketStatuses)
+        .where(eq(ticketStatuses.systemKey, 'closed')),
+    );
+    const ticket = await createTicket('Closed before it could be snoozed');
+    const moved = await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+      statusId: closed?.id,
+    });
+    expect(moved.status).toBe(200);
+
+    const outcome = await call<RuleTestRunResult>('POST', `${brandPath()}/rules/test-run`, ada, {
+      rule: {
+        name: 'Snooze the closed ones',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      },
+      ticket: String(ticket.number),
+    });
+    expect(outcome.status).toBe(200);
+    expect(outcome.body.outcome?.actions).toEqual([
+      { action: { type: 'snooze', preset: 'in_1_hour' }, effect: 'unavailable' },
+    ]);
   });
 
   it('refuses a rule that names another brand’s ids, and reorders a whole list only', async () => {

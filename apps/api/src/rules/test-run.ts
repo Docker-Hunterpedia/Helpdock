@@ -11,6 +11,8 @@ import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { canWorkDepartment } from '../assignment/rotation.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
+import { snoozeWithinBounds } from '../tickets/snooze/snooze-plan.js';
 import type { TicketChange } from '../tickets/ticket-events.js';
 import type { RulesRepository } from './rules.repository.js';
 import type { TicketFacts } from './ticket-facts.js';
@@ -32,6 +34,8 @@ import { guardRun, RULE_SOURCE_EVENTS, triggersFor } from './triggers.js';
 export interface PreviewDeps {
   readonly rules: RulesRepository;
   readonly assignment: AssignmentRepository;
+  /** Resolves the `snooze` action's preset, so the preview agrees with the run (#368). */
+  readonly snooze: SnoozeResolver;
 }
 
 interface Simulation {
@@ -82,6 +86,31 @@ const previewOne = async (
       return moveStatusTo(tx, deps, sim, (await deps.rules.statusByKey(tx, 'escalated'))?.id);
     case 'close':
       return moveStatusTo(tx, deps, sim, (await deps.rules.statusByKey(tx, 'closed'))?.id);
+    case 'snooze': {
+      // #368. A closed ticket cannot be snoozed, and a brand without the
+      // Snoozed status has nothing to move to; otherwise the move stands,
+      // at whatever instant the run resolves the preset to.
+      const current = await deps.rules.status(tx, sim.facts.statusId);
+      const snoozed = await deps.rules.statusByKey(tx, 'snoozed');
+      if (current === undefined || current.systemState === 'closed' || snoozed === undefined) {
+        return UNAVAILABLE;
+      }
+      const now = new Date();
+      const until = await deps.snooze.at(tx, brandId, facts.departmentId, action.preset, now);
+      // As the engine does: asleep until the same minute already is no change.
+      if (snoozed.id === facts.statusId && facts.snoozedUntil?.getTime() === until.getTime()) {
+        return UNCHANGED;
+      }
+      // The run's bounds (5 minutes to 90 days): a preset outside them is refused there too.
+      if (!snoozeWithinBounds(until, now)) {
+        return UNAVAILABLE;
+      }
+      if (snoozed.id !== facts.statusId) {
+        sim.changes.add('status');
+      }
+      sim.facts = { ...facts, statusId: snoozed.id, snoozedUntil: until };
+      return CHANGED;
+    }
     case 'set_priority':
       if (facts.priority === action.priority) {
         return UNCHANGED;

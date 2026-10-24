@@ -148,6 +148,7 @@
     "notify": "Notify",
     "escalate": "Escalate",
     "close": "Close",
+    "snooze": "Snooze",
     "ai_triage": "AI triage"
   },
   "assignTargets": {
@@ -192,6 +193,12 @@
       "notify": "Notify {{who}}",
       "escalate": "Escalate",
       "close": "Close",
+      "snooze": {
+        "in_1_hour": "Snooze for 1 hour",
+        "in_4_hours": "Snooze for 4 hours",
+        "next_business_day": "Snooze until next business day",
+        "next_week": "Snooze until next week"
+      },
       "ai_triage": {
         "suggest": "AI triage suggests {{fields}}",
         "apply": "AI triage sets {{fields}}"
@@ -270,6 +277,8 @@
     "note": "Note",
     "notifyWho": "Notify",
     "notifyMessage": "Message (optional)",
+    "snoozeFor": "Wake time",
+    "snoozeNote": "Snoozes the ticket like the Snooze menu. Not run when the ticket was just woken (a reply, an SLA step or its time), so a reply always stays visible. Next business day and next week are the department's next opening.",
     "incomplete": "Fill in every condition and action before saving.",
     "cancel": "Cancel",
     "save": "Save rule",

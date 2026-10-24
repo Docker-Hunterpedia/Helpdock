@@ -165,6 +165,8 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         return t('rules:text.action.escalate');
       case 'close':
         return t('rules:text.action.close');
+      case 'snooze':
+        return t(`rules:text.action.snooze.${entry.preset}`);
       case 'ai_triage':
         return t(`rules:text.action.ai_triage.${entry.mode}`, {
           fields: entry.fields

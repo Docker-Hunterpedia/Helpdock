@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { localeSchema } from './brand.js';
 import { AGENT_PLACEHOLDERS } from './placeholders.js';
-import { messageCreateRequestSchema, ticketMessageSchema, ticketPrioritySchema } from './ticket.js';
+import {
+  messageCreateRequestSchema,
+  snoozeActionSchema,
+  ticketMessageSchema,
+  ticketPrioritySchema,
+} from './ticket.js';
 import { TEMPLATE_PLACEHOLDERS } from './ticket-templates.js';
 
 /**
@@ -67,6 +72,14 @@ export const macroActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('add_tag'), tagId: z.uuid() }),
   z.object({ type: z.literal('remove_tag'), tagId: z.uuid() }),
   z.object({ type: z.literal('assign'), assignee: macroAssigneeSchema }),
+  /**
+   * #368: snoozes with one of the Snooze menu's presets, which the server
+   * resolves against the ticket's department calendar when the macro is
+   * applied, and runs through the same update as a person's snooze — the same
+   * activity, outbox event and wake timer. A closed ticket is refused, as a
+   * person's snooze is.
+   */
+  snoozeActionSchema,
 ]);
 export type MacroAction = z.infer<typeof macroActionSchema>;
 export type MacroActionType = MacroAction['type'];

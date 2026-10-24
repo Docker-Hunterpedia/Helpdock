@@ -23,7 +23,7 @@ import type {
   TicketStatusList,
   TicketUpdateRequest,
 } from '@helpdock/schemas';
-import { SNOOZE_MAX_MS, SNOOZE_MIN_MS, TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
+import { TICKET_PAGE_SIZE_DEFAULT } from '@helpdock/schemas';
 import {
   BadRequestException,
   ConflictException,
@@ -64,15 +64,12 @@ import {
   type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
-import { effectiveSystemState } from './lifecycle/status-state.js';
-import { transitionFor } from './lifecycle/transitions.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
 import { arrivalOf, requestArrival, WIDGET_ENTRY } from './routing/arrival.js';
-import { enqueueTicketSnoozed } from './snooze/snooze-events.js';
+import { planSnooze, recordSnooze } from './snooze/snooze-plan.js';
 import {
   isSnoozedStatus,
-  snoozeValues,
   WAKE_VALUES,
   wakeStatusFor,
   writeWokeActivity,
@@ -1114,36 +1111,34 @@ export class TicketsService {
       };
     }
 
-    const until = new Date(snoozedUntil);
-    const ahead = until.getTime() - now.getTime();
-    if (ahead < SNOOZE_MIN_MS || ahead > SNOOZE_MAX_MS) {
-      throw new BadRequestException('snoozedUntil must be between 5 minutes and 90 days from now');
-    }
-
-    const outcome = transitionFor(
-      { ...ticket, systemState: effectiveSystemState(ticket, status) },
-      'agent.snooze',
-    );
-    if (outcome.kind === 'refused') {
-      throw new TicketLifecycleFailure(outcome.reason);
-    }
-    const snoozed = await this.#lifecycleReads.snoozedStatus(tx);
-    if (snoozed === undefined) {
-      throw new ConflictException('This brand has no Snoozed status');
+    const plan = planSnooze({
+      ticket,
+      status,
+      snoozed: await this.#lifecycleReads.snoozedStatus(tx),
+      until: new Date(snoozedUntil),
+      now,
+      snoozedBy: staffActorId(principal),
+    });
+    if (plan.kind === 'refused') {
+      switch (plan.reason) {
+        case 'out-of-bounds':
+          throw new BadRequestException(
+            'snoozedUntil must be between 5 minutes and 90 days from now',
+          );
+        case 'transition':
+          throw new TicketLifecycleFailure(plan.refusal);
+        case 'no-snoozed-status':
+          throw new ConflictException('This brand has no Snoozed status');
+      }
     }
 
     return {
       kind: 'snooze',
-      values: snoozeValues({
-        ticket,
-        snoozedStatusId: snoozed.id,
-        until,
-        snoozedBy: staffActorId(principal),
-      }),
+      values: plan.values,
       statusResult: {
-        statusId: snoozed.id,
+        statusId: plan.values.statusId,
         closedAt: ticket.closedAt,
-        changed: snoozed.id !== status.id,
+        changed: plan.statusChanged,
         closing: false,
         reopening: false,
       },
@@ -1168,24 +1163,7 @@ export class TicketsService {
     const { tx, brandId, actor } = context;
 
     if (snooze?.kind === 'snooze' && after.snoozedUntil !== null) {
-      await writeTicketActivity(tx, {
-        brandId,
-        ticketId: after.id,
-        departmentId: after.departmentId,
-        actor,
-        action: 'ticket.snoozed',
-        from: { snoozedUntil: before.snoozedUntil?.toISOString() ?? null },
-        to: {
-          snoozedUntil: after.snoozedUntil.toISOString(),
-          resumeStatusId: after.snoozeResumeStatusId,
-        },
-      });
-      await enqueueTicketSnoozed(tx, brandId, {
-        ticketId: after.id,
-        departmentId: after.departmentId,
-        version: after.snoozeVersion,
-        snoozedUntil: after.snoozedUntil.toISOString(),
-      });
+      await recordSnooze(tx, { brandId, actor, before, after });
       return;
     }
 

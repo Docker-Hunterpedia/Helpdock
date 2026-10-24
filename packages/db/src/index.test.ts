@@ -97,6 +97,7 @@ describe('@helpdock/db', () => {
       'reports.ts',
       'retention-settings.ts',
       'settings.ts',
+      'setup-checklist.ts',
       'sla-policies.ts',
       'sso.ts',
       'tags.ts',

@@ -407,6 +407,7 @@ describe.skipIf(!hasDocker)('the outgoing email settings', () => {
         port: 465,
         tls: 'tls',
         user: 'postmaster',
+        password: 'relay-secret',
         fromAddress: 'pinned@helpdock.test',
         fromName: 'Helpdock',
       });

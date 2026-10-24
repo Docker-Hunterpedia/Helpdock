@@ -254,7 +254,8 @@
       "unknown": "The test message was not sent"
     },
     "save": "Save outgoing mail",
-    "saved": "Outgoing mail saved."
+    "saved": "Outgoing mail saved.",
+    "passwordRequired": "Type the password again to use it with this server."
   },
   "senders": {
     "heading": "From and Reply-To per department",

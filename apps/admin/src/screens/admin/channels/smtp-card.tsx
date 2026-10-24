@@ -22,6 +22,7 @@ import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { useEmailApi } from '../../../auth/session.tsx';
+import { SmtpPasswordRequiredError } from '../../../email/api.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { Field } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
@@ -96,6 +97,15 @@ export function SmtpCard({
   const [draft, setDraft] = useState<SmtpDraft>(() => draftOf(settings));
   const [problem, setProblem] = useState<'host' | 'port' | null>(null);
   const [result, setResult] = useState<OutgoingSmtpTestResult | null>(null);
+  const [passwordError, setPasswordError] = useState(false);
+
+  /** The api asks for the password again: a field error, not a toast. */
+  const passwordRefused = (error: unknown): boolean => {
+    const refused = error instanceof SmtpPasswordRequiredError;
+    setPasswordError(refused);
+
+    return refused;
+  };
 
   useEffect(() => {
     setDraft(draftOf(settings));
@@ -105,16 +115,20 @@ export function SmtpCard({
     (request: OutgoingSmtpUpdate) => api.saveSmtp(brandId, request),
     t('channels:smtp.saved'),
     onSaved,
+    passwordRefused,
   );
 
   const test = useMutation({
     mutationFn: (request: OutgoingSmtpUpdate) => api.testSmtp(brandId, request),
     onMutate: () => {
       setResult(null);
+      setPasswordError(false);
     },
     onSuccess: setResult,
-    onError: () => {
-      toast({ tone: 'danger', message: t('channels:actionFailed') });
+    onError: (error) => {
+      if (!passwordRefused(error)) {
+        toast({ tone: 'danger', message: t('channels:actionFailed') });
+      }
     },
   });
 
@@ -127,6 +141,7 @@ export function SmtpCard({
   const submit = (event: FormEvent): void => {
     event.preventDefault();
     const request = validated();
+    setPasswordError(false);
     if (request !== null) {
       save.mutate(request);
     }
@@ -253,6 +268,7 @@ export function SmtpCard({
           id={`${id}-password`}
           label={t('channels:smtp.password')}
           hint={savedLine(stored, locale, t)}
+          error={passwordError ? t('channels:smtp.passwordRequired') : undefined}
         >
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField
@@ -261,8 +277,10 @@ export function SmtpCard({
               type="password"
               value={draft.password ?? MASKED}
               sx={{ flex: 1 }}
+              error={passwordError}
               onChange={(event) => {
                 set({ password: event.target.value });
+                setPasswordError(false);
               }}
               slotProps={{
                 htmlInput: {

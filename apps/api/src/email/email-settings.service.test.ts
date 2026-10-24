@@ -115,7 +115,12 @@ describe('EmailSettingsService.saveSmtp', () => {
 });
 
 describe('the stored password stays with its server', () => {
-  const moved = [{ host: 'evil.example.net' }, { port: 25 }, { user: 'someone@evil.example.net' }];
+  const moved = [
+    { host: 'evil.example.net' },
+    { port: 25 },
+    { tls: 'none' as const },
+    { user: 'someone@evil.example.net' },
+  ];
 
   it('refuses a save that moves the server and sends no password', async () => {
     const { service, context, repository } = setup();

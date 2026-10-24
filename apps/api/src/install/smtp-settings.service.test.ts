@@ -177,10 +177,10 @@ describe('SmtpSettingsService', () => {
       logger: silentLogger(),
     });
 
-    await inInstallRequest(() => service.save(update({ tls: 'tls', fromName: 'Support' })));
+    await inInstallRequest(() => service.save(update({ fromName: 'Support' })));
 
     await expect(settings.get('smtp.password')).resolves.toBe('kept-secret');
-    await expect(settings.get('smtp.tls')).resolves.toBe('tls');
+    await expect(settings.get('smtp.fromName')).resolves.toBe('Support');
   });
 
   it('refuses a save that moves the server and keeps the stored password', async () => {
@@ -192,7 +192,12 @@ describe('SmtpSettingsService', () => {
       logger: silentLogger(),
     });
 
-    for (const changed of [{ host: 'evil.example.net' }, { port: 25 }, { user: 'someone' }]) {
+    for (const changed of [
+      { host: 'evil.example.net' },
+      { port: 25 },
+      { tls: 'none' as const },
+      { user: 'someone' },
+    ]) {
       await expect(inInstallRequest(() => service.save(update(changed)))).rejects.toMatchObject({
         reason: 'smtp-password-required',
         status: 400,
@@ -342,7 +347,12 @@ describe('SmtpSettingsService', () => {
         smtp: fakeTransport({ delivered: true }, seen),
       });
 
-      for (const changed of [{ host: 'evil.example.net' }, { port: 25 }, { user: 'someone' }]) {
+      for (const changed of [
+        { host: 'evil.example.net' },
+        { port: 25 },
+        { tls: 'none' as const },
+        { user: 'someone' },
+      ]) {
         await expect(
           inInstallRequest(() => service.test(update(changed), '203.0.113.9')),
         ).rejects.toMatchObject({ reason: 'smtp-password-required', status: 400 });

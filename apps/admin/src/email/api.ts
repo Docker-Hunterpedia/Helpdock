@@ -9,6 +9,14 @@ import type {
   TicketEmailContext,
 } from '@helpdock/schemas';
 
+/** The api wants the SMTP password typed again: the server, port, TLS mode or username changed. */
+export class SmtpPasswordRequiredError extends Error {
+  constructor() {
+    super('email: smtp-password-required');
+    this.name = 'SmtpPasswordRequiredError';
+  }
+}
+
 /**
  * Everything the outbound email screens need (M2-05, M2-06, M2-08's outbound
  * half): Channels › Outgoing email, the Email signature tab of Your account,

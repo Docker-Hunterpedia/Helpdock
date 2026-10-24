@@ -63,7 +63,10 @@ export interface EmailSettingsDependencies {
 
 /** The stored password is only for the server it was saved with: host, port and user. */
 const sameServer = (stored: SmtpServer, body: OutgoingSmtpUpdate): boolean =>
-  stored.host === body.host && stored.port === body.port && stored.user === body.user;
+  stored.host === body.host &&
+  stored.port === body.port &&
+  stored.tls === body.tls &&
+  stored.user === body.user;
 
 const emptyToNull = (value: string): string | null => (value.trim() === '' ? null : value);
 

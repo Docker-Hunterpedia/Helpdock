@@ -166,7 +166,10 @@ export class SmtpSettingsService {
     }
 
     const serverChanged =
-      update.host !== before.host || update.port !== before.port || update.user !== before.user;
+      update.host !== before.host ||
+      update.port !== before.port ||
+      update.tls !== before.tls ||
+      update.user !== before.user;
     if (serverChanged && before.passwordConfigured && update.password === undefined) {
       throw new SetupFailure('smtp-password-required');
     }
@@ -271,13 +274,17 @@ export class SmtpSettingsService {
       return input.password;
     }
 
-    const [host, port, user, password] = await Promise.all([
+    const [host, port, tls, user, password] = await Promise.all([
       this.#settings.get('smtp.host'),
       this.#settings.get('smtp.port'),
+      this.#settings.get('smtp.tls'),
       this.#settings.get('smtp.user'),
       this.#settings.get('smtp.password'),
     ]);
-    if (password !== '' && (input.host !== host || input.port !== port || input.user !== user)) {
+    if (
+      password !== '' &&
+      (input.host !== host || input.port !== port || input.tls !== tls || input.user !== user)
+    ) {
       throw new SetupFailure('smtp-password-required');
     }
 

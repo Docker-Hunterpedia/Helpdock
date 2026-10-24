@@ -112,6 +112,8 @@ export function useEmailAction<TInput, TResult>(
   run: (input: TInput) => Promise<TResult>,
   success: string,
   refresh: (result: TResult) => Promise<void> | void,
+  /** Answers a refusal the screen draws on a field; true means it did, so no toast. */
+  refused?: (error: unknown) => boolean,
 ) {
   const t = useT();
   const toast = useToast();
@@ -122,7 +124,10 @@ export function useEmailAction<TInput, TResult>(
       await refresh(result);
       toast({ tone: 'success', message: success });
     },
-    onError: () => {
+    onError: (error) => {
+      if (refused?.(error) === true) {
+        return;
+      }
       toast({ tone: 'danger', message: t('channels:actionFailed') });
     },
   });

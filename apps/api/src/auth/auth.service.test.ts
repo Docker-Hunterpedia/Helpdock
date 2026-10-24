@@ -3906,3 +3906,24 @@ describe('replacing the authenticator app (#373)', () => {
     });
   });
 });
+
+describe('resetting a second factor for somebody else (#398)', () => {
+  const tx = {} as DbTransaction;
+
+  it('revokes the sessions before it returns, so the commit never leaves them alive', async () => {
+    const user = staff.add(await newUser());
+    const opened = await signIn({ userAgent: 'Firefox' });
+    if (opened.kind !== 'session') throw new Error('expected a session');
+
+    await service.resetSecondFactorOf(user.id, tx);
+
+    await expect(sessions.listSessions(user.id)).resolves.toEqual([]);
+  });
+
+  it('throws, so the reset rolls back, when the sessions cannot be revoked', async () => {
+    const user = staff.add(await newUser());
+    vi.spyOn(sessions, 'revokeEverything').mockRejectedValueOnce(new Error('redis is down'));
+
+    await expect(service.resetSecondFactorOf(user.id, tx)).rejects.toThrow('redis is down');
+  });
+});

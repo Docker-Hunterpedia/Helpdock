@@ -33,7 +33,7 @@ import { StaffFailure } from './staff-failure.js';
  * under the target's account-row lock, which every other factor change takes:
  * the app, the passkeys, the recovery codes, the audit row and the notice in the
  * outbox commit together or not at all, and the person's sessions are revoked
- * once that commit has happened.
+ * before it (a failed revoke undoes the reset) and again after.
  *
  * The order of the refusals is the order of what they cost. The cheap ones that
  * need no proof (self, the rate limit, nothing to reset, the factors changed,

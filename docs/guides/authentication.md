@@ -314,8 +314,10 @@ session and trusted browser is revoked, `auth.second_factor.reset` is audited
 the administrator). At their next sign-in an Admin, install admin or anyone while
 `auth.require2fa` is on goes to enrolment before a session opens; everyone else
 signs in with the password alone until they set one up from their security page,
-and the confirm and the email say which applies. Sessions are revoked after the
-commit, so a reset that rolls back signs nobody out. Refused with `409`: your own account, a person
+and the confirm and the email say which applies. Sessions are revoked before
+the commit (a failed revoke undoes the reset) and again after it; a reset that
+fails may still have signed the person out, but never leaves the factors removed
+with sessions alive. Refused with `409`: your own account, a person
 with nothing to reset, factors that changed while the confirm was open, and the
 last configured break-glass admin while SSO is enforced (make another install
 admin ready for break-glass first). Ten resets an hour per admin

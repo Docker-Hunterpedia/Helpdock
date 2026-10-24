@@ -261,7 +261,7 @@ page offers **Replace app**, which swaps the secret in one confirmed step:
 1. `POST /api/me/totp/rotate/start` with one proof: a live code from the current
    app, a single-use recovery code, an assertion from a passkey the account
    holds (in answer to `POST /api/me/passkeys/step-up/options`), or the current
-   password **with** a recovery code (DOMAIN-RULES §12.1 rule 6). It answers
+   password **with** a recovery code (DOMAIN-RULES §12.1 rule 7). It answers
    `{ rotationId, secret, uri }` — the staged secret for the QR code.
 2. `POST /api/me/totp/rotate/confirm` with `{ rotationId, code }`, where `code`
    is a live code from the **new** app. Only then is the secret swapped, in one

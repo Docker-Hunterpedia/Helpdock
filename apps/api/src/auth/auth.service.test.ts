@@ -3587,6 +3587,11 @@ describe('replacing the authenticator app (#373)', () => {
         passkeys: passkeyRows as unknown as PasskeyRepository,
         limiter,
         signingKeys,
+        ssoPolicy: new SsoSignInPolicy({
+          db: {} as Db,
+          settings,
+          keyring: createKeyring({ APP_MASTER_KEY: MASTER_KEY_B64 }),
+        }),
         logger: silentLogger(),
       });
       const session = { userId, familyId: 'fam-1', tx: {} as DbTransaction };

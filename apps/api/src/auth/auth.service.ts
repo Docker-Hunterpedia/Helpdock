@@ -1099,7 +1099,7 @@ export class AuthService {
         throw new AuthFailure('recovery-code-not-allowed');
       }
       // Two recovery-code shapes, each a complete proof of its own (DOMAIN-RULES
-      // §12.1 rule 6): the shape that also names the password has both halves
+      // §12.1 rule 7): the shape that also names the password has both halves
       // checked inside its helper, and the bare shape spends the code inside
       // its own — so whichever door the caller picks, it is locked the same way.
       if (proof.currentPassword !== undefined) {

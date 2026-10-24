@@ -64,6 +64,7 @@ import {
   type TicketLifecycleService,
 } from './lifecycle/lifecycle.service.js';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
+import { effectiveSystemState } from './lifecycle/status-state.js';
 import { transitionFor } from './lifecycle/transitions.js';
 import { readMergeView } from './merge/merge-view.js';
 import { ReplyDeliveryHook } from './reply-delivery.hook.js';
@@ -1119,7 +1120,10 @@ export class TicketsService {
       throw new BadRequestException('snoozedUntil must be between 5 minutes and 90 days from now');
     }
 
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.snooze');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'agent.snooze',
+    );
     if (outcome.kind === 'refused') {
       throw new TicketLifecycleFailure(outcome.reason);
     }

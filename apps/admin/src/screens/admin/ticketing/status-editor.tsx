@@ -13,6 +13,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
+import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { Field } from '../../../ui/field.tsx';
 
 /**
@@ -50,6 +51,7 @@ export function StatusEditor({
   ticketCount,
   fallbackName,
   busy,
+  closedTicketsCount,
   onSubmit,
   onCancel,
   onDelete,
@@ -61,6 +63,8 @@ export function StatusEditor({
   /** Where they would move to: the brand's default open status. */
   readonly fallbackName: string;
   readonly busy: boolean;
+  /** #361. Set when the last save was refused because that many closed tickets sit in the status. */
+  readonly closedTicketsCount?: number | undefined;
   onSubmit(draft: StatusDraft): void;
   onCancel(): void;
   /** Absent while creating, and for a seeded or default status. */
@@ -191,6 +195,15 @@ export function StatusEditor({
           ))}
         </Select>
       </Field>
+
+      {closedTicketsCount === undefined || status === null ? null : (
+        <AlertBanner tone="warning">
+          {t('ticketing:statuses.editor.reopenRefused', {
+            count: closedTicketsCount,
+            name: status.name,
+          })}
+        </AlertBanner>
+      )}
 
       <FormControlLabel
         control={

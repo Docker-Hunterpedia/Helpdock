@@ -42,7 +42,7 @@ export function useTicketingAction<TInput, TResult>(
   run: (input: TInput) => Promise<TResult>,
   message: (input: TInput) => string,
   refresh: () => Promise<void>,
-  report: (error: unknown) => void,
+  report: (error: unknown, input: TInput) => void,
 ) {
   const toast = useToast();
 

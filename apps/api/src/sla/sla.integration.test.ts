@@ -47,7 +47,7 @@ import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redi
 import { Queue } from 'bullmq';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
@@ -60,14 +60,20 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
+import { TICKET_STATUS_STATE_RESYNC_EVENT } from '../tickets/lifecycle/status-state-events.js';
+import { repairClosedStatusTickets } from '../tickets/lifecycle/status-state-repair.js';
+import { createStatusStateResyncHandler } from '../tickets/lifecycle/status-state-worker.js';
 import { TicketingSettingsService } from '../tickets/lifecycle/ticketing-settings.service.js';
 import { bullSnoozeQueue } from '../tickets/snooze/snooze-worker.js';
+import { TicketRepository } from '../tickets/tickets.repository.js';
 import { workerDependencies } from '../worker/start-worker.js';
 import { BusinessHoursService } from './business-hours.service.js';
 import { fireSlaTimer } from './escalation.js';
 import { SlaRepository } from './sla.repository.js';
 import { SlaService } from './sla.service.js';
 import { SLA_SCHEDULE_EVENT, SLA_STATUS_RESYNC_EVENT } from './sla-events.js';
+import { SlaLifecycleHooks } from './sla-hooks.js';
 import { bullTimerQueue } from './sla-timers.js';
 import {
   createSlaScheduleHandler,
@@ -888,6 +894,23 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
     });
 
     describe('status re-sync (#336)', () => {
+      // A brand holds a bounded number of statuses; each test leaves only what it found.
+      type StatusRow = { id: string };
+      const listStatuses = async () =>
+        (await call<{ statuses: StatusRow[] }>('GET', `${brandPath()}/ticket-statuses`, ada)).body
+          .statuses;
+      let baseline = new Set<string>();
+      beforeAll(async () => {
+        baseline = new Set((await listStatuses()).map((row) => row.id));
+      });
+      afterEach(async () => {
+        for (const row of await listStatuses()) {
+          if (!baseline.has(row.id)) {
+            await call('DELETE', `${brandPath()}/ticket-statuses/${row.id}`, ada);
+          }
+        }
+      });
+
       const statusPath = (statusId: string) => `${brandPath()}/ticket-statuses/${statusId}`;
       const patchStatus = (statusId: string, body: Record<string, unknown>) =>
         call('PATCH', statusPath(statusId), ada, body);
@@ -1206,6 +1229,421 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       expect(saved.body.runningTickets).toBeGreaterThan(0);
 
       expect((await clockOf(ticket.id, 'resolution')).targetMinutes).toBe(960);
+    });
+  });
+
+  describe('status state resync (#361)', () => {
+    // A policy of its own, so the suite is whole when the file is filtered
+    // down to it: without one the tickets it files have no clocks to close.
+    beforeAll(async () => {
+      expect(
+        (await call('POST', `${brandPath()}/sla-policies`, ada, policyBody({ escalation: [] })))
+          .status,
+      ).toBe(201);
+    });
+
+    const statusPath = (statusId: string) => `${brandPath()}/ticket-statuses/${statusId}`;
+    const patchStatus = <T = unknown>(statusId: string, body: Record<string, unknown>) =>
+      call<T>('PATCH', statusPath(statusId), ada, body);
+
+    /** What the worker builds, a batch of two at a time. */
+    const stateDeps = (repository?: TicketLifecycleRepository) => {
+      const lifecycleRepository = new TicketLifecycleRepository();
+      const slaRepository = new SlaRepository();
+      return {
+        repository: repository ?? lifecycleRepository,
+        lifecycle: new TicketLifecycleService(
+          lifecycleRepository,
+          new TicketRepository(),
+          new SlaLifecycleHooks(lifecycleRepository, new SlaService(slaRepository)),
+        ),
+        batch: 2,
+      };
+    };
+
+    /** Runs every `ticket.status_state_resync` row of one status through the handler. */
+    const drainer = (statusId: string, repository?: TicketLifecycleRepository) => {
+      const handler = createStatusStateResyncHandler(stateDeps(repository));
+      const handled = new Set<string>();
+      const rows: {
+        id: string;
+        payload: Record<string, unknown>;
+        brandId: string;
+        event: string;
+      }[] = [];
+      const drain = async (): Promise<number> => {
+        for (;;) {
+          const pending = (
+            await withSystem(runtime.db, seeded.brandId, (tx) =>
+              tx
+                .select()
+                .from(outbox)
+                .where(eq(outbox.event, TICKET_STATUS_STATE_RESYNC_EVENT))
+                .orderBy(asc(outbox.id)),
+            )
+          ).filter((row) => !handled.has(row.id) && row.payload.statusId === statusId);
+          const row = pending[0];
+          if (row === undefined) {
+            return handled.size;
+          }
+          handled.add(row.id);
+          rows.push({ id: row.id, payload: row.payload, brandId: row.brandId, event: row.event });
+          await withSystem(runtime.db, seeded.brandId, (tx) =>
+            handler({
+              outboxId: row.id,
+              brandId: row.brandId,
+              event: row.event,
+              payload: row.payload,
+              tx,
+              log: silentLogger,
+            }),
+          );
+        }
+      };
+      /** A redelivery: the same outbox row, handled again. */
+      const replayFirst = async (): Promise<void> => {
+        const row = rows[0];
+        if (row === undefined) {
+          throw new Error('nothing was drained to replay');
+        }
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          handler({
+            outboxId: row.id,
+            brandId: row.brandId,
+            event: row.event,
+            payload: row.payload,
+            tx,
+            log: silentLogger,
+          }),
+        );
+      };
+      return { drain, replayFirst };
+    };
+
+    /** Sets what the api would refuse to, to stage a flip that raced the worker. */
+    const setStateDirectly = (statusId: string, systemState: 'open' | 'closed') =>
+      withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.update(ticketStatuses).set({ systemState }).where(eq(ticketStatuses.id, statusId)),
+      );
+
+    const rowOf = (ticketId: string) =>
+      withSystem(runtime.db, seeded.brandId, async (tx) => {
+        const [row] = await tx
+          .select({ closedAt: tickets.closedAt, statusId: tickets.statusId })
+          .from(tickets)
+          .where(eq(tickets.id, ticketId));
+        return row;
+      });
+
+    const activityOf = (ticketId: string, action: string) =>
+      withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx
+          .select({
+            actorId: ticketActivity.actorId,
+            from: ticketActivity.from,
+            to: ticketActivity.to,
+          })
+          .from(ticketActivity)
+          .where(and(eq(ticketActivity.ticketId, ticketId), eq(ticketActivity.action, action))),
+      );
+
+    const statusWithTickets = async (name: string, count: number) => {
+      const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+        name,
+        systemState: 'open',
+        pausesSla: false,
+        color: 'info',
+      });
+      expect(created.status).toBe(201);
+      const statusId = created.body.id;
+      const ids: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const { ticket } = await createTicket();
+        expect(
+          (await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, { statusId })).status,
+        ).toBe(200);
+        ids.push(ticket.id);
+      }
+      return { statusId, ids };
+    };
+
+    /** The `ticket.status_state_resync` rows this status owns, oldest first. */
+    const stateEventsOf = async (statusId: string) =>
+      (
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select({ payload: outbox.payload })
+            .from(outbox)
+            .where(eq(outbox.event, TICKET_STATUS_STATE_RESYNC_EVENT))
+            .orderBy(asc(outbox.id)),
+        )
+      )
+        .map((row) => row.payload as { statusId: string; at: string })
+        .filter((payload) => payload.statusId === statusId);
+
+    const eventTicketIds = async (event: string) =>
+      (await outboxOf(event)).map((payload) => payload.ticketId as string);
+
+    /** The `ticket.status_state_resync` outbox rows of one status, oldest first. */
+    const stateEventsOfRows = async (statusId: string) =>
+      (
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .select()
+            .from(outbox)
+            .where(eq(outbox.event, TICKET_STATUS_STATE_RESYNC_EVENT))
+            .orderBy(asc(outbox.id)),
+        )
+      ).filter((row) => row.payload.statusId === statusId);
+
+    const runHandler = (
+      handler: ReturnType<typeof createStatusStateResyncHandler>,
+      row: Awaited<ReturnType<typeof stateEventsOfRows>>[number] | undefined,
+    ) => {
+      if (row === undefined) {
+        throw new Error('no state event to run');
+      }
+      return withSystem(runtime.db, seeded.brandId, (tx) =>
+        handler({
+          outboxId: row.id,
+          brandId: row.brandId,
+          event: row.event,
+          payload: row.payload,
+          tx,
+          log: silentLogger,
+        }),
+      );
+    };
+
+    type Refusal = { error: { ticketing?: { reason: string; count?: number } } };
+
+    it('refuses to leave the closed state while the status holds tickets, and allows it when empty', async () => {
+      const { statusId } = await statusWithTickets('Vendor archive', 2);
+      const { drain } = drainer(statusId);
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 2 })).status).toBe(
+        200,
+      );
+      await drain();
+
+      const refused = await patchStatus<Refusal>(statusId, { systemState: 'open' });
+      expect(refused.status).toBe(409);
+      expect(refused.body.error.ticketing).toEqual({
+        reason: 'status-has-closed-tickets',
+        count: 2,
+      });
+
+      const empty = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+        name: 'Empty archive',
+        systemState: 'closed',
+        pausesSla: false,
+        color: 'info',
+      });
+      expect(empty.status).toBe(201);
+      expect((await patchStatus(empty.body.id, { systemState: 'open' })).status).toBe(200);
+    });
+
+    it('needs the live-ticket count confirmed before it closes anything', async () => {
+      const { statusId, ids } = await statusWithTickets('Vendor done', 2);
+      const { drain } = drainer(statusId);
+
+      const bare = await patchStatus<Refusal>(statusId, { systemState: 'closed' });
+      expect(bare.status).toBe(409);
+      expect(bare.body.error.ticketing).toEqual({
+        reason: 'status-change-needs-confirmation',
+        count: 2,
+      });
+      const wrong = await patchStatus<Refusal>(statusId, {
+        systemState: 'closed',
+        confirmCount: 1,
+      });
+      expect(wrong.status).toBe(409);
+      expect(wrong.body.error.ticketing?.count).toBe(2);
+      expect(await stateEventsOf(statusId)).toEqual([]);
+      expect((await rowOf(ids[0] ?? ''))?.closedAt).toBeNull();
+
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 2 })).status).toBe(
+        200,
+      );
+      const writtenAt = new Date(String((await stateEventsOf(statusId))[0]?.at));
+      // Two rows at this batch size: the full batch and the empty successor.
+      expect(await drain()).toBe(2);
+
+      for (const id of ids) {
+        const row = await rowOf(id);
+        expect(row?.statusId).toBe(statusId);
+        expect(row?.closedAt?.toISOString()).toBe(writtenAt.toISOString());
+
+        const clock = await clockOf(id, 'resolution');
+        expect(clock.satisfiedAt?.toISOString()).toBe(writtenAt.toISOString());
+
+        const closed = await activityOf(id, 'ticket.closed');
+        expect(closed).toHaveLength(1);
+        expect(closed[0]?.actorId).toBe(ada.id);
+        expect(closed[0]?.to).toMatchObject({ statusId, reason: 'status-state' });
+
+        // Each ticket fires its own ticket.closed; a configuration change asks no survey.
+        expect(await eventTicketIds('ticket.closed')).toContain(id);
+        expect(await eventTicketIds('csat.requested')).not.toContain(id);
+      }
+    });
+
+    it('closes an empty status without a confirmation', async () => {
+      const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+        name: 'Empty shelf',
+        systemState: 'open',
+        pausesSla: false,
+        color: 'info',
+      });
+      expect(created.status).toBe(201);
+      const { drain } = drainer(created.body.id);
+
+      expect((await patchStatus(created.body.id, { systemState: 'closed' })).status).toBe(200);
+      expect(await drain()).toBe(1);
+    });
+
+    it('counts and closes only live tickets: soft-deleted and merged ones are left alone', async () => {
+      const { statusId, ids } = await statusWithTickets('Mixed shelf', 4);
+      const [live, deleted, merged, other] = ids;
+      await withSystem(runtime.db, seeded.brandId, async (tx) => {
+        await tx
+          .update(tickets)
+          .set({ deletedAt: new Date() })
+          .where(eq(tickets.id, deleted ?? ''));
+        await tx
+          .update(tickets)
+          .set({ mergedIntoId: other ?? null })
+          .where(eq(tickets.id, merged ?? ''));
+      });
+      const { drain } = drainer(statusId);
+
+      // Four tickets filed, two of them out of the count.
+      const bare = await patchStatus<Refusal>(statusId, { systemState: 'closed' });
+      expect(bare.body.error.ticketing?.count).toBe(2);
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 2 })).status).toBe(
+        200,
+      );
+      await drain();
+
+      expect((await rowOf(live ?? ''))?.closedAt).not.toBeNull();
+      expect((await rowOf(other ?? ''))?.closedAt).not.toBeNull();
+      expect((await rowOf(deleted ?? ''))?.closedAt).toBeNull();
+      expect((await rowOf(merged ?? ''))?.closedAt).toBeNull();
+    });
+
+    it('stops a chain when the state is flipped back between two of its batches', async () => {
+      const { statusId, ids } = await statusWithTickets('Flip flop', 3);
+      const handler = createStatusStateResyncHandler(stateDeps());
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 3 })).status).toBe(
+        200,
+      );
+
+      const [first] = await stateEventsOfRows(statusId);
+      await runHandler(handler, first);
+      // Two of three closed, the successor written with a cursor.
+      const closedNow = await Promise.all(ids.map(async (id) => (await rowOf(id))?.closedAt));
+      expect(closedNow.filter((value) => value !== null && value !== undefined)).toHaveLength(2);
+      const rows = await stateEventsOfRows(statusId);
+      expect(rows).toHaveLength(2);
+
+      await setStateDirectly(statusId, 'open');
+      await runHandler(handler, rows[1]);
+
+      const after = await Promise.all(ids.map(async (id) => (await rowOf(id))?.closedAt));
+      expect(after.filter((value) => value !== null && value !== undefined)).toHaveLength(2);
+      expect(await stateEventsOfRows(statusId)).toHaveLength(2);
+    });
+
+    it('does not close a ticket that was moved out of the status mid-batch', async () => {
+      const { statusId, ids } = await statusWithTickets('Racy shelf', 2);
+      const [stays, leaves] = ids;
+      const elsewhere = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
+        name: 'Elsewhere',
+        systemState: 'open',
+        pausesSla: false,
+        color: 'info',
+      });
+
+      // The batch is read, then an agent moves one ticket before the worker
+      // reaches it: the read is the real one, the move is staged after it.
+      class MovingRepository extends TicketLifecycleRepository {
+        override async liveTicketsToClose(
+          ...args: Parameters<TicketLifecycleRepository['liveTicketsToClose']>
+        ) {
+          const batch = await super.liveTicketsToClose(...args);
+          await args[0]
+            .update(tickets)
+            .set({ statusId: elsewhere.body.id })
+            .where(eq(tickets.id, leaves ?? ''));
+          return batch;
+        }
+      }
+      const { drain } = drainer(statusId, new MovingRepository());
+
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 2 })).status).toBe(
+        200,
+      );
+      await drain();
+
+      expect((await rowOf(stays ?? ''))?.closedAt).not.toBeNull();
+      const moved = await rowOf(leaves ?? '');
+      expect(moved?.statusId).toBe(elsewhere.body.id);
+      expect(moved?.closedAt).toBeNull();
+      expect(await activityOf(leaves ?? '', 'ticket.closed')).toHaveLength(0);
+      expect(await eventTicketIds('ticket.closed')).not.toContain(leaves);
+    });
+
+    it('repairs tickets an earlier edit left in a closed status without a closed_at, once', async () => {
+      const { statusId, ids } = await statusWithTickets('Left behind', 2);
+      // What the pre-#361 edit produced: the state flipped, the tickets untouched.
+      await setStateDirectly(statusId, 'closed');
+      const { drain } = drainer(statusId);
+
+      expect(await repairClosedStatusTickets(runtime.db)).toBeGreaterThanOrEqual(1);
+      await drain();
+
+      for (const id of ids) {
+        expect((await rowOf(id))?.closedAt).not.toBeNull();
+        expect((await clockOf(id, 'resolution')).satisfiedAt).not.toBeNull();
+        expect(await eventTicketIds('ticket.closed')).toContain(id);
+        expect(await eventTicketIds('csat.requested')).not.toContain(id);
+      }
+
+      // Nothing is left to repair in this status.
+      const events = (await stateEventsOf(statusId)).length;
+      await repairClosedStatusTickets(runtime.db);
+      expect((await stateEventsOf(statusId)).length).toBe(events);
+    });
+
+    it('leaves an open-like change to the SLA re-sync and writes no state event', async () => {
+      const { statusId, ids } = await statusWithTickets('Waiting a while', 1);
+      const id = ids[0] ?? '';
+      const { drain } = drainer(statusId);
+
+      expect(
+        (await patchStatus(statusId, { systemState: 'on_hold', pausesSla: true })).status,
+      ).toBe(200);
+      expect(await drain()).toBe(0);
+      expect(await stateEventsOf(statusId)).toEqual([]);
+
+      expect((await rowOf(id))?.closedAt).toBeNull();
+      expect(await activityOf(id, 'ticket.closed')).toHaveLength(0);
+    });
+
+    it('moves nothing twice when the same batch is redelivered', async () => {
+      const { statusId, ids } = await statusWithTickets('Once only', 1);
+      const id = ids[0] ?? '';
+      const { drain, replayFirst } = drainer(statusId);
+
+      expect((await patchStatus(statusId, { systemState: 'closed', confirmCount: 1 })).status).toBe(
+        200,
+      );
+      await drain();
+      const satisfiedAt = (await clockOf(id, 'resolution')).satisfiedAt?.toISOString();
+
+      await replayFirst();
+
+      expect((await rowOf(id))?.closedAt?.toISOString()).toBe(satisfiedAt);
+      expect(await activityOf(id, 'ticket.closed')).toHaveLength(1);
     });
   });
 

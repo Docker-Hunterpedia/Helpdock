@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from './fixtures.js';
 import { openTicketing, signIn } from './flows.js';
 import { strings } from './strings.js';
@@ -200,5 +201,72 @@ test.describe('ticket statuses', () => {
     await expect(
       card.getByRole('spinbutton', { name: t('ticketing:statuses.reply.daysLabel') }),
     ).toHaveCount(0);
+  });
+
+  /**
+   * #361. One dropdown change must not become an unbounded mass action: moving
+   * a status into the closed state asks for the count typed back, and moving it
+   * out while it holds tickets is refused with a banner.
+   */
+  test('confirms closing the tickets of a status, and refuses reopening them', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    const axe = async (): Promise<string[]> =>
+      (
+        await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+          .analyze()
+      ).violations.map((violation) => `${violation.id}: ${violation.help}`);
+    const chooseState = async (state: 'open' | 'closed'): Promise<void> => {
+      await page
+        .getByRole('combobox', { name: t('ticketing:statuses.editor.systemState') })
+        .click();
+      await page.getByRole('option', { name: t(`ticketing:statuses.states.${state}`) }).click();
+      await page
+        .getByRole('button', { name: t('ticketing:statuses.editor.save'), exact: true })
+        .click();
+    };
+    await openStatuses(page, locale);
+
+    await page
+      .getByRole('button', {
+        name: t('ticketing:statuses.table.select', { name: 'Waiting on supplier' }),
+      })
+      .click();
+    await chooseState('closed');
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(
+      t('ticketing:statuses.confirm.stateChange.title', { count: 12 }),
+    );
+    await expect(dialog).toContainText('ticket.closed');
+    const submit = dialog.getByRole('button', {
+      name: t('ticketing:statuses.confirm.stateChange.submit', { count: 12 }),
+    });
+    await expect(submit).toBeDisabled();
+    expect(await axe()).toEqual([]);
+
+    await dialog
+      .getByRole('textbox', {
+        name: t('ticketing:statuses.confirm.stateChange.typeLabel', { total: 12 }),
+      })
+      .fill('12');
+    await submit.click();
+    await expect(page.getByRole('status')).toContainText(
+      t('ticketing:toast.statusUpdated', { name: 'Waiting on supplier' }),
+    );
+    await expect(dialog).toHaveCount(0);
+
+    await chooseState('open');
+    const banner = page.getByRole('status').filter({
+      hasText: t('ticketing:statuses.editor.reopenRefused', {
+        count: 12,
+        name: 'Waiting on supplier',
+      }),
+    });
+    await expect(banner).toBeVisible();
+    expect(await axe()).toEqual([]);
   });
 });

@@ -178,6 +178,62 @@ describe('deleting a status', () => {
   });
 });
 
+describe('changing the system state across the closed boundary (#361)', () => {
+  const chooseState = async (
+    user: ReturnType<typeof userEvent.setup>,
+    state: 'Open' | 'Closed',
+  ): Promise<void> => {
+    await user.click(screen.getByRole('combobox', { name: 'System state' }));
+    await user.click(await screen.findByRole('option', { name: state }));
+  };
+
+  it('asks for the count typed back before closing the tickets, then closes them', async () => {
+    const user = userEvent.setup();
+    await renderStatuses();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Waiting on supplier' }));
+    await chooseState(user, 'Closed');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Close 12 tickets?');
+    expect(dialog).toHaveTextContent('No satisfaction surveys are sent');
+    expect(dialog).toHaveTextContent('ticket.closed webhook');
+    const close = within(dialog).getByRole('button', { name: 'Close 12 tickets' });
+    expect(close).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText('Type 12 to confirm'), '11');
+    expect(close).toBeDisabled();
+    await user.clear(within(dialog).getByLabelText('Type 12 to confirm'));
+    await user.type(within(dialog).getByLabelText('Type 12 to confirm'), '12');
+    await user.click(close);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Waiting on supplier saved');
+  });
+
+  it('warns with the count and keeps the status closed when it still holds tickets', async () => {
+    const user = userEvent.setup();
+    await renderStatuses();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Waiting on supplier' }));
+    await chooseState(user, 'Closed');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Type 12 to confirm'), '12');
+    await user.click(within(dialog).getByRole('button', { name: 'Close 12 tickets' }));
+    await screen.findByText('Waiting on supplier saved');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    await chooseState(user, 'Open');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText(/holds 12 closed tickets/)).toBeVisible();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
 describe('reordering', () => {
   it('moves a status from the keyboard alone', async () => {
     const user = userEvent.setup();

@@ -152,9 +152,16 @@ export const ticketStatusUpdateRequestSchema = z
     color: statusColorSchema.optional(),
     /** Only `true` is meaningful: a brand always has exactly one default. */
     isDefault: z.literal(true).optional(),
+    /**
+     * #361. How many live tickets the person was told a move into a closed
+     * system state would close. The api closes them only when it still matches;
+     * otherwise it answers `status-change-needs-confirmation` with the count.
+     */
+    confirmCount: z.int().nonnegative().optional(),
   })
   .refine(
-    (value) => Object.values(value).some((field) => field !== undefined),
+    ({ confirmCount: _confirmed, ...fields }) =>
+      Object.values(fields).some((field) => field !== undefined),
     'Send at least one field to change',
   );
 export type TicketStatusUpdateRequest = z.infer<typeof ticketStatusUpdateRequestSchema>;

@@ -257,11 +257,14 @@ export interface TicketingApi {
  */
 export class TicketingError extends Error {
   readonly reason: TicketingRefusal;
+  /** #361. The live tickets a refused status state change would have touched. */
+  readonly count: number | undefined;
 
-  constructor(reason: TicketingRefusal) {
+  constructor(reason: TicketingRefusal, count?: number) {
     super(`ticketing: ${reason}`);
     this.name = 'TicketingError';
     this.reason = reason;
+    this.count = count;
   }
 }
 

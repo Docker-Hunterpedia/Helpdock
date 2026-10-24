@@ -1,4 +1,4 @@
-import { brands, type Db, type DbTransaction, ticketMessages } from '@helpdock/db';
+import { brands, type Db, type DbTransaction, ticketActivity, ticketMessages } from '@helpdock/db';
 import {
   createJobProcessor,
   type JobLogger,
@@ -14,9 +14,9 @@ import {
 } from '@helpdock/jobs';
 import { RULE_MAX_DEPTH } from '@helpdock/schemas';
 import { type Job, UnrecoverableError } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { ticketChangeSchema } from '../tickets/ticket-events.js';
+import { ticketChangeSchema, type WakeCause, wakeCauseSchema } from '../tickets/ticket-events.js';
 import { evaluateEventRules, type RulesEngineDeps, runScheduledRules } from './engine.js';
 import { type RepliedMessage, RULE_SOURCE_EVENTS, triggersFor } from './triggers.js';
 
@@ -43,6 +43,7 @@ const sourcePayloadSchema = z.object({
   changes: z.array(ticketChangeSchema).optional(),
   messageId: z.uuid().optional(),
   ruleChain: z.array(z.uuid()).max(RULE_MAX_DEPTH).optional(),
+  wokeBy: wakeCauseSchema.optional(),
 });
 
 /** Adds the evaluation job. Its id comes from the outbox row, so a redelivery adds nothing. */
@@ -50,19 +51,59 @@ export interface RulesEvaluateQueue {
   add(payload: RulesEvaluatePayload): Promise<void>;
 }
 
+interface ReadMessage extends RepliedMessage {
+  readonly id: string;
+  readonly ticketId: string;
+}
+
 const repliedMessage = async (
   tx: DbTransaction,
   messageId: string | undefined,
-): Promise<RepliedMessage | undefined> => {
+): Promise<ReadMessage | undefined> => {
   if (messageId === undefined) {
     return undefined;
   }
   const [row] = await tx
-    .select({ kind: ticketMessages.kind, authorType: ticketMessages.authorType })
+    .select({
+      id: ticketMessages.id,
+      kind: ticketMessages.kind,
+      authorType: ticketMessages.authorType,
+      ticketId: ticketMessages.ticketId,
+    })
     .from(ticketMessages)
     .where(eq(ticketMessages.id, messageId))
     .limit(1);
   return row;
+};
+
+/**
+ * #368. Whether a customer's reply is what woke the ticket. Every channel
+ * writes `ticket.woke` in the reply's own transaction, before the message, so
+ * the two rows share a `created_at`; reading it here marks the event for all
+ * of them at once rather than each channel's router.
+ */
+const wokeByReply = async (tx: DbTransaction, message: ReadMessage): Promise<boolean> => {
+  if (message.authorType !== 'contact') {
+    return false;
+  }
+  const [woke] = await tx
+    .select({ id: ticketActivity.id })
+    .from(ticketActivity)
+    .where(
+      and(
+        eq(ticketActivity.ticketId, message.ticketId),
+        eq(ticketActivity.action, 'ticket.woke'),
+        // Compared in SQL: a JavaScript date would cut the microseconds both rows carry.
+        eq(
+          ticketActivity.createdAt,
+          sql`(select ${ticketMessages.createdAt} from ${ticketMessages} where ${ticketMessages.id} = ${message.id})`,
+        ),
+        sql`${ticketActivity.to} ->> 'reason' = 'customer_reply'`,
+      ),
+    )
+    .limit(1);
+
+  return woke !== undefined;
 };
 
 export const createRulesSourceHandler =
@@ -76,14 +117,16 @@ export const createRulesSourceHandler =
     }
 
     const { ticketId, changes, messageId, ruleChain } = parsed.data;
-    const triggers = triggersFor(event, {
-      changes,
-      message:
-        event === RULE_SOURCE_EVENTS.replied ? await repliedMessage(tx, messageId) : undefined,
-    });
+    const message =
+      event === RULE_SOURCE_EVENTS.replied ? await repliedMessage(tx, messageId) : undefined;
+    const triggers = triggersFor(event, { changes, message });
     if (triggers.length === 0) {
       return;
     }
+
+    const wokeBy: WakeCause | undefined =
+      parsed.data.wokeBy ??
+      (message !== undefined && (await wokeByReply(tx, message)) ? 'customer_reply' : undefined);
 
     await queue.add({
       brandId,
@@ -91,6 +134,7 @@ export const createRulesSourceHandler =
       triggers,
       sourceOutboxId: outboxId,
       chain: ruleChain ?? [],
+      ...(wokeBy === undefined ? {} : { wokeBy }),
     });
   };
 

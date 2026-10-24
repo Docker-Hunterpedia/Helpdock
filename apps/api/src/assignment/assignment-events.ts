@@ -14,6 +14,7 @@ import {
   RULE_MAX_DEPTH,
 } from '@helpdock/schemas';
 import { z } from 'zod';
+import { wakeCauseSchema } from '../tickets/ticket-events.js';
 import { type AutoAssignDeps, autoAssign, unassignTicket } from './auto-assign.js';
 import { canWorkDepartment } from './rotation.js';
 
@@ -49,6 +50,8 @@ export const assignmentRequestedPayloadSchema = z.object({
    * depth guard follows survives the hop through this handler.
    */
   ruleChain: z.array(z.uuid()).min(1).max(RULE_MAX_DEPTH).optional(),
+  /** #368. The chain started at a snooze ending by itself; the pick's event says so too. */
+  wokeBy: wakeCauseSchema.optional(),
 });
 export type AssignmentRequestedPayload = z.infer<typeof assignmentRequestedPayloadSchema>;
 
@@ -154,13 +157,15 @@ const clock = (deps: { now?: () => Date }): Date => deps.now?.() ?? new Date();
 export const createAssignmentRequestedHandler =
   (deps: AutoAssignDeps & { now?: () => Date }): OutboxEventHandler =>
   async ({ brandId, payload, tx, log }: OutboxEventContext): Promise<void> => {
-    const { ticketId, trigger, ruleChain } = assignmentRequestedPayloadSchema.parse(payload);
+    const { ticketId, trigger, ruleChain, wokeBy } =
+      assignmentRequestedPayloadSchema.parse(payload);
     const outcome = await autoAssign(deps, tx, {
       brandId,
       ticketId,
       trigger,
       now: clock(deps),
       ruleChain,
+      wokeBy,
     });
 
     log.info({ brandId, ticketId, trigger, ...outcome }, 'assignment requested');

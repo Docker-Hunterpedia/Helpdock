@@ -4,6 +4,8 @@ import { cannedResponsePort } from '../macros/canned-response-port.js';
 import { CannedResponsesService } from '../macros/canned-responses.service.js';
 import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
+import { SlaRepository } from '../sla/sla.repository.js';
+import { snoozePresetResolver } from '../tickets/snooze/snooze-calendar.js';
 import { RulesController } from './rules.controller.js';
 import { RulesRepository } from './rules.repository.js';
 import { RulesService } from './rules.service.js';
@@ -52,6 +54,7 @@ export class RulesModule {
               assignment: new AssignmentRepository(),
               businessHours: businessHoursProbe(businessHours),
               cannedResponses: cannedResponsePort(canned),
+              snooze: snoozePresetResolver(new SlaRepository()),
             }),
         },
       ],

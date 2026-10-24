@@ -72,6 +72,10 @@ const TICKET_CHANGE_EVENTS = new Set<string>([
   TICKET_EVENTS.spam,
 ]);
 
+/** The ways a snooze ends without a person asking, as an event names them. */
+export const wakeCauseSchema = z.enum(['time', 'sla', 'customer_reply']);
+export type WakeCause = z.infer<typeof wakeCauseSchema>;
+
 /** The parts of a ticket an update can move, as `changes` names them (M3-03). */
 export const TICKET_CHANGES = [
   'subject',
@@ -120,6 +124,14 @@ export const ticketEventPayloadSchema = z.object({
    * the outbox: absent when a person, a channel or a timer made the change.
    */
   ruleChain: z.array(z.uuid()).min(1).max(RULE_MAX_DEPTH).optional(),
+  /**
+   * #368. Set when the change is a snooze ending by itself: its time came, an
+   * SLA step fired, or the customer wrote. A rule that runs because of it, and
+   * every rule that chain sets off, may not snooze the ticket again, or a
+   * `ticket_updated` rule would put it back to sleep for ever and hide the
+   * reply that woke it (DOMAIN-RULES §2.2).
+   */
+  wokeBy: wakeCauseSchema.optional(),
   /**
    * M3-03, for M3-02. On `ticket.replied` written by a rule's canned reply:
    * whether the rule says the reply answers the customer (DOMAIN-RULES §3.1,

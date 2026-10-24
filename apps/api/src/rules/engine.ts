@@ -11,6 +11,7 @@ import {
   ruleDurationMinutes,
 } from '@helpdock/schemas';
 import { z } from 'zod';
+import type { WakeCause } from '../tickets/ticket-events.js';
 import { applyRuleActions, type RuleActionDeps } from './actions.js';
 import type { BusinessHoursProbe } from './ports.js';
 import { loadTicketFacts, type TicketFacts } from './ticket-facts.js';
@@ -95,6 +96,8 @@ const applyInSavepoint = async (
     readonly rule: WorkflowRuleRow;
     readonly chain: readonly string[];
     readonly now: Date;
+    /** #368. Set when the event is a snooze ending by itself; see {@link RuleActionContext.wokeBy}. */
+    readonly wokeBy?: WakeCause | undefined;
     /** The log row this run is written as, chosen first so an action can name it (M7-07). */
     readonly runId: string;
   },
@@ -119,6 +122,7 @@ const applyInSavepoint = async (
           runId: run.runId,
           chain: [...run.chain, run.rule.id],
           now: run.now,
+          ...(run.wokeBy === undefined ? {} : { wokeBy: run.wokeBy }),
         },
         target,
         actions,
@@ -139,6 +143,8 @@ export interface EventEvaluation {
   readonly triggers: readonly string[];
   /** The rules before this event in its chain, oldest first. */
   readonly chain: readonly string[];
+  /** #368. Set when the event is a snooze ending by itself (its time, an SLA step, a reply). */
+  readonly wokeBy?: WakeCause | undefined;
 }
 
 /** What happened to each rule the event reached, in order. The log holds the same. */
@@ -147,7 +153,7 @@ export type RunVerdict = 'applied' | 'skipped' | 'stopped' | 'failed';
 export const evaluateEventRules = async (
   deps: RulesEngineDeps,
   tx: DbTransaction,
-  { brandId, ticketId, triggers, chain }: EventEvaluation,
+  { brandId, ticketId, triggers, chain, wokeBy }: EventEvaluation,
 ): Promise<{ ruleId: string; verdict: RunVerdict }[]> => {
   const rules = await deps.rules.eventRules(tx, triggers);
   const verdicts: { ruleId: string; verdict: RunVerdict }[] = [];
@@ -214,7 +220,7 @@ export const evaluateEventRules = async (
     const outcomes = await applyInSavepoint(
       deps,
       tx,
-      { brandId, ticketId, rule, chain, now, runId },
+      { brandId, ticketId, rule, chain, now, runId, wokeBy },
       parsed.actions,
     );
     const verdict: RunVerdict = outcomes === null ? 'failed' : 'applied';

@@ -1,4 +1,4 @@
-import { tickets } from '@helpdock/db';
+import { tickets, users } from '@helpdock/db';
 import type {
   MacroRunRequest,
   MacroRunResponse,
@@ -107,7 +107,7 @@ export class MacroRunService {
     const fields =
       plan.snoozePreset === undefined
         ? plan.fields
-        : await this.#withSnooze(brandId, targetId, plan.fields, plan.snoozePreset);
+        : await this.#withSnooze(brandId, targetId, plan.fields, plan.snoozePreset, actor.userId);
 
     const departmentId =
       Object.keys(fields).length === 0
@@ -155,13 +155,28 @@ export class MacroRunService {
     ticketId: string,
     fields: MacroPlan['fields'],
     preset: SnoozePresetKey,
+    userId: string,
   ): Promise<MacroRunFields> {
     const tx = getTx();
     const target = await readRenderTicket(tx, ticketId);
     if (target === undefined) {
       throw new NotFoundException('No such ticket');
     }
-    const until = await this.#snooze.at(tx, brandId, target.departmentId, preset, new Date());
+    // The person's own zone from Profile (M14-12), as the Snooze menu uses it;
+    // the brand's when they have not chosen one.
+    const [profile] = await tx
+      .select({ timeZone: users.timeZone })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    const until = await this.#snooze.at(
+      tx,
+      brandId,
+      target.departmentId,
+      preset,
+      new Date(),
+      profile?.timeZone ?? null,
+    );
 
     return { ...fields, snoozedUntil: until.toISOString() };
   }

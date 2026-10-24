@@ -124,5 +124,9 @@ target the Snoozed status at all.
 - Snoozing from the bulk bar and from the command palette arrives with M14-04
   and M14-05.
 - A brand with no business hours set gets 09:00 in the agent's time zone for
-  the calendar presets; a rule's or a macro's snooze falls back to the brand's
-  own time zone, because a rule runs as nobody.
+  the calendar presets. A rule's snooze falls back to the brand's own time zone,
+  because a rule runs as nobody; a macro's to the time zone of the person
+  applying it (Your account › Profile), then the brand's, as the menu does.
+- A rule's snooze action never runs on a wake (its time, an SLA step or the
+  customer's reply), so a reply stays visible and a rule cannot re-snooze for
+  ever; the run log says the ticket was just woken.

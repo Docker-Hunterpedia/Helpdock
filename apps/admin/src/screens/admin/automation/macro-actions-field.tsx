@@ -176,6 +176,12 @@ export function MacroActionsField({
         );
       })}
 
+      {actions.some((action) => action.type === 'snooze') ? (
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          {t('macros:actions.snoozeNote')}
+        </Typography>
+      ) : null}
+
       <Box>
         <Button
           variant="text"

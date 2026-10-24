@@ -111,7 +111,7 @@ A third seeded custom status, **Snoozed** (`on_hold`, `pauses_sla`, not `awaitin
 | Snoozed | Agent sets another status, closes, marks spam, or the ticket is merged (a person or a rule) | That status; the snooze is cleared. Reason `status_changed`. |
 | Snoozed | *Wake now* (`snoozedUntil: null`) | The remembered status (as above). Reason `manual`. |
 
-Time-based rules and workflow actions use the same transitions and are logged with actor `rule:<id>`. A rule snoozes only through the snooze action (#368): its preset is resolved with the Snooze menu's own maths, the activity, `ticket.snoozed` outbox event and wake timer are a person's snooze's, and `snoozed_by` is null — a rule is nobody, so a wake tells the assignee. A macro snoozes through the same update a person's `PATCH` takes, and the person who applied it is `snoozed_by`.
+Time-based rules and workflow actions use the same transitions and are logged with actor `rule:<id>`. A rule snoozes only through the snooze action (#368): its preset is resolved with the Snooze menu's own maths, the activity, `ticket.snoozed` outbox event and wake timer are a person's snooze's, and `snoozed_by` is null — a rule is nobody, so a wake tells the assignee. It is one planner with the menu's and `PATCH`'s (bounds, transition, columns, activity, outbox), and it **never runs on a wake**: a run answering a time, SLA or customer-reply wake, and every run that chain sets off, refuses the action as *unavailable* with the reason `woken` in the run log, because a wake that a rule undoes would loop and would hide the customer's reply (the customer reply always wakes). A macro snoozes through the same update a person's `PATCH` takes, and the person who applied it is `snoozed_by`.
 
 ### 2.3 Reopen policy
 

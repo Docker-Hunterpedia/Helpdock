@@ -23,6 +23,8 @@ export interface TicketFacts extends RuleTicketFacts {
   readonly contactLocale: 'en' | 'ar' | null;
   /** Spam, merged, soft-deleted: no rule acts on these (DOMAIN-RULES §2.2). */
   readonly inert: boolean;
+  /** #368. When the ticket's snooze ends, so a `snooze` action can tell it would change nothing. */
+  readonly snoozedUntil?: Date | null;
 }
 
 const newestContactMessage = async (tx: DbTransaction, ticketId: string): Promise<string> => {
@@ -125,6 +127,7 @@ export const loadTicketFacts = async (
     contactLocale: contact.locale,
     accountId: contact.accountId,
     custom: ticket.custom,
+    snoozedUntil: ticket.snoozedUntil,
     inert: row.isSpam || ticket.mergedIntoId !== null || ticket.deletedAt !== null,
   };
 };

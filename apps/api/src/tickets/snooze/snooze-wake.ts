@@ -167,6 +167,7 @@ export const wakeTicket = async (
     ticketId: ticket.id,
     departmentId: ticket.departmentId,
     changes: ['status'],
+    wokeBy: cause,
   });
 
   return { ticket: updated, status: target };

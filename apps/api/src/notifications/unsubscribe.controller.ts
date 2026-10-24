@@ -1,7 +1,6 @@
 import type { UnsubscribeView } from '@helpdock/schemas';
 import { unsubscribeViewSchema } from '@helpdock/schemas';
 import {
-  Body,
   Controller,
   Get,
   Headers,
@@ -68,13 +67,14 @@ export class UnsubscribeController {
   @HttpCode(HttpStatus.OK)
   async unsubscribe(
     @Param(new ZodValidationPipe(UnsubscribeTokenParamDto)) { token }: UnsubscribeTokenParamDto,
-    @Body() body: unknown,
     @Headers('content-type') contentType: string | undefined,
     @Req() request: FastifyRequest,
   ): Promise<UnsubscribeView> {
     requireRequestContext().path = '/api/public/unsubscribe/:token';
+    // The raw body is read from the request, not `@Body()`: a multipart body
+    // arrives as bytes and is decoded first, then parsed by the schema here.
     new ZodValidationPipe(UnsubscribeRequestDto).transform(
-      await readUnsubscribeForm(body, contentType),
+      await readUnsubscribeForm(request.body, contentType),
       { type: 'body' },
     );
 

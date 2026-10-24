@@ -64,6 +64,7 @@ import { ConfigModule } from './runtime/config.module.js';
 import { DbModule } from './runtime/db.module.js';
 import { SettingsModule } from './runtime/settings.module.js';
 import { BRAND_RESOLVER, LOGGER, PRINCIPAL_RESOLVER } from './runtime/tokens.js';
+import { SetupChecklistModule } from './setup-checklist/setup-checklist.module.js';
 import { SlaModule } from './sla/sla.module.js';
 import { SsoModule } from './sso/sso.module.js';
 import { StaffModule } from './staff/staff.module.js';
@@ -264,6 +265,8 @@ export class AppModule implements NestModule {
         ReportsModule.forRoot({ aiUsage: new DbAiUsage(options.settings) }),
         // M1-05: saved views and the sidebar's counts.
         ViewsModule.forRoot(),
+        // M14-13: the Admin's "Get set up" checklist.
+        SetupChecklistModule.forRoot(),
         // M2-05, M2-06: Channels › Outgoing email, signatures, the ticket
         // view's email context. Sending runs in the worker.
         EmailModule.forRoot(

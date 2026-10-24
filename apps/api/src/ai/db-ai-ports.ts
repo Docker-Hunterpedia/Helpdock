@@ -15,6 +15,7 @@ import type { Db, DbTransaction } from '@helpdock/db';
 import { withSystemJob } from '../tenant/system-job.js';
 import { AiRepository } from './ai.repository.js';
 import { BudgetMeter } from './budget-meter.js';
+import { resolveAiTarget } from './resolve-ai-target.js';
 
 /**
  * The ports of `@helpdock/ai` against this install: providers and the default
@@ -47,14 +48,11 @@ export class DbAiPorts implements AiPorts {
 
   async target(brandId: string): Promise<AiTarget> {
     const row = await this.#inBrand(brandId, (tx) => this.#repository.settings(tx, brandId));
-    const providerId = row?.providerId ?? (await this.#settings.get('ai.defaultProvider'));
-    const modelId = row?.modelId ?? (await this.#settings.get('ai.defaultModel'));
-    const provider = (await this.#settings.get('ai.providers')).find(
-      (candidate) => candidate.id === providerId,
-    );
-    if (provider === undefined || modelId === '') {
+    const resolved = await resolveAiTarget(row, this.#settings);
+    if (resolved === undefined) {
       throw new AiNotConfiguredError(brandId);
     }
+    const { provider, modelId } = resolved;
     return {
       provider,
       modelId,

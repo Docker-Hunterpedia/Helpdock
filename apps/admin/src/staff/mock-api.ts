@@ -8,6 +8,8 @@ import type {
   RecoveryCodes,
   SecondFactorReset,
   SecondFactorSummary,
+  SetupChecklist,
+  SetupChecklistStepId,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -18,9 +20,11 @@ import type {
 } from '@helpdock/schemas';
 import {
   normalisePhone,
+  OPTIONAL_SETUP_CHECKLIST_STEPS,
   PROFILE_PHOTO_MAX_BYTES,
   PROFILE_PHOTO_MIME_TYPES,
   publicNameOf,
+  SETUP_CHECKLIST_STEPS,
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
 import { type StaffApi, StaffError } from './api.js';
@@ -217,12 +221,24 @@ const seedSessions = (): StaffSessionList => ({
   ],
 });
 
+/**
+ * The fixture's three brands (`MOCK_BRANDS` in `auth/mock-api.ts`, which imports
+ * this file, so the ids are spelled here): the first is mid-way through setup,
+ * the second has finished it, and the third refuses the checklist the way a
+ * brand where the person is not an Admin does.
+ */
+const FINISHED_BRAND = '0192c3f0-1a2b-7c3d-8e4f-000000000002';
+const REFUSED_BRAND = '0192c3f0-1a2b-7c3d-8e4f-000000000003';
+const STARTED_STEPS: readonly SetupChecklistStepId[] = ['channel', 'teammate', 'businessHours'];
+
 let nextUserId = 1;
 
 export class MockStaffApi implements StaffApi {
   #staff = seedStaff();
   #profile = seedProfile();
   #sessions = seedSessions();
+  readonly #checklistDone = new Map<string, Set<SetupChecklistStepId>>();
+  readonly #checklistHidden = new Set<string>();
   #viewerEnabled = true;
   /** The rotation id a start answered, so a confirm can be refused as spent. */
   #stagedRotationId: string | null = null;
@@ -404,6 +420,59 @@ export class MockStaffApi implements StaffApi {
   }
 
   // ------------------------------------------------------------------
+
+  async setupChecklist(brandId: string): Promise<SetupChecklist> {
+    return this.#checklist(brandId);
+  }
+
+  async dismissSetupChecklist(brandId: string): Promise<SetupChecklist> {
+    this.#checklist(brandId);
+    this.#checklistHidden.add(brandId);
+
+    return this.#checklist(brandId);
+  }
+
+  /** Ticks a step the way the api would once the brand's data changed. */
+  completeSetupStep(brandId: string, step: SetupChecklistStepId): void {
+    this.#doneSteps(brandId).add(step);
+  }
+
+  #doneSteps(brandId: string): Set<SetupChecklistStepId> {
+    const existing = this.#checklistDone.get(brandId);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const created = new Set<SetupChecklistStepId>(
+      brandId === FINISHED_BRAND
+        ? SETUP_CHECKLIST_STEPS.filter((id) => !OPTIONAL_SETUP_CHECKLIST_STEPS.includes(id))
+        : STARTED_STEPS,
+    );
+    this.#checklistDone.set(brandId, created);
+
+    return created;
+  }
+
+  #checklist(brandId: string): SetupChecklist {
+    if (brandId === REFUSED_BRAND) {
+      throw new Error('forbidden');
+    }
+
+    const done = this.#doneSteps(brandId);
+    const steps = SETUP_CHECKLIST_STEPS.map((id) => ({
+      id,
+      done: done.has(id),
+      optional: OPTIONAL_SETUP_CHECKLIST_STEPS.includes(id),
+    }));
+
+    return {
+      steps,
+      doneCount: steps.filter((step) => step.done).length,
+      total: steps.length,
+      complete: steps.every((step) => step.done || step.optional),
+      dismissed: this.#checklistHidden.has(brandId),
+    };
+  }
 
   async profile(): Promise<Profile> {
     return this.#profile;

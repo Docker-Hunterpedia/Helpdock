@@ -18,6 +18,7 @@ import { CountBadge } from './count-badge.tsx';
 import { ADMIN_NAV, type NavItem, navFor, PRIMARY_NAV } from './nav-items.js';
 import { NotificationBell } from './notification-bell.tsx';
 import { RailTooltip } from './rail-tooltip.tsx';
+import { SetupChecklistEntry } from './setup-checklist.tsx';
 import { useSidebarScroll } from './sidebar-scroll.js';
 import { UserMenu } from './user-menu.tsx';
 
@@ -616,6 +617,7 @@ export function Sidebar({
           borderBlockStart: `1px solid ${tokens['border.default']}`,
         }}
       >
+        {collapsed ? null : <SetupChecklistEntry />}
         {collapse === undefined ? null : <SidebarToggle collapse={collapse} controls={sidebarId} />}
         <UserMenu variant={collapsed ? 'avatar' : 'full'} />
       </Box>

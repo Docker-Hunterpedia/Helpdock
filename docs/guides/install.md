@@ -242,6 +242,39 @@ There is no way to reopen it: the install is "set up" exactly while the `users`
 table has a row in it, and the only way back is to restore a database that had
 none.
 
+### The setup checklist
+
+After the wizard, every Admin of a brand sees **Get set up** at the foot of the
+sidebar (not on the collapsed rail), with a progress bar and "3 of 9". It opens
+a panel of nine steps, each with a line on why and a **Go** link to the page
+where it is done:
+
+1. Connect a channel: a mailbox, a Telegram bot, a Meta account or a widget origin.
+2. Invite a teammate: a second person holds a role in the brand (a pending invitation counts).
+3. Set business hours.
+4. Create an SLA policy.
+5. Set up assignment: at least one department is not on Manual.
+6. Add a saved reply or macro.
+7. Publish a help center article: one language published and public.
+8. Connect an AI provider (optional): a provider and a model for the brand, or the install's default.
+9. Receive your first ticket: a ticket that arrived through a channel. Tickets typed in by an agent and imported tickets do not count.
+
+Nothing is ticked by hand. The steps are read from the brand's own data each
+time the panel is opened, so a step ticks when the work exists and un-ticks if
+it is deleted. Only Admins see the checklist (Team Leaders, Agents and Viewers
+never do), and each brand has its own.
+
+**Hide this checklist** hides it for you in that brand and nobody else. When
+the eight required steps are done, the AI provider being optional, it goes for
+everyone; a panel that is open at that moment says "Helpdock is set up" and is
+gone once closed. A person whose role is removed and given again sees the
+checklist again.
+
+The api is `GET /api/brands/:brandId/setup-checklist` and
+`POST /api/brands/:brandId/setup-checklist/dismiss`, both for `brand:manage`.
+They are routes of the admin app and are not part of the public `/api/v1`
+OpenAPI document.
+
 ## Custom domains
 
 A brand's help center runs on the brand's own hostname, such as

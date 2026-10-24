@@ -75,6 +75,7 @@ import {
   reportSearchDaily,
   retentionSettings,
   settings,
+  setupChecklistDismissals,
   slaPolicies,
   tags,
   teamMembers,
@@ -819,6 +820,12 @@ const fixtures = [
     name: 'notification_email_pacing',
     insert: (tx: DbTransaction, brandId: string) =>
       tx.insert(notificationEmailPacing).values({ brandId, userId }),
+  },
+  {
+    name: 'setup_checklist_dismissals',
+    // M14-13. One row per person and brand; the owner rule has its tests below.
+    insert: (tx: DbTransaction, brandId: string) =>
+      tx.insert(setupChecklistDismissals).values({ brandId, userId }),
   },
   {
     name: 'widget_settings',
@@ -1842,6 +1849,44 @@ describe.skipIf(!hasDocker)('row-level security', () => {
           ticketCount: 1,
           undoUntil: new Date(),
         }),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { cause?: { message?: string } },
+      );
+
+      expect(rejection?.cause?.message).toMatch(/row-level security/i);
+    });
+  });
+
+  describe('who hid the setup checklist (M14-13)', () => {
+    const hiderId = uuidv7();
+    const as = (principalId: string) =>
+      ({
+        brandIds: [brandA],
+        departmentIds: 'all',
+        principalType: 'staff',
+        principalId,
+      }) as const;
+    const hiders = async (tx: DbTransaction): Promise<string[]> =>
+      (
+        await tx.select({ userId: setupChecklistDismissals.userId }).from(setupChecklistDismissals)
+      ).map((row) => row.userId);
+
+    beforeAll(async () => {
+      await db.insert(users).values({ id: hiderId, email: 'hider@example.com', name: 'Hider' });
+      await withTenant(db, as(hiderId), (tx) =>
+        tx.insert(setupChecklistDismissals).values({ brandId: brandA, userId: hiderId }),
+      );
+    });
+
+    it('is its owner’s alone, an Admin of the brand included', async () => {
+      expect(await withTenant(db, as(hiderId), hiders)).toEqual([hiderId]);
+      expect(await withTenant(db, as(userId), hiders)).not.toContain(hiderId);
+    });
+
+    it('cannot be written for somebody else by a member of staff', async () => {
+      const rejection = await withTenant(db, as(userId), (tx) =>
+        tx.insert(setupChecklistDismissals).values({ brandId: brandA, userId: hiderId }),
       ).then(
         () => undefined,
         (error: unknown) => error as { cause?: { message?: string } },

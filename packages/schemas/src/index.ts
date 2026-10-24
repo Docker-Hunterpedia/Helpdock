@@ -56,6 +56,7 @@ export * from './reports.js';
 export * from './retention.js';
 export * from './rule-conditions.js';
 export * from './second-factor-reset.js';
+export * from './setup-checklist.js';
 export * from './sla.js';
 export * from './spam.js';
 export * from './sso.js';

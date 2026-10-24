@@ -91,6 +91,7 @@ const MIGRATION_TAGS = [
   '0070_pinned_custom_field',
   '0071_required_to_close',
   '0072_unsubscribe_after_resubscribe',
+  '0073_setup_checklist',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

@@ -36,6 +36,7 @@ export * from './outbox.js';
 export * from './reports.js';
 export * from './retention-settings.js';
 export * from './settings.js';
+export * from './setup-checklist.js';
 export * from './sla-policies.js';
 export * from './sso.js';
 export * from './tags.js';

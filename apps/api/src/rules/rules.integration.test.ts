@@ -781,6 +781,10 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
             {
               match: 'all',
               conditions: [
+                // The subject narrows this rule to this test's ticket: the file
+                // leaves earlier awaiting tickets behind, and a rule that also
+                // matched them would close them here.
+                { field: 'subject', operator: 'contains', values: ['Rule-gated close'] },
                 { field: 'status', operator: 'is', values: [awaitingStatus] },
                 {
                   field: 'time_in_status',
@@ -794,7 +798,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         actions: [{ type: 'close' }],
       });
 
-      const ticket = await createTicket('Waiting on the customer');
+      const ticket = await createTicket('Rule-gated close M14-17');
       await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
         statusId: awaitingStatus,
       });

@@ -95,7 +95,10 @@ describe('NotificationBell', () => {
     await user.click(await bell(3));
     const panel = await screen.findByRole('dialog', { name: 'Notifications' });
 
-    expect(await within(panel).findByRole('status')).toHaveTextContent(/^Paused until \d\d:\d\d/);
+    expect(await within(panel).findByRole('status')).toHaveTextContent(
+      // An hour from now is tomorrow's date during the last hour of the day, and then the line names the day.
+      /^Paused until (\w{3} \d{1,2} \w{3}, )?\d\d:\d\d/,
+    );
     await user.click(within(panel).getByRole('button', { name: 'Resume now' }));
 
     await waitFor(() => expect(within(panel).queryByRole('status')).toBeNull());

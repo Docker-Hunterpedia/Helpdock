@@ -72,7 +72,7 @@ export interface MappedError {
   /** Only on a refused contact action; see `contacts/contact-failure.ts`. */
   readonly contact?: { readonly reason: ContactRefusal; readonly problem?: IdentityProblem };
   /** Only on a refused ticketing-settings action; see `brands/ticketing-failure.ts`. */
-  readonly ticketing?: TicketingRefusal;
+  readonly ticketing?: { readonly reason: TicketingRefusal; readonly count?: number };
   /** Only on a transition §2.2 has no row for; see `tickets/lifecycle/lifecycle-failure.ts`. */
   readonly lifecycle?: TicketLifecycleRefusal;
   /** Only on a refused wizard step; see `install/setup-failure.ts`. */
@@ -192,7 +192,10 @@ export const mapError = (error: unknown): MappedError => {
       status: error.getStatus(),
       code: CODE_BY_STATUS[error.getStatus()] ?? 'forbidden',
       message: error.message,
-      ticketing: error.reason,
+      ticketing: {
+        reason: error.reason,
+        ...(error.count === undefined ? {} : { count: error.count }),
+      },
       unexpected: false,
     };
   }
@@ -426,7 +429,7 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.auth === undefined ? {} : { auth: mapped.auth }),
     ...(mapped.staff === undefined ? {} : { staff: { reason: mapped.staff } }),
     ...(mapped.contact === undefined ? {} : { contact: mapped.contact }),
-    ...(mapped.ticketing === undefined ? {} : { ticketing: { reason: mapped.ticketing } }),
+    ...(mapped.ticketing === undefined ? {} : { ticketing: mapped.ticketing }),
     ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),

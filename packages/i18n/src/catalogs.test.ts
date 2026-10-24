@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { createI18n } from './index.js';
 import { NAMESPACES, SUPPORTED_LNGS } from './resources.js';
 
 const localesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../locales');
@@ -126,8 +127,9 @@ describe.each(NAMESPACES)('%s namespace', (namespace) => {
 
   it('interpolates the count in the catch-all plural form of both languages', () => {
     for (const base of new Set([...en.keys(), ...ar.keys()].filter(isPlural).map(baseKey))) {
-      expect(en.get(`${base}_other`), `en ${namespace}:${base}`).toContain('{{count}}');
-      expect(ar.get(`${base}_other`), `ar ${namespace}:${base}`).toContain('{{count}}');
+      // `{{count, number(...)}}` is the same placeholder with a number format.
+      expect(en.get(`${base}_other`), `en ${namespace}:${base}`).toMatch(/\{\{count[,}]/);
+      expect(ar.get(`${base}_other`), `ar ${namespace}:${base}`).toMatch(/\{\{count[,}]/);
     }
   });
 
@@ -211,4 +213,15 @@ describe('the catalogs as a whole', () => {
 
     expect(untranslated).toEqual([]);
   });
+});
+
+// #361: a count in the status-state dialog reads "1,284" in both languages, in Latin digits.
+it.each([
+  ['en', 'Close 1,284 tickets?'],
+  ['ar', 'إغلاق 1,284 تذكرة؟'],
+] as const)('groups the digits of a large count in the %s status-state title', (lng, expected) => {
+  const instance = createI18n({ lng });
+  expect(instance.t('ticketing:statuses.confirm.stateChange.title', { count: 1284 })).toBe(
+    expected,
+  );
 });

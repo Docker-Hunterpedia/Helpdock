@@ -13,7 +13,7 @@ import {
 } from '@helpdock/db';
 import type { Locale } from '@helpdock/i18n';
 import { type BrandSettings, parseBrandSettings } from '@helpdock/schemas';
-import { and, asc, count, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 
 /**
  * Every statement the lifecycle and the status list make.
@@ -213,6 +213,113 @@ export class TicketLifecycleRepository {
       .set({ statusId: toStatusId, updatedAt: new Date() })
       .where(eq(tickets.statusId, fromStatusId))
       .returning({ id: tickets.id, departmentId: tickets.departmentId });
+  }
+
+  /**
+   * How many live tickets a status holds: not soft-deleted, not merged.
+   *
+   * `openOnly` narrows it to the ones with no `closed_at`, which is what a move
+   * into a closed state would close; without it, every one the status holds,
+   * which is what stops it leaving the closed state (#361).
+   */
+  async countLiveTicketsInStatus(
+    tx: DbTransaction,
+    statusId: string,
+    options: { readonly openOnly: boolean },
+  ): Promise<number> {
+    const [row] = await tx
+      .select({ total: count() })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.statusId, statusId),
+          isNull(tickets.deletedAt),
+          isNull(tickets.mergedIntoId),
+          options.openOnly ? isNull(tickets.closedAt) : undefined,
+        ),
+      );
+
+    return row?.total ?? 0;
+  }
+
+  /**
+   * The closed-state statuses that still hold a live ticket with no `closed_at`:
+   * what the edit that left them that way (before #361) owed a close.
+   */
+  async closedStatusesWithOpenTickets(tx: DbTransaction): Promise<string[]> {
+    const rows = await tx
+      .selectDistinct({ id: ticketStatuses.id })
+      .from(ticketStatuses)
+      .innerJoin(tickets, eq(tickets.statusId, ticketStatuses.id))
+      .where(
+        and(
+          eq(ticketStatuses.systemState, 'closed'),
+          isNull(tickets.closedAt),
+          isNull(tickets.deletedAt),
+          isNull(tickets.mergedIntoId),
+        ),
+      );
+
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * One batch of the live tickets in a status that a move into a closed state
+   * still owes a close, in id order after `afterId` (issue #361).
+   *
+   * Selecting the ones with no `closed_at` makes a redelivery, or a state
+   * flipped back before the worker ran, select nothing. The rows are locked, so
+   * an agent moving one out meanwhile waits for this transaction rather than
+   * racing it; {@link closeTicketInStatus} re-checks anyway.
+   */
+  async liveTicketsToClose(
+    tx: DbTransaction,
+    statusId: string,
+    options: { readonly afterId?: string; readonly limit: number },
+  ): Promise<{ id: string }[]> {
+    return tx
+      .select({ id: tickets.id })
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.statusId, statusId),
+          isNull(tickets.deletedAt),
+          isNull(tickets.mergedIntoId),
+          isNull(tickets.closedAt),
+          options.afterId === undefined ? undefined : gt(tickets.id, options.afterId),
+        ),
+      )
+      .orderBy(asc(tickets.id))
+      .limit(options.limit)
+      .for('update');
+  }
+
+  /**
+   * Closes one ticket, only while it is still live, still in that status and
+   * still open. `undefined` means it moved, closed or went away since the batch
+   * read it, and the caller leaves it alone.
+   */
+  async closeTicketInStatus(
+    tx: DbTransaction,
+    ticketId: string,
+    statusId: string,
+    at: Date,
+  ): Promise<TicketRow | undefined> {
+    const rows = await tx
+      .update(tickets)
+      .set({ closedAt: at, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tickets.id, ticketId),
+          eq(tickets.statusId, statusId),
+          isNull(tickets.closedAt),
+          isNull(tickets.deletedAt),
+          isNull(tickets.mergedIntoId),
+        ),
+      )
+      .returning();
+
+    return rows[0];
   }
 
   /**

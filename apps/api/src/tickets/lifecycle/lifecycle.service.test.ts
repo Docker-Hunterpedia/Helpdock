@@ -243,6 +243,38 @@ describe('a customer reply to an open-like ticket (§2.2 row 1)', () => {
     expect(updates[0]?.values).toMatchObject({ statusId: OPEN.id, closedAt: null });
   });
 
+  // #361: a status moved into a closed state closes its tickets in batches, so
+  // for a while a ticket in it has no closed_at. The reply decides by closed_at.
+  it('treats a ticket a status-state close has not reached as open', async () => {
+    const { service, context, updates } = harness({});
+
+    const landing = await service.onCustomerReply(
+      context,
+      ticket({ closedAt: null }),
+      CLOSED,
+      INBOUND,
+    );
+
+    expect(landing.continued).toBe(false);
+    expect(landing.status.id).toBe(OPEN.id);
+    expect(updates[0]?.values).toMatchObject({ statusId: OPEN.id, closedAt: null });
+  });
+
+  // Deleting a status leaves closed_at on the tickets it moves to Open.
+  it('treats an open-status ticket with a leftover closed_at as open', async () => {
+    const { service, context } = harness({});
+
+    const landing = await service.onCustomerReply(
+      context,
+      ticket({ closedAt: new Date('2020-01-01T00:00:00.000Z') }),
+      AWAITING,
+      INBOUND,
+    );
+
+    expect(landing.continued).toBe(false);
+    expect(landing.status.id).toBe(OPEN.id);
+  });
+
   it('writes nothing when the ticket is already in that status', async () => {
     const { service, context, updates } = harness({});
 
@@ -374,10 +406,13 @@ describe('an agent public reply (§2.2 row 2)', () => {
 
   // §2.2 gives the row to `open` alone: a ticket on hold or escalated is
   // somewhere deliberate, and a reply does not move it.
-  it.each([AWAITING, CLOSED])('leaves a %s ticket alone', async (current) => {
+  it.each([
+    [AWAITING, null],
+    [CLOSED, NOW],
+  ])('leaves a %s ticket alone', async (current, closedAt) => {
     const { service, context, updates } = harness({});
 
-    const next = await service.onAgentPublicReply(context, ticket(), current);
+    const next = await service.onAgentPublicReply(context, ticket({ closedAt }), current);
 
     expect(next.id).toBe(current.id);
     expect(updates).toHaveLength(0);

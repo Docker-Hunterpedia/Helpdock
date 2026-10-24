@@ -1,5 +1,6 @@
 import type { TicketStatus as TicketStatusRow } from '@helpdock/db';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
+import { effectiveSystemState } from './lifecycle/status-state.js';
 import {
   type LifecycleEvent,
   type TicketLifecycleFacts,
@@ -118,7 +119,8 @@ export const applyStatusChange = ({
     throw new UnknownStatusError(requestedStatusId);
   }
 
-  const outcome = transitionFor({ ...ticket, systemState: current.systemState }, event);
+  const systemState = effectiveSystemState({ closedAt }, current);
+  const outcome = transitionFor({ ...ticket, systemState }, event);
   if (outcome.kind === 'refused') {
     throw new TicketLifecycleFailure(outcome.reason);
   }
@@ -133,7 +135,7 @@ export const applyStatusChange = ({
     throw new TicketLifecycleFailure('snooze-requires-time');
   }
 
-  const wasClosed = current.systemState === 'closed';
+  const wasClosed = systemState === 'closed';
   const closing = next.systemState === 'closed';
 
   return {

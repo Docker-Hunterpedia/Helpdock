@@ -13,6 +13,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,7 +27,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { isAuthError } from '../../../auth/api.js';
@@ -35,10 +36,12 @@ import { EmptyState } from '../../../shell/empty-state.tsx';
 import { isTicketingError } from '../../../ticketing/api.js';
 import { refusalCopy } from '../../../ticketing/refusal-copy.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { Field } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { moveBy, moveTo } from './reorder.js';
 import { ReplyBehaviourCard } from './reply-behaviour-card.tsx';
 import { type StatusDraft, StatusEditor } from './status-editor.tsx';
+import { typedCountMatches } from './typed-count.js';
 import { useTicketingAction } from './use-ticketing-action.js';
 
 /**
@@ -61,6 +64,13 @@ import { useTicketingAction } from './use-ticketing-action.js';
  * to Open" is a promise about other people's work, and a count guessed in the
  * browser would be a promise the browser cannot keep.
  */
+interface UpdateInput {
+  readonly status: TicketStatus;
+  readonly draft: StatusDraft;
+  /** #361. The count the person typed back, for a save that closes tickets. */
+  readonly confirmCount?: number;
+}
+
 export function StatusesTab(): ReactNode {
   const t = useT();
   const api = useTicketingApi();
@@ -68,6 +78,7 @@ export function StatusesTab(): ReactNode {
   const tokens = useSemanticTokens();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const confirmCountId = useId();
 
   const brand = currentBrand(session);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -77,6 +88,18 @@ export function StatusesTab(): ReactNode {
   );
   const [confirming, setConfirming] = useState<TicketStatus | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  // #361. A save the api wants confirmed because it closes the tickets in the
+  // status, and the typed count that confirms it.
+  const [closing, setClosing] = useState<{
+    status: TicketStatus;
+    draft: StatusDraft;
+    count: number;
+  } | null>(null);
+  const [typedCount, setTypedCount] = useState('');
+  // #361. A save refused because closed tickets still sit in the status.
+  const [reopenRefusal, setReopenRefusal] = useState<{ statusId: string; count: number } | null>(
+    null,
+  );
 
   const statuses = useQuery({
     queryKey: ['ticket-statuses', brand.id],
@@ -148,12 +171,31 @@ export function StatusesTab(): ReactNode {
     report,
   );
 
+  const reportUpdate = (error: unknown, input: UpdateInput): void => {
+    if (isTicketingError(error) && error.count !== undefined) {
+      if (error.reason === 'status-change-needs-confirmation') {
+        setTypedCount('');
+        setClosing({ status: input.status, draft: input.draft, count: error.count });
+        return;
+      }
+      if (error.reason === 'status-has-closed-tickets') {
+        setReopenRefusal({ statusId: input.status.id, count: error.count });
+        return;
+      }
+    }
+
+    report(error);
+  };
+
   const update = useTicketingAction(
-    (input: { status: TicketStatus; draft: StatusDraft }) =>
-      api.updateStatus(brand.id, input.status.id, input.draft),
+    (input: UpdateInput) =>
+      api.updateStatus(brand.id, input.status.id, {
+        ...input.draft,
+        ...(input.confirmCount === undefined ? {} : { confirmCount: input.confirmCount }),
+      }),
     (input) => t('ticketing:toast.statusUpdated', { name: input.draft.name }),
     refresh,
-    report,
+    reportUpdate,
   );
 
   const makeDefault = useTicketingAction(
@@ -197,6 +239,7 @@ export function StatusesTab(): ReactNode {
     }
   };
 
+  const closingCount = closing?.count ?? 0;
   const fallbackName = usage.data?.fallbackName ?? '';
   const ticketCount = usage.data?.ticketCount ?? 0;
 
@@ -383,8 +426,14 @@ export function StatusesTab(): ReactNode {
                   return;
                 }
 
+                setReopenRefusal(null);
                 update.mutate({ status: selected, draft });
               }}
+              closedTicketsCount={
+                reopenRefusal !== null && reopenRefusal.statusId === selected?.id
+                  ? reopenRefusal.count
+                  : undefined
+              }
               onCancel={() => {
                 setCreating(false);
                 setSelectedId(null);
@@ -491,6 +540,52 @@ export function StatusesTab(): ReactNode {
           {t('ticketing:statuses.actions.delete')}
         </MenuItem>
       </Menu>
+
+      <ConfirmDialog
+        open={closing !== null}
+        destructive
+        busy={busy}
+        title={t('ticketing:statuses.confirm.stateChange.title', {
+          count: closingCount,
+        })}
+        body={t('ticketing:statuses.confirm.stateChange.body', {
+          count: closingCount,
+          name: closing?.status.name ?? '',
+        })}
+        confirmLabel={t('ticketing:statuses.confirm.stateChange.submit', {
+          count: closingCount,
+        })}
+        confirmDisabled={!typedCountMatches(typedCount, closingCount)}
+        onClose={() => {
+          setClosing(null);
+        }}
+        onConfirm={() => {
+          if (closing !== null) {
+            update.mutate({
+              status: closing.status,
+              draft: closing.draft,
+              confirmCount: closing.count,
+            });
+          }
+          setClosing(null);
+        }}
+      >
+        <Field
+          id={confirmCountId}
+          label={t('ticketing:statuses.confirm.stateChange.typeLabel', { total: closingCount })}
+        >
+          <TextField
+            id={confirmCountId}
+            value={typedCount}
+            onChange={(event) => {
+              setTypedCount(event.target.value);
+            }}
+            size="small"
+            autoComplete="off"
+            slotProps={{ htmlInput: { inputMode: 'numeric' } }}
+          />
+        </Field>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirming !== null}

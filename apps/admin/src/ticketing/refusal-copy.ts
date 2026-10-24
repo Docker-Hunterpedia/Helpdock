@@ -33,6 +33,8 @@ export const REFUSAL_COPY = {
   'view-is-built-in': 'ticketing:toast.viewIsBuiltIn',
   'macro-changed': 'ticketing:toast.macroChanged',
   'pin-conflict': 'ticketing:toast.pinConflict',
+  'status-has-closed-tickets': 'ticketing:toast.statusHasClosedTickets',
+  'status-change-needs-confirmation': 'ticketing:toast.statusChangeNeedsConfirmation',
 } as const satisfies Record<TicketingRefusal, string>;
 
 /** The catalog key for one refusal, keeping the literal type `useT()` needs. */

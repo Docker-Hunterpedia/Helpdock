@@ -250,7 +250,11 @@ describe('a refused ticketing action', () => {
   it('is a permission answer when the department is outside the actor’s scope', () => {
     const mapped = mapError(new TicketingFailure('out-of-scope'));
 
-    expect(mapped).toMatchObject({ status: 403, code: 'forbidden', ticketing: 'out-of-scope' });
+    expect(mapped).toMatchObject({
+      status: 403,
+      code: 'forbidden',
+      ticketing: { reason: 'out-of-scope' },
+    });
     expect(mapped.unexpected).toBe(false);
   });
 
@@ -263,6 +267,19 @@ describe('a refused ticketing action', () => {
     ] as const) {
       expect(mapError(new TicketingFailure(reason)).status).toBe(409);
     }
+  });
+
+  it('carries the count a refused status state change would have touched (#361)', () => {
+    const body = errorBody(
+      mapError(new TicketingFailure('status-change-needs-confirmation', 37)),
+      'req-11',
+    );
+
+    expect(body.error).toMatchObject({
+      code: 'conflict',
+      ticketing: { reason: 'status-change-needs-confirmation', count: 37 },
+    });
+    expect(mapError(new TicketingFailure('status-has-closed-tickets', 3)).status).toBe(409);
   });
 });
 

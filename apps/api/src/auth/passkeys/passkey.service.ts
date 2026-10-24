@@ -246,7 +246,7 @@ export class PasskeyService {
   async list(userId: string, tx: DbTransaction): Promise<PasskeyList> {
     const user = await this.#parts.auth.activeAccount(userId, tx);
     const rows = await this.#parts.passkeys.ofUser(userId, tx);
-    const { state } = await this.#parts.webauthn.status();
+    const { state } = await this.#parts.webauthn.status(tx);
 
     return {
       passkeys: rows.map(toPasskey),
@@ -274,6 +274,7 @@ export class PasskeyService {
       purpose: 'step-up',
       binding: { userId, familyId },
       allow: existing,
+      tx,
     });
     return { ceremonyId, options: { ...options } };
   }
@@ -302,6 +303,7 @@ export class PasskeyService {
       user: { handle, email: user.email, name: user.name },
       existing,
       binding: { userId, familyId: session.familyId },
+      tx,
     });
     return { ceremonyId, options: { ...options } };
   }
@@ -331,6 +333,7 @@ export class PasskeyService {
       ceremonyId: input.ceremonyId,
       binding: { userId, familyId: session.familyId },
       response: toRegistrationJson(input.response),
+      tx,
     });
 
     const held = await passkeys.count(userId, tx);
@@ -508,6 +511,7 @@ export class PasskeyService {
       binding: { userId, familyId },
       ceremonyId: proof.ceremonyId,
       response: toAuthenticationJson(proof.response),
+      tx,
       findCredential: async (credentialId) => {
         const row = await passkeys.byCredentialId(credentialId, tx);
         presented = row?.id;

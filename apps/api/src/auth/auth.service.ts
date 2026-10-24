@@ -938,8 +938,11 @@ export class AuthService {
   }
 
   /** Whether this account may offer a recovery code to start a rotation; the page hides the option when not. */
-  async recoveryCodeProofAllowed(userId: string, tx?: Queryable): Promise<boolean> {
-    return !(await this.#parts.ssoPolicy.recoveryCodeBarred(await this.#requireUser(userId, tx)));
+  async recoveryCodeProofAllowed(userId: string, tx?: DbTransaction): Promise<boolean> {
+    return !(await this.#parts.ssoPolicy.recoveryCodeBarred(
+      await this.#requireUser(userId, tx),
+      tx,
+    ));
   }
 
   /**
@@ -1097,7 +1100,7 @@ export class AuthService {
       // Before any attempt is spent: a break-glass account under enforcement
       // proves with its app or a passkey, as ADR 0053 keeps recovery codes out
       // of break-glass and this would install its next factor.
-      if (await this.#parts.ssoPolicy.recoveryCodeBarred(user)) {
+      if (await this.#parts.ssoPolicy.recoveryCodeBarred(user, tx)) {
         throw new AuthFailure('recovery-code-not-allowed');
       }
       // Two recovery-code shapes, each a complete proof of its own (DOMAIN-RULES
@@ -1704,7 +1707,7 @@ export class AuthService {
     readonly proof: OauthStepUpRequest;
     readonly tx?: DbTransaction;
   }): Promise<{ url: string; browserNonce: string }> {
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    if (await this.#parts.ssoPolicy.enforced(tx)) throw new AuthFailure('sso-required');
     await this.#requireStepUp(userId, proof, tx);
     if (await this.#hasLiveIdentity(userId, provider, tx)) {
       throw new AuthFailure('oauth-identity-conflict');

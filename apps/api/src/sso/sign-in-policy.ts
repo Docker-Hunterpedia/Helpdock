@@ -10,6 +10,7 @@ import {
 } from '@helpdock/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { AuthFailure } from '../auth/auth-failure.js';
+import { withInstallScope } from '../tenant/install-scope.js';
 import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
 import { readSsoSetting } from './sso-settings.js';
 
@@ -17,10 +18,14 @@ import { readSsoSetting } from './sso-settings.js';
 export class SsoSignInPolicy {
   constructor(private readonly options: { db: Db; settings: Settings; keyring: Keyring }) {}
 
-  async enforced(): Promise<boolean> {
-    return withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
-      readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced'),
-    );
+  /** Pass the caller's transaction when it holds one: see {@link withInstallScope}. */
+  async enforced(within?: DbTransaction): Promise<boolean> {
+    const read = (tx: DbTransaction) =>
+      readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced');
+
+    return within === undefined
+      ? withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, read)
+      : withInstallScope(within, () => read(within));
   }
 
   async assertLocal(email: string, method: string): Promise<void> {
@@ -54,8 +59,8 @@ export class SsoSignInPolicy {
    * of break-glass (ADR 0053); a code that could install its next factor would
    * be a way round that. Never barred while SSO is not enforced.
    */
-  async recoveryCodeBarred(user: User): Promise<boolean> {
-    return withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, async (tx) => {
+  async recoveryCodeBarred(user: User, within?: DbTransaction): Promise<boolean> {
+    const barred = async (tx: DbTransaction): Promise<boolean> => {
       if (!(await readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced')))
         return false;
       const listed = await readSsoSetting(
@@ -66,7 +71,14 @@ export class SsoSignInPolicy {
       );
       if (listed.includes(user.id)) return true;
       return isBreakGlassEligible(user, (await passkeyCounts(tx, [user.id])).get(user.id) ?? 0);
-    });
+    };
+
+    // A caller already inside a transaction passes it: a second connection
+    // taken from the pool while the caller holds one deadlocks the pool once
+    // as many requests as it has connections arrive together.
+    return within === undefined
+      ? withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, barred)
+      : withInstallScope(within, () => barred(within));
   }
 
   /**

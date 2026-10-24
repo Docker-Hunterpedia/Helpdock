@@ -1,8 +1,11 @@
 import type {
   DepartmentList,
+  PasskeyProof,
   Profile,
   ProfileUpdateRequest,
   RecoveryCodes,
+  SecondFactorReset,
+  SecondFactorSummary,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -34,6 +37,15 @@ export interface StaffApi {
   updateStaff(brandId: string, userId: string, request: StaffUpdateRequest): Promise<StaffMember>;
   setActive(brandId: string, userId: string, active: boolean): Promise<StaffMember>;
   removeFromBrand(brandId: string, userId: string): Promise<void>;
+
+  /** Install admins only (#398): what resetting this person's second factor removes, and the digest to confirm. */
+  secondFactorSummary(userId: string): Promise<SecondFactorSummary>;
+  /** Behind the admin's own step-up and the digest they confirmed; answers what was removed. */
+  resetSecondFactor(
+    userId: string,
+    proof: PasskeyProof,
+    digest: string,
+  ): Promise<SecondFactorReset>;
 
   profile(): Promise<Profile>;
   updateProfile(request: ProfileUpdateRequest): Promise<Profile>;

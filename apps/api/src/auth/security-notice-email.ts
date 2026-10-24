@@ -24,6 +24,7 @@ export const SECURITY_CHANGES = [
   'twoFactorEnabled',
   'twoFactorDisabled',
   'twoFactorRotated',
+  'secondFactorReset',
   'recoveryCodes',
   'oauthConnected',
   'oauthDisconnected',
@@ -37,7 +38,7 @@ export type SecurityChange = (typeof SECURITY_CHANGES)[number];
  * What picks the sentences: a change, or a variant of one. A reset that left
  * passkeys behind says so, with the advice to check them, in words of its own.
  */
-type NoticeKind = SecurityChange | 'passwordResetPasskeys';
+type NoticeKind = SecurityChange | 'passwordResetPasskeys' | 'secondFactorResetOptional';
 
 /** The changes whose every line is their own, from the M18 artboard. */
 const WORDED_CHANGES = new Set<NoticeKind>([
@@ -46,7 +47,9 @@ const WORDED_CHANGES = new Set<NoticeKind>([
   'passkeyAdded',
   'passkeyRemoved',
   'passkeysMoved',
+  'secondFactorReset',
   'passwordResetPasskeys',
+  'secondFactorResetOptional',
 ]);
 
 const isSecurityChange = (value: string | undefined): value is SecurityChange =>
@@ -150,7 +153,11 @@ export const renderSecurityNoticeEmail = ({
     i18n.exists(`securityChange.${key}`, { lng: locale, ns: 'email' });
   const kept = positiveCount(values.passkeys);
   const kind: NoticeKind =
-    change === 'passwordReset' && kept > 0 ? 'passwordResetPasskeys' : change;
+    change === 'passwordReset' && kept > 0
+      ? 'passwordResetPasskeys'
+      : change === 'secondFactorReset' && values.required === '0'
+        ? 'secondFactorResetOptional'
+        : change;
   const remaining = positiveCount(values.remaining);
   const common = {
     appName: 'Helpdock',
@@ -219,7 +226,7 @@ export const renderSecurityNoticeEmail = ({
     copy,
     rows,
     addresses,
-    names: values.passkey === undefined ? [] : [values.passkey],
+    names: [values.passkey, values.actor].filter((name): name is string => name !== undefined),
     host: common.host,
   });
 

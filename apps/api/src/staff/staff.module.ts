@@ -10,6 +10,7 @@ import { SessionService } from '../auth/session/session.service.js';
 import type { Logger } from '../logging/logger.js';
 import { createS3Client, type ObjectStorage, S3ObjectStorage } from '../media/storage.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
+import { SsoSignInPolicy } from '../sso/sign-in-policy.js';
 import { AccountController } from './account.controller.js';
 import { AccountService } from './account.service.js';
 import { InstallStaffController } from './install-staff.controller.js';
@@ -19,6 +20,7 @@ import { InviteStore } from './invite.store.js';
 import { InvitesController } from './invites.controller.js';
 import { AssignmentStaffLifecycleHooks } from './lifecycle-hooks.js';
 import { ProfilePhotoStore } from './profile-photo.store.js';
+import { SecondFactorResetService } from './second-factor-reset.service.js';
 import { StaffController } from './staff.controller.js';
 import { StaffRepository } from './staff.repository.js';
 import { StaffService } from './staff.service.js';
@@ -159,6 +161,18 @@ export class StaffModule {
           inject: [StaffRepository, AuthService],
           useFactory: (staff: StaffRepository, auth: AuthService): InstallStaffService =>
             new InstallStaffService({ staff, auth, photos, logger }),
+        },
+        {
+          provide: SecondFactorResetService,
+          inject: [StaffRepository, AuthService, PasskeyService, SsoSignInPolicy, RateLimiter],
+          useFactory: (
+            staff: StaffRepository,
+            auth: AuthService,
+            passkeys: PasskeyService,
+            ssoPolicy: SsoSignInPolicy,
+            limiter: RateLimiter,
+          ): SecondFactorResetService =>
+            new SecondFactorResetService({ staff, auth, passkeys, ssoPolicy, limiter, logger }),
         },
       ],
     };

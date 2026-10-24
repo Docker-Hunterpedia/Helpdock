@@ -105,6 +105,21 @@ export class PasskeyService {
    * claim the principal does not carry. A ceremony begun in one browser cannot
    * be finished by another, even for the same person.
    */
+  /** The account-row lock every factor change takes (DOMAIN-RULES §12.1 rule 3). */
+  lockAccount(userId: string, tx: DbTransaction): Promise<void> {
+    return this.#parts.passkeys.lockAccount(userId, tx);
+  }
+
+  /** The ids of the passkeys an account holds, for the digest an admin's reset is bound to. */
+  async idsOf(userId: string, tx: DbTransaction): Promise<string[]> {
+    return (await this.#parts.passkeys.ofUser(userId, tx)).map((row) => row.id).sort();
+  }
+
+  /** Removes every passkey one account holds, and says how many (#398). */
+  removeAllOf(userId: string, tx: DbTransaction): Promise<number> {
+    return this.#parts.passkeys.removeAllOf(userId, tx);
+  }
+
   async sessionOf(
     userId: string,
     authorization: string | undefined,

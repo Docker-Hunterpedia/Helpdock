@@ -596,7 +596,8 @@ Backlog or never:
     extended. What exists, deleting a person (`anonymise`), now deletes their
     passkeys with the rest of the identity, and the staff list counts a
     passkey as a second factor. A reset action is a feature of its own and is
-    not built here.
+    not built here. **Built later as #398** (DOMAIN-RULES §12.1 rule 8): an
+    install admin's reset on the Staff row menu, with its own artboard.
   - **Under SSO enforcement** a passkey second factor and a passkey enrolment
     answer `sso-required`, as a recovery code does (M18-05 opened the
     break-glass door to a passkey: see its entry).

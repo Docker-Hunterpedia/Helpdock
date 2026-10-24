@@ -26,6 +26,7 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
       provider: 'GitHub',
       account: 'lina@users.noreply.github.com',
       passkey: 'MacBook Air',
+      actor: 'Omar Saleh',
     };
     const en = notice(values);
     const ar = notice(values, 'ar');
@@ -179,6 +180,35 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
       expect(en.text).not.toContain("wasn't you");
       expect(ar.subject).toBe('أُزيلت مفاتيح المرور من حسابك');
       expect(ar.html).toContain('<bdi dir="ltr">desk.helpdock.com</bdi>');
+    });
+
+    it('names the administrator who reset a second factor, in both languages', () => {
+      const en = notice({ change: 'secondFactorReset', actor: 'Omar Saleh' });
+      const ar = notice({ change: 'secondFactorReset', actor: 'عمر صالح' }, 'ar');
+
+      expect(en.subject).toBe('Your second factor was reset');
+      expect(en.text).toContain('Omar Saleh, an administrator, reset the second factor');
+      expect(en.text).toContain("Didn't ask for this? Contact your administrator now.");
+      expect(en.text).toContain(`Open your security page: ${SECURITY_PAGE}`);
+      expect(ar.subject).toBe('أُعيد تعيين العامل الثاني لحسابك');
+      expect(ar.text).toContain('أعاد عمر صالح، أحد المسؤولين');
+      expect(ar.html).toContain('<bdi>عمر صالح</bdi>');
+    });
+
+    it('tells a person whose role needs no second factor that they can set one up, not that they must', () => {
+      const en = notice({ change: 'secondFactorReset', actor: 'Omar Saleh', required: '0' });
+      const ar = notice({ change: 'secondFactorReset', actor: 'عمر صالح', required: '0' }, 'ar');
+      const required = notice({ change: 'secondFactorReset', actor: 'Omar Saleh', required: '1' });
+
+      expect(en.text).toContain('You can set up a new one from your security page.');
+      expect(en.text).not.toContain('Next time you sign in');
+      expect(en.subject).toBe('Your second factor was reset');
+      expect(en.text).toContain("Didn't ask for this?");
+      expect(ar.text).toContain('يمكنك إعداد عامل ثانٍ جديد من صفحة الأمان');
+      expect(ar.text).not.toContain('عند دخولك التالي');
+      expect(required.text).toContain(
+        'Next time you sign in, set up an authenticator app or a passkey.',
+      );
     });
 
     it('adds no sentence about what remains when nothing does', () => {

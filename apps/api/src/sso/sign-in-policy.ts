@@ -119,6 +119,41 @@ export class SsoSignInPolicy {
   }
 
   /**
+   * Whether `userId` is the last account that can still sign in by break-glass
+   * while SSO is enforced: listed, eligible now, and no other listed account is
+   * eligible. Resetting that person's second factor would make them ineligible
+   * and leave the install with no way in if the IdP is down (#398). Never true
+   * while SSO is not enforced.
+   */
+  async isLastBreakGlass(userId: string, within: DbTransaction): Promise<boolean> {
+    if (
+      !(await readSsoSetting(within, this.options.settings, this.options.keyring, 'sso.enforced'))
+    )
+      return false;
+    const allowed = await readSsoSetting(
+      within,
+      this.options.settings,
+      this.options.keyring,
+      'sso.breakGlassUserIds',
+    );
+    if (!allowed.includes(userId)) return false;
+    const candidates = await within
+      .select()
+      .from(users)
+      .where(inArray(users.id, [...allowed]));
+    const held = await passkeyCounts(
+      within,
+      candidates.map((user) => user.id),
+    );
+    const eligible = candidates.filter((user) =>
+      isBreakGlassEligible(user, held.get(user.id) ?? 0),
+    );
+    return (
+      eligible.some((user) => user.id === userId) && eligible.every((user) => user.id === userId)
+    );
+  }
+
+  /**
    * Whether a sign-in that began with `firstFactor` may finish with `factor`
    * under the current enforcement. Always true when SSO is not enforced.
    */

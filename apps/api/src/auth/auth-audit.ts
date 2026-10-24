@@ -42,6 +42,7 @@ export type AuthAuditAction =
   | 'auth.second_factor.enabled'
   | 'auth.second_factor.disabled'
   | 'auth.second_factor.rotated'
+  | 'auth.second_factor.reset'
   | 'auth.recovery_codes.regenerated'
   | 'auth.recovery_code.used'
   | 'auth.oauth.linked'

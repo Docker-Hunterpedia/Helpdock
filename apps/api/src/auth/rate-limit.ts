@@ -212,6 +212,19 @@ export const PROFILE_PHOTO_RULE: RateLimitRule = {
 };
 
 /**
+ * Per install admin, for resetting another person's second factor (#398). The
+ * action signs the person out of everywhere and is the help-desk trap the
+ * artboard warns about, so a stolen admin session cannot sweep the staff list:
+ * ten an hour is more than any real day of lost phones. Refused resets and wrong
+ * step-up proofs count too, because the check runs before either is decided.
+ */
+export const SECOND_FACTOR_RESET_RULE: RateLimitRule = {
+  bucket: 'second-factor-reset',
+  limit: 10,
+  windowSeconds: 60 * 60,
+};
+
+/**
  * Trim, count, add, expire — in one round trip, so two requests racing cannot
  * both see a count below the limit.
  */

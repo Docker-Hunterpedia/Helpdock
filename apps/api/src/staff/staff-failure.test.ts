@@ -14,6 +14,10 @@ const REASONS: readonly StaffRefusal[] = [
   'photo-too-large',
   'photo-unsupported-type',
   'photo-unreadable',
+  'not-resettable',
+  'second-factor-changed',
+  'last-break-glass',
+  'reset-rate-limited',
 ];
 
 describe('StaffFailure', () => {
@@ -25,6 +29,19 @@ describe('StaffFailure', () => {
     for (const reason of ['self', 'viewer-disabled', 'last-install-admin'] as const) {
       expect(new StaffFailure(reason).getStatus(), reason).toBe(HttpStatus.CONFLICT);
     }
+  });
+});
+
+describe('the second-factor reset refusals (#398)', () => {
+  it.each(['not-resettable', 'second-factor-changed', 'last-break-glass'] as const)(
+    'answers 409 for %s, a state the admin can act on',
+    (reason) => {
+      expect(new StaffFailure(reason).getStatus()).toBe(HttpStatus.CONFLICT);
+    },
+  );
+
+  it('answers 429 when the admin has reset too many in an hour', () => {
+    expect(new StaffFailure('reset-rate-limited').getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
   });
 });
 

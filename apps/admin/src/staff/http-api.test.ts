@@ -296,6 +296,34 @@ describe('the account the person owns', () => {
     });
   });
 
+  it('reads what a reset removes and sends the proof with the digest (#398)', async () => {
+    const digest = 'a'.repeat(64);
+    fetchMock.mockResolvedValue(
+      json({ totp: true, passkeys: 2, recoveryCodes: 6, enrolmentRequired: true, digest }),
+    );
+    await expect(staff.secondFactorSummary(USER_ID)).resolves.toMatchObject({ passkeys: 2 });
+    expect(lastCall().url).toBe(`/api/install/staff/${USER_ID}/second-factor`);
+
+    fetchMock.mockResolvedValue(json({ totp: true, passkeys: 2, recoveryCodes: 6 }));
+    await staff.resetSecondFactor(USER_ID, { currentPassword: 'pw' }, digest);
+    expect(lastCall()).toMatchObject({
+      url: `/api/install/staff/${USER_ID}/second-factor/reset`,
+      init: { method: 'POST' },
+    });
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({
+      proof: { currentPassword: 'pw' },
+      digest,
+    });
+  });
+
+  it('turns the reset refusals into staff errors', async () => {
+    fetchMock.mockResolvedValue(staffFailure('last-break-glass'));
+
+    await expect(
+      staff.resetSecondFactor(USER_ID, { code: '123456' }, 'a'.repeat(64)),
+    ).rejects.toMatchObject({ reason: 'last-break-glass' });
+  });
+
   it('lists and ends one browser', async () => {
     fetchMock.mockResolvedValue(json({ sessions: [] }));
     await staff.sessions();

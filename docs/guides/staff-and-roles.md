@@ -272,6 +272,17 @@ The QR code is drawn in the browser, as SVG, by a small encoder in
 `otpauth://` URI is a credential, and asking a server to draw it would put it in
 a second place.
 
+### Resetting somebody's second factor
+
+An install admin can remove another person's authenticator app, passkeys and
+recovery codes from the row menu (**Reset second factor**) when they have lost
+both their phone and their codes. It asks the admin to confirm it is them, lists
+exactly what goes, signs the person out everywhere, emails them and writes an
+audit row; at their next sign-in they enrol again, as a newly promoted Admin
+does. It is refused for your own row, for the last break-glass admin while SSO is
+enforced, and when the person's factors changed while you were confirming. See
+[Authentication](authentication.md#when-a-person-has-lost-the-phone-and-the-recovery-codes).
+
 ## Your own account
 
 Your account has four tabs: **Profile** (first, `/me/profile`), **Security**,
@@ -340,6 +351,8 @@ breached-list check.
 | `POST /api/brands/:brandId/staff/:userId/reactivate` | `@Requires('staff:manage')` | |
 | `DELETE /api/brands/:brandId/staff/:userId/role` | `@Requires('staff:manage')` | Remove from this brand |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise. Audited |
+| `GET /api/install/staff/:userId/second-factor` | `@Requires('install:admin')` | What a second-factor reset would remove: `totp`, `passkeys`, `recoveryCodes` and the `digest` to confirm |
+| `POST /api/install/staff/:userId/second-factor/reset` | `@Requires('install:admin')` | `{ proof, digest }`: remove the app, passkeys and recovery codes, revoke every session, audit `auth.second_factor.reset`, email the person. Refusals `staff.reason` `self`, `not-resettable`, `second-factor-changed`, `last-break-glass` (409) and `reset-rate-limited` (429) |
 | `GET /api/auth/invites/:token` | `@Public()` | Read an invitation. Rate-limited |
 | `POST /api/auth/invites/:token/accept` | `@Public()` | Spend it. Rate-limited |
 | `GET /api/me/profile` | `@Authenticated()` | Name, language, two-factor state and, since 1.1, `publicName`, `displayName`, `jobTitleEn`, `jobTitleAr`, `phone`, `timeZone` and `photo` (`{ small, large }`, presigned) |

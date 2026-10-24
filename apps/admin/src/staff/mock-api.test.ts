@@ -5,6 +5,10 @@ import {
   MOCK_DEPARTMENTS,
   MOCK_ENROLMENT_CODE,
   MOCK_INVITE_TOKEN,
+  MOCK_RESET_BLOCKED_PASSWORD,
+  MOCK_RESET_CHANGED_PASSWORD,
+  MOCK_RESET_DIGEST,
+  MOCK_RESET_LIMITED_PASSWORD,
   MOCK_SELF_ID,
   MOCK_STAFF_BRAND_ID,
   MockStaffApi,
@@ -274,5 +278,62 @@ describe('the account a person owns', () => {
     await staff.revokeSession(sessions[1]?.familyId ?? '');
 
     await expect(staff.sessions().then((s) => s.sessions)).resolves.toHaveLength(1);
+  });
+});
+
+describe('resetting a second factor (#398)', () => {
+  const omar = async (): Promise<string> =>
+    (await staff.listStaff(brand, 'omar')).staff[0]?.userId ?? '';
+  const password = { currentPassword: MOCK_CURRENT_PASSWORD };
+
+  it('lists what goes and clears the person once the right proof and digest arrive', async () => {
+    const id = await omar();
+
+    await expect(staff.secondFactorSummary(id)).resolves.toMatchObject({
+      totp: true,
+      passkeys: 2,
+      recoveryCodes: 6,
+      digest: MOCK_RESET_DIGEST,
+    });
+    await expect(staff.resetSecondFactor(id, password, MOCK_RESET_DIGEST)).resolves.toEqual({
+      totp: true,
+      passkeys: 2,
+      recoveryCodes: 6,
+    });
+    expect((await staff.listStaff(brand, 'omar')).staff[0]?.twoFactorEnabled).toBe(false);
+    await expect(staff.secondFactorSummary(id)).rejects.toMatchObject({ reason: 'not-resettable' });
+  });
+
+  it('refuses your own row, someone with no factor, and a digest that moved', async () => {
+    const yara = (await staff.listStaff(brand, 'yara')).staff[0]?.userId ?? '';
+
+    await expect(staff.secondFactorSummary(MOCK_SELF_ID)).rejects.toMatchObject({ reason: 'self' });
+    await expect(staff.secondFactorSummary(yara)).rejects.toMatchObject({
+      reason: 'not-resettable',
+    });
+    await expect(
+      staff.resetSecondFactor(await omar(), password, 'b'.repeat(64)),
+    ).rejects.toMatchObject({
+      reason: 'second-factor-changed',
+    });
+  });
+
+  it.each([
+    [MOCK_RESET_BLOCKED_PASSWORD, 'last-break-glass'],
+    [MOCK_RESET_CHANGED_PASSWORD, 'second-factor-changed'],
+    [MOCK_RESET_LIMITED_PASSWORD, 'reset-rate-limited'],
+  ])('answers the fixture password %s with %s and removes nothing', async (word, reason) => {
+    const id = await omar();
+
+    await expect(
+      staff.resetSecondFactor(id, { currentPassword: word }, MOCK_RESET_DIGEST),
+    ).rejects.toMatchObject({ reason });
+    expect((await staff.listStaff(brand, 'omar')).staff[0]?.twoFactorEnabled).toBe(true);
+  });
+
+  it('refuses a wrong password as an auth failure', async () => {
+    await expect(
+      staff.resetSecondFactor(await omar(), { currentPassword: 'nope' }, MOCK_RESET_DIGEST),
+    ).rejects.toMatchObject({ code: 'invalid-credentials' });
   });
 });

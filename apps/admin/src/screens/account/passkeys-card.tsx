@@ -18,7 +18,6 @@ import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { isAuthError } from '../../auth/api.js';
 import {
-  assertPasskey,
   createPasskey,
   isPasskeyCeremonyError,
   type PasskeyCeremonyFailure,
@@ -32,6 +31,7 @@ import { formatDay } from '../../ui/format.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { Pill } from '../tickets/badges.tsx';
 import { AccountCard } from './account-card.tsx';
+import { StepUpDialog } from './step-up-dialog.tsx';
 
 /**
  * Passkeys on `/me/security` (M18-02, artboard `Admin/Profile-Security-Passkeys`):
@@ -46,10 +46,6 @@ import { AccountCard } from './account-card.tsx';
  */
 
 export const PASSKEYS_KEY = ['me', 'passkeys'] as const;
-
-/** A password is at least twelve characters, so six digits can only be a code. */
-const secretProof = (value: string): PasskeyProof =>
-  /^\d{6}$/.test(value) ? { code: value } : { currentPassword: value };
 
 type Flow =
   | { readonly kind: 'add'; readonly step: 'stepUp' }
@@ -539,104 +535,6 @@ function RemainingNote({ list }: { readonly list: PasskeyList }): ReactNode {
       <Info size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
       <Typography variant="body2">{text}</Typography>
     </Box>
-  );
-}
-
-/**
- * "Confirm it's you": the passkey button, then the password or a code in one
- * field. The passkey answers at once (the browser prompt is the confirmation);
- * the field's value goes on with Continue.
- */
-function StepUpDialog({
-  body,
-  hasPasskeys,
-  busy,
-  error,
-  onProof,
-  onClose,
-}: {
-  readonly body: string;
-  readonly hasPasskeys: boolean;
-  readonly busy: boolean;
-  readonly error: string | null;
-  onProof(proof: PasskeyProof): void;
-  onClose(): void;
-}): ReactNode {
-  const t = useT();
-  const api = useAuthApi();
-  const fieldId = useId();
-  const [value, setValue] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
-  const shown = problem ?? error;
-
-  const confirmWithPasskey = async (): Promise<void> => {
-    setAsking(true);
-    setProblem(null);
-    try {
-      const { ceremonyId, options } = await api.passkeyStepUpOptions();
-      const response = await assertPasskey(options);
-      onProof({ passkey: { ceremonyId, response } });
-    } catch (failure) {
-      const cancelled = isPasskeyCeremonyError(failure) && failure.reason === 'cancelled';
-      if (!cancelled) setProblem(t('me:passkeys.passkeyProofFailed'));
-    } finally {
-      setAsking(false);
-    }
-  };
-
-  return (
-    <ConfirmDialog
-      open
-      busy={busy || asking}
-      title={t('me:passkeys.stepUpTitle')}
-      body={body}
-      confirmLabel={t('me:passkeys.continue')}
-      onClose={onClose}
-      onConfirm={() => {
-        if (value === '') {
-          setProblem(t('me:passkeys.proofRequired'));
-          return;
-        }
-        setProblem(null);
-        onProof(secretProof(value));
-      }}
-    >
-      {hasPasskeys && passkeysSupported() ? (
-        <>
-          <Button
-            variant="outlined"
-            startIcon={<KeyRound size={16} aria-hidden="true" />}
-            disabled={busy || asking}
-            onClick={() => {
-              void confirmWithPasskey();
-            }}
-          >
-            {t('me:passkeys.usePasskey')}
-          </Button>
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', textAlign: 'center' }}
-            aria-hidden="true"
-          >
-            {t('me:passkeys.or')}
-          </Typography>
-        </>
-      ) : null}
-      <TextField
-        id={fieldId}
-        type="password"
-        label={t('me:passkeys.proofLabel')}
-        value={value}
-        onChange={(event) => {
-          setValue(event.target.value);
-        }}
-        error={shown !== null}
-        helperText={shown ?? ' '}
-        fullWidth
-        slotProps={{ htmlInput: { autoComplete: 'current-password' } }}
-      />
-    </ConfirmDialog>
   );
 }
 

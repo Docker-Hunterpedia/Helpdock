@@ -912,6 +912,36 @@ export class AuthService {
     await this.#notifySecurityChange(user.id, 'twoFactorDisabled', tx);
   }
 
+  /**
+   * An install admin's reset of another person's second factor (#398): the app
+   * and its recovery codes go, and everything the person could get back in with
+   * goes with them. The caller holds the account-row lock, has removed the
+   * passkeys and proved the admin's step-up.
+   *
+   * Sessions and trusted browsers are revoked **before** the commit, so a
+   * revoke that fails throws and rolls the whole reset back: factors are never
+   * removed while the old sessions live (the survivor may be an attacker's). A
+   * rollback after a successful revoke only signs the person out, which is safe.
+   * The revoke runs again after the commit for a sign-in that finished with the
+   * old factor in the milliseconds between the two; the post-commit drain
+   * swallows errors, so that one logs its own failure at error level.
+   */
+  async resetSecondFactorOf(userId: string, tx: DbTransaction): Promise<void> {
+    await this.#parts.staff.disableTotp(userId, tx);
+    await this.revokeAllAccess(userId, 'second-factor-reset');
+    await this.#afterCommit(async () => {
+      try {
+        await this.#parts.rotations.clearForUser(userId);
+        await this.revokeAllAccess(userId, 'second-factor-reset');
+      } catch (error) {
+        this.#parts.logger.error(
+          { err: error, userId },
+          'Could not revoke the sessions of a reset account after commit; revoke them by hand',
+        );
+      }
+    });
+  }
+
   // ------------------------------------------------------------------
   // Replacing the authenticator app (#373)
   //

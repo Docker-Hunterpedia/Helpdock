@@ -9,6 +9,9 @@ import {
   profileUpdateRequestSchema,
   publicInviteSchema,
   recoveryCodesSchema,
+  secondFactorResetRequestSchema,
+  secondFactorResetSchema,
+  secondFactorSummarySchema,
   sessionFamilyParamSchema,
   staffInviteRequestSchema,
   staffListSchema,
@@ -58,3 +61,7 @@ export class TotpRotationConfirmRequestDto extends createZodDto(totpRotationConf
 export class StaffSessionListDto extends createZodDto(staffSessionListSchema) {}
 export class SessionFamilyParamDto extends createZodDto(sessionFamilyParamSchema) {}
 export class RecoveryCodesDto extends createZodDto(recoveryCodesSchema) {}
+
+export class SecondFactorSummaryDto extends createZodDto(secondFactorSummarySchema) {}
+export class SecondFactorResetRequestDto extends createZodDto(secondFactorResetRequestSchema) {}
+export class SecondFactorResetDto extends createZodDto(secondFactorResetSchema) {}

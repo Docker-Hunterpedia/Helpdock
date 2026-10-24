@@ -6,6 +6,7 @@ import { MockBrowserPush } from '../../notifications/browser-push.js';
 import { MOCK_EMAIL_STATE_STORAGE, MockNotificationsApi } from '../../notifications/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
+import { toWallClock } from '../help-center/time.js';
 
 /**
  * The Email schedule card of Your account › Notifications (M14-11,
@@ -14,6 +15,23 @@ import { signedInMockApis } from '../../test/signed-in.js';
  */
 
 const FIRST_PAINT_MS = 5_000;
+
+/** The mock view's `digestTimeZone`: the zone the card works the presets out in. */
+const VIEW_ZONE = 'Asia/Riyadh';
+
+/** The day and hour an instant reads as in the view's zone, whatever zone the runner is in. */
+const inViewZone = (at: Date): { day: string; hour: string } => {
+  const { date, time } = toWallClock(at.toISOString(), VIEW_ZONE);
+
+  return { day: date, hour: time.slice(0, 2) };
+};
+
+/** The calendar day `days` after today in the view's zone. */
+const dayAfterToday = (days: number): string => {
+  const [y, m, d] = inViewZone(new Date()).day.split('-').map(Number) as [number, number, number];
+
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};
 
 const preset = (state: Record<string, unknown>): void => {
   window.localStorage.setItem(MOCK_EMAIL_STATE_STORAGE, JSON.stringify(state));
@@ -139,9 +157,7 @@ describe('Pause', () => {
     await within(card()).findByText(/^Paused until /);
 
     const until = new Date((await api.preferences()).emailDelivery.pausedUntil ?? '');
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    expect([until.getDate(), until.getHours()]).toEqual([tomorrow.getDate(), 9]);
+    expect(inViewZone(until)).toEqual({ day: dayAfterToday(1), hour: '09' });
   });
 
   it('pauses until a chosen date, refusing a day outside the year', async () => {
@@ -158,9 +174,7 @@ describe('Pause', () => {
     );
     expect(within(dialog).getByRole('button', { name: 'Pause' })).toBeDisabled();
 
-    const inTwoWeeks = new Date();
-    inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
-    const value = `${String(inTwoWeeks.getFullYear())}-${String(inTwoWeeks.getMonth() + 1).padStart(2, '0')}-${String(inTwoWeeks.getDate()).padStart(2, '0')}`;
+    const value = dayAfterToday(14);
     await user.clear(date);
     await user.type(date, value);
     await user.click(within(dialog).getByRole('button', { name: 'Pause' }));
@@ -169,7 +183,7 @@ describe('Pause', () => {
       /^Paused until /,
     );
     const until = new Date((await api.preferences()).emailDelivery.pausedUntil ?? '');
-    expect([until.getDate(), until.getHours()]).toEqual([inTwoWeeks.getDate(), 9]);
+    expect(inViewZone(until)).toEqual({ day: value, hour: '09' });
   });
 });
 

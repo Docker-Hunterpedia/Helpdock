@@ -203,6 +203,40 @@ describe('update', () => {
     });
   });
 
+  it('refuses hiding a field from agents while it is required to close', async () => {
+    rows = [def({ id: 'gate', key: 'gate', requiredToClose: true })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'gate', { agentVisible: false, force: false }),
+    ).rejects.toThrow(/visible to agents/i);
+  });
+
+  it('refuses requiring a hidden field to close', async () => {
+    rows = [def({ id: 'quiet', key: 'quiet', agentVisible: false })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'quiet', { requiredToClose: true, force: false }),
+    ).rejects.toThrow(/visible to agents/i);
+  });
+
+  it('refuses requiring a contact field to close', async () => {
+    await expect(
+      service.update(contextFor(transaction.tx), 'seats', { requiredToClose: true, force: false }),
+    ).rejects.toThrow(/only ticket fields/i);
+  });
+
+  it('lets a field hidden and later shown be gated once it is visible', async () => {
+    rows = [def({ id: 'quiet', key: 'quiet', agentVisible: false })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'quiet', {
+        requiredToClose: true,
+        agentVisible: true,
+        force: false,
+      }),
+    ).resolves.toMatchObject({ requiredToClose: true, agentVisible: true });
+  });
+
   it('refuses a type change while rows carry a value', async () => {
     await expect(
       service.update(contextFor(transaction.tx), 'tier', { type: 'text', force: false }),

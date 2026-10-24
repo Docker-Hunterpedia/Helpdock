@@ -9,13 +9,16 @@ import {
 } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useT } from '../../../app/i18n.js';
+import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import {
   type BulkChoice,
   dialogKindOf,
+  missingFieldsSentence,
   type PreviewSummary,
   reasonKey,
 } from '../../../tickets/bulk.js';
+import { translator } from '../thread.tsx';
 
 /**
  * The preview before an apply (`Admin/Tickets-Bulk`, M14-04): "Close 12
@@ -55,6 +58,7 @@ export function BulkPreviewDialog({
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
+  const { locale } = usePreferences();
   const open = choice !== null && summary !== null;
   const kind = choice === null ? 'change' : dialogKindOf(choice);
   const total = summary?.total ?? 0;
@@ -138,7 +142,8 @@ export function BulkPreviewDialog({
                 {referenceOf(blocker.ticketId)}
               </Typography>
               <span>
-                {t(`tickets:${reasonKey(blocker.reason, choice ?? { kind: 'spam' })}` as never)}
+                {missingFieldsSentence(blocker.reason, locale, translator(t)) ??
+                  t(`tickets:${reasonKey(blocker.reason, choice ?? { kind: 'spam' })}` as never)}
               </span>
             </Box>
           ))}

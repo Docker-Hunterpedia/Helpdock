@@ -1121,9 +1121,18 @@ clarifications the implementation had to fix down:
   the blocked ones with the same code. The bulk bar already carried the
   refusal's sentence since M14-04.
 - The refusal travels with its `fields` in the error body
-  (`lifecycle.fields`), and the workspace toasts the labels and opens the
-  details panel, which is how the Close button and `e` "open the fields
-  instead". Migration `0070_required_to_close`.
+  (`lifecycle.fields`). The Close button and `e` open the "Fill in before
+  closing" dialog (`CloseGateDialog`), whose **Save and close** sends the
+  values and the status in one `PATCH`. A bulk refusal also carries `missing`
+  (key, label, Arabic label) so the preview names the field.
+  Migration `0070_required_to_close`.
+- **Validation.** `requiredToClose: true` is refused on contact and account
+  fields and on a field with `agentVisible: false` (create and update, judged
+  on the resulting state).
+- **Spam from the status picker** (and bulk or macro `statusId`) skips the
+  gate and records `closedWithout`; a merge records it on the secondary only;
+  imports write closed tickets with no gate. The status-state resync (#390)
+  is a further system close and must record `closedWithout` on its path.
 
 `custom_field_defs.required_to_close` (beside `required`, which keeps meaning
 "at creation"). A close by a person (UI or public API key) of a ticket with an

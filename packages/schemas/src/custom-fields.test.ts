@@ -268,6 +268,40 @@ describe('customFieldCreateRequestSchema', () => {
     expect(customFieldUpdateRequestSchema.safeParse({ force: true }).success).toBe(false);
   });
 
+  it.each(['contact', 'account'])('refuses requiredToClose on a %s field', (target) => {
+    const result = customFieldCreateRequestSchema.safeParse({
+      ...valid,
+      target,
+      requiredToClose: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]).toMatchObject({
+      path: ['requiredToClose'],
+      message: 'Only ticket fields can be required to close',
+    });
+  });
+
+  it('refuses requiredToClose on a field agents cannot see, which no agent could fill in', () => {
+    const result = customFieldCreateRequestSchema.safeParse({
+      ...valid,
+      requiredToClose: true,
+      agentVisible: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['agentVisible']);
+  });
+
+  it('accepts requiredToClose on a visible ticket field, and a hidden one that is not gated', () => {
+    expect(
+      customFieldCreateRequestSchema.safeParse({ ...valid, requiredToClose: true }).success,
+    ).toBe(true);
+    expect(
+      customFieldCreateRequestSchema.safeParse({ ...valid, agentVisible: false }).success,
+    ).toBe(true);
+  });
+
   it('refuses a select with no options, which would show an empty menu', () => {
     expect(
       customFieldCreateRequestSchema.safeParse({ ...valid, type: 'select', options: [] }).success,

@@ -1125,7 +1125,7 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
       expect((await rowOf(id as string)).statusId).toBe(awaiting);
     });
 
-    it('refuses a bulk close that would leave a required-to-close field empty, per ticket, and applies none', async () => {
+    it('refuses a bulk close that would leave a required-to-close field empty, per ticket, naming the field, and closes the rest', async () => {
       const gate = await call<{ key: string }>('POST', `${brandPath()}/custom-fields`, ada, {
         target: 'ticket',
         key: 'bulk_closure_code',
@@ -1146,7 +1146,13 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
           close: true,
         });
         expect(preview.body.results).toEqual([
-          { ticketId: blocked, outcome: 'refused', fields: [], code: 'fields-required-to-close' },
+          {
+            ticketId: blocked,
+            outcome: 'refused',
+            fields: [],
+            code: 'fields-required-to-close',
+            missing: [{ key: gate.body.key, label: 'Bulk closure code', labelAr: null }],
+          },
           expect.objectContaining({ ticketId: filled, outcome: 'will_change' }),
         ]);
 
@@ -1157,7 +1163,13 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
         ]);
         expect(applied.status).toBe(200);
         expect(applied.body.results).toEqual([
-          { ticketId: blocked, outcome: 'refused', fields: [], code: 'fields-required-to-close' },
+          {
+            ticketId: blocked,
+            outcome: 'refused',
+            fields: [],
+            code: 'fields-required-to-close',
+            missing: [{ key: gate.body.key, label: 'Bulk closure code', labelAr: null }],
+          },
           expect.objectContaining({ ticketId: filled, outcome: 'will_change' }),
         ]);
         expect((await rowOf(blocked)).statusId).toBe(open);

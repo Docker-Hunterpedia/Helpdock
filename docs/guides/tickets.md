@@ -251,7 +251,11 @@ state while the field is empty answers **409** with
 `error.lifecycle.fields` naming the keys that are still empty. Filling the
 field and closing in one request goes through. The system's closes — a rule, a
 time-based rule, a merge, a mark as spam — are never stopped, and their
-activity row records `closedWithout` with the keys it went without.
+activity row records `closedWithout` with the keys it went without, and the
+thread shows it as "<who> closed the ticket without <field labels>". A merge
+records it on the ticket that closes, not on the primary. Choosing Spam from
+the status picker is not stopped either. Imports write closed tickets with no
+gate.
 
 ## Messages and `seq`
 

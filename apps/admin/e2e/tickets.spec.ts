@@ -464,14 +464,10 @@ test.describe('fields required to close (M14-17)', () => {
   const renewsOn = (locale: Locale): string => (locale === 'ar' ? 'يتجدد في' : 'Renews on');
   const closedName = (locale: Locale): string => (locale === 'ar' ? 'مغلقة' : 'Closed');
 
-  test('refuses a close while the field is empty, names it, and the filled field closes', async ({
-    page,
-    appLocale: locale,
-  }) => {
+  /** Gates the seeded date field for this page's fixture brand, then opens the ticket and picks Closed. */
+  const tryToClose = async (page: Page, locale: Locale): Promise<void> => {
     const t = strings(locale);
     await signIn(page, locale);
-
-    // Gate the seeded date field for this page's fixture brand.
     await openTicketingTab(page, locale, 'custom-fields');
     await page
       .getByRole('button', {
@@ -491,27 +487,48 @@ test.describe('fields required to close (M14-17)', () => {
     ).toBeVisible();
 
     await openTicket(page, locale);
-
     await page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }).click();
     await page.getByRole('option', { name: closedName(locale) }).click();
+  };
 
-    await expect(
-      page.getByRole('status').filter({
-        hasText: t('tickets:lifecycle.fields-required-to-close', { fields: renewsOn(locale) }),
-      }),
-    ).toBeVisible();
+  test('opens the dialog instead of closing, and Save and close fills the field and closes', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await tryToClose(page, locale);
 
-    // Fill it in, and the same close goes through.
-    const renew = page.getByRole('textbox', { name: renewsOn(locale) });
-    await renew.fill('2026-12-01');
-    await renew.press('Tab');
+    const dialog = page.getByRole('dialog', { name: t('tickets:closeGate.title') });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(t('tickets:details.requiredToClose'))).toBeVisible();
+    // Axe reads colours mid-fade otherwise.
+    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+    expect(await violations(page)).toEqual([]);
 
-    await page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }).click();
-    await page.getByRole('option', { name: closedName(locale) }).click();
+    await dialog.getByRole('textbox', { name: renewsOn(locale) }).fill('2026-12-01');
+    await dialog.getByRole('button', { name: t('tickets:closeGate.submit') }).click();
 
+    await expect(dialog).toBeHidden();
     await expect(
       page.getByRole('status').filter({ hasText: t('tickets:toast.updated') }),
     ).toBeVisible();
+    await expect(
+      page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }),
+    ).toContainText(closedName(locale));
+  });
+
+  test('Cancel leaves the ticket open', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await tryToClose(page, locale);
+
+    const dialog = page.getByRole('dialog', { name: t('tickets:closeGate.title') });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: t('common:actions.cancel') }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }),
+    ).not.toContainText(closedName(locale));
   });
 });
 

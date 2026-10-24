@@ -55,7 +55,7 @@ import { paragraphsFrom } from '../ticketing/template-render.js';
 import type { TemplatesService } from '../ticketing/templates.service.js';
 import { replaceTicketTags, tagsOfTicket, tagsOfTickets } from '../ticketing/ticket-tags.js';
 import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
-import { refuseCloseForMissingFields } from './close-requirements.js';
+import { missingRequiredToCloseKeys, refuseCloseForMissingFields } from './close-requirements.js';
 import { InvalidCursorError } from './cursor.js';
 import { importedTicketSources, ticketWithSource } from './imported-ticket-sources.js';
 import type { TicketLifecycleRepository } from './lifecycle/lifecycle.repository.js';
@@ -569,7 +569,12 @@ export class TicketsService {
     // behind, so a patch that fills the field and closes in one body goes
     // through. The bulk edit closes through this method, so its preview
     // reports the refusal per ticket with the same code.
-    if (statusResult?.closing === true) {
+    // Spam is a closed state too, but a mark as spam is not a resolution, so it
+    // is never held back by a field about how the ticket was resolved.
+    if (
+      statusResult?.closing === true &&
+      (await this.#tickets.findStatus(tx, statusResult.statusId))?.isSpam !== true
+    ) {
       // `values.custom` is an entry of a `Record<string, unknown>`, so the
       // fallback reads as `{}` to the checker; both spellings are the same object.
       const custom =
@@ -1275,6 +1280,11 @@ export class TicketsService {
     }
 
     if (result.closing) {
+      // M14-17: Spam picked from the status picker skips the required-to-close
+      // gate, and the row says which fields it went without.
+      const closedWithout = next.isSpam
+        ? await missingRequiredToCloseKeys(context.tx, updated.custom)
+        : [];
       await writeTicketActivity(context.tx, {
         brandId: context.brandId,
         ticketId: updated.id,
@@ -1282,7 +1292,11 @@ export class TicketsService {
         actor: context.actor,
         action: 'ticket.closed',
         from: { statusId: previous.id },
-        to: { statusId: next.id, closedAt: updated.closedAt?.toISOString() ?? null },
+        to: {
+          statusId: next.id,
+          closedAt: updated.closedAt?.toISOString() ?? null,
+          ...(closedWithout.length === 0 ? {} : { closedWithout }),
+        },
       });
       await this.#lifecycle.onClosed(context, updated, next);
       return;

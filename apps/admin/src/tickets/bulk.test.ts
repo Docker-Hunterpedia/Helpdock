@@ -5,10 +5,12 @@ import { ContactError } from '../contacts/api.js';
 import { TicketingError } from '../ticketing/api.js';
 import { TicketLifecycleError } from './api.js';
 import {
+  type BlockReason,
   type BulkChoice,
   changesOf,
   dialogKindOf,
   failureOf,
+  missingFieldsSentence,
   reasonKey,
   summarise,
   toastKindOf,
@@ -71,6 +73,27 @@ describe('summarise', () => {
         { ticketId: 'c', reason: { kind: 'unchanged' } },
         { ticketId: 'd', reason: { kind: 'notFound' } },
       ],
+    });
+  });
+
+  it('keeps the fields a close is waiting for (M14-17)', () => {
+    const missing = [{ key: 'order_id', label: 'Order id', labelAr: null }];
+    const summary = summarise(
+      response([
+        {
+          ticketId: 'b',
+          outcome: 'refused',
+          fields: [],
+          code: 'fields-required-to-close',
+          missing,
+        },
+      ]),
+    );
+
+    expect(summary.blockers[0]?.reason).toEqual({
+      kind: 'refused',
+      code: 'fields-required-to-close',
+      missing,
     });
   });
 
@@ -162,5 +185,40 @@ describe('failureOf', () => {
       kind: 'unknown',
     });
     expect(failureOf('a string')).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('missingFieldsSentence (M14-17)', () => {
+  const t = (key: string, options?: Record<string, unknown>): string =>
+    key === 'tickets:bulk.reason.fieldQuote'
+      ? `“${String(options?.label)}”`
+      : `${String(options?.fields)} must be filled in`;
+
+  it('joins the quoted labels in the viewer’s language', () => {
+    const reason: BlockReason = {
+      kind: 'refused',
+      code: 'fields-required-to-close',
+      missing: [
+        { key: 'a', label: 'Order id', labelAr: 'رقم' },
+        { key: 'b', label: 'Cause', labelAr: null },
+      ],
+    };
+
+    expect(missingFieldsSentence(reason, 'en', t)).toBe('“Order id” and “Cause” must be filled in');
+    expect(missingFieldsSentence(reason, 'ar', t)).toContain('“رقم”');
+  });
+
+  it('is null when nothing names a field, so the code’s own sentence stands', () => {
+    expect(missingFieldsSentence({ kind: 'unchanged' }, 'en', t)).toBeNull();
+    expect(
+      missingFieldsSentence({ kind: 'refused', code: 'fields-required-to-close' }, 'en', t),
+    ).toBeNull();
+    expect(
+      missingFieldsSentence(
+        { kind: 'refused', code: 'fields-required-to-close', missing: [] },
+        'en',
+        t,
+      ),
+    ).toBeNull();
   });
 });

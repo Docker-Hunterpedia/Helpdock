@@ -3,7 +3,7 @@ import type { RuleAction } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import type { RulesRepository } from './rules.repository.js';
-import { previewActions } from './test-run.js';
+import { type PreviewDeps, previewActions } from './test-run.js';
 import type { TicketFacts } from './ticket-facts.js';
 
 /**
@@ -18,7 +18,7 @@ const BILLING = '0199f4b2-0000-7000-8000-0000000000d2';
 const TEAM = '0199f4b2-0000-7000-8000-0000000000e1';
 const AGENT = '0199f4b2-0000-7000-8000-0000000000a1';
 const tx = {} as DbTransaction;
-const UNTIL = new Date('2026-10-01T11:00:00.000Z');
+const UNTIL = new Date(Math.floor(Date.now() / 60_000) * 60_000 + 3_600_000);
 const SNOOZED = '0199f4b2-0000-7000-8000-0000000000f2';
 
 const facts = (overrides: Partial<TicketFacts> = {}): TicketFacts => ({
@@ -61,7 +61,7 @@ const deps = (
   snooze: { at: async () => UNTIL },
 });
 
-const run = (d: ReturnType<typeof deps>, actions: RuleAction[], start: TicketFacts = facts()) =>
+const run = (d: PreviewDeps, actions: RuleAction[], start: TicketFacts = facts()) =>
   previewActions(tx, BRAND, d, start, actions);
 
 describe('previewActions assignment', () => {

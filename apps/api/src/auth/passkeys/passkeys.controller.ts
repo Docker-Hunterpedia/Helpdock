@@ -161,7 +161,7 @@ export class InstallPasskeysController {
   @Requires('install:admin')
   @ZodSerializerDto(InstallPasskeysDto)
   status(): Promise<InstallPasskeys> {
-    return this.#passkeys.installStatus();
+    return this.#passkeys.installStatus(getTx());
   }
 
   @Post('move')
@@ -171,6 +171,7 @@ export class InstallPasskeysController {
   move(): Promise<InstallPasskeysMoved> {
     return this.#passkeys.moveToCurrentHost(
       requireStaffPrincipalId(requireRequestContext().principal),
+      getTx(),
     );
   }
 }

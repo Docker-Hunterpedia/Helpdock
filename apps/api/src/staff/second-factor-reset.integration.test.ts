@@ -274,7 +274,12 @@ describe.skipIf(!hasDocker)('an install admin resets a second factor (#398)', ()
     expect(refreshCookie).toBeDefined();
 
     const shown = await summary(target.id);
-    expect(shown).toMatchObject({ totp: true, passkeys: 2, recoveryCodes: 3 });
+    expect(shown).toMatchObject({
+      totp: true,
+      passkeys: 2,
+      recoveryCodes: 3,
+      enrolmentRequired: true,
+    });
     const response = await reset(target.id, shown.digest);
 
     expect(response.statusCode).toBe(200);
@@ -383,8 +388,10 @@ describe.skipIf(!hasDocker)('an install admin resets a second factor (#398)', ()
     expect(await resetAudits(target.id)).toHaveLength(0);
   });
 
-  it('is all or nothing: a notice that cannot be queued leaves every factor and the audit alone', async () => {
+  it('is all or nothing: a notice that cannot be queued leaves every factor, the audit and the sessions alone', async () => {
     const target = await makeTarget();
+    const session = await signInWithTotp(target.email, target.secret);
+    const refreshCookie = session.cookies.find((cookie) => cookie.name === REFRESH_COOKIE)?.value;
     const shown = await summary(target.id);
     const ddl = createDb({ url: envFor().DATABASE_MIGRATION_URL, max: 1 });
     await ddl.db.execute(
@@ -409,6 +416,33 @@ describe.skipIf(!hasDocker)('an install admin resets a second factor (#398)', ()
     expect((await storedUser(target.id))?.recoveryCodesHashed).toHaveLength(3);
     expect(await passkeyCount(target.id)).toBe(2);
     expect(await resetAudits(target.id)).toHaveLength(0);
+    const refreshed = await app.inject({
+      method: 'POST',
+      url: '/api/auth/refresh',
+      headers: { cookie: `${REFRESH_COOKIE}=${refreshCookie}` },
+    });
+    expect(refreshed.statusCode).toBe(201);
+  });
+
+  it('resets a plain Agent whose second factor is optional: no enrolment at next sign-in, and the email says so', async () => {
+    const target = await makeTarget({ passkeys: 1, role: 'agent' });
+    const shown = await summary(target.id);
+    expect(shown.enrolmentRequired).toBe(false);
+
+    expect((await reset(target.id, shown.digest)).statusCode).toBe(200);
+
+    expect(await passkeyCount(target.id)).toBe(0);
+    expect((await storedUser(target.id))?.totpEnabled).toBe(false);
+    const next = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ email: target.email, password: PASSWORD }),
+    });
+    expect(next.json()).toHaveProperty('accessToken');
+    const [notice] = await email.all();
+    expect(notice?.text).toContain('You can set up a new one from your security page.');
+    expect(notice?.text).not.toContain('Next time you sign in');
   });
 
   it('refuses an admin resetting their own factors', async () => {

@@ -20,6 +20,8 @@ export const secondFactorSummarySchema = z.object({
   passkeys: z.number().int().min(0),
   /** Unused recovery codes. */
   recoveryCodes: z.number().int().min(0),
+  /** Whether the person's role requires a second factor: they enrol at next sign-in, rather than choose to. */
+  enrolmentRequired: z.boolean(),
   digest: DIGEST,
 });
 export type SecondFactorSummary = z.infer<typeof secondFactorSummarySchema>;

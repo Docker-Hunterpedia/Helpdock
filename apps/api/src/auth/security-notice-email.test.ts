@@ -195,6 +195,22 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
       expect(ar.html).toContain('<bdi>عمر صالح</bdi>');
     });
 
+    it('tells a person whose role needs no second factor that they can set one up, not that they must', () => {
+      const en = notice({ change: 'secondFactorReset', actor: 'Omar Saleh', required: '0' });
+      const ar = notice({ change: 'secondFactorReset', actor: 'عمر صالح', required: '0' }, 'ar');
+      const required = notice({ change: 'secondFactorReset', actor: 'Omar Saleh', required: '1' });
+
+      expect(en.text).toContain('You can set up a new one from your security page.');
+      expect(en.text).not.toContain('Next time you sign in');
+      expect(en.subject).toBe('Your second factor was reset');
+      expect(en.text).toContain("Didn't ask for this?");
+      expect(ar.text).toContain('يمكنك إعداد عامل ثانٍ جديد من صفحة الأمان');
+      expect(ar.text).not.toContain('عند دخولك التالي');
+      expect(required.text).toContain(
+        'Next time you sign in, set up an authenticator app or a passkey.',
+      );
+    });
+
     it('adds no sentence about what remains when nothing does', () => {
       const en = notice({ change: 'passkeyRemoved', passkey: 'Key', remaining: '0', totp: '0' });
 

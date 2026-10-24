@@ -298,7 +298,9 @@ describe('the account the person owns', () => {
 
   it('reads what a reset removes and sends the proof with the digest (#398)', async () => {
     const digest = 'a'.repeat(64);
-    fetchMock.mockResolvedValue(json({ totp: true, passkeys: 2, recoveryCodes: 6, digest }));
+    fetchMock.mockResolvedValue(
+      json({ totp: true, passkeys: 2, recoveryCodes: 6, enrolmentRequired: true, digest }),
+    );
     await expect(staff.secondFactorSummary(USER_ID)).resolves.toMatchObject({ passkeys: 2 });
     expect(lastCall().url).toBe(`/api/install/staff/${USER_ID}/second-factor`);
 

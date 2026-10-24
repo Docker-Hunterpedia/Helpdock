@@ -35,6 +35,7 @@ const setup = (
     passkeys?: string[];
     allowed?: boolean;
     lastBreakGlass?: boolean;
+    required?: boolean;
   } = {},
 ) => {
   const events: string[] = [];
@@ -70,13 +71,14 @@ const setup = (
       events.push('reset');
       return Promise.resolve();
     }),
+    isSecondFactorRequired: vi.fn(() => Promise.resolve(options.required ?? true)),
     notifyCredentialChange: vi.fn(() => {
       events.push('notice');
       return Promise.resolve();
     }),
   };
   const passkeys = {
-    lockAccount: vi.fn(() => {
+    lockAccount: vi.fn((_id: string) => {
       events.push('lock');
       return Promise.resolve();
     }),
@@ -158,7 +160,15 @@ describe('SecondFactorResetService', () => {
     const removed = await resetOf(fixture, await digestFor());
 
     expect(removed).toEqual({ totp: true, passkeys: 2, recoveryCodes: 2 });
-    expect(fixture.events).toEqual(['lock', 'step-up', 'passkeys', 'reset', 'audit', 'notice']);
+    expect(fixture.events).toEqual([
+      'lock',
+      'lock',
+      'step-up',
+      'passkeys',
+      'reset',
+      'audit',
+      'notice',
+    ]);
     expect(fixture.insertedAudit[0]).toMatchObject({
       action: 'auth.second_factor.reset',
       actorId: ACTOR,
@@ -169,7 +179,31 @@ describe('SecondFactorResetService', () => {
       TARGET,
       'secondFactorReset',
       fixture.tx,
-      { actor: 'Someone' },
+      { actor: 'Someone', required: '1' },
+    );
+  });
+
+  it('locks both account rows in id order before the proof, so two admins resetting each other cannot deadlock', async () => {
+    const fixture = setup();
+
+    await resetOf(fixture, await digestFor());
+
+    expect(fixture.passkeys.lockAccount.mock.calls.map(([id]) => id)).toEqual([ACTOR, TARGET]);
+    expect(fixture.events.indexOf('step-up')).toBeGreaterThan(fixture.events.lastIndexOf('lock'));
+  });
+
+  it('says in the summary and the notice whether the role requires a second factor', async () => {
+    const optional = setup({ required: false });
+
+    expect(await optional.service.summary(optional.tx, ACTOR, TARGET)).toMatchObject({
+      enrolmentRequired: false,
+    });
+    await resetOf(optional, (await optional.service.summary(optional.tx, ACTOR, TARGET)).digest);
+    expect(optional.auth.notifyCredentialChange).toHaveBeenCalledWith(
+      TARGET,
+      'secondFactorReset',
+      optional.tx,
+      { actor: 'Someone', required: '0' },
     );
   });
 

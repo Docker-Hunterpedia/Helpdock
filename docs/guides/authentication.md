@@ -312,8 +312,10 @@ In one transaction the app, the passkeys and the recovery codes are removed, eve
 session and trusted browser is revoked, `auth.second_factor.reset` is audited
 (actor, target, counts) and the person is emailed (`secondFactorReset`, naming
 the administrator). At their next sign-in an Admin, install admin or anyone while
-`auth.require2fa` is on goes to enrolment before a session opens; others may set
-one up from their security page. Refused with `409`: your own account, a person
+`auth.require2fa` is on goes to enrolment before a session opens; everyone else
+signs in with the password alone until they set one up from their security page,
+and the confirm and the email say which applies. Sessions are revoked after the
+commit, so a reset that rolls back signs nobody out. Refused with `409`: your own account, a person
 with nothing to reset, factors that changed while the confirm was open, and the
 last configured break-glass admin while SSO is enforced (make another install
 admin ready for break-glass first). Ten resets an hour per admin

@@ -361,7 +361,11 @@ export class MockStaffApi implements StaffApi {
   async secondFactorSummary(userId: string): Promise<SecondFactorSummary> {
     this.#assertResettable(this.#require(userId));
 
-    return { ...MOCK_RESET_COUNTS, digest: MOCK_RESET_DIGEST };
+    return {
+      ...MOCK_RESET_COUNTS,
+      enrolmentRequired: this.#require(userId).role === 'admin',
+      digest: MOCK_RESET_DIGEST,
+    };
   }
 
   async resetSecondFactor(

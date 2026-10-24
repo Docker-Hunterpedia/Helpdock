@@ -916,15 +916,15 @@ export class AuthService {
    * An install admin's reset of another person's second factor (#398): the app
    * and its recovery codes go, and everything the person could get back in with
    * goes with them. The caller holds the account-row lock, has removed the
-   * passkeys and proved the admin's step-up. Sessions are revoked now and again
-   * after the commit, so a sign-in that finished with the old factor between the
-   * two cannot keep its session.
+   * passkeys and proved the admin's step-up. Sessions and trusted browsers are
+   * revoked only after the commit, so a reset that rolls back signs nobody out.
    */
   async resetSecondFactorOf(userId: string, tx: DbTransaction): Promise<void> {
     await this.#parts.staff.disableTotp(userId, tx);
-    await this.revokeAllAccess(userId, 'second-factor-reset');
     await this.#afterCommit(async () => {
       await this.#parts.rotations.clearForUser(userId);
+      // A sign-in that finished with the old factor in the milliseconds between
+      // the commit and this line is cut off here, since its session is revoked too.
       await this.revokeAllAccess(userId, 'second-factor-reset');
     });
   }

@@ -65,14 +65,19 @@ export function ResetSecondFactorFlow({
   };
 
   const reset = useMutation({
-    mutationFn: (input: { proof: PasskeyProof; digest: string }) =>
+    mutationFn: (input: { proof: PasskeyProof; digest: string; required: boolean }) =>
       staffApi.resetSecondFactor(member.userId, input.proof, input.digest),
-    onSuccess: async () => {
+    onSuccess: async (_removed, input) => {
       onClose();
       await onDone();
       toast({
         tone: 'success',
-        message: t('staff:toast.secondFactorReset', { name: member.name }),
+        message: t(
+          input.required
+            ? 'staff:toast.secondFactorReset'
+            : 'staff:toast.secondFactorResetOptional',
+          { name: member.name },
+        ),
       });
     },
     onError: (error: unknown) => {
@@ -126,11 +131,21 @@ export function ResetSecondFactorFlow({
       busy={reset.isPending}
       confirmDisabled={found === undefined}
       title={t('staff:reset.title', { name: member.name })}
-      body={t('staff:reset.consequence', { name: member.name })}
+      body={t(
+        found?.enrolmentRequired === false
+          ? 'staff:reset.consequenceOptional'
+          : 'staff:reset.consequence',
+        { name: member.name },
+      )}
       confirmLabel={t('staff:reset.submit')}
       onClose={onClose}
       onConfirm={() => {
-        if (found !== undefined) reset.mutate({ proof, digest: found.digest });
+        if (found !== undefined)
+          reset.mutate({
+            proof,
+            digest: found.digest,
+            required: found.enrolmentRequired,
+          });
       }}
     >
       {found === undefined ? null : (

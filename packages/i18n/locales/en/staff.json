@@ -129,7 +129,8 @@
     "secondFactorReset": "{{name}}'s second factor was reset. They were signed out and will set one up at their next sign-in.",
     "lastBreakGlass": "{{name}} is the last install admin who can sign in while SSO is enforced. Make another install admin ready to sign in with a password and a second factor first.",
     "resetRateLimited": "Too many resets in a short time. Try again in a few minutes.",
-    "secondFactorChanged": "{{name}}'s second factor changed while you were confirming. Open the menu again."
+    "secondFactorChanged": "{{name}}'s second factor changed while you were confirming. Open the menu again.",
+    "secondFactorResetOptional": "{{name}}'s second factor was reset. They were signed out and can set one up from their security page."
   },
   "sso": {
     "badge": "SSO",
@@ -146,6 +147,7 @@
     "codes_other": "{{count}} unused recovery codes",
     "consequence": "{{name}} is signed out everywhere. At their next sign-in they set up a second factor again before they can use Helpdock. We email them about it.",
     "warning": "Make sure {{name}} asked for this through a channel you trust. Whoever knows their password can set up the next second factor.",
-    "submit": "Reset second factor"
+    "submit": "Reset second factor",
+    "consequenceOptional": "{{name}} is signed out everywhere. They can set up a second factor again from their security page. We email them about it."
   }
 }

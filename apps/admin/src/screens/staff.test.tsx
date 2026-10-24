@@ -315,6 +315,9 @@ describe('resetting a second factor (#398)', () => {
 
     await stepUp(user, MOCK_CURRENT_PASSWORD);
     expect(await screen.findByText("Reset Omar Nasser's second factor?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/They can set up a second factor again from their security page/),
+    ).toBeInTheDocument();
     expect(screen.getByText('Authenticator app')).toBeInTheDocument();
     expect(screen.getByText('2 passkeys')).toBeInTheDocument();
     expect(screen.getByText('6 unused recovery codes')).toBeInTheDocument();

@@ -32,7 +32,8 @@ import { StaffFailure } from './staff-failure.js';
  * entry). Everything that changes happens in the request's one transaction,
  * under the target's account-row lock, which every other factor change takes:
  * the app, the passkeys, the recovery codes, the audit row and the notice in the
- * outbox commit together or not at all.
+ * outbox commit together or not at all, and the person's sessions are revoked
+ * once that commit has happened.
  *
  * The order of the refusals is the order of what they cost. The cheap ones that
  * need no proof (self, the rate limit, nothing to reset, the factors changed,
@@ -65,7 +66,8 @@ const digestOf = ({ user, passkeyIds }: Factors): string =>
     )
     .digest('hex');
 
-const summaryOf = (factors: Factors): SecondFactorSummary => ({
+const summaryOf = (factors: Factors, enrolmentRequired: boolean): SecondFactorSummary => ({
+  enrolmentRequired,
   totp: factors.user.totpEnabled,
   passkeys: factors.passkeyIds.length,
   recoveryCodes: factors.user.recoveryCodesHashed.length,
@@ -86,10 +88,11 @@ export class SecondFactorResetService {
     targetId: string,
   ): Promise<SecondFactorSummary> {
     if (actorId === targetId) throw new StaffFailure('self');
+    await widenInstallScope(tx, await this.#activeBrandIds(tx));
     const factors = await this.#factorsOf(tx, targetId);
     if (!this.#resettable(factors)) throw new StaffFailure('not-resettable');
 
-    return summaryOf(factors);
+    return summaryOf(factors, await this.#parts.auth.isSecondFactorRequired(factors.user, tx));
   }
 
   async reset({
@@ -121,7 +124,10 @@ export class SecondFactorResetService {
     // The notice goes through the outbox of the person's brand, which install
     // scope cannot see until it is widened to the active brands.
     await widenInstallScope(tx, await this.#activeBrandIds(tx));
-    await passkeys.lockAccount(targetId, tx);
+    // Both account rows, in id order, before any proof: a passkey step-up marks
+    // the admin's own credential used, and two admins resetting each other would
+    // otherwise wait on each other's credential rows (40P01).
+    for (const id of [actorId, targetId].sort()) await passkeys.lockAccount(id, tx);
     const factors = await this.#factorsOf(tx, targetId);
     if (!this.#resettable(factors)) throw new StaffFailure('not-resettable');
     if (digestOf(factors) !== request.digest) throw new StaffFailure('second-factor-changed');
@@ -161,7 +167,10 @@ export class SecondFactorResetService {
       targetId,
       meta: { ...removed },
     });
-    await auth.notifyCredentialChange(targetId, 'secondFactorReset', tx, { actor: actor.name });
+    await auth.notifyCredentialChange(targetId, 'secondFactorReset', tx, {
+      actor: actor.name,
+      required: (await auth.isSecondFactorRequired(factors.user, tx)) ? '1' : '0',
+    });
     logger.warn({ actorId, targetId, ...removed }, 'An install admin reset a second factor');
 
     return removed;

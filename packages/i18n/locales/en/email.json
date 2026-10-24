@@ -107,6 +107,14 @@
       "body": "{{actor}}, an administrator, reset the second factor on your {{appName}} account. Your authenticator app, passkeys and recovery codes no longer work, and you were signed out. Next time you sign in, set up an authenticator app or a passkey.",
       "warning": "Didn't ask for this? Contact your administrator now.",
       "action": "Open your security page"
+    },
+    "secondFactorResetOptional": {
+      "subject": "Your second factor was reset",
+      "eyebrow": "Security · second factor",
+      "heading": "Your second factor was reset",
+      "body": "{{actor}}, an administrator, reset the second factor on your {{appName}} account. Your authenticator app, passkeys and recovery codes no longer work, and you were signed out. You can set up a new one from your security page.",
+      "warning": "Didn't ask for this? Contact your administrator now.",
+      "action": "Open your security page"
     }
   },
   "smtpTest": {

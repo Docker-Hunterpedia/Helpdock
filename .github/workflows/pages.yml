@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'scripts/site/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -32,7 +33,19 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: site
+          sparse-checkout: |
+            site
+            scripts/site
+      # The site files carry the version of the last hand edit. Stamp the
+      # latest published, non-prerelease Release into them, and fail rather
+      # than publish a wrong version if the lookup does not answer.
+      - name: Stamp the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          node scripts/site/stamp-release.mjs "${tag#v}" site
       - name: Upload the site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

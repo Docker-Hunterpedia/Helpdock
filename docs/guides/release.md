@@ -131,7 +131,7 @@ Release as a pre-release and does **not** move `:latest`.
 | **Signature** | Cosign keyless signing over the multi-architecture image digest. GitHub OIDC issues the short-lived Fulcio certificate; no private signing key is stored. The workflow verifies the signature and its exact workflow identity before continuing. |
 | **SBOM** | `anchore/sbom-action` in CycloneDX JSON, generated **from the pushed image** so it covers the base image's Debian packages and ffmpeg, not only `node_modules`. Attached to the Release as `helpdock-<version>.cdx.json`. |
 | **Release** | Created from the tag. Its body is the `CHANGELOG.md` section for that version, followed by GitHub's generated list of merged pull requests. |
-| **Website** | A last step dispatches the [Pages workflow](website.md#the-release-number), which stamps the new version and its links into the site. Skipped for a pre-release, and when the run only re-signs a tag that already has a Release. |
+| **Website** | A last job, holding only `actions: write`, dispatches the [Pages workflow](website.md#the-release-number), which stamps the new version and its links into the site. Skipped for a pre-release, and when the run only re-signs a tag that already has a Release. |
 
 The package is public and linked to this repository. A new registry or renamed
 package starts private; make it public before calling that release complete.
@@ -184,7 +184,8 @@ the next patch ([security scanning](security-scanning.md)).
   while templates must continue pointing at an already published image.
 
 - Check that the website shows the new version (Actions › Pages). If the dispatch
-  failed, run **Pages › Run workflow** by hand.
+  failed, the release run shows a warning instead of failing; run
+  **Pages › Run workflow** by hand.
 - Check `docker pull ghcr.io/docker-hunterpedia/helpdock:<version>` from a
   machine that is not signed in.
 - Resolve that tag's digest and verify its Cosign signature as above.

@@ -545,6 +545,12 @@ export const rulesEvaluatePayloadSchema = z.object({
    * guard counts from (REQUIREMENTS §4.3).
    */
   chain: z.array(z.uuid()).max(RULE_CHAIN_MAX),
+  /**
+   * #368. Set when the event is a snooze ending by itself (its time, an SLA
+   * step, the customer's reply), and carried down the chain: no rule it starts
+   * may snooze the ticket again.
+   */
+  wokeBy: z.enum(['time', 'sla', 'customer_reply']).optional(),
 });
 
 export type RulesEvaluatePayload = z.infer<typeof rulesEvaluatePayloadSchema>;

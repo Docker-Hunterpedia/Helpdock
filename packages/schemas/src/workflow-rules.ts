@@ -481,6 +481,11 @@ export const actionOutcomeSchema = z.object({
    * department, a canned response that no longer exists.
    */
   effect: z.enum(['changed', 'unchanged', 'unavailable']),
+  /**
+   * Why an `unavailable` action was not done, when the log can say more than
+   * "it could not be": a `snooze` on a run that a wake started (#368).
+   */
+  reason: z.enum(['woken']).optional(),
   /** For `notify`, who it reached. */
   recipientIds: z.array(z.uuid()).optional(),
   /** For `ai_triage`: `queued` when the rule ran, then what the job did. */

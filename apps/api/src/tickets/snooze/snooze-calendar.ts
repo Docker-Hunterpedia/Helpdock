@@ -28,8 +28,9 @@ export interface CalendarReader {
 export interface SnoozeResolver {
   /**
    * One Snooze-menu preset for a ticket's department as an instant. Where the
-   * menu falls back to the asking agent's zone, a rule or a macro — which run
-   * as nobody — falls back to the brand's own.
+   * menu falls back to the asking agent's zone, a rule — which runs as nobody —
+   * falls back to the brand's own, and a macro to the applying person's
+   * profile zone (`personalTimeZone`), else the brand's, as the menu does.
    */
   at(
     tx: DbTransaction,
@@ -37,17 +38,18 @@ export interface SnoozeResolver {
     departmentId: string,
     preset: SnoozePresetKey,
     now: Date,
+    personalTimeZone?: string | null,
   ): Promise<Date>;
 }
 
 export const snoozePresetResolver = (sla: Pick<SlaRepository, 'calendarRows'>): SnoozeResolver => ({
-  at: async (tx, brandId, departmentId, preset, now) => {
+  at: async (tx, brandId, departmentId, preset, now, personalTimeZone) => {
     const rows = await sla.calendarRows(tx, brandId);
 
     return snoozePresetAt({
       now,
       preset,
-      agentTimeZone: rows.brandTimezone,
+      agentTimeZone: personalTimeZone ?? rows.brandTimezone,
       calendar: departmentCalendar(rows, departmentId),
     });
   },

@@ -310,7 +310,7 @@ export function ActionRow({
           >
             {snoozePresetKeySchema.options.map((preset) => (
               <option key={preset} value={preset}>
-                {t(`tickets:snooze.preset.${preset}`)}
+                {t(`rules:builder.snoozeOption.${preset}`)}
               </option>
             ))}
           </Choice>
@@ -434,6 +434,14 @@ export function ActionRow({
           sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
         >
           {t('rules:builder.triageHint')}
+        </Typography>
+      ) : null}
+      {action.type === 'snooze' ? (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
+        >
+          {t('rules:builder.snoozeNote')}
         </Typography>
       ) : null}
       {action.type === 'send_canned' ? (

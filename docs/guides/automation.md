@@ -84,7 +84,15 @@ and AI triage.
   outbox event and wake timer, the same clocks. A closed ticket is recorded as
   *not carried out*, as a person's is refused. Setting the Snoozed status with
   *Set status* is still refused at save, because a bare status carries no wake
-  time; the snooze action is the way to put a ticket away.
+  time; the snooze action is the way to put a ticket away. The action goes
+  through the same planner as the menu, so the bounds are the menu's too: a time
+  under 5 minutes or over 90 days ahead is recorded as *not carried out*.
+  **It never runs on a wake.** A run started by a snooze ending by itself (its
+  time came, an SLA step fired, or the customer replied) and every run that
+  chain sets off record the action as *not carried out* with the reason *the
+  ticket was just woken*, so a `ticket_updated` rule cannot put the ticket back
+  to sleep for ever and a customer's reply is never hidden
+  ([DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions)).
 - A canned reply is a public message written by the system. It **does not stop
   the first-response clock** unless the action's *Counts as first response* box
   is ticked (`counts_as_response`, DOMAIN-RULES §3.1). The builder offers the

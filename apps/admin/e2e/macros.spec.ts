@@ -122,6 +122,7 @@ test.describe('the Macros tab', () => {
     await page
       .getByRole('option', { name: t('tickets:snooze.preset.in_1_hour'), exact: true })
       .click();
+    await expect(page.getByText(t('macros:actions.snoozeNote'))).toBeVisible();
 
     // Set status still cannot pick the Snoozed status.
     await pick(t('macros:actions.type', { position: 3 }), t('macros:actions.types.set_status'));

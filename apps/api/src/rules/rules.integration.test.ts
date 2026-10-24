@@ -42,7 +42,9 @@ import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { signInForTest } from '../testing/staff-sign-in.js';
+import { wakeStatusFor, wakeTicket, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
 import { createTicketSnoozedHandler } from '../tickets/snooze/snooze-worker.js';
+import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
 import { evaluateEventRules, runScheduledRules } from './engine.js';
 import { createRulesEngineDeps } from './engine-deps.js';
 import { createRulesSourceHandler } from './rules-jobs.js';
@@ -197,7 +199,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
    * brand transaction of its own, as the rules worker runs it. Bounded, so a
    * loop the guard failed to stop fails the test instead of hanging it.
    */
-  const drain = async (): Promise<number> => {
+  const drain = async (deps: ReturnType<typeof engine> = engine()): Promise<number> => {
     let evaluations = 0;
     for (let round = 0; round < 20; round += 1) {
       const rows = await inBrand(async (tx) => {
@@ -237,7 +239,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         );
       }
       for (const job of jobs) {
-        await inBrand((tx) => evaluateEventRules(engine(), tx, job));
+        await inBrand((tx) => evaluateEventRules(deps, tx, job));
         evaluations += 1;
       }
     }
@@ -1079,6 +1081,170 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     ]);
 
     await disableAll();
+  });
+
+  describe('a snooze that ends by itself is never undone by a rule (#368)', () => {
+    const resnoozeRule = (
+      trigger: 'ticket_created' | 'ticket_updated' | 'customer_replied',
+      name: string,
+    ) =>
+      saveRule({
+        name,
+        kind: 'event',
+        trigger,
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'snooze', preset: 'in_1_hour' }],
+      });
+
+    /** A ticket asleep by a person's `PATCH`, with the outbox empty and no rule running. */
+    const sleepingTicket = async (subject: string): Promise<Ticket> => {
+      await disableAll();
+      const ticket = await createTicket(subject);
+      const slept = await call('PATCH', `${brandPath()}/tickets/${ticket.id}`, ada, {
+        snoozedUntil: new Date(Date.now() + 30 * 60_000).toISOString(),
+      });
+      expect(slept.status).toBe(200);
+      await drain();
+      return ticket;
+    };
+
+    const isAsleep = async (ticketId: string): Promise<boolean> => {
+      const row = await ticketRow(ticketId);
+      return row?.snoozedUntil !== null;
+    };
+
+    it.each(['time', 'sla'] as const)(
+      'refuses to snooze on the run a %s wake starts, and says why in the log',
+      async (cause) => {
+        const ticket = await sleepingTicket(`Woken by ${cause}`);
+        await resnoozeRule('ticket_updated', `Snooze on update after ${cause}`);
+
+        const asleep = await ticketRow(ticket.id);
+        await inBrand((tx) => {
+          /* c8 ignore next 3 -- the ticket was snoozed above. */
+          if (asleep === undefined) {
+            throw new Error('the ticket is gone');
+          }
+          return wakeTicket(tx, { ticket: asleep, cause, now: new Date() });
+        });
+        await drain();
+
+        expect(await isAsleep(ticket.id)).toBe(false);
+        const run = (await runsOf(ticket.id)).find(
+          (candidate) => candidate.ruleName === `Snooze on update after ${cause}`,
+        );
+        expect(run?.result).toBe('applied');
+        expect(run?.details).toMatchObject({
+          actions: [
+            {
+              action: { type: 'snooze', preset: 'in_1_hour' },
+              effect: 'unavailable',
+              reason: 'woken',
+            },
+          ],
+        });
+        await disableAll();
+      },
+    );
+
+    /** What every channel does for a customer's reply to a snoozed ticket, in one transaction. */
+    const customerWritesBack = async (ticketId: string, wakes: boolean): Promise<void> => {
+      await inBrand(async (tx) => {
+        const row = (await tx.select().from(tickets).where(eq(tickets.id, ticketId)))[0];
+        /* c8 ignore next 3 -- the ticket was created above. */
+        if (row === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        if (wakes) {
+          const open = await wakeStatusFor(tx, row.snoozeResumeStatusId);
+          await tx
+            .update(tickets)
+            .set({ statusId: open?.id ?? row.statusId })
+            .where(eq(tickets.id, ticketId));
+          await writeWokeActivity(tx, {
+            brandId: seeded.brandId,
+            ticket: row,
+            actor: { actorType: 'system', actorId: 'test', via: 'system' },
+            reason: 'customer_reply',
+            statusId: open?.id ?? row.statusId,
+          });
+        }
+        const [message] = await tx
+          .insert(ticketMessages)
+          .values({
+            brandId: seeded.brandId,
+            ticketId,
+            departmentId: row.departmentId,
+            seq: 99,
+            kind: 'public',
+            authorType: 'contact',
+            authorId: row.contactId ?? uuidv7(),
+            bodyHtml: '<p>Any news?</p>',
+            bodyText: 'Any news?',
+            channel: row.channel,
+          })
+          .returning();
+        await enqueueTicketEvent(tx, seeded.brandId, TICKET_EVENTS.replied, {
+          ticketId,
+          departmentId: row.departmentId,
+          messageId: message?.id ?? uuidv7(),
+          seq: 99,
+          kind: 'public',
+        });
+      });
+    };
+
+    it('refuses to snooze on the run a customer reply wakes the ticket for', async () => {
+      const ticket = await sleepingTicket('Woken by the customer');
+      await resnoozeRule('customer_replied', 'Snooze on reply');
+
+      await customerWritesBack(ticket.id, true);
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze on reply',
+      );
+      expect(run?.details).toMatchObject({
+        actions: [{ effect: 'unavailable', reason: 'woken' }],
+      });
+      await disableAll();
+    });
+
+    it.each([
+      ['under 5 minutes', 60_000],
+      ['over 90 days', 91 * 24 * 3_600_000],
+    ])('refuses a preset that resolves to %s, as PATCH does', async (_name, ahead) => {
+      await disableAll();
+      await resnoozeRule('ticket_created', 'Snooze out of bounds');
+      const ticket = await createTicket('A preset the bounds refuse');
+      await drain({
+        ...engine(),
+        snooze: {
+          at: async (_tx, _brand, _department, _preset, now) => new Date(now.getTime() + ahead),
+        },
+      });
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze out of bounds',
+      );
+      expect(run?.details).toMatchObject({ actions: [{ effect: 'unavailable' }] });
+      await disableAll();
+    });
+
+    it('still snoozes on a reply that woke nothing', async () => {
+      await disableAll();
+      const ticket = await createTicket('Not asleep when the customer wrote');
+      await drain();
+      await resnoozeRule('customer_replied', 'Snooze on plain reply');
+
+      await customerWritesBack(ticket.id, false);
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(true);
+      await disableAll();
+    });
   });
 
   it('test-runs a snooze on a closed ticket as not carried out (#368)', async () => {

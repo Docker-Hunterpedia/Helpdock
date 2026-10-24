@@ -102,6 +102,7 @@
   },
   "actions": {
     "legend": "Actions",
+    "snoozeNote": "A macro resolves times in your own time zone (Profile), else the brand's.",
     "caption": "Staged when the macro is applied and run in this order when the reply is sent; at once if there is no reply.",
     "type": "Action {{position}}",
     "types": {

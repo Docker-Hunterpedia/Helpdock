@@ -11,6 +11,7 @@ import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { canWorkDepartment } from '../assignment/rotation.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
+import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import type { TicketChange } from '../tickets/ticket-events.js';
 import type { RulesRepository } from './rules.repository.js';
 import type { TicketFacts } from './ticket-facts.js';
@@ -32,6 +33,8 @@ import { guardRun, RULE_SOURCE_EVENTS, triggersFor } from './triggers.js';
 export interface PreviewDeps {
   readonly rules: RulesRepository;
   readonly assignment: AssignmentRepository;
+  /** Resolves the `snooze` action's preset, so the preview agrees with the run (#368). */
+  readonly snooze: SnoozeResolver;
 }
 
 interface Simulation {
@@ -91,11 +94,21 @@ const previewOne = async (
       if (current === undefined || current.systemState === 'closed' || snoozed === undefined) {
         return UNAVAILABLE;
       }
-      if (snoozed.id !== sim.facts.statusId) {
-        sim.facts = { ...sim.facts, statusId: snoozed.id };
+      const until = await deps.snooze.at(
+        tx,
+        brandId,
+        facts.departmentId,
+        action.preset,
+        new Date(),
+      );
+      // As the engine does: asleep until the same minute already is no change.
+      if (snoozed.id === facts.statusId && facts.snoozedUntil?.getTime() === until.getTime()) {
+        return UNCHANGED;
+      }
+      if (snoozed.id !== facts.statusId) {
         sim.changes.add('status');
       }
-      // Already snoozed: the wake time moves all the same.
+      sim.facts = { ...facts, statusId: snoozed.id, snoozedUntil: until };
       return CHANGED;
     }
     case 'set_priority':

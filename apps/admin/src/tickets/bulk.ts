@@ -1,4 +1,10 @@
-import type { BULK_ME, BulkChanges, BulkResponse, TicketPriority } from '@helpdock/schemas';
+import type {
+  BULK_ME,
+  BulkChanges,
+  BulkResponse,
+  BulkTicketResult,
+  TicketPriority,
+} from '@helpdock/schemas';
 import { isAuthError } from '../auth/api.js';
 import { isTicketLifecycleError } from './api.js';
 
@@ -58,7 +64,12 @@ export function changesOf(choice: BulkChoice): BulkChanges {
 
 export type BlockReason =
   | { readonly kind: 'unchanged' }
-  | { readonly kind: 'refused'; readonly code: string }
+  | {
+      readonly kind: 'refused';
+      readonly code: string;
+      /** M14-17. The required-to-close fields still empty, for `fields-required-to-close`. */
+      readonly missing?: BulkTicketResult['missing'];
+    }
   | { readonly kind: 'notFound' };
 
 export interface Blocker {
@@ -85,7 +96,11 @@ export function summarise(response: BulkResponse): PreviewSummary {
     } else if (result.outcome === 'refused') {
       blockers.push({
         ticketId: result.ticketId,
-        reason: { kind: 'refused', code: result.code ?? 'other' },
+        reason: {
+          kind: 'refused',
+          code: result.code ?? 'other',
+          ...(result.missing === undefined ? {} : { missing: result.missing }),
+        },
       });
     } else {
       blockers.push({ ticketId: result.ticketId, reason: { kind: 'notFound' } });
@@ -200,3 +215,27 @@ const isCodedRefusal = (error: unknown): boolean =>
 
 const isClientError = (status: number | undefined): boolean =>
   status !== undefined && status >= 400 && status < 500;
+
+/**
+ * M14-17. The sentence naming the fields a close is waiting for — “Order id”
+ * must be filled in before it can be closed — or null when the refusal carries
+ * no list and the code's own sentence stands.
+ */
+export function missingFieldsSentence(
+  reason: BlockReason,
+  locale: 'en' | 'ar',
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string | null {
+  if (reason.kind !== 'refused' || reason.missing === undefined || reason.missing.length === 0) {
+    return null;
+  }
+  const labels = reason.missing.map((field) =>
+    t('tickets:bulk.reason.fieldQuote', {
+      label: locale === 'ar' && field.labelAr !== null ? field.labelAr : field.label,
+    }),
+  );
+
+  return t('tickets:bulk.reason.fieldsMissing', {
+    fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(labels),
+  });
+}

@@ -76,3 +76,18 @@ export const fieldLabel = (
   def: Pick<CustomFieldDef, 'label' | 'labelAr'>,
   locale: string,
 ): string => (locale === 'ar' && def.labelAr !== null ? def.labelAr : def.label);
+
+/** A field's label in the viewer's language, or its key when no definition is loaded for it. */
+export const fieldLabelOf = (
+  defs: readonly CustomFieldDef[],
+  key: string,
+  locale: 'en' | 'ar',
+): string => {
+  const def = defs.find((candidate) => candidate.key === key);
+
+  return def === undefined
+    ? key
+    : locale === 'ar' && def.labelAr !== null
+      ? def.labelAr
+      : def.label;
+};

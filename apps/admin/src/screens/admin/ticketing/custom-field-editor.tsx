@@ -85,6 +85,7 @@ export function CustomFieldEditor({
   const keyId = useId();
   const typeId = useId();
   const placementId = useId();
+  const requiredToCloseHintId = useId();
 
   const [label, setLabel] = useState(field?.label ?? '');
   const [labelAr, setLabelAr] = useState(field?.labelAr ?? '');
@@ -136,7 +137,8 @@ export function CustomFieldEditor({
       required,
       // A flag about closing means nothing on a target that never closes, so
       // the request stays silent about it there.
-      ...(placement === 'ticket' ? { requiredToClose } : {}),
+      // A field agents cannot see is one they could never fill in, so it never gates a close.
+      ...(placement === 'ticket' ? { requiredToClose: requiredToClose && agentVisible } : {}),
       agentVisible,
       pinned: pinned && pinnable,
     });
@@ -261,16 +263,24 @@ export function CustomFieldEditor({
           <FormControlLabel
             control={
               <Checkbox
-                checked={requiredToClose}
+                checked={requiredToClose && agentVisible}
+                disabled={!agentVisible}
                 onChange={(event) => {
                   setRequiredToClose(event.target.checked);
                 }}
+                slotProps={{ input: { 'aria-describedby': requiredToCloseHintId } }}
               />
             }
             label={t('ticketing:customFields.editor.requiredToClose')}
           />
-          <Typography variant="caption" sx={{ color: 'text.secondary', marginBlockStart: -4 }}>
-            {t('ticketing:customFields.editor.requiredToCloseHint')}
+          <Typography
+            id={requiredToCloseHintId}
+            variant="caption"
+            sx={{ color: 'text.secondary', marginBlockStart: -4 }}
+          >
+            {agentVisible
+              ? t('ticketing:customFields.editor.requiredToCloseHint')
+              : t('ticketing:customFields.editor.requiredToCloseHidden')}
           </Typography>
         </Box>
       ) : null}

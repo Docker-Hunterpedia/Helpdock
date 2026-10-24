@@ -14,7 +14,7 @@ import { usePreferences } from '../../app/providers.tsx';
 import { ticketRoute } from '../../app/route-paths.js';
 import { linkReferences } from '../../tickets/merge.js';
 import type { PendingMessage } from '../../tickets/pending.js';
-import type { ThreadItem } from '../../tickets/thread.js';
+import { closedWithoutKeys, type ThreadItem } from '../../tickets/thread.js';
 import { formatClock, formatDay } from '../../ui/format.js';
 import { AiEventText } from './ai/ai-event.tsx';
 import { AutoReplyMessage } from './ai/auto-reply-message.tsx';
@@ -69,6 +69,8 @@ export interface ThreadNames {
   staffName(userId: string | null): string | null;
   /** The address or handle under a contact's name, when there is one. */
   addressFor(authorId: string | null): string | null;
+  /** M14-17. A custom field's label in the viewer's language; absent where the definitions are not loaded. */
+  fieldLabel?(key: string): string;
 }
 
 const BUBBLE_KIND: Record<string, BubbleKind> = {
@@ -495,18 +497,6 @@ function SentMessage({
  * Medium → High via a rule" is the whole sentence, and a generic "updated the
  * ticket" is the fallback for a field this screen has no wording for yet.
  */
-/**
- * M14-17. The `closedWithout` keys a system close records in its activity
- * detail, or nothing when the entry does not carry a well-formed list of them.
- */
-const closedWithoutKeys = (entry: TicketActivityEntry): readonly string[] => {
-  const detail = entry.to?.closedWithout;
-
-  return Array.isArray(detail) && detail.every((key) => typeof key === 'string')
-    ? (detail as string[])
-    : [];
-};
-
 export const describeEvent = (
   entry: TicketActivityEntry,
   names: ThreadNames,
@@ -615,7 +605,12 @@ export const describeEvent = (
   // spelling, the one exports and rule conditions use.
   const closedWithout = closedWithoutKeys(entry);
   if (closedWithout.length > 0) {
-    return `${t('tickets:event.closedWithout', { actor, fields: closedWithout.join(', ') })} ${via} · ${at}`;
+    const labels = closedWithout.map((key) => names.fieldLabel?.(key) ?? key);
+
+    return `${t('tickets:event.closedWithout', {
+      actor,
+      fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(labels),
+    })} ${via} · ${at}`;
   }
 
   const sentence = (): string => {

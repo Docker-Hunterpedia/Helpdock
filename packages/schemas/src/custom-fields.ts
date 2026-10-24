@@ -150,6 +150,36 @@ const assertOptionsMatchType = (
   }
 };
 
+/**
+ * The sentence for a required-to-close field that could never be satisfied, or
+ * `null` when the combination is fine (M14-17). Contact and account fields are
+ * not on a ticket, so nothing closes through them; a field an Agent cannot see
+ * is one an Agent could never fill in, so every Agent's close would be refused.
+ */
+export const requiredToCloseProblem = (value: {
+  readonly target: CustomFieldTarget;
+  readonly requiredToClose: boolean;
+  readonly agentVisible: boolean;
+}): { readonly path: 'requiredToClose' | 'agentVisible'; readonly message: string } | null => {
+  if (!value.requiredToClose) {
+    return null;
+  }
+  if (value.target !== 'ticket') {
+    return {
+      path: 'requiredToClose',
+      message: 'Only ticket fields can be required to close',
+    };
+  }
+  if (!value.agentVisible) {
+    return {
+      path: 'agentVisible',
+      message: 'A field required to close has to be visible to agents, or they could never close',
+    };
+  }
+
+  return null;
+};
+
 export const customFieldCreateRequestSchema = z
   .object({
     target: customFieldTargetSchema,
@@ -164,7 +194,13 @@ export const customFieldCreateRequestSchema = z
     /** M14-16. Pins the new field (and unpins the brand's previous one). */
     pinned: z.boolean().default(false),
   })
-  .superRefine(assertOptionsMatchType);
+  .superRefine((value, ctx) => {
+    assertOptionsMatchType(value, ctx);
+    const problem = requiredToCloseProblem(value);
+    if (problem !== null) {
+      ctx.addIssue({ code: 'custom', path: [problem.path], message: problem.message });
+    }
+  });
 export type CustomFieldCreateRequest = z.infer<typeof customFieldCreateRequestSchema>;
 
 /**

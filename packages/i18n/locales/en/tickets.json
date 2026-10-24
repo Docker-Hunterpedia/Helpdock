@@ -181,6 +181,11 @@
     },
     "closedWithout": "{{actor}} closed the ticket without {{fields}}"
   },
+  "closeGate": {
+    "title": "Fill in before closing",
+    "body": "{{ticket}} needs these before it can be closed:",
+    "submit": "Save and close"
+  },
   "composer": {
     "label": "Reply or internal note",
     "reply": "Reply",
@@ -233,6 +238,7 @@
     "custom": "Custom fields",
     "noCustom": "None",
     "customNone": "—",
+    "requiredToClose": "Required to close",
     "customRefused": {
       "text": "Enter some text, up to 2,000 characters.",
       "number": "Enter a number.",
@@ -1220,6 +1226,8 @@
       "assignee-above-actor": "Only an Admin can assign work to an Admin.",
       "not-eligible": "That person cannot take tickets in this ticket's department.",
       "fields-required-to-close": "Required fields must be filled in before it can be closed.",
+      "fieldQuote": "“{{label}}”",
+      "fieldsMissing": "{{fields}} must be filled in before it can be closed.",
       "unknown-reference": "Something you chose does not exist in this ticket's department.",
       "invalid": "That change is not allowed for this ticket.",
       "forbidden": "You may not change this ticket.",

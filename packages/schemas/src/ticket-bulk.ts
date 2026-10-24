@@ -143,6 +143,14 @@ export const bulkTicketResultSchema = z.object({
   fields: z.array(bulkFieldSchema),
   /** The refusal code, for `refused`: the same code the single-ticket path answers with. */
   code: z.string().nullable(),
+  /**
+   * M14-17. For a `fields-required-to-close` refusal, the ticket fields still
+   * empty, in the brand's order, by key and by label in both languages — the
+   * preview names them where the person reads it.
+   */
+  missing: z
+    .array(z.object({ key: z.string(), label: z.string(), labelAr: z.string().nullable() }))
+    .optional(),
 });
 export type BulkTicketResult = z.infer<typeof bulkTicketResultSchema>;
 

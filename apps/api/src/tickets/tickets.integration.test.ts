@@ -1010,6 +1010,28 @@ describe.skipIf(!hasDocker)('tickets', () => {
       const spam = detail.body.activity.find((entry) => entry.action === 'ticket.marked_spam');
       expect(spam?.to).toMatchObject({ closedWithout: expect.arrayContaining([gate]) });
     });
+
+    it('does not hold back Spam chosen from the status picker, and notes the gap', async () => {
+      const statuses = await call<TicketStatusList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/ticket-statuses`,
+        ada,
+      );
+      const spamId = statuses.body.statuses.find((status) => status.isSpam)?.id ?? '';
+      expect(spamId).not.toBe('');
+      const { ticket } = await createTicket(sam);
+
+      const { status } = await closeAs(sam, ticket.id, { statusId: spamId });
+
+      expect(status).toBe(200);
+      const detail = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+      );
+      const closed = detail.body.activity.find((entry) => entry.action === 'ticket.closed');
+      expect(closed?.to).toMatchObject({ closedWithout: expect.arrayContaining([gate]) });
+    });
   });
 
   // ----------------------------------------------------------------- thread

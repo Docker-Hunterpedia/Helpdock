@@ -9,7 +9,7 @@ import type {
   CustomFieldUpdateRequest,
   CustomFieldUsage,
 } from '@helpdock/schemas';
-import { isChoiceField } from '@helpdock/schemas';
+import { isChoiceField, requiredToCloseProblem } from '@helpdock/schemas';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { isUniqueViolation } from '../http/unique-violation.js';
@@ -150,6 +150,15 @@ export class CustomFieldsService {
     // The request may name options without naming a type, so the schema cannot
     // check the pair on its own: only the stored row knows what the type is.
     assertOptionsMatchType(request.type ?? def.type, options ?? def.options);
+    // Likewise the close gate: visibility and the flag may arrive in separate requests.
+    const problem = requiredToCloseProblem({
+      target: def.target,
+      requiredToClose: request.requiredToClose ?? def.requiredToClose,
+      agentVisible: request.agentVisible ?? def.agentVisible,
+    });
+    if (problem !== null) {
+      throw new BadRequestException(problem.message);
+    }
 
     if (options !== undefined) {
       await this.#applyOptionRemovals(context, def, options, usage, request.force);

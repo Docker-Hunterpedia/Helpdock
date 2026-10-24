@@ -97,6 +97,8 @@ interface ActivityPair {
   readonly to: TicketRow;
   readonly fromDetail?: Record<string, unknown>;
   readonly toDetail?: Record<string, unknown>;
+  /** M14-17. Written on the `from` ticket's row only: it is the one that closes. */
+  readonly closedWithout?: readonly string[];
 }
 
 /** Why a split's selection was refused, as the status code that says so. */
@@ -425,11 +427,8 @@ export class MergeService {
       from: ticket,
       to: merge.primary,
       fromDetail: { statusId: status.id, departmentId: ticket.departmentId },
-      toDetail: {
-        statusId: merge.merged.id,
-        departmentId: moved.departmentId,
-        ...(closedWithout.length === 0 ? {} : { closedWithout }),
-      },
+      toDetail: { statusId: merge.merged.id, departmentId: moved.departmentId },
+      closedWithout,
     });
     await this.#logStatusChange(context, moved, status.id, merge.merged.id);
     if (snoozedBefore) {
@@ -679,6 +678,8 @@ export class MergeService {
     const from = { ticketId: pair.from.id, ...pair.fromDetail };
     const to = { ticketId: pair.to.id, ...pair.toDetail };
 
+    const closedWithout = pair.closedWithout ?? [];
+
     for (const ticket of [pair.from, pair.to]) {
       await writeTicketActivity(context.tx, {
         brandId: context.brandId,
@@ -687,7 +688,7 @@ export class MergeService {
         actor: context.actor,
         action: pair.action,
         from,
-        to,
+        to: ticket === pair.from && closedWithout.length > 0 ? { ...to, closedWithout } : to,
       });
     }
   }

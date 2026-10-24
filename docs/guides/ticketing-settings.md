@@ -462,7 +462,10 @@ says how many rows are affected.
 button. A close **by a person** — an agent in the workspace, a macro, a bulk
 edit, or an API key acting for one — is refused with `fields-required-to-close`
 (409) while the field is empty, and the refusal names the keys that are still
-empty; the workspace shows them by label and opens the fields for filling. A
+empty. In the workspace, the Close button and `e` open a **Fill in before
+closing** dialog with the empty fields, each marked *Required to close*, and
+**Save and close** fills them and closes in one request; Cancel leaves the
+ticket as it was. A
 checkbox counts as empty until it is ticked, and a blank text or an empty
 multi-select count too — the gate is something a person acts on. A ticket that
 predates the flag follows the same rule; there is no grandfathering.
@@ -471,8 +474,16 @@ The system closes anyway. A workflow rule, a time-based rule, a merge and a
 mark as spam are never stopped by the gate, and their close records
 `closed without <field>` in the activity log, because a rule that silently
 stops closing tickets is worse than a gap the report can show. A bulk edit
-reports the refusal per ticket in its preview, with the same code, and closes
-the tickets it can.
+reports the refusal per ticket in its preview, naming the field (“Order id”
+must be filled in before it can be closed), and closes the tickets it can.
+Choosing **Spam** from the status picker is a mark as spam, so the gate does
+not stop it. Importing (Zendesk, Freshdesk, Zoho Desk) writes tickets that
+are already closed in the source, with no gate and no `closedWithout` note:
+the history is written as it was.
+
+A field has to be a ticket field and visible to agents to be required to
+close: contact and account fields never close anything, and agents could
+never fill in a hidden one, so the api refuses both combinations.
 
 Turning the flag off lets tickets close again immediately; nothing is
 backfilled. Empty means empty at the moment of the close, so a request that

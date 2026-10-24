@@ -1,6 +1,6 @@
 import { customFieldDefs, type DbTransaction } from '@helpdock/db';
 import { missingRequiredToClose, type RequiredToCloseRule } from '@helpdock/schemas';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { TicketLifecycleFailure } from './lifecycle/lifecycle-failure.js';
 
 /**
@@ -55,4 +55,24 @@ export const refuseCloseForMissingFields = async (
   if (missing.length > 0) {
     throw new TicketLifecycleFailure('fields-required-to-close', missing);
   }
+};
+
+/** The labels of the keys a refusal named, in the order it named them, for a screen that cannot look them up. */
+export const labelsOfFields = async (
+  tx: DbTransaction,
+  keys: readonly string[],
+): Promise<{ key: string; label: string; labelAr: string | null }[]> => {
+  if (keys.length === 0) {
+    return [];
+  }
+  const rows = await tx
+    .select({
+      key: customFieldDefs.key,
+      label: customFieldDefs.label,
+      labelAr: customFieldDefs.labelAr,
+    })
+    .from(customFieldDefs)
+    .where(and(eq(customFieldDefs.target, 'ticket'), inArray(customFieldDefs.key, [...keys])));
+
+  return [...rows].sort((a, b) => keys.indexOf(a.key) - keys.indexOf(b.key));
 };

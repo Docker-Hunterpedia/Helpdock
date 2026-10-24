@@ -381,7 +381,8 @@
       "pinned": "Pin on rows and the ticket header",
       "pinnedHint": "One select field per brand can be pinned.",
       "requiredToClose": "Required to close",
-      "requiredToCloseHint": "Agents cannot close a ticket while this field is empty. Rules, merges and spam still close, and the activity log says so."
+      "requiredToCloseHint": "Agents cannot close a ticket while this field is empty. Rules, merges and spam still close, and the activity log says so.",
+      "requiredToCloseHidden": "Agents cannot fill in a field they cannot see, so a hidden field cannot be required to close."
     },
     "confirm": {
       "delete": {

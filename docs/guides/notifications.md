@@ -238,7 +238,10 @@ its own Unsubscribe button.
   nothing and its rows are marked `skipped_off`.
 - Your account › Notifications then says "You unsubscribed on 3 Oct…" with
   **Turn email back on**, which clears it and restores exactly the same
-  choices. The bell's panel shows the same line.
+  choices. The bell's panel shows the same line. An unsubscribe link from an
+  email sent before you turned email back on keeps working until it expires
+  (one year), including in emails forwarded to others; #397 tracks refusing
+  them.
 - A token is good for a year from the email that carried it. It is signed
   (HMAC-SHA256, key derived with HKDF from `APP_MASTER_KEY` for this purpose
   alone), names one user and can do one thing: turn that user's notification

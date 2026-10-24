@@ -2,6 +2,7 @@ import type { Settings } from '@helpdock/config';
 import type { DbTransaction } from '@helpdock/db';
 import type { SetupChecklist } from '@helpdock/schemas';
 import type { AiRepository } from '../ai/ai.repository.js';
+import { resolveAiTarget } from '../ai/resolve-ai-target.js';
 import type { SetupChecklistRepository } from './setup-checklist.repository.js';
 import { buildSetupChecklist } from './setup-checklist-steps.js';
 
@@ -47,20 +48,10 @@ export class SetupChecklistService {
     return this.view(context);
   }
 
-  /**
-   * The provider and model the brand's assistant would call: its own pair or the
-   * install's default, and a provider that is still on the install's list. The
-   * same resolution `DbAiPorts.target` makes before a call, so the step does not
-   * tick for a brand whose first answer would fail as "not configured".
-   */
+  /** The same resolution a model call makes, so the step never ticks for a brand whose first answer would fail as "not configured". */
   async #aiProviderIsConnected(tx: DbTransaction, brandId: string): Promise<boolean> {
-    const row = await this.#ai.settings(tx, brandId);
-    const [providerId, modelId, providers] = await Promise.all([
-      row?.providerId ?? this.#settings.get('ai.defaultProvider'),
-      row?.modelId ?? this.#settings.get('ai.defaultModel'),
-      this.#settings.get('ai.providers'),
-    ]);
-
-    return modelId !== '' && providers.some((provider) => provider.id === providerId);
+    return (
+      (await resolveAiTarget(await this.#ai.settings(tx, brandId), this.#settings)) !== undefined
+    );
   }
 }

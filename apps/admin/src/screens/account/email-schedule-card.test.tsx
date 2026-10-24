@@ -137,8 +137,9 @@ describe('Pause', () => {
     ).toEqual(['For 1 hour', 'Until tomorrow 09:00', 'For 1 week', 'Until a date…']);
     await user.click(within(menu).getByRole('menuitem', { name: /For 1 hour/ }));
 
+    // An hour from now is tomorrow's date during the last hour of the day, and then the line names the day.
     expect(await within(card()).findByRole('status')).toHaveTextContent(
-      /Paused until \d\d:\d\d\. Email and push resume then; the bell keeps everything\./,
+      /Paused until (\w{3} \d{1,2} \w{3}, )?\d\d:\d\d\. Email and push resume then; the bell keeps everything\./,
     );
     const paused = (await api.preferences()).emailDelivery.pausedUntil;
     expect(Date.parse(paused ?? '') - Date.now()).toBeGreaterThan(3_500_000);

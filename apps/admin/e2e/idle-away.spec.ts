@@ -27,16 +27,23 @@ const openAssignment = async (page: Page, locale: Locale, department = support(l
   await signIn(page, locale);
   await openTicketing(page, locale);
   await settingsTab(page, t, 'ticketing:tabs.assignment').click();
+  // The Departments tab has its own "Edit <name>" button and stays on screen until
+  // the route changes; the Assignment tab opens on Support, so wait for that first.
+  await page
+    .getByRole('heading', {
+      name: t('ticketing:assignment.editor.heading', { department: support(locale) }),
+    })
+    .waitFor();
   if (department !== support(locale)) {
     await page
       .getByRole('button', { name: t('ticketing:assignment.table.edit', { name: department }) })
       .click();
+    await page
+      .getByRole('heading', {
+        name: t('ticketing:assignment.editor.heading', { department }),
+      })
+      .waitFor();
   }
-  await page
-    .getByRole('heading', {
-      name: t('ticketing:assignment.editor.heading', { department }),
-    })
-    .waitFor();
 };
 
 const idleSelect = (page: Page, locale: Locale) =>

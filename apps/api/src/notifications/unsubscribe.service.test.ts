@@ -162,7 +162,7 @@ describe('issuedBeforeResubscribe', () => {
     ['never resubscribed', new Date('2020-01-01T00:00:00Z'), null, false],
     ['issued a second before', new Date('2026-10-21T09:59:59.900Z'), at, true],
     ['issued days before', new Date('2026-10-18T10:00:00Z'), at, true],
-    ['issued in the same second', new Date('2026-10-21T10:00:00.000Z'), at, false],
+    ['issued in the same second', new Date('2026-10-21T10:00:00.000Z'), at, true],
     ['issued after', new Date('2026-10-21T10:00:01.000Z'), at, false],
   ])('%s', (_name, issuedAt, resubscribedAt, expected) => {
     expect(issuedBeforeResubscribe(issuedAt, resubscribedAt)).toBe(expected);

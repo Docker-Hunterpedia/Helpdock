@@ -53,16 +53,17 @@ export const UNSUBSCRIBE_PUBLIC_RULE: RateLimitRule = {
 };
 
 /**
- * True when a link was issued before the person last turned email back on.
- * Tokens carry whole seconds, so the resubscribe time is floored to the second
- * too and only a strictly earlier second is refused: a link minted in the same
- * second as the resubscribe is accepted. That second is ambiguous (the token
- * cannot say which side it fell on), and the one-second window is not worth
- * stranding a link minted just after.
+ * True when a link was issued at or before the moment the person last turned
+ * email back on. Tokens carry whole seconds, so the resubscribe time is floored
+ * to the second too and the same second is refused: the token cannot say which
+ * side of the resubscribe it fell on, and failing closed costs one 404 on a
+ * link minted in that second (the next email carries a working one), while
+ * failing open is the bug this guards against, worsened by clock skew between
+ * the API and the worker.
  */
 export const issuedBeforeResubscribe = (issuedAt: Date, resubscribedAt: Date | null): boolean =>
   resubscribedAt !== null &&
-  Math.floor(issuedAt.getTime() / 1000) < Math.floor(resubscribedAt.getTime() / 1000);
+  Math.floor(issuedAt.getTime() / 1000) <= Math.floor(resubscribedAt.getTime() / 1000);
 
 export interface UnsubscribeServiceOptions {
   readonly db: Db;

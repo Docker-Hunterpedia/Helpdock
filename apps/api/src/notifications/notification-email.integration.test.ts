@@ -1396,7 +1396,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
         expect(withoutRequestId(refused[1] as typeof unknown)).toEqual(withoutRequestId(unknown));
         expect(await unsubscribedAt(sam.id)).toBeNull();
 
-        const fresh = tokenFor(sam.id);
+        const fresh = tokenFor(sam.id, new Date(Date.now() + 2000));
         expect((await get(fresh)).statusCode).toBe(200);
         expect((await post(fresh)).statusCode).toBe(200);
         expect(await unsubscribedAt(sam.id)).toBeInstanceOf(Date);

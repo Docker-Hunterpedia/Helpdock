@@ -24,6 +24,7 @@ export const SECURITY_CHANGES = [
   'twoFactorEnabled',
   'twoFactorDisabled',
   'twoFactorRotated',
+  'secondFactorReset',
   'recoveryCodes',
   'oauthConnected',
   'oauthDisconnected',
@@ -46,6 +47,7 @@ const WORDED_CHANGES = new Set<NoticeKind>([
   'passkeyAdded',
   'passkeyRemoved',
   'passkeysMoved',
+  'secondFactorReset',
   'passwordResetPasskeys',
 ]);
 
@@ -219,7 +221,7 @@ export const renderSecurityNoticeEmail = ({
     copy,
     rows,
     addresses,
-    names: values.passkey === undefined ? [] : [values.passkey],
+    names: [values.passkey, values.actor].filter((name): name is string => name !== undefined),
     host: common.host,
   });
 

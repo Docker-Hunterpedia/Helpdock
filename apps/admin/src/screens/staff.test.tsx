@@ -1,7 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
-import { MockStaffApi } from '../staff/mock-api.js';
+import { MOCK_ROLE_STORAGE } from '../auth/mock-api.js';
+import {
+  MOCK_CURRENT_PASSWORD,
+  MOCK_RESET_BLOCKED_PASSWORD,
+  MockStaffApi,
+} from '../staff/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
 
@@ -248,5 +253,110 @@ describe('a pending invitation', () => {
     expect(
       await screen.findByText('The invitation to karim@helpdock.com was revoked.'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('resetting a second factor (#398)', () => {
+  const openReset = async (user: ReturnType<typeof renderApp>['user']): Promise<void> => {
+    await openRowMenu(user, 'omar@helpdock.com', 'Omar Nasser');
+    await user.click(await screen.findByRole('menuitem', { name: /Reset second factor/ }));
+  };
+
+  const stepUp = async (
+    user: ReturnType<typeof renderApp>['user'],
+    password: string,
+  ): Promise<void> => {
+    await user.type(await screen.findByLabelText('Password or 6-digit code'), password);
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+  };
+
+  it('is offered on another active person who has a second factor, and nowhere else', async () => {
+    const { user } = await renderStaff();
+
+    await openRowMenu(user, 'omar@helpdock.com', 'Omar Nasser');
+    expect(
+      within(await screen.findByRole('menu')).getByRole('menuitem', {
+        name: /Reset second factor/,
+      }),
+    ).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+
+    await openRowMenu(user, 'yara@helpdock.com', 'Yara Salem');
+    expect(
+      within(await screen.findByRole('menu')).queryByRole('menuitem', {
+        name: /Reset second factor/,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('is not offered to a staff member who is not an install admin', async () => {
+    localStorage.setItem(MOCK_ROLE_STORAGE, 'admin');
+    try {
+      const { user } = await renderStaff();
+
+      await openRowMenu(user, 'omar@helpdock.com', 'Omar Nasser');
+
+      expect(
+        within(await screen.findByRole('menu')).queryByRole('menuitem', {
+          name: /Reset second factor/,
+        }),
+      ).not.toBeInTheDocument();
+    } finally {
+      localStorage.removeItem(MOCK_ROLE_STORAGE);
+    }
+  });
+
+  it('confirms with the step-up, lists what goes with live counts, then marks the row not set up', async () => {
+    const { user } = await renderStaff();
+    await openReset(user);
+
+    await stepUp(user, MOCK_CURRENT_PASSWORD);
+    expect(await screen.findByText("Reset Omar Nasser's second factor?")).toBeInTheDocument();
+    expect(screen.getByText('Authenticator app')).toBeInTheDocument();
+    expect(screen.getByText('2 passkeys')).toBeInTheDocument();
+    expect(screen.getByText('6 unused recovery codes')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Whoever knows their password can set up the next second factor/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Reset second factor' }));
+
+    expect(
+      await screen.findByText(/Omar Nasser's second factor was reset\. They were signed out/),
+    ).toBeInTheDocument();
+    const row = await rowFor('omar@helpdock.com');
+    await waitFor(() => {
+      expect(within(row).getByText('Not set up')).toBeInTheDocument();
+    });
+  });
+
+  it('says a wrong password back at step 1 and keeps the factors', async () => {
+    const { user } = await renderStaff();
+    await openReset(user);
+
+    await stepUp(user, 'not the password');
+    await user.click(await screen.findByRole('button', { name: 'Reset second factor' }));
+
+    expect(await screen.findByText('That password or code did not match.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(within(await rowFor('omar@helpdock.com')).getByText('Enrolled')).toBeInTheDocument();
+  });
+
+  it('refuses the last break-glass admin with a sentence naming them', async () => {
+    const { user } = await renderStaff();
+    await openReset(user);
+
+    await stepUp(user, MOCK_RESET_BLOCKED_PASSWORD);
+    await user.click(await screen.findByRole('button', { name: 'Reset second factor' }));
+
+    expect(
+      await screen.findByText(
+        /Omar Nasser is the last install admin who can sign in while SSO is enforced/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(await rowFor('omar@helpdock.com')).getByText('Enrolled')).toBeInTheDocument();
   });
 });

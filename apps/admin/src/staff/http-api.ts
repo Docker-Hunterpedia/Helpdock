@@ -1,8 +1,11 @@
 import type {
   DepartmentList,
+  PasskeyProof,
   Profile,
   ProfileUpdateRequest,
   RecoveryCodes,
+  SecondFactorReset,
+  SecondFactorSummary,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -15,6 +18,8 @@ import {
   departmentListSchema,
   profileSchema,
   recoveryCodesSchema,
+  secondFactorResetSchema,
+  secondFactorSummarySchema,
   staffListSchema,
   staffMemberSchema,
   staffSessionListSchema,
@@ -89,6 +94,25 @@ export class HttpStaffApi implements StaffApi {
 
   async removeFromBrand(brandId: string, userId: string): Promise<void> {
     await this.#transport.request('DELETE', `${this.#brand(brandId)}/staff/${userId}/role`);
+  }
+
+  async secondFactorSummary(userId: string): Promise<SecondFactorSummary> {
+    return secondFactorSummarySchema.parse(
+      await this.#transport.request('GET', `/install/staff/${userId}/second-factor`),
+    );
+  }
+
+  async resetSecondFactor(
+    userId: string,
+    proof: PasskeyProof,
+    digest: string,
+  ): Promise<SecondFactorReset> {
+    return secondFactorResetSchema.parse(
+      await this.#transport.request('POST', `/install/staff/${userId}/second-factor/reset`, {
+        proof,
+        digest,
+      }),
+    );
   }
 
   // ------------------------------------------------------------------

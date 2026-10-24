@@ -54,6 +54,14 @@ export const staffRefusalSchema = z.enum([
   'photo-unreadable',
   /** Too many photo uploads in a row (429, M14-12 review). */
   'photo-rate-limited',
+  /** The target has no second factor to reset, or is not an active person (409, #398). */
+  'not-resettable',
+  /** The factors changed after the admin opened the confirm (409, #398). */
+  'second-factor-changed',
+  /** The reset would leave SSO enforcement with no break-glass admin (409, #398). */
+  'last-break-glass',
+  /** Too many second-factor resets in a short time (429, #398). */
+  'reset-rate-limited',
 ]);
 export type StaffRefusal = z.infer<typeof staffRefusalSchema>;
 

@@ -6,6 +6,7 @@ import {
   IconButton,
   InputAdornment,
   ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
   Table,
@@ -20,6 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   EllipsisVertical,
+  KeyRound,
   MailCheck,
   Search,
   ShieldUser,
@@ -40,6 +42,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
 import { formatDay } from '../ui/format.js';
 import { useToast } from '../ui/toasts.tsx';
 import { InviteDialog, RoleDialog } from './staff-dialogs.tsx';
+import { ResetSecondFactorFlow } from './staff-reset-second-factor.tsx';
 
 /**
  * `Admin/Staff`: everyone with a role in this brand, and everything
@@ -80,6 +83,7 @@ export function StaffScreen(): ReactNode {
   const [menuFor, setMenuFor] = useState<{ member: StaffMember; anchor: HTMLElement } | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [roleFor, setRoleFor] = useState<StaffMember | null>(null);
+  const [resetFor, setResetFor] = useState<StaffMember | null>(null);
   const [confirming, setConfirming] = useState<{ member: StaffMember; action: RowAction } | null>(
     null,
   );
@@ -106,6 +110,11 @@ export function StaffScreen(): ReactNode {
         'out-of-scope': 'staff:toast.outOfScope',
         'viewer-disabled': 'staff:toast.viewerDisabled',
         'last-install-admin': 'staff:toast.lastInstallAdmin',
+        // The reset flow words its own refusals, with the person's name.
+        'not-resettable': 'staff:toast.failed',
+        'second-factor-changed': 'staff:toast.failed',
+        'last-break-glass': 'staff:toast.failed',
+        'reset-rate-limited': 'staff:toast.failed',
         // The profile's refusals never come from this screen.
         'invalid-phone': 'staff:toast.failed',
         'photo-missing': 'staff:toast.failed',
@@ -447,6 +456,25 @@ export function StaffScreen(): ReactNode {
                 </ListItemIcon>
                 {t('staff:actions.changeRole')}
               </MenuItem>,
+              session.user.installAdmin &&
+              menuFor?.member.status === 'active' &&
+              menuFor.member.twoFactorEnabled ? (
+                <MenuItem
+                  key="reset-second-factor"
+                  onClick={() => {
+                    setResetFor(menuFor.member);
+                    setMenuFor(null);
+                  }}
+                >
+                  <ListItemIcon>
+                    <KeyRound size={16} aria-hidden="true" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={t('staff:actions.resetSecondFactor')}
+                    secondary={t('staff:actions.resetSecondFactorHint')}
+                  />
+                </MenuItem>
+              ) : null,
               menuFor?.member.status === 'deactivated' ? (
                 <MenuItem
                   key="reactivate"
@@ -527,6 +555,16 @@ export function StaffScreen(): ReactNode {
           }
         }}
       />
+
+      {resetFor === null ? null : (
+        <ResetSecondFactorFlow
+          member={resetFor}
+          onClose={() => {
+            setResetFor(null);
+          }}
+          onDone={refresh}
+        />
+      )}
 
       <ConfirmDialog
         open={confirming !== null}

@@ -210,6 +210,15 @@ export class PasskeyRepository {
       .orderBy(asc(webauthnCredentials.userId));
   }
 
+  /** Deletes every passkey one account holds. */
+  async removeAllOf(userId: string, tx: Queryable): Promise<number> {
+    const removed = await tx
+      .delete(webauthnCredentials)
+      .where(eq(webauthnCredentials.userId, userId))
+      .returning({ id: webauthnCredentials.id });
+    return removed.length;
+  }
+
   /** Deletes every passkey on the install; the caller moves the RP ID in the same transaction. */
   async removeAll(tx: Queryable): Promise<number> {
     const removed = await tx.delete(webauthnCredentials).returning({ id: webauthnCredentials.id });

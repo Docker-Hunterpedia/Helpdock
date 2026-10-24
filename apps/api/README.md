@@ -505,6 +505,8 @@ routes answers 401 without a valid bearer token.
 | `/api/brands/:brandId/assignment*` | `ticketing:manage` for the settings and the agents, `ticket:write` for `…/:departmentId/assignable` | M1-07's Assignment tab and the assignee picker. [The settings guide](../../docs/guides/ticketing-settings.md#endpoints) lists them. |
 | `/api/brands/:brandId/{business-hours,holidays,sla-policies}*`, `PATCH …/ticketing/sla-settings` | `@Requires('ticketing:manage')` | M3-01's Business hours tab and M3-02's SLAs tab; every save recomputes the clocks. [The SLA guide](../../docs/guides/slas.md#endpoints) lists them. |
 | `DELETE /api/install/staff/:userId` | `@Requires('install:admin')` | Delete and anonymise an account. Audited. |
+| `GET /api/install/staff/:userId/second-factor` | `@Requires('install:admin')` | What resetting this person's second factor removes, with the digest to confirm. |
+| `POST /api/install/staff/:userId/second-factor/reset` | `@Requires('install:admin')` | Reset another person's second factor (#398): step-up, digest, one transaction, audited, emailed. |
 | `/api/me/*` | `@Authenticated()` | A person's own profile, password, second factor and sessions. |
 | `GET /metrics` | `@Public()` + `MetricsGuard` | Prometheus. A direct connection from a private address, or `METRICS_TOKEN` as a bearer; anything else is a 404. |
 | `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |

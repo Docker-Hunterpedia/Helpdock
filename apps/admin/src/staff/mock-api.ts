@@ -1,10 +1,13 @@
 import type {
   Department,
   DepartmentList,
+  PasskeyProof,
   Profile,
   ProfileUpdateRequest,
   PublicInvite,
   RecoveryCodes,
+  SecondFactorReset,
+  SecondFactorSummary,
   StaffInviteRequest,
   StaffList,
   StaffMember,
@@ -67,6 +70,18 @@ export const MOCK_ENROLMENT_CODE = '482913';
 /** A confirmation code the fixture answers as stale: the factors changed since the rotation began. */
 export const MOCK_STALE_ROTATION_CODE = '999999';
 export const MOCK_ROTATION_ID = '0192c3f0-1a2b-7c3d-8e4f-0000000000f0';
+
+/** What the fixture says a reset removes, for anyone who has a second factor (#398). */
+export const MOCK_RESET_COUNTS = { totp: true, passkeys: 2, recoveryCodes: 6 } as const;
+export const MOCK_RESET_DIGEST = 'a'.repeat(64);
+/**
+ * Step-up passwords the fixture answers with a refusal, as the codes above do
+ * for a stale rotation: the api's refusals depend on state a browser test
+ * cannot arrange (SSO enforcement, a factor changing meanwhile).
+ */
+export const MOCK_RESET_BLOCKED_PASSWORD = 'break-glass-refusal';
+export const MOCK_RESET_CHANGED_PASSWORD = 'factors-changed-refusal';
+export const MOCK_RESET_LIMITED_PASSWORD = 'rate-limit-refusal';
 
 const recoveryCodes = (seed: string): string[] =>
   Array.from({ length: 10 }, (_unused, index) => `RC-${seed}${index}-${1000 + index * 7}`);
@@ -341,6 +356,47 @@ export class MockStaffApi implements StaffApi {
   async removeFromBrand(_brandId: string, userId: string): Promise<void> {
     this.#assertNotSelf(this.#require(userId));
     this.#staff = this.#staff.filter((candidate) => candidate.userId !== userId);
+  }
+
+  async secondFactorSummary(userId: string): Promise<SecondFactorSummary> {
+    this.#assertResettable(this.#require(userId));
+
+    return { ...MOCK_RESET_COUNTS, digest: MOCK_RESET_DIGEST };
+  }
+
+  async resetSecondFactor(
+    userId: string,
+    proof: PasskeyProof,
+    digest: string,
+  ): Promise<SecondFactorReset> {
+    const target = this.#require(userId);
+    this.#assertResettable(target);
+    if (digest !== MOCK_RESET_DIGEST) {
+      throw new StaffError('second-factor-changed');
+    }
+    if (proof.passkey === undefined) {
+      if (proof.code !== undefined) {
+        this.#assertCode(proof.code);
+      } else if (proof.currentPassword === MOCK_RESET_BLOCKED_PASSWORD) {
+        throw new StaffError('last-break-glass');
+      } else if (proof.currentPassword === MOCK_RESET_CHANGED_PASSWORD) {
+        throw new StaffError('second-factor-changed');
+      } else if (proof.currentPassword === MOCK_RESET_LIMITED_PASSWORD) {
+        throw new StaffError('reset-rate-limited');
+      } else if (proof.currentPassword !== MOCK_CURRENT_PASSWORD) {
+        throw new AuthError('invalid-credentials');
+      }
+    }
+    this.#replace({ ...target, twoFactorEnabled: false });
+
+    return { ...MOCK_RESET_COUNTS };
+  }
+
+  #assertResettable(target: StaffMember): void {
+    this.#assertNotSelf(target);
+    if (target.status !== 'active' || !target.twoFactorEnabled) {
+      throw new StaffError('not-resettable');
+    }
   }
 
   // ------------------------------------------------------------------

@@ -297,6 +297,28 @@ may still use a recovery code.
 With a lost phone the recovery code (alone, or with the password) proves the
 step-up; with a passkey, the passkey does.
 
+### When a person has lost the phone and the recovery codes
+
+An install admin can reset another person's second factor (#398): **Staff**, the
+row menu, **Reset second factor** (install admins only; absent on your own row,
+on people with no second factor, and on anyone who is not active). The admin
+confirms it is them first (their passkey, password or a live app code, from the
+step-up budget), then a destructive confirm lists what goes, with live counts
+from the server: the app, the passkeys and the unused recovery codes. It warns
+to check the person's identity out of band, because whoever knows their password
+can enrol the next second factor.
+
+In one transaction the app, the passkeys and the recovery codes are removed, every
+session and trusted browser is revoked, `auth.second_factor.reset` is audited
+(actor, target, counts) and the person is emailed (`secondFactorReset`, naming
+the administrator). At their next sign-in an Admin, install admin or anyone while
+`auth.require2fa` is on goes to enrolment before a session opens; others may set
+one up from their security page. Refused with `409`: your own account, a person
+with nothing to reset, factors that changed while the confirm was open, and the
+last configured break-glass admin while SSO is enforced (make another install
+admin ready for break-glass first). Ten resets an hour per admin
+(`second-factor-reset`).
+
 Turning the second factor **off** again, and redrawing the recovery codes, are
 on the security page and each cost a live code: a session proves somebody signed
 in, not that the person at the keyboard now is the account holder. Turning it

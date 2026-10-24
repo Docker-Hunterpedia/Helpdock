@@ -34,7 +34,7 @@
   },
   "twoFactor": {
     "enrolled": "Enrolled",
-    "pending": "Pending"
+    "pending": "Not set up"
   },
   "lastActive": {
     "now": "Now",
@@ -87,7 +87,9 @@
     "reactivate": "Reactivate",
     "remove": "Remove from {{brand}}",
     "resend": "Resend invite",
-    "revoke": "Revoke invite"
+    "revoke": "Revoke invite",
+    "resetSecondFactor": "Reset second factor",
+    "resetSecondFactorHint": "Install admins only"
   },
   "roleDialog": {
     "title": "Change role",
@@ -123,10 +125,27 @@
     "selfChange": "You cannot change your own role.",
     "lastInstallAdmin": "This is the last install admin, so it cannot be deactivated.",
     "outOfScope": "You can only manage agents and viewers in your own departments.",
-    "viewerDisabled": "The Viewer role is turned off for this install."
+    "viewerDisabled": "The Viewer role is turned off for this install.",
+    "secondFactorReset": "{{name}}'s second factor was reset. They were signed out and will set one up at their next sign-in.",
+    "lastBreakGlass": "{{name}} is the last install admin who can sign in while SSO is enforced. Make another install admin ready to sign in with a password and a second factor first.",
+    "resetRateLimited": "Too many resets in a short time. Try again in a few minutes.",
+    "secondFactorChanged": "{{name}}'s second factor changed while you were confirming. Open the menu again."
   },
   "sso": {
     "badge": "SSO",
     "managedBy": "Managed by {{provider}}"
+  },
+  "reset": {
+    "stepUp": "Use your passkey, or enter your password or a code from your authenticator app, to reset {{name}}'s second factor.",
+    "title": "Reset {{name}}'s second factor?",
+    "removes": "This removes",
+    "app": "Authenticator app",
+    "passkeys_one": "{{count}} passkey",
+    "passkeys_other": "{{count}} passkeys",
+    "codes_one": "{{count}} unused recovery code",
+    "codes_other": "{{count}} unused recovery codes",
+    "consequence": "{{name}} is signed out everywhere. At their next sign-in they set up a second factor again before they can use Helpdock. We email them about it.",
+    "warning": "Make sure {{name}} asked for this through a channel you trust. Whoever knows their password can set up the next second factor.",
+    "submit": "Reset second factor"
   }
 }

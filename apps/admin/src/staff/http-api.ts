@@ -114,6 +114,9 @@ export class HttpStaffApi implements StaffApi {
         proof,
         digest,
       }),
+    );
+  }
+
   async setupChecklist(brandId: string): Promise<SetupChecklist> {
     return setupChecklistSchema.parse(
       await this.#transport.request('GET', `${this.#brand(brandId)}/setup-checklist`),

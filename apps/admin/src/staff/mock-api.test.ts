@@ -335,6 +335,9 @@ describe('resetting a second factor (#398)', () => {
     await expect(
       staff.resetSecondFactor(await omar(), { currentPassword: 'nope' }, MOCK_RESET_DIGEST),
     ).rejects.toMatchObject({ code: 'invalid-credentials' });
+  });
+});
+
 describe('the setup checklist', () => {
   const FINISHED = '0192c3f0-1a2b-7c3d-8e4f-000000000002';
   const REFUSED = '0192c3f0-1a2b-7c3d-8e4f-000000000003';

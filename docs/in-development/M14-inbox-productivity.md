@@ -1050,7 +1050,7 @@ owner decision D-31.
   resolution `DbAiPorts.target` makes (the brand's pair or the install default, and a
   provider still on the install's list); the first ticket is a ticket on a non-manual
   channel with `imported_at` null.
-- [x] `setup_checklist_dismissals` (migration `0072_setup_checklist`): brand and owner
+- [x] `setup_checklist_dismissals` (migration `0073_setup_checklist`): brand and owner
   scoped, primary key `(brand_id, user_id)`, in `TENANT_TABLES` and `OWNER_SCOPED_TABLES`
   and in the RLS isolation test.
 - [x] The entry sits above the sidebar toggle and opens a popover panel beside it

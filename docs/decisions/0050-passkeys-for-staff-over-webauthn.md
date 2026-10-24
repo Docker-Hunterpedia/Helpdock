@@ -35,7 +35,7 @@ Planned in [M18 Sign-in options](../in-development/M18-sign-in-options.md)
    one expected origin is `APP_URL`'s origin, never taken from `Host` or
    `Origin` headers. It is stored in `auth.webauthn.rpId` by the first successful
    registration, and afterwards only by an install admin's "Move passkeys" when
-   the address changed for good (M18-06, DOMAIN-RULES §12.1 rule 5), so an
+   the address changed for good (M18-06, DOMAIN-RULES §12.1 rule 6), so an
    install opened on a temporary host before anyone registers is not pinned there. One
    insert-unless-present statement writes it, so replicas racing to pin agree
    on one value, and a registration that lost to another host is refused; an `HD_AUTH_WEBAUTHN_RP_ID` pin is honoured and nothing is written.

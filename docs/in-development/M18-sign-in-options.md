@@ -773,7 +773,7 @@ Backlog or never:
     `error.passkeys.reason` `not-paused`, `pin-locked`, or `move-blocked` when the
     move would lock out a configured break-glass admin under enforcement or leave a
     required account with no second factor; the counts are in the GET and the
-    dialog. DOMAIN-RULES §12.1 rule 5; ADR 0050 and rule 1 amended.
+    dialog. DOMAIN-RULES §12.1 rule 6; ADR 0050 and rule 1 amended.
   - **System page.** The same warning, with a link to Settings.
   - **Security › Regenerate with a passkey.** Offered when the account holds a
     passkey on a supporting browser; a confirmation, the browser prompt, the codes

@@ -72,7 +72,12 @@ describe('planSnooze', () => {
   });
 
   it("refuses a closed ticket, a merged one and a deleted one, with the transition's reason", () => {
-    expect(plan(at(3_600_000), { status: status({ systemState: 'closed' }) })).toEqual({
+    expect(
+      plan(at(3_600_000), {
+        ticket: ticket({ closedAt: NOW }),
+        status: status({ systemState: 'closed' }),
+      }),
+    ).toEqual({
       kind: 'refused',
       reason: 'transition',
       refusal: 'ticket-closed',
@@ -98,5 +103,11 @@ describe('planSnooze', () => {
         snoozedBy: null,
       }),
     ).toEqual({ kind: 'refused', reason: 'no-snoozed-status' });
+  });
+
+  it('reads open or closed the way the lifecycle does: a closed-state status without closed_at is live', () => {
+    expect(plan(at(3_600_000), { status: status({ systemState: 'closed' }) })).toMatchObject({
+      kind: 'planned',
+    });
   });
 });

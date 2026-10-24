@@ -22,6 +22,7 @@ const fields: CustomFieldDef[] = [
     options: ['Sev 1', 'Sev 2'],
     required: false,
     agentVisible: true,
+    requiredToClose: false,
     pinned: true,
     sortOrder: 0,
   },

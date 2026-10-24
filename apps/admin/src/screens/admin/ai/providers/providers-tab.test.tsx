@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { AiError } from '../../../../ai/api.js';
 import { MockAiApi } from '../../../../ai/mock-api.js';
 import { AppRoutes } from '../../../../app/routes.tsx';
 import { renderApp } from '../../../../test/render.tsx';
@@ -167,5 +168,32 @@ describe('AI › Providers', () => {
     await user.type(key, 'sk-new');
     await user.click(within(embeddings).getByRole('button', { name: 'Save' }));
     expect(await screen.findByText('Embedding settings saved.')).toBeVisible();
+  });
+
+  it('asks for the transcription key again when the endpoint changes (#399)', async () => {
+    const aiApi = new MockAiApi();
+    vi.spyOn(aiApi, 'transcription').mockResolvedValue({
+      endpoint: 'https://a.example.com/v1/audio/transcriptions',
+      model: 'whisper-1',
+      hasApiKey: true,
+      lockedKeys: [],
+    });
+    vi.spyOn(aiApi, 'saveTranscription').mockRejectedValue(
+      new AiError('transcription-key-required'),
+    );
+    const { user } = await renderProviders(aiApi);
+    const transcription = card('Voice transcription');
+
+    const endpoint = within(transcription).getByLabelText('Whisper-compatible endpoint');
+    fireEvent.change(endpoint, {
+      target: { value: 'https://b.example.net/v1/audio/transcriptions' },
+    });
+    await user.click(within(transcription).getByRole('button', { name: 'Save' }));
+
+    const key = await within(transcription).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the API key again/);
+    });
+    expect(key).not.toHaveAttribute('readonly');
   });
 });

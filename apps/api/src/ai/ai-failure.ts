@@ -15,6 +15,7 @@ const STATUS_BY_REASON: Readonly<Record<AiRefusal, number>> = {
   'unknown-model': HttpStatus.BAD_REQUEST,
   'credential-required': HttpStatus.BAD_REQUEST,
   'embedding-key-required': HttpStatus.BAD_REQUEST,
+  'transcription-key-required': HttpStatus.BAD_REQUEST,
   'oauth-unsupported': HttpStatus.BAD_REQUEST,
   'provider-in-use': HttpStatus.CONFLICT,
   'discovery-failed': HttpStatus.CONFLICT,
@@ -32,6 +33,8 @@ const MESSAGE_BY_REASON: Readonly<Record<AiRefusal, string>> = {
     'This provider needs a credential; a stored one is only used with the kind and address it was saved for',
   'embedding-key-required':
     'The stored embeddings key is only used with the address it was saved for; type it again',
+  'transcription-key-required':
+    'The stored transcription key is only used with the endpoint it was saved for; type it again',
   'oauth-unsupported': 'This kind of provider does not accept subscription credentials',
   'provider-in-use': 'The default model or a brand still uses this provider',
   'discovery-failed': 'The provider could not be asked for its models',

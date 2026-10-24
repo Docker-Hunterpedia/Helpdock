@@ -88,7 +88,7 @@ case and a trailing slash). Otherwise the call is refused with 400
 `error.ai.reason: "credential-required"` and a field error on `body.auth.apiKey`
 (or `body.auth.credentials`), and nothing is saved: type the key again with the
 new address. The embeddings key follows the same rule for `baseUrl`, with
-`"embedding-key-required"` and a field error on `body.apiKey`. Clearing the key
+`"embedding-key-required"` and a field error on `body.apiKey`, and the transcription key for the transcription endpoint with `"transcription-key-required"`. Clearing the key
 (an empty `apiKey`) needs no re-entry. The admin screen opens the key field and
 says so on it.
 
@@ -136,7 +136,7 @@ Voice notes from the widget and Telegram can be transcribed for agents
 |---|---|---|
 | `transcription.endpoint` | `HD_TRANSCRIPTION_ENDPOINT` | `https://api.openai.com/v1/audio/transcriptions`. Empty turns transcription off |
 | `transcription.model` | `HD_TRANSCRIPTION_MODEL` | `whisper-1` (the default) |
-| `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys |
+| `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys. Changing `transcription.endpoint` to another address needs the key typed again: 400 `transcription-key-required`, field `body.apiKey`, nothing saved. Turning transcription off (empty endpoint) needs no key |
 
 How it runs:
 

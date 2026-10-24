@@ -1,6 +1,7 @@
 import type { SettingKey, Settings } from '@helpdock/config';
 import { auditLog, type DbTransaction, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
 import type { TranscriptionSettingsUpdate, TranscriptionSettingsView } from '@helpdock/schemas';
+import { sameEndpoint } from '../http/same-endpoint.js';
 import type { AiDestinationCheck } from './ai-destination.js';
 import { AiFailure } from './ai-failure.js';
 
@@ -48,6 +49,16 @@ export class TranscriptionSettingsService {
     actorId: string,
     body: TranscriptionSettingsUpdate,
   ): Promise<TranscriptionSettingsView> {
+    // The stored key goes only to the endpoint it was saved for (#399). An empty
+    // endpoint turns transcription off and sends nothing.
+    if (
+      body.apiKey === undefined &&
+      body.endpoint !== '' &&
+      (await this.#settings.get('transcription.apiKey')) !== '' &&
+      !sameEndpoint(await this.#settings.get('transcription.endpoint'), body.endpoint)
+    ) {
+      throw new AiFailure('transcription-key-required', 'body.apiKey');
+    }
     const writes: [TranscriptionKey, string][] = [
       ['transcription.endpoint', body.endpoint],
       ['transcription.model', body.model],

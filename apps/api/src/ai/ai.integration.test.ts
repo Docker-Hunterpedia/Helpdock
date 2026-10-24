@@ -879,6 +879,36 @@ describe.skipIf(!hasDocker)('the AI foundation', () => {
       expect(off.body).toMatchObject({ endpoint: '', hasApiKey: true });
     });
 
+    it('sends the stored key only to the endpoint it was saved for (#399)', async () => {
+      const endpoint = 'https://api.openai.com/v1/audio/transcriptions';
+      await call('PUT', path, adminToken, { endpoint, model: 'whisper-1', apiKey: 'sk-bound' });
+
+      const moved = await call<ErrorResponse>('PUT', path, adminToken, {
+        endpoint: 'https://evil.example.net/v1/audio/transcriptions',
+        model: 'whisper-1',
+      });
+      expect(moved.status).toBe(400);
+      expect(moved.body.error.ai?.reason).toBe('transcription-key-required');
+      expect(moved.body.error.fields?.[0]?.path).toBe('body.apiKey');
+      expect(await runtime.settings.get('transcription.endpoint')).toBe(endpoint);
+      expect(await runtime.settings.get('transcription.apiKey')).toBe('sk-bound');
+
+      const respelled = await call('PUT', path, adminToken, {
+        endpoint: `${endpoint}/`,
+        model: 'whisper-1',
+      });
+      expect(respelled.status).toBe(200);
+      expect(await runtime.settings.get('transcription.apiKey')).toBe('sk-bound');
+
+      const retyped = await call('PUT', path, adminToken, {
+        endpoint: 'https://new.example.com/v1/audio/transcriptions',
+        model: 'whisper-1',
+        apiKey: 'sk-new',
+      });
+      expect(retyped.status).toBe(200);
+      expect(await runtime.settings.get('transcription.apiKey')).toBe('sk-new');
+    });
+
     it('is refused to anyone but the install admin', async () => {
       expect((await call('GET', path, leaderToken)).status).toBe(403);
     });

@@ -28,6 +28,8 @@ export const aiRefusalSchema = z.enum([
   'credential-required',
   /** The embeddings base URL changed and the stored key was not typed again. */
   'embedding-key-required',
+  /** The transcription endpoint changed and the stored key was not typed again. */
+  'transcription-key-required',
   /** pi-ai has no subscription (OAuth) flow for that kind. */
   'oauth-unsupported',
   /** The default model or a brand still uses the provider. */

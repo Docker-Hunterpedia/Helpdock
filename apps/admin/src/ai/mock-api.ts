@@ -258,6 +258,14 @@ export class MockAiApi implements AiApi {
     ) {
       return Promise.reject(new AiError('locked-by-environment'));
     }
+    if (
+      request.apiKey === undefined &&
+      request.endpoint !== '' &&
+      this.#transcription.hasApiKey &&
+      !sameAddress(this.#transcription.endpoint, request.endpoint)
+    ) {
+      return Promise.reject(new AiError('transcription-key-required'));
+    }
     this.#transcription = {
       ...this.#transcription,
       endpoint: request.endpoint,

@@ -2,7 +2,7 @@ import type { TranscriptionSettingsUpdate, TranscriptionSettingsView } from '@he
 import { Box, Button, TextField, Typography } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
-import { aiKeys } from '../../../../ai/api.js';
+import { aiKeys, isAiError } from '../../../../ai/api.js';
 import { useAiApi } from '../../../../ai/context.tsx';
 import { useT } from '../../../../app/i18n.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
@@ -32,6 +32,7 @@ export function TranscriptionCard({
   const [model, setModel] = useState(settings.model);
   const [apiKey, setApiKey] = useState<string | null>(settings.hasApiKey ? null : '');
   const [invalid, setInvalid] = useState(false);
+  const [keyRetype, setKeyRetype] = useState(false);
 
   const locked = (key: string): boolean => settings.lockedKeys.includes(key);
   const save = useAiAction(
@@ -41,6 +42,17 @@ export function TranscriptionCard({
       queryClient.setQueryData(aiKeys.transcription, saved);
       setEndpoint(saved.endpoint);
       setApiKey(saved.hasApiKey ? null : '');
+      setKeyRetype(false);
+    },
+    (error) => {
+      // The api will not send a stored key to an endpoint it was not saved for.
+      if (!isAiError(error) || error.reason !== 'transcription-key-required') {
+        return false;
+      }
+      setApiKey((held) => held ?? '');
+      setKeyRetype(true);
+
+      return true;
     },
   );
 
@@ -169,8 +181,12 @@ export function TranscriptionCard({
             label={t('aiSettings:transcription.apiKey')}
             stored={settings.hasApiKey}
             value={apiKey}
+            error={keyRetype ? t('aiSettings:transcription.keyRetype') : undefined}
             replaceLabel={t('aiSettings:transcription.replaceKey')}
-            onChange={setApiKey}
+            onChange={(next) => {
+              setApiKey(next);
+              setKeyRetype(false);
+            }}
           />
         )}
       </Box>

@@ -54,12 +54,12 @@ export const tagLabel = (tag: Pick<Tag, 'name' | 'nameAr'>, locale: string): str
 
 /** The picker's search: either name, case-insensitive, anywhere in it. */
 export const tagMatches = (tag: Pick<Tag, 'name' | 'nameAr'>, term: string): boolean => {
-  const needle = term.trim().toLocaleLowerCase();
+  const needle = term.trim().toLowerCase();
 
   return (
     needle === '' ||
-    tag.name.toLocaleLowerCase().includes(needle) ||
-    (tag.nameAr?.toLocaleLowerCase().includes(needle) ?? false)
+    tag.name.toLowerCase().includes(needle) ||
+    (tag.nameAr?.toLowerCase().includes(needle) ?? false)
   );
 };
 

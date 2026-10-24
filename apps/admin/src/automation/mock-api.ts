@@ -535,14 +535,14 @@ export class MockAutomationApi implements AutomationApi {
 
   async runs(_brandId: string, query: RuleRunQuery): Promise<WorkflowRunList> {
     await Promise.resolve();
-    const q = query.q?.trim().toLocaleLowerCase() ?? '';
+    const q = query.q?.trim().toLowerCase() ?? '';
     return {
       runs: this.#runs.filter(
         (entry) =>
           (query.result === undefined || entry.result === query.result) &&
           (q === '' ||
-            entry.ruleName.toLocaleLowerCase().includes(q) ||
-            entry.ticketReference.toLocaleLowerCase() === q),
+            entry.ruleName.toLowerCase().includes(q) ||
+            entry.ticketReference.toLowerCase() === q),
       ),
     };
   }

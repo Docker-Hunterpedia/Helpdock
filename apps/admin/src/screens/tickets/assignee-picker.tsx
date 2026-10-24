@@ -24,7 +24,7 @@ import { PresenceDot } from '../../ui/presence-dot.tsx';
 
 /** Case-insensitive, and on the whole name, because people search by surname too. */
 export const matchesSearch = (name: string, term: string): boolean =>
-  name.toLocaleLowerCase().includes(term.trim().toLocaleLowerCase());
+  name.toLowerCase().includes(term.trim().toLowerCase());
 
 export function AssigneePicker({
   id,

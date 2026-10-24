@@ -56,5 +56,11 @@
     "formatter": {
       "enabled": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/admin/src/**"],
+      "plugins": ["./scripts/biome/bare-locale-call.grit"]
+    }
+  ]
 }

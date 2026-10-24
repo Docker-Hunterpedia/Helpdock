@@ -12,6 +12,7 @@ import type {
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
+  PasskeyRecoveryRedrawRequest,
   PasskeyRegistrationOptions,
   PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
@@ -208,6 +209,14 @@ export class HttpAuthApi implements AuthApi {
   async finishPasskey(request: PasskeyFinishRequest): Promise<PasskeyAdded> {
     return passkeyAddedSchema.parse(
       await this.#transport.request('POST', '/me/passkeys/finish', request),
+    );
+  }
+
+  async regenerateRecoveryCodesWithPasskey(
+    request: PasskeyRecoveryRedrawRequest,
+  ): Promise<RecoveryCodes> {
+    return recoveryCodesSchema.parse(
+      await this.#transport.request('POST', '/me/passkeys/recovery-codes', request),
     );
   }
 

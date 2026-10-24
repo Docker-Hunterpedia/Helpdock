@@ -70,3 +70,9 @@ export const ticketFieldsFor = (
   defs
     .filter((def) => def.target === 'ticket' && (seesHidden || def.agentVisible))
     .sort((a, b) => a.sortOrder - b.sortOrder);
+
+/** A field's label in the reader's language, falling back to the Latin one it was given. */
+export const fieldLabel = (
+  def: Pick<CustomFieldDef, 'label' | 'labelAr'>,
+  locale: string,
+): string => (locale === 'ar' && def.labelAr !== null ? def.labelAr : def.label);

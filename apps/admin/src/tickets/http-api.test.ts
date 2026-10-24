@@ -39,6 +39,22 @@ describe('listQueryString', () => {
     );
   });
 
+  it('sends each custom-field filter as one JSON parameter, which the api parses back (M14-16)', () => {
+    const query = listQueryString({
+      fieldFilter: [
+        { key: 'severity', op: 'any_of', values: ['Sev 1'] },
+        { key: 'total', op: 'between', from: 1, to: 9 },
+      ],
+    });
+    const params = new URLSearchParams(query);
+
+    expect(params.getAll('fieldFilter').map((raw) => JSON.parse(raw))).toEqual([
+      { key: 'severity', op: 'any_of', values: ['Sev 1'] },
+      { key: 'total', op: 'between', from: 1, to: 9 },
+    ]);
+    expect(query).not.toContain('[object Object]');
+  });
+
   it('leaves an empty filter off entirely rather than sending nothing', () => {
     expect(listQueryString({ statusId: [], q: '' })).toBe('');
   });

@@ -164,6 +164,23 @@ describe('the security notice (ASVS 2.2.3, Email/SecurityChange-M18)', () => {
       expect(en.text).toContain(`Open your security page: ${SECURITY_PAGE}`);
     });
 
+    it('tells a holder their passkeys were removed when the install moved, in both languages', () => {
+      const en = notice({ change: 'passkeysMoved', account: 'desk.helpdock.com', totp: '0' });
+      const ar = notice({ change: 'passkeysMoved', account: 'desk.helpdock.com', totp: '1' }, 'ar');
+
+      expect(en.subject).toBe('Your passkeys were removed');
+      expect(en.text).toContain('This install now runs at desk.helpdock.com');
+      expect(en.text).toContain(`Open your security page: ${SECURITY_PAGE}`);
+      expect(en.text).toContain(
+        'Your recovery codes were forgotten with them. Set up a second factor again',
+      );
+      expect(en.text).not.toContain('authenticator app still works');
+      expect(ar.text).toContain('يبقى تطبيق المصادقة لديك صالحًا');
+      expect(en.text).not.toContain("wasn't you");
+      expect(ar.subject).toBe('أُزيلت مفاتيح المرور من حسابك');
+      expect(ar.html).toContain('<bdi dir="ltr">desk.helpdock.com</bdi>');
+    });
+
     it('adds no sentence about what remains when nothing does', () => {
       const en = notice({ change: 'passkeyRemoved', passkey: 'Key', remaining: '0', totp: '0' });
 

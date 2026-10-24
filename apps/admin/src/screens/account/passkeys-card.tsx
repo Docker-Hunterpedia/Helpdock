@@ -45,7 +45,7 @@ import { AccountCard } from './account-card.tsx';
  * still works, so nobody is stuck with passkeys that cannot sign.
  */
 
-const PASSKEYS_KEY = ['me', 'passkeys'] as const;
+export const PASSKEYS_KEY = ['me', 'passkeys'] as const;
 
 /** A password is at least twelve characters, so six digits can only be a code. */
 const secretProof = (value: string): PasskeyProof =>

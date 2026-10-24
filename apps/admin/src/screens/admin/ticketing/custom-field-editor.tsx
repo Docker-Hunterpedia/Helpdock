@@ -46,6 +46,8 @@ export interface CustomFieldDraft {
   readonly options: readonly string[];
   readonly required: boolean;
   readonly agentVisible: boolean;
+  /** M14-16: shown as a chip on the rows and in the ticket header. */
+  readonly pinned: boolean;
 }
 
 /** `Plan tier` → `plan_tier`: the spelling `customFieldKeySchema` accepts. */
@@ -90,6 +92,7 @@ export function CustomFieldEditor({
   const [options, setOptions] = useState<readonly string[]>(field?.options ?? []);
   const [required, setRequired] = useState(field?.required ?? false);
   const [agentVisible, setAgentVisible] = useState(field?.agentVisible ?? true);
+  const [pinned, setPinned] = useState(field?.pinned ?? false);
   const [placement, setPlacement] = useState<CustomFieldTarget>(field?.target ?? target);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the identity that means "a different field" is its id.
@@ -102,10 +105,13 @@ export function CustomFieldEditor({
     setOptions(field?.options ?? []);
     setRequired(field?.required ?? false);
     setAgentVisible(field?.agentVisible ?? true);
+    setPinned(field?.pinned ?? false);
     setPlacement(field?.target ?? target);
   }, [field?.id, target]);
 
   const choice = isChoiceField(type);
+  // The chip is on every row, so only a ticket select that Agents may see can be pinned.
+  const pinnable = placement === 'ticket' && type === 'select' && agentVisible;
   const effectiveKey = keyTouched ? key : keyFromLabel(label);
   const complete =
     label.trim() !== '' && effectiveKey !== '' && (!choice || options.some((o) => o.trim() !== ''));
@@ -125,6 +131,7 @@ export function CustomFieldEditor({
       options: choice ? options.map((option) => option.trim()).filter(Boolean) : [],
       required,
       agentVisible,
+      pinned: pinned && pinnable,
     });
   };
 
@@ -275,6 +282,25 @@ export function CustomFieldEditor({
       <Typography variant="caption" sx={{ color: 'text.secondary', marginBlockStart: -4 }}>
         {t('ticketing:customFields.editor.agentVisibleHint')}
       </Typography>
+
+      {pinnable ? (
+        <>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={pinned}
+                onChange={(event) => {
+                  setPinned(event.target.checked);
+                }}
+              />
+            }
+            label={t('ticketing:customFields.editor.pinned')}
+          />
+          <Typography variant="caption" sx={{ color: 'text.secondary', marginBlockStart: -4 }}>
+            {t('ticketing:customFields.editor.pinnedHint')}
+          </Typography>
+        </>
+      ) : null}
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
         <Button variant="text" onClick={onCancel} disabled={busy}>

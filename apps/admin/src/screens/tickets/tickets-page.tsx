@@ -142,6 +142,11 @@ export function TicketsPage(): ReactNode {
 
   const directory = useWorkspaceData(brand.id);
   const summary = useFilterSummary(directory);
+  // A field hidden from Agents is not a filter for them (the api refuses it too).
+  const filterableFields = ticketFieldsFor(
+    directory.fields,
+    session.user.role === 'admin' || session.user.role === 'teamLeader',
+  );
   const viewActions = useViewActions();
   const contactResults = useContactSearch(brand.id, contactTerm);
   const debounced = useDebounced(typed, SEARCH_DEBOUNCE_MS);
@@ -479,6 +484,8 @@ export function TicketsPage(): ReactNode {
       departments={directory.departments}
       tags={directory.tags}
       staff={directory.staff.map((member) => ({ userId: member.userId, name: member.name }))}
+      fields={filterableFields}
+      pinnedField={directory.fields.find((def) => def.pinned && def.target === 'ticket')}
       viewerId={session.user.id}
       changes={changes}
       openFiltersToken={openFiltersToken}

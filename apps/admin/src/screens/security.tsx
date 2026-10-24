@@ -4,13 +4,18 @@ import { PASSWORD_MIN_LENGTH, totpCodeRequestSchema } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Chip, MenuItem, TextField, Typography } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
+import { KeyRound, RotateCcw } from 'lucide-react';
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { usePreferences } from '../app/providers.tsx';
 import { ROUTES } from '../app/route-paths.js';
 import { isAuthError } from '../auth/api.js';
+import {
+  assertPasskey,
+  isPasskeyCeremonyError,
+  passkeysSupported,
+} from '../auth/passkey-ceremony.js';
 import { useAuthApi, useSetSession, useStaffApi } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
@@ -19,7 +24,7 @@ import { PasswordField, type PasswordRefusal } from '../ui/password-field.tsx';
 import { passwordStrength } from '../ui/password-strength.js';
 import { useToast } from '../ui/toasts.tsx';
 import { AccountCard } from './account/account-card.tsx';
-import { PasskeysCard } from './account/passkeys-card.tsx';
+import { PASSKEYS_KEY, PasskeysCard } from './account/passkeys-card.tsx';
 import { ReplaceAuthenticatorDialog } from './account/replace-authenticator.tsx';
 import { SignInProvidersCard } from './account/sign-in-providers.tsx';
 
@@ -39,7 +44,7 @@ import { SignInProvidersCard } from './account/sign-in-providers.tsx';
  * signed in, not that the person at the keyboard now is the account holder.
  */
 
-type Confirming = 'disable' | 'regenerate' | 'replace' | null;
+type Confirming = 'disable' | 'regenerate' | 'regeneratePasskey' | 'replace' | null;
 
 export function SecurityScreen(): ReactNode {
   const t = useT();
@@ -71,6 +76,11 @@ export function SecurityScreen(): ReactNode {
 
   const profile = useQuery({ queryKey: ['me', 'profile'], queryFn: () => api.profile() });
   const sessions = useQuery({ queryKey: ['me', 'sessions'], queryFn: () => api.sessions() });
+  const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: () => authApi.passkeys() });
+  const canRedrawWithPasskey =
+    passkeys.data?.state === 'available' &&
+    passkeys.data.passkeys.length > 0 &&
+    passkeysSupported();
 
   /** Both step-up dialogs answer a wrong code the same way, in the same field. */
   const reportCodeFailure = (error: unknown): void => {
@@ -148,6 +158,27 @@ export function SecurityScreen(): ReactNode {
       toast({ tone: 'success', message: t('me:twoFactor.regenerated') });
     },
     onError: reportCodeFailure,
+  });
+
+  /** The step-up is the passkey itself: the browser prompt is the confirmation. */
+  const regenerateWithPasskey = useMutation({
+    mutationFn: async () => {
+      const { ceremonyId, options } = await authApi.passkeyStepUpOptions();
+      const response = await assertPasskey(options);
+      return authApi.regenerateRecoveryCodesWithPasskey({ passkey: { ceremonyId, response } });
+    },
+    onSuccess: async (result) => {
+      setConfirming(null);
+      setNewCodes(result.recoveryCodes);
+      await queryClient.invalidateQueries({ queryKey: ['me', 'profile'] });
+      toast({ tone: 'success', message: t('me:twoFactor.regenerated') });
+    },
+    onError: (error) => {
+      setConfirming(null);
+      // A prompt the person closed is an answer, not a failure.
+      if (isPasskeyCeremonyError(error) && error.reason === 'cancelled') return;
+      toast({ tone: 'danger', message: t('me:twoFactor.regenerateWithPasskeyFailed') });
+    },
   });
 
   const revokeSession = useMutation({
@@ -366,6 +397,17 @@ export function SecurityScreen(): ReactNode {
                 {t('me:twoFactor.enable')}
               </Button>
             )}
+            {canRedrawWithPasskey ? (
+              <Button
+                variant="outlined"
+                startIcon={<KeyRound size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setConfirming('regeneratePasskey');
+                }}
+              >
+                {t('me:twoFactor.regenerateWithPasskey')}
+              </Button>
+            ) : null}
           </Box>
 
           {newCodes === null ? null : (
@@ -487,6 +529,20 @@ export function SecurityScreen(): ReactNode {
         onClose={(outcome) => {
           setConfirming(null);
           setReplaceStale(outcome === 'stale');
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirming === 'regeneratePasskey'}
+        busy={regenerateWithPasskey.isPending}
+        title={t('me:twoFactor.regenerateWithPasskeyTitle')}
+        body={t('me:twoFactor.regenerateWithPasskeyBody')}
+        confirmLabel={t('me:twoFactor.regenerateWithPasskeySubmit')}
+        onClose={() => {
+          setConfirming(null);
+        }}
+        onConfirm={() => {
+          regenerateWithPasskey.mutate();
         }}
       />
 

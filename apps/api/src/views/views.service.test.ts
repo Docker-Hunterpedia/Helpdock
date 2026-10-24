@@ -106,10 +106,19 @@ const repository = {
   update(tx: DbTransaction, id: string, values: Partial<NewView>): Promise<void>;
 };
 
+const checked: { reader: TicketReader; filters: unknown }[] = [];
+let fieldFilterRefused = false;
+
 const counter: TicketCounter = {
   countTickets: async (_tx, reader, filters) => {
     counted.push(...filters.map((one) => ({ reader, filters: one })));
     return filters.map(() => matches);
+  },
+  resolveFieldFilters: async (_tx, reader, filters) => {
+    checked.push({ reader, filters });
+    if (fieldFilterRefused) {
+      throw new BadRequestException('no such ticket field');
+    }
   },
 };
 
@@ -144,6 +153,8 @@ beforeEach(() => {
   seeded = 0;
   counted = [];
   matches = 3;
+  checked.length = 0;
+  fieldFilterRefused = false;
   created = 0;
   transaction = fakeTransaction();
   service = new ViewsService(repository, counter);
@@ -195,7 +206,11 @@ describe('counts', () => {
       { viewId: 'vip', count: 3, capped: false },
       { viewId: 'agent-own', count: 3, capped: false },
     ]);
-    expect(counted[0]?.reader).toEqual({ brandId: BRAND, viewerId: AGENT.userId });
+    expect(counted[0]?.reader).toEqual({
+      brandId: BRAND,
+      viewerId: AGENT.userId,
+      seesHiddenFields: false,
+    });
     expect(counted[0]?.filters.assigneeId).toEqual(['me']);
   });
 
@@ -213,6 +228,82 @@ describe('counts', () => {
     const { counts } = await service.counts(as(AGENT));
 
     expect(counts[0]).toEqual({ viewId: 'my-open', count: 999, capped: true });
+  });
+});
+
+describe('counts and field visibility (M14-16)', () => {
+  it('lets a reader who manages ticketing count by a field hidden from Agents', async () => {
+    await service.counts(as(ADMIN));
+
+    expect(counted[0]?.reader.seesHiddenFields).toBe(true);
+  });
+});
+
+describe('custom-field filters when a view is saved (M14-16)', () => {
+  const withFields: TicketViewFilters = {
+    sort: 'updatedAt',
+    direction: 'desc',
+    fieldFilter: [{ key: 'severity', op: 'any_of', values: ['Sev 1'] }],
+  };
+
+  it('checks them against the brand’s fields before it writes anything', async () => {
+    fieldFilterRefused = true;
+
+    await expect(
+      service.create(as(AGENT), {
+        name: 'Typo',
+        filters: withFields,
+        visibility: { kind: 'personal' },
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(rows.some((candidate) => candidate.name === 'Typo')).toBe(false);
+  });
+
+  it('does not look at the fields for a view that has no field filter', async () => {
+    await service.create(as(AGENT), {
+      name: 'Plain',
+      filters: { sort: 'updatedAt', direction: 'desc' },
+      visibility: { kind: 'personal' },
+    });
+
+    expect(checked).toEqual([]);
+  });
+
+  it('reads a personal view as its owner may: an Admin’s may name a hidden field', async () => {
+    await service.create(as(ADMIN), {
+      name: 'Mine',
+      filters: withFields,
+      visibility: { kind: 'personal' },
+    });
+
+    expect(checked[0]?.reader.seesHiddenFields).toBe(true);
+  });
+
+  it('reads a shared view as an Agent would, whoever saves it', async () => {
+    await service.create(as(ADMIN), {
+      name: 'Everyone',
+      filters: withFields,
+      visibility: { kind: 'brand' },
+    });
+
+    expect(checked[0]?.reader.seesHiddenFields).toBe(false);
+  });
+
+  it('checks the stored filters again when only the audience changes', async () => {
+    rows = rows.map((candidate) =>
+      candidate.id === 'vip' ? { ...candidate, filters: withFields } : candidate,
+    );
+
+    await service.update(as(ADMIN), 'vip', { visibility: { kind: 'brand' } });
+
+    expect(checked[0]?.filters).toEqual(withFields.fieldFilter);
+    expect(checked[0]?.reader.seesHiddenFields).toBe(false);
+  });
+
+  it('checks nothing for a rename', async () => {
+    await service.update(as(ADMIN), 'vip', { name: 'VIPs' });
+
+    expect(checked).toEqual([]);
   });
 });
 

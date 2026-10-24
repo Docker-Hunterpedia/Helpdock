@@ -69,15 +69,14 @@ export const filterArticles = (
   structure: HcStructure,
   filters: ArticleFilters,
 ): HcArticleSummary[] => {
-  const q = filters.q.trim().toLocaleLowerCase();
+  const q = filters.q.trim().toLowerCase();
   const order = sectionOrder(structure);
 
   return structure.articles
     .filter((article) => filters.sectionId === null || article.sectionId === filters.sectionId)
     .filter(
       (article) =>
-        q === '' ||
-        article.versions.some((version) => version.title.toLocaleLowerCase().includes(q)),
+        q === '' || article.versions.some((version) => version.title.toLowerCase().includes(q)),
     )
     .filter((article) => {
       const primary = primaryVersion(article, structure.defaultLocale);

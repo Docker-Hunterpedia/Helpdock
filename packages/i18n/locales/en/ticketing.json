@@ -153,7 +153,8 @@
     "policyDeleted": "Policy {{name}} deleted",
     "policiesReordered": "Policy order saved",
     "slaSettingsSaved": "SLA settings saved",
-    "macroChanged": "That macro changed after you applied it. Apply it again."
+    "macroChanged": "That macro changed after you applied it. Apply it again.",
+    "pinConflict": "The pinned field changed at the same moment. Try again."
   },
   "statuses": {
     "add": "Add status",
@@ -363,7 +364,9 @@
       "nothing": {
         "heading": "Nothing selected",
         "body": "Choose a field to edit its label, its type and its options."
-      }
+      },
+      "pinned": "Pin on rows and the ticket header",
+      "pinnedHint": "One select field per brand can be pinned."
     },
     "confirm": {
       "delete": {
@@ -378,7 +381,8 @@
         "submit": "Remove anyway"
       }
     },
-    "addTo": "Add {{target}} field"
+    "addTo": "Add {{target}} field",
+    "pinned": "Pinned"
   },
   "templates": {
     "add": "Add template",
@@ -669,7 +673,8 @@
         "heading": "Nothing selected",
         "body": "Choose a view to edit its name, who sees it and what it shows."
       },
-      "saved": "As saved"
+      "saved": "As saved",
+      "fields": "Custom fields"
     },
     "note": "Built-in views can be renamed, reordered or hidden for the brand, not deleted or refiltered. A view never widens access: an agent sees only the tickets in their own departments that match it.",
     "confirm": {

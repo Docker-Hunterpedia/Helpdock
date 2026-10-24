@@ -743,6 +743,62 @@ Backlog or never:
   - There is no real-api Playwright spec for break-glass: the second-factor
     screen is unchanged and server-driven, and a spec would need an SSO
     connection and enforcement set up against the real api.
+- [x] **M18-06** Admin passkey screens ([#280](https://github.com/Docker-Hunterpedia/Helpdock/issues/280)).
+  Most of the five boards were built by the API deliverables that needed them;
+  this one audited them against the boards and built what was missing.
+
+  | Board | Built by | This PR |
+  |---|---|---|
+  | `Admin/Login-Passkey` | M18-04 (#376): button, autofill, waiting, cancelled, refusal, unsupported, paused | Nothing missing |
+  | `Admin/SecondFactor` | M18-03 (#371) | Nothing missing |
+  | `Admin/Enrol2FA-Choose` | M18-03 (#371) | Nothing missing |
+  | `Admin/Profile-Security-Passkeys` | M18-02 (#364): the card, step-up, add, rename, remove and limit dialogs | The "redraw recovery codes with a passkey" control M18-03 left API-only |
+  | `Admin/Settings-Authentication` | Nothing | The Passkeys section, the drift warning and "Move passkeys", the copy changes, the System page warning |
+
+  Added here:
+  - **Settings › Authentication › Passkeys.** `GET /api/install/passkeys`
+    (`install:admin`): state (`available`, `paused`, `unavailable`), the RP ID
+    `APP_URL` implies, the pinned RP ID and date, whether the environment pins it,
+    and counts of passkeys and holders (counts only). The section draws the
+    status badge, the read-only RP ID in mono, "12 passkeys across 7 staff", the
+    HTTPS explanation when unavailable, and, when paused, the warning naming
+    both hosts in `bdi dir="ltr"`.
+  - **Move passkeys.** `POST /api/install/passkeys/move` behind a confirmation
+    that says every passkey stops working. One transaction deletes every passkey,
+    forgets the recovery codes of holders with no app, and re-pins
+    `auth.webauthn.rpId` (`RpIdPinStore.moveTo`); then `auth.passkey.rp_moved` is
+    written in the same transaction, as is each holder's `passkeysMoved`
+    `securityChange` notice (en, ar; it says whether recovery codes were
+    forgotten). The pin moves only while it still holds the old host and the
+    holders' account rows are locked, so two moves cannot both run. `409` with
+    `error.passkeys.reason` `not-paused`, `pin-locked`, or `move-blocked` when the
+    move would lock out a configured break-glass admin under enforcement or leave a
+    required account with no second factor; the counts are in the GET and the
+    dialog. DOMAIN-RULES §12.1 rule 6; ADR 0050 and rule 1 amended.
+  - **System page.** The same warning, with a link to Settings.
+  - **Security › Regenerate with a passkey.** Offered when the account holds a
+    passkey on a supporting browser; a confirmation, the browser prompt, the codes
+    once. A closed prompt is silent.
+  - **Copy.** "Require a second factor for all staff" with the board's hint, and
+    "Sign-in link validity (minutes)" (en and ar).
+  - **#379 review nits.** "Their passkeys have no PIN or biometric"; the
+    changeset and `sso.md` now say passkeys added before this release count as
+    unverified for break-glass, and the remedy is to re-register with a PIN or
+    biometric, or keep an app.
+
+  Differences and gaps:
+  - **The Passkeys section is inside the Sign-in methods card**, under a divider,
+    not a card of its own. Google, Microsoft and GitHub share that card's one
+    form and Save, so the board's separate cards would have meant splitting the
+    form. The order (Sign-in methods, Passkeys, then providers) is the board's.
+  - **Move deletes the passkeys.** The board says they "stop working" and staff
+    "add their passkeys again"; leaving the rows would keep them counting as a
+    second factor, so they are removed. This cannot be undone, as the dialog says.
+  - **Staff-list badges and an admin's view of another person's passkeys are not
+    built.** No board draws them, and the staff list already counts a passkey as a
+    second factor (M18-03). They need a board first.
+  - The `shell-settings.png` baselines change; they come from the Screenshots
+    workflow's artifact.
 - [ ] The other deliverables.
 
 ## Task status
@@ -751,7 +807,8 @@ Backlog or never:
 |---|---|---|
 | M18-05 | in review (#279) | Done: see the Progress entry. ADR 0053 is implemented; D-50 was accepted on 2026-10-20. |
 | M18-08 | in review (#282) | Done: see the Progress entry. Tests: `oauth-microsoft.service.test.ts` (wrong `tid`, wrong issuer, wrong audience and nonce, guest, no `xms_edov`, replayed state, other browser, other provider's state, discovery that lies), `oauth-microsoft.integration.test.ts` (the same over HTTP against Postgres and Redis, with binding, connect, invitation, a tenant change that strands the old identities and their lazy replacement (first link, connect, rollback, Microsoft-only), and personal accounts on and off), `microsoftIsAuthoritative`, the settings service and schemas, the admin card, sign-in, refusal and invitation screens, Playwright in `en` and `ar`. Screenshot baselines of Settings are regenerated by the Screenshots workflow. |
-| M18-03 | in review (#277) | Done: see Progress. Not built: a screen for redrawing the recovery codes with a passkey (API only), and the admin "reset second factor" action, which does not exist in 1.0. |
+| M18-06 | in review (#280) | Done: see the Progress entry. Not built: staff-list badges and an admin's view of a person's passkeys (no board). Tests: `passkey.service.test.ts` (status, move, refusals, recovery codes, a holder who cannot be emailed), `passkeys.integration.test.ts` (the install routes over HTTP on real Postgres and Redis), `passkeys-section.test.tsx`, `passkeys-drift.test.tsx`, `passkeys-card.test.tsx` (redraw), `passkeys-admin.spec.ts` in `en` and `ar` with axe. |
+| M18-03 | in review (#277) | Done: see Progress. Redrawing with a passkey has its screen from M18-06. Not built: the admin "reset second factor" action, which does not exist in 1.0. |
 | M18-07 | in review (#281, PR #321) | Done: `oauth.google.allowedDomains` (setting, `HD_*` pin, enforcement on sign-in, connect and invitation, bound accounts included, `oauth-domain-not-allowed`, Settings › Authentication tag input refusing gmail.com); the `Admin/Login-Providers` callback screens; the card renamed Sign-in methods with "last used" per `Admin/Profile-Security-SignInMethods`; the `Email/SecurityChange-M18` layout; binding at invitation acceptance (`Admin/AcceptInvite-Providers`, `oauth-invite-mismatch`, `invite-expired`); migration `0059_oauth_identity_use` (`linked_via`, `last_used_at`). Not built, by design: the `issuer` column (ADR 0051, "No issuer column": one issuer per provider per install). Left to other deliverables: passkey step-up and passkey-as-first-factor (M18-02/M18-06), Microsoft (M18-08). |
 
 ## Data model

@@ -547,7 +547,14 @@
     "sort": "Sort: {{value}}",
     "everything": "Every ticket",
     "snoozedOnly": "Snoozed only",
-    "snoozedInclude": "Including snoozed"
+    "snoozedInclude": "Including snoozed",
+    "fieldNotSet": "{{field}} is not set",
+    "fieldTicked": "{{field}} is ticked",
+    "fieldUnticked": "{{field}} is not ticked",
+    "fieldBefore": "{{field}} before {{value}}",
+    "fieldAfter": "{{field}} after {{value}}",
+    "fieldBetween": "{{field}} between {{from}} and {{to}}",
+    "fieldContains": "{{field}} contains \"{{value}}\""
   },
   "sort": {
     "updatedAt": {
@@ -1249,5 +1256,31 @@
     },
     "announce_one": "{{count}} ticket selected",
     "announce_other": "{{count}} tickets selected"
+  },
+  "fieldFilters": {
+    "legend": "Custom fields",
+    "none": "No field filters yet.",
+    "add": "Add filter",
+    "apply": "Apply",
+    "remove": "Remove the {{field}} filter",
+    "operatorOf": "{{field}} operator",
+    "valueOf": "{{field}} value",
+    "from": "{{field}} from",
+    "to": "{{field}} to",
+    "ticked": "Ticked",
+    "unticked": "Not ticked",
+    "incomplete": "Fill in or remove the filters that have no value yet.",
+    "ops": {
+      "any_of": "is any of",
+      "not_set": "is not set",
+      "is": "is",
+      "before": "is before",
+      "after": "is after",
+      "between": "is between",
+      "contains": "contains"
+    }
+  },
+  "pinned": {
+    "name": "{{field}}:"
   }
 }

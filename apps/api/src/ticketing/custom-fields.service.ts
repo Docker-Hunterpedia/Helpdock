@@ -12,6 +12,7 @@ import type {
 import { isChoiceField } from '@helpdock/schemas';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { isUniqueViolation } from '../http/unique-violation.js';
 import { writeTicketingAudit } from './audit.js';
 import type { CustomFieldsRepository, FieldUsage } from './custom-fields.repository.js';
 import type { TicketingActor, TicketingContext } from './ticketing-context.js';
@@ -70,8 +71,15 @@ export class CustomFieldsService {
     context: TicketingContext,
     request: CustomFieldCreateRequest,
   ): Promise<CustomFieldDef> {
+    if (request.pinned) {
+      await this.#repository.lockFields(context.tx);
+    }
     if (await this.#repository.keyTaken(context.tx, request.target, request.key)) {
       throw new TicketingFailure('name-taken');
+    }
+
+    if (request.pinned) {
+      assertPinnableShape(request.target, request.type, request.agentVisible);
     }
 
     const created = await this.#repository.create(context.tx, {
@@ -84,8 +92,12 @@ export class CustomFieldsService {
       options: [...request.options],
       required: request.required,
       agentVisible: request.agentVisible,
+      pinned: false,
       sortOrder: await this.#repository.nextSortOrder(context.tx, request.target),
     });
+    // Created unpinned, then pinned, so the previous pinned field is let go
+    // before the unique index could object.
+    const unpinned = request.pinned ? await this.#pin(context.tx, created.id) : [];
 
     await writeTicketingAudit(context.tx, {
       brandId: context.brandId,
@@ -93,10 +105,16 @@ export class CustomFieldsService {
       action: 'custom_field.created',
       targetType: 'custom_field',
       targetId: created.id,
-      meta: { target: created.target, key: created.key, type: created.type },
+      meta: {
+        target: created.target,
+        key: created.key,
+        type: created.type,
+        ...(request.pinned ? { pinned: true } : {}),
+        ...(unpinned.length === 0 ? {} : { unpinned }),
+      },
     });
 
-    return toDef(created);
+    return toDef(await this.#require(context.tx, created.id));
   }
 
   async update(
@@ -104,6 +122,9 @@ export class CustomFieldsService {
     fieldId: string,
     request: CustomFieldUpdateRequest,
   ): Promise<CustomFieldDef> {
+    // Before the checks, so a concurrent "pin" and "hide from Agents" are
+    // judged one after the other against the row the first one left.
+    await this.#repository.lockFields(context.tx);
     const def = await this.#require(context.tx, fieldId);
     const usage = await this.#repository.usage(context.tx, def);
     const movesType = request.type !== undefined && request.type !== def.type;
@@ -123,6 +144,7 @@ export class CustomFieldsService {
       throw new TicketingFailure('field-in-use');
     }
 
+    const pins = this.#assertPinnable(def, request);
     const options = request.options === undefined ? undefined : [...request.options];
     // The request may name options without naming a type, so the schema cannot
     // check the pair on its own: only the stored row knows what the type is.
@@ -132,14 +154,20 @@ export class CustomFieldsService {
       await this.#applyOptionRemovals(context, def, options, usage, request.force);
     }
 
-    await this.#repository.update(context.tx, fieldId, {
-      ...(request.label === undefined ? {} : { label: request.label }),
-      ...(request.labelAr === undefined ? {} : { labelAr: request.labelAr }),
-      ...(request.type === undefined ? {} : { type: request.type }),
-      ...(options === undefined ? {} : { options }),
-      ...(request.required === undefined ? {} : { required: request.required }),
-      ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
-    });
+    // The unique index allows one pinned field, so the old one is let go first.
+    const unpinned = pins ? await this.#repository.unpinOthers(context.tx, fieldId) : [];
+
+    await this.#writingPin(() =>
+      this.#repository.update(context.tx, fieldId, {
+        ...(request.label === undefined ? {} : { label: request.label }),
+        ...(request.labelAr === undefined ? {} : { labelAr: request.labelAr }),
+        ...(request.type === undefined ? {} : { type: request.type }),
+        ...(options === undefined ? {} : { options }),
+        ...(request.required === undefined ? {} : { required: request.required }),
+        ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
+        ...(request.pinned === undefined ? {} : { pinned: request.pinned }),
+      }),
+    );
 
     await writeTicketingAudit(context.tx, {
       brandId: context.brandId,
@@ -155,10 +183,57 @@ export class CustomFieldsService {
         ...(options === undefined ? {} : { options, wasOptioned: def.options }),
         ...(request.required === undefined ? {} : { required: request.required }),
         ...(request.agentVisible === undefined ? {} : { agentVisible: request.agentVisible }),
+        ...(request.pinned === undefined || request.pinned === def.pinned
+          ? {}
+          : { pinned: request.pinned }),
+        ...(unpinned.length === 0 ? {} : { unpinned }),
       },
     });
 
     return toDef(await this.#require(context.tx, fieldId));
+  }
+
+  /** Pins a field and returns the keys of the ones that let go. */
+  async #pin(tx: DbTransaction, fieldId: string): Promise<string[]> {
+    const unpinned = await this.#repository.unpinOthers(tx, fieldId);
+    await this.#writingPin(() => this.#repository.update(tx, fieldId, { pinned: true }));
+
+    return unpinned;
+  }
+
+  /**
+   * The row lock keeps two pins apart; the unique index is the backstop for a
+   * write path that does not take it, and its refusal is a 409 the person can
+   * retry rather than a 500.
+   */
+  async #writingPin<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      throw isUniqueViolation(error) ? new TicketingFailure('pin-conflict') : error;
+    }
+  }
+
+  /**
+   * The pin rule (M14-16): the chip shows on every row and in every ticket
+   * header, so the field has to be a ticket select that Agents may see, and a
+   * change to a pinned field that would break that is refused rather than
+   * leaving a chip nobody can explain. Returns `true` when the request pins a
+   * field that was not pinned, which is when the previous one is let go.
+   */
+  #assertPinnable(def: CustomFieldDefRow, request: CustomFieldUpdateRequest): boolean {
+    const pinned = request.pinned ?? def.pinned;
+    if (!pinned) {
+      return false;
+    }
+
+    assertPinnableShape(
+      def.target,
+      request.type ?? def.type,
+      request.agentVisible ?? def.agentVisible,
+    );
+
+    return request.pinned === true && !def.pinned;
   }
 
   /**
@@ -282,6 +357,16 @@ const assertOptionsMatchType = (type: CustomFieldType, options: readonly string[
   }
 };
 
+const assertPinnableShape = (
+  target: CustomFieldTarget,
+  type: CustomFieldType,
+  agentVisible: boolean,
+): void => {
+  if (target !== 'ticket' || type !== 'select' || !agentVisible) {
+    throw new BadRequestException('Only a ticket select field that Agents can see can be pinned');
+  }
+};
+
 const toDef = (row: CustomFieldDefRow): CustomFieldDef => ({
   id: row.id,
   target: row.target,
@@ -292,5 +377,6 @@ const toDef = (row: CustomFieldDefRow): CustomFieldDef => ({
   options: row.options,
   required: row.required,
   agentVisible: row.agentVisible,
+  pinned: row.pinned,
   sortOrder: row.sortOrder,
 });

@@ -1,4 +1,4 @@
-import type { Ticket, TicketViewingActivity } from '@helpdock/schemas';
+import type { CustomFieldDef, Ticket, TicketViewingActivity } from '@helpdock/schemas';
 import { importSourceLink } from '@helpdock/schemas';
 import { Box, Button, Chip, IconButton, Typography } from '@mui/material';
 import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
+import { PinnedFieldChip, pinnedValueOf } from './pinned-field-chip.tsx';
 import { type TicketAction, TicketActionsMenu } from './ticket-actions-menu.tsx';
 
 /**
@@ -41,6 +42,7 @@ export function TicketHeader({
   onMacro,
   macroOpen = false,
   snooze,
+  pinnedField,
 }: {
   readonly ticket: Ticket;
   readonly departmentName: string | undefined;
@@ -60,12 +62,15 @@ export function TicketHeader({
   readonly macroOpen?: boolean | undefined;
   /** M14-02: the Snooze button and its menu. Absent when the ticket cannot be snoozed. */
   readonly snooze?: ReactNode;
+  /** M14-16: the brand's pinned field, shown beside the priority when the ticket has a value. */
+  readonly pinnedField?: CustomFieldDef | undefined;
 }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const [first, ...rest] = viewers;
   const macroKeys = useAriaKeyShortcuts('ticket.macros');
   const importedUrl = importSourceLink(ticket.imported?.url);
+  const pinnedValue = pinnedValueOf(ticket, pinnedField);
 
   return (
     <Box
@@ -119,6 +124,9 @@ export function TicketHeader({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <StatusBadge status={ticket.status} />
         <PriorityBadge priority={ticket.priority} />
+        {pinnedField === undefined || pinnedValue === null ? null : (
+          <PinnedFieldChip def={pinnedField} value={pinnedValue} size="header" />
+        )}
         {ticket.imported ? (
           <Chip
             size="small"

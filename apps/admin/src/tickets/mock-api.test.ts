@@ -131,6 +131,62 @@ describe('MockTicketsApi', () => {
     expect(tickets).toHaveLength(2);
   });
 
+  describe('custom-field filters (M14-16)', () => {
+    const stampTier = async (id: string, tier: string | null) =>
+      api.update(BRAND, id, { custom: { tier } });
+
+    it('keeps the tickets whose stored value is one of the options, and no others', async () => {
+      // HD-1042 is seeded as gold; give another ticket a different tier.
+      await stampTier(MOCK_TICKET_SIGN_IN, 'silver');
+
+      const gold = await api.list(BRAND, {
+        fieldFilter: [{ key: 'tier', op: 'any_of', values: ['gold'] }],
+        snoozed: 'include',
+      });
+      const either = await api.list(BRAND, {
+        fieldFilter: [{ key: 'tier', op: 'any_of', values: ['gold', 'silver'] }],
+        snoozed: 'include',
+      });
+
+      expect(gold.tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_REFUND]);
+      expect(new Set(either.tickets.map((ticket) => ticket.id))).toEqual(
+        new Set([MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN]),
+      );
+    });
+
+    it('reads "not set" as no value, and all filters have to match', async () => {
+      const unset = await api.list(BRAND, {
+        fieldFilter: [{ key: 'tier', op: 'not_set' }],
+        limit: 100,
+        snoozed: 'include',
+      });
+      const both = await api.list(BRAND, {
+        fieldFilter: [
+          { key: 'tier', op: 'any_of', values: ['gold'] },
+          { key: 'order_id', op: 'contains', value: 'ord-48' },
+        ],
+      });
+
+      expect(unset.tickets.map((ticket) => ticket.id)).not.toContain(MOCK_TICKET_REFUND);
+      expect(unset.tickets.length).toBeGreaterThan(1);
+      expect(both.tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_REFUND]);
+    });
+
+    it('compares numbers and days only with a value of their own kind', async () => {
+      await api.update(BRAND, MOCK_TICKET_REFUND, { custom: { renews_on: '2026-03-01' } });
+
+      const before = await api.list(BRAND, {
+        fieldFilter: [{ key: 'renews_on', op: 'before', value: '2026-04-01' }],
+      });
+      const numeric = await api.list(BRAND, {
+        fieldFilter: [{ key: 'renews_on', op: 'after', value: 5 }],
+      });
+
+      expect(before.tickets.map((ticket) => ticket.id)).toEqual([MOCK_TICKET_REFUND]);
+      expect(numeric.tickets).toEqual([]);
+    });
+  });
+
   it('searches the subject and the reference', async () => {
     expect((await api.list(BRAND, { q: 'refund' })).tickets).toHaveLength(1);
     expect((await api.list(BRAND, { q: 'HD-1035' })).tickets).toHaveLength(1);

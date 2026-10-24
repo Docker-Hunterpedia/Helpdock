@@ -1,4 +1,4 @@
-import type { Department, TagSummary, TicketView } from '@helpdock/schemas';
+import type { CustomFieldDef, Department, TagSummary, TicketView } from '@helpdock/schemas';
 import { ticketPrioritySchema, VIEW_NAME_MAX_LENGTH } from '@helpdock/schemas';
 import {
   Box,
@@ -16,6 +16,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { viewLabel } from '../../../tickets/views.js';
 import { Field } from '../../../ui/field.tsx';
+import { FieldFilterEditor } from '../../tickets/field-filter-editor.tsx';
 import { DepartmentChoice } from '../../tickets/view-dialogs.tsx';
 import {
   ASSIGNEE_CHOICES,
@@ -52,6 +53,7 @@ export function ViewEditor({
   view,
   departments,
   tags,
+  fields,
   busy,
   onSubmit,
   onCancel,
@@ -61,6 +63,8 @@ export function ViewEditor({
   readonly view: TicketView | null;
   readonly departments: readonly Department[];
   readonly tags: readonly TagSummary[];
+  /** M14-16: the ticket fields a filter may name. A shared view offers the ones Agents see. */
+  readonly fields: readonly CustomFieldDef[];
   readonly busy: boolean;
   onSubmit(draft: ViewDraft): void;
   onCancel(): void;
@@ -74,6 +78,7 @@ export function ViewEditor({
   const nameArId = useId();
   const audienceId = useId();
   const tagsId = useId();
+  const fieldsId = useId();
   const ids = {
     state: useId(),
     assignee: useId(),
@@ -375,6 +380,27 @@ export function ViewEditor({
                 set({ filters: withSortChoice(filters, value as SortChoice) });
               }
             },
+          )}
+          {fields.length === 0 ? null : (
+            <>
+              <Typography
+                id={fieldsId}
+                component="span"
+                sx={{ fontSize: 12, color: 'text.secondary' }}
+              >
+                {t('ticketing:views.editor.fields')}
+              </Typography>
+              <Box role="group" aria-labelledby={fieldsId}>
+                <FieldFilterEditor
+                  fields={fields}
+                  value={filters.fieldFilter}
+                  disabled={fixed}
+                  onChange={(fieldFilter) => {
+                    set({ filters: { ...filters, fieldFilter } });
+                  }}
+                />
+              </Box>
+            </>
           )}
           {filters.sort === 'slaDue' ? (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>

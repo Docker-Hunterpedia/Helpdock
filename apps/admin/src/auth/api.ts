@@ -13,6 +13,7 @@ import type {
   PasskeyFinishRequest,
   PasskeyList,
   PasskeyProof,
+  PasskeyRecoveryRedrawRequest,
   PasskeyRegistrationOptions,
   PasskeySecondFactorAnswer,
   PasskeyStepUpOptions,
@@ -88,6 +89,11 @@ export interface AuthApi {
   renamePasskey(id: string, name: string, proof: PasskeyProof): Promise<Passkey>;
   /** Refused with `second-factor-required` for the last second factor of an account that needs one. */
   removePasskey(id: string, proof: PasskeyProof): Promise<void>;
+  /**
+   * Ten new recovery codes, confirmed by an assertion from a passkey the account
+   * holds (M18-03 API, M18-06 screen). The old codes stop working at once.
+   */
+  regenerateRecoveryCodesWithPasskey(request: PasskeyRecoveryRedrawRequest): Promise<RecoveryCodes>;
   /** Turns the one-time code a redirect carried into a session. */
   exchange(code: string): Promise<Session>;
   /** Always resolves, whether or not the address belongs to an account. */

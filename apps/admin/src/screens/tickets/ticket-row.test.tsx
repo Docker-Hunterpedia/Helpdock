@@ -205,3 +205,47 @@ describe('the checkbox on a row (M14-04)', () => {
     );
   });
 });
+
+describe('the pinned field on a row (M14-16)', () => {
+  const plan = {
+    id: 'f-plan',
+    target: 'ticket' as const,
+    key: 'plan',
+    label: 'Plan',
+    labelAr: null,
+    type: 'select' as const,
+    options: ['Pro', 'Free'],
+    required: false,
+    agentVisible: true,
+    pinned: true,
+    sortOrder: 0,
+  };
+  const row = (custom: Record<string, unknown>, pinnedField: typeof plan | null = plan) =>
+    renderApp(
+      <ul>
+        <TicketRow
+          ticket={testTicket({ custom })}
+          selected={false}
+          now={NOW}
+          search=""
+          pinnedField={pinnedField ?? undefined}
+        />
+      </ul>,
+    );
+
+  it('puts the value on the caption line and in the link’s accessible name', () => {
+    row({ plan: 'Pro' });
+
+    expect(screen.getByText('Pro')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Plan: Pro/ })).toBeInTheDocument();
+  });
+
+  it('adds nothing when the ticket has no value, or when no field is pinned', () => {
+    const { unmount } = row({});
+    expect(screen.queryByText('Plan:')).not.toBeInTheDocument();
+    unmount();
+
+    row({ plan: 'Pro' }, null);
+    expect(screen.queryByText('Pro')).not.toBeInTheDocument();
+  });
+});

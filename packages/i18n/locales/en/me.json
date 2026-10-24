@@ -67,7 +67,12 @@
     "replaceBodyAppOnly": "Use your passkey, or enter a code from your authenticator app, to replace your authenticator app. Recovery codes are not accepted while single sign-on is enforced.",
     "replaceProofLabelAppOnly": "Code from your current app",
     "replaceProofRequiredAppOnly": "Enter a 6-digit code from your current app.",
-    "recoveryCodeNotAllowed": "A recovery code can't be used here while single sign-on is enforced. Use your current app or a passkey."
+    "recoveryCodeNotAllowed": "A recovery code can't be used here while single sign-on is enforced. Use your current app or a passkey.",
+    "regenerateWithPasskey": "Regenerate with a passkey",
+    "regenerateWithPasskeyTitle": "Regenerate recovery codes with a passkey?",
+    "regenerateWithPasskeyBody": "Your browser will ask for a passkey. The codes you have now stop working at once.",
+    "regenerateWithPasskeySubmit": "Use my passkey",
+    "regenerateWithPasskeyFailed": "Couldn't confirm with your passkey. Try again or use a code."
   },
   "passkeys": {
     "title": "Passkeys",

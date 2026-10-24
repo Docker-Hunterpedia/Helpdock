@@ -890,6 +890,7 @@ GET /api/brands/:brandId/tickets
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the words, the contact's name, or a reference or original number (first, past the other filters)
   &overdue=true               only tickets whose SLA has run out (M1-05)
+  &fieldFilter={"key":"severity","op":"any_of","values":["Sev 1"]}   repeatable; one JSON object per custom-field filter, all must match (M14-16)
   &snoozed=exclude            exclude (default) | only | include: snoozed tickets (M14-02); a reference in `q` finds one regardless
   &sort=updatedAt             updatedAt | createdAt | number | priority | slaDue
   &direction=desc             asc | desc
@@ -1002,6 +1003,55 @@ status that pauses the SLA ("Awaiting customer" is waiting, not late), and
 either `sla_breached` or past `first_response_due_at` or `resolution_due_at` by
 the transaction's `now()`. `false` is the same as leaving it off. It narrows the
 scan the other live-state filters use rather than needing an index of its own.
+
+### Filtering by a custom field
+
+`fieldFilter` (M14-16) narrows the list by the value of a **ticket** custom field.
+Each parameter is one JSON object, URL-encoded; send several to require all of
+them. A saved view stores the same objects in `filters.fieldFilter`, so anything
+the list accepts a view can keep.
+
+| `op` | Field types | Shape | Matches |
+|---|---|---|---|
+| `any_of` | select, multi-select | `{"key","op","values":["Sev 1","Sev 2"]}` | the value is one of `values` (any member of a multi-select) |
+| `not_set` | every type | `{"key","op"}` | the ticket has no value, which is how a cleared field is stored |
+| `is` | checkbox | `{"key","op","value":true}` | ticked; `false` is "not ticked" and includes a box never touched |
+| `before`, `after` | number, date | `{"key","op","value":10}` or `"2026-03-01"` | strictly less or greater |
+| `between` | number, date | `{"key","op","from":1,"to":9}` | both ends included; `from` may not be after `to` |
+| `contains` | text | `{"key","op","value":"stripe"}` | a case-insensitive substring; `%` and `_` mean themselves |
+
+The api reads the field's type from the brand's definition, never from the
+request, and refuses with `400` a key that is not a ticket field (a typo is not
+an empty list), an operator the type has no use for, a number compared with a
+day, a field named twice, and more than ten filters. A ticket with a value of
+another kind than its field's (a leftover from before a type was fixed) simply
+does not match a comparison. Values reach SQL as bound parameters, the filters
+run under the same row-level security and department scope as every other
+filter, and a view's sidebar count uses the same `WHERE` as its list.
+
+**Visibility.** A field whose *Visible to agents* is off can be filtered only by
+somebody who holds `ticketing:manage` (Admin, Team Leader). For everyone else,
+including an API key, it answers as if the field did not exist, because a filter
+on it would let a reader learn by narrowing what the details panel hides. A shared
+view is checked as an Agent would read it when it is saved, so it cannot name such
+a field; a view whose field was deleted since counts nothing in the sidebar and
+answers `400` when opened, until it is edited.
+
+**No index.** There is no index on `tickets.custom`. A `jsonb_path_ops` GIN was
+built and measured on the 50k-ticket dataset of
+[DOMAIN-RULES §14](../planning/DOMAIN-RULES.md#14-performance-test-conditions):
+the plans were identical with and without it (12 to 45 ms for a rare value, a
+common one and a department-restricted Agent), because `@>` is not `LEAKPROOF`
+and Postgres therefore does not run it ahead of the row-level-security policies,
+and the list is paged by the `tickets_brand_*` indexes anyway. `pnpm --filter @helpdock/api perf:tickets` carries four field-filter cases (a rare value, a common one, a multi-select, and a filter with the live states) so the numbers can be taken again.
+
+**The Severity recipe.** Helpdock has no Severity field of its own; priority is
+what the SLA engine targets. A team that wants one: add a **Select** field named
+Severity with Sev 1 to Sev 4 under Ticketing › Custom fields and tick *Pin on
+rows and the ticket header*; filter the list by Severity is any of Sev 1, add
+*Open* as the state, and **Save as a view** called "Sev 1 open"; then add a rule
+(*When ticket updated, if Severity is Sev 1, set priority Urgent and notify the
+on-call team*) in Automation.
 
 ### Creating
 
@@ -1492,6 +1542,21 @@ sentence for the field's type appears under the field as an alert, the input is
 marked invalid, and the stored value comes back. A field whose definition is
 not visible to agents is left out for Agents and Viewers, and shown to Admins
 and Team Leaders.
+
+### Filtering and the pinned field (M14-16)
+
+The Filter popover (`Admin/Ticketing-FieldFilters`) ends with a **Custom fields**
+section: *Add filter* lists the ticket fields the reader may filter by (the ones
+hidden from Agents are left out for Agents), each row is the field, an operator
+that suits its type and the value the operator needs, and **Apply** sends the
+rows. A row with no value yet is not a filter: Apply waits, and says so. Applied
+filters become chips under the list header, each removing only itself, are part
+of the link (`field=<json>`), and are saved with a view like any other filter.
+The Views tab's editor has the same rows, applied as they are made.
+
+The pinned field's value is a neutral chip on the row's caption line and in the
+ticket header. A ticket without a value shows nothing; the field's name is
+there for a screen reader ("Severity: Sev 1").
 
 ### The ⋯ menu
 

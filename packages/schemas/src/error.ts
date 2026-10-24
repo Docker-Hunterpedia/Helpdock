@@ -10,6 +10,7 @@ import { hcRefusalSchema } from './help-center.js';
 import { setupRefusalSchema } from './install.js';
 import { knowledgeRefusalSchema } from './knowledge.js';
 import { metaRefusalDetailsSchema, metaRefusalSchema } from './meta.js';
+import { passkeysRefusalSchema } from './passkeys.js';
 import { ssoRefusalSchema } from './sso.js';
 import { staffRefusalSchema } from './staff.js';
 import { telegramRefusalSchema } from './telegram.js';
@@ -96,6 +97,8 @@ export const errorResponseSchema = z.object({
     channels: z.object({ reason: channelsRefusalSchema }).optional(),
     /** Only on a refused custom-domain action (M5-07). */
     domains: z.object({ reason: domainsRefusalSchema }).optional(),
+    /** Only on a refused move of the install's passkeys (M18-06). */
+    passkeys: z.object({ reason: passkeysRefusalSchema }).optional(),
     /** Only on a refused widget request (M4-02 to M4-04); the widget translates it. */
     widget: z.object({ reason: widgetErrorCodeSchema }).optional(),
     /** Only on a refused help center change (M5-01). */

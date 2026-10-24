@@ -238,6 +238,19 @@ Before changing either, read DESIGN.md. A new colour, font size, radius or
 spacing value needs a change there first, and a new component needs a DESIGN §6
 entry in the same pull request.
 
+Formatted dates and numbers go through
+[`apps/admin/src/ui/format.ts`](../../apps/admin/src/ui/format.ts)
+(`formatDay`, `formatDayTime`, `latinNumbering`), never through a bare
+`toLocaleString()` and friends: a call with no locale argument follows the
+browser's locale instead of the app's and prints Arabic-Indic digits in `ar`,
+against DESIGN §7 (finding UX-04 of the
+[1.0 UX review](../completed/ux-review-1-0.md)). `pnpm lint` fails on such a call, or one that passes `undefined` as the
+locale, anywhere in `apps/admin/src` (the Biome plugin
+[`scripts/biome/bare-locale-call.grit`](../../scripts/biome/bare-locale-call.grit),
+scoped by an override in `biome.json`); pass an explicit locale or go through
+the helper. Case folding on comparisons uses the
+locale-independent `toLowerCase` and `toUpperCase` for the same reason.
+
 ## Database
 
 The schema, the migrations and the row-level security policies live in

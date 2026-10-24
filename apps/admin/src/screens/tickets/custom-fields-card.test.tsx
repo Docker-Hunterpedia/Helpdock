@@ -24,6 +24,7 @@ const def = (
   options: type === 'select' || type === 'multi_select' ? ['DHL', 'UPS'] : [],
   required: false,
   agentVisible: true,
+  pinned: false,
   sortOrder: 0,
   ...overrides,
 });

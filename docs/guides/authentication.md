@@ -315,7 +315,9 @@ keeps it.
 Redrawing them needs a live authenticator code (`POST /api/me/recovery-codes/regenerate`)
 **or** an assertion from a passkey the account holds (`POST /api/me/passkeys/recovery-codes`
 with `{ passkey: { ceremonyId, response } }`, answering the ceremony from
-`POST /api/me/passkeys/step-up/options`). Both spend the step-up budget. A recovery
+`POST /api/me/passkeys/step-up/options`). On Security, **Regenerate with a
+passkey** (offered when the account holds a passkey and the browser supports
+them) asks the browser for one and shows the new codes once. Both spend the step-up budget. A recovery
 code answers a second-factor challenge only: it never opens a passwordless
 sign-in, and it is not a break-glass credential, even with a passkey on the account.
 Under SSO enforcement it may finish a sign-in that began with an SSO assertion
@@ -492,10 +494,34 @@ does not orphan them silently:
 - password, sign-in links, TOTP, OAuth and SSO keep working.
 
 Moving the passkeys to the new host means re-pinning the setting, after which
-staff add their passkeys again. Settings › Authentication is planned to offer
-that to install admins with the passkey screens (M18-06). `HD_AUTH_WEBAUTHN_RP_ID`
-also sets the pin: while it is set, the environment value is the pin and
-nothing is written to the database.
+staff add their passkeys again. An install admin does it from **Settings ›
+Authentication**: the Passkeys section shows `Paused`, both hosts, and a
+**Move passkeys to <new host>** button. The button opens a confirmation that says
+every existing passkey stops working, and that people with no authenticator app also
+lose their recovery codes and will set up a second factor again. Then, in **one
+transaction**, it moves the pin only while it still holds the old host (two moves
+cannot both run), locks the holders' accounts, removes every passkey on the
+install (a passkey made for the old host cannot work on the new one, and left in
+place it would still count as a second factor), forgets the recovery codes of
+anyone with no app, writes `auth.passkey.rp_moved` (`from`, `to`, `passkeys`,
+`holders`) and queues each holder a `securityChange` notice through the outbox. If
+any step fails, none of it happens. The same warning shows on the System page.
+
+The move is refused while it would lock people out: when SSO is enforced and a
+configured break-glass admin relies on a passkey (they have no authenticator app),
+or when an account that must have a second factor (an Admin, an install admin, or
+everyone under `auth.require2fa`) has only passkeys. The dialog shows how many
+accounts, and the admin adds authenticator apps first. Behind the button are two
+routes, both `install:admin`:
+
+| Route | |
+|---|---|
+| `GET /api/install/passkeys` | `state` (`available`, `paused`, `unavailable`), the `rpId` `APP_URL` implies, the `pinnedRpId` and when it was pinned, `pinLocked`, the counts `passkeyCount` and `holderCount`, and, while paused, `blockers` (`breakGlassAccounts`, `secondFactorAccounts`). Counts only: it names nobody |
+| `POST /api/install/passkeys/move` | Only while `paused`. Answers `{ rpId, passkeysRemoved, holdersNotified }`, or `409` with `error.passkeys.reason`: `not-paused`, `pin-locked` (`HD_AUTH_WEBAUTHN_RP_ID` pins the RP ID) or `move-blocked` |
+
+`HD_AUTH_WEBAUTHN_RP_ID` also sets the pin: while it is set, the environment value
+is the pin and nothing is written to the database, so the button is not offered
+and the section says to change it there.
 
 ### Ceremonies
 
@@ -728,7 +754,7 @@ in the recipient's own language, right to left for Arabic.
 The account holder is told by email whenever their password is changed or
 reset, their second factor is turned on or off, their recovery codes are
 redrawn, a Google or GitHub account is connected to or disconnected from their
-account, or a passkey is added or removed (ASVS 2.2.3, 2.5.5) — a `securityChange`
+account, or a passkey is added or removed, or all passkeys are removed because the install moved (ASVS 2.2.3, 2.5.5) — a `securityChange`
 auth email naming which one, when it happened, what to do if it was not them,
 and a link to their security page. A passkey notice names the passkey, and an
 addition also says where it came from (the browser and system the user agent
@@ -762,6 +788,7 @@ ASVS 7.1.3, 7.2.1):
 | `auth.password.changed` / `.reset`, `auth.second_factor.enabled` / `.disabled`, `auth.recovery_codes.regenerated` (`meta.proof`: `code` or `passkey`), `auth.recovery_code.used` | A credential changed |
 | `auth.oauth.linked` / `.unlinked` | A Google, Microsoft or GitHub account was connected or disconnected. `meta.provider`, and for a link `meta.via`: `sign-in` (a first link Google vouched for, written by the system) or `connect` (from the person's session) |
 | `auth.oauth.link_refused` | A connect or first link found that provider account bound to somebody else, or this person already holding one |
+| `auth.passkey.rp_moved` | An install admin moved the passkeys to the install's new address. `meta` has `from`, `to`, `passkeys` (removed) and `holders` |
 | `auth.passkey.rp_pinned` | The first passkey registration pinned `auth.webauthn.rpId`. Written by the system, with `meta.rpId` |
 | `auth.passkey.added` / `.renamed` / `.removed` | A passkey was registered, renamed or removed from the person's session ([Adding, renaming and removing passkeys](#adding-renaming-and-removing-passkeys)) |
 | `auth.sign_in.failed` with `meta.method: passkey` | A passwordless sign-in refused; `meta.reason` names why, and the person was told only `invalid-credentials` (see [Signing in with a passkey](#signing-in-with-a-passkey)) |

@@ -1,13 +1,14 @@
 import type { Keyring, Settings } from '@helpdock/config';
 import {
   type Db,
+  type DbTransaction,
   INSTALL_SCOPE_BRAND_ID,
   ssoConnections,
   type User,
   users,
   withSystem,
 } from '@helpdock/db';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
 import { readSsoSetting } from './sso-settings.js';
@@ -66,6 +67,43 @@ export class SsoSignInPolicy {
       if (listed.includes(user.id)) return true;
       return isBreakGlassEligible(user, (await passkeyCounts(tx, [user.id])).get(user.id) ?? 0);
     });
+  }
+
+  /**
+   * How many configured break-glass accounts would stop being eligible if every
+   * passkey on the install were removed: those that are eligible now and rely on
+   * a verified passkey because they have no authenticator app. Zero while SSO is
+   * not enforced, since nothing then depends on break-glass. Passkeys are about
+   * to be removed (M18-06 "Move passkeys"), so this is the lockout it would cause.
+   */
+  async breakGlassLosingPasskeys(within?: DbTransaction): Promise<number> {
+    const count = async (tx: DbTransaction): Promise<number> => {
+      if (!(await readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced')))
+        return 0;
+      const allowed = await readSsoSetting(
+        tx,
+        this.options.settings,
+        this.options.keyring,
+        'sso.breakGlassUserIds',
+      );
+      if (allowed.length === 0) return 0;
+      const candidates = await tx
+        .select()
+        .from(users)
+        .where(inArray(users.id, [...allowed]));
+      const held = await passkeyCounts(
+        tx,
+        candidates.map((user) => user.id),
+      );
+      return candidates.filter(
+        (user) =>
+          isBreakGlassEligible(user, held.get(user.id) ?? 0) && !isBreakGlassEligible(user, 0),
+      ).length;
+    };
+
+    return within === undefined
+      ? withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, count)
+      : count(within);
   }
 
   /**

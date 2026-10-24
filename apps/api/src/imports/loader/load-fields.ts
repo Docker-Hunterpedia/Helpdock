@@ -67,6 +67,8 @@ async function createImportedField(tx: DbTransaction, input: FieldLoad): Promise
     .values({
       ...definition,
       labelAr: definition.labelAr ?? null,
+      // An import never pins: the brand picks its one pinned field (M14-16).
+      pinned: false,
       id,
       brandId: input.brandId,
       sortOrder,

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { Env } from '@helpdock/config';
+import { createKeyring, type Env } from '@helpdock/config';
 import {
   auditLog,
   brandDomains,
@@ -11,6 +11,7 @@ import {
   type Db,
   type DbHandle,
   INSTALL_SCOPE_BRAND_ID,
+  notificationPrefs,
   UnsafeRuntimeRoleError,
   userBrandRoles,
   users,
@@ -25,6 +26,7 @@ import { DEV_PRINCIPAL_ENV_KEY, DEV_PRINCIPAL_HEADER } from './auth/principal-re
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from './bootstrap.js';
 import { REQUEST_ID_HEADER } from './context/request-id.js';
 import { createLogger } from './logging/logger.js';
+import { UnsubscribeTokens } from './notifications/unsubscribe-tokens.js';
 import { INSTALL_SCOPE_ACTION } from './tenant/install-scope.js';
 import { withSystemJob } from './tenant/system-job.js';
 import { dockerAvailable } from './testing/docker-available.js';
@@ -233,6 +235,107 @@ describe.skipIf(!hasDocker)('the api', () => {
           { name: 'settings', status: 'up' },
         ],
       });
+    });
+  });
+
+  describe('the unsubscribe link (M14-11, RFC 8058)', () => {
+    const tokens = new UnsubscribeTokens(createKeyring({ APP_MASTER_KEY: MASTER_KEY }));
+    const link = (): string => `/api/public/unsubscribe/${tokens.sign(agentA, new Date())}`;
+    const BOUNDARY = 'x-unsubscribe-boundary';
+
+    const multipart = (fields: Record<string, string>): string =>
+      `${Object.entries(fields)
+        .map(
+          ([name, value]) =>
+            `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+        )
+        .join('')}--${BOUNDARY}--\r\n`;
+
+    const post = (url: string, contentType: string, payload: string) =>
+      app.inject({ method: 'POST', url, headers: { 'content-type': contentType }, payload });
+
+    it('unsubscribes on a multipart one-click POST, the form RFC 8058 §3.2 recommends', async () => {
+      const response = await post(
+        link(),
+        `multipart/form-data; boundary=${BOUNDARY}`,
+        multipart({ 'List-Unsubscribe': 'One-Click' }),
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ state: 'done' });
+      const [row] = await runtime.db
+        .select({ at: notificationPrefs.emailUnsubscribedAt })
+        .from(notificationPrefs)
+        .where(eq(notificationPrefs.userId, agentA));
+      expect(row?.at).toBeInstanceOf(Date);
+    });
+
+    it('takes the url-encoded form and JSON the confirmation page sends, again with no change', async () => {
+      const encoded = await post(
+        link(),
+        'application/x-www-form-urlencoded',
+        'List-Unsubscribe=One-Click',
+      );
+      const json = await post(link(), 'application/json', '{"List-Unsubscribe":"One-Click"}');
+
+      expect([encoded.statusCode, json.statusCode]).toEqual([200, 200]);
+    });
+
+    it.each([
+      ['a multipart body without the field', multipart({ other: 'x' })],
+      ['a multipart body with the wrong value', multipart({ 'List-Unsubscribe': 'Yes' })],
+    ])('refuses %s with 400', async (_name, payload) => {
+      const response = await post(link(), `multipart/form-data; boundary=${BOUNDARY}`, payload);
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('refuses a multipart body past the route’s small limit, before reading it', async () => {
+      const response = await post(
+        link(),
+        `multipart/form-data; boundary=${BOUNDARY}`,
+        multipart({ 'List-Unsubscribe': 'One-Click', filler: 'x'.repeat(8 * 1024) }),
+      );
+
+      expect(response.statusCode).toBe(413);
+    });
+
+    it('still refuses multipart on a route that did not ask for it', async () => {
+      const response = await post(
+        '/api/auth/sign-in',
+        `multipart/form-data; boundary=${BOUNDARY}`,
+        multipart({ a: 'b' }),
+      );
+
+      expect(response.statusCode).toBe(415);
+    });
+
+    it('sends a browser that opens the List-Unsubscribe address on to the page, and a script gets JSON', async () => {
+      const url = link();
+      const token = url.split('/').pop();
+
+      const browser = await app.inject({
+        method: 'GET',
+        url,
+        headers: { accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8' },
+      });
+      const script = await app.inject({ method: 'GET', url, headers: { accept: '*/*' } });
+
+      expect(browser.statusCode).toBe(302);
+      expect(browser.headers.location).toBe(`/unsubscribe/${token}`);
+      expect(script.statusCode).toBe(200);
+      expect(script.json()).toMatchObject({ state: 'confirm' });
+    });
+
+    it('answers 404 to a respelled token, which is the same token to no one', async () => {
+      const url = link();
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+      const last = url.slice(-1);
+      const index = alphabet.indexOf(last);
+      const respelled = alphabet[index % 4 === 0 ? index + 1 : index - 1] ?? 'A';
+
+      expect((await get(`${url.slice(0, -1)}${respelled}`)).statusCode).toBe(404);
+      expect((await get(url)).statusCode).toBe(200);
     });
   });
 

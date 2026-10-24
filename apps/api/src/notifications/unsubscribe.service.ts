@@ -23,7 +23,8 @@ import type { UnsubscribeSubject, UnsubscribeTokens } from './unsubscribe-tokens
  * another setting or another action could be reached.
  *
  * **No oracle.** A token that is malformed, forged, expired, for a deactivated
- * or deleted account, or rate-limited away is the same 404. The page can
+ * or deleted account is the same 404 (a rate-limited request is a 429, which
+ * says nothing about the token). The page can
  * therefore never be used to ask whether an address has an account here, and
  * the confirmation shows the address only to the holder of a token we signed
  * for it.

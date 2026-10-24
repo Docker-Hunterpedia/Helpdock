@@ -94,6 +94,15 @@ export class UnsubscribeTokens {
     if (payload.length !== PAYLOAD_BYTES || presented.length !== KEY_BYTES) {
       return null;
     }
+    // The last character of each half carries bits the bytes do not use, which
+    // `Buffer.from` ignores: 20 bytes and 32 bytes each leave 2 spare bits, so one
+    // token would have sixteen spellings. Only the one `sign` writes is valid.
+    if (
+      payload.toString('base64url') !== payloadPart ||
+      presented.toString('base64url') !== macPart
+    ) {
+      return null;
+    }
 
     // Every key is tried, with no early exit, so timing does not say which signed.
     const signed = this.#keys

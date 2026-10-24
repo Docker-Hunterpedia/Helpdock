@@ -221,10 +221,15 @@ ends with "…Change them, or unsubscribe from notification emails" and carries
 ([RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)), so a mail client can show
 its own Unsubscribe button.
 
-- A mail client's **POST** to that address unsubscribes at once.
+- A mail client's **POST** to that address unsubscribes at once. Its body is
+  `List-Unsubscribe=One-Click`, sent url-encoded or as `multipart/form-data`
+  (RFC 8058 §3.2); the route's body limit is 4 KiB.
 - A person's **click** on the footer link (a `GET`) opens a confirmation page
   at `/unsubscribe/<token>` in their language and changes nothing, so a link
-  scanner that follows every URL unsubscribes nobody. The button posts the same
+  scanner that follows every URL unsubscribes nobody. A browser that opens the
+  `List-Unsubscribe` address itself (a `GET` asking for `text/html`) is
+  redirected to that page, so the address a person and a mail client share is
+  one. The button posts the same
   one-click request.
 - Unsubscribing sets `notification_prefs.email_unsubscribed_at` and leaves the
   matrix, the schedule, the hour and any pause as they were. Preferences are
@@ -344,8 +349,8 @@ module owns each event ([`packages/jobs`](../../packages/jobs/README.md#handling
 | `POST /api/brands/:brandId/notifications/read-all` | `ticket:read` | Marks all of the caller's read in the brand |
 | `POST /api/brands/:brandId/notifications/test-push` | `ticket:read` | `{ subscriptionId }`; `409` without VAPID keys |
 | `POST /api/brands/:brandId/notifications/test-email` | `ticket:read` | A test email to the caller's own address through the outbox (`204`); `409` on an install without SMTP, `429` past five an hour |
-| `GET /api/public/unsubscribe/:token` | public, signed token | What the confirmation page draws (`{ state: 'confirm', email, locale }`); changes nothing; `404` for any token that is no good |
-| `POST /api/public/unsubscribe/:token` | public, signed token | RFC 8058 one-click: body `List-Unsubscribe=One-Click` (`400` otherwise); unsubscribes, idempotently; `{ state: 'done', locale }` |
+| `GET /api/public/unsubscribe/:token` | public, signed token | What the confirmation page draws (`{ state: 'confirm', email, locale }`); changes nothing; `404` for any token that is no good; a request that accepts `text/html` is redirected (`302`) to `/unsubscribe/<token>` |
+| `POST /api/public/unsubscribe/:token` | public, signed token | RFC 8058 one-click: body `List-Unsubscribe=One-Click`, url-encoded, JSON or multipart (`400` otherwise); unsubscribes, idempotently; `{ state: 'done', locale }` |
 | `GET`, `PUT /api/me/notification-preferences` | signed in | The matrix, the email address and language, push status, and `emailDelivery`: `schedule` (`immediate`, `hourly`, `daily`, `off`), `digestHour` (0–23), `pausedUntil` and `unsubscribedAt`. A `PUT` takes any of `preferences`, `emailSchedule`, `digestHour`, `pausedUntil` (an ISO time within a year, or `null` to resume; `400` otherwise) and `emailUnsubscribed: false` ("Turn email back on"; `true` is refused) and keeps the rest. The view also says whether the install can send email (`emailConfigured`) and the zone the digest hour and the pause presets are read in (`digestTimeZone`: the person's own, else the current brand's) |
 | `POST /api/me/push-subscriptions` | signed in | `PushSubscription.toJSON()` plus a label; `https` endpoints only |
 | `DELETE /api/me/push-subscriptions/:id` | signed in | Removes one of the caller's browsers |

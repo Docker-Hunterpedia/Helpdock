@@ -46,6 +46,34 @@ describe('UnsubscribeTokens', () => {
     expect(tokens.verify(`${later}.${mac}`, new Date(ISSUED.getTime() + 400 * DAY))).toBeNull();
   });
 
+  it('has one spelling: the unused bits of each half’s last character cannot be changed', () => {
+    const tokens = tokensUnder(CURRENT);
+    const token = tokens.sign(USER, ISSUED);
+    const [payload = '', mac = ''] = token.split('.');
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    // Same leading bits, different spare ones: each half leaves 2 (160 and 256 bits in 162 and 258).
+    const respelled = (half: string, spare: number): string[] => {
+      const last = alphabet.indexOf(half.slice(-1));
+      const base = last - (last % 2 ** spare);
+
+      return Array.from({ length: 2 ** spare }, (_, bits) => alphabet[base + bits] ?? '')
+        .filter((char) => char !== half.slice(-1))
+        .map((char) => `${half.slice(0, -1)}${char}`);
+    };
+    const payloads = respelled(payload, 2);
+    const macs = respelled(mac, 2);
+
+    expect(payloads).toHaveLength(3);
+    expect(macs).toHaveLength(3);
+    expect(tokens.verify(token, ISSUED)).not.toBeNull();
+    for (const other of payloads) {
+      expect(tokens.verify(`${other}.${mac}`, ISSUED)).toBeNull();
+    }
+    for (const other of macs) {
+      expect(tokens.verify(`${payload}.${other}`, ISSUED)).toBeNull();
+    }
+  });
+
   it('refuses a token signed under a key this install does not hold', () => {
     expect(tokensUnder(CURRENT).verify(tokensUnder(OLDER).sign(USER, ISSUED), ISSUED)).toBeNull();
   });

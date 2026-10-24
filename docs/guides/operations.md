@@ -640,6 +640,8 @@ again. Once the previous key is gone, at step 6:
 - Anyone who did not sign in while both keys were set uses **Forgot password**,
   and redraws their recovery codes.
 - CSAT links signed under the previous key stop working.
+- Unsubscribe links in notification emails already in inboxes stop working
+  (the page says "This link has expired"); the next email carries a fresh one.
 
 Losing both keys is not recoverable. The [restore drill](restore-drill.md)
 rehearses this procedure on a restored stack.

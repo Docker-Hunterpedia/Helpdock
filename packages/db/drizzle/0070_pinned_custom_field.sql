@@ -1,0 +1,2 @@
+ALTER TABLE "custom_field_defs" ADD COLUMN "pinned" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "custom_field_defs_brand_pinned_key" ON "custom_field_defs" USING btree ("brand_id") WHERE "custom_field_defs"."pinned";

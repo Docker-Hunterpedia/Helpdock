@@ -1285,8 +1285,10 @@ export function TicketView({
               onSuccess: () => {
                 setGate(null);
               },
-              onError: () => {
-                setGateRepeated(true);
+              onError: (error) => {
+                if (isTicketLifecycleError(error) && error.reason === 'fields-required-to-close') {
+                  setGateRepeated(true);
+                }
               },
             },
           );

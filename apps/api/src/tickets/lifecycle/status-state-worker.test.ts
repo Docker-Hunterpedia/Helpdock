@@ -7,6 +7,11 @@ vi.mock('../ticket-events.js', () => ({
   TICKET_EVENTS: { closed: 'ticket.closed' },
   enqueueTicketEvent: vi.fn(async () => undefined),
 }));
+vi.mock('../close-requirements.js', () => ({
+  requiredToCloseRules: vi.fn(async () => [
+    { key: 'order_id', type: 'text', requiredToClose: true },
+  ]),
+}));
 vi.mock('@helpdock/jobs', () => ({ enqueueOutbox: vi.fn(async () => 'outbox-id') }));
 
 const { writeTicketActivity } = await import('../ticket-activity.js');
@@ -17,7 +22,11 @@ const STATUS = '0192c3f0-1a2b-7c3d-8e4f-0000000000e7';
 const AT = '2026-10-23T10:00:00.000Z';
 const ids = ['0192c3f0-0000-7000-8000-000000000001', '0192c3f0-0000-7000-8000-000000000002'];
 
-const row = (id: string) => ({ id, departmentId: 'dept' });
+const row = (id: string, custom: Record<string, unknown> = {}) => ({
+  id,
+  departmentId: 'dept',
+  custom,
+});
 const tx = {} as DbTransaction;
 const log = { info: vi.fn() };
 
@@ -122,5 +131,20 @@ describe('ticket.status_state_resync handler', () => {
     const partial = deps({ batch: [{ id: ids[0] ?? '' }], limit: 2 });
     await run(partial.deps);
     expect(enqueueOutbox).not.toHaveBeenCalled();
+  });
+
+  it('closes through an empty required-to-close field and notes it, never refusing (M14-17)', async () => {
+    const d = deps({
+      batch: ids.map((id) => ({ id })),
+      close: (id) => row(id, id === ids[0] ? {} : { order_id: 'A-1' }),
+    });
+    await run(d.deps);
+
+    expect(d.onClosed).toHaveBeenCalledTimes(2);
+    const entries = vi
+      .mocked(writeTicketActivity)
+      .mock.calls.map(([, entry]) => entry.to as Record<string, unknown>);
+    expect(entries[0]).toMatchObject({ reason: 'status-state', closedWithout: ['order_id'] });
+    expect(entries[1]).not.toHaveProperty('closedWithout');
   });
 });

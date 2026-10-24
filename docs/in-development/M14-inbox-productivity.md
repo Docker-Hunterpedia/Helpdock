@@ -1132,7 +1132,8 @@ clarifications the implementation had to fix down:
 - **Spam from the status picker** (and bulk or macro `statusId`) skips the
   gate and records `closedWithout`; a merge records it on the secondary only;
   imports write closed tickets with no gate. The status-state resync (#390)
-  is a further system close and must record `closedWithout` on its path.
+  is a further system close: it never gates, and records `closedWithout` on the
+  `ticket.closed` row of each ticket it closes.
 
 `custom_field_defs.required_to_close` (beside `required`, which keeps meaning
 "at creation"). A close by a person (UI or public API key) of a ticket with an

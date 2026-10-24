@@ -1487,6 +1487,42 @@ describe.skipIf(!hasDocker)('SLA engine', () => {
       }
     });
 
+    it('closes through an empty required-to-close field and notes it on the row (M14-17)', async () => {
+      const gate = await call<{ id: string; key: string }>(
+        'POST',
+        `${brandPath()}/custom-fields`,
+        ada,
+        {
+          target: 'ticket',
+          key: 'resync_gate',
+          label: 'Resync gate',
+          type: 'text',
+          requiredToClose: true,
+        },
+      );
+      expect(gate.status).toBe(201);
+
+      try {
+        const { statusId, ids } = await statusWithTickets('Gated shelf', 1);
+        const { drain } = drainer(statusId);
+
+        expect(
+          (await patchStatus(statusId, { systemState: 'closed', confirmCount: 1 })).status,
+        ).toBe(200);
+        await drain();
+
+        const id = ids[0] ?? '';
+        expect((await rowOf(id))?.closedAt).not.toBeNull();
+        const closed = await activityOf(id, 'ticket.closed');
+        expect(closed[0]?.to).toMatchObject({
+          reason: 'status-state',
+          closedWithout: [gate.body.key],
+        });
+      } finally {
+        await call('DELETE', `${brandPath()}/custom-fields/${gate.body.id}`, ada);
+      }
+    });
+
     it('closes an empty status without a confirmation', async () => {
       const created = await call<{ id: string }>('POST', `${brandPath()}/ticket-statuses`, ada, {
         name: 'Empty shelf',

@@ -13,6 +13,7 @@ import {
 import { useT } from '../app/i18n.js';
 import { ROUTES } from '../app/route-paths.js';
 import { isAuthError } from '../auth/api.js';
+import { isEmailUnavailable } from '../auth/auth-error.js';
 import { useAuthApi } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { PasswordField } from '../ui/password-field.tsx';
@@ -54,7 +55,11 @@ export function PasswordResetSent(): ReactNode {
       subtitle={t('auth:passwordReset.sentSubtitle', { email: state.email })}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {resend.isError ? <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner> : null}
+        {resend.isError ? (
+          <AlertBanner tone="danger">
+            {isEmailUnavailable(resend.error) ? t('auth:emailUnavailable') : t('auth:unavailable')}
+          </AlertBanner>
+        ) : null}
         {resend.isSuccess ? (
           <AlertBanner tone="info">{t('auth:passwordReset.resent')}</AlertBanner>
         ) : null}

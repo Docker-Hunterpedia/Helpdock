@@ -15,6 +15,7 @@ import {
 } from '@helpdock/schemas';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { escapeHtml } from '../auth/email-templates.js';
+import { SetupFailure } from '../install/setup-failure.js';
 import type { EmailRepository } from './email.repository.js';
 import { outgoingTestCopy } from './email-copy.js';
 import type { OutboundEmailService } from './outbound-email.service.js';
@@ -59,6 +60,10 @@ export interface EmailSettingsDependencies {
   readonly transports: SmtpTransportFactory;
   readonly now?: () => Date;
 }
+
+/** The stored password is only for the server it was saved with: host, port and user. */
+const sameServer = (stored: SmtpServer, body: OutgoingSmtpUpdate): boolean =>
+  stored.host === body.host && stored.port === body.port && stored.user === body.user;
 
 const emptyToNull = (value: string): string | null => (value.trim() === '' ? null : value);
 
@@ -106,6 +111,13 @@ export class EmailSettingsService {
     body: OutgoingSmtpUpdate,
   ): Promise<EmailOutgoingSettings> {
     const passwordChanged = body.password !== undefined;
+    if (!passwordChanged) {
+      // Keeping the stored password is only for the server it was saved for.
+      const stored = brandSmtpServer(await this.#repository.settings(tx, brandId), this.#keyring);
+      if (stored !== undefined && stored.password !== '' && !sameServer(stored, body)) {
+        throw new SetupFailure('smtp-password-required');
+      }
+    }
     await this.#repository.saveSettings(tx, brandId, {
       smtpHost: body.host,
       smtpPort: body.port,
@@ -149,6 +161,14 @@ export class EmailSettingsService {
 
     const row = await this.#repository.settings(tx, brandId);
     const stored = brandSmtpServer(row, this.#keyring);
+    if (
+      body.password === undefined &&
+      stored !== undefined &&
+      stored.password !== '' &&
+      !sameServer(stored, body)
+    ) {
+      throw new SetupFailure('smtp-password-required');
+    }
     const server: SmtpServer = {
       host: body.host,
       port: body.port,

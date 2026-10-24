@@ -118,8 +118,8 @@ export function SignIn(): ReactNode {
     onSuccess: () => {
       void navigate(ROUTES.magicLinkSent, { state: { email: email.trim() } });
     },
-    onError: () => {
-      setFailure('unavailable');
+    onError: (error: unknown) => {
+      setFailure(isAuthError(error) ? error.code : 'unavailable');
     },
   });
 
@@ -128,8 +128,8 @@ export function SignIn(): ReactNode {
     onSuccess: () => {
       void navigate(ROUTES.passwordResetSent, { state: { email: email.trim() } });
     },
-    onError: () => {
-      setFailure('unavailable');
+    onError: (error: unknown) => {
+      setFailure(isAuthError(error) ? error.code : 'unavailable');
     },
   });
 
@@ -195,11 +195,15 @@ export function SignIn(): ReactNode {
         ? t('auth:signIn.invalidCredentials')
         : failure === 'no-account'
           ? t('auth:noAccount')
-          : ssoFailure
-            ? t(ssoFailure)
-            : failure
-              ? t('auth:unavailable')
-              : undefined;
+          : // No sender: the honest answer instead of "check your email" (#369).
+            // Says how the install is configured, never which accounts exist.
+            failure === 'email-unavailable'
+            ? t('auth:emailUnavailable')
+            : ssoFailure
+              ? t(ssoFailure)
+              : failure
+                ? t('auth:unavailable')
+                : undefined;
 
   return (
     <AuthLayout

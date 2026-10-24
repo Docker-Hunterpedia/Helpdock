@@ -27,14 +27,16 @@ on the ticket.
 
 | Section | What it sets |
 |---|---|
-| Outgoing mail (SMTP) | The brand's own server: host, port, `TLS` / `STARTTLS` / none, username and password. **Test SMTP** sends one message to you through the server on screen and shows the relay's answer. A brand with no server of its own sends through the install's (`smtp.*`, set by the first-run wizard). |
+| Outgoing mail (SMTP) | The brand's own server: host, port, `TLS` / `STARTTLS` / none, username and password. **Test SMTP** sends one message to you through the server on screen and shows the relay's answer. A brand with no server of its own sends through the install's (`smtp.*`, set by the first-run wizard and changeable in **Admin › System › Outgoing email**). |
 | From and Reply-To per department | The default sender, and a `Name <address>` plus an optional Reply-To for each department that sends as someone else. A reply goes out as its ticket's department, then the default, then the install's `smtp.from`. |
 | Auto-replies | See below. |
 | Failed sends | The dead-letter queue. See below. |
 
 The SMTP password is encrypted with AES-256-GCM under `APP_MASTER_KEY` and is
 never sent back to the browser: the field shows that one is stored and is
-read-only until **Replace** is pressed. Every save writes an audit row
+read-only until **Replace** is pressed. A stored password is reused, by a save
+or by **Test SMTP**, only while the host, port and username are unchanged;
+change any of them and the password must be typed again. Every save writes an audit row
 (`email.smtp.updated`, `email.senders.updated`, `email.auto_replies.updated`)
 that says whether the password changed, never what it is.
 

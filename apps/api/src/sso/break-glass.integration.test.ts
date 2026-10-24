@@ -25,6 +25,7 @@ import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { SoftwareAuthenticator } from '../testing/software-authenticator.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
+import { seedSystemSender } from '../testing/system-sender.js';
 import { writeSsoSetting } from './sso-settings.js';
 
 /**
@@ -263,6 +264,9 @@ describe.skipIf(!hasDocker)('SSO enforcement and break-glass (ADR 0053)', () => 
     runtime = await createRuntime({ env, logger });
     app = await createApiApp({ runtime });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
+    // This suite decides on enforcement, not on the sender's absence (#369):
+    // give it one, so a refused road answers `sso-required` as the table says.
+    await seedSystemSender(runtime.settings);
   }, 300_000);
 
   afterAll(async () => {

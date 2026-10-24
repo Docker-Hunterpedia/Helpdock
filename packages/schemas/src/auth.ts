@@ -450,6 +450,12 @@ const authErrorCodes = [
   'recovery-invalid',
   'no-account',
   'unavailable',
+  /**
+   * The install has no system sender (`smtp.*`), so no sign-in link or reset
+   * link can go out. The same answer for every address: it says how the
+   * install is configured, never which accounts exist (#369).
+   */
+  'email-unavailable',
   /** A new password that is on the bundled list of breached passwords (ASVS 2.1.7). */
   'password-breached',
   /** `APP_URL` is plain http on a host other than localhost, or an IP address: browsers refuse WebAuthn there (M18-01). */

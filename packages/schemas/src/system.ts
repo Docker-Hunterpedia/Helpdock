@@ -129,6 +129,20 @@ export const systemRelaySchema = z.discriminatedUnion('reporting', [
 export type SystemRelay = z.infer<typeof systemRelaySchema>;
 
 /**
+ * The install's system sender (`smtp.*`), as the health card states it: a
+ * sender that is missing is the one state of the install that silently eats
+ * sign-in links and password resets (#369), so it is drawn as a warning, not
+ * assumed. The From address is the one fact worth showing — it is on every
+ * email the install sends — and no host or credential ever is.
+ */
+export const systemSmtpSchema = z.object({
+  configured: z.boolean(),
+  /** Empty while unconfigured. */
+  fromAddress: z.string(),
+});
+export type SystemSmtp = z.infer<typeof systemSmtpSchema>;
+
+/**
  * A channel's connection health, for every brand: its mailboxes (M2) and
  * Telegram bots (M6), read by `apps/api/src/channels/channel-status.ts`.
  */
@@ -236,6 +250,8 @@ export const systemStatusSchema = z.object({
   database: systemDatabaseSchema,
   redis: systemRedisSchema,
   relay: systemRelaySchema,
+  /** The install's system sender: missing means sign-in links go nowhere (#369). */
+  smtp: systemSmtpSchema,
   queues: systemQueuesSchema,
   channels: z.array(channelStatusSchema),
   storage: systemStorageSchema,

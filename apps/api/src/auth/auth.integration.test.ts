@@ -28,6 +28,7 @@ import { OidcService } from '../sso/oidc.service.js';
 import { QueuedAuthMail } from '../testing/auth-mail.js';
 import { dockerAvailable } from '../testing/docker-available.js';
 import { forgetUsedTotpSteps } from '../testing/staff-sign-in.js';
+import { seedSystemSender } from '../testing/system-sender.js';
 import { OAUTH_STATE_TTL_SECONDS } from './oauth/oauth.service.js';
 import { RateLimiter, SIGN_IN_EMAIL_RULE, SIGN_IN_IP_RULE } from './rate-limit.js';
 import {
@@ -204,6 +205,9 @@ describe.skipIf(!hasDocker)('the auth service', () => {
     app = await createApiApp({ runtime });
     email = new QueuedAuthMail({ db: runtime.db, keyring: createKeyring(env) });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
+    // A sender exists, as in an install that took the wizard's step 3: the
+    // link and reset requests under test are the ones a working install answers.
+    await seedSystemSender(runtime.settings);
   }, 300_000);
 
   afterAll(async () => {

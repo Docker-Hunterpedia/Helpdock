@@ -16,6 +16,7 @@ export function SectionCard({
   heading,
   caption,
   aside,
+  regionName,
   footer,
   onSubmit,
   children,
@@ -25,6 +26,8 @@ export function SectionCard({
   readonly caption: string;
   /** Beside the heading: a count badge, a "Retry all". */
   readonly aside?: ReactNode;
+  /** A region name distinct from the heading, when another landmark on the page shares it. */
+  readonly regionName?: string;
   readonly footer?: ReactNode;
   readonly onSubmit?: (event: FormEvent) => void;
   readonly children: ReactNode;
@@ -35,7 +38,9 @@ export function SectionCard({
   return (
     <Box
       component="section"
-      aria-labelledby={headingId}
+      {...(regionName === undefined
+        ? { 'aria-labelledby': headingId }
+        : { 'aria-label': regionName })}
       sx={{
         borderRadius: '10px',
         border: `1px solid ${tokens['border.default']}`,

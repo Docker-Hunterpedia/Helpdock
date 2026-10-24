@@ -37,7 +37,7 @@ import { ContactFailure } from '../contacts/contact-failure.js';
 import { IdentityContentionError } from '../contacts/identity.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
-import { SetupFailure } from '../install/setup-failure.js';
+import { SetupFailure, SetupThrottled } from '../install/setup-failure.js';
 import { KnowledgeFailure } from '../knowledge/knowledge-failure.js';
 import { MetaFailure } from '../meta/meta-failure.js';
 import { SsoFailure } from '../sso/sso-failure.js';
@@ -215,6 +215,19 @@ export const mapError = (error: unknown): MappedError => {
       code: CODE_BY_STATUS[error.getStatus()] ?? 'forbidden',
       message: error.message,
       setup: error.reason,
+      ...(error.reason === 'smtp-password-required'
+        ? { fields: [{ path: 'body.password', message: error.message }] }
+        : {}),
+      unexpected: false,
+    };
+  }
+
+  if (error instanceof SetupThrottled) {
+    return {
+      status: HttpStatus.TOO_MANY_REQUESTS,
+      retryAfter: error.retryAfter,
+      code: 'rate_limited',
+      message: error.message,
       unexpected: false,
     };
   }

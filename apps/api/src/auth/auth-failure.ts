@@ -36,6 +36,9 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   // The challenge lock remains separate from the sliding-window refusal.
   'totp-locked': HttpStatus.TOO_MANY_REQUESTS,
   unavailable: HttpStatus.TOO_MANY_REQUESTS,
+  // A standing state of the install, not a throttle: no link can be emailed
+  // until the install has a system sender (#369).
+  'email-unavailable': HttpStatus.SERVICE_UNAVAILABLE,
   'no-account': HttpStatus.FORBIDDEN,
   'password-breached': HttpStatus.BAD_REQUEST,
   'passkeys-unavailable': HttpStatus.FORBIDDEN,
@@ -72,6 +75,8 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'challenge-expired': 'That sign-in attempt has expired',
   'totp-locked': 'Too many attempts; this account is locked for a short while',
   unavailable: 'Sign-in is unavailable right now',
+  'email-unavailable':
+    'This install has no outgoing email server, so no link was sent; set up SMTP first',
   'no-account': 'No account on this install matches that identity',
   'password-breached': 'That password appears in a list of breached passwords; choose another',
   'passkeys-unavailable': 'Passkeys need APP_URL to be https, or http://localhost',

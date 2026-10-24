@@ -13,13 +13,21 @@ import {
   type ProductMetrics,
   productMetricsSchema,
   queueBoardPassSchema,
+  type SmtpSettings,
+  type SmtpSettingsTestRequest,
+  type SmtpSettingsUpdate,
+  type SmtpTestResult,
   type SystemQueuePage,
   type SystemQueuesQuery,
   type SystemStatus,
+  smtpSettingsSchema,
+  smtpSettingsTestRequestSchema,
+  smtpSettingsUpdateSchema,
+  smtpTestResultSchema,
   systemQueuePageSchema,
   systemStatusSchema,
 } from '@helpdock/schemas';
-import type { ZodType } from 'zod';
+import { type ZodType, z } from 'zod';
 
 /**
  * `GET /api/install/system`, parsed through the schema the api serves it with.
@@ -37,16 +45,53 @@ export class NotAllowedError extends Error {
   }
 }
 
+export interface SystemApiErrorDetails {
+  /** Seconds from `Retry-After`, on a 429. */
+  readonly retryAfter?: number;
+  /** The refusal code the body carried (`setup.reason`), e.g. `smtp-password-required`. */
+  readonly reason?: string;
+  /** The api's message, written for a client: it may name the `HD_SMTP_*` variable. */
+  readonly detail?: string;
+}
+
 export class SystemApiError extends Error {
   /** The HTTP status, when the api answered at all: 400 and 409 have their own sentences. */
   readonly status: number | undefined;
+  readonly retryAfter: number | undefined;
+  readonly reason: string | undefined;
+  readonly detail: string | undefined;
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, details: SystemApiErrorDetails = {}) {
     super(`system: ${message}`);
     this.name = 'SystemApiError';
     this.status = status;
+    this.retryAfter = details.retryAfter;
+    this.reason = details.reason;
+    this.detail = details.detail;
   }
 }
+
+const refusalBodySchema = z.object({
+  error: z.object({
+    message: z.string().optional(),
+    setup: z.object({ reason: z.string() }).optional(),
+  }),
+});
+
+const refusalDetails = async (response: Response): Promise<SystemApiErrorDetails> => {
+  const header = Number(response.headers.get('retry-after'));
+  const body = refusalBodySchema.safeParse(await response.json().catch(() => undefined));
+
+  return {
+    ...(Number.isFinite(header) && header > 0 ? { retryAfter: header } : {}),
+    ...(body.success && body.data.error.setup !== undefined
+      ? { reason: body.data.error.setup.reason }
+      : {}),
+    ...(body.success && body.data.error.message !== undefined
+      ? { detail: body.data.error.message }
+      : {}),
+  };
+};
 
 /** The access token to send, or null without one; the app's transport supplies it. */
 export type AccessTokenSource = () => Promise<string | null>;
@@ -70,6 +115,12 @@ export interface SystemApi {
   deleteBrand(brandId: string, confirmPrefix: string): Promise<BrandDeletion>;
   /** Takes the deletion back while the grace lasts. */
   restoreBrand(brandId: string): Promise<BrandDeletion>;
+  /** #369: the install's system sender, as the Outgoing email card draws it. */
+  smtpSettings(): Promise<SmtpSettings>;
+  /** Saves the card. The password is optional and means "keep the stored one". */
+  saveSmtpSettings(update: SmtpSettingsUpdate): Promise<SmtpSettings>;
+  /** Sends one test message with the credentials on screen, to the admin's own address. */
+  testSmtpSettings(request: SmtpSettingsTestRequest): Promise<SmtpTestResult>;
 }
 
 export class HttpSystemApi implements SystemApi {
@@ -137,6 +188,28 @@ export class HttpSystemApi implements SystemApi {
     return this.#send('DELETE', this.#deletion(brandId), brandDeletionSchema);
   }
 
+  async smtpSettings(): Promise<SmtpSettings> {
+    return this.#read('/install/settings/smtp', smtpSettingsSchema);
+  }
+
+  async saveSmtpSettings(update: SmtpSettingsUpdate): Promise<SmtpSettings> {
+    return this.#send(
+      'PUT',
+      '/install/settings/smtp',
+      smtpSettingsSchema,
+      smtpSettingsUpdateSchema.parse(update),
+    );
+  }
+
+  async testSmtpSettings(request: SmtpSettingsTestRequest): Promise<SmtpTestResult> {
+    return this.#send(
+      'POST',
+      '/install/settings/smtp/test',
+      smtpTestResultSchema,
+      smtpSettingsTestRequestSchema.parse(request),
+    );
+  }
+
   #deletion(brandId: string): string {
     return `/install/brands/${encodeURIComponent(brandId)}/deletion`;
   }
@@ -162,7 +235,11 @@ export class HttpSystemApi implements SystemApi {
       throw new NotAllowedError();
     }
     if (!response.ok) {
-      throw new SystemApiError(`the api answered ${response.status}`, response.status);
+      throw new SystemApiError(
+        `the api answered ${response.status}`,
+        response.status,
+        await refusalDetails(response),
+      );
     }
 
     const parsed = schema.safeParse(await response.json());
@@ -182,6 +259,7 @@ export const SYSTEM_QUEUES_QUERY_KEY = ['install', 'system', 'queues'] as const;
 export const AUDIT_LOG_QUERY_KEY = ['install', 'audit-log'] as const;
 export const PRODUCT_METRICS_QUERY_KEY = ['install', 'system', 'metrics'] as const;
 export const INSTALL_BRANDS_QUERY_KEY = ['install', 'brands'] as const;
+export const SMTP_SETTINGS_QUERY_KEY = ['install', 'settings', 'smtp'] as const;
 export const brandDeletionQueryKey = (brandId: string) =>
   ['install', 'brands', brandId, 'deletion'] as const;
 

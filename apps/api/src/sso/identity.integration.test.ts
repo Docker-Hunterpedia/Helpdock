@@ -37,6 +37,7 @@ import { SessionService } from '../auth/session/session.service.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { hasDocker, metaEnv, startPostgres, startRedis } from '../testing/meta-install.js';
 import { silentLogger } from '../testing/silent-logger.js';
+import { seedSystemSender } from '../testing/system-sender.js';
 import { SsoIdentityService } from './identity.service.js';
 import type { SsoAssertion } from './oidc-contracts.js';
 
@@ -465,6 +466,9 @@ describe.skipIf(!hasDocker)(
 
     it('enforces SSO across password, magic link, OAuth and invite; emergency password still requires fresh TOTP', async () => {
       const auth = app.get(AuthService);
+      // This suite decides on enforcement, not on the sender's absence (#369):
+      // give it one, so a refused email road answers `sso-required`.
+      await seedSystemSender(runtime.settings);
       const password = 'M11-only-correct-horse-passphrase!';
       await owner.db
         .update(users)

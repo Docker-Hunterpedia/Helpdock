@@ -5,11 +5,13 @@ import { type ReactNode, useMemo } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { EmptyState } from '../../../shell/empty-state.js';
 import { PageHeader } from '../../../shell/page-header.js';
+import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { secondsSince } from './format.js';
 import { HealthCards } from './health-cards.js';
 import { ImportsCard } from './imports-card.js';
 import { LlmSpendCard } from './llm-spend-card.js';
 import { PasskeysDrift } from './passkeys-drift.tsx';
+import { OutgoingEmailCard } from './outgoing-email-card.js';
 import { PendingDeletionsCard } from './pending-deletions-card.js';
 import { ProductMetricsRow } from './product-metrics-row.js';
 import { QueueDashboardButton } from './queue-dashboard-button.js';
@@ -29,7 +31,9 @@ import { VersionCard } from './version-card.js';
 /**
  * The artboard `Admin/System-1.0` (M8-05, M8-07): four health cards, the
  * product metrics, the queue table and the channels beside version, storage
- * and audit, then LLM spend and the brands pending deletion.
+ * and audit, then LLM spend and the brands pending deletion. #369 adds the
+ * outgoing email card beside the channels and a warning banner while the
+ * install has no system sender.
  *
  * It refetches every ten seconds rather than holding a socket open. A status
  * page is read for a minute and closed; a poll is what it costs, and it keeps
@@ -137,6 +141,19 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
 
       <Box sx={{ display: 'grid', gap: 6 }}>
         <PasskeysDrift />
+        {!data.smtp.configured ? (
+          <AlertBanner tone="warning">
+            {t('system:smtp.missingBanner')}{' '}
+            <Typography
+              variant="body2"
+              component="a"
+              href="#outgoing-email"
+              sx={{ color: 'inherit', textDecorationColor: 'inherit' }}
+            >
+              {t('system:smtp.missingBannerAction')}
+            </Typography>
+          </AlertBanner>
+        ) : null}
 
         <HealthCards status={data} />
 
@@ -152,6 +169,7 @@ export function SystemPage({ api }: { readonly api?: SystemApi } = {}): ReactNod
         >
           <Box sx={{ display: 'grid', gap: 4 }}>
             <QueuesCard summary={data.queues} api={client} />
+            <OutgoingEmailCard api={client} />
             <ChannelsCard channels={data.channels} />
             <ImportsCard health={data.imports} api={client} />
           </Box>

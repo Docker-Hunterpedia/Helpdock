@@ -79,7 +79,7 @@ export const SETUP_KEY_MAX_LENGTH = 1024;
  * Why step 1 was refused when the status alone is too coarse. The only one so
  * far: the install set `HD_SETUP_TOKEN` and the request did not carry it.
  */
-export const setupRefusalSchema = z.enum(['setup-key-invalid']);
+export const setupRefusalSchema = z.enum(['setup-key-invalid', 'smtp-password-required']);
 export type SetupRefusal = z.infer<typeof setupRefusalSchema>;
 
 export const setupAdminRequestSchema = z.object({
@@ -217,6 +217,8 @@ export const smtpTestResultSchema = z.object({
   /** The server's final reply, truncated. Present only when it delivered. */
   response: z.string().max(SMTP_RESPONSE_MAX_LENGTH).optional(),
   error: smtpErrorCodeSchema.optional(),
+  /** Where the test went: the signed-in admin's address. Only on the System page's test. */
+  recipient: z.string().optional(),
 });
 export type SmtpTestResult = z.infer<typeof smtpTestResultSchema>;
 

@@ -5,8 +5,10 @@ import {
   type BrandDeletion,
   defaultBrandSettings,
   type ProductMetrics,
+  type SmtpSettings,
   type SystemQueuePage,
   type SystemStatus,
+  smtpSettingsSchema,
 } from '@helpdock/schemas';
 import type { SystemApi } from './system-api.js';
 
@@ -64,6 +66,8 @@ export const healthySystemStatus = (overrides: Partial<SystemStatus> = {}): Syst
     published: 0,
     failed: 0,
   },
+  /** The wizard's step 3 was taken: the healthy install sends its own mail. */
+  smtp: { configured: true, fromAddress: 'no-reply@helpdock.dev' },
   queues: {
     queues: [
       queue('inbound'),
@@ -133,14 +137,48 @@ export const fakeSystemApi = (overrides: Partial<SystemApi> = {}): SystemApi => 
   brandDeletion: async (brandId) => brandDeletionOf(brandId),
   deleteBrand: async (brandId) => pendingDeletion(brandId, Date.now()),
   restoreBrand: async (brandId) => activeDeletion(brandId),
+  smtpSettings: async () => smtpSettingsFixture(),
+  saveSmtpSettings: async (update) => ({ ...smtpSettingsFixture(), ...update }),
+  testSmtpSettings: async () => ({ delivered: true, response: '250 2.0.0 Ok: queued' }),
   ...overrides,
 });
+
+/** `GET /api/install/settings/smtp` for the wizard step that was taken. */
+export const smtpSettingsFixture = (overrides: Partial<SmtpSettings> = {}): SmtpSettings =>
+  smtpSettingsSchema.parse({
+    configured: true,
+    host: 'smtp.helpdock.dev',
+    port: 587,
+    tls: 'starttls',
+    user: 'postmaster',
+    passwordConfigured: true,
+    fromAddress: 'no-reply@helpdock.dev',
+    fromName: 'Helpdock',
+    locked: {
+      host: false,
+      port: false,
+      tls: false,
+      user: false,
+      password: false,
+      fromAddress: false,
+      fromName: false,
+    },
+    ...overrides,
+  });
 
 /** The same install with Redis mid-rewrite: the degraded state the artboard draws. */
 export const degradedSystemStatus = (): SystemStatus =>
   healthySystemStatus({
     redis: { status: 'warning', version: '7.4', aofRewriteInProgress: true, latencyMs: 38 },
   });
+
+/**
+ * The install that skipped the wizard's step 3 (#369): no system sender, so
+ * sign-in links and password resets are not being sent and the System page
+ * says so.
+ */
+export const missingSenderSystemStatus = (): SystemStatus =>
+  healthySystemStatus({ smtp: { configured: false, fromAddress: '' } });
 
 function queue(
   name: string,

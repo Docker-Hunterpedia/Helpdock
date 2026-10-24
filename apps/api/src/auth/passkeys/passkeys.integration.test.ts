@@ -25,6 +25,7 @@ import { QueuedAuthMail } from '../../testing/auth-mail.js';
 import { dockerAvailable } from '../../testing/docker-available.js';
 import { SoftwareAuthenticator } from '../../testing/software-authenticator.js';
 import { forgetUsedTotpSteps } from '../../testing/staff-sign-in.js';
+import { seedSystemSender } from '../../testing/system-sender.js';
 import { hashToken, webauthnCeremonyKey } from '../redis-keys.js';
 import { issueAccessToken } from '../session/access-token.js';
 import { refreshCookieOf } from '../session/cookies.js';
@@ -221,6 +222,8 @@ describe.skipIf(!hasDocker)('passkeys on /api/me/passkeys', () => {
     app = await createApiApp({ runtime });
     email = new QueuedAuthMail({ db: runtime.db, keyring: createKeyring(env) });
     seeded = await seedDevInstall({ db: runtime.db, env, withTotp: true });
+    // The reset notice under test is queued only when the install can send (#369).
+    await seedSystemSender(runtime.settings);
     password.currentPassword = seeded.password;
     accessToken = await signIn();
   }, 300_000);

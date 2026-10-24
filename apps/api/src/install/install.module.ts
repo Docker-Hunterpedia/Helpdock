@@ -14,6 +14,7 @@ import { InstallSettingsService } from './settings.service.js';
 import { SetupController } from './setup.controller.js';
 import { SetupService } from './setup.service.js';
 import { SetupTokenStore } from './setup-token.store.js';
+import { SmtpSettingsService } from './smtp-settings.service.js';
 
 /**
  * M0-08's first-run setup and M0-02's install-wide Settings API.
@@ -88,6 +89,16 @@ export class InstallModule {
           inject: [SETTINGS, ENV],
           useFactory: (settings: Settings, env: Env): InstallSettingsService =>
             new InstallSettingsService(settings, env),
+        },
+        {
+          provide: SmtpSettingsService,
+          inject: [SETTINGS, REDIS],
+          useFactory: (settings: Settings, redis: Redis): SmtpSettingsService =>
+            new SmtpSettingsService({
+              settings,
+              limiter: new RateLimiter(redis),
+              logger,
+            }),
         },
         {
           provide: StrandedMicrosoftIdentityNotice,

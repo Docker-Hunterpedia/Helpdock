@@ -18,6 +18,15 @@ import type { VapidKeys } from './push.js';
  *   in a response — only the public key is served, as the browser's
  *   `applicationServerKey`.
  */
+/**
+ * Whether the settings describe a sender the worker would actually send from.
+ * One rule for every reader — the System page's health card, the honest
+ * `email-unavailable` answer of the sign-in routes (#369) and this class — so
+ * they cannot disagree about what "configured" means.
+ */
+export const systemSenderConfigured = (host: string, fromAddress: string): boolean =>
+  host !== '' && fromAddress !== '';
+
 export class InstallChannels implements DeliverySettings {
   readonly #settings: Pick<Settings, 'get'>;
 
@@ -35,7 +44,7 @@ export class InstallChannels implements DeliverySettings {
       this.#settings.get('smtp.from'),
       this.#settings.get('smtp.fromName'),
     ]);
-    if (host === '' || fromAddress === '') {
+    if (!systemSenderConfigured(host, fromAddress)) {
       return null;
     }
 

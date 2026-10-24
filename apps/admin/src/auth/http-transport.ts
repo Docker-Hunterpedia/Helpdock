@@ -275,7 +275,12 @@ const toError = async (
   let staff: StaffRefusal | undefined;
   let contact: { reason: ContactRefusal; problem?: IdentityProblem | undefined } | undefined;
   let ticketing: TicketingRefusal | undefined;
-  let lifecycle: TicketLifecycleRefusal | undefined;
+  let lifecycle:
+    | {
+        reason: TicketLifecycleRefusal;
+        fields?: string[] | undefined;
+      }
+    | undefined;
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
   let helpCenter: HcRefusal | undefined;
@@ -294,7 +299,7 @@ const toError = async (
     staff = body.staff?.reason;
     contact = body.contact;
     ticketing = body.ticketing?.reason;
-    lifecycle = body.lifecycle?.reason;
+    lifecycle = body.lifecycle;
     channels = body.channels?.reason;
     domains = body.domains?.reason;
     helpCenter = body.helpCenter?.reason;
@@ -324,7 +329,7 @@ const toError = async (
   }
 
   if (lifecycle !== undefined) {
-    return new TicketLifecycleError(lifecycle);
+    return new TicketLifecycleError(lifecycle.reason, lifecycle.fields);
   }
 
   if (channels !== undefined) {

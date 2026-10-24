@@ -19,6 +19,7 @@ import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import { escapeHtml } from '../auth/email-templates.js';
 import { mergeCustomValues, parseCustomValues } from '../ticketing/custom-values.js';
 import { replaceTicketTags, tagsOfTicket } from '../ticketing/ticket-tags.js';
+import { missingRequiredToCloseKeys } from '../tickets/close-requirements.js';
 import type {
   LifecycleContext,
   TicketLifecycleService,
@@ -215,11 +216,19 @@ const moveStatus = async (
   }
 
   if (result.closing) {
+    // M14-17: a rule closes through an empty required-to-close field, and the
+    // close says which fields it went without — a refusal here would stop
+    // tickets closing silently, so the gate is a note instead.
+    const closedWithout = await missingRequiredToCloseKeys(context.tx, updated.custom);
     await writeTicketActivity(context.tx, {
       ...base,
       action: 'ticket.closed',
       from: { statusId: previous.id },
-      to: { statusId: next.id, closedAt: updated.closedAt?.toISOString() ?? null },
+      to: {
+        statusId: next.id,
+        closedAt: updated.closedAt?.toISOString() ?? null,
+        ...(closedWithout.length === 0 ? {} : { closedWithout }),
+      },
     });
     await deps.lifecycle.onClosed(lifecycleContext(context), updated, next);
   } else if (result.reopening) {

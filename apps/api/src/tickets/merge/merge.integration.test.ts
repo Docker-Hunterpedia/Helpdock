@@ -539,6 +539,36 @@ describe.skipIf(!hasDocker)('merge and split (DOMAIN-RULES §2.4)', () => {
       }
     });
 
+    it('notes the fields a merge closed the secondary without on that ticket only (M14-17)', async () => {
+      const created = await call<{ id: string; key: string }>(
+        'POST',
+        `${brandPath()}/custom-fields`,
+        ada,
+        {
+          target: 'ticket',
+          key: 'merge_gate',
+          label: 'Merge gate',
+          type: 'text',
+          requiredToClose: true,
+        },
+      );
+      expect(created.status).toBe(201);
+
+      try {
+        const secondary = await createTicket(ada, { departmentId: support });
+        const primary = await createTicket(ada, { departmentId: support });
+
+        expect((await merge(ada, secondary.ticket.id, primary.ticket.id)).status).toBe(200);
+
+        const [closing] = await activityFor(secondary.ticket.id, 'ticket.merged');
+        const [open] = await activityFor(primary.ticket.id, 'ticket.merged');
+        expect(closing?.to).toMatchObject({ closedWithout: [created.body.key] });
+        expect(open?.to).not.toHaveProperty('closedWithout');
+      } finally {
+        await call('DELETE', `${brandPath()}/custom-fields/${created.body.id}`, ada);
+      }
+    });
+
     it('refuses what §2.4 has no row for, with a code the screen can read', async () => {
       const a = await createTicket(ada, { departmentId: support });
       const b = await createTicket(ada, { departmentId: support });

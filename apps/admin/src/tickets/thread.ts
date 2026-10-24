@@ -37,6 +37,31 @@ const THREAD_EVENT_ACTIONS: readonly string[] = [
   'ticket.woke',
 ];
 
+/**
+ * M14-17. A close, a merge and a mark as spam each have their own bubble or
+ * status line already, so they are drawn only when the row carries the one
+ * thing nothing else says: the required-to-close fields the system closed the
+ * ticket without.
+ */
+const CLOSE_EVENT_ACTIONS: readonly string[] = [
+  'ticket.closed',
+  'ticket.merged',
+  'ticket.marked_spam',
+];
+
+/** The keys a system close recorded in `closedWithout`, or none when the row has no well-formed list. */
+export const closedWithoutKeys = (entry: TicketActivityEntry): readonly string[] => {
+  const detail = entry.to?.closedWithout;
+
+  return Array.isArray(detail) && detail.every((key) => typeof key === 'string')
+    ? (detail as string[])
+    : [];
+};
+
+const isThreadEvent = (entry: TicketActivityEntry): boolean =>
+  THREAD_EVENT_ACTIONS.includes(entry.action) ||
+  (CLOSE_EVENT_ACTIONS.includes(entry.action) && closedWithoutKeys(entry).length > 0);
+
 export type ThreadItem =
   | {
       readonly kind: 'message';
@@ -100,7 +125,7 @@ export const buildThread = (
         }),
       ),
     ...activity
-      .filter((entry) => THREAD_EVENT_ACTIONS.includes(entry.action))
+      .filter(isThreadEvent)
       .map((entry): ThreadItem => ({ kind: 'event', id: entry.id, at: entry.createdAt, entry })),
     ...pending.map(
       (message): ThreadItem => ({

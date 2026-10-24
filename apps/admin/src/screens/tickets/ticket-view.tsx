@@ -30,7 +30,7 @@ import { EmptyState } from '../../shell/empty-state.tsx';
 import { isTicketingError } from '../../ticketing/api.js';
 import { refusalCopy } from '../../ticketing/refusal-copy.js';
 import { isTicketLifecycleError } from '../../tickets/api.js';
-import { ticketFieldsFor } from '../../tickets/custom-values.js';
+import { fieldLabelOf, ticketFieldsFor } from '../../tickets/custom-values.js';
 import { ticketKeys } from '../../tickets/keys.js';
 import {
   type StagedMacro,
@@ -46,6 +46,7 @@ import { useToast } from '../../ui/toasts.tsx';
 import { useTicketAi } from './ai/use-ticket-ai.tsx';
 import { useTicketAssist } from './assist/use-ticket-assist.tsx';
 import { TranscriptsProvider } from './assist/voice-transcript.tsx';
+import { CloseGateDialog } from './close-gate-dialog.tsx';
 import { Composer, type ComposerMode } from './composer.tsx';
 import { previousTickets } from './contact-history.js';
 import { CsatCard } from './csat-card.tsx';
@@ -141,6 +142,9 @@ export function TicketView({
   const [pending, dispatch] = useReducer(pendingReducer, [] as readonly PendingMessage[]);
   // M1-09: the ⋯ menu's two dialogs, and what the merge search last asked for.
   const [dialog, setDialog] = useState<'merge' | 'split' | null>(null);
+  /** M14-17. The close a required field stopped: the status asked for, and the keys still empty. */
+  const [gate, setGate] = useState<{ statusId: string; keys: readonly string[] } | null>(null);
+  const [gateRepeated, setGateRepeated] = useState(false);
   const [mergeTerm, setMergeTerm] = useState('');
   // M3-06: the macro picker, what an applied macro has staged, and which
   // pending send carries which macro — kept by `clientId`, so a retry of a
@@ -428,8 +432,28 @@ export function TicketView({
    * A refusal a person can act on gets its sentence: the lifecycle's (M1-08,
    * M1-09) or the ticketing settings' (M1-07's assignee rules); anything else,
    * the one for failure.
+   *
+   * A close the required-to-close fields stopped (M14-17) names the fields by
+   * label. A person's own close opens the "Fill in before closing" dialog
+   * instead; this is the sentence for a macro, which has no dialog.
    */
+  const closeGateLabels = (keys: readonly string[]): string =>
+    new Intl.ListFormat(locale, { type: 'conjunction' }).format(
+      keys.map((key) => fieldLabelOf(fieldDefs.data?.fields ?? [], key, locale)),
+    );
+
   const refused = (error: unknown): void => {
+    if (isTicketLifecycleError(error) && error.reason === 'fields-required-to-close') {
+      toast({
+        tone: 'danger',
+        message: t('tickets:lifecycle.fields-required-to-close', {
+          fields: closeGateLabels(error.fields),
+        }),
+      });
+
+      return;
+    }
+
     toast({
       tone: 'danger',
       message: isTicketLifecycleError(error)
@@ -449,7 +473,19 @@ export function TicketView({
       await queryClient.invalidateQueries({ queryKey: ticketKeys.assignables(brandId) });
       toast({ tone: 'success', message: t('tickets:toast.updated') });
     },
-    onError: refused,
+    onError: (error, patch) => {
+      // M14-17: a close the required-to-close fields stopped opens the dialog
+      // that fills them in and closes in one request.
+      if (
+        isTicketLifecycleError(error) &&
+        error.reason === 'fields-required-to-close' &&
+        patch.statusId !== undefined
+      ) {
+        setGate({ statusId: patch.statusId, keys: error.fields });
+        return;
+      }
+      refused(error);
+    },
   });
 
   // M14-02. `null` wakes the ticket now; an instant snoozes it or moves its time.
@@ -575,8 +611,9 @@ export function TicketView({
 
         return directory.staff.find((member) => member.userId === userId)?.name ?? null;
       },
+      fieldLabel: (key) => fieldLabelOf(fieldDefs.data?.fields ?? [], key, locale),
     }),
-    [directory, viewer, contact.data, detail.data],
+    [directory, viewer, contact.data, detail.data, fieldDefs.data, locale],
   );
 
   // M10-08: the Meta half of a WhatsApp, Messenger or Instagram ticket.
@@ -1227,6 +1264,38 @@ export function TicketView({
 
       {spam.dialog}
       {assist.dialog}
+
+      <CloseGateDialog
+        open={gate !== null}
+        reference={isolate(ticketReference(ticket))}
+        fields={ticketFieldsFor(fieldDefs.data?.fields ?? [], true).filter((field) =>
+          gate?.keys.includes(field.key),
+        )}
+        stored={ticket.custom}
+        busy={update.isPending}
+        stillEmpty={gateRepeated && gate !== null ? closeGateLabels(gate.keys) : null}
+        onSubmit={(custom) => {
+          if (gate === null) {
+            return;
+          }
+          setGateRepeated(false);
+          update.mutate(
+            { statusId: gate.statusId, custom },
+            {
+              onSuccess: () => {
+                setGate(null);
+              },
+              onError: () => {
+                setGateRepeated(true);
+              },
+            },
+          );
+        }}
+        onClose={() => {
+          setGate(null);
+          setGateRepeated(false);
+        }}
+      />
 
       <MergeDialog
         open={dialog === 'merge'}

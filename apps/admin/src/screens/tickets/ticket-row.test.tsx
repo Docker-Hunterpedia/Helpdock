@@ -217,6 +217,7 @@ describe('the pinned field on a row (M14-16)', () => {
     options: ['Pro', 'Free'],
     required: false,
     agentVisible: true,
+    requiredToClose: false,
     pinned: true,
     sortOrder: 0,
   };

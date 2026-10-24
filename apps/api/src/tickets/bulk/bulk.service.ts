@@ -33,6 +33,7 @@ import { TicketingFailure } from '../../brands/ticketing-failure.js';
 import { getTx } from '../../context/request-context.js';
 import { tagsOfTicket } from '../../ticketing/ticket-tags.js';
 import type { TicketTagsService } from '../../ticketing/ticket-tags.service.js';
+import { labelsOfFields } from '../close-requirements.js';
 import { TicketLifecycleFailure } from '../lifecycle/lifecycle-failure.js';
 import type { TicketSpamService } from '../ticket-spam.service.js';
 import type { TicketRepository } from '../tickets.repository.js';
@@ -85,7 +86,11 @@ export const BULK_PREVIEW_RULE: RateLimitRule = {
 type Processed =
   | { readonly outcome: 'not_found' }
   | { readonly outcome: 'unchanged' }
-  | { readonly outcome: 'refused'; readonly code: string }
+  | {
+      readonly outcome: 'refused';
+      readonly code: string;
+      readonly missing?: BulkTicketResult['missing'];
+    }
   | {
       readonly outcome: 'will_change';
       readonly fields: BulkField[];
@@ -292,7 +297,13 @@ export class BulkService {
         throw error;
       }
 
-      return { outcome: 'refused', code };
+      // The savepoint is rolled back, so the transaction can still be read.
+      const missing =
+        error instanceof TicketLifecycleFailure && error.reason === 'fields-required-to-close'
+          ? await labelsOfFields(tx, error.fields)
+          : undefined;
+
+      return { outcome: 'refused', code, ...(missing === undefined ? {} : { missing }) };
     }
   }
 
@@ -657,7 +668,13 @@ const resultOf = (ticketId: string, work: Processed | undefined): BulkTicketResu
     case 'unchanged':
       return { ticketId, outcome: 'unchanged', fields: [], code: null };
     case 'refused':
-      return { ticketId, outcome: 'refused', fields: [], code: work.code };
+      return {
+        ticketId,
+        outcome: 'refused',
+        fields: [],
+        code: work.code,
+        ...(work.missing === undefined ? {} : { missing: work.missing }),
+      };
     default:
       return { ticketId, outcome: 'not_found', fields: [], code: null };
   }

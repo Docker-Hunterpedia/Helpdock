@@ -1125,6 +1125,68 @@ describe.skipIf(!hasDocker)('bulk edit', () => {
       expect((await rowOf(id as string)).statusId).toBe(awaiting);
     });
 
+    it('refuses a bulk close that would leave a required-to-close field empty, per ticket, naming the field, and closes the rest', async () => {
+      const gate = await call<{ key: string }>('POST', `${brandPath()}/custom-fields`, ada, {
+        target: 'ticket',
+        key: 'bulk_closure_code',
+        label: 'Bulk closure code',
+        type: 'text',
+        requiredToClose: true,
+      });
+      expect(gate.status).toBe(201);
+
+      try {
+        const [blocked] = await createMany(1);
+        const [filled] = await createMany(1, { custom: { bulk_closure_code: 'CR-1' } });
+        if (blocked === undefined || filled === undefined) {
+          throw new Error('the tickets were not created');
+        }
+
+        const preview = await bulk(ada, 'preview', [blocked, filled] as string[], {
+          close: true,
+        });
+        expect(preview.body.results).toEqual([
+          {
+            ticketId: blocked,
+            outcome: 'refused',
+            fields: [],
+            code: 'fields-required-to-close',
+            missing: [{ key: gate.body.key, label: 'Bulk closure code', labelAr: null }],
+          },
+          expect.objectContaining({ ticketId: filled, outcome: 'will_change' }),
+        ]);
+
+        // The apply keeps what the preview named: the blocked ticket stays
+        // open and is reported with the same code, the allowed one closes.
+        const applied = await bulk(ada, 'apply', [blocked, filled] as string[], { close: true }, [
+          filled,
+        ]);
+        expect(applied.status).toBe(200);
+        expect(applied.body.results).toEqual([
+          {
+            ticketId: blocked,
+            outcome: 'refused',
+            fields: [],
+            code: 'fields-required-to-close',
+            missing: [{ key: gate.body.key, label: 'Bulk closure code', labelAr: null }],
+          },
+          expect.objectContaining({ ticketId: filled, outcome: 'will_change' }),
+        ]);
+        expect((await rowOf(blocked)).statusId).toBe(open);
+        expect((await rowOf(filled)).statusId).toBe(closed);
+      } finally {
+        const list = await call<{ fields: { id: string; key: string }[] }>(
+          'GET',
+          `${brandPath()}/custom-fields?target=ticket`,
+          ada,
+        );
+        const id = list.body.fields.find((field) => field.key === 'bulk_closure_code')?.id;
+        if (id !== undefined) {
+          await call('DELETE', `${brandPath()}/custom-fields/${id}`, ada);
+        }
+      }
+    });
+
     it('sets one custom field value, validated like a single edit, and undoes it', async () => {
       const field = await call<{ key: string }>('POST', `${brandPath()}/custom-fields`, ada, {
         target: 'ticket',

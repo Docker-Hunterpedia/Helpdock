@@ -57,6 +57,14 @@ export const customFieldDefs = pgTable(
     options: jsonb('options').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     required: boolean('required').notNull().default(false),
     /**
+     * M14-17. A ticket field a person cannot close a ticket while it is empty.
+     * Only the ticket target's rows are read, so the flag is inert — and stays
+     * honestly "off" — on a contact or account field, which nothing closes.
+     * Rules, time-based rules, merges and spam close anyway, and their close
+     * says which fields it went without.
+     */
+    requiredToClose: boolean('required_to_close').notNull().default(false),
+    /**
      * Whether an Agent sees the field at all. Off is how a brand keeps a field
      * that only administrators and rules read; it is a display rule and never a
      * security boundary, because the value is in the same jsonb column either

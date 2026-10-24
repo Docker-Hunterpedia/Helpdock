@@ -20,7 +20,7 @@ Helpdock signs in to the mailbox and fetches new mail every 30 s, 60 s, 2 min or
 | Username, password | Many providers (Fastmail, Gmail, iCloud) need an *app password*. The password is encrypted with `APP_MASTER_KEY` and never shown again; **Replace** sets a new one. |
 | Folder | Usually `INBOX`. |
 
-**Test IMAP** signs in with the values on the screen, saved or not, and reports the folder's message count or the server's exact refusal. Nothing is imported. On a saved mailbox it uses the stored password unless you typed a new one.
+**Test IMAP** signs in with the values on the screen, saved or not, and reports the folder's message count or the server's exact refusal. Nothing is imported. On a saved mailbox it uses the stored password unless you typed a new one, and only while the host, port, security mode and username are the saved ones: change any of them and the password must be typed again, on the same screen (400 `password-required`, field `body.imap.password`, or `body.password` for the test). Saving a mailbox follows the same rule, so a changed host cannot be made to receive the stored password.
 
 The first poll imports the folder's *unseen* messages, not its history. Every message taken is flagged `\Seen` on the server. A host that resolves to a private or internal address is refused (DOMAIN-RULES §13); allow it with `OUTBOUND_ALLOW_CIDRS` if your mail server is inside your network.
 

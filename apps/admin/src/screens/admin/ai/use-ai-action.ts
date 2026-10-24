@@ -11,6 +11,8 @@ export function useAiAction<TInput, TResult>(
   run: (input: TInput) => Promise<TResult>,
   success: string,
   refresh: (result: TResult) => Promise<void> | void,
+  /** Answers a refusal the card draws on a field; true means it did, so no toast. */
+  refused?: (error: unknown) => boolean,
 ) {
   const t = useT();
   const toast = useToast();
@@ -22,6 +24,9 @@ export function useAiAction<TInput, TResult>(
       toast({ tone: 'success', message: success });
     },
     onError: (error: unknown) => {
+      if (refused?.(error) === true) {
+        return;
+      }
       toast({ tone: 'danger', message: failureMessage(t, error) });
     },
   });

@@ -65,6 +65,16 @@ const imap = (
   ...overrides,
 });
 
+/** The api sends a stored password only to the server it was saved for (#399). */
+const sameServer = (
+  saved: NonNullable<Mailbox['imap']>,
+  next: { host: string; port: number; security: string; username: string },
+): boolean =>
+  saved.host.toLowerCase() === next.host.toLowerCase() &&
+  saved.port === next.port &&
+  saved.security === next.security &&
+  saved.username === next.username;
+
 const health = (overrides: Partial<Mailbox['health']>): Mailbox['health'] => ({
   state: 'healthy',
   lastPolledAt: null,
@@ -295,7 +305,11 @@ export class MockChannelsApi implements ChannelsApi {
     await Promise.resolve();
     const current = await this.mailbox('', mailboxId);
     this.#refuseTaken(request.address, mailboxId);
-    if (request.method === 'imap' && request.imap.password === undefined && current.imap === null) {
+    if (
+      request.method === 'imap' &&
+      request.imap.password === undefined &&
+      (current.imap === null || !sameServer(current.imap, request.imap))
+    ) {
       throw new ChannelsError('password-required');
     }
     if (request.method === 'imap' && request.imap.password !== undefined) {
@@ -317,11 +331,18 @@ export class MockChannelsApi implements ChannelsApi {
 
   async testImap(_brandId: string, request: ImapTestRequest): Promise<ImapTestResult> {
     await Promise.resolve();
-    const password =
-      request.password ??
-      (request.mailboxId === undefined
+    const saved =
+      request.mailboxId === undefined
         ? undefined
-        : (this.#passwords.get(request.mailboxId) ?? 'stored'));
+        : (await this.mailbox('', request.mailboxId)).imap;
+    const storedPassword =
+      request.mailboxId === undefined || (saved != null && !sameServer(saved, request))
+        ? undefined
+        : (this.#passwords.get(request.mailboxId) ?? 'stored');
+    const password = request.password ?? storedPassword;
+    if (password === undefined) {
+      throw new ChannelsError('password-required');
+    }
     const base = { host: request.host, port: request.port };
 
     if (request.host.includes('unreachable')) {

@@ -29,6 +29,7 @@ export type ProviderProblem =
   | 'baseUrlRequired'
   | 'baseUrlInvalid'
   | 'apiKeyRequired'
+  | 'credentialRetype'
   | 'oauthInvalid';
 
 export type ProviderField = 'id' | 'label' | 'baseUrl' | 'apiKey' | 'oauth';

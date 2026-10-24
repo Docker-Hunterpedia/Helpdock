@@ -121,8 +121,11 @@ export class MailboxesService {
     const values: Partial<NewMailbox> = { ...this.#common(request) };
     if (request.method === 'imap') {
       const password = request.imap.password;
-      if (password === undefined && current.imapPassword === null) {
-        throw new ChannelsFailure('password-required');
+      if (
+        password === undefined &&
+        (current.imapPassword === null || !sameImapServer(current, request.imap))
+      ) {
+        throw new ChannelsFailure('password-required', 'body.imap.password');
       }
       Object.assign(values, imapColumns(request.imap));
       if (password !== undefined) {
@@ -197,13 +200,14 @@ export class MailboxesService {
     let password = request.password;
     if (password === undefined && request.mailboxId !== undefined) {
       const { mailbox } = await this.#require(tx, request.mailboxId);
+      // The stored password goes only to the server it was saved for (#399).
       password =
-        mailbox.imapPassword === null
+        mailbox.imapPassword === null || !sameImapServer(mailbox, request)
           ? undefined
           : decryptSecret(mailbox.imapPassword, this.#keyring);
     }
     if (password === undefined) {
-      throw new ChannelsFailure('password-required');
+      throw new ChannelsFailure('password-required', 'body.password');
     }
 
     return this.#imap.test({
@@ -295,6 +299,25 @@ export class MailboxesService {
 }
 
 type ImapSettingsInput = Extract<MailboxUpdateRequest, { method: 'imap' }>['imap'];
+
+/**
+ * The stored IMAP password belongs to one server and account: it is sent only
+ * while host, port, username and TLS mode are as saved, so editing the host
+ * cannot make Helpdock log in to a server the editor controls (#399).
+ */
+const sameImapServer = (
+  stored: {
+    imapHost: string | null;
+    imapPort: number | null;
+    imapSecurity: string | null;
+    imapUsername: string | null;
+  },
+  next: { host: string; port: number; security: string; username: string },
+): boolean =>
+  stored.imapHost?.toLowerCase() === next.host.toLowerCase() &&
+  stored.imapPort === next.port &&
+  stored.imapSecurity === next.security &&
+  stored.imapUsername === next.username;
 
 const imapColumns = (imap: ImapSettingsInput) => ({
   imapHost: imap.host,

@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { AiError } from '../../../../ai/api.js';
 import { MockAiApi } from '../../../../ai/mock-api.js';
 import { AppRoutes } from '../../../../app/routes.tsx';
 import { renderApp } from '../../../../test/render.tsx';
@@ -121,5 +122,78 @@ describe('AI › Providers', () => {
         within(card('Embeddings')).getByRole('progressbar', { name: 'Re-embed progress' }),
       ).toHaveAttribute('aria-valuenow', '0');
     });
+  });
+
+  it('asks for the key again, on its field, when a provider’s address changes (#399)', async () => {
+    const { user, aiApi } = await renderProviders();
+    const form = card('OpenAI');
+
+    fireEvent.change(within(form).getByLabelText(/^Base URL/), {
+      target: { value: 'https://proxy.example.net/v1' },
+    });
+    await user.click(within(form).getByRole('button', { name: 'Save provider' }));
+
+    const key = await within(form).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the credential again/);
+    });
+    expect(key).toHaveAttribute('aria-invalid', 'true');
+    expect(key).not.toHaveAttribute('readonly');
+    expect(screen.queryByText('Provider saved.')).toBeNull();
+    expect(
+      (await aiApi.providers()).providers.find((row) => row.id === 'openai')?.baseUrl,
+    ).toBeNull();
+
+    await user.type(key, 'sk-new');
+    await user.click(within(form).getByRole('button', { name: 'Save provider' }));
+    expect(await screen.findByText('Provider saved.')).toBeVisible();
+  });
+
+  it('asks for the embeddings key again, on its field, when the address changes (#399)', async () => {
+    const { user, aiApi } = await renderProviders();
+    const embeddings = card('Embeddings');
+
+    fireEvent.change(within(embeddings).getByLabelText('Endpoint'), {
+      target: { value: 'https://embeddings.example.net/v1' },
+    });
+    await user.click(within(embeddings).getByRole('button', { name: 'Save' }));
+
+    const key = await within(embeddings).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the API key again/);
+    });
+    expect(key).not.toHaveAttribute('readonly');
+    expect((await aiApi.embedding()).baseUrl).toBe('https://api.openai.com/v1');
+
+    await user.type(key, 'sk-new');
+    await user.click(within(embeddings).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Embedding settings saved.')).toBeVisible();
+  });
+
+  it('asks for the transcription key again when the endpoint changes (#399)', async () => {
+    const aiApi = new MockAiApi();
+    vi.spyOn(aiApi, 'transcription').mockResolvedValue({
+      endpoint: 'https://a.example.com/v1/audio/transcriptions',
+      model: 'whisper-1',
+      hasApiKey: true,
+      lockedKeys: [],
+    });
+    vi.spyOn(aiApi, 'saveTranscription').mockRejectedValue(
+      new AiError('transcription-key-required'),
+    );
+    const { user } = await renderProviders(aiApi);
+    const transcription = card('Voice transcription');
+
+    const endpoint = within(transcription).getByLabelText('Whisper-compatible endpoint');
+    fireEvent.change(endpoint, {
+      target: { value: 'https://b.example.net/v1/audio/transcriptions' },
+    });
+    await user.click(within(transcription).getByRole('button', { name: 'Save' }));
+
+    const key = await within(transcription).findByLabelText('API key');
+    await waitFor(() => {
+      expect(key).toHaveAccessibleDescription(/Enter the API key again/);
+    });
+    expect(key).not.toHaveAttribute('readonly');
   });
 });

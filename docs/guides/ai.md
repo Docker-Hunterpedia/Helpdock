@@ -81,6 +81,17 @@ same rules a webhook endpoint passes:
 - A name that does not resolve yet is judged by its scheme alone: `https` is
   accepted, `http` is refused.
 
+**Keys stay with their address (#399).** A stored provider API key (or OAuth
+credential) is reused by a save that sends none only while the provider's kind
+and `baseUrl` are unchanged (compared by scheme, host, port and path, ignoring
+case and a trailing slash). Otherwise the call is refused with 400
+`error.ai.reason: "credential-required"` and a field error on `body.auth.apiKey`
+(or `body.auth.credentials`), and nothing is saved: type the key again with the
+new address. The embeddings key follows the same rule for `baseUrl`, with
+`"embedding-key-required"` and a field error on `body.apiKey`, and the transcription key for the transcription endpoint with `"transcription-key-required"`. Clearing the key
+(an empty `apiKey`) needs no re-entry. The admin screen opens the key field and
+says so on it.
+
 Only a value that changed is checked, so a provider can be renamed and the
 embedding price edited without looking up an unchanged address. Settings pinned
 with `HD_*` variables are the operator's and are not checked.
@@ -125,7 +136,7 @@ Voice notes from the widget and Telegram can be transcribed for agents
 |---|---|---|
 | `transcription.endpoint` | `HD_TRANSCRIPTION_ENDPOINT` | `https://api.openai.com/v1/audio/transcriptions`. Empty turns transcription off |
 | `transcription.model` | `HD_TRANSCRIPTION_MODEL` | `whisper-1` (the default) |
-| `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys |
+| `transcription.apiKey` | `HD_TRANSCRIPTION_API_KEY` | Write-only, like provider keys. Changing `transcription.endpoint` to another address needs the key typed again: 400 `transcription-key-required`, field `body.apiKey`, nothing saved. Turning transcription off (empty endpoint) needs no key |
 
 How it runs:
 
@@ -358,7 +369,7 @@ One embedding model serves every brand (ADR 0005). It is configured with
 |---|---|
 | `embedding.provider` | `openai`, a label for the log |
 | `embedding.baseUrl` | `https://api.openai.com/v1`, or `http://ollama:11434/v1` when its range is in `OUTBOUND_ALLOW_CIDRS`. Checked when saved, like a provider's |
-| `embedding.apiKey` | Write-only, like provider keys |
+| `embedding.apiKey` | Write-only, like provider keys. Changing `embedding.baseUrl` needs the key typed again (`embedding-key-required`) |
 | `embedding.model` | `text-embedding-3-small` |
 | `embedding.dims` | `1536`. At most **2000**, the most a pgvector HNSW index covers; a larger model is refused with that reason. Use a model, or a reduced-dimension variant, at or under it |
 | `embedding.pricePerMillionTokens` | `0.02` |

@@ -13,6 +13,7 @@ import type {
   EmbeddingSpaceView,
 } from '@helpdock/schemas';
 import { ne, sql } from 'drizzle-orm';
+import { sameEndpoint } from '../http/same-endpoint.js';
 import { widenInstallScope } from '../tenant/install-scope.js';
 import type { AiDestinationCheck } from './ai-destination.js';
 import { AiFailure } from './ai-failure.js';
@@ -74,10 +75,20 @@ export class EmbeddingSettingsService {
     actorId: string,
     body: EmbeddingSettingsUpdate,
   ): Promise<EmbeddingSettingsView> {
-    const [storedModel, storedDims] = await Promise.all([
+    const [storedModel, storedDims, storedBaseUrl, storedKey] = await Promise.all([
       this.#settings.get('embedding.model'),
       this.#settings.get('embedding.dims'),
+      this.#settings.get('embedding.baseUrl'),
+      this.#settings.get('embedding.apiKey'),
     ]);
+    // The stored key goes only to the address it was saved for (#399).
+    if (
+      body.apiKey === undefined &&
+      storedKey !== '' &&
+      !sameEndpoint(storedBaseUrl, body.baseUrl)
+    ) {
+      throw new AiFailure('embedding-key-required', 'body.apiKey');
+    }
     const changesSpace = storedModel !== body.model || storedDims !== body.dims;
     if (storedModel !== '' && changesSpace && body.confirmReembed !== true) {
       throw new AiFailure('reembed-not-confirmed');

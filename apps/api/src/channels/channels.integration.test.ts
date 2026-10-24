@@ -24,6 +24,7 @@ import {
 } from '@helpdock/db';
 import { silentLogger } from '@helpdock/jobs';
 import type {
+  ErrorResponse,
   ImapTestResult,
   InboundParseSecret,
   InboundParseSettings,
@@ -441,19 +442,64 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         ...base,
         method: 'imap',
         imap: {
-          host: 'imap.example.com',
-          port: 143,
-          security: 'starttls',
+          host: 'IMAP.example.com',
+          port: 993,
+          security: 'tls',
           username: 'u',
           pollIntervalSeconds: 300,
         },
       });
       expect(kept.body.imap).toMatchObject({
-        port: 143,
-        security: 'starttls',
+        port: 993,
+        security: 'tls',
         pollIntervalSeconds: 300,
         passwordSet: true,
       });
+
+      // The stored password belongs to the server it was saved for (#399).
+      for (const moved of [
+        { host: 'evil.example.net', port: 993, security: 'tls', username: 'u' },
+        { host: 'imap.example.com', port: 143, security: 'tls', username: 'u' },
+        { host: 'imap.example.com', port: 993, security: 'starttls', username: 'u' },
+        { host: 'imap.example.com', port: 993, security: 'tls', username: 'other' },
+      ]) {
+        const refused = await call<ErrorResponse>(
+          'PUT',
+          `${brandPath()}/mailboxes/${inbound.body.id}`,
+          ada,
+          { ...base, method: 'imap', imap: moved },
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.body.error.channels?.reason).toBe('password-required');
+        expect(refused.body.error.fields?.[0]?.path).toBe('body.imap.password');
+      }
+      const unmoved = await call<Mailbox>(
+        'GET',
+        `${brandPath()}/mailboxes/${inbound.body.id}`,
+        ada,
+      );
+      expect(unmoved.body.imap).toMatchObject({
+        host: 'IMAP.example.com',
+        port: 993,
+        username: 'u',
+      });
+      const retyped = await call<Mailbox>(
+        'PUT',
+        `${brandPath()}/mailboxes/${inbound.body.id}`,
+        ada,
+        {
+          ...base,
+          method: 'imap',
+          imap: {
+            host: 'imap.other.example',
+            port: 143,
+            security: 'starttls',
+            username: 'u',
+            password: 'typed-again',
+          },
+        },
+      );
+      expect(retyped.body.imap).toMatchObject({ host: 'imap.other.example', passwordSet: true });
 
       const back = await call<Mailbox>('PUT', `${brandPath()}/mailboxes/${inbound.body.id}`, ada, {
         ...base,
@@ -542,6 +588,25 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
 
       const none = await call('POST', `${brandPath()}/mailboxes/test-imap`, ada, settings);
       expect(none.status).toBe(400);
+
+      // A changed server never gets the stored password: the refusal comes
+      // before any connection, where a login attempt would have answered 200.
+      for (const moved of [
+        { host: '127.0.0.2' },
+        { port: settings.port + 1 },
+        { security: 'starttls' },
+        { username: 'someone-else' },
+      ]) {
+        const refused = await call<ErrorResponse>(
+          'POST',
+          `${brandPath()}/mailboxes/test-imap`,
+          ada,
+          { ...settings, ...moved, mailboxId: saved.body.id },
+        );
+        expect(refused.status).toBe(400);
+        expect(refused.body.error.channels?.reason).toBe('password-required');
+        expect(refused.body.error.fields?.[0]?.path).toBe('body.password');
+      }
     });
   });
 

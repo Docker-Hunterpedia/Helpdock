@@ -17,6 +17,7 @@ import {
   type SsoConnectionInput,
   type SsoMapping,
   type SsoSettingsUpdate,
+  ssoConnectionConfigSchema,
   ssoConnectionSchema,
 } from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
@@ -25,6 +26,7 @@ import type { Redis } from 'ioredis';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { principalIdOf } from '../auth/principal.js';
 import { getTx, requireRequestContext } from '../context/request-context.js';
+import { sameEndpoint } from '../http/same-endpoint.js';
 import { isBreakGlassEligible, passkeyCounts, passkeyHoldings } from './break-glass.js';
 import { ssoIdentityAuthority } from './identity-authority.js';
 import { addsCertificates, fetchSamlMetadata, samlCertificate } from './saml-metadata.js';
@@ -155,6 +157,16 @@ export class SsoService {
     }
     if (current.protocol !== input.config.protocol)
       throw new ConflictException('sso-protocol-immutable');
+    // The stored client secret goes only to the issuer it was saved for (#399).
+    const stored = ssoConnectionConfigSchema.parse(current.config);
+    if (
+      input.config.protocol === 'oidc' &&
+      stored.protocol === 'oidc' &&
+      input.clientSecret === undefined &&
+      current.secretEncrypted !== null &&
+      !sameEndpoint(stored.issuer, input.config.issuer)
+    )
+      throw new SsoFailure('sso-client-secret-required');
     if (current.enabled && !input.enabled) await this.canRemoveEnabled(id);
     const [updated] = await tx
       .update(ssoConnections)

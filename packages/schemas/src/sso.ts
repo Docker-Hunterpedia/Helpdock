@@ -138,6 +138,8 @@ export const ssoRefusalSchema = z.enum([
   'sso-email-domain-taken',
   /** The IdP metadata lists a signing certificate the admin has not saved. */
   'sso-metadata-confirm-certificates',
+  /** The issuer changed and the stored client secret was not typed again. */
+  'sso-client-secret-required',
 ]);
 export type SsoRefusal = z.infer<typeof ssoRefusalSchema>;
 export type SsoConnectionInput = z.infer<typeof ssoConnectionCreateSchema>;

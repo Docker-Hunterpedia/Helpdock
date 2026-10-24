@@ -47,7 +47,9 @@ export type DraftField =
   | 'folder'
   | 'allowlist';
 
-export type DraftErrors = Partial<Record<DraftField, 'required' | 'email' | 'port' | 'password'>>;
+export type DraftErrors = Partial<
+  Record<DraftField, 'required' | 'email' | 'port' | 'password' | 'passwordRetype'>
+>;
 
 export const draftFrom = (
   mailbox: Mailbox | undefined,

@@ -10,7 +10,9 @@ import {
 import { ZodSerializationException, ZodValidationException } from 'nestjs-zod';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { AiFailure } from '../ai/ai-failure.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { ChannelsFailure } from '../channels/channels-failure.js';
 import { IdentityContentionError } from '../contacts/identity.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
@@ -153,6 +155,41 @@ describe('errorBody', () => {
       setup: { reason: 'smtp-password-required' },
       fields: [{ path: 'body.password' }],
     });
+  });
+
+  it('draws a refused stored secret on the field that must be typed again (#399)', () => {
+    const imap = errorBody(
+      mapError(new ChannelsFailure('password-required', 'body.imap.password')),
+      'req-10c',
+    );
+    const ai = errorBody(
+      mapError(new AiFailure('embedding-key-required', 'body.apiKey')),
+      'req-10d',
+    );
+    const sso = errorBody(mapError(new SsoFailure('sso-client-secret-required')), 'req-10e');
+
+    expect(imap.error).toMatchObject({
+      code: 'validation_failed',
+      channels: { reason: 'password-required' },
+      fields: [{ path: 'body.imap.password' }],
+    });
+    expect(ai.error).toMatchObject({
+      code: 'validation_failed',
+      ai: { reason: 'embedding-key-required' },
+      fields: [{ path: 'body.apiKey' }],
+    });
+    expect(sso.error).toMatchObject({
+      code: 'validation_failed',
+      sso: { reason: 'sso-client-secret-required' },
+      fields: [{ path: 'body.clientSecret' }],
+    });
+  });
+
+  it('adds no field to a channels or ai refusal that names none', () => {
+    expect(
+      errorBody(mapError(new ChannelsFailure('address-taken')), 'r').error.fields,
+    ).toBeUndefined();
+    expect(errorBody(mapError(new AiFailure('unknown-model')), 'r').error.fields).toBeUndefined();
   });
 
   it('maps a throttled setup call to 429 with its Retry-After', () => {

@@ -106,6 +106,93 @@ describe('InstallAiService.upsert', () => {
   });
 });
 
+describe('InstallAiService.upsert and the stored credential (#399)', () => {
+  const compatible = {
+    kind: 'openai-compatible',
+    label: 'Local',
+    baseUrl: 'https://llm.example.com/v1',
+    auth: { type: 'apiKey' as const, apiKey: 'sk-stored' },
+  };
+  const seeded = async () => {
+    const settings = settingsWith();
+    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http, allowAnyAddress);
+    await service.upsert(context, 'llm', compatible);
+
+    return { settings, service };
+  };
+  const keyless = { type: 'apiKey' as const };
+
+  it('keeps the stored key while the address differs only in case, port default or trailing slash', async () => {
+    const { settings, service } = await seeded();
+
+    await service.upsert(context, 'llm', {
+      ...compatible,
+      baseUrl: 'HTTPS://LLM.example.com:443/v1/',
+      auth: keyless,
+    });
+
+    expect((await settings.get('ai.providers'))[0]?.auth).toEqual(compatible.auth);
+  });
+
+  it.each([
+    ['host', 'https://evil.example.net/v1'],
+    ['path', 'https://llm.example.com/other'],
+    ['scheme', 'http://llm.example.com/v1'],
+    ['port', 'https://llm.example.com:8443/v1'],
+  ])('asks for the key again when the %s changes, and stores nothing', async (_, baseUrl) => {
+    const { settings, service } = await seeded();
+
+    await expect(
+      service.upsert(context, 'llm', { ...compatible, baseUrl, auth: keyless }),
+    ).rejects.toMatchObject({
+      reason: 'credential-required',
+      field: 'body.auth.apiKey',
+      status: 400,
+    });
+    expect((await settings.get('ai.providers'))[0]).toMatchObject({
+      baseUrl: compatible.baseUrl,
+      auth: compatible.auth,
+    });
+  });
+
+  it('asks for the key again when the kind changes, even with the address unchanged', async () => {
+    const { service } = await seeded();
+
+    await expect(
+      service.upsert(context, 'llm', { ...compatible, kind: 'openai', auth: keyless }),
+    ).rejects.toMatchObject({ reason: 'credential-required' });
+  });
+
+  it('asks for the key again when a provider without an address gains one', async () => {
+    const settings = settingsWith();
+    const service = new InstallAiService(settings, fakeEmbeddingsServer(4).http, allowAnyAddress);
+    await service.upsert(context, 'openai', openai);
+
+    await expect(
+      service.upsert(context, 'openai', {
+        ...openai,
+        baseUrl: 'https://evil.example.net/v1',
+        auth: keyless,
+      }),
+    ).rejects.toMatchObject({ reason: 'credential-required' });
+  });
+
+  it('stores a changed address together with a newly typed key', async () => {
+    const { settings, service } = await seeded();
+
+    await service.upsert(context, 'llm', {
+      ...compatible,
+      baseUrl: 'https://new.example.com/v1',
+      auth: { type: 'apiKey', apiKey: 'sk-new' },
+    });
+
+    expect((await settings.get('ai.providers'))[0]).toMatchObject({
+      baseUrl: 'https://new.example.com/v1',
+      auth: { apiKey: 'sk-new' },
+    });
+  });
+});
+
 describe('InstallAiService.upsert and the address it is given (ASVS 12.6.1, 9.2.2)', () => {
   const resolvingTo =
     (address: string): LookupFunction =>

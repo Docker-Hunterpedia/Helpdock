@@ -128,7 +128,7 @@ export type MailboxHealth = z.infer<typeof mailboxHealthSchema>;
 export const channelsRefusalSchema = z.enum([
   /** Another mailbox, in this brand or another, already receives for that address. */
   'address-taken',
-  /** Switching to IMAP with no password typed and none stored. */
+  /** IMAP with no password typed and none stored, or a stored one whose host, port, user or TLS mode changed. */
   'password-required',
   /** The department the mailbox would file into is not this brand's. */
   'department-not-found',

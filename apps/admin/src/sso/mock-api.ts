@@ -100,6 +100,14 @@ export class MockSsoApi implements SsoApi {
     if (current.protocol !== validated.config.protocol) throw new Error('sso-protocol-immutable');
     this.#checkDomains(validated, id);
     if (
+      current.secretConfigured &&
+      validated.clientSecret === undefined &&
+      current.config.protocol === 'oidc' &&
+      validated.config.protocol === 'oidc' &&
+      current.config.issuer.replace(/\/+$/, '') !== validated.config.issuer.replace(/\/+$/, '')
+    )
+      throw new SsoError('sso-client-secret-required');
+    if (
       current.enabled &&
       !validated.enabled &&
       this.#settings.enforced &&

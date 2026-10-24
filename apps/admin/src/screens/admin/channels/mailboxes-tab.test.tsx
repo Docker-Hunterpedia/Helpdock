@@ -172,6 +172,45 @@ describe('the mailbox form', { timeout: 60_000 }, () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No answer within 15 s');
   });
 
+  it('asks for the password again, on the field, when a save moves the server (#399)', async () => {
+    const id = '0192c3f0-1a2b-7c3d-8e4f-0000000000e1';
+    const { user, channelsApi } = await open(`/admin/channels/mailboxes/${id}`);
+    await screen.findByRole('heading', { name: 'billing@helpdock.io', level: 1 });
+
+    await user.clear(screen.getByLabelText('IMAP host'));
+    await user.type(screen.getByLabelText('IMAP host'), 'imap.other.example');
+    await user.click(screen.getByRole('button', { name: 'Save mailbox' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Enter the IMAP password/);
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAccessibleDescription(/Type the password again/);
+    expect(password).toHaveAttribute('aria-invalid', 'true');
+    expect(password).not.toHaveAttribute('readonly');
+    expect((await channelsApi.mailbox('', id)).imap?.host).toBe('imap.fastmail.com');
+
+    await user.type(password, 'typed-again');
+    await user.click(screen.getByRole('button', { name: 'Save mailbox' }));
+    await waitFor(async () => {
+      expect((await channelsApi.mailbox('', id)).imap?.host).toBe('imap.other.example');
+    });
+  });
+
+  it('asks for the password again, on the field, when Test IMAP is pointed elsewhere (#399)', async () => {
+    const { user } = await open('/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e1');
+    await screen.findByRole('heading', { name: 'billing@helpdock.io', level: 1 });
+
+    await user.clear(screen.getByLabelText('Username'));
+    await user.type(screen.getByLabelText('Username'), 'someone-else');
+    await user.click(screen.getByRole('button', { name: 'Test IMAP' }));
+
+    const password = await screen.findByLabelText('Password');
+    await waitFor(() => {
+      expect(password).toHaveAccessibleDescription(/Type the password again/);
+    });
+    expect(password).not.toHaveAttribute('readonly');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('saves a change, discards another, and deletes the mailbox', async () => {
     const { user, channelsApi } = await open(
       '/admin/channels/mailboxes/0192c3f0-1a2b-7c3d-8e4f-0000000000e4',

@@ -147,6 +147,20 @@ function MailboxForm({
     await queryClient.invalidateQueries({ queryKey: ['mailbox', brand.id] });
   };
 
+  /**
+   * The api refuses to send a stored password to a server it was not saved
+   * for: open the password field and say so on it. True when it was that.
+   */
+  const retypePassword = (error: unknown): boolean => {
+    if (!isChannelsError(error) || error.reason !== 'password-required') {
+      return false;
+    }
+    setDraft((current) => (current.password === null ? { ...current, password: '' } : current));
+    setErrors((current) => ({ ...current, password: 'passwordRetype' }));
+
+    return true;
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       const checked = validate(draft, { creating });
@@ -179,6 +193,7 @@ function MailboxForm({
         if (error.reason === 'address-taken') {
           setErrors((current) => ({ ...current, address: 'email' }));
         }
+        retypePassword(error);
         return;
       }
       toast({ tone: 'danger', message: t('channels:toast.failed') });
@@ -200,8 +215,10 @@ function MailboxForm({
     onSuccess: (result) => {
       setTest(result);
     },
-    onError: () => {
-      toast({ tone: 'danger', message: t('channels:toast.failed') });
+    onError: (error: unknown) => {
+      if (!retypePassword(error)) {
+        toast({ tone: 'danger', message: t('channels:toast.failed') });
+      }
     },
   });
 

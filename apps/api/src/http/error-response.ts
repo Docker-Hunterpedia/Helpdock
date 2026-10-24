@@ -248,6 +248,9 @@ export const mapError = (error: unknown): MappedError => {
       code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
       message: error.message,
       channels: error.reason,
+      ...(error.field === undefined
+        ? {}
+        : { fields: [{ path: error.field, message: error.message }] }),
       unexpected: false,
     };
   }
@@ -320,6 +323,9 @@ export const mapError = (error: unknown): MappedError => {
         reason: error.reason,
         ...(error.domains === undefined ? {} : { domains: error.domains }),
       },
+      ...(error.reason === 'sso-client-secret-required'
+        ? { fields: [{ path: 'body.clientSecret', message: error.message }] }
+        : {}),
       unexpected: false,
     };
   }
@@ -353,6 +359,9 @@ export const mapError = (error: unknown): MappedError => {
       code: CODE_BY_STATUS[error.getStatus()] ?? 'conflict',
       message: error.message,
       ai: error.reason,
+      ...(error.field === undefined
+        ? {}
+        : { fields: [{ path: error.field, message: error.message }] }),
       unexpected: false,
     };
   }

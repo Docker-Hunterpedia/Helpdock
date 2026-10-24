@@ -16,16 +16,20 @@ const STATUS_BY_REASON: Readonly<Record<ChannelsRefusal, number>> = {
 
 const MESSAGE_BY_REASON: Readonly<Record<ChannelsRefusal, string>> = {
   'address-taken': 'Another mailbox already receives mail for that address',
-  'password-required': 'An IMAP mailbox needs a password, and none is stored yet',
+  'password-required':
+    'The IMAP password is only used with the server it was saved for; type it again',
   'department-not-found': 'No such department in this brand',
 };
 
 export class ChannelsFailure extends HttpException {
   readonly reason: ChannelsRefusal;
+  /** The request field a form draws the refusal on, when it is about one. */
+  readonly field: string | undefined;
 
-  constructor(reason: ChannelsRefusal) {
+  constructor(reason: ChannelsRefusal, field?: string) {
     super(MESSAGE_BY_REASON[reason], STATUS_BY_REASON[reason]);
     this.name = 'ChannelsFailure';
     this.reason = reason;
+    this.field = field;
   }
 }

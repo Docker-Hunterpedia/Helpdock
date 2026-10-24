@@ -81,7 +81,13 @@ export const errorResponseSchema = z.object({
      * `staff` above: the status says "forbidden" or "conflict", this says
      * which rule refused, and the Ticketing screen turns it into a sentence.
      */
-    ticketing: z.object({ reason: ticketingRefusalSchema }).optional(),
+    ticketing: z
+      .object({
+        reason: ticketingRefusalSchema,
+        /** #361. The live tickets a status state change would touch. */
+        count: z.int().nonnegative().optional(),
+      })
+      .optional(),
     /**
      * Only on a transition DOMAIN-RULES §2.2 has no row for (M1-08). The status
      * is 409 for all three, so the ticket workspace reads this to say whether

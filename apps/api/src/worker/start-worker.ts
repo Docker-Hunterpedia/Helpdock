@@ -203,6 +203,7 @@ import { BusinessHoursService } from '../sla/business-hours.service.js';
 import { businessHoursProbe } from '../sla/business-hours-probe.js';
 import { SlaRepository } from '../sla/sla.repository.js';
 import { SlaService } from '../sla/sla.service.js';
+import { SlaLifecycleHooks } from '../sla/sla-hooks.js';
 import { bullTimerQueue } from '../sla/sla-timers.js';
 import {
   createSlaProcessor,
@@ -228,10 +229,17 @@ import {
 } from '../telegram/telegram-send.job.js';
 import { liveBrandIds } from '../tenant/live-brands.js';
 import { withSystemJob } from '../tenant/system-job.js';
-
 import { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
+import { TicketLifecycleService } from '../tickets/lifecycle/lifecycle.service.js';
+import { TICKET_STATUS_STATE_RESYNC_EVENT } from '../tickets/lifecycle/status-state-events.js';
+import { repairClosedStatusTickets } from '../tickets/lifecycle/status-state-repair.js';
+import {
+  createStatusStateResyncHandler,
+  type StatusStateWorkerDeps,
+} from '../tickets/lifecycle/status-state-worker.js';
 import { bullSnoozeQueue, registerSnoozeEventHandlers } from '../tickets/snooze/snooze-worker.js';
 import { registerTicketEventHandlers } from '../tickets/ticket-events.js';
+import { TicketRepository } from '../tickets/tickets.repository.js';
 import { createTranscribeProcessor } from '../transcription/transcribe.job.js';
 import { transcriptionConfigFrom } from '../transcription/transcription-config.js';
 import { registerTranscriptionHandlers } from '../transcription/transcription-events.js';
@@ -507,6 +515,25 @@ const slaDeps = (queue: Queue): SlaWorkerDeps => {
   };
 };
 
+/**
+ * Issue #361. The dependencies of `ticket.status_state_resync`: the same
+ * lifecycle service `TicketsModule` wires, with the SLA and CSAT hooks in its
+ * base class chain, so a batch's closes and reopens run the exact code an
+ * agent's status change runs.
+ */
+const statusStateDeps = (): StatusStateWorkerDeps => {
+  const lifecycleRepository = new TicketLifecycleRepository();
+  const tickets = new TicketRepository();
+  const slaRepository = new SlaRepository();
+  const lifecycle = new TicketLifecycleService(
+    lifecycleRepository,
+    tickets,
+    new SlaLifecycleHooks(lifecycleRepository, new SlaService(slaRepository)),
+  );
+
+  return { repository: lifecycleRepository, lifecycle };
+};
+
 /** M7-03's handlers and boot reach the `knowledge` queue through this. */
 const knowledgeQueuesOf = (queue: Queue): KnowledgeQueues => ({
   addSync: async (payload, jobId) => {
@@ -749,6 +776,12 @@ export const workerDependencies: WorkerDependencies = {
     registerSlaEventHandlers(slaDeps(sla));
     // M14-02. `ticket.snoozed` adds the delayed wake job on the same queue.
     registerSnoozeEventHandlers(slaDeps(sla));
+    // #361. A status whose system state crossed the closed boundary moves its
+    // tickets through the lifecycle, a batch at a time.
+    registerEventHandler(
+      TICKET_STATUS_STATE_RESYNC_EVENT,
+      createStatusStateResyncHandler(statusStateDeps()),
+    );
 
     // M3-07. After the ticket handlers, so on the events both handle the
     // socket frame goes first. It owns `ticket.assigned`, `ticket.escalated`,
@@ -1327,6 +1360,11 @@ export const workerDependencies: WorkerDependencies = {
     // and its clock being rescheduled.
     addRebuild(undefined, `${slaRebuildJob.name}.boot.${String(Date.now())}`).catch(
       (error: unknown) => log.error({ err: error }, 'could not add the boot SLA rebuild'),
+    );
+    // #361. Tickets an earlier status edit left in a closed status without a
+    // `closed_at` are closed through the lifecycle, once, on boot.
+    repairClosedStatusTickets(db).catch((error: unknown) =>
+      log.error({ err: error }, 'could not repair tickets in closed statuses'),
     );
     queue
       .upsertJobScheduler(

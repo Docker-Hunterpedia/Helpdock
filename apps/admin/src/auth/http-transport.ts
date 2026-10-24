@@ -274,7 +274,7 @@ const toError = async (
   let auth: AuthErrorBody | undefined;
   let staff: StaffRefusal | undefined;
   let contact: { reason: ContactRefusal; problem?: IdentityProblem | undefined } | undefined;
-  let ticketing: TicketingRefusal | undefined;
+  let ticketing: { reason: TicketingRefusal; count?: number | undefined } | undefined;
   let lifecycle: TicketLifecycleRefusal | undefined;
   let channels: ChannelsRefusal | undefined;
   let domains: DomainsRefusal | undefined;
@@ -293,7 +293,7 @@ const toError = async (
     auth = body.auth;
     staff = body.staff?.reason;
     contact = body.contact;
-    ticketing = body.ticketing?.reason;
+    ticketing = body.ticketing;
     lifecycle = body.lifecycle?.reason;
     channels = body.channels?.reason;
     domains = body.domains?.reason;
@@ -320,7 +320,7 @@ const toError = async (
   }
 
   if (ticketing !== undefined) {
-    return new TicketingError(ticketing);
+    return new TicketingError(ticketing.reason, ticketing.count);
   }
 
   if (lifecycle !== undefined) {

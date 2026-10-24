@@ -785,6 +785,20 @@ export class MockTicketingApi implements TicketingApi {
       this.#assertStatusNameFree(request.name, statusId);
     }
 
+    // #361: the same two refusals the api answers with, counted from the
+    // tickets the mock holds per status.
+    const held = this.#ticketsByStatus[statusId] ?? 0;
+    if (request.systemState !== undefined && held > 0) {
+      if (status.systemState === 'closed' && request.systemState !== 'closed') {
+        throw new TicketingError('status-has-closed-tickets', held);
+      }
+      if (status.systemState !== 'closed' && request.systemState === 'closed') {
+        if (request.confirmCount !== held) {
+          throw new TicketingError('status-change-needs-confirmation', held);
+        }
+      }
+    }
+
     const updated: TicketStatus = {
       ...status,
       ...(request.name === undefined ? {} : { name: request.name }),

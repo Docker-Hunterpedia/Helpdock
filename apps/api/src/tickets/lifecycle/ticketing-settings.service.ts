@@ -21,6 +21,8 @@ import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
 import { toTicketStatus } from '../ticket-view.js';
 import { TicketLifecycleRepository } from './lifecycle.repository.js';
 import { statusDeleteRefusal, statusEditRefusal } from './status-rules.js';
+import { type StatusStateTransition, statusStateTransitionFor } from './status-state.js';
+import { enqueueTicketStatusStateResync } from './status-state-events.js';
 
 /**
  * The Statuses tab of `Admin/Ticketing`, and the Reply behaviour card under it
@@ -106,6 +108,12 @@ export class TicketingSettingsService {
     // One default per brand, and the move is two statements in one
     // transaction: clear it everywhere else, then set it here. Doing it the
     // other way round would leave a moment with two.
+    const transition =
+      request.systemState === undefined
+        ? 'none'
+        : statusStateTransitionFor(status.systemState, request.systemState);
+    await this.#guardStateChange(context.tx, statusId, transition, request.confirmCount);
+
     if (request.isDefault === true && !status.isDefault) {
       await this.#lifecycle.clearDefaultStatus(context.tx, statusId);
     }
@@ -132,8 +140,21 @@ export class TicketingSettingsService {
       await enqueueSlaStatusResync(context.tx, context.brandId, { statusId, at: context.now });
     }
 
+    // Only a move into a closed state gets here with tickets to close: the way
+    // out was refused above while the status held any. Between the open-like
+    // states nothing is owed — they differ in nothing the clocks or
+    // `closed_at` read.
+    if (transition === 'close') {
+      await enqueueTicketStatusStateResync(context.tx, context.brandId, {
+        statusId,
+        at: context.now,
+        actorType: context.actor.actorType,
+        actorId: context.actor.actorId,
+      });
+    }
+
     await this.#audit(context, 'ticket_status.updated', statusId, {
-      changed: Object.keys(request),
+      changed: Object.keys(request).filter((field) => field !== 'confirmCount'),
     });
 
     return toTicketStatus(updated);
@@ -313,6 +334,39 @@ export class TicketingSettingsService {
   async #assertNameFree(tx: DbTransaction, name: string, exceptId?: string): Promise<void> {
     if (await this.#lifecycle.statusNameTaken(tx, name, exceptId)) {
       throw new TicketingFailure('name-taken');
+    }
+  }
+
+  /**
+   * #361. One dropdown change must not become an unbounded mass action.
+   *
+   * Out of a closed state is refused while the status holds a live ticket
+   * (they would all reopen); the admin moves or merges them first. Into one
+   * needs the person to have confirmed the number of tickets it closes, and a
+   * number that moved since they looked asks again.
+   */
+  async #guardStateChange(
+    tx: DbTransaction,
+    statusId: string,
+    transition: StatusStateTransition,
+    confirmCount: number | undefined,
+  ): Promise<void> {
+    if (transition === 'reopen') {
+      const held = await this.#lifecycle.countLiveTicketsInStatus(tx, statusId, {
+        openOnly: false,
+      });
+      if (held > 0) {
+        throw new TicketingFailure('status-has-closed-tickets', held);
+      }
+    }
+
+    if (transition === 'close') {
+      const toClose = await this.#lifecycle.countLiveTicketsInStatus(tx, statusId, {
+        openOnly: true,
+      });
+      if (toClose > 0 && confirmCount !== toClose) {
+        throw new TicketingFailure('status-change-needs-confirmation', toClose);
+      }
     }
   }
 

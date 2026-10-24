@@ -2556,6 +2556,59 @@ describe.skipIf(!hasDocker)('tickets', () => {
           .where(eq(ticketActivity.ticketId, ticketId)),
       );
 
+    // Deleting a status moves its tickets to the default Open status and leaves
+    // their closed_at (`moveTicketsToStatus`), so 1.0 data has open tickets
+    // that carry one. They are open tickets (#361 review).
+    describe('an Open-status ticket that kept a closed_at from a deleted status', () => {
+      const leftover = async () => {
+        const { ticket } = await createTicket(ada);
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx
+            .update(tickets)
+            .set({ closedAt: new Date('2026-01-01T00:00:00Z') })
+            .where(eq(tickets.id, ticket.id)),
+        );
+        return ticket.id;
+      };
+      const path = (id: string) => `${brandPath(seeded.brandId)}/tickets/${id}`;
+
+      it('can be snoozed', async () => {
+        const id = await leftover();
+        const until = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+        const { status } = await call('PATCH', path(id), ada, { snoozedUntil: until });
+
+        expect(status).toBe(200);
+        // This suite's worker has no snooze handler; leave the outbox as found.
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.delete(outbox).where(eq(outbox.event, 'ticket.snoozed')),
+        );
+      });
+
+      it('moves to another open status without counting as a reopen', async () => {
+        const id = await leftover();
+
+        const { status } = await call('PATCH', path(id), ada, {
+          statusId: await statusNamed('Escalated'),
+        });
+
+        expect(status).toBe(200);
+        expect((await activityOf(id)).map((row) => row.action)).not.toContain('ticket.reopened');
+      });
+
+      it('goes to Awaiting customer on an agent public reply, like any open ticket', async () => {
+        const id = await leftover();
+
+        const reply = await call('POST', `${path(id)}/messages`, ada, {
+          kind: 'public',
+          bodyHtml: '<p>On it</p>',
+        });
+
+        expect(reply.status).toBe(201);
+        expect((await ticketRow(id))?.statusId).toBe(await statusNamed('Awaiting customer'));
+      });
+    });
+
     describe('closing and reopening', () => {
       it('sets closed_at on the way in and clears it on the way out (§2.2, §3.5)', async () => {
         const { ticket } = await createTicket(ada);

@@ -154,7 +154,9 @@
     "policiesReordered": "حُفظ ترتيب السياسات",
     "slaSettingsSaved": "حُفظت إعدادات مستوى الخدمة",
     "macroChanged": "تغيّر هذا الماكرو بعد أن طبّقته. طبّقه مرة أخرى.",
-    "pinConflict": "تغيّر الحقل المثبَّت في اللحظة نفسها. حاول مرة أخرى."
+    "pinConflict": "تغيّر الحقل المثبَّت في اللحظة نفسها. حاول مرة أخرى.",
+    "statusHasClosedTickets": "ما زالت في هذه الحالة تذاكر مغلقة. انقلها أو ادمجها أولًا.",
+    "statusChangeNeedsConfirmation": "تغيّر عدد التذاكر. راجع التأكيد وحاول مجددًا."
   },
   "statuses": {
     "add": "إضافة حالة",
@@ -195,7 +197,7 @@
       "nameAr": "الاسم (بالعربية)",
       "nameArHint": "اختياري. يظهر للعملاء الذين يقرؤون بالعربية.",
       "systemState": "حالة النظام",
-      "systemStateHint": "ما تعتبره حسابات اتفاقية الخدمة والتقارير هذه الحالة.",
+      "systemStateHint": "ما تعتبره حسابات اتفاقية الخدمة والتقارير هذه الحالة. نقل الحالة إلى حالة مغلقة يغلق التذاكر فيها بعد تأكيد العدد، ويُرفض نقلها من حالة مغلقة ما دامت فيها تذاكر.",
       "pausesSla": "إيقاف مؤقّت لمؤقّتات اتفاقية الخدمة",
       "awaitingCustomer": "تُحتسب بانتظار العميل",
       "colour": "اللون",
@@ -211,7 +213,13 @@
       "nothing": {
         "heading": "لم يُحدَّد شيء",
         "body": "اختر حالة لتحرير اسمها وحالة النظام وأعلامها."
-      }
+      },
+      "reopenRefused_zero": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "reopenRefused_one": "تحتوي «{{name}}» على تذكرة مغلقة واحدة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "reopenRefused_two": "تحتوي «{{name}}» على تذكرتين مغلقتين. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "reopenRefused_few": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذاكر مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "reopenRefused_many": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة.",
+      "reopenRefused_other": "تحتوي «{{name}}» على {{count, number(numberingSystem: latn)}} تذكرة مغلقة. انقلها أو ادمجها قبل تغيير الحالة إلى حالة مفتوحة."
     },
     "colours": {
       "info": "أزرق",
@@ -230,6 +238,27 @@
         "body_many": "تنتقل {{count}} تذكرة إلى {{fallback}}. لا يمكن التراجع عن هذا.",
         "body_other": "تنتقل {{count}} تذكرة إلى {{fallback}}. لا يمكن التراجع عن هذا.",
         "submit": "حذف الحالة"
+      },
+      "stateChange": {
+        "title_zero": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة؟",
+        "title_one": "إغلاق تذكرة واحدة؟",
+        "title_two": "إغلاق تذكرتين؟",
+        "title_few": "إغلاق {{count, number(numberingSystem: latn)}} تذاكر؟",
+        "title_many": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة؟",
+        "title_other": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة؟",
+        "body_zero": "تغيير «{{name}}» إلى حالة مغلقة يغلق {{count, number(numberingSystem: latn)}} تذكرة فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "body_one": "تغيير «{{name}}» إلى حالة مغلقة يغلق التذكرة الواحدة فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "body_two": "تغيير «{{name}}» إلى حالة مغلقة يغلق التذكرتين فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "body_few": "تغيير «{{name}}» إلى حالة مغلقة يغلق {{count, number(numberingSystem: latn)}} تذاكر فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "body_many": "تغيير «{{name}}» إلى حالة مغلقة يغلق {{count, number(numberingSystem: latn)}} تذكرة فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "body_other": "تغيير «{{name}}» إلى حالة مغلقة يغلق {{count, number(numberingSystem: latn)}} تذكرة فيها الآن. لا تُرسل استبيانات رضا لهذا التغيير. تُطلق كل تذكرة webhook خاصًّا بها من نوع ticket.closed.",
+        "typeLabel": "اكتب {{total, number(numberingSystem: latn)}} للتأكيد",
+        "submit_zero": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة",
+        "submit_one": "إغلاق تذكرة واحدة",
+        "submit_two": "إغلاق تذكرتين",
+        "submit_few": "إغلاق {{count, number(numberingSystem: latn)}} تذاكر",
+        "submit_many": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة",
+        "submit_other": "إغلاق {{count, number(numberingSystem: latn)}} تذكرة"
       }
     },
     "reply": {

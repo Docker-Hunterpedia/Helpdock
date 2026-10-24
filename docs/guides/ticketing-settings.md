@@ -151,6 +151,33 @@ created:
 | **Counts as awaiting customer** | The ball is with the customer; time-based rules and reports read it |
 | Excluded from reports | Not editable. Seeded on Spam and Merged; it is why a close into one schedules no survey |
 
+### Changing the system state
+
+A custom status may be remapped between the four states, and the save is not a
+relabel: the tickets already in it cross the closed boundary ([DOMAIN-RULES
+§2.2](../planning/DOMAIN-RULES.md#22-transitions)). One dropdown change must
+not become an unbounded mass action, so the two directions are guarded.
+
+| The state moves | What happens |
+|---|---|
+| Into **Closed** | The editor asks you to type the number of tickets it will close ("Close N tickets?"), and the API requires the same number as `confirmCount`; without it, or if the number moved since, it answers `409` `status-change-needs-confirmation` with the current count. A status with no tickets closes without a question. |
+| Out of **Closed** | Refused with `409` `status-has-closed-tickets` and the count while the status holds any ticket. Move or merge those tickets first; an empty status can be changed freely. |
+| Between **Open**, **On hold** and **Escalated** | Nothing. Those states differ in nothing the clocks or `closed_at` read; only a change of "Pauses SLA clocks" re-syncs them, as the table above describes |
+
+After a confirmed close, the worker closes the tickets in batches of 200, with
+the time of your save as `closed_at`. Each ticket gets what a close by hand
+gets (the resolution clock met, an activity row naming your save, a
+`ticket.closed` event), so **each ticket fires its own `ticket.closed`
+webhook** and rules on that event run per ticket. **No satisfaction survey is
+sent**: a configuration change is not a resolution. Soft-deleted and merged
+tickets are neither counted nor closed. A ticket moved to another status, or
+closed by someone else, before the worker reaches it is left alone, and a
+customer reply on a ticket the worker has not reached yet is handled as a reply
+on an open ticket (it moves to the default open status). Tickets that an older
+version left in a closed status without a close date are closed the same way
+when the worker next starts. If the state is
+flipped back before the worker runs, nothing more is closed.
+
 ### What a seeded status accepts
 
 A seeded row may be **renamed, given an Arabic name, and recoloured**. Its

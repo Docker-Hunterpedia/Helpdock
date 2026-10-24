@@ -46,6 +46,9 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   'macro-changed': HttpStatus.CONFLICT,
   // M14-16. Two changes to the pinned field raced; the later one retries.
   'pin-conflict': HttpStatus.CONFLICT,
+  // #361. The state change would touch more tickets than one save should.
+  'status-has-closed-tickets': HttpStatus.CONFLICT,
+  'status-change-needs-confirmation': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -70,14 +73,21 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
     'A built-in view may be renamed, reordered or hidden, never deleted, refiltered or reshared',
   'macro-changed': 'That macro has changed since it was applied; apply it again',
   'pin-conflict': 'The brand’s pinned field changed at the same moment; try again',
+  'status-has-closed-tickets':
+    'Closed tickets still sit in this status; move or merge them before it stops being closed',
+  'status-change-needs-confirmation':
+    'Closing this status closes the tickets in it; send confirmCount to confirm the number',
 };
 
 export class TicketingFailure extends HttpException {
   readonly reason: TicketingRefusal;
+  /** #361. The tickets a refused status state change would have touched. */
+  readonly count: number | undefined;
 
-  constructor(reason: TicketingRefusal) {
+  constructor(reason: TicketingRefusal, count?: number) {
     super(MESSAGE_BY_REASON[reason], STATUS_BY_REASON[reason]);
     this.name = 'TicketingFailure';
     this.reason = reason;
+    this.count = count;
   }
 }

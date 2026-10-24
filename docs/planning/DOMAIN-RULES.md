@@ -113,6 +113,16 @@ A third seeded custom status, **Snoozed** (`on_hold`, `pauses_sla`, not `awaitin
 
 Time-based rules and workflow actions use the same transitions and are logged with actor `rule:<id>`.
 
+**A status whose system state changes** crosses the closed boundary for the live tickets (not soft-deleted, not merged) already in it (#361), and one dropdown change must not become an unbounded mass action:
+
+- **Out of `closed`** is refused while the status holds any live ticket: `409 status-has-closed-tickets` with the count. The admin moves or merges them first; an empty status may change. Nothing is reopened in bulk.
+- **Into `closed`** needs `confirmCount` equal to the live tickets that are not yet closed, else `409 status-change-needs-confirmation` with the count (none needed for an empty status). The `ticket.status_state_resync` outbox event then closes them in batches of 200, counted from the moment of the save: `closed_at` set, the resolution clock met (row 4), an activity row, and a `ticket.closed` event **per ticket**, so webhooks and rules fire per ticket. **No CSAT is scheduled**: a configuration change is not a resolution.
+- The worker reads status and tickets as they are now: a status no longer closed closes nothing more, and a ticket that moved out, closed or was deleted since is skipped (batch rows are locked and the update re-checks status and `closed_at`).
+- While a batch runs, a ticket in a closed-state status that has no `closed_at` (not reached yet) is read as open for a reply or a status change. The converse is not read: an open-status ticket that carries a `closed_at` (deleting a status moves its tickets to the default open status and leaves it) is an open ticket.
+- On worker boot, every closed-state status still holding a live ticket with no `closed_at` (left by the edit before #361) gets the same event, so those tickets are closed once, without surveys.
+- Known race: a ticket moved into the status by an agent between the count check and the worker is closed with the rest if the status is closed by then, and a ticket moved in after the batches finished is caught by the boot repair. Status changes of tickets do not take the status-row lock.
+- Between the open-like states nothing is owed, and a change of `pauses_sla` re-syncs on its own (§3.2).
+
 ### 2.3 Reopen policy
 
 Per brand, editable by Team Leaders and Admins. Setting `reopen_policy`:
@@ -634,3 +644,4 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-21 | §12.1 rule 6 and rule 1: moving the passkeys when `APP_URL`'s host changes is the one later change to the RP ID pin; atomic, refused when it would lock out break-glass or a required second factor (M18-06). |
 | 2026-10-23 | §2.10 review fixes: §2.10.4 restated as "the online line carries names only" — a photo URL is issued solely for a message's author in the visitor's own conversation; §2.10.1's history sentence corrected (the email `From` header used to carry the full name); profile text fields refuse control and format characters. |
 | 2026-10-24 | §12: a magic-link or password-reset request is refused with `email-unavailable` for every address alike while the install has no system sender, before any lookup or budget, and `sso-required` is answered first when SSO is enforced; a stored SMTP password is used (by a save or a test, install or brand) only while host, port and username are unchanged, otherwise `smtp-password-required` (#369). |
+| 2026-10-23 | §2.2: a status moved into a closed state closes its live tickets after a typed count is confirmed, in batches and without surveys; moving it out of one is refused while it holds tickets (#361). |

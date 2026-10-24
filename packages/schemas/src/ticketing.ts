@@ -256,6 +256,17 @@ export const ticketingRefusalSchema = z.enum([
   'macro-changed',
   /** Another change to the brand's fields got to the pinned field first; try again (409, M14-16). */
   'pin-conflict',
+  /**
+   * #361. Moving a status out of the closed state while live tickets sit in it
+   * would reopen them all from one dropdown; move or merge them first (409).
+   * The body carries `count`.
+   */
+  'status-has-closed-tickets',
+  /**
+   * #361. Moving a status into the closed state closes the live tickets in it;
+   * send `confirmCount` equal to the `count` this answers with (409).
+   */
+  'status-change-needs-confirmation',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

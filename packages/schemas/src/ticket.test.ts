@@ -6,6 +6,7 @@ import {
   ticketContactSchema,
   ticketCreateRequestSchema,
   ticketListQuerySchema,
+  ticketStatusUpdateRequestSchema,
   ticketUpdateRequestSchema,
 } from './ticket.js';
 
@@ -196,5 +197,26 @@ describe('ticketChannelSchema', () => {
 
   it('still refuses a channel Helpdock does not have', () => {
     expect(ticketChannelSchema.safeParse('slack').success).toBe(false);
+  });
+});
+
+describe('ticketStatusUpdateRequestSchema (#361)', () => {
+  it('takes a confirmCount beside the change it confirms', () => {
+    expect(
+      ticketStatusUpdateRequestSchema.safeParse({ systemState: 'closed', confirmCount: 37 })
+        .success,
+    ).toBe(true);
+  });
+
+  it('does not count a confirmCount alone as a change', () => {
+    expect(ticketStatusUpdateRequestSchema.safeParse({ confirmCount: 3 }).success).toBe(false);
+  });
+
+  it('refuses a negative or fractional count', () => {
+    for (const confirmCount of [-1, 1.5]) {
+      expect(
+        ticketStatusUpdateRequestSchema.safeParse({ systemState: 'closed', confirmCount }).success,
+      ).toBe(false);
+    }
   });
 });

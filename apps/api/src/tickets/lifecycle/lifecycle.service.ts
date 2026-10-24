@@ -17,6 +17,7 @@ import { type LifecycleResponseEvent, TicketLifecycleHooks } from './hooks.js';
 import { TicketLifecycleRepository } from './lifecycle.repository.js';
 import { TicketLifecycleFailure } from './lifecycle-failure.js';
 import { decideReopen } from './reopen-policy.js';
+import { effectiveSystemState } from './status-state.js';
 import { transitionFor } from './transitions.js';
 
 /**
@@ -49,6 +50,11 @@ export interface LifecycleContext {
   readonly actor: ActivityActor;
   /** Shared by every write of one transition, so they cannot disagree. */
   readonly now: Date;
+  /**
+   * #361. A close that is a configuration change, not a resolution (a status
+   * moved into a closed state), asks the customer nothing.
+   */
+  readonly withoutSurvey?: boolean;
 }
 
 /** Where a customer's reply belongs, once §2.2 and §2.3 have been applied. */
@@ -125,7 +131,10 @@ export class TicketLifecycleService {
     /** M14-08: where the reply came in, which a continuation records as its arrival. */
     inbound: ArrivalEntryPoint,
   ): Promise<CustomerReplyLanding> {
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'customer.reply');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'customer.reply',
+    );
     if (outcome.kind === 'refused') {
       throw new TicketLifecycleFailure(outcome.reason);
     }
@@ -165,7 +174,10 @@ export class TicketLifecycleService {
     ticket: TicketRow,
     status: TicketStatusRow,
   ): Promise<TicketStatusRow> {
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.reply');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'agent.reply',
+    );
     if (outcome.kind !== 'to-awaiting-customer') {
       return status;
     }
@@ -214,7 +226,8 @@ export class TicketLifecycleService {
     if (
       ticket.mergedIntoId === null &&
       !isSpamStatus(status) &&
-      context.actor.via !== 'bulk_undo'
+      context.actor.via !== 'bulk_undo' &&
+      context.withoutSurvey !== true
     ) {
       await this.#hooks.onClosedForCsat(context.tx, {
         ...event,
@@ -323,7 +336,10 @@ export class TicketLifecycleService {
     ticket: TicketRow,
     status: TicketStatusRow,
   ): Promise<{ ticket: TicketRow; status: TicketStatusRow; changed: boolean }> {
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'mark.spam');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'mark.spam',
+    );
     if (outcome.kind === 'refused') {
       throw new TicketLifecycleFailure(outcome.reason);
     }
@@ -380,7 +396,10 @@ export class TicketLifecycleService {
     ticket: TicketRow,
     status: TicketStatusRow,
   ): Promise<CustomerReplyLanding> {
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'agent.reopen');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'agent.reopen',
+    );
     if (outcome.kind === 'refused') {
       throw new TicketLifecycleFailure(outcome.reason);
     }
@@ -418,7 +437,10 @@ export class TicketLifecycleService {
     ticket: TicketRow,
     status: TicketStatusRow,
   ): Promise<void> {
-    const outcome = transitionFor({ ...ticket, systemState: status.systemState }, 'soft.delete');
+    const outcome = transitionFor(
+      { ...ticket, systemState: effectiveSystemState(ticket, status) },
+      'soft.delete',
+    );
     if (outcome.kind === 'refused') {
       throw new TicketLifecycleFailure(outcome.reason);
     }

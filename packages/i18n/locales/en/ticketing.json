@@ -154,7 +154,9 @@
     "policiesReordered": "Policy order saved",
     "slaSettingsSaved": "SLA settings saved",
     "macroChanged": "That macro changed after you applied it. Apply it again.",
-    "pinConflict": "The pinned field changed at the same moment. Try again."
+    "pinConflict": "The pinned field changed at the same moment. Try again.",
+    "statusHasClosedTickets": "This status still holds closed tickets. Move or merge them first.",
+    "statusChangeNeedsConfirmation": "The number of tickets changed. Review the confirmation and try again."
   },
   "statuses": {
     "add": "Add status",
@@ -195,7 +197,7 @@
       "nameAr": "Name (Arabic)",
       "nameArHint": "Optional. Shown to customers reading in Arabic.",
       "systemState": "System state",
-      "systemStateHint": "What SLA maths and reports treat this status as.",
+      "systemStateHint": "What SLA maths and reports treat this status as. Moving a status into the closed state closes the tickets in it, after you confirm the number; moving it out is refused while it holds tickets.",
       "pausesSla": "Pauses SLA clocks",
       "awaitingCustomer": "Counts as awaiting customer",
       "colour": "Colour",
@@ -207,7 +209,9 @@
       "nothing": {
         "heading": "Nothing selected",
         "body": "Choose a status to edit its name, its system state and its flags."
-      }
+      },
+      "reopenRefused_one": "“{{name}}” holds {{count, number(numberingSystem: latn)}} closed ticket. Move or merge it before changing the status to an open state.",
+      "reopenRefused_other": "“{{name}}” holds {{count, number(numberingSystem: latn)}} closed tickets. Move or merge them before changing the status to an open state."
     },
     "colours": {
       "info": "Blue",
@@ -222,6 +226,15 @@
         "body_one": "{{count}} ticket moves to {{fallback}}. This cannot be undone.",
         "body_other": "{{count}} tickets move to {{fallback}}. This cannot be undone.",
         "submit": "Delete status"
+      },
+      "stateChange": {
+        "title_one": "Close {{count, number(numberingSystem: latn)}} ticket?",
+        "title_other": "Close {{count, number(numberingSystem: latn)}} tickets?",
+        "body_one": "Changing “{{name}}” to a closed state closes the {{count, number(numberingSystem: latn)}} ticket in it now. No satisfaction surveys are sent for this change. Each ticket fires its own ticket.closed webhook.",
+        "body_other": "Changing “{{name}}” to a closed state closes the {{count, number(numberingSystem: latn)}} tickets in it now. No satisfaction surveys are sent for this change. Each ticket fires its own ticket.closed webhook.",
+        "typeLabel": "Type {{total, number(numberingSystem: latn)}} to confirm",
+        "submit_one": "Close {{count, number(numberingSystem: latn)}} ticket",
+        "submit_other": "Close {{count, number(numberingSystem: latn)}} tickets"
       }
     },
     "reply": {

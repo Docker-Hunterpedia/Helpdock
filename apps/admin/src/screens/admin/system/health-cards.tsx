@@ -72,12 +72,17 @@ export function HealthCards({ status }: { readonly status: SystemStatus }): Reac
   const slowest = status.api.checks.reduce((worst, check) => Math.max(worst, check.latencyMs), 0);
   const relay = status.relay;
   const migrations = status.database.migrationsApplied;
+  const smtp = status.smtp;
 
   return (
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
+        gridTemplateColumns: {
+          xs: '1fr',
+          sm: 'repeat(2, 1fr)',
+          lg: 'repeat(5, minmax(0, 1fr))',
+        },
         gap: 4,
         marginBlockEnd: 6,
       }}
@@ -144,6 +149,20 @@ export function HealthCards({ status }: { readonly status: SystemStatus }): Reac
             : t('system:cards.redis.caption', { latency: formatMs(status.redis.latencyMs) })
         }
         captionStatus={status.redis.status}
+      />
+
+      <HealthCard
+        title={t('system:cards.smtp.title')}
+        // A missing sender is a standing warning, not a failure of anything:
+        // the install is up, it just cannot put a sign-in link in anybody's
+        // inbox (#369).
+        status={smtp.configured ? 'ok' : 'warning'}
+        label={smtp.configured ? t('system:status.ok') : t('system:notConfigured')}
+        fact={smtp.configured && smtp.fromAddress !== '' ? smtp.fromAddress : '—'}
+        caption={
+          smtp.configured ? t('system:cards.smtp.caption') : t('system:cards.smtp.notConfigured')
+        }
+        captionStatus={smtp.configured ? 'ok' : 'warning'}
       />
     </Box>
   );

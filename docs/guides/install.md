@@ -186,7 +186,7 @@ Four steps, none of which can be got wrong permanently except one:
 |---|---|
 | **1 Admin account** | The setup key, when `HD_SETUP_TOKEN` is set. Your name, email, a password of at least twelve characters, and your language. This account is the *install administrator*: the only one that reaches every brand and every setting. The language you pick here is the one the rest of the wizard, and your admin, are shown in — pick العربية and the whole thing turns around. |
 | **2 First brand** | The brand's name, a **ticket prefix**, its default language, its timezone, and optionally the hostname its help center will answer on. The brand is created with one department, **General**; rename it or add more in admin. |
-| **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. This is the install's system sender: sign-in links, password resets, staff invitations and staff notifications all go from it, sent by the worker. You may skip this, but until it is set none of those are delivered — the worker only logs that they would have been ([authentication › Sending](authentication.md#sending)). |
+| **3 Outgoing email** | Your SMTP server, port, encryption, credentials and the address mail comes from. **Send a test email** delivers one to the address from step 1 and shows you what the server said. This is the install's system sender: sign-in links, password resets, staff invitations and staff notifications all go from it, sent by the worker. You may skip this, but until it is set none of those are delivered, and the sign-in screens say so instead of claiming a link was sent ([authentication › Sending](authentication.md#sending)). You can set it later — and change or test it any time — in **Admin › System › Outgoing email**; the System page warns while it is missing. |
 | **4 Done** | What was created, and the way in. |
 
 **The ticket prefix cannot be changed.** It is printed in every ticket number,
@@ -226,7 +226,9 @@ shown again, in admin or anywhere else.
 
 If you set any `HD_SMTP_*` variable in `.env`, that key wins over whatever the
 wizard saves ([ARCHITECTURE §4](../planning/ARCHITECTURE.md#4-configuration-model)),
-and the wizard leaves it alone rather than storing a value nothing reads.
+and the wizard leaves it alone rather than storing a value nothing reads. The
+System page draws such a field locked — *Set by environment* — and refuses a
+save that would change it.
 
 ### Once it is finished
 

@@ -74,7 +74,8 @@ export const SETTING_DEFINITIONS = [
     default: '',
     secret: false,
     scope: 'brand',
-    description: 'SMTP server used to send mail. Empty until the first-run wizard sets it.',
+    description:
+      'SMTP server used to send mail. Empty until the wizard or the System page sets it.',
   }),
   defineSetting({
     key: 'smtp.port',

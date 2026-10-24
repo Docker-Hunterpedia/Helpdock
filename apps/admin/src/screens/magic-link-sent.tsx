@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Link as RouterLink, useLocation } from 'react-router';
 import { useT } from '../app/i18n.js';
 import { ROUTES } from '../app/route-paths.js';
+import { isEmailUnavailable } from '../auth/auth-error.js';
 import { useAuthApi } from '../auth/session.tsx';
 import { AlertBanner } from '../ui/alert-banner.tsx';
 import { AuthLayout } from './auth-layout.tsx';
@@ -40,7 +41,11 @@ export function MagicLinkSent(): ReactNode {
       subtitle={t('auth:magicLink.subtitle', { email: state.email })}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {resend.isError ? <AlertBanner tone="danger">{t('auth:unavailable')}</AlertBanner> : null}
+        {resend.isError ? (
+          <AlertBanner tone="danger">
+            {isEmailUnavailable(resend.error) ? t('auth:emailUnavailable') : t('auth:unavailable')}
+          </AlertBanner>
+        ) : null}
         {resend.isSuccess ? (
           <AlertBanner tone="info">{t('auth:magicLink.resent')}</AlertBanner>
         ) : null}

@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../../app/routes.tsx';
-import type { EmailApi } from '../../../email/api.js';
+import { type EmailApi, SmtpPasswordRequiredError } from '../../../email/api.js';
 import { MockEmailApi } from '../../../email/mock-api.js';
 import { renderApp } from '../../../test/render.tsx';
 import { signedInMockApis } from '../../../test/signed-in.js';
@@ -93,6 +93,27 @@ describe('Outgoing mail (SMTP)', () => {
     const alert = await within(smtp).findByRole('alert');
     expect(alert).toHaveTextContent('The SMTP server refused the sign-in');
     expect(alert).toHaveTextContent('535 5.7.8 Authentication credentials invalid');
+  });
+
+  it('asks for the password again on the Password field when the server changed', async () => {
+    class AsksAgain extends MockEmailApi {
+      override async saveSmtp(): Promise<never> {
+        throw new SmtpPasswordRequiredError();
+      }
+    }
+    const { user } = await renderOutgoing(new AsksAgain());
+    const smtp = section('Outgoing mail (SMTP)');
+
+    const host = within(smtp).getByLabelText('SMTP host');
+    await user.clear(host);
+    await user.type(host, 'other.example.com');
+    await user.click(within(smtp).getByRole('button', { name: 'Save outgoing mail' }));
+
+    expect(
+      await within(smtp).findByText('Type the password again to use it with this server.'),
+    ).toBeVisible();
+    expect(within(smtp).getByLabelText('Password')).toBeInvalid();
+    expect(screen.queryByText(/could not be completed|went wrong/i)).toBeNull();
   });
 
   it("says a brand with no server of its own sends through the install's", async () => {

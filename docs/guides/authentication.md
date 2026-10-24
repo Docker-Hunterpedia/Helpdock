@@ -698,14 +698,30 @@ before it reaches the outbox row, and stays sealed in the job's data in Redis.
 Only the job opens it, to put it in the message. Neither the api nor the worker
 logs a link: the lines name the kind of email and the account id.
 
-**Without SMTP** — a development install that skipped the wizard's SMTP step —
-the job logs, at `warn`, that the email *would* have been sent, with the kind
-and the account id, and finishes. It never logs the link, in any `NODE_ENV`.
-To follow a sign-in link locally, point `smtp.*` at the Mailpit of the dev
-compose file (`localhost:1025`, TLS `none`) and read it at
-<http://localhost:8025>. The worker reads the settings when it sends, so no
-restart is needed. The System page has no slot for this yet: the Channels card
-lists brand channels, not the install's sender.
+**Without SMTP** — an install that skipped the wizard's email step — nothing
+is claimed and nothing pretends. A sign-in link or password reset is refused
+with `email-unavailable`, the same answer for every address (it says how the
+install is configured, never which accounts exist), and the screen says no
+link was sent and points to **Admin › System › Outgoing email** instead of an
+inbox. A job that was already queued when the sender disappeared logs, at
+`warn`, that the email *would* have been sent, with the kind and the account
+id, and finishes; it never logs the link, in any `NODE_ENV`.
+
+**Setting the sender after setup** needs no `.env` edit and no restart:
+**Admin › System › Outgoing email** (install admins) holds the same fields the
+wizard's step 3 does — server, port, TLS mode, credentials, the From address
+and name — plus **Send a test email** showing the server's answer. The
+password is write-only: the field shows "Saved · type to change", and the
+stored one is used only while the server, port and username are unchanged;
+changing any of them asks for the password again (`smtp-password-required`), so
+a stolen session cannot send it to another host. A test is limited like the
+wizard's (ten per address in fifteen minutes; the card says "Wait N seconds"). A
+field an `HD_SMTP_*` variable pins is read-only with a caption naming the
+variable, because the environment wins and the worker reads the settings when it
+sends. With SSO enforced, a magic-link request answers `sso-required` before it
+answers `email-unavailable`. To follow a sign-in link
+locally, point `smtp.*` at the Mailpit of the dev compose file
+(`localhost:1025`, TLS `none`) and read it at <http://localhost:8025>.
 
 The messages are rendered from the `email` catalogs in `@helpdock/i18n`,
 in the recipient's own language, right to left for Arabic.

@@ -306,6 +306,24 @@ export class RateLimiter {
     return true;
   }
 
+  /** Seconds until a refused subject gets a slot back: the oldest entry's expiry. */
+  async retryAfter(rule: RateLimitRule, subject: string): Promise<number> {
+    const [, oldest] = await this.#redis.zrange(
+      rateLimitKey(rule.bucket, hashSubject(subject)),
+      '0',
+      '0',
+      'WITHSCORES',
+    );
+    const now = Date.now();
+
+    return retryAfterSeconds(
+      oldest === undefined
+        ? now + rule.windowSeconds * 1000
+        : Number(oldest) + rule.windowSeconds * 1000,
+      now,
+    );
+  }
+
   /**
    * Gives an address its budget back. A sign-in that succeeded is not an
    * attack, and without this a busy person on a shared address could lock

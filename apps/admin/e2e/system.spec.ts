@@ -8,8 +8,10 @@ import {
   healthySystemStatus,
   installBrands,
   measuredSystemStatus,
+  missingSenderSystemStatus,
   productMetrics,
   QUEUE_BOARD_PASS,
+  smtpSettingsFixture,
 } from '../src/screens/admin/system/fixtures.js';
 import { expect, test } from './fixtures.js';
 import { signIn } from './flows.js';
@@ -105,6 +107,9 @@ const json = (body: unknown) => ({
  */
 async function stubSystem(page: Page, body: Fixture): Promise<void> {
   await page.route(SYSTEM_ENDPOINT, (route) => route.fulfill(json(body)));
+  await page.route('**/api/install/settings/smtp', (route) =>
+    route.fulfill(json(smtpSettingsFixture())),
+  );
   await page.route('**/api/install/system/metrics', (route) =>
     route.fulfill(json(productMetrics())),
   );
@@ -150,11 +155,16 @@ test.describe('the System page', () => {
 
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(t('system:title'));
 
-    for (const card of ['api', 'worker', 'postgres', 'redis'] as const) {
+    for (const card of ['api', 'worker', 'postgres', 'redis', 'smtp'] as const) {
       await expect(
-        page.getByRole('region', { name: t(`system:cards.${card}.title`) }),
+        // Exact: the settings card's own region is named "Outgoing email
+        // settings", which contains the health card's name.
+        page.getByRole('region', { name: t(`system:cards.${card}.title`), exact: true }),
       ).toBeVisible();
     }
+
+    // The system sender, where an operator who skipped the wizard's step edits it.
+    await expect(page.getByLabel(t('system:smtp.host'))).toBeVisible();
 
     await expect(page.getByRole('table', { name: t('system:queues.title') })).toBeVisible();
     await expect(page.getByRole('region', { name: t('system:channels.title') })).toBeVisible();
@@ -165,6 +175,156 @@ test.describe('the System page', () => {
 
     // The version string is Latin in both locales (DESIGN §7).
     await expect(page.getByText('helpdock 0.1.0 · a2cf2b3 · node v24.18.0')).toBeVisible();
+  });
+
+  test('warns while no outgoing email is set up, and offers the card that fixes it (#369)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await stubSystem(page, missingSenderSystemStatus());
+    await page.route('**/api/install/settings/smtp', (route) =>
+      route.fulfill(
+        json(
+          smtpSettingsFixture({
+            configured: false,
+            host: '',
+            user: '',
+            passwordConfigured: false,
+            fromAddress: '',
+            fromName: '',
+          }),
+        ),
+      ),
+    );
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+
+    // The banner names what is not being sent and anchors to the card.
+    await expect(page.getByText(t('system:smtp.missingBanner'))).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: t('system:smtp.missingBannerAction') }),
+    ).toHaveAttribute('href', '#outgoing-email');
+
+    // The health card says it in words, not only in a hue.
+    const health = page.getByRole('region', {
+      name: t('system:cards.smtp.title'),
+      exact: true,
+    });
+    await expect(health.getByText(t('system:cards.smtp.notConfigured'))).toBeVisible();
+
+    // The card the link points at carries the form, ready for the relay.
+    await expect(page.getByLabel(t('system:smtp.host'))).toBeVisible();
+    await expect(page.getByLabel(t('system:smtp.fromAddress'))).toHaveValue('');
+    await expect(page.getByRole('button', { name: t('system:smtp.test') })).toBeVisible();
+
+    // A warning must read as well to axe as a healthy card does.
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('sends a test email against the stubbed server and draws what it said (#369)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    let sent: unknown;
+    await stubSystem(page, healthySystemStatus());
+    await page.route('**/api/install/settings/smtp/test', (route) => {
+      sent = route.request().postDataJSON();
+      return route.fulfill(
+        json({ delivered: true, response: '250 2.0.0 OK queued', recipient: 'lina@helpdock.com' }),
+      );
+    });
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+
+    // The stored password is a placeholder, and it is not sent back.
+    await expect(page.getByLabel(t('system:smtp.password'))).toHaveAttribute(
+      'placeholder',
+      t('system:smtp.passwordPlaceholder'),
+    );
+    await page.getByRole('button', { name: t('system:smtp.test') }).click();
+
+    await expect(
+      page.getByText(
+        t('system:smtp.testDeliveredWithResponse', {
+          recipient: 'lina@helpdock.com',
+          response: '250 2.0.0 OK queued',
+        }),
+      ),
+    ).toBeVisible();
+    expect(sent).not.toHaveProperty('password');
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('draws a rate-limited test as a wait in seconds (#369)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await stubSystem(page, healthySystemStatus());
+    await page.route('**/api/install/settings/smtp/test', (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: 'application/json',
+        headers: { 'retry-after': '40' },
+        body: JSON.stringify({
+          error: { code: 'rate_limited', message: 'slow down', requestId: 'r' },
+        }),
+      }),
+    );
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+
+    await page.getByRole('button', { name: t('system:smtp.test') }).click();
+
+    await expect(page.getByText(t('system:smtp.testRateLimited', { seconds: '40' }))).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('says which variable pins a field when a save is refused, and asks for the password again (#369)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await stubSystem(page, healthySystemStatus());
+    let refusal: { status: number; error: object } = {
+      status: 409,
+      error: { code: 'conflict', message: 'HD_SMTP_HOST locks this setting', requestId: 'r' },
+    };
+    await page.route('**/api/install/settings/smtp', (route) =>
+      route.request().method() === 'PUT'
+        ? route.fulfill({
+            status: refusal.status,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: refusal.error }),
+          })
+        : route.fulfill(json(smtpSettingsFixture())),
+    );
+    await signIn(page, locale);
+    await page.getByRole('link', { name: new RegExp(strings(locale)('admin:nav.system')) }).click();
+
+    const fromName = page.getByLabel(t('system:smtp.fromName'));
+    await fromName.fill('Helpdock Support');
+    await page.getByRole('button', { name: t('system:smtp.save') }).click();
+    await expect(
+      page.getByText(t('system:smtp.pinnedSaveFailed', { envKey: 'HD_SMTP_HOST' })),
+    ).toBeVisible();
+
+    refusal = {
+      status: 400,
+      error: {
+        code: 'validation_failed',
+        message: 'type it again',
+        requestId: 'r',
+        setup: { reason: 'smtp-password-required' },
+        fields: [{ path: 'body.password', message: 'type it again' }],
+      },
+    };
+    await page.getByLabel(t('system:smtp.host')).fill('other.example.com');
+    await page.getByRole('button', { name: t('system:smtp.save') }).click();
+    await expect(page.getByText(t('system:smtp.errors.passwordRequired'))).toBeVisible();
+    expect(await violations(page)).toEqual([]);
   });
 
   test('shows a degraded Redis as a warning in words', async ({ page, appLocale: locale }) => {

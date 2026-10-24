@@ -4,7 +4,7 @@ import type { LocaleOption } from './e2e/fixtures.js';
 /** Exercises HTTP error mapping without starting a real API. */
 export default defineConfig<LocaleOption>({
   testDir: './e2e/api',
-  testMatch: 'sign-in-rate-limit.spec.ts',
+  testMatch: ['sign-in-rate-limit.spec.ts', 'sign-in-email-unavailable.spec.ts'],
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   use: { baseURL: 'http://localhost:5274' },

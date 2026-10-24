@@ -62,7 +62,7 @@
   },
   "email": {
     "title": "Outgoing email",
-    "description": "Helpdock sends sign-in links, notifications and ticket replies through your own SMTP relay. You can change all of this later in Channels › Outgoing email.",
+    "description": "Helpdock sends sign-in links, notifications and ticket replies through your own SMTP relay. You can change all of this later in Admin › System › Outgoing email.",
     "hostLabel": "SMTP server",
     "hostPlaceholder": "smtp.example.com",
     "portLabel": "Port",

@@ -510,6 +510,7 @@ routes answers 401 without a valid bearer token.
 | `GET /api/install/system` | `@Requires('install:admin')` | The System page's read. Audited. |
 | `GET /api/install/system/queues` | `@Requires('install:admin')` | Every queue, paginated. Audited. |
 | `POST /api/install/setup/admin` | `@Public()` | [The first-run wizard](#the-first-run-wizard). 409 once the install has an account; 403 `setup-key-invalid` without `HD_SETUP_TOKEN` when one is set. |
+| `GET`/`PUT /api/install/settings/smtp`, `POST /api/install/settings/smtp/test` | `install:admin` | The install's system sender (#369). The password is write-only and is reused only while host, port and user are unchanged: otherwise 400 `smtp-password-required` (`error.setup.reason`, field `body.password`). The test is limited like the wizard's: 429 with `Retry-After`; 409 when a key is pinned by `HD_SMTP_*`. |
 | `POST /api/install/setup/brand` | `@Public()` | 409 without the wizard token. Sets the refresh cookie. |
 | `POST /api/install/setup/smtp` | `@Public()` | Saves or skips the `smtp.*` settings. |
 | `POST /api/install/setup/smtp/test` | `@Public()` | Sends one message with the credentials in the body. |

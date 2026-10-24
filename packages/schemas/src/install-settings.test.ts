@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   installAuthenticationSettingsSchema,
   installAuthenticationSettingsUpdateSchema,
+  smtpSettingsSchema,
+  smtpSettingsUpdateSchema,
   workspaceDomainSchema,
 } from './install-settings.js';
 
@@ -147,5 +149,108 @@ describe('the allowed Workspace domains', () => {
 
   it('accepts a domain the setting stores', () => {
     expect(workspaceDomainSchema.parse('acme.co.uk')).toBe('acme.co.uk');
+  });
+});
+
+describe('the outgoing email settings (#369)', () => {
+  const read = {
+    configured: true,
+    host: 'smtp.example.com',
+    port: 587,
+    tls: 'starttls',
+    user: 'postmaster',
+    passwordConfigured: true,
+    fromAddress: 'no-reply@example.com',
+    fromName: 'Example',
+    locked: {
+      host: false,
+      port: false,
+      tls: false,
+      user: false,
+      password: false,
+      fromAddress: false,
+      fromName: false,
+    },
+  } as const;
+
+  it('accepts the shape the api answers with, and carries no password', () => {
+    expect(smtpSettingsSchema.parse(read)).toEqual(read);
+    expect('password' in smtpSettingsSchema.parse(read)).toBe(false);
+  });
+
+  it('accepts an unconfigured install, whose From address is still empty', () => {
+    expect(
+      smtpSettingsSchema.safeParse({
+        ...read,
+        configured: false,
+        host: '',
+        user: '',
+        passwordConfigured: false,
+        fromAddress: '',
+        fromName: '',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a port no server has', () => {
+    expect(smtpSettingsSchema.safeParse({ ...read, port: 0 }).success).toBe(false);
+    expect(smtpSettingsSchema.safeParse({ ...read, port: 65_536 }).success).toBe(false);
+  });
+
+  it('refuses a TLS mode the wizard never offered', () => {
+    expect(smtpSettingsSchema.safeParse({ ...read, tls: 'ssl' }).success).toBe(false);
+  });
+
+  it('keeps a save honest about its shape', () => {
+    expect(
+      smtpSettingsUpdateSchema.parse({
+        host: ' smtp.example.com ',
+        port: 465,
+        tls: 'tls',
+        user: '',
+        fromAddress: 'no-reply@example.com',
+        fromName: ' Example ',
+      }),
+    ).toEqual({
+      host: 'smtp.example.com',
+      port: 465,
+      tls: 'tls',
+      user: '',
+      fromAddress: 'no-reply@example.com',
+      fromName: 'Example',
+    });
+  });
+
+  it('lets the password stay behind, and refuses an empty one in its place', () => {
+    const body = {
+      host: 'smtp.example.com',
+      port: 587,
+      tls: 'starttls',
+      user: '',
+      fromAddress: 'no-reply@example.com',
+      fromName: 'Example',
+    };
+    expect(smtpSettingsUpdateSchema.safeParse(body).success).toBe(true);
+    expect(smtpSettingsUpdateSchema.safeParse({ ...body, password: '' }).success).toBe(false);
+    expect(smtpSettingsUpdateSchema.safeParse({ ...body, password: 'relay-secret' }).success).toBe(
+      true,
+    );
+  });
+
+  it('refuses a save without a host, a From address or a name', () => {
+    const body = {
+      host: 'smtp.example.com',
+      port: 587,
+      tls: 'starttls',
+      user: '',
+      fromAddress: 'no-reply@example.com',
+      fromName: 'Example',
+    };
+    for (const key of ['host', 'fromAddress', 'fromName'] as const) {
+      expect(
+        smtpSettingsUpdateSchema.safeParse({ ...body, [key]: key === 'host' ? '' : ' ' }).success,
+        key,
+      ).toBe(false);
+    }
   });
 });

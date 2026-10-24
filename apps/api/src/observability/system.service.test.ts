@@ -1,3 +1,4 @@
+import type { Settings } from '@helpdock/config';
 import type { Db, DbTransaction } from '@helpdock/db';
 import { RELAY_STATUS_KEY } from '@helpdock/jobs';
 import { type ChannelStatus, systemQueuePageSchema, systemStatusSchema } from '@helpdock/schemas';
@@ -85,6 +86,12 @@ const fakeQueues = (names: readonly string[]): QueueRegistry =>
 
 const QUEUE_NAMES = ['inbound', 'outbound', 'sla', 'rules', 'ai', 'knowledge', 'media'];
 
+/** The two `smtp.*` reads the status makes; everything else is out of its way. */
+const fakeSettings = ({ host = '', from = '' }: { host?: string; from?: string } = {}): Settings =>
+  ({
+    get: async (key: 'smtp.host' | 'smtp.from') => (key === 'smtp.host' ? host : from),
+  }) as unknown as Settings;
+
 const CHANNEL: ChannelStatus = {
   id: '01924f00-0000-7000-8000-0000000000c1',
   name: '@acme_support_bot',
@@ -99,11 +106,15 @@ const serviceWith = ({
   channels = async () => [CHANNEL],
   rows = [{ version: 'PostgreSQL 17.6 (Debian)', state: 'idle', connections: 2, bytes: '3200' }],
   readings = [],
+  smtpHost = '',
+  smtpFrom = '',
 }: {
   relay?: string | null;
   channels?: () => Promise<readonly ChannelStatus[]>;
   rows?: Record<string, unknown>[];
   readings?: readonly StorageUsageRecord[];
+  smtpHost?: string;
+  smtpFrom?: string;
 } = {}) =>
   new SystemService(
     fakeDb(rows),
@@ -114,6 +125,7 @@ const serviceWith = ({
     channels,
     fakeStorage(readings),
     new NoAiUsage(),
+    fakeSettings({ host: smtpHost, from: smtpFrom }),
   );
 
 const inRequest = <T>(run: () => Promise<T>): Promise<T> => {
@@ -190,6 +202,16 @@ describe('SystemService.status', () => {
     expect(status.aiSpend).toEqual({ configured: false });
   });
 
+  it('says whether the install has a system sender, with the address it sends from (#369)', async () => {
+    const missing = await inRequest(() => serviceWith().status());
+    expect(missing.smtp).toEqual({ configured: false, fromAddress: '' });
+
+    const configured = await inRequest(() =>
+      serviceWith({ smtpHost: 'smtp.example.com', smtpFrom: 'no-reply@example.com' }).status(),
+    );
+    expect(configured.smtp).toEqual({ configured: true, fromAddress: 'no-reply@example.com' });
+  });
+
   it('lists every channel the reader found (M2, M6)', async () => {
     const status = await inRequest(() => serviceWith().status());
 
@@ -250,6 +272,11 @@ describe('SystemService.status', () => {
         },
       } as unknown as StorageUsageStore,
       new NoAiUsage(),
+      {
+        get: async () => {
+          throw new Error('settings went away');
+        },
+      } as unknown as Settings,
     );
 
     const status = await inRequest(() => service.status());
@@ -260,6 +287,7 @@ describe('SystemService.status', () => {
     expect(status.database.migrationsApplied).toBe(4);
     expect(status.queues).toEqual({ queues: [], total: 0, deadLettered: 0 });
     expect(status.storage).toEqual({ configured: false });
+    expect(status.smtp).toEqual({ configured: false, fromAddress: '' });
   });
 });
 

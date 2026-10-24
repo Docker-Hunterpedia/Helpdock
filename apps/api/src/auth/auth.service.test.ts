@@ -533,6 +533,11 @@ beforeEach(async () => {
     logger: silentLogger(),
     appUrl: APP_URL,
   });
+
+  // A sender exists, as in an install that took the wizard's step 3: the email
+  // requests are honest about its absence only when it is gone (#369).
+  await settings.set('smtp.host', 'smtp.example.com', { updatedBy: 'test' });
+  await settings.set('smtp.from', 'no-reply@helpdock.com', { updatedBy: 'test' });
 });
 
 describe('methods', () => {
@@ -1205,6 +1210,63 @@ describe('the password reset', () => {
         password: 'a whole new password',
       }),
     ).rejects.toMatchObject({ auth: { code: 'challenge-expired' } });
+  });
+});
+
+describe('the sign-in link requests without a system sender (#369)', () => {
+  const IP = '203.0.113.8';
+  const noSender = async (): Promise<void> => {
+    await settings.set('smtp.host', '', { updatedBy: 'test' });
+  };
+
+  it('refuses a sign-in link with the same answer for every address, spending nothing', async () => {
+    await noSender();
+    staff.add(await newUser());
+
+    await expect(
+      service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP }),
+    ).rejects.toMatchObject({ auth: { code: 'email-unavailable' } });
+    // The answer is about the install, never about which addresses exist.
+    await expect(
+      service.requestMagicLink({ email: 'nobody@helpdock.com', ip: IP }),
+    ).rejects.toMatchObject({ auth: { code: 'email-unavailable' } });
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('refuses a password reset the same way, known address or not', async () => {
+    await noSender();
+    const user = staff.add(await newUser());
+
+    await expect(service.requestPasswordReset({ email: user.email, ip: IP })).rejects.toMatchObject(
+      { auth: { code: 'email-unavailable' } },
+    );
+    await expect(
+      service.requestPasswordReset({ email: 'nobody@helpdock.com', ip: IP }),
+    ).rejects.toMatchObject({ auth: { code: 'email-unavailable' } });
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('answers sso-required, not email-unavailable, when SSO is enforced and no sender is set', async () => {
+    await noSender();
+    staff.add(await newUser());
+    vi.spyOn(SsoSignInPolicy.prototype, 'enforced').mockResolvedValueOnce(true);
+
+    await expect(
+      service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP }),
+    ).rejects.toMatchObject({ auth: { code: 'sso-required' } });
+  });
+
+  it('sends again once the sender exists, with no restart', async () => {
+    await noSender();
+    staff.add(await newUser());
+    await expect(
+      service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP }),
+    ).rejects.toMatchObject({ auth: { code: 'email-unavailable' } });
+
+    await settings.set('smtp.host', 'smtp.example.com', { updatedBy: 'test' });
+    await service.requestMagicLink({ email: 'lina@helpdock.com', ip: IP });
+
+    expect(mail.sent).toHaveLength(1);
   });
 });
 

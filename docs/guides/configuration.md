@@ -436,7 +436,7 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 
 | Variable | Setting | Scope | Secret | Default | What it is |
 |---|---|---|---|---|---|
-| `HD_SMTP_HOST` | `smtp.host` | brand | no | — | SMTP server used to send mail. Empty until the first-run wizard sets it. |
+| `HD_SMTP_HOST` | `smtp.host` | brand | no | — | SMTP server used to send mail. Empty until the wizard or the System page sets it. |
 | `HD_SMTP_PORT` | `smtp.port` | brand | no | `587` | SMTP port. 587 for STARTTLS, 465 for implicit TLS. |
 | `HD_SMTP_TLS` | `smtp.tls` | brand | no | `starttls` | How the SMTP connection is protected: starttls upgrades an open connection (587), tls is implicit TLS (465), none is an unencrypted relay. |
 | `HD_SMTP_USER` | `smtp.user` | brand | no | — | SMTP username. Empty for a relay that does not authenticate. |

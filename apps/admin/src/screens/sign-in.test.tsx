@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { AuthError } from '../auth/api.js';
 import { MOCK_EMAIL, MOCK_PASSWORD, MockAuthApi } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 
@@ -30,6 +32,31 @@ describe('SignIn', () => {
     expect(
       await screen.findByText('Staff access for support.helpdock.com and 2 other brands.'),
     ).toBeInTheDocument();
+  });
+
+  it('says email sign-in is unavailable instead of claiming a link was sent (#369)', async () => {
+    const authApi = new MockAuthApi();
+    vi.spyOn(authApi, 'requestMagicLink').mockRejectedValue(
+      new AuthError('email-unavailable', { status: 503 }),
+    );
+    vi.spyOn(authApi, 'requestPasswordReset').mockRejectedValue(
+      new AuthError('email-unavailable', { status: 503 }),
+    );
+    renderApp(<AppRoutes />, { authApi, initialEntries: ['/sign-in'] });
+
+    const email = await screen.findByLabelText('Email');
+    const message =
+      "Email sign-in isn't available on this install right now. " +
+      'Ask an administrator to set up outgoing email.';
+
+    // The magic-link button.
+    await userEvent.type(email, MOCK_EMAIL);
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }));
+    expect(await screen.findByText(message)).toBeVisible();
+
+    // Forgot password answers the same way, whatever the address.
+    await userEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
+    expect(await screen.findByText(message)).toBeVisible();
   });
 
   it('drops the "and n others" clause on a single-brand install', async () => {

@@ -14,7 +14,7 @@ import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { IdentityContentionError } from '../contacts/identity.js';
 import { DomainsFailure } from '../domains/domains-failure.js';
 import { HelpCenterFailure } from '../help-center/help-center-failure.js';
-import { SetupFailure } from '../install/setup-failure.js';
+import { SetupFailure, SetupThrottled } from '../install/setup-failure.js';
 import { MetaFailure } from '../meta/meta-failure.js';
 import { SsoFailure } from '../sso/sso-failure.js';
 import { TenantScopeError } from '../tenant/tenant-scope.js';
@@ -143,6 +143,22 @@ describe('errorBody', () => {
       requestId: 'req-10',
       setup: { reason: 'setup-key-invalid' },
     });
+  });
+
+  it('asks for the SMTP password again as a field error on the password', () => {
+    const body = errorBody(mapError(new SetupFailure('smtp-password-required')), 'req-10b');
+
+    expect(body.error).toMatchObject({
+      code: 'validation_failed',
+      setup: { reason: 'smtp-password-required' },
+      fields: [{ path: 'body.password' }],
+    });
+  });
+
+  it('maps a throttled setup call to 429 with its Retry-After', () => {
+    const mapped = mapError(new SetupThrottled('slow down', 90));
+
+    expect(mapped).toMatchObject({ status: 429, code: 'rate_limited', retryAfter: 90 });
   });
 
   it('carries the custom-domain refusal, which the Domains tab turns into a sentence', () => {

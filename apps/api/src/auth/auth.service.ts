@@ -27,6 +27,7 @@ import {
 } from '@helpdock/schemas';
 import { currentRequestContext } from '../context/request-context.js';
 import type { Logger } from '../logging/logger.js';
+import { systemSenderConfigured } from '../notifications/install-channels.js';
 import type { SsoIdentityService } from '../sso/identity.service.js';
 import { type SsoAssertion, ssoAssertionSchema } from '../sso/oidc-contracts.js';
 import type { SsoSignInPolicy } from '../sso/sign-in-policy.js';
@@ -233,10 +234,11 @@ export class AuthService {
       sso: await this.#parts.ssoPolicy.connections(),
       ssoEnforced: enforced,
       password: true,
-      // On whether or not SMTP is set: the worker reads the system sender when
-      // it sends, so an operator who fills SMTP in later needs no restart, and
-      // an answer that changed with it would tell a stranger how this install
-      // is configured.
+      // The button is drawn whatever the install's sender is: methods() is read
+      // by every visitor, and this is the one place the install's
+      // configuration is not advertised. When there is no sender the request
+      // itself answers `email-unavailable` (#369), which is the honest answer
+      // and the same one for every address.
       magicLink: !enforced,
       oauth: oauth as AuthMethods['oauth'],
       // Passwordless passkey sign-in is a local method, refused under
@@ -1080,11 +1082,13 @@ export class AuthService {
     readonly email: string;
     readonly ip: string;
   }): Promise<void> {
+    // First: with SSO enforced there is no link to send, whatever the sender.
+    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
+    await this.#assertSenderCanSend();
     if (!(await this.#allowEmailDispatch(email, ip))) {
       return;
     }
 
-    if (await this.#parts.ssoPolicy.enforced()) throw new AuthFailure('sso-required');
     const user = await this.#parts.staff.findByEmail(email);
     if (user === undefined || !this.#isUsable(user)) {
       return;
@@ -1170,6 +1174,7 @@ export class AuthService {
     readonly email: string;
     readonly ip: string;
   }): Promise<void> {
+    await this.#assertSenderCanSend();
     if (!(await this.#allowEmailDispatch(email, ip))) {
       return;
     }
@@ -2100,6 +2105,26 @@ export class AuthService {
     const withinIpBudget = await this.#parts.limiter.consume(EMAIL_DISPATCH_IP_RULE, ip);
 
     return withinEmailBudget && withinIpBudget;
+  }
+
+  /**
+   * An install with no system sender cannot put a sign-in link or a reset link
+   * in anybody's inbox, and a screen that then said "check your email" would
+   * leave a locked-out admin with nowhere to go (#369). The request is refused
+   * with `email-unavailable` before any address is looked up — the answer is
+   * about this install's configuration, it is the same for every address, and
+   * it spends no budget, so it leaks nothing about accounts (DOMAIN-RULES §12).
+   * The worker's warn log stays as the belt for an install whose sender is
+   * removed between this check and the send.
+   */
+  async #assertSenderCanSend(): Promise<void> {
+    const [host, fromAddress] = await Promise.all([
+      this.#parts.settings.get('smtp.host'),
+      this.#parts.settings.get('smtp.from'),
+    ]);
+    if (!systemSenderConfigured(host, fromAddress)) {
+      throw new AuthFailure('email-unavailable');
+    }
   }
 
   /**

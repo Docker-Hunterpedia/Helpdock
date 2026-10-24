@@ -41,6 +41,11 @@
       "title": "Redis",
       "caption": "latency {{latency}} ms",
       "aofRewrite": "AOF rewrite running · latency {{latency}} ms"
+    },
+    "smtp": {
+      "title": "Outgoing email",
+      "caption": "sign-in links and staff notifications send from this sender",
+      "notConfigured": "no SMTP server: sign-in links and password resets are not sent"
     }
   },
   "queues": {
@@ -265,5 +270,57 @@
   },
   "passkeysDrift": {
     "link": "Open Settings › Authentication"
+  },
+  "smtp": {
+    "title": "Outgoing email",
+    "caption": "The install's system sender: sign-in links, password resets, invitations, security and staff notification emails.",
+    "statusConfigured": "Working",
+    "statusMissing": "Not set",
+    "missingBanner": "No outgoing email server is set up, so sign-in links, password resets and staff notifications are not being sent.",
+    "missingBannerAction": "Set up outgoing email",
+    "loadFailed": "The outgoing email settings could not be read.",
+    "saved": "Outgoing email settings saved.",
+    "saveFailed": "The settings could not be saved. Try again.",
+    "host": "Server",
+    "hostPlaceholder": "smtp.example.com",
+    "port": "Port",
+    "tls": "Encryption",
+    "tlsModes": {
+      "starttls": "STARTTLS (587)",
+      "tls": "TLS (465)",
+      "none": "None"
+    },
+    "user": "Username",
+    "userOptional": "Optional, for a relay that does not authenticate",
+    "password": "Password",
+    "passwordHint": "Encrypted with the master key; never shown again after saving.",
+    "fromAddress": "From address",
+    "fromName": "From name",
+    "test": "Send a test email",
+    "testDelivered": "Sent to {{recipient}}.",
+    "testDeliveredWithResponse": "Sent to {{recipient}}. The server said: {{response}}",
+    "lockBadge": "Set by environment",
+    "lockHint": "Set by {{envKey}} in the environment.",
+    "errors": {
+      "hostRequired": "Enter the SMTP server’s hostname.",
+      "portInvalid": "Enter a port between 1 and 65535.",
+      "fromAddressRequired": "Enter the address mail will come from.",
+      "fromAddressInvalid": "Enter a valid email address.",
+      "fromNameRequired": "Enter the name recipients will see.",
+      "auth-failed": "Couldn't sign in: the server refused the username or password.",
+      "connection-refused": "Couldn't connect: the server refused the connection on port {{port}}.",
+      "tls-error": "Couldn't connect securely: the encryption setting doesn't match this server.",
+      "timeout": "Couldn't connect: the server did not answer within ten seconds.",
+      "rejected": "The server refused the message. Check the From address.",
+      "unknown": "The test could not be completed. Check the details and try again.",
+      "passwordRequired": "Type the password again to use it with this server."
+    },
+    "notSetWarning": "Nothing is being sent. Until you set this up, nobody can reset a password or sign in by email.",
+    "passwordPlaceholder": "Saved · type to change",
+    "passwordAsksAgain": "Changing the server, port or username asks for the password again.",
+    "testRateLimited": "Too many tests. Wait {{seconds}} seconds and try again.",
+    "pinnedSaveFailed": "{{envKey}} sets this in the environment, so it can't be changed here. Remove it from .env to edit it here.",
+    "save": "Save",
+    "regionName": "Outgoing email settings"
   }
 }

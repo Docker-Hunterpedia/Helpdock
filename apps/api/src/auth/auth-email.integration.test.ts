@@ -1,4 +1,4 @@
-import { createKeyring, type Env } from '@helpdock/config';
+import { createKeyring, type Env, encryptSecret } from '@helpdock/config';
 import { createDb, users } from '@helpdock/db';
 import {
   type AuthEmailPayload,
@@ -267,22 +267,60 @@ describe.skipIf(!hasDocker)('auth email delivery', () => {
     }
   });
 
-  it('without SMTP, logs that the email would have been sent and sends nothing', async () => {
+  it('without SMTP, the request itself says email sign-in is unavailable (#369)', async () => {
+    await useSystemSmtp(false);
+
+    const magic = await post('/api/auth/magic-link', { email: seeded.email });
+    expect(magic.statusCode).toBe(503);
+    expect(magic.json()).toMatchObject({ error: { auth: { code: 'email-unavailable' } } });
+
+    // The answer is about the install's configuration, never about accounts:
+    // an address nobody has draws exactly the same refusal.
+    const stranger = await post('/api/auth/magic-link', { email: 'nobody@helpdock.test' });
+    expect(stranger.statusCode).toBe(503);
+    expect(stranger.json()).toMatchObject({ error: { auth: { code: 'email-unavailable' } } });
+
+    const forgot = await post('/api/auth/password/forgot', { email: seeded.email });
+    expect(forgot.statusCode).toBe(503);
+    expect(forgot.json()).toMatchObject({ error: { auth: { code: 'email-unavailable' } } });
+
+    // Nobody is left waiting for an email that cannot go: no outbox row, no
+    // job, and a 204 that said "check your inbox" would have been a lie.
+    expect(await queued.all()).toEqual([]);
+  });
+
+  it('without SMTP, a job that was already queued logs and sends nothing', async () => {
     await useSystemSmtp(false);
     logLines.length = 0;
 
-    expect((await post('/api/auth/magic-link', { email: seeded.email })).statusCode).toBe(204);
-    const jobs = await relayAuthEmails();
-    expect(jobs).toHaveLength(1);
-    await deliverRepeatedly(jobs);
+    // A job the request queued before the sender was removed: the worker half
+    // still has to finish rather than retry forever.
+    const job = {
+      name: authEmailJob.name,
+      id: 'auth-email-no-sender',
+      data: {
+        kind: 'magicLink',
+        userId: seeded.userId,
+        urlEncrypted: encryptSecret(
+          `${APP_URL}/sign-in/magic#token=integration-test-token`,
+          createKeyring(envFor()),
+        ),
+        brandId: seeded.brandId,
+        sourceOutboxId: '01990000-0000-7000-8000-000000000001',
+      },
+    } as Job;
+
+    await deliverRepeatedly([job]);
 
     expect(await mailpitMessages()).toEqual([]);
+    // Warned once: the redeliveries find the receipt the first delivery wrote
+    // and finish without logging a send that never happened either.
     const wouldHave = logLines.filter((line) =>
       line.includes('Auth email not sent: this install has no SMTP settings'),
     );
     expect(wouldHave).toHaveLength(1);
     expect(wouldHave[0]).toContain(seeded.userId);
-    await expectNoLeak((await queued.last()).text.match(/#token=([A-Za-z0-9_-]+)/)?.[1] ?? '');
+    await expectNoLeak('integration-test-token');
   });
 
   it('delivers a sign-in link once, however often the job arrives, and the link works', async () => {

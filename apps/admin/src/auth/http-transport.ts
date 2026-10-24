@@ -24,6 +24,7 @@ import { ChannelsError } from '../channels/api.js';
 import { ContactError } from '../contacts/api.js';
 import { WebhooksError } from '../developers/api.js';
 import { DomainsError } from '../domains/api.js';
+import { SmtpPasswordRequiredError } from '../email/api.js';
 import { HelpCenterError } from '../help-center/api.js';
 import { KnowledgeError } from '../knowledge/api.js';
 import { MetaError } from '../meta/api.js';
@@ -262,6 +263,7 @@ const toError = async (
   | HelpCenterError
   | KnowledgeError
   | MetaError
+  | SmtpPasswordRequiredError
   | SsoError
   | StaffError
   | TelegramError
@@ -284,6 +286,7 @@ const toError = async (
   let assist: AssistRefusal | undefined;
   let webhooks: { reason: WebhooksRefusal; address?: string | undefined } | undefined;
   let sso: { reason: SsoRefusal; domains?: string[] | undefined } | undefined;
+  let smtpPasswordRequired = false;
 
   try {
     const body = errorResponseSchema.parse(await response.json()).error;
@@ -302,6 +305,7 @@ const toError = async (
     assist = body.assist?.reason;
     webhooks = body.webhooks;
     sso = body.sso;
+    smtpPasswordRequired = body.setup?.reason === 'smtp-password-required';
   } catch {
     // An HTML error page from a proxy, or a network failure: no error body to
     // read, and `unavailable` is the answer below.
@@ -357,6 +361,10 @@ const toError = async (
 
   if (webhooks !== undefined) {
     return new WebhooksError(webhooks.reason, webhooks.address);
+  }
+
+  if (smtpPasswordRequired) {
+    return new SmtpPasswordRequiredError();
   }
 
   if (sso !== undefined) {

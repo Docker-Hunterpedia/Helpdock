@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SmtpPasswordRequiredError } from '../email/api.js';
 import { HttpTransport } from './http-transport.js';
 
 /**
@@ -100,6 +101,29 @@ describe('HttpTransport on a 401', () => {
 
     expect(urls()).toEqual(['/api/auth/me', '/api/auth/refresh', '/api/auth/me']);
     expect(bearerOf(2)).toBe('Bearer fresh');
+  });
+});
+
+describe('an SMTP password the api asks for again', () => {
+  it('crosses as SmtpPasswordRequiredError, not a generic failure', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          error: {
+            code: 'validation_failed',
+            message: 'type it again',
+            requestId: 'r3',
+            setup: { reason: 'smtp-password-required' },
+            fields: [{ path: 'body.password', message: 'type it again' }],
+          },
+        },
+        400,
+      ),
+    );
+
+    await expect(
+      signedIn().request('PUT', `/brands/${BRAND_ID}/email/outgoing/smtp`, {}),
+    ).rejects.toBeInstanceOf(SmtpPasswordRequiredError);
   });
 });
 

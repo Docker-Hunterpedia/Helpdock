@@ -1,3 +1,4 @@
+import type { Settings } from '@helpdock/config';
 import { auditLog, brands, type Db } from '@helpdock/db';
 import { readRelayStatus } from '@helpdock/jobs';
 import type {
@@ -12,9 +13,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { desc } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
 import { getTx } from '../context/request-context.js';
+import { systemSenderConfigured } from '../notifications/install-channels.js';
 import { AI_USAGE_SOURCE, type AiUsageSource } from '../reports/ai-usage.js';
 import { ReadinessService } from '../runtime/readiness.service.js';
-import { DB, REDIS } from '../runtime/tokens.js';
+import { DB, REDIS, SETTINGS } from '../runtime/tokens.js';
 import type { BootFacts } from './boot-facts.js';
 import { buildInfo } from './build-info.js';
 import { readImportHealth } from './import-health.js';
@@ -75,6 +77,7 @@ export class SystemService {
   readonly #channels: ChannelStatusReader;
   readonly #storage: StorageUsageStore;
   readonly #ai: AiUsageSource;
+  readonly #settings: Settings;
 
   constructor(
     @Inject(DB) db: Db,
@@ -85,6 +88,7 @@ export class SystemService {
     @Inject(CHANNEL_STATUS) channels: ChannelStatusReader,
     @Inject(STORAGE_USAGE) storage: StorageUsageStore,
     @Inject(AI_USAGE_SOURCE) ai: AiUsageSource,
+    @Inject(SETTINGS) settings: Settings,
   ) {
     this.#db = db;
     this.#redis = redis;
@@ -94,6 +98,7 @@ export class SystemService {
     this.#channels = channels;
     this.#storage = storage;
     this.#ai = ai;
+    this.#settings = settings;
   }
 
   async status(): Promise<SystemStatus> {
@@ -103,7 +108,7 @@ export class SystemService {
     const audit = await this.#auditPreview();
 
     const now = new Date();
-    const [checks, postgres, redis, relayStatus, queueCounts, channels, storage, aiSpend] =
+    const [checks, postgres, redis, relayStatus, queueCounts, channels, storage, aiSpend, smtp] =
       await Promise.all([
         this.#readiness.detail(),
         readPostgresFacts(this.#db),
@@ -113,6 +118,7 @@ export class SystemService {
         this.#channels().catch(() => []),
         this.#storageReading(),
         this.#ai.installSpend(this.#db).catch(() => ({ configured: false as const })),
+        this.#smtpReading(),
       ]);
 
     const databaseCheck = checkNamed(checks, 'database');
@@ -149,6 +155,7 @@ export class SystemService {
         latencyMs: redis.latencyMs,
       },
       relay: relayView(relayStatus),
+      smtp,
       queues: queuesView(queueCounts, SUMMARY_QUEUE_LIMIT),
       // M2's mailboxes and M6's bots, each with the health its own list shows.
       channels: [...channels],
@@ -162,6 +169,24 @@ export class SystemService {
   /** DOMAIN-RULES §15's product metrics (M8-07); see `product-metrics.ts`. */
   async productMetrics(): Promise<ProductMetrics> {
     return new ProductMetricsService(this.#db, this.#ai).read();
+  }
+
+  /**
+   * Whether the install has a system sender, the one reading the health card
+   * needs (#369). Fail-soft like the rest: a settings blip draws "not
+   * configured", which is the direction an operator should look in anyway.
+   */
+  async #smtpReading(): Promise<SystemStatus['smtp']> {
+    try {
+      const [host, fromAddress] = await Promise.all([
+        this.#settings.get('smtp.host'),
+        this.#settings.get('smtp.from'),
+      ]);
+
+      return { configured: systemSenderConfigured(host, fromAddress), fromAddress };
+    } catch {
+      return { configured: false, fromAddress: '' };
+    }
   }
 
   /** Fail-soft like the rest: a Redis blip shows "not measured", not a 500. */

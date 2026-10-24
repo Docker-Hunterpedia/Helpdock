@@ -10,6 +10,7 @@ import {
   fakeSystemApi,
   healthySystemStatus,
   measuredSystemStatus,
+  missingSenderSystemStatus,
   OLD_STORE_BRAND,
   QUEUE_BOARD_PASS,
 } from './fixtures.js';
@@ -35,13 +36,18 @@ describe('SystemPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Reading the system status');
   });
 
-  it('draws the four health cards of the artboard', async () => {
+  it('draws the health cards of the artboard, outgoing email among them (#369)', async () => {
     renderSystem(apiReturning(healthySystemStatus()));
 
     expect(await screen.findByRole('region', { name: 'API' })).toBeInTheDocument();
-    for (const card of ['Worker', 'Postgres', 'Redis']) {
+    for (const card of ['Worker', 'Postgres', 'Redis', 'Outgoing email']) {
       expect(screen.getByRole('region', { name: card })).toBeInTheDocument();
     }
+
+    // The healthy install says what it sends from, and says nothing else.
+    const smtp = screen.getByRole('region', { name: 'Outgoing email' });
+    expect(within(smtp).getByText('Healthy')).toBeVisible();
+    expect(within(smtp).getByText('no-reply@helpdock.dev')).toBeVisible();
 
     expect(
       within(screen.getByRole('region', { name: 'Postgres' })).getByText('17.6'),
@@ -266,4 +272,35 @@ describe('SystemPage', () => {
     expect(table.textContent).not.toMatch(/[\u0660-\u0669\u06f0-\u06f9]/);
     expect(waiting.closest('td')).toHaveStyle({ textAlign: 'end' });
   });
+});
+
+it('warns in a banner and on the health card while no system sender is set (#369)', async () => {
+  renderSystem(apiReturning(missingSenderSystemStatus()));
+
+  expect(
+    await screen.findByText(
+      'No outgoing email server is set up, so sign-in links, password resets and staff notifications are not being sent.',
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Set up outgoing email' })).toHaveAttribute(
+    'href',
+    '#outgoing-email',
+  );
+
+  const smtp = screen.getByRole('region', { name: 'Outgoing email' });
+  expect(within(smtp).getByText('Not configured')).toBeVisible();
+  expect(
+    within(smtp).getByText('no SMTP server: sign-in links and password resets are not sent'),
+  ).toBeVisible();
+});
+
+it('carries the outgoing email card where the sender is edited (#369)', async () => {
+  renderSystem(apiReturning(healthySystemStatus()));
+
+  // The health card and the form card share a name; the form is the one
+  // with the fields in it, and its own read to wait for.
+  expect(await screen.findByLabelText('Server')).toHaveValue('smtp.helpdock.dev');
+  expect(screen.getByLabelText('From address')).toHaveValue('no-reply@helpdock.dev');
+  // The status chip says the same thing the health card does.
+  expect(screen.getByText('Working')).toBeVisible();
 });

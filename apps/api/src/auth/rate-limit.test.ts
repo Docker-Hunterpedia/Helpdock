@@ -82,6 +82,16 @@ describe('RateLimiter', () => {
     expect(await spend(4)).toEqual([true, true, true, false]);
   });
 
+  it('says when a refused subject gets its first slot back', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-19T10:00:00Z'));
+    await spend(3);
+
+    vi.setSystemTime(new Date('2026-09-19T10:00:20Z'));
+
+    await expect(limiter.retryAfter(SHORT, 'lina@helpdock.com')).resolves.toBe(40);
+  });
+
   it('counts two attempts in the same millisecond as two', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-19T10:00:00Z'));

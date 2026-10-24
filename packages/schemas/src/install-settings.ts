@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { MAX_DOMAIN_LENGTH } from './domains.js';
+import { smtpTlsModeSchema } from './install.js';
 
 const oauthProviderSettingsSchema = z.strictObject({
   clientId: z.string(),
@@ -117,3 +119,66 @@ export type InstallAuthenticationSettings = z.infer<typeof installAuthentication
 export type InstallAuthenticationSettingsUpdate = z.infer<
   typeof installAuthenticationSettingsUpdateSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Outgoing email (the install's system sender, #369)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every `smtp.*` key the System page's Outgoing email card shows, with whether
+ * an `HD_SMTP_*` variable pins it. A pinned field is drawn locked: the
+ * environment wins over the database (ARCHITECTURE §4), so editing it would
+ * store a value nothing reads.
+ */
+const smtpLockedFieldsSchema = z.strictObject({
+  host: z.boolean(),
+  port: z.boolean(),
+  tls: z.boolean(),
+  user: z.boolean(),
+  password: z.boolean(),
+  fromAddress: z.boolean(),
+  fromName: z.boolean(),
+});
+
+export const smtpSettingsSchema = z.strictObject({
+  /** False until a host and a From address exist — the rule `InstallChannels.systemSender` applies. */
+  configured: z.boolean(),
+  host: z.string(),
+  port: z.int().min(1).max(65_535),
+  tls: smtpTlsModeSchema,
+  /** Empty for a relay that does not authenticate. Never a secret: the wizard stores it in the clear. */
+  user: z.string(),
+  /** Write-only. The response says whether one is stored, never what it is. */
+  passwordConfigured: z.boolean(),
+  /** May be empty while unconfigured; stored values were an address when they were saved. */
+  fromAddress: z.string(),
+  fromName: z.string(),
+  locked: smtpLockedFieldsSchema,
+});
+export type SmtpSettings = z.infer<typeof smtpSettingsSchema>;
+
+/**
+ * Saving the card. The password is optional and means "keep the stored one",
+ * so an operator who only came to change the port does not have to retype a
+ * credential they cannot see. An empty install takes a password; a save that
+ * provides none keeps what is stored.
+ */
+export const smtpSettingsUpdateSchema = z.strictObject({
+  host: z.string().trim().min(1).max(MAX_DOMAIN_LENGTH),
+  port: z.int().min(1).max(65_535),
+  tls: smtpTlsModeSchema,
+  user: z.string().max(320),
+  password: z.string().min(1).max(512).optional(),
+  fromAddress: z.email().max(320),
+  fromName: z.string().trim().min(1).max(120),
+});
+export type SmtpSettingsUpdate = z.infer<typeof smtpSettingsUpdateSchema>;
+
+/**
+ * "Send a test email" sends with what is on screen, so a save is not needed to
+ * try a change — the wizard step's own rule. The password travels only when
+ * the form holds one; otherwise the stored one is used, and the answer is
+ * about the credentials this install would really send with.
+ */
+export const smtpSettingsTestRequestSchema = smtpSettingsUpdateSchema;
+export type SmtpSettingsTestRequest = z.infer<typeof smtpSettingsTestRequestSchema>;

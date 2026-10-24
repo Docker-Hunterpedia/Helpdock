@@ -1,4 +1,4 @@
-import { createKeyring, decryptSecret } from '@helpdock/config';
+import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import {
@@ -43,6 +43,16 @@ const setup = (install: Parameters<typeof installSmtp>[0] = undefined) => {
   const recording = recordingTx();
   const context = { tx: recording.tx, brandId: BRAND, actorId: USER };
   return { repository, transports, service, context, ...recording };
+};
+
+const withStoredServer = (repository: FakeEmailRepository): void => {
+  repository.settingsRow = settingsRow({
+    smtpHost: smtpBody.host,
+    smtpPort: smtpBody.port,
+    smtpTls: smtpBody.tls,
+    smtpUser: smtpBody.user,
+    smtpPassword: encryptSecret('stored-secret', keyring),
+  });
 };
 
 const smtpBody = {
@@ -101,6 +111,52 @@ describe('EmailSettingsService.saveSmtp', () => {
 
     expect(repository.saved[0]).not.toHaveProperty('smtpPassword');
     expect(repository.saved[1]).toMatchObject({ smtpPassword: null });
+  });
+});
+
+describe('the stored password stays with its server', () => {
+  const moved = [
+    { host: 'evil.example.net' },
+    { port: 25 },
+    { tls: 'none' as const },
+    { user: 'someone@evil.example.net' },
+  ];
+
+  it('refuses a save that moves the server and sends no password', async () => {
+    const { service, context, repository } = setup();
+    withStoredServer(repository);
+
+    for (const change of moved) {
+      await expect(service.saveSmtp(context, { ...smtpBody, ...change })).rejects.toMatchObject({
+        reason: 'smtp-password-required',
+        status: 400,
+      });
+    }
+    expect(repository.saved).toHaveLength(0);
+
+    await service.saveSmtp(context, { ...smtpBody, host: 'new.example.net', password: 'typed' });
+    expect(repository.saved).toHaveLength(1);
+  });
+
+  it('refuses a test against another server with no password, and opens no connection', async () => {
+    const { service, context, repository, transports } = setup();
+    withStoredServer(repository);
+
+    for (const change of moved) {
+      await expect(service.testSmtp(context, { ...smtpBody, ...change })).rejects.toMatchObject({
+        reason: 'smtp-password-required',
+      });
+    }
+    expect(transports.servers).toHaveLength(0);
+  });
+
+  it('tests the unchanged server with the stored password', async () => {
+    const { service, context, repository, transports } = setup();
+    withStoredServer(repository);
+
+    await service.testSmtp(context, smtpBody);
+
+    expect(transports.servers[0]).toMatchObject({ password: 'stored-secret' });
   });
 });
 

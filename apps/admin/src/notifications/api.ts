@@ -1,6 +1,7 @@
 import type {
   NotificationList,
   NotificationPreferences,
+  NotificationPreferencesUpdate,
   NotificationPreferencesView,
   PushSubscriptionCreate,
   PushSubscriptionView,
@@ -16,9 +17,13 @@ export interface NotificationsApi {
   markRead(brandId: string, notificationId: string): Promise<void>;
   markAllRead(brandId: string): Promise<void>;
   testPush(brandId: string, subscriptionId: string): Promise<void>;
+  /** M14-11. A test email to the signed-in person's own address, through the outbox. */
+  testEmail(brandId: string): Promise<void>;
 
   preferences(): Promise<NotificationPreferencesView>;
   updatePreferences(preferences: NotificationPreferences): Promise<NotificationPreferencesView>;
+  /** M14-11. The schedule, digest hour, pause and "Turn email back on", each on its own. */
+  updateSettings(update: NotificationPreferencesUpdate): Promise<NotificationPreferencesView>;
   subscribe(subscription: PushSubscriptionCreate): Promise<PushSubscriptionView>;
   unsubscribe(subscriptionId: string): Promise<void>;
 }

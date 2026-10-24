@@ -25,6 +25,16 @@ export class InstallChannels implements DeliverySettings {
     this.#settings = settings;
   }
 
+  /** Whether `smtp.host` and `smtp.from` are set, which is all `systemSender` needs to exist. */
+  async smtpConfigured(): Promise<boolean> {
+    const [host, fromAddress] = await Promise.all([
+      this.#settings.get('smtp.host'),
+      this.#settings.get('smtp.from'),
+    ]);
+
+    return host !== '' && fromAddress !== '';
+  }
+
   async systemSender(): Promise<EmailSender | null> {
     const [host, port, tls, user, password, fromAddress, fromName] = await Promise.all([
       this.#settings.get('smtp.host'),

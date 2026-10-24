@@ -138,6 +138,8 @@ const CREDENTIAL_PATHS: readonly RegExp[] = [
   /^\/api\/auth\/magic-link\/(?!(?:preview|consume)$)[^/]+/,
   // The rating link (M1-12), as the page and as the public api call.
   /^(\/api\/public)?\/csat\/[^/]+/,
+  // The unsubscribe link in notification emails (M14-11), as the page and as the public api call.
+  /^(\/api\/public)?\/unsubscribe\/[^/]+/,
 ];
 
 export const redactCredentialSegments = (path: string): string => {

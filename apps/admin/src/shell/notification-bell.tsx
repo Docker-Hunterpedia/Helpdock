@@ -24,6 +24,7 @@ import { useSemanticTokens } from '../app/tokens.js';
 import { currentBrand, useSession } from '../auth/session.tsx';
 import { useKeyboard } from '../keyboard/keyboard-provider.tsx';
 import { useNotificationsApi } from '../notifications/context.tsx';
+import { EmailStatusLines } from '../notifications/email-status-line.tsx';
 import {
   bulkLine,
   bulkTitle,
@@ -35,6 +36,7 @@ import {
   timeAgo,
 } from '../notifications/format.js';
 import { notificationsKey, useNotificationList } from '../notifications/use-notifications.js';
+import { useNotificationPreferences } from '../notifications/use-preferences.js';
 import { useToast } from '../ui/toasts.tsx';
 import { visuallyHidden } from '../ui/visually-hidden.js';
 import { CountBadge } from './count-badge.tsx';
@@ -162,6 +164,7 @@ function NotificationPanel({
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const list = useNotificationList(filter);
   const unread = list.data?.unreadCount ?? 0;
+  const preferences = useNotificationPreferences();
 
   const refresh = (): Promise<void> =>
     queryClient.invalidateQueries({ queryKey: notificationsKey(brandId) });
@@ -227,6 +230,12 @@ function NotificationPanel({
           {t('admin:notifications.panel.markAllRead')}
         </Button>
       </Box>
+
+      {preferences.data === undefined ? null : (
+        <Box sx={{ paddingBlockStart: 2, paddingInline: 4 }}>
+          <EmailStatusLines view={preferences.data} only="first" />
+        </Box>
+      )}
 
       <Box sx={{ paddingBlockStart: 2, paddingInline: 4 }}>
         <ToggleButtonGroup

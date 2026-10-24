@@ -1,6 +1,7 @@
 import { createI18n, dir, type Locale } from '@helpdock/i18n';
 import { fontFallbacks } from '@helpdock/ui/resolve';
 import { escapeHtml } from '../auth/email-templates.js';
+import type { UnsubscribeLinks } from './unsubscribe-tokens.js';
 
 /**
  * What every staff notification email shares, single or batched (artboards
@@ -49,17 +50,20 @@ export interface Footer {
 }
 
 /**
- * "You get these because of your notification settings. Change them." and
- * who it was sent to. M14-11 adds the one-click unsubscribe link here.
+ * "You get these because of your notification settings. Change them, or
+ * unsubscribe from notification emails." and who it was sent to. The
+ * unsubscribe link opens a confirmation page: following it changes nothing.
  */
 export const notificationFooter = ({
   locale,
   appUrl,
   email,
+  unsubscribe,
 }: {
   readonly locale: Locale;
   readonly appUrl: string;
   readonly email: string;
+  readonly unsubscribe: UnsubscribeLinks;
 }): Footer => {
   const i18n = createI18n({ lng: locale });
   const t = i18n.getFixedT(locale, 'email', 'notificationBatch');
@@ -67,11 +71,16 @@ export const notificationFooter = ({
   const settingsUrl = link(appUrl, '/me/notifications');
   const why = t('footer.why');
   const change = t('footer.change');
+  const unsubscribeLabel = t('footer.unsubscribe');
 
   return {
-    text: [`${why} ${change}: ${settingsUrl}`, sentTo].join('\n'),
+    text: [
+      `${why} ${change}: ${settingsUrl}`,
+      `${unsubscribeLabel}: ${unsubscribe.page}`,
+      sentTo,
+    ].join('\n'),
     html: [
-      `<p style="margin:28px 0 0 0;padding-top:16px;border-top:1px solid ${COLOR.divider};font-size:12px;line-height:18px;color:${COLOR.muted}">${escapeHtml(why)} <a href="${escapeHtml(settingsUrl)}" style="color:${COLOR.primary}">${escapeHtml(change)}</a>.</p>`,
+      `<p style="margin:28px 0 0 0;padding-top:16px;border-top:1px solid ${COLOR.divider};font-size:12px;line-height:18px;color:${COLOR.muted}">${escapeHtml(why)} <a href="${escapeHtml(settingsUrl)}" style="color:${COLOR.primary}">${escapeHtml(change)}</a>${escapeHtml(t('footer.or'))}<a href="${escapeHtml(unsubscribe.page)}" style="color:${COLOR.primary}">${escapeHtml(unsubscribeLabel)}</a>.</p>`,
       `<p style="margin:4px 0 0 0;font-size:12px;line-height:18px;color:${COLOR.muted}">${escapeHtml(sentTo)}</p>`,
     ].join(''),
   };

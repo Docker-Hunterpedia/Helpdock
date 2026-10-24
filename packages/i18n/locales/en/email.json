@@ -298,7 +298,9 @@
     "action": "Open your notifications",
     "footer": {
       "why": "You get these because of your notification settings.",
-      "change": "Change them"
+      "change": "Change them",
+      "or": ", or ",
+      "unsubscribe": "unsubscribe from notification emails"
     }
   },
   "transcript": {
@@ -317,5 +319,12 @@
     "choice": "Rate {{rating}} out of 5, {{label}}",
     "hint": "Choose a number to open the survey page with it already selected. You can add a comment there before sending.",
     "note": "This link works once and expires in {{days}} days. It is an automatic message; replying to it adds to your request."
+  },
+  "notificationTest": {
+    "subject": "Helpdock test email",
+    "kicker": "Test",
+    "heading": "Notification emails reach you here",
+    "body": "You asked for this test. Real notification emails look like this, with the settings and unsubscribe links in the footer.",
+    "action": "Open notification settings"
   }
 }

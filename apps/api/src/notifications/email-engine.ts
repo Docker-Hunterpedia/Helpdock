@@ -24,6 +24,8 @@ import type { BatchItemRow, BatchRow, EmailPacingRepository } from './email-paci
 import { isEmailOff, isPaused, type RowVerdict, verdictFor } from './email-recheck.js';
 import type { NotificationsRepository } from './notifications.repository.js';
 import { renderStaffNotificationEmail } from './staff-email.js';
+import { renderTestEmail } from './test-email.js';
+import { type UnsubscribeTokens, unsubscribeLinks } from './unsubscribe-tokens.js';
 
 /**
  * M14-10's pacing engine (DOMAIN-RULES §20, ADR 0037): the four jobs' work,
@@ -77,6 +79,8 @@ export interface EmailEngineDeps {
   systemSender(): Promise<EmailSender | null>;
   /** `APP_URL`, for links and the `Message-ID` domain. */
   readonly appUrl: string;
+  /** M14-11. Signs the unsubscribe link each notification email carries. */
+  readonly unsubscribe: UnsubscribeTokens;
   readonly log: JobLogger;
   readonly now?: () => Date;
 }
@@ -407,6 +411,13 @@ export class NotificationEmailEngine {
         brandName: brand.name,
         content,
         appUrl,
+        unsubscribe: unsubscribeLinks(
+          this.#deps.unsubscribe,
+          appUrl,
+          batch.userId,
+          recipient.locale,
+          now,
+        ),
         now,
       }),
     );
@@ -456,8 +467,61 @@ export class NotificationEmailEngine {
         messageText: message?.bodyText ?? null,
         detail: notification.detail,
         appUrl,
+        unsubscribe: unsubscribeLinks(
+          this.#deps.unsubscribe,
+          appUrl,
+          notification.userId,
+          locale,
+          this.#now(),
+        ),
       }),
     );
+  }
+
+  // ----------------------------------------------------------------- test
+
+  /**
+   * `notify.email_test`: one test email to the person who pressed the button,
+   * whatever their schedule, pause or unsubscribe says (they asked for this
+   * one). Returns false when there was nothing to send it with or to.
+   */
+  async sendTest(tx: DbTransaction, userId: string, testId: string): Promise<boolean> {
+    const { repository, appUrl } = this.#deps;
+    const [recipient, sender] = await Promise.all([
+      repository.recipient(tx, userId),
+      this.#deps.systemSender(),
+    ]);
+    if (recipient === undefined) {
+      return false;
+    }
+    if (sender === null) {
+      this.#deps.log.warn(
+        { userId },
+        'Test notification email not sent: this install has no SMTP settings.',
+      );
+      return false;
+    }
+
+    const message = renderTestEmail({
+      locale: recipient.locale,
+      to: { address: recipient.email, name: recipient.name },
+      appUrl,
+      unsubscribe: unsubscribeLinks(
+        this.#deps.unsubscribe,
+        appUrl,
+        userId,
+        recipient.locale,
+        this.#now(),
+      ),
+    });
+    await emailDelivery(() =>
+      sender.send({
+        ...message,
+        messageId: `<notify.test.${testId}@${new URL(appUrl).hostname}>`,
+      }),
+    );
+
+    return true;
   }
 
   // --------------------------------------------------------------- digest

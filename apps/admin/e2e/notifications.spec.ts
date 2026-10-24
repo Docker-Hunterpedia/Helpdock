@@ -128,7 +128,10 @@ test.describe('notifications', () => {
     await page.getByRole('button', { name: t('me:notifications.push.test') }).click();
     await expect(page.getByText(t('me:notifications.push.testSent'))).toBeVisible();
 
-    await page.getByRole('button', { name: t('me:notifications.push.turnOff') }).click();
+    // Exact: Arabic "Pause notifications" contains the word for "Turn off".
+    await page
+      .getByRole('button', { name: t('me:notifications.push.turnOff'), exact: true })
+      .click();
     await expect(
       page.getByText(t('me:notifications.push.notEnabled'), { exact: true }),
     ).toBeVisible();

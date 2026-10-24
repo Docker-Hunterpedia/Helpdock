@@ -36,6 +36,7 @@ import { registerPermissionsPolicy, securityHeaderOptions } from './http/securit
 import { createLogger, type Logger, NestPinoLogger } from './logging/logger.js';
 import { MetaWebhookService } from './meta/meta-webhook.service.js';
 import { registerMetaWebhookBody } from './meta/meta-webhook-body.js';
+import { UNSUBSCRIBE_ROUTE } from './notifications/unsubscribe-body.js';
 import type { BootFacts } from './observability/boot-facts.js';
 import { registerHttpMetrics } from './observability/http-metrics.js';
 import type { Metrics } from './observability/metrics.js';
@@ -374,6 +375,7 @@ export const createApiApp = async ({
     WEB_FORM_ROUTE,
     SAML_ACS_ROUTE,
     PROFILE_PHOTO_ROUTE,
+    UNSUBSCRIBE_ROUTE,
   ]);
 
   // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's

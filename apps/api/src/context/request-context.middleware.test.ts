@@ -120,6 +120,8 @@ describe('redactCredentialSegments', () => {
     ['/csat/AbC-123_xyz.DeF', '/csat/:token'],
     ['/api/public/csat/AbC-123_xyz.DeF', '/api/public/csat/:token'],
     ['/api/auth/magic-link/AbC-123_xyz', '/api/auth/magic-link/:token'],
+    ['/unsubscribe/AbC-123_xyz.DeF', '/unsubscribe/:token'],
+    ['/api/public/unsubscribe/AbC-123_xyz.DeF', '/api/public/unsubscribe/:token'],
   ])('collapses %s', (path, expected) => {
     expect(redactCredentialSegments(path)).toBe(expected);
   });

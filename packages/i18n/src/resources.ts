@@ -24,6 +24,7 @@ import arTelegram from '../locales/ar/telegram.json' with { type: 'json' };
 import arTicket from '../locales/ar/ticket.json' with { type: 'json' };
 import arTicketing from '../locales/ar/ticketing.json' with { type: 'json' };
 import arTickets from '../locales/ar/tickets.json' with { type: 'json' };
+import arUnsubscribe from '../locales/ar/unsubscribe.json' with { type: 'json' };
 import arWebform from '../locales/ar/webform.json' with { type: 'json' };
 import arWidget from '../locales/ar/widget.json' with { type: 'json' };
 import arWizard from '../locales/ar/wizard.json' with { type: 'json' };
@@ -53,6 +54,7 @@ import enTelegram from '../locales/en/telegram.json' with { type: 'json' };
 import enTicket from '../locales/en/ticket.json' with { type: 'json' };
 import enTicketing from '../locales/en/ticketing.json' with { type: 'json' };
 import enTickets from '../locales/en/tickets.json' with { type: 'json' };
+import enUnsubscribe from '../locales/en/unsubscribe.json' with { type: 'json' };
 import enWebform from '../locales/en/webform.json' with { type: 'json' };
 import enWidget from '../locales/en/widget.json' with { type: 'json' };
 import enWizard from '../locales/en/wizard.json' with { type: 'json' };
@@ -113,6 +115,8 @@ export const NAMESPACES = [
   // Instagram) ticket's thread in the customer's language (a location, a story, a
   // reaction; M10-03) and what it sends to the customer (a file left out; M10-06).
   'meta',
+  // The public unsubscribe page (M14-11): read by the person an email reached, with no session.
+  'unsubscribe',
 ] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
@@ -149,6 +153,7 @@ export const resources = {
     reports: enReports,
     developers: enDevelopers,
     meta: enMeta,
+    unsubscribe: enUnsubscribe,
   },
   ar: {
     common: arCommon,
@@ -180,6 +185,7 @@ export const resources = {
     reports: arReports,
     developers: arDevelopers,
     meta: arMeta,
+    unsubscribe: arUnsubscribe,
   },
 };
 

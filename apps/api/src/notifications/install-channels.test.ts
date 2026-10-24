@@ -28,6 +28,16 @@ describe('InstallChannels', () => {
     ).toBe(null);
   });
 
+  it('reports SMTP as configured only with a host and a From address', async () => {
+    expect(await new InstallChannels(settingsWith(SMTP)).smtpConfigured()).toBe(true);
+    expect(
+      await new InstallChannels(settingsWith({ ...SMTP, 'smtp.host': '' })).smtpConfigured(),
+    ).toBe(false);
+    expect(
+      await new InstallChannels(settingsWith({ ...SMTP, 'smtp.from': '' })).smtpConfigured(),
+    ).toBe(false);
+  });
+
   it('builds a sender from the install SMTP settings', async () => {
     const sender = await new InstallChannels(settingsWith(SMTP)).systemSender();
 

@@ -1,4 +1,5 @@
 import {
+  brands,
   contacts,
   type DbTransaction,
   departments,
@@ -613,6 +614,8 @@ export class NotificationsRepository {
       readonly emailSchedule?: EmailSchedule | undefined;
       readonly digestHour?: number | undefined;
       readonly pausedUntil?: Date | null | undefined;
+      /** `null` is "Turn email back on"; an unsubscribe goes through {@link unsubscribeEmail}. */
+      readonly emailUnsubscribedAt?: null | undefined;
     } = {},
   ): Promise<void> {
     const choices = Object.fromEntries(
@@ -631,12 +634,56 @@ export class NotificationsRepository {
       });
   }
 
-  async account(
+  /**
+   * M14-11. Records the unsubscribe and leaves the matrix, the schedule and the
+   * pause as they were. True only for the call that changed it: a repeat, or a
+   * concurrent twin, finds it already set and writes nothing.
+   */
+  async unsubscribeEmail(tx: DbTransaction, userId: string, at: Date): Promise<boolean> {
+    const changed = await tx
+      .insert(notificationPrefs)
+      .values({ userId, preferences: {}, emailUnsubscribedAt: at })
+      .onConflictDoUpdate({
+        target: notificationPrefs.userId,
+        set: { emailUnsubscribedAt: at, updatedAt: sql`now()` },
+        setWhere: isNull(notificationPrefs.emailUnsubscribedAt),
+      })
+      .returning({ userId: notificationPrefs.userId });
+
+    return changed.length > 0;
+  }
+
+  /** The brand's time zone, which the daily digest's hour is read in for anyone who has not chosen their own. */
+  async brandTimeZone(tx: DbTransaction, brandId: string): Promise<string | undefined> {
+    const [row] = await tx
+      .select({ timeZone: brands.timezone })
+      .from(brands)
+      .where(eq(brands.id, brandId))
+      .limit(1);
+
+    return row?.timeZone;
+  }
+
+  /** The account a verified unsubscribe token names; undefined once deactivated or gone. */
+  async activeAccount(
     tx: DbTransaction,
     userId: string,
   ): Promise<{ email: string; locale: 'en' | 'ar' } | undefined> {
     const [row] = await tx
       .select({ email: users.email, locale: users.locale })
+      .from(users)
+      .where(and(eq(users.id, userId), isNull(users.deactivatedAt)))
+      .limit(1);
+
+    return row;
+  }
+
+  async account(
+    tx: DbTransaction,
+    userId: string,
+  ): Promise<{ email: string; locale: 'en' | 'ar'; timeZone: string | null } | undefined> {
+    const [row] = await tx
+      .select({ email: users.email, locale: users.locale, timeZone: users.timeZone })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);

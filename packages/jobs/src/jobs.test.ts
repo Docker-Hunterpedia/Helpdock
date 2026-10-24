@@ -53,6 +53,7 @@ import {
   notifyEmailRebuildJob,
   notifyEmailScheduleJob,
   notifyEmailScheduleJobId,
+  notifyEmailTestJob,
   notifyPushJob,
   OUTBOX_RELAY_INTERVAL_MS,
   outboxEventJob,
@@ -532,6 +533,18 @@ describe('the notify jobs (M3-07, M14-10)', () => {
 
     expect(idempotencyKeyFor(notifyPushJob, payload, 'a')).toBe(
       `notify.push:${subscriptionId}:${outboxId}`,
+    );
+  });
+
+  it('keys a test email by the press that asked for it, and refuses one without a user', () => {
+    const userId = '01924f00-0000-7000-8000-0000000000d2';
+    const payload = parseJobPayload(notifyEmailTestJob, { brandId, userId, testId: outboxId });
+
+    expect(idempotencyKeyFor(notifyEmailTestJob, payload, 'a')).toBe(
+      `notify.email_test:${outboxId}`,
+    );
+    expect(() => parseJobPayload(notifyEmailTestJob, { brandId, testId: outboxId })).toThrow(
+      PayloadValidationError,
     );
   });
 

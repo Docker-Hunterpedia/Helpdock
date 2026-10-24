@@ -10,6 +10,7 @@ import {
   referenceHtml,
   renderFrame,
 } from './email-frame.js';
+import { type UnsubscribeLinks, unsubscribeHeaders } from './unsubscribe-tokens.js';
 
 /**
  * A batch of several notifications, or a digest, as the
@@ -29,6 +30,8 @@ export interface BatchEmailInput {
   readonly brandName: string;
   readonly content: BatchContent;
   readonly appUrl: string;
+  /** M14-11. Signed for this recipient: the footer's page and the header's one-click address. */
+  readonly unsubscribe: UnsubscribeLinks;
   /** When it is sent: the daily digest is "for" this day. */
   readonly now: Date;
 }
@@ -217,7 +220,12 @@ export const renderBatchEmail = (input: BatchEmailInput): EmailMessage => {
   const tickets = content.tickets.map((line) => renderLine(voice, line, false));
   const notificationsUrl = link(input.appUrl, '/');
   const action = t('action');
-  const footer = notificationFooter({ locale, appUrl: input.appUrl, email: input.to.address });
+  const footer = notificationFooter({
+    locale,
+    appUrl: input.appUrl,
+    email: input.to.address,
+    unsubscribe: input.unsubscribe,
+  });
 
   const text = [
     kicker,
@@ -250,5 +258,6 @@ export const renderBatchEmail = (input: BatchEmailInput): EmailMessage => {
     text,
     html: renderFrame({ locale, brand: staff('brand'), inner, footer }),
     locale,
+    headers: unsubscribeHeaders(input.unsubscribe),
   };
 };

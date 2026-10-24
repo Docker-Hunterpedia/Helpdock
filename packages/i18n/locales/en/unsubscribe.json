@@ -1,0 +1,25 @@
+{
+  "title": "Unsubscribe from notification emails",
+  "loading": "Checking your link…",
+  "confirm": {
+    "heading": "Stop notification emails?",
+    "body": "For {{email}}, from every brand. The bell in Helpdock and security emails keep working.",
+    "action": "Unsubscribe"
+  },
+  "done": {
+    "status": "You're unsubscribed from notification emails.",
+    "body": "Still reaching you: the bell in Helpdock, push notifications you turned on, and security emails. Changed your mind? Turn email back on from Your account › Notifications.",
+    "settings": "Open notification settings"
+  },
+  "invalid": {
+    "heading": "This link has expired",
+    "body": "Unsubscribe links work for a year. Sign in and change your notification settings instead.",
+    "action": "Sign in"
+  },
+  "unavailable": {
+    "heading": "Could not reach Helpdock",
+    "body": "Nothing was changed. Try again in a moment.",
+    "retry": "Try again"
+  },
+  "failed": "Nothing was changed. Try again in a moment."
+}

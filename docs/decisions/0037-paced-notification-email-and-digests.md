@@ -1,6 +1,6 @@
 # 0037 Paced notification email and digests
 
-Status: accepted (M14-10; owner decisions D-25 to D-27). Decisions 1 to 7 are built by M14-10; decision 8, the unsubscribe, by M14-11.
+Status: accepted (M14-10; owner decisions D-25 to D-27). Decisions 1 to 7 are built by M14-10; decision 8, the unsubscribe, by M14-11 (built).
 Date: 2026-10-20
 
 ## Context

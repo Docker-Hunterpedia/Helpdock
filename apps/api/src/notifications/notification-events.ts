@@ -2,8 +2,10 @@ import type { DbTransaction } from '@helpdock/db';
 import {
   enqueueOutbox,
   type NotifyEmailSchedulePayload,
+  type NotifyEmailTestPayload,
   type NotifyPushPayload,
   notifyEmailScheduleJobId,
+  notifyEmailTestJob,
   notifyPushJob,
   type OutboxEventContext,
   type OutboxEventHandler,
@@ -67,6 +69,8 @@ export const NOTIFICATION_EVENTS = {
   created: 'notification.created',
   read: 'notification.read',
   pushTest: 'notification.push_test',
+  /** M14-11. "Send me a test email" on the Notifications tab. */
+  emailTest: 'notification.email_test',
 } as const;
 
 /** What the notifications module subscribes as, beside each event's own handler. */
@@ -112,6 +116,7 @@ export const pushTestPayloadSchema = z.object({
   userId: z.uuid(),
   subscriptionId: z.uuid(),
 });
+export const emailTestPayloadSchema = z.object({ userId: z.uuid() });
 
 // ------------------------------------------------------------------ fan-out
 
@@ -458,6 +463,7 @@ const staffAuthor = (
 export interface NotifyQueue {
   addEmailSchedule(jobId: string, payload: NotifyEmailSchedulePayload): Promise<void>;
   addPush(jobId: string, payload: NotifyPushPayload): Promise<void>;
+  addEmailTest(jobId: string, payload: NotifyEmailTestPayload): Promise<void>;
 }
 
 export interface DeliveryDeps {
@@ -526,6 +532,19 @@ export const createPushTestHandler =
     });
   };
 
+/** "Send me a test email": one email to the address of the person who pressed it. */
+export const createEmailTestHandler =
+  ({ queue }: Pick<DeliveryDeps, 'queue'>): OutboxEventHandler =>
+  async ({ brandId, outboxId, payload }: OutboxEventContext): Promise<void> => {
+    const { userId } = emailTestPayloadSchema.parse(payload);
+
+    await queue.addEmailTest(`${notifyEmailTestJob.name}.${outboxId}`, {
+      brandId,
+      userId,
+      testId: outboxId,
+    });
+  };
+
 /** Refreshes read state without announcing a new notification or scheduling email/push. */
 export const createNotificationReadHandler =
   ({ broadcast }: Pick<DeliveryDeps, 'broadcast'>): OutboxEventHandler =>
@@ -560,4 +579,5 @@ export const registerNotificationHandlers = (deps: FanOutDeps & DeliveryDeps): v
   registerEventHandler(NOTIFICATION_EVENTS.read, createNotificationReadHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.created, createNotificationCreatedHandler(deps));
   registerEventHandler(NOTIFICATION_EVENTS.pushTest, createPushTestHandler(deps));
+  registerEventHandler(NOTIFICATION_EVENTS.emailTest, createEmailTestHandler(deps));
 };

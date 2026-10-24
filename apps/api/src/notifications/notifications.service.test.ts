@@ -55,11 +55,17 @@ const service = ({
   marked = true,
   deleted = true,
   subscriptionOwner = ME,
+  smtp = true,
+  allowTestEmail = true,
+  userZone = null,
 }: {
   vapid?: string | null;
   marked?: boolean;
   deleted?: boolean;
   subscriptionOwner?: string;
+  smtp?: boolean;
+  allowTestEmail?: boolean;
+  userZone?: string | null;
 } = {}) => {
   const calls: Calls = { outbox: [], email: {} };
   const repository = {
@@ -88,7 +94,12 @@ const service = ({
       pausedUntil: null,
       unsubscribedAt: null,
     }),
-    account: async () => ({ email: 'lina@helpdock.test', locale: 'en' as const }),
+    brandTimeZone: async () => 'Asia/Riyadh',
+    account: async () => ({
+      email: 'lina@helpdock.test',
+      locale: 'en' as const,
+      timeZone: userZone,
+    }),
     subscriptionsOf: async () => [subscription],
     upsertSubscription: async (
       _tx: DbTransaction,
@@ -115,7 +126,8 @@ const service = ({
     tx,
     notifications: new NotificationsService(
       repository,
-      { vapidPublicKey: async () => vapid },
+      { vapidPublicKey: async () => vapid, smtpConfigured: async () => smtp },
+      { allow: async () => allowTestEmail },
       () => NOW,
     ),
   };
@@ -185,6 +197,35 @@ describe('NotificationsService — the panel', () => {
   });
 });
 
+describe('NotificationsService — the test email', () => {
+  it('queues one through the outbox for the person asking, naming no address', async () => {
+    const { notifications, context, calls } = service();
+
+    await notifications.testEmail(context);
+
+    expect(calls.outbox).toEqual([
+      expect.objectContaining({
+        brandId: BRAND,
+        event: 'notification.email_test',
+        payload: { userId: ME },
+      }),
+    ]);
+  });
+
+  it('refuses on an install without SMTP, and past the hourly budget', async () => {
+    const noSmtp = service({ smtp: false });
+    await expect(noSmtp.notifications.testEmail(noSmtp.context)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+
+    const spent = service({ allowTestEmail: false });
+    await expect(spent.notifications.testEmail(spent.context)).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(spent.calls.outbox).toEqual([]);
+  });
+});
+
 describe('NotificationsService — preferences', () => {
   it('shows the defaults, the address, and that push is set up', async () => {
     const { notifications, tx } = service();
@@ -206,7 +247,35 @@ describe('NotificationsService — preferences', () => {
         pausedUntil: null,
         unsubscribedAt: null,
       },
+      emailConfigured: true,
+      digestTimeZone: null,
     });
+  });
+
+  it('says whether the install can send email at all, and which zone the digest hour is in', async () => {
+    const { notifications, tx } = service({ smtp: false });
+
+    expect(await notifications.preferences(tx, ME, BRAND)).toMatchObject({
+      emailConfigured: false,
+      digestTimeZone: 'Asia/Riyadh',
+    });
+  });
+
+  it("reads the digest hour in the person's own zone when they have chosen one", async () => {
+    const { notifications, tx } = service({ userZone: 'Europe/Berlin' });
+
+    expect(await notifications.preferences(tx, ME, BRAND)).toMatchObject({
+      digestTimeZone: 'Europe/Berlin',
+    });
+  });
+
+  it('turns email back on after an unsubscribe by clearing it, and nothing else', async () => {
+    const { notifications, tx, calls } = service();
+
+    await notifications.updatePreferences(tx, ME, { emailUnsubscribed: false });
+
+    expect(calls.saved).toBeUndefined();
+    expect(calls.email).toMatchObject({ emailUnsubscribedAt: null });
   });
 
   it('says push is not set up on an install without keys', async () => {

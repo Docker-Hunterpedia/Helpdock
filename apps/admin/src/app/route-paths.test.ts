@@ -8,6 +8,7 @@ import {
   safeReturnTo,
   ticketIdFromPath,
   ticketRoute,
+  unsubscribeTokenFromPath,
 } from './route-paths.js';
 
 describe('safeReturnTo', () => {
@@ -82,4 +83,17 @@ describe('magicLinkTokenFromHash', () => {
   ])('is empty for %s', (_case, hash) => {
     expect(magicLinkTokenFromHash(hash)).toBe('');
   });
+});
+
+describe('unsubscribeTokenFromPath', () => {
+  it('reads the token of the unsubscribe page', () => {
+    expect(unsubscribeTokenFromPath('/unsubscribe/AAA.bbb')).toBe('AAA.bbb');
+  });
+
+  it.each(['/unsubscribe/', '/unsubscribe', '/me/unsubscribe/AAA', '/csat/AAA', '/'])(
+    'is null for %s',
+    (path) => {
+      expect(unsubscribeTokenFromPath(path)).toBeNull();
+    },
+  );
 });

@@ -1,5 +1,6 @@
 import { brands, type Db } from '@helpdock/db';
 import {
+  createJobProcessor,
   type JobLogger,
   notifyDigestTickJob,
   notifyDigestTickJobId,
@@ -7,6 +8,7 @@ import {
   notifyEmailBatchJobId,
   notifyEmailRebuildJob,
   notifyEmailScheduleJob,
+  notifyEmailTestJob,
   parseJobPayloadOrFail,
 } from '@helpdock/jobs';
 import { DelayedError, type Job, type Queue } from 'bullmq';
@@ -122,6 +124,15 @@ export const createEmailJobProcessors = ({
   };
 
   return {
+    // M14-11. A receipt keyed by the press makes a redelivered job send once.
+    [notifyEmailTestJob.name]: createJobProcessor(
+      notifyEmailTestJob,
+      async ({ payload, tx }) => {
+        await engine.sendTest(tx, payload.userId, payload.testId);
+      },
+      { db, log },
+    ),
+
     // Upgrade hand-off: the retired payload names the same brand and notification.
     'notify.email': schedule,
     [notifyEmailScheduleJob.name]: schedule,

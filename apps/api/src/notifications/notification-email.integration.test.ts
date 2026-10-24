@@ -1,11 +1,13 @@
 import type { EmailMessage } from '@helpdock/channels';
-import { decodeMasterKey, type Env } from '@helpdock/config';
+import { createKeyring, decodeMasterKey, type Env } from '@helpdock/config';
 import {
+  auditLog,
   brands,
   createDb,
   type Db,
   type DbHandle,
   departments,
+  INSTALL_SCOPE_BRAND_ID,
   jobReceipts,
   notificationEmailBatches,
   notificationEmailPacing,
@@ -36,9 +38,9 @@ import {
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { DelayedError, type Job, Queue, Worker } from 'bullmq';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Redis } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
 import { createLogger } from '../logging/logger.js';
@@ -52,6 +54,7 @@ import { pacingConfigFromMinutes } from './email-pacing.js';
 import { EmailPacingRepository } from './email-pacing.repository.js';
 import { createNotificationReadHandler, NOTIFICATION_EVENTS } from './notification-events.js';
 import { NotificationsRepository } from './notifications.repository.js';
+import { UnsubscribeTokens } from './unsubscribe-tokens.js';
 
 /**
  * M14-10 against a real Postgres and Redis: Right away batching and its
@@ -70,6 +73,9 @@ const MASTER_KEY = Buffer.alloc(32, 37).toString('base64');
 const PASSWORD = 'an agent password';
 const CONTAINER_STARTUP_MS = 120_000;
 const APP_URL = 'https://support.example.com';
+const unsubscribeTokens = new UnsubscribeTokens(
+  createKeyring({ APP_MASTER_KEY: MASTER_KEY } as Env),
+);
 const MINUTE = 60_000;
 
 const hasDocker = await dockerAvailable();
@@ -130,6 +136,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
     presenceOf: async (_brandId, userId) => presence.get(userId) ?? 'offline',
     systemSender: async () => ({ send: async (message) => void sent.push(message) }),
     appUrl: APP_URL,
+    unsubscribe: unsubscribeTokens,
     log: silentLogger,
     now: () => clock,
   });
@@ -404,6 +411,26 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       expect(sent[0]?.messageId).toBe(`<notify.batch.${batchId}@support.example.com>`);
     });
 
+    it('signs every email’s unsubscribe link for its recipient, single or batched (M14-11)', async () => {
+      const batchId = await opened(await notify({ kind: 'assigned', actorId: ada.id }));
+      clock = at(2);
+      await send(batchId);
+      const second = await opened(await notify());
+      await schedule(await notify());
+      clock = at(20);
+      await send(second);
+
+      expect(sent).toHaveLength(2);
+      for (const email of sent) {
+        expect(email.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+        const token = /\/api\/public\/unsubscribe\/([^>]+)>/.exec(
+          email.headers?.['List-Unsubscribe'] ?? '',
+        )?.[1];
+        expect(unsubscribeTokens.verify(token ?? '', clock)?.userId).toBe(sam.id);
+        expect(email.text).toContain(`/unsubscribe/${token}?lang=en`);
+      }
+    });
+
     it('sends one email however often the batch job runs', async () => {
       const batchId = await opened(await notify());
       clock = at(2);
@@ -518,6 +545,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
           },
         }),
         appUrl: APP_URL,
+        unsubscribe: unsubscribeTokens,
         log: silentLogger,
         now: () => clock,
       });
@@ -590,6 +618,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
           },
         }),
         appUrl: APP_URL,
+        unsubscribe: unsubscribeTokens,
         log: silentLogger,
         now: () => clock,
       });
@@ -654,6 +683,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
           presenceOf: async () => 'offline',
           systemSender: async () => ({ send: async (message) => void sent.push(message) }),
           appUrl: APP_URL,
+          unsubscribe: unsubscribeTokens,
           log: silentLogger,
           now: () => clock,
         });
@@ -785,6 +815,7 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
         presenceOf: async () => 'offline',
         systemSender: async () => null,
         appUrl: APP_URL,
+        unsubscribe: unsubscribeTokens,
         log: { ...silentLogger, warn: (_fields, message) => void warnings.push(message) },
         now: () => clock,
       });
@@ -1142,6 +1173,262 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
       const orphanBatch = (await row(orphan))?.emailBatchId ?? null;
       expect(orphanBatch).not.toBeNull();
       expect(await queue.getJob(notifyEmailBatchJobId(orphanBatch ?? ''))).toBeDefined();
+    });
+  });
+
+  describe('one-click unsubscribe (M14-11)', () => {
+    const FORM = 'List-Unsubscribe=One-Click';
+    const unsubscribeUrl = (token: string) => `/api/public/unsubscribe/${token}`;
+    const tokenFor = (userId: string, issuedAt = new Date()) =>
+      unsubscribeTokens.sign(userId, issuedAt);
+    const post = (token: string, payload: string | undefined = FORM) =>
+      app.inject({
+        method: 'POST',
+        url: unsubscribeUrl(token),
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        ...(payload === undefined ? {} : { payload }),
+      });
+    const get = (token: string) => app.inject({ method: 'GET', url: unsubscribeUrl(token) });
+    const unsubscribedAt = async (userId: string) =>
+      (
+        await runtime.db
+          .select({ at: notificationPrefs.emailUnsubscribedAt })
+          .from(notificationPrefs)
+          .where(eq(notificationPrefs.userId, userId))
+      )[0]?.at ?? null;
+    const audits = (userId: string) =>
+      withSystem(runtime.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
+        tx
+          .select()
+          .from(auditLog)
+          .where(
+            and(
+              eq(auditLog.action, 'notification.email_unsubscribed'),
+              eq(auditLog.targetId, userId),
+            ),
+          ),
+      );
+
+    beforeEach(async () => {
+      await withSystem(runtime.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
+        tx.delete(auditLog).where(eq(auditLog.action, 'notification.email_unsubscribed')),
+      );
+      await runtime.db.delete(notificationPrefs).where(eq(notificationPrefs.userId, kim.id));
+    });
+
+    it('opens the confirmation on GET without unsubscribing anyone', async () => {
+      const response = await get(tokenFor(sam.id));
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ state: 'confirm', email: sam.email, locale: 'en' });
+      expect(await unsubscribedAt(sam.id)).toBeNull();
+      expect(await audits(sam.id)).toEqual([]);
+    });
+
+    it('unsubscribes on the RFC 8058 POST, leaving the matrix and schedule as they were', async () => {
+      const matrix = {
+        ...NOTIFICATION_PREFERENCE_DEFAULTS,
+        replied: { inApp: true, email: true, push: false },
+      };
+      expect(
+        (await call('PUT', '/api/me/notification-preferences', sam, { preferences: matrix }))
+          .status,
+      ).toBe(200);
+      await setEmail({ emailSchedule: 'hourly' });
+
+      const response = await post(tokenFor(sam.id));
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ state: 'done', locale: 'en' });
+      expect(await unsubscribedAt(sam.id)).toBeInstanceOf(Date);
+      const view = await call<NotificationPreferencesView>(
+        'GET',
+        '/api/me/notification-preferences',
+        sam,
+      );
+      expect(view.body.preferences).toEqual(matrix);
+      expect(view.body.emailDelivery).toMatchObject({
+        schedule: 'hourly',
+        unsubscribedAt: expect.any(String),
+      });
+      expect(await audits(sam.id)).toEqual([
+        expect.objectContaining({
+          brandId: INSTALL_SCOPE_BRAND_ID,
+          actorType: 'system',
+          actorId: `unsubscribe:${sam.id}`,
+          targetType: 'user',
+          meta: { tokenIssuedAt: expect.any(String) },
+        }),
+      ]);
+    });
+
+    it('is harmless to replay: the same state, the first date, and one audit row', async () => {
+      const token = tokenFor(sam.id);
+      await post(token);
+      const first = await unsubscribedAt(sam.id);
+
+      const again = await post(token);
+      const viaPage = await post(tokenFor(sam.id, new Date(Date.now() + 60_000)));
+
+      expect(again.statusCode).toBe(200);
+      expect(viaPage.statusCode).toBe(200);
+      expect(await unsubscribedAt(sam.id)).toEqual(first);
+      expect(await audits(sam.id)).toHaveLength(1);
+    });
+
+    it('refuses a POST that is not the one-click form, and changes nothing', async () => {
+      const token = tokenFor(sam.id);
+
+      expect((await post(token, 'List-Unsubscribe=Other')).statusCode).toBe(400);
+      expect((await post(token, 'unrelated=1')).statusCode).toBe(400);
+      expect(
+        (await app.inject({ method: 'POST', url: unsubscribeUrl(token), payload: {} })).statusCode,
+      ).toBe(400);
+      expect(await unsubscribedAt(sam.id)).toBeNull();
+    });
+
+    it('cannot be forged for another person: a swapped user, a wrong key, an altered date', async () => {
+      const [, mac] = tokenFor(sam.id).split('.');
+      const [kimPayload] = tokenFor(kim.id).split('.');
+      const foreign = new UnsubscribeTokens(
+        createKeyring({ APP_MASTER_KEY: Buffer.alloc(32, 99).toString('base64') }),
+      );
+
+      for (const forged of [
+        `${kimPayload}.${mac}`,
+        foreign.sign(kim.id, new Date()),
+        `${'A'.repeat(27)}.${'A'.repeat(43)}`,
+      ]) {
+        expect((await post(forged)).statusCode).toBe(404);
+        expect((await get(forged)).statusCode).toBe(404);
+      }
+      expect(await unsubscribedAt(kim.id)).toBeNull();
+      expect(await unsubscribedAt(sam.id)).toBeNull();
+    });
+
+    it('refuses a token a year old and one from the future', async () => {
+      const old = tokenFor(sam.id, new Date(Date.now() - 366 * 86_400_000));
+      const future = tokenFor(sam.id, new Date(Date.now() + 3_600_000));
+
+      expect((await post(old)).statusCode).toBe(404);
+      expect((await get(old)).statusCode).toBe(404);
+      expect((await post(future)).statusCode).toBe(404);
+      expect(await unsubscribedAt(sam.id)).toBeNull();
+    });
+
+    it('answers a deleted or deactivated account exactly as it answers a forged token', async () => {
+      const ghost = await get(tokenFor(uuidv7()));
+      const forged = await get(`${'A'.repeat(27)}.${'A'.repeat(43)}`);
+      await runtime.db.update(users).set({ deactivatedAt: new Date() }).where(eq(users.id, kim.id));
+      const deactivated = await post(tokenFor(kim.id));
+      await runtime.db.update(users).set({ deactivatedAt: null }).where(eq(users.id, kim.id));
+
+      expect(ghost.statusCode).toBe(404);
+      expect(deactivated.statusCode).toBe(404);
+      const withoutRequestId = (body: string) => body.replace(/"requestId":"[^"]+"/, '');
+      expect(withoutRequestId(ghost.body)).toBe(withoutRequestId(forged.body));
+      expect(withoutRequestId(deactivated.body)).toBe(withoutRequestId(forged.body));
+      expect(await unsubscribedAt(kim.id)).toBeNull();
+    });
+
+    it('stops the email at once: a new row is skipped off, a queued batch sends nothing', async () => {
+      const queued = await opened(await notify());
+      await post(tokenFor(sam.id));
+      clock = at(2);
+
+      expect(await send(queued)).toEqual({ kind: 'done', sent: false });
+      expect(sent).toEqual([]);
+      const id = await notify();
+      expect(await schedule(id)).toBeNull();
+      expect((await row(id))?.emailState).toBe('skipped_off');
+    });
+
+    it('is undone by Turn email back on, which restores the same choices', async () => {
+      await setEmail({ emailSchedule: 'daily', digestHour: 6 });
+      await post(tokenFor(sam.id));
+
+      const back = await call<NotificationPreferencesView>(
+        'PUT',
+        '/api/me/notification-preferences',
+        sam,
+        { emailUnsubscribed: false },
+      );
+
+      expect(back.status).toBe(200);
+      expect(back.body.emailDelivery).toEqual({
+        schedule: 'daily',
+        digestHour: 6,
+        pausedUntil: null,
+        unsubscribedAt: null,
+      });
+      expect(
+        (await call('PUT', '/api/me/notification-preferences', sam, { emailUnsubscribed: true }))
+          .status,
+      ).toBe(400);
+    });
+  });
+
+  describe('the test email (M14-11)', () => {
+    const smtp = async (host: string, from: string) => {
+      await runtime.settings.set('smtp.host', host, { updatedBy: 'test' });
+      await runtime.settings.set('smtp.from', from, { updatedBy: 'test' });
+    };
+    const press = (who: Person) =>
+      call('POST', `/api/brands/${seeded.brandId}/notifications/test-email`, who);
+
+    afterEach(async () => {
+      await smtp('', '');
+    });
+
+    it('is refused on an install that cannot send email', async () => {
+      expect((await press(sam)).status).toBe(409);
+    });
+
+    it('queues one through the outbox for the caller, at most five an hour', async () => {
+      await smtp('mailpit', 'desk@example.com');
+      const queued = () =>
+        withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.select().from(outbox).where(eq(outbox.event, 'notification.email_test')),
+        );
+      const before = (await queued()).length;
+
+      for (let press1 = 0; press1 < 5; press1 += 1) {
+        expect((await press(ada)).status).toBe(204);
+      }
+      expect((await press(ada)).status).toBe(429);
+
+      const rows = (await queued()).slice(before);
+      expect(rows).toHaveLength(5);
+      expect(
+        rows.every((queuedRow) => (queuedRow.payload as { userId: string }).userId === ada.id),
+      ).toBe(true);
+    });
+
+    it('sends to the person’s own address with the unsubscribe headers, once per press', async () => {
+      const processors = createEmailJobProcessors({
+        db: runtime.db,
+        engine,
+        queue: bullEmailQueue(queue),
+        log: silentLogger,
+        now: () => clock,
+      });
+      const testId = uuidv7();
+      const job = {
+        id: `notify.email_test.${testId}`,
+        name: 'notify.email_test',
+        data: { brandId: seeded.brandId, userId: sam.id, testId },
+      } as Job;
+
+      await processors['notify.email_test'](job);
+      await processors['notify.email_test'](job);
+
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({
+        to: { address: sam.email },
+        subject: 'Helpdock test email',
+        messageId: `<notify.test.${testId}@support.example.com>`,
+        headers: { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      });
     });
   });
 });

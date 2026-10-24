@@ -261,6 +261,73 @@
       "inApp": "in-app",
       "email": "email",
       "push": "browser push"
+    },
+    "schedule": {
+      "heading": "Email schedule",
+      "caption": "The bell is always immediate. Mentions, SLA breaches and escalations are urgent and can cut the wait.",
+      "legend": "When notification emails are sent",
+      "options": {
+        "immediate": {
+          "title": "Right away",
+          "description": "One email a couple of minutes after the first notification, with what arrived meanwhile. The waits grow while more keeps coming."
+        },
+        "hourly": {
+          "title": "Hourly digest",
+          "description": "At the top of the hour, what is still unread."
+        },
+        "daily": {
+          "title": "Daily digest",
+          "lead": "Once a day at"
+        },
+        "off": {
+          "title": "Off",
+          "description": "No notification emails. Security emails still come."
+        }
+      },
+      "hour": "Hour of the daily digest",
+      "pause": "Pause notifications",
+      "testEmail": "Send me a test email",
+      "save": "Save schedule",
+      "discard": "Discard",
+      "discardLabel": "Discard schedule changes",
+      "saved": "Email schedule saved.",
+      "pauseMenu": {
+        "label": "Pause email and push",
+        "oneHour": "For 1 hour",
+        "tomorrow": "Until tomorrow 09:00",
+        "oneWeek": "For 1 week",
+        "date": "Until a date…",
+        "until": "until {{when}}"
+      },
+      "pauseDialog": {
+        "title": "Pause until a date",
+        "when": "Resume on",
+        "hint": "Email and push resume at 09:00 that day. The bell keeps everything.",
+        "tooSoon": "Choose a day after today.",
+        "tooFar": "Choose a day within a year from today.",
+        "invalid": "Choose a date.",
+        "confirm": "Pause",
+        "cancel": "Cancel"
+      },
+      "status": {
+        "paused": "Paused until {{when}}. Email and push resume then; the bell keeps everything.",
+        "resume": "Resume now",
+        "unsubscribed": "You unsubscribed on {{date}}. The bell, push and security emails still reach you.",
+        "turnOn": "Turn email back on",
+        "off": "Email is off. The bell and push still reach you.",
+        "chooseSchedule": "Choose a schedule",
+        "notConfigured": "This install can't send email yet, so notification emails are not sent. Ask an install admin to set up outgoing email."
+      },
+      "toast": {
+        "paused": "Paused until {{when}}.",
+        "resumed": "Email and push are back on.",
+        "emailBack": "Email is back on.",
+        "testSent": "A test email is on its way to {{email}}.",
+        "testNotConfigured": "This install can't send email yet.",
+        "testLimit": "That's enough test emails for now. Try again later.",
+        "failed": "That did not work. Nothing was changed."
+      },
+      "urgent": "Urgent"
     }
   },
   "profile": {

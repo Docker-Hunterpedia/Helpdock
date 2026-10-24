@@ -45,6 +45,11 @@ const rows: readonly BatchItem[] = [
   }),
 ];
 
+const UNSUBSCRIBE = {
+  page: 'https://desk.example.com/unsubscribe/token?lang=en',
+  oneClick: 'https://desk.example.com/api/public/unsubscribe/token',
+};
+
 const input = (overrides: Partial<BatchEmailInput> = {}): BatchEmailInput => {
   const content = groupBatch(
     rows,
@@ -63,6 +68,7 @@ const input = (overrides: Partial<BatchEmailInput> = {}): BatchEmailInput => {
     brandName: 'Acme',
     content,
     appUrl: 'https://desk.example.com',
+    unsubscribe: UNSUBSCRIBE,
     now: new Date('2026-10-20T05:00:00.000Z'),
     ...overrides,
   };
@@ -167,8 +173,20 @@ describe('renderBatchEmail (M14-10, artboard Email/NotificationBatch)', () => {
   });
 
   it('ends with the footer every notification email shares', () => {
-    expect(renderBatchEmail(input()).text).toContain(
+    const email = renderBatchEmail(input());
+
+    expect(email.text).toContain(
       'You get these because of your notification settings. Change them: https://desk.example.com/me/notifications',
     );
+    expect(email.text).toContain(
+      'unsubscribe from notification emails: https://desk.example.com/unsubscribe/token?lang=en',
+    );
+  });
+
+  it('carries the RFC 8058 headers, naming the one-click address', () => {
+    expect(renderBatchEmail(input()).headers).toEqual({
+      'List-Unsubscribe': '<https://desk.example.com/api/public/unsubscribe/token>',
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    });
   });
 });

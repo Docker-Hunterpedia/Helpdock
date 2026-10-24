@@ -1,6 +1,7 @@
 import type {
   NotificationList,
   NotificationPreferences,
+  NotificationPreferencesUpdate,
   NotificationPreferencesView,
   PushSubscriptionCreate,
   PushSubscriptionView,
@@ -42,6 +43,10 @@ export class HttpNotificationsApi implements NotificationsApi {
     await this.#transport.request('POST', `${this.#brand(brandId)}/test-push`, { subscriptionId });
   }
 
+  async testEmail(brandId: string): Promise<void> {
+    await this.#transport.request('POST', `${this.#brand(brandId)}/test-email`);
+  }
+
   async preferences(): Promise<NotificationPreferencesView> {
     return notificationPreferencesViewSchema.parse(
       await this.#transport.request('GET', '/me/notification-preferences'),
@@ -53,6 +58,14 @@ export class HttpNotificationsApi implements NotificationsApi {
   ): Promise<NotificationPreferencesView> {
     return notificationPreferencesViewSchema.parse(
       await this.#transport.request('PUT', '/me/notification-preferences', { preferences }),
+    );
+  }
+
+  async updateSettings(
+    update: NotificationPreferencesUpdate,
+  ): Promise<NotificationPreferencesView> {
+    return notificationPreferencesViewSchema.parse(
+      await this.#transport.request('PUT', '/me/notification-preferences', update),
     );
   }
 

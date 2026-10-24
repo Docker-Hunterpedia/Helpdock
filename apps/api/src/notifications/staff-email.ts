@@ -15,6 +15,7 @@ import {
   renderFrame,
   withReference,
 } from './email-frame.js';
+import { type UnsubscribeLinks, unsubscribeHeaders } from './unsubscribe-tokens.js';
 
 /**
  * The staff notification email of the `EmailStaffNotification` artboard, in
@@ -45,6 +46,8 @@ export interface StaffEmailInput {
   readonly detail: NotificationDetail;
   /** `APP_URL`: links point into the admin app of this install. */
   readonly appUrl: string;
+  /** M14-11. Signed for this recipient: the footer's page and the header's one-click address. */
+  readonly unsubscribe: UnsubscribeLinks;
 }
 
 const isSla = (kind: NotificationKind): boolean =>
@@ -110,7 +113,12 @@ export const renderStaffNotificationEmail = (input: StaffEmailInput): EmailMessa
   const ticketUrl = link(input.appUrl, `/tickets/${encodeURIComponent(ticket.id)}`);
   const action =
     kind === 'mentioned' ? t('action.reply') : t('action.open', { reference: ticket.reference });
-  const footer = notificationFooter({ locale, appUrl: input.appUrl, email: input.to.address });
+  const footer = notificationFooter({
+    locale,
+    appUrl: input.appUrl,
+    email: input.to.address,
+    unsubscribe: input.unsubscribe,
+  });
 
   const text = [
     kicker,
@@ -149,6 +157,7 @@ export const renderStaffNotificationEmail = (input: StaffEmailInput): EmailMessa
     text,
     html,
     locale,
+    headers: unsubscribeHeaders(input.unsubscribe),
   };
 };
 

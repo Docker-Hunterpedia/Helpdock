@@ -1107,6 +1107,34 @@ header, without a new hue. The guide gains the Severity recipe.
 
 ### M14-17 Fields required to close
 
+**Status: built, in review** (issue #304). Built as below, with these
+clarifications the implementation had to fix down:
+
+- **"Empty" per type.** Absent and `null` are empty for every type, as are a
+  blank text and an empty multi-select; an **unticked checkbox** is empty too —
+  the gate is something a person acts on, which is stricter than `required` at
+  creation, where `false` is an answer. A zero, a date and a chosen option are
+  filled.
+- **Bulk apply is per ticket.** The preview reports `fields-required-to-close`
+  per ticket; the apply keeps exactly the set the preview said would change
+  (ADR 0036), so a close that blocks some tickets closes the rest and reports
+  the blocked ones with the same code. The bulk bar already carried the
+  refusal's sentence since M14-04.
+- The refusal travels with its `fields` in the error body
+  (`lifecycle.fields`). The Close button and `e` open the "Fill in before
+  closing" dialog (`CloseGateDialog`), whose **Save and close** sends the
+  values and the status in one `PATCH`. A bulk refusal also carries `missing`
+  (key, label, Arabic label) so the preview names the field.
+  Migration `0071_required_to_close`.
+- **Validation.** `requiredToClose: true` is refused on contact and account
+  fields and on a field with `agentVisible: false` (create and update, judged
+  on the resulting state).
+- **Spam from the status picker** (and bulk or macro `statusId`) skips the
+  gate and records `closedWithout`; a merge records it on the secondary only;
+  imports write closed tickets with no gate. The status-state resync (#390)
+  is a further system close: it never gates, and records `closedWithout` on the
+  `ticket.closed` row of each ticket it closes.
+
 `custom_field_defs.required_to_close` (beside `required`, which keeps meaning
 "at creation"). A close by a person (UI or public API key) of a ticket with an
 empty required-to-close field is refused with `fields-required-to-close` (409)

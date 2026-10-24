@@ -865,6 +865,175 @@ describe.skipIf(!hasDocker)('tickets', () => {
     });
   });
 
+  // ------------------------------------------------- fields required to close
+
+  describe('fields required to close (M14-17)', () => {
+    /**
+     * The gated fields of this describe, created once against the brand and
+     * taken down after it, because every later close in this file must not
+     * meet them.
+     */
+    let gate: string;
+    let legacyId: string;
+
+    const closeAs = (who: Person, ticketId: string, body: Record<string, unknown> = {}) =>
+      call<Ticket | ErrorResponse>(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${ticketId}`,
+        who,
+        { statusId: closedStatus, ...body },
+      );
+
+    beforeAll(async () => {
+      const created = await call<{ key: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/custom-fields`,
+        ada,
+        {
+          target: 'ticket',
+          key: 'closure_code',
+          label: 'Closure code',
+          type: 'text',
+          requiredToClose: true,
+        },
+      );
+      expect(created.status).toBe(201);
+      gate = created.body.key;
+
+      const legacy = await call<{ id: string }>(
+        'POST',
+        `${brandPath(seeded.brandId)}/custom-fields`,
+        ada,
+        { target: 'ticket', key: 'legacy_code', label: 'Legacy code', type: 'text' },
+      );
+      expect(legacy.status).toBe(201);
+      legacyId = legacy.body.id;
+    });
+
+    afterAll(async () => {
+      for (const key of ['legacy_code', 'closure_code']) {
+        const id = await findField(key);
+        if (id !== undefined) {
+          await call('DELETE', `${brandPath(seeded.brandId)}/custom-fields/${id}`, ada);
+        }
+      }
+    });
+
+    const findField = async (key: string): Promise<string | undefined> => {
+      const list = await call<{ fields: { id: string; key: string }[] }>(
+        'GET',
+        `${brandPath(seeded.brandId)}/custom-fields?target=ticket`,
+        ada,
+      );
+
+      return list.body.fields.find((field) => field.key === key)?.id;
+    };
+
+    it('refuses a close that would leave the field empty, naming it, and writes nothing', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const { status, body } = await closeAs(sam, ticket.id);
+
+      expect(status).toBe(409);
+      expect((body as ErrorResponse).error.lifecycle).toEqual({
+        reason: 'fields-required-to-close',
+        fields: [gate],
+      });
+
+      const detail = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+      );
+      expect(detail.body.ticket.status.systemState).toBe('open');
+      expect(detail.body.ticket.closedAt).toBeNull();
+    });
+
+    it('judges the values the request writes, so filling and closing in one body goes through', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const { status, body } = await closeAs(sam, ticket.id, {
+        custom: { [gate]: 'CR-7' },
+      });
+
+      expect(status).toBe(200);
+      expect((body as Ticket).status.systemState).toBe('closed');
+    });
+
+    it('lets a close through once the field was filled by an earlier patch', async () => {
+      const { ticket } = await createTicket(sam);
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${ticket.id}`, sam, {
+        custom: { [gate]: 'CR-8' },
+      });
+
+      const { status } = await closeAs(sam, ticket.id);
+
+      expect(status).toBe(200);
+    });
+
+    it('holds for a ticket that predates the flag: no grandfathering', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const switched = await call(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/custom-fields/${legacyId}`,
+        ada,
+        { requiredToClose: true },
+      );
+      expect(switched.status).toBe(200);
+
+      const { status, body } = await closeAs(sam, ticket.id);
+
+      expect(status).toBe(409);
+      expect((body as ErrorResponse).error.lifecycle).toMatchObject({
+        reason: 'fields-required-to-close',
+        fields: expect.arrayContaining(['closure_code', 'legacy_code']),
+      });
+    });
+
+    it('lets the system close: spam goes through and the row says what it went without', async () => {
+      const { ticket } = await createTicket(sam);
+
+      const marked = await call<Ticket>(
+        'POST',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}/spam`,
+        sam,
+        {},
+      );
+      expect(marked.status).toBe(201);
+
+      const detail = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+      );
+      const spam = detail.body.activity.find((entry) => entry.action === 'ticket.marked_spam');
+      expect(spam?.to).toMatchObject({ closedWithout: expect.arrayContaining([gate]) });
+    });
+
+    it('does not hold back Spam chosen from the status picker, and notes the gap', async () => {
+      const statuses = await call<TicketStatusList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/ticket-statuses`,
+        ada,
+      );
+      const spamId = statuses.body.statuses.find((status) => status.isSpam)?.id ?? '';
+      expect(spamId).not.toBe('');
+      const { ticket } = await createTicket(sam);
+
+      const { status } = await closeAs(sam, ticket.id, { statusId: spamId });
+
+      expect(status).toBe(200);
+      const detail = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${ticket.id}`,
+        sam,
+      );
+      const closed = detail.body.activity.find((entry) => entry.action === 'ticket.closed');
+      expect(closed?.to).toMatchObject({ closedWithout: expect.arrayContaining([gate]) });
+    });
+  });
+
   // ----------------------------------------------------------------- thread
 
   describe('the thread', () => {

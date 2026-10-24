@@ -387,6 +387,52 @@ test.describe('custom fields', () => {
     );
   });
 
+  test('marks a ticket field required to close, and offers it for ticket fields only (M14-17)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicketingTab(page, locale, 'custom-fields');
+
+    // A contact field never closes, so the flag is not offered for it.
+    await page
+      .getByRole('button', { name: t('ticketing:customFields.table.select', { name: 'Seats' }) })
+      .click();
+    await expect(
+      page.getByRole('checkbox', { name: t('ticketing:customFields.editor.requiredToClose') }),
+    ).toHaveCount(0);
+
+    await page
+      .getByRole('button', {
+        name: t('ticketing:customFields.table.select', { name: 'Renews on' }),
+      })
+      .click();
+    const toggle = page.getByRole('checkbox', {
+      name: t('ticketing:customFields.editor.requiredToClose'),
+    });
+    await toggle.check();
+    await page
+      .getByRole('button', { name: t('ticketing:customFields.editor.save'), exact: true })
+      .click();
+
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: t('ticketing:toast.fieldUpdated', { name: 'Renews on' }) }),
+    ).toBeVisible();
+
+    // Chosen again, the field remembers.
+    await page
+      .getByRole('button', {
+        name: t('ticketing:customFields.table.select', { name: 'Renews on' }),
+      })
+      .click();
+    await expect(
+      page.getByRole('checkbox', { name: t('ticketing:customFields.editor.requiredToClose') }),
+    ).toBeChecked();
+  });
+
   test('reorders an option from the keyboard and asks before removing one in use', async ({
     page,
     appLocale: locale,

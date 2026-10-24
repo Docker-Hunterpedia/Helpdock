@@ -16,6 +16,7 @@ const def = (key: string, type: CustomFieldDef['type'], extra: Partial<CustomFie
   options: type === 'select' ? ['Sev 1', 'Sev 2'] : [],
   required: false,
   agentVisible: true,
+  requiredToClose: false,
   pinned: false,
   sortOrder: 0,
   ...extra,

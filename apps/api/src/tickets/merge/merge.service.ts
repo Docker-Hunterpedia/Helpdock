@@ -25,6 +25,7 @@ import type { Principal } from '../../auth/principal.js';
 import { getTx } from '../../context/request-context.js';
 import { MediaRepository } from '../../media/media.repository.js';
 import { replaceTicketTags, tagsOfTicket } from '../../ticketing/ticket-tags.js';
+import { missingRequiredToCloseKeys } from '../close-requirements.js';
 import { ticketWithSource } from '../imported-ticket-sources.js';
 import { TicketLifecycleHooks } from '../lifecycle/hooks.js';
 import { TicketLifecycleRepository } from '../lifecycle/lifecycle.repository.js';
@@ -96,6 +97,8 @@ interface ActivityPair {
   readonly to: TicketRow;
   readonly fromDetail?: Record<string, unknown>;
   readonly toDetail?: Record<string, unknown>;
+  /** M14-17. Written on the `from` ticket's row only: it is the one that closes. */
+  readonly closedWithout?: readonly string[];
 }
 
 /** Why a split's selection was refused, as the status code that says so. */
@@ -415,12 +418,17 @@ export class MergeService {
       throw new ConflictException('That ticket moved while it was being merged');
     }
 
+    // M14-17: a merge closes the secondary through an empty required-to-close
+    // field, and the close says which fields it went without — a refusal here
+    // would turn "merge these two" into an unexplainable no.
+    const closedWithout = await missingRequiredToCloseKeys(context.tx, moved.custom);
     await this.#recordPair(context, {
       action: 'ticket.merged',
       from: ticket,
       to: merge.primary,
       fromDetail: { statusId: status.id, departmentId: ticket.departmentId },
       toDetail: { statusId: merge.merged.id, departmentId: moved.departmentId },
+      closedWithout,
     });
     await this.#logStatusChange(context, moved, status.id, merge.merged.id);
     if (snoozedBefore) {
@@ -670,6 +678,8 @@ export class MergeService {
     const from = { ticketId: pair.from.id, ...pair.fromDetail };
     const to = { ticketId: pair.to.id, ...pair.toDetail };
 
+    const closedWithout = pair.closedWithout ?? [];
+
     for (const ticket of [pair.from, pair.to]) {
       await writeTicketActivity(context.tx, {
         brandId: context.brandId,
@@ -678,7 +688,7 @@ export class MergeService {
         actor: context.actor,
         action: pair.action,
         from,
-        to,
+        to: ticket === pair.from && closedWithout.length > 0 ? { ...to, closedWithout } : to,
       });
     }
   }

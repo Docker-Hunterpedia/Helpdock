@@ -1,6 +1,12 @@
 import type { CustomFieldDef, CustomFieldType } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
-import { draftChanges, draftOf, ticketFieldsFor, valueOfDraft } from './custom-values.js';
+import {
+  draftChanges,
+  draftOf,
+  fieldLabelOf,
+  ticketFieldsFor,
+  valueOfDraft,
+} from './custom-values.js';
 
 const def = (type: CustomFieldType, overrides: Partial<CustomFieldDef> = {}): CustomFieldDef => ({
   id: `id-${type}`,
@@ -11,6 +17,7 @@ const def = (type: CustomFieldType, overrides: Partial<CustomFieldDef> = {}): Cu
   type,
   options: type === 'select' || type === 'multi_select' ? ['a', 'b'] : [],
   required: false,
+  requiredToClose: false,
   agentVisible: true,
   pinned: false,
   sortOrder: 0,
@@ -83,5 +90,22 @@ describe('ticketFieldsFor', () => {
 
   it('leaves out a field hidden from Agents for a reader who is one', () => {
     expect(ticketFieldsFor(fields, false).map((field) => field.id)).toEqual(['1']);
+  });
+});
+
+describe('fieldLabelOf (M14-17)', () => {
+  const defs = [
+    { key: 'order_id', label: 'Order id', labelAr: 'رقم الطلب' },
+    { key: 'root_cause', label: 'Root cause', labelAr: null },
+  ] as CustomFieldDef[];
+
+  it('reads the label in the viewer’s language, falling back to English', () => {
+    expect(fieldLabelOf(defs, 'order_id', 'en')).toBe('Order id');
+    expect(fieldLabelOf(defs, 'order_id', 'ar')).toBe('رقم الطلب');
+    expect(fieldLabelOf(defs, 'root_cause', 'ar')).toBe('Root cause');
+  });
+
+  it('shows the key for a field whose definition is not loaded', () => {
+    expect(fieldLabelOf(defs, 'gone', 'en')).toBe('gone');
   });
 });

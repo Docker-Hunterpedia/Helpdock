@@ -89,11 +89,15 @@ export const errorResponseSchema = z.object({
       })
       .optional(),
     /**
-     * Only on a transition DOMAIN-RULES §2.2 has no row for (M1-08). The status
-     * is 409 for all three, so the ticket workspace reads this to say whether
-     * the ticket is merged, deleted, or was never closed.
+     * Only on a transition DOMAIN-RULES §2.2 has no row for, or a close the
+     * required-to-close fields stop (M1-08, M14-17). The status is 409 for all
+     * of them, so the ticket workspace reads this to say whether the ticket is
+     * merged, deleted, was never closed — or which fields are still empty,
+     * which `fields` names.
      */
-    lifecycle: z.object({ reason: ticketLifecycleRefusalSchema }).optional(),
+    lifecycle: z
+      .object({ reason: ticketLifecycleRefusalSchema, fields: z.array(z.string()).optional() })
+      .optional(),
     /**
      * Only on a refused first-run wizard step (#43). The wizard shows the setup
      * key's error line on this rather than a generic failure banner.

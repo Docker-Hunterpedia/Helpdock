@@ -82,6 +82,7 @@ function CustomFieldEditor({
   const { locale } = usePreferences();
   const id = useId();
   const errorId = `${id}-error`;
+  const markerId = `${id}-marker`;
   const [draft, setDraft] = useState<CustomDraft>(() => draftOf(def, stored));
   const [refused, setRefused] = useState(false);
 
@@ -106,7 +107,11 @@ function CustomFieldEditor({
   };
 
   const label = locale === 'ar' && def.labelAr !== null ? def.labelAr : def.label;
-  const described = refused ? errorId : undefined;
+  // The marker and a refusal both describe the control, so a reader hears the former first.
+  const described =
+    [def.requiredToClose ? markerId : undefined, refused ? errorId : undefined]
+      .filter((part) => part !== undefined)
+      .join(' ') || undefined;
 
   return (
     <Box
@@ -118,14 +123,25 @@ function CustomFieldEditor({
         alignItems: 'center',
       }}
     >
-      <Typography
-        component="label"
-        htmlFor={id}
-        variant="caption"
-        sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}
-      >
-        {label}
-      </Typography>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography
+          component="label"
+          htmlFor={id}
+          variant="caption"
+          sx={{ display: 'block', color: 'text.secondary', overflowWrap: 'anywhere' }}
+        >
+          {label}
+        </Typography>
+        {def.requiredToClose ? (
+          <Typography
+            id={markerId}
+            variant="caption"
+            sx={{ display: 'block', color: 'text.secondary' }}
+          >
+            {t('tickets:details.requiredToClose')}
+          </Typography>
+        ) : null}
+      </Box>
 
       {editorFor({
         def,

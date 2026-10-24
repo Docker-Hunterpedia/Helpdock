@@ -73,8 +73,11 @@ export interface MappedError {
   readonly contact?: { readonly reason: ContactRefusal; readonly problem?: IdentityProblem };
   /** Only on a refused ticketing-settings action; see `brands/ticketing-failure.ts`. */
   readonly ticketing?: { readonly reason: TicketingRefusal; readonly count?: number };
-  /** Only on a transition §2.2 has no row for; see `tickets/lifecycle/lifecycle-failure.ts`. */
-  readonly lifecycle?: TicketLifecycleRefusal;
+  /** Only on a transition §2.2 has no row for, or a close M14-17's gate stops; see `tickets/lifecycle/lifecycle-failure.ts`. */
+  readonly lifecycle?: {
+    readonly reason: TicketLifecycleRefusal;
+    readonly fields?: readonly string[];
+  };
   /** Only on a refused wizard step; see `install/setup-failure.ts`. */
   readonly setup?: SetupRefusal;
   /** Only on a refused mailbox action; see `channels/channels-failure.ts`. */
@@ -206,7 +209,10 @@ export const mapError = (error: unknown): MappedError => {
       status: error.getStatus(),
       code: 'conflict',
       message: error.message,
-      lifecycle: error.reason,
+      lifecycle: {
+        reason: error.reason,
+        ...(error.fields.length === 0 ? {} : { fields: [...error.fields] }),
+      },
       unexpected: false,
     };
   }
@@ -430,7 +436,16 @@ export const errorBody = (mapped: MappedError, requestId: string): ErrorResponse
     ...(mapped.staff === undefined ? {} : { staff: { reason: mapped.staff } }),
     ...(mapped.contact === undefined ? {} : { contact: mapped.contact }),
     ...(mapped.ticketing === undefined ? {} : { ticketing: mapped.ticketing }),
-    ...(mapped.lifecycle === undefined ? {} : { lifecycle: { reason: mapped.lifecycle } }),
+    ...(mapped.lifecycle === undefined
+      ? {}
+      : {
+          lifecycle: {
+            reason: mapped.lifecycle.reason,
+            ...(mapped.lifecycle.fields === undefined
+              ? {}
+              : { fields: [...mapped.lifecycle.fields] }),
+          },
+        }),
     ...(mapped.setup === undefined ? {} : { setup: { reason: mapped.setup } }),
     ...(mapped.channels === undefined ? {} : { channels: { reason: mapped.channels } }),
     ...(mapped.domains === undefined ? {} : { domains: { reason: mapped.domains } }),

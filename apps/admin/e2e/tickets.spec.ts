@@ -1,9 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Locale } from '@helpdock/i18n';
 import type { Page } from '@playwright/test';
 import { MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN } from '../src/tickets/mock-api.js';
 import { expectFieldPartsStacked } from './field-layout.js';
 import { expect, test } from './fixtures.js';
-import { openTicket, openTickets, signIn } from './flows.js';
+import { openTicket, openTicketingTab, openTickets, signIn } from './flows.js';
 import { strings } from './strings.js';
 
 /**
@@ -456,6 +457,78 @@ test.describe('one ticket', () => {
     await page.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
 
     await expect(page.getByText(t('tickets:newTicket.subjectRequired'))).toBeVisible();
+  });
+});
+
+test.describe('fields required to close (M14-17)', () => {
+  const renewsOn = (locale: Locale): string => (locale === 'ar' ? 'يتجدد في' : 'Renews on');
+  const closedName = (locale: Locale): string => (locale === 'ar' ? 'مغلقة' : 'Closed');
+
+  /** Gates the seeded date field for this page's fixture brand, then opens the ticket and picks Closed. */
+  const tryToClose = async (page: Page, locale: Locale): Promise<void> => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicketingTab(page, locale, 'custom-fields');
+    await page
+      .getByRole('button', {
+        name: t('ticketing:customFields.table.select', { name: 'Renews on' }),
+      })
+      .click();
+    await page
+      .getByRole('checkbox', { name: t('ticketing:customFields.editor.requiredToClose') })
+      .check();
+    await page
+      .getByRole('button', { name: t('ticketing:customFields.editor.save'), exact: true })
+      .click();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: t('ticketing:toast.fieldUpdated', { name: 'Renews on' }) }),
+    ).toBeVisible();
+
+    await openTicket(page, locale);
+    await page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }).click();
+    await page.getByRole('option', { name: closedName(locale) }).click();
+  };
+
+  test('opens the dialog instead of closing, and Save and close fills the field and closes', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await tryToClose(page, locale);
+
+    const dialog = page.getByRole('dialog', { name: t('tickets:closeGate.title') });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(t('tickets:details.requiredToClose'))).toBeVisible();
+    // Axe reads colours mid-fade otherwise.
+    await expect(page.locator('.MuiDialog-container')).toHaveCSS('opacity', '1');
+    expect(await violations(page)).toEqual([]);
+
+    await dialog.getByRole('textbox', { name: renewsOn(locale) }).fill('2026-12-01');
+    await dialog.getByRole('button', { name: t('tickets:closeGate.submit') }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByRole('status').filter({ hasText: t('tickets:toast.updated') }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }),
+    ).toContainText(closedName(locale));
+  });
+
+  test('Cancel leaves the ticket open', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await tryToClose(page, locale);
+
+    const dialog = page.getByRole('dialog', { name: t('tickets:closeGate.title') });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: t('common:actions.cancel') }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByRole('combobox', { name: t('tickets:details.status'), exact: true }),
+    ).not.toContainText(closedName(locale));
   });
 });
 

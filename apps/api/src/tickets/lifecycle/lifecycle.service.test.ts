@@ -124,8 +124,8 @@ const harness = (options: {
 }) => {
   const recorder: Recorder = { inserts: [] };
 
-  // Enough of Drizzle's builder for the three statements the service makes:
-  // an activity row, an outbox row (which reads its id back) and a message.
+  // Enough of Drizzle's builder for the statements the service makes: an
+  // activity row, an outbox row (which reads its id back) and a message.
   const tx = {
     insert: (table: object) => ({
       values: (values: unknown) => {
@@ -135,6 +135,18 @@ const harness = (options: {
         return Object.assign(Promise.resolve(rows), { returning: async () => rows });
       },
     }),
+    // M14-17: the spam close reads the brand's required-to-close fields; these
+    // tests run with a brand that has none, so the read answers no rows.
+    select: () => {
+      const rows: unknown[] = [];
+      const builder = Object.assign(Promise.resolve(rows), {
+        from: () => builder,
+        where: () => builder,
+        orderBy: () => builder,
+      });
+
+      return builder;
+    },
   } as unknown as DbTransaction;
 
   const statuses = options.statuses ?? [OPEN, AWAITING, CLOSED, SPAM];

@@ -23,6 +23,7 @@ const def = (
   type,
   options: type === 'select' || type === 'multi_select' ? ['DHL', 'UPS'] : [],
   required: false,
+  requiredToClose: false,
   agentVisible: true,
   pinned: false,
   sortOrder: 0,
@@ -111,5 +112,22 @@ describe('CustomFieldsCard', () => {
     renderApp(<CustomFieldsCard fields={[]} values={{}} canWrite onSave={vi.fn()} />);
 
     expect(screen.getByText('None')).toBeVisible();
+  });
+
+  it('marks a field required to close and describes the control with the marker (M14-17)', () => {
+    renderApp(
+      <CustomFieldsCard
+        fields={[def('number', 'Amount', { requiredToClose: true }), def('select', 'Carrier')]}
+        values={{}}
+        canWrite
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText('Required to close')).toHaveLength(1);
+    expect(screen.getByRole('spinbutton', { name: 'Amount' })).toHaveAccessibleDescription(
+      'Required to close',
+    );
+    expect(screen.getByRole('combobox', { name: 'Carrier' })).not.toHaveAccessibleDescription();
   });
 });

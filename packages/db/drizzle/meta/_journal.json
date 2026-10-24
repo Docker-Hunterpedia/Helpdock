@@ -484,6 +484,13 @@
       "when": 1792848442143,
       "tag": "0070_pinned_custom_field",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792853847327,
+      "tag": "0071_required_to_close",
+      "breakpoints": true
     }
   ]
 }

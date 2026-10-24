@@ -62,6 +62,7 @@ import {
   BULK_UNDO_WINDOW_SECONDS,
   customValuesSchema,
   mergeCustomValues,
+  missingRequiredToClose,
   normaliseEmail,
   renderSegments,
   SNOOZE_MAX_MS,
@@ -1098,6 +1099,24 @@ export class MockTicketsApi implements TicketsApi {
       request.custom === undefined
         ? ticket.custom
         : mergeCustomValues(ticket.custom, await this.#parseCustom(brandId, request.custom));
+
+    // M14-17: the fixture refuses the close the api refuses, before anything
+    // is written, on the values this request would leave behind. The other
+    // closes through here are system ones the api never refuses — mark spam
+    // goes through its own service, and merges and undos write their rows —
+    // so the gate is a person naming a status.
+    if (
+      request.statusId !== undefined &&
+      !status.isSpam &&
+      status.systemState === 'closed' &&
+      ticket.status.systemState !== 'closed'
+    ) {
+      const { fields } = await this.#catalog.customFields(brandId, 'ticket');
+      const missing = missingRequiredToClose(fields, custom);
+      if (missing.length > 0) {
+        throw new TicketLifecycleError('fields-required-to-close', missing);
+      }
+    }
 
     const updated: Ticket = {
       ...ticket,

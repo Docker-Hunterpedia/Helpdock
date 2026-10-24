@@ -1,4 +1,6 @@
 import type { OutboxEventHandler } from '@helpdock/jobs';
+import { missingRequiredToClose } from '@helpdock/schemas';
+import { requiredToCloseRules } from '../close-requirements.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../ticket-events.js';
@@ -80,6 +82,10 @@ export const createStatusStateResyncHandler =
       withoutSurvey: true,
     };
 
+    // M14-17: a configuration change closes through empty required-to-close
+    // fields — it is a system close, never gated — and each row says which.
+    const gate = await requiredToCloseRules(tx);
+
     for (const { id } of batch) {
       const closed = await deps.repository.closeTicketInStatus(tx, id, statusId, at);
       if (closed === undefined) {
@@ -87,6 +93,7 @@ export const createStatusStateResyncHandler =
         continue;
       }
 
+      const closedWithout = missingRequiredToClose(gate, closed.custom);
       await writeTicketActivity(tx, {
         brandId,
         ticketId: closed.id,
@@ -94,7 +101,12 @@ export const createStatusStateResyncHandler =
         actor: context.actor,
         action: 'ticket.closed',
         from: { statusId },
-        to: { statusId, closedAt: at.toISOString(), reason: 'status-state' },
+        to: {
+          statusId,
+          closedAt: at.toISOString(),
+          reason: 'status-state',
+          ...(closedWithout.length === 0 ? {} : { closedWithout }),
+        },
       });
       await deps.lifecycle.onClosed(context, closed, status);
       await enqueueTicketEvent(tx, brandId, TICKET_EVENTS.closed, {

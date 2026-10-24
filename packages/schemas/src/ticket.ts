@@ -235,6 +235,12 @@ export const ticketLifecycleRefusalSchema = z.enum([
   'bulk-undo-expired',
   /** M14-03. The bulk edit was already undone. */
   'bulk-already-undone',
+  /**
+   * M14-17. A close by a person or an API key (owner decision D-30) of a ticket
+   * with an empty required-to-close field. The error body's `lifecycle.fields`
+   * names the keys that are still empty.
+   */
+  'fields-required-to-close',
 ]);
 export type TicketLifecycleRefusal = z.infer<typeof ticketLifecycleRefusalSchema>;
 

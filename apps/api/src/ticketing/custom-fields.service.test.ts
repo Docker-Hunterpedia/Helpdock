@@ -31,6 +31,7 @@ const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefR
   labelAr: null,
   type: 'text',
   options: [],
+  requiredToClose: false,
   required: false,
   agentVisible: true,
   pinned: false,
@@ -148,6 +149,7 @@ describe('create', () => {
       type: 'date',
       options: [],
       required: false,
+      requiredToClose: false,
       agentVisible: true,
       pinned: false,
     });
@@ -167,6 +169,7 @@ describe('create', () => {
         type: 'text',
         options: [],
         required: false,
+        requiredToClose: false,
         agentVisible: true,
         pinned: false,
       }),
@@ -182,6 +185,7 @@ describe('create', () => {
         type: 'text',
         options: [],
         required: false,
+        requiredToClose: false,
         agentVisible: true,
         pinned: false,
       }),
@@ -197,6 +201,40 @@ describe('update', () => {
       action: 'custom_field.updated',
       meta: { key: 'tier', label: 'Tier', wasLabelled: 'Plan tier' },
     });
+  });
+
+  it('refuses hiding a field from agents while it is required to close', async () => {
+    rows = [def({ id: 'gate', key: 'gate', requiredToClose: true })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'gate', { agentVisible: false, force: false }),
+    ).rejects.toThrow(/visible to agents/i);
+  });
+
+  it('refuses requiring a hidden field to close', async () => {
+    rows = [def({ id: 'quiet', key: 'quiet', agentVisible: false })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'quiet', { requiredToClose: true, force: false }),
+    ).rejects.toThrow(/visible to agents/i);
+  });
+
+  it('refuses requiring a contact field to close', async () => {
+    await expect(
+      service.update(contextFor(transaction.tx), 'seats', { requiredToClose: true, force: false }),
+    ).rejects.toThrow(/only ticket fields/i);
+  });
+
+  it('lets a field hidden and later shown be gated once it is visible', async () => {
+    rows = [def({ id: 'quiet', key: 'quiet', agentVisible: false })];
+
+    await expect(
+      service.update(contextFor(transaction.tx), 'quiet', {
+        requiredToClose: true,
+        agentVisible: true,
+        force: false,
+      }),
+    ).resolves.toMatchObject({ requiredToClose: true, agentVisible: true });
   });
 
   it('refuses a type change while rows carry a value', async () => {
@@ -318,6 +356,7 @@ describe('pinning (M14-16)', () => {
       options: ['Sev 1'],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: false,
       ...over,
     });
@@ -377,6 +416,7 @@ describe('pinning (M14-16)', () => {
     await expect(
       service.update(contextFor(transaction.tx), 'tier', {
         agentVisible: false,
+        requiredToClose: false,
         pinned: false,
         force: false,
       }),
@@ -429,6 +469,7 @@ describe('concurrent pins (M14-16)', () => {
       options: [],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: false,
     });
     expect(locked).toBe(1);
@@ -441,6 +482,7 @@ describe('concurrent pins (M14-16)', () => {
       options: ['Sev 1'],
       required: false,
       agentVisible: true,
+      requiredToClose: false,
       pinned: true,
     });
     expect(locked).toBe(2);

@@ -130,6 +130,21 @@ describe('editing', () => {
     expect(screen.getByText(/key is fixed once the field exists/)).toBeInTheDocument();
   });
 
+  it('describes the required-to-close checkbox with its hint, and locks it for a hidden field (M14-17)', async () => {
+    const { user } = await renderFields();
+
+    await user.click(screen.getByRole('button', { name: 'Edit Plan tier' }));
+    const gate = await screen.findByRole('checkbox', { name: 'Required to close' });
+    expect(gate).toHaveAccessibleDescription(
+      /Agents cannot close a ticket while this field is empty/,
+    );
+
+    await user.click(screen.getByRole('checkbox', { name: 'Visible to agents' }));
+
+    expect(gate).toBeDisabled();
+    expect(gate).toHaveAccessibleDescription(/a hidden field cannot be required to close/);
+  });
+
   it('refuses a type change while rows carry a value, and says which rule refused', async () => {
     const { user } = await renderFields();
 

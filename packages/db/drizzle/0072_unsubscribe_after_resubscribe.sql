@@ -1,0 +1,1 @@
+ALTER TABLE "notification_prefs" ADD COLUMN "email_resubscribed_at" timestamp with time zone;

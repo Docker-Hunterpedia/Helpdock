@@ -275,7 +275,18 @@ describe('NotificationsService — preferences', () => {
     await notifications.updatePreferences(tx, ME, { emailUnsubscribed: false });
 
     expect(calls.saved).toBeUndefined();
-    expect(calls.email).toMatchObject({ emailUnsubscribedAt: null });
+    expect(calls.email).toMatchObject({
+      emailUnsubscribedAt: null,
+      resubscribedAt: expect.any(Date),
+    });
+  });
+
+  it('does not ask for a resubscribe stamp on a save that is not "Turn email back on"', async () => {
+    const { notifications, tx, calls } = service();
+
+    await notifications.updatePreferences(tx, ME, { digestHour: 7 });
+
+    expect(calls.email).toMatchObject({ resubscribedAt: undefined });
   });
 
   it('says push is not set up on an install without keys', async () => {

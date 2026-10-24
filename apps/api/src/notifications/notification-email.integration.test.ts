@@ -1196,6 +1196,13 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
           .from(notificationPrefs)
           .where(eq(notificationPrefs.userId, userId))
       )[0]?.at ?? null;
+    const resubscribedAt = async (userId: string) =>
+      (
+        await runtime.db
+          .select({ at: notificationPrefs.emailResubscribedAt })
+          .from(notificationPrefs)
+          .where(eq(notificationPrefs.userId, userId))
+      )[0]?.at ?? null;
     const audits = (userId: string) =>
       withSystem(runtime.db, INSTALL_SCOPE_BRAND_ID, (tx) =>
         tx
@@ -1365,6 +1372,53 @@ describe.skipIf(!hasDocker)('notification email pacing (M14-10)', () => {
         (await call('PUT', '/api/me/notification-preferences', sam, { emailUnsubscribed: true }))
           .status,
       ).toBe(400);
+    });
+
+    describe('after Turn email back on', () => {
+      const turnBackOn = () =>
+        call('PUT', '/api/me/notification-preferences', sam, { emailUnsubscribed: false });
+      const hourAgo = () => new Date(Date.now() - 3_600_000);
+
+      it('refuses a link issued before it on GET and POST, and honours one issued after', async () => {
+        const old = tokenFor(sam.id, hourAgo());
+        expect((await post(old)).statusCode).toBe(200);
+        expect((await turnBackOn()).status).toBe(200);
+        expect(await resubscribedAt(sam.id)).toBeInstanceOf(Date);
+
+        const refused = [await get(old), await post(old)];
+        expect(refused.map((response) => response.statusCode)).toEqual([404, 404]);
+        const unknown = await get(`${'A'.repeat(27)}.${'A'.repeat(43)}`);
+        const withoutRequestId = (response: { json: () => { error: object } }) => ({
+          ...response.json().error,
+          requestId: undefined,
+        });
+        expect(withoutRequestId(refused[0] as typeof unknown)).toEqual(withoutRequestId(unknown));
+        expect(withoutRequestId(refused[1] as typeof unknown)).toEqual(withoutRequestId(unknown));
+        expect(await unsubscribedAt(sam.id)).toBeNull();
+
+        const fresh = tokenFor(sam.id, new Date(Date.now() + 2000));
+        expect((await get(fresh)).statusCode).toBe(200);
+        expect((await post(fresh)).statusCode).toBe(200);
+        expect(await unsubscribedAt(sam.id)).toBeInstanceOf(Date);
+      });
+
+      it('stamps only the save that lifts the unsubscribe', async () => {
+        await post(tokenFor(sam.id, hourAgo()));
+        await turnBackOn();
+        const stamped = await resubscribedAt(sam.id);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        await turnBackOn();
+        await call('PUT', '/api/me/notification-preferences', sam, { digestHour: 7 });
+
+        expect(await resubscribedAt(sam.id)).toEqual(stamped);
+      });
+
+      it('leaves the stamp empty for someone who never unsubscribed', async () => {
+        await turnBackOn();
+
+        expect(await resubscribedAt(sam.id)).toBeNull();
+      });
     });
   });
 

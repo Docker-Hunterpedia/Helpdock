@@ -52,9 +52,25 @@ export const UNSUBSCRIBE_PUBLIC_RULE: RateLimitRule = {
   windowSeconds: 15 * 60,
 };
 
+/**
+ * True when a link was issued at or before the moment the person last turned
+ * email back on. Tokens carry whole seconds, so the resubscribe time is floored
+ * to the second too and the same second is refused: the token cannot say which
+ * side of the resubscribe it fell on, and failing closed costs one 404 on a
+ * link minted in that second (the next email carries a working one), while
+ * failing open is the bug this guards against, worsened by clock skew between
+ * the API and the worker.
+ */
+export const issuedBeforeResubscribe = (issuedAt: Date, resubscribedAt: Date | null): boolean =>
+  resubscribedAt !== null &&
+  Math.floor(issuedAt.getTime() / 1000) <= Math.floor(resubscribedAt.getTime() / 1000);
+
 export interface UnsubscribeServiceOptions {
   readonly db: Db;
-  readonly repository: Pick<NotificationsRepository, 'activeAccount' | 'unsubscribeEmail'>;
+  readonly repository: Pick<
+    NotificationsRepository,
+    'activeAccount' | 'emailResubscribedAt' | 'unsubscribeEmail'
+  >;
   readonly tokens: UnsubscribeTokens;
   readonly limiter: RateLimiter;
   readonly now?: () => Date;
@@ -71,13 +87,10 @@ export class UnsubscribeService {
 
   /** The confirmation page's read. Changes nothing. */
   async view(token: string, ip: string): Promise<UnsubscribeView> {
-    const { userId } = await this.#admit(token, ip);
+    const { userId, issuedAt } = await this.#admit(token, ip);
 
     return this.#asSystem(userId, async (tx) => {
-      const account = await this.#options.repository.activeAccount(tx, userId);
-      if (account === undefined) {
-        throw new NotFoundException('No such unsubscribe link');
-      }
+      const account = await this.#activeAccountFor(tx, userId, issuedAt);
 
       return { state: 'confirm', email: account.email, locale: account.locale };
     });
@@ -89,10 +102,7 @@ export class UnsubscribeService {
 
     return this.#asSystem(userId, async (tx) => {
       const { repository } = this.#options;
-      const account = await repository.activeAccount(tx, userId);
-      if (account === undefined) {
-        throw new NotFoundException('No such unsubscribe link');
-      }
+      const account = await this.#activeAccountFor(tx, userId, issuedAt);
 
       if (await repository.unsubscribeEmail(tx, userId, this.#now())) {
         await tx.insert(auditLog).values({
@@ -108,6 +118,20 @@ export class UnsubscribeService {
 
       return { state: 'done', locale: account.locale };
     });
+  }
+
+  /** The account, or the same 404 an unknown token gets: gone, deactivated, or issued before a resubscribe. */
+  async #activeAccountFor(tx: DbTransaction, userId: string, issuedAt: Date) {
+    const { repository } = this.#options;
+    const account = await repository.activeAccount(tx, userId);
+    if (
+      account === undefined ||
+      issuedBeforeResubscribe(issuedAt, await repository.emailResubscribedAt(tx, userId))
+    ) {
+      throw new NotFoundException('No such unsubscribe link');
+    }
+
+    return account;
   }
 
   async #admit(token: string, ip: string): Promise<UnsubscribeSubject> {

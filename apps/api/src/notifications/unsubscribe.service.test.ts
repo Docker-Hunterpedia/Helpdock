@@ -3,7 +3,7 @@ import { auditLog, type Db, INSTALL_SCOPE_BRAND_ID } from '@helpdock/db';
 import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type { RateLimiter } from '../auth/rate-limit.js';
-import { UnsubscribeService } from './unsubscribe.service.js';
+import { issuedBeforeResubscribe, UnsubscribeService } from './unsubscribe.service.js';
 import { UnsubscribeTokens } from './unsubscribe-tokens.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
@@ -23,7 +23,9 @@ const harness = ({
   account = { email: 'lina@helpdock.test', locale: 'ar' as const },
   changed = true,
   allowed = true,
+  resubscribedAt = null,
 }: {
+  resubscribedAt?: Date | null;
   account?: { email: string; locale: 'en' | 'ar' } | null;
   changed?: boolean;
   allowed?: boolean;
@@ -52,6 +54,7 @@ const harness = ({
       db,
       repository: {
         activeAccount: async () => account ?? undefined,
+        emailResubscribedAt: async () => resubscribedAt,
         unsubscribeEmail: async (_tx, _userId, at) => {
           writes.push(at);
           return changed;
@@ -149,5 +152,46 @@ describe('UnsubscribeService.unsubscribe', () => {
 
     await expect(service.unsubscribe(fresh(), 'ip')).rejects.toBeInstanceOf(NotFoundException);
     expect(writes).toEqual([]);
+  });
+});
+
+describe('issuedBeforeResubscribe', () => {
+  const at = new Date('2026-10-21T10:00:00.500Z');
+
+  it.each([
+    ['never resubscribed', new Date('2020-01-01T00:00:00Z'), null, false],
+    ['issued a second before', new Date('2026-10-21T09:59:59.900Z'), at, true],
+    ['issued days before', new Date('2026-10-18T10:00:00Z'), at, true],
+    ['issued in the same second', new Date('2026-10-21T10:00:00.000Z'), at, true],
+    ['issued after', new Date('2026-10-21T10:00:01.000Z'), at, false],
+  ])('%s', (_name, issuedAt, resubscribedAt, expected) => {
+    expect(issuedBeforeResubscribe(issuedAt, resubscribedAt)).toBe(expected);
+  });
+});
+
+describe('a link issued before "Turn email back on"', () => {
+  const resubscribedAt = new Date(NOW.getTime() - DAY / 2);
+
+  it('is refused by view and unsubscribe with the 404 an unknown token gets, writing nothing', async () => {
+    const { service, writes, audits } = harness({ resubscribedAt });
+
+    await expect(service.view(fresh(), '203.0.113.9')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.unsubscribe(fresh(), '203.0.113.9')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(writes).toEqual([]);
+    expect(audits).toEqual([]);
+  });
+
+  it('still works when the link was issued after it', async () => {
+    const { service, writes } = harness({ resubscribedAt });
+    const later = tokens.sign(USER, new Date(NOW.getTime() - 1000));
+
+    expect(await service.view(later, '203.0.113.9')).toMatchObject({ state: 'confirm' });
+    expect(await service.unsubscribe(later, '203.0.113.9')).toEqual({
+      state: 'done',
+      locale: 'ar',
+    });
+    expect(writes).toEqual([NOW]);
   });
 });

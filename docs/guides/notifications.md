@@ -238,15 +238,25 @@ its own Unsubscribe button.
   nothing and its rows are marked `skipped_off`.
 - Your account › Notifications then says "You unsubscribed on 3 Oct…" with
   **Turn email back on**, which clears it and restores exactly the same
-  choices. The bell's panel shows the same line. An unsubscribe link from an
-  email sent before you turned email back on keeps working until it expires
-  (one year), including in emails forwarded to others; #397 tracks refusing
-  them.
+  choices. The bell's panel shows the same line.
+- **Turning email back on retires older links.** The save that lifts an
+  unsubscribe records `notification_prefs.email_resubscribed_at`, and a link
+  from an email issued before that moment is refused with the same `404` an
+  unknown token gets, on both `GET` and `POST`, so a forwarded copy of an old
+  email cannot switch your email off again. Emails sent afterwards carry links
+  that work. Tokens record whole seconds, so the comparison is made in whole
+  seconds and a link minted in the same second as the resubscribe is refused
+  too (it cannot be told from an older one); the next email carries a working
+  link. Saving other settings, or turning email back on when it was never off,
+  does not move the timestamp. People who turned email back on before this
+  release have no timestamp, so their older links keep working until they
+  expire.
 - A token is good for a year from the email that carried it. It is signed
   (HMAC-SHA256, key derived with HKDF from `APP_MASTER_KEY` for this purpose
   alone), names one user and can do one thing: turn that user's notification
-  email off. A forged, altered, expired or unknown token, and a token for a
-  deactivated account, all get the same "This link has expired" page (`404`),
+  email off. A forged, altered, expired or unknown token, a token for a
+  deactivated account, and a token issued before the last resubscribe all
+  get the same "This link has expired" page (`404`),
   so the page never says whether an address has an account here. Repeating a
   request changes nothing further; the first one writes the audit row
   `notification.email_unsubscribed`. The route is limited to 120 requests per

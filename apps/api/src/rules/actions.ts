@@ -590,6 +590,7 @@ const requestTriage = async (
     mode: action.mode,
     fields: [...action.fields],
     chain: [...context.chain],
+    ...wokeOf(context),
   });
   return { effect: 'changed', triage: { status: 'queued' } };
 };

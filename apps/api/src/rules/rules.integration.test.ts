@@ -45,6 +45,7 @@ import { signInForTest } from '../testing/staff-sign-in.js';
 import { wakeStatusFor, wakeTicket, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
 import { createTicketSnoozedHandler } from '../tickets/snooze/snooze-worker.js';
 import { enqueueTicketEvent, TICKET_EVENTS } from '../tickets/ticket-events.js';
+import { applyTriageActions } from './actions.js';
 import { evaluateEventRules, runScheduledRules } from './engine.js';
 import { createRulesEngineDeps } from './engine-deps.js';
 import { createRulesSourceHandler } from './rules-jobs.js';
@@ -1230,6 +1231,53 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         (candidate) => candidate.ruleName === 'Snooze out of bounds',
       );
       expect(run?.details).toMatchObject({ actions: [{ effect: 'unavailable' }] });
+      await disableAll();
+    });
+
+    it('keeps the mark through an AI triage that applies, so the chain cannot re-snooze either', async () => {
+      const ticket = await sleepingTicket('Woken, then triaged');
+      await resnoozeRule('ticket_updated', 'Snooze after triage');
+      const asleep = await ticketRow(ticket.id);
+      await inBrand((tx) => {
+        /* c8 ignore next 3 -- the ticket was snoozed above. */
+        if (asleep === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        return wakeTicket(tx, { ticket: asleep, cause: 'time', now: new Date() });
+      });
+      await drain();
+      expect(await isAsleep(ticket.id)).toBe(false);
+
+      // The triage job's apply, as the worker runs it for a rule started by the wake.
+      await inBrand(async (tx) => {
+        const deps = engine();
+        const target = await deps.tickets.findTicket(tx, ticket.id);
+        /* c8 ignore next 3 -- the ticket exists. */
+        if (target === undefined) {
+          throw new Error('the ticket is gone');
+        }
+        await applyTriageActions(
+          deps,
+          {
+            tx,
+            brandId: seeded.brandId,
+            ruleId: uuidv7(),
+            runId: uuidv7(),
+            chain: [uuidv7()],
+            now: new Date(),
+            wokeBy: 'time',
+          },
+          target,
+          [{ type: 'set_priority', priority: 'urgent' }],
+        );
+      });
+      await drain();
+
+      expect(await isAsleep(ticket.id)).toBe(false);
+      const run = (await runsOf(ticket.id)).find(
+        (candidate) => candidate.ruleName === 'Snooze after triage',
+      );
+      expect(run?.details).toMatchObject({ actions: [{ effect: 'unavailable', reason: 'woken' }] });
       await disableAll();
     });
 

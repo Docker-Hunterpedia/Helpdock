@@ -160,4 +160,21 @@ describe('previewActions snooze', () => {
 
     expect(outcomes[0]?.effect).toBe('unavailable');
   });
+
+  it.each([
+    ['under 5 minutes', 60_000],
+    ['over 90 days', 91 * 24 * 3_600_000],
+  ])('says unavailable for a preset that resolves to %s, as the run does', async (_name, ahead) => {
+    const bounded = {
+      ...snoozeDeps(),
+      snooze: {
+        at: async (_tx: DbTransaction, _b: string, _d: string, _p: string, now: Date) =>
+          new Date(now.getTime() + ahead),
+      },
+    };
+
+    const { outcomes } = await run(bounded, [action]);
+
+    expect(outcomes[0]?.effect).toBe('unavailable');
+  });
 });

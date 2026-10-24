@@ -246,6 +246,7 @@ const apply = async (
       ruleId: payload.ruleId,
       runId: payload.runId,
       chain: payload.chain,
+      ...(payload.wokeBy === undefined ? {} : { wokeBy: payload.wokeBy }),
       now: (deps.now ?? (() => new Date()))(),
     },
     target,

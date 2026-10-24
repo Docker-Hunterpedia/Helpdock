@@ -310,7 +310,7 @@ export function ActionRow({
           >
             {snoozePresetKeySchema.options.map((preset) => (
               <option key={preset} value={preset}>
-                {t(`rules:builder.snoozeOption.${preset}`)}
+                {t(`tickets:snooze.preset.${preset}`)}
               </option>
             ))}
           </Choice>

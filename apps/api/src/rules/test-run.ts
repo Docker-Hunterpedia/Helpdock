@@ -12,6 +12,7 @@ import type { AssignmentRepository } from '../assignment/assignment.repository.j
 import { canWorkDepartment } from '../assignment/rotation.js';
 import { routesAutomatically } from '../assignment/ticket-assignment.js';
 import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
+import { snoozeWithinBounds } from '../tickets/snooze/snooze-plan.js';
 import type { TicketChange } from '../tickets/ticket-events.js';
 import type { RulesRepository } from './rules.repository.js';
 import type { TicketFacts } from './ticket-facts.js';
@@ -94,16 +95,15 @@ const previewOne = async (
       if (current === undefined || current.systemState === 'closed' || snoozed === undefined) {
         return UNAVAILABLE;
       }
-      const until = await deps.snooze.at(
-        tx,
-        brandId,
-        facts.departmentId,
-        action.preset,
-        new Date(),
-      );
+      const now = new Date();
+      const until = await deps.snooze.at(tx, brandId, facts.departmentId, action.preset, now);
       // As the engine does: asleep until the same minute already is no change.
       if (snoozed.id === facts.statusId && facts.snoozedUntil?.getTime() === until.getTime()) {
         return UNCHANGED;
+      }
+      // The run's bounds (5 minutes to 90 days): a preset outside them is refused there too.
+      if (!snoozeWithinBounds(until, now)) {
+        return UNAVAILABLE;
       }
       if (snoozed.id !== facts.statusId) {
         sim.changes.add('status');

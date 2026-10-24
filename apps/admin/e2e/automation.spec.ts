@@ -162,10 +162,10 @@ test.describe('the builder and its test run', () => {
     await expect(wakeTime).toBeVisible();
     for (const preset of ['in_1_hour', 'in_4_hours', 'next_business_day', 'next_week'] as const) {
       await expect(
-        wakeTime.locator('option', { hasText: t(`rules:builder.snoozeOption.${preset}`) }),
+        wakeTime.locator('option', { hasText: t(`tickets:snooze.preset.${preset}`) }),
       ).toHaveCount(1);
     }
-    await wakeTime.selectOption({ label: t('rules:builder.snoozeOption.next_business_day') });
+    await wakeTime.selectOption({ label: t('tickets:snooze.preset.next_business_day') });
     await expect(page.getByText(t('rules:builder.snoozeNote'))).toBeVisible();
 
     // Set status still cannot pick the Snoozed status: the action needs no
@@ -200,7 +200,7 @@ test.describe('the builder and its test run', () => {
     await page.getByRole('combobox', { name: t('rules:builder.value') }).selectOption('urgent');
     await page
       .getByRole('combobox', { name: t('rules:builder.snoozeFor') })
-      .selectOption({ label: t('rules:builder.snoozeOption.next_business_day') });
+      .selectOption({ label: t('tickets:snooze.preset.next_business_day') });
     await page.getByRole('button', { name: t('rules:builder.save') }).click();
     await expect(
       page.getByRole('form', {

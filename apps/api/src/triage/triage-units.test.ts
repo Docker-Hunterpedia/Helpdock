@@ -35,6 +35,7 @@ describe('the ai.triage_requested handler (M7-07)', () => {
         mode: 'suggest',
         fields: ['priority'],
         chain: [uuid(2)],
+        wokeBy: 'customer_reply',
       },
       tx: {} as DbTransaction,
       log: silentLogger,
@@ -44,7 +45,12 @@ describe('the ai.triage_requested handler (M7-07)', () => {
       {
         jobId: uuid(9),
         name: 'ai.classify',
-        payload: expect.objectContaining({ brandId, mode: 'suggest', fields: ['priority'] }),
+        payload: expect.objectContaining({
+          brandId,
+          mode: 'suggest',
+          fields: ['priority'],
+          wokeBy: 'customer_reply',
+        }),
       },
     ]);
   });

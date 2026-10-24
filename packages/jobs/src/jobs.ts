@@ -1393,6 +1393,8 @@ export const aiClassifyPayloadSchema = z.object({
     .max(3),
   /** The rule chain the run belongs to, carried on to the changes an `apply` makes. */
   chain: z.array(z.uuid()).max(10),
+  /** #368. The chain started at a snooze ending by itself, so the `apply` writes events that say so. */
+  wokeBy: z.enum(['time', 'sla', 'customer_reply']).optional(),
 });
 export type AiClassifyPayload = z.infer<typeof aiClassifyPayloadSchema>;
 

@@ -46,7 +46,6 @@ Run these from the repository root.
 | `pnpm check:boundaries` | Enforces the app import rule described below. |
 | `pnpm check:routes` | Fails when a controller handler declares neither `@Requires`, `@Authenticated` nor `@Public`. |
 | `pnpm check:validation` | Fails when a `@Param`, `@Query` or `@Body` on a controller handler names no Zod schema. |
-| `pnpm check:locale-args` | Fails on a bare `toLocaleString()`-style call — no locale argument — in `apps/admin/src`; see [UI and i18n](#ui-and-i18n). |
 | `pnpm design:render` | Renders the artboard sources in `docs/design/artboards/` to PNGs in `docs/design/screens/`. See [docs/design/](../design/README.md). |
 | `pnpm changeset` | Records what a change should say in the next release. See [the release guide](release.md). |
 | `pnpm --filter @helpdock/api seed:dev` | Creates the development install: one brand, one admin, a published password. Refuses `NODE_ENV=production`. |
@@ -245,9 +244,11 @@ Formatted dates and numbers go through
 `toLocaleString()` and friends: a call with no locale argument follows the
 browser's locale instead of the app's and prints Arabic-Indic digits in `ar`,
 against DESIGN §7 (finding UX-04 of the
-[1.0 UX review](../completed/ux-review-1-0.md)). `pnpm check:locale-args` fails
-the build on such a call anywhere in `apps/admin/src`; pass an explicit locale
-or go through the helper. Case folding on comparisons uses the
+[1.0 UX review](../completed/ux-review-1-0.md)). `pnpm lint` fails on such a call, or one that passes `undefined` as the
+locale, anywhere in `apps/admin/src` (the Biome plugin
+[`scripts/biome/bare-locale-call.grit`](../../scripts/biome/bare-locale-call.grit),
+scoped by an override in `biome.json`); pass an explicit locale or go through
+the helper. Case folding on comparisons uses the
 locale-independent `toLowerCase` and `toUpperCase` for the same reason.
 
 ## Database

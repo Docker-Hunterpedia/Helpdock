@@ -1,0 +1,16 @@
+language js
+
+// A call to a Date or Number locale formatter that names no locale, or names
+// `undefined` as the locale, follows the browser's locale instead of the app's.
+// Scoped to apps/admin/src by the override in biome.json.
+or {
+  `$o.toLocaleString($args)`,
+  `$o.toLocaleDateString($args)`,
+  `$o.toLocaleTimeString($args)`,
+  `$o?.toLocaleString($args)`,
+  `$o?.toLocaleDateString($args)`,
+  `$o?.toLocaleTimeString($args)`
+} as $call where {
+  or { $args <: ., $args <: [`undefined`, ...] },
+  register_diagnostic(span=$call, message="A toLocale call with no locale (or `undefined`) follows the browser's locale, not the app's (DESIGN §7, UX-04). Format dates and numbers through apps/admin/src/ui/format.ts, or pass an explicit locale.", severity="error")
+}

@@ -138,11 +138,6 @@ jobs:
       - name: Check app import boundaries
         run: pnpm check:boundaries
 
-      # UX-04: a bare toLocale* call follows the browser's locale instead of the
-      # app's, which turns dates into Arabic-Indic digits in `ar` (DESIGN §7).
-      - name: Check locale arguments
-        run: pnpm check:locale-args
-
       # DOMAIN-RULES §1.3: "Missing decorator fails the request in development
       # and in CI." The permission guard is the runtime half; this is CI's.
       - name: Check route permission declarations

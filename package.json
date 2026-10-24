@@ -29,7 +29,6 @@
     "check:imports": "node scripts/check-import-writer.ts",
     "check:routes": "node scripts/check-route-permissions.ts && node scripts/check-import-writer.ts",
     "check:validation": "node scripts/check-route-validation.ts",
-    "check:locale-args": "node scripts/check-locale-args.ts",
     "design:render": "node scripts/render-artboards.ts docs/design/artboards docs/design/screens",
     "changeset": "changeset",
     "changeset:version": "changeset version"

@@ -280,3 +280,39 @@ export const withWidenedDepartments = async <T>(
     await setScope(uuidArrayLiteral('departmentIds', scope));
   }
 };
+
+/**
+ * Runs `fn` with the install scope added to the transaction's brands, and puts
+ * the brands back afterwards.
+ *
+ * It exists for a request that holds a pooled connection and needs one
+ * install-wide value (`sso.enforced`). The alternative, `withSystem` on the
+ * pool, takes a second connection while the first is held; as many such
+ * requests as the pool has connections then wait on each other for good.
+ *
+ * Only the install scope's rows are added to what the transaction reads, which
+ * is the one id {@link INSTALL_SCOPE_BRAND_ID} names, so the widest this can
+ * reach is install-global settings; no brand is added. The previous value is
+ * restored in a `finally`, and the setting is local to the transaction anyway.
+ */
+export const withInstallScope = async <T>(tx: DbTransaction, fn: () => Promise<T>): Promise<T> => {
+  const rows = await tx.execute<{ brand_ids: string | null }>(
+    sql`SELECT current_setting(${SESSION_SETTINGS.brandIds}, true) AS brand_ids`,
+  );
+  const literal = [...rows][0]?.brand_ids ?? '';
+  const inner = literal.startsWith('{') && literal.endsWith('}') ? literal.slice(1, -1) : '';
+  const held = inner.length === 0 ? [] : inner.split(',');
+  if (held.includes(INSTALL_SCOPE_BRAND_ID)) {
+    return fn();
+  }
+
+  const setBrands = (value: string): Promise<unknown> =>
+    tx.execute(sql`SELECT set_config(${SESSION_SETTINGS.brandIds}, ${value}, true)`);
+
+  await setBrands(uuidArrayLiteral('brandIds', [...held, INSTALL_SCOPE_BRAND_ID]));
+  try {
+    return await fn();
+  } finally {
+    await setBrands(literal);
+  }
+};

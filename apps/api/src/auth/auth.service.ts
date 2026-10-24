@@ -938,8 +938,11 @@ export class AuthService {
   }
 
   /** Whether this account may offer a recovery code to start a rotation; the page hides the option when not. */
-  async recoveryCodeProofAllowed(userId: string, tx?: Queryable): Promise<boolean> {
-    return !(await this.#parts.ssoPolicy.recoveryCodeBarred(await this.#requireUser(userId, tx)));
+  async recoveryCodeProofAllowed(userId: string, tx?: DbTransaction): Promise<boolean> {
+    return !(await this.#parts.ssoPolicy.recoveryCodeBarred(
+      await this.#requireUser(userId, tx),
+      tx,
+    ));
   }
 
   /**

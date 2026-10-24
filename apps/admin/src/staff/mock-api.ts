@@ -148,6 +148,7 @@ const seedProfile = (): Profile => ({
   twoFactorEnabled: true,
   recoveryCodesLeft: 8,
   twoFactorRequired: false,
+  recoveryCodeProofAllowed: true,
   publicName: null,
   displayName: 'Lina',
   jobTitleEn: 'Billing specialist',
@@ -412,7 +413,15 @@ export class MockStaffApi implements StaffApi {
     this.#profile = { ...this.#profile, twoFactorEnabled: false, recoveryCodesLeft: 0 };
   }
 
+  /** Plays a break-glass account under SSO enforcement: no recovery code may start a replacement. */
+  barRecoveryCodeProofs(): void {
+    this.#profile = { ...this.#profile, recoveryCodeProofAllowed: false };
+  }
+
   async startTotpRotation(proof: TotpRotationProof): Promise<TotpRotationStart> {
+    if (proof.recoveryCode !== undefined && !this.#profile.recoveryCodeProofAllowed) {
+      throw new AuthError('recovery-code-not-allowed');
+    }
     if (!this.#profile.twoFactorEnabled) {
       throw new AuthError('totp-not-enabled');
     }

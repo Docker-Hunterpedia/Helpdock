@@ -287,6 +287,13 @@ codes stop working at the swap. The confirm code's time step is then recorded as
 used, after the commit, so that code cannot also sign in; the new app's next code
 can.
 
+While SSO is enforced, an account that is on the break-glass list or eligible for
+it cannot prove with a recovery code (alone or with the password): the start
+answers `403 recovery-code-not-allowed`, spends no code and no attempt, and the
+security page does not offer the option. Those accounts prove with the current
+app's code or a passkey. Everyone else, and everyone while enforcement is off,
+may still use a recovery code.
+
 With a lost phone the recovery code (alone, or with the password) proves the
 step-up; with a passkey, the passkey does.
 

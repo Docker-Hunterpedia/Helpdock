@@ -2,7 +2,11 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
-import { MOCK_ENROLMENT_CODE, MOCK_STALE_ROTATION_CODE } from '../../staff/mock-api.js';
+import {
+  MOCK_ENROLMENT_CODE,
+  MOCK_STALE_ROTATION_CODE,
+  MockStaffApi,
+} from '../../staff/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 
@@ -155,5 +159,32 @@ describe('replacing the authenticator app (#373)', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers only the app code or a passkey to a break-glass account under enforcement', async () => {
+    const user = userEvent.setup();
+    const apis = await signedInMockApis();
+    if (!(apis.staff instanceof MockStaffApi)) throw new Error('expected the fixture');
+    apis.staff.barRecoveryCodeProofs();
+    renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      initialEntries: ['/me/security'],
+    });
+    await user.click(await screen.findByRole('button', { name: 'Replace app' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByLabelText('Code from your current app')).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('button', {
+        name: 'Use your password and a recovery code instead',
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText('Code from your current app'), 'RC-4KQ2-9XMT');
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    expect(
+      await within(dialog).findByText('Enter a 6-digit code from your current app.'),
+    ).toBeInTheDocument();
   });
 });

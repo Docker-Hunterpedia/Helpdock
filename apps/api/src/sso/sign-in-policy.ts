@@ -1,5 +1,12 @@
 import type { Keyring, Settings } from '@helpdock/config';
-import { type Db, INSTALL_SCOPE_BRAND_ID, ssoConnections, users, withSystem } from '@helpdock/db';
+import {
+  type Db,
+  INSTALL_SCOPE_BRAND_ID,
+  ssoConnections,
+  type User,
+  users,
+  withSystem,
+} from '@helpdock/db';
 import { eq, sql } from 'drizzle-orm';
 import { AuthFailure } from '../auth/auth-failure.js';
 import { enforcementAllows, isBreakGlassEligible, passkeyCounts } from './break-glass.js';
@@ -36,6 +43,28 @@ export class SsoSignInPolicy {
       if (!user || !allowed.includes(user.id)) throw new AuthFailure('sso-required');
       const held = (await passkeyCounts(tx, [user.id])).get(user.id) ?? 0;
       if (!isBreakGlassEligible(user, held)) throw new AuthFailure('sso-required');
+    });
+  }
+
+  /**
+   * Whether a recovery code may not stand in as a step-up proof for this
+   * account. Under enforcement, a break-glass account (on the list, or eligible
+   * for it) is the install's emergency way in, and recovery codes are kept out
+   * of break-glass (ADR 0053); a code that could install its next factor would
+   * be a way round that. Never barred while SSO is not enforced.
+   */
+  async recoveryCodeBarred(user: User): Promise<boolean> {
+    return withSystem(this.options.db, INSTALL_SCOPE_BRAND_ID, async (tx) => {
+      if (!(await readSsoSetting(tx, this.options.settings, this.options.keyring, 'sso.enforced')))
+        return false;
+      const listed = await readSsoSetting(
+        tx,
+        this.options.settings,
+        this.options.keyring,
+        'sso.breakGlassUserIds',
+      );
+      if (listed.includes(user.id)) return true;
+      return isBreakGlassEligible(user, (await passkeyCounts(tx, [user.id])).get(user.id) ?? 0);
     });
   }
 

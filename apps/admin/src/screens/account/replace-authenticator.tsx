@@ -54,9 +54,12 @@ const proofOf = (value: string): TotpRotationProof =>
 
 export function ReplaceAuthenticatorDialog({
   open,
+  recoveryCodeAllowed,
   onClose,
 }: {
   readonly open: boolean;
+  /** False for a break-glass account under SSO enforcement: only the app or a passkey proves it. */
+  readonly recoveryCodeAllowed: boolean;
   /** `stale` when the replacement expired or the factors changed under it: the page says "start again". */
   onClose(outcome?: 'stale'): void;
 }): ReactNode {
@@ -123,6 +126,10 @@ export function ReplaceAuthenticatorDialog({
         setProofError(t('me:passkeys.locked'));
         return;
       }
+      if (isAuthError(error) && error.code === 'recovery-code-not-allowed') {
+        setProofError(t('me:twoFactor.recoveryCodeNotAllowed'));
+        return;
+      }
       if (
         isAuthError(error) &&
         (error.code === 'invalid-credentials' ||
@@ -183,12 +190,19 @@ export function ReplaceAuthenticatorDialog({
       start.mutate({ currentPassword: password, recoveryCode: secret.trim() });
       return;
     }
-    if (secret.trim() === '') {
-      setProofError(t('me:twoFactor.replaceProofRequired'));
+    const proof = proofOf(secret);
+    if (secret.trim() === '' || (!recoveryCodeAllowed && proof.code === undefined)) {
+      setProofError(
+        t(
+          recoveryCodeAllowed
+            ? 'me:twoFactor.replaceProofRequired'
+            : 'me:twoFactor.replaceProofRequiredAppOnly',
+        ),
+      );
       return;
     }
     setProofError(null);
-    start.mutate(proofOf(secret));
+    start.mutate(proof);
   };
 
   const submitCode = (): void => {
@@ -224,7 +238,11 @@ export function ReplaceAuthenticatorDialog({
           </DialogTitle>
           <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {t('me:twoFactor.replaceBody')}
+              {t(
+                recoveryCodeAllowed
+                  ? 'me:twoFactor.replaceBody'
+                  : 'me:twoFactor.replaceBodyAppOnly',
+              )}
             </Typography>
 
             {passkeysSupported() ? (
@@ -253,7 +271,11 @@ export function ReplaceAuthenticatorDialog({
             {mode === 'secret' ? (
               <TextField
                 id={proofId}
-                label={t('me:twoFactor.replaceProofLabel')}
+                label={t(
+                  recoveryCodeAllowed
+                    ? 'me:twoFactor.replaceProofLabel'
+                    : 'me:twoFactor.replaceProofLabelAppOnly',
+                )}
                 value={secret}
                 onChange={(event) => {
                   setSecret(event.target.value);
@@ -292,19 +314,21 @@ export function ReplaceAuthenticatorDialog({
               </>
             )}
 
-            <Button
-              variant="text"
-              size="small"
-              sx={{ alignSelf: 'flex-start' }}
-              onClick={() => {
-                setProofError(null);
-                setSecret('');
-                setPassword('');
-                setMode(mode === 'secret' ? 'password' : 'secret');
-              }}
-            >
-              {mode === 'secret' ? t('me:twoFactor.usePassword') : t('me:twoFactor.useCode')}
-            </Button>
+            {recoveryCodeAllowed ? (
+              <Button
+                variant="text"
+                size="small"
+                sx={{ alignSelf: 'flex-start' }}
+                onClick={() => {
+                  setProofError(null);
+                  setSecret('');
+                  setPassword('');
+                  setMode(mode === 'secret' ? 'password' : 'secret');
+                }}
+              >
+                {mode === 'secret' ? t('me:twoFactor.usePassword') : t('me:twoFactor.useCode')}
+              </Button>
+            ) : null}
           </DialogContent>
           <DialogActions sx={{ padding: 4 }}>
             <Button variant="text" disabled={busy} onClick={close}>

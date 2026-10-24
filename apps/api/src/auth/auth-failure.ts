@@ -45,6 +45,7 @@ const STATUS_BY_CODE: Readonly<Record<AuthErrorCode, number>> = {
   'passkey-duplicate': HttpStatus.CONFLICT,
   'totp-already-enabled': HttpStatus.CONFLICT,
   'totp-not-enabled': HttpStatus.CONFLICT,
+  'recovery-code-not-allowed': HttpStatus.FORBIDDEN,
   'passkey-invalid': HttpStatus.UNAUTHORIZED,
 };
 
@@ -85,6 +86,8 @@ const MESSAGE_BY_CODE: Readonly<Record<AuthErrorCode, string>> = {
   'totp-already-enabled':
     'An authenticator app is already on; turn it off with a live code before enrolling another',
   'totp-not-enabled': 'There is no authenticator app to replace; enrol one first',
+  'recovery-code-not-allowed':
+    'While single sign-on is enforced, this account must prove it with its authenticator app or a passkey, not a recovery code',
   'passkey-invalid': 'That passkey did not verify',
 };
 

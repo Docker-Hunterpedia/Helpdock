@@ -3502,6 +3502,52 @@ describe('replacing the authenticator app (#373)', () => {
       expect(audit.actions()).toContain('auth.recovery_code.used');
     });
 
+    describe('under SSO enforcement', () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      const seedCodes = async (userId: string): Promise<void> => {
+        const user = staff.users.get(userId);
+        if (user === undefined) throw new Error('no user');
+        user.recoveryCodesHashed = await hashRecoveryCodes(['RC-4KQ2-9XMT'], hasher);
+      };
+
+      it('refuses a recovery code, bare or with the password, to a barred account, spending nothing', async () => {
+        const { userId } = await requiredAccount();
+        await seedCodes(userId);
+        vi.spyOn(SsoSignInPolicy.prototype, 'recoveryCodeBarred').mockResolvedValue(true);
+
+        await expect(start(userId, { recoveryCode: 'RC-4KQ2-9XMT' })).rejects.toMatchObject({
+          auth: { code: 'recovery-code-not-allowed' },
+        });
+        await expect(
+          start(userId, { currentPassword: PASSWORD, recoveryCode: 'RC-4KQ2-9XMT' }),
+        ).rejects.toMatchObject({ auth: { code: 'recovery-code-not-allowed' } });
+        expect(staff.users.get(userId)?.recoveryCodesHashed).toHaveLength(1);
+        expect(audit.actions()).not.toContain('auth.step_up.refused');
+      });
+
+      it('still takes the current app code from a barred account', async () => {
+        const { userId, secret } = await requiredAccount();
+        vi.spyOn(SsoSignInPolicy.prototype, 'recoveryCodeBarred').mockResolvedValue(true);
+
+        await expect(start(userId, { code: await generate({ secret }) })).resolves.toMatchObject({
+          rotationId: expect.any(String),
+        });
+      });
+
+      it('takes a recovery code from an account that is not barred', async () => {
+        const { userId } = await requiredAccount();
+        await seedCodes(userId);
+        vi.spyOn(SsoSignInPolicy.prototype, 'recoveryCodeBarred').mockResolvedValue(false);
+
+        await expect(start(userId, { recoveryCode: 'RC-4KQ2-9XMT' })).resolves.toMatchObject({
+          rotationId: expect.any(String),
+        });
+      });
+    });
+
     it('takes the password with a recovery code, and refuses with either half wrong', async () => {
       const { userId } = await requiredAccount();
       const codes = ['RC-4KQ2-9XMT', 'RC-8ZP3-2WVN'];

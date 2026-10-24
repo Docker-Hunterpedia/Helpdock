@@ -76,6 +76,7 @@ export class AccountService {
       twoFactorEnabled: user.totpEnabled,
       recoveryCodesLeft: user.recoveryCodesHashed.length,
       twoFactorRequired: await this.#parts.auth.secondFactorRequiredFor(userId, tx),
+      recoveryCodeProofAllowed: await this.#parts.auth.recoveryCodeProofAllowed(userId, tx),
       publicName: user.publicName,
       displayName: publicNameOf({ fullName: user.name, publicName: user.publicName }),
       jobTitleEn: user.jobTitleEn,

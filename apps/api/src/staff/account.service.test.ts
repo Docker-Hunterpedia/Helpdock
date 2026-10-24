@@ -72,7 +72,10 @@ beforeEach(() => {
   limiter = { consume: vi.fn(async () => true) };
   service = new AccountService({
     staff: staff as unknown as StaffRepository,
-    auth: { secondFactorRequiredFor: async () => false } as unknown as AuthService,
+    auth: {
+      secondFactorRequiredFor: async () => false,
+      recoveryCodeProofAllowed: async () => true,
+    } as unknown as AuthService,
     passkeys: {} as PasskeyService,
     sessions: {} as SessionService,
     photos: photos as unknown as ProfilePhotoStore,

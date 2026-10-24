@@ -483,6 +483,7 @@ export function SecurityScreen(): ReactNode {
 
       <ReplaceAuthenticatorDialog
         open={confirming === 'replace'}
+        recoveryCodeAllowed={profile.data?.recoveryCodeProofAllowed !== false}
         onClose={(outcome) => {
           setConfirming(null);
           setReplaceStale(outcome === 'stale');

@@ -63,7 +63,11 @@
     "newCodeLabel": "6-digit code from the new app",
     "replaced": "Your authenticator app was replaced. Codes from the old app no longer work. We emailed you about it.",
     "keyLabel": "Or enter this key",
-    "replaceStale": "This replacement expired or your factors changed since it started. Start again."
+    "replaceStale": "This replacement expired or your factors changed since it started. Start again.",
+    "replaceBodyAppOnly": "Use your passkey, or enter a code from your authenticator app, to replace your authenticator app. Recovery codes are not accepted while single sign-on is enforced.",
+    "replaceProofLabelAppOnly": "Code from your current app",
+    "replaceProofRequiredAppOnly": "Enter a 6-digit code from your current app.",
+    "recoveryCodeNotAllowed": "A recovery code can't be used here while single sign-on is enforced. Use your current app or a passkey."
   },
   "passkeys": {
     "title": "Passkeys",

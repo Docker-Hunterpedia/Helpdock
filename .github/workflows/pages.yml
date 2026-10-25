@@ -1,23 +1,45 @@
 name: Pages
 
-# Publishes the product website in `site/` to GitHub Pages, served at
-# https://helpdock.oday-bakkour.com (`site/CNAME`). The site is plain HTML and
-# CSS with no build step, so the folder is uploaded as it is. The procedure and
-# the one-time repository settings are in docs/guides/website.md.
+# Builds the product website in `site/` (Astro, static output, then a Pagefind
+# index) and publishes it to GitHub Pages, served at
+# https://helpdock.oday-bakkour.com (`site/public/CNAME`). The published docs,
+# changelog, downloads and agent skill come from the latest release's tag, not
+# from main, so they always match the released version; the site redeploys when
+# release.yml dispatches it after a release, and daily for the star count. A
+# pull request builds and tests the site, with its own docs, without deploying
+# it. The procedure and the one-time settings are in docs/guides/website.md.
 on:
   push:
     branches: [main]
+    # A guide or changelog edit on main waits for the next release: the deploy
+    # takes those from the release tag.
     paths:
       - 'site/**'
       - 'scripts/site/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - 'scripts/site/**'
+      - 'apps/api/src/api-v1/openapi.ts'
+      - 'packages/schemas/src/**'
+      - 'docs/guides/**'
+      - 'CHANGELOG.md'
+      - 'apps/api/CHANGELOG.md'
+      - 'apps/api/package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+  # Daily, so the GitHub star count shown on the site stays fresh without a push.
+  schedule:
+    - cron: '17 4 * * *'
 
 # One deployment at a time; a newer push waits rather than cancelling a
-# deployment that is already rolling out.
+# deployment that is already rolling out. Pull requests get their own group.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.pull_request.number) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
 
@@ -25,7 +47,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -33,27 +55,83 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: |
-            site
-            scripts/site
-      # The site files carry the version of the last hand edit. Stamp the
-      # latest published, non-prerelease Release into them, and fail rather
-      # than publish a wrong version if the lookup does not answer.
-      - name: Stamp the latest release
+          # The changelog page dates each release from its tag.
+          fetch-tags: true
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test the website's helpers
+        run: pnpm --filter @helpdock/website test
+      # The site shows the latest published, non-prerelease Release. Fail rather
+      # than publish a wrong version if the lookup does not answer; the build
+      # itself refuses a value that is not a plain x.y.z.
+      - name: Look up the latest release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
-          node scripts/site/stamp-release.mjs "${tag#v}" site
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      # The guides, changelogs and API schemas as released. A pull request keeps
+      # its own, so a docs change can be previewed before it ships.
+      - name: Take the docs, changelogs and API schemas from the release tag
+        if: github.event_name != 'pull_request'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 --no-tags origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+          rm -rf docs/guides packages/schemas/src
+          git checkout "v${VERSION}" -- docs/guides CHANGELOG.md apps/api/CHANGELOG.md \
+            packages/schemas/src apps/api/src/api-v1/openapi.ts
+      # Unlike the version, the star count is decoration: if GitHub does not
+      # answer, the site is built without it rather than not at all.
+      - name: Look up the star count
+        id: stars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if stars=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .stargazers_count); then
+            echo "count=${stars}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=No star count::The site is built without the GitHub star count."
+          fi
+      - name: Build the site
+        env:
+          HELPDOCK_VERSION: ${{ steps.release.outputs.version }}
+          HELPDOCK_STARS: ${{ steps.stars.outputs.count }}
+        run: pnpm --filter @helpdock/website build
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @helpdock/website exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browsers
+        run: pnpm --filter @helpdock/website exec playwright install --with-deps chromium
+      # The theme switch, the Arabic page, axe in both themes, and that no page
+      # loads anything from another origin.
+      - name: Smoke-test the built site
+        run: pnpm --filter @helpdock/website e2e
       - name: Upload the site
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: site
+          path: site/dist
 
   deploy:
     name: deploy
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

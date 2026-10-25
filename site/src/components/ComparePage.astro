@@ -1,0 +1,231 @@
+---
+import { COMPETITORS } from '../data/competitors.ts';
+import type { Locale } from '../data/site.ts';
+import Base from '../layouts/Base.astro';
+import type { Competitor } from '../lib/competitor-schema.ts';
+import { faqPage } from '../lib/seo.ts';
+import Cta from './Cta.astro';
+import Faq from './Faq.astro';
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import PageHero from './PageHero.astro';
+import ProductMark from './ProductMark.astro';
+
+type Props = { competitor: Competitor; locale: Locale };
+const { competitor, locale } = Astro.props;
+const copy = competitor[locale];
+if (!copy) throw new Error(`${competitor.slug} has no ${locale} copy`);
+
+const prefix = locale === 'ar' ? '/ar' : '';
+const path = `${prefix}/compare/helpdock-vs-${competitor.slug}/`;
+const hasArabic = competitor.ar !== undefined;
+const checked = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en-GB', {
+  dateStyle: 'long',
+  timeZone: 'UTC',
+}).format(new Date(competitor.checked));
+
+const t = {
+  en: {
+    home: 'Home',
+    compare: 'Compare',
+    h1: `Helpdock vs ${competitor.name}`,
+    eyebrow: 'Comparison',
+    glance: 'At a glance',
+    rows: [
+      ['Delivery', 'Self-hosted on your Linux server, with Docker Compose', copy.hosting],
+      ['Licence', 'AGPL-3.0-only, free, no paid tier', copy.licence],
+      ['Where the data lives', 'Your Postgres and your S3-compatible bucket', copy.data],
+    ],
+    asOf: `Facts about ${competitor.name} as of ${checked}. Sources:`,
+    hostingSource: 'delivery',
+    licenceSource: 'licence',
+    inShort: 'In short',
+    gives: 'What Helpdock gives you',
+    moving: `Moving from ${competitor.name}`,
+    guide: competitor.importer
+      ? `Read the ${competitor.name} migration guide`
+      : 'How the CSV mapper works',
+    guideHref: competitor.importer ? `/alternatives/${competitor.slug}/` : '/features/importers/',
+    notFit: 'When Helpdock is not the right fit',
+    notFitLead: 'Choosing well matters more than choosing us. Look elsewhere if:',
+    faq: 'Questions, answered.',
+    others: 'Other comparisons',
+    vs: 'Helpdock vs',
+    versus: 'vs',
+  },
+  ar: {
+    home: 'الرئيسية',
+    compare: 'المقارنات',
+    h1: `Helpdock مقابل ${competitor.name}`,
+    eyebrow: 'مقارنة',
+    glance: 'نظرة سريعة',
+    rows: [
+      ['طريقة التشغيل', 'تستضيفه بنفسك على خادم Linux عبر Docker Compose', copy.hosting],
+      ['الرخصة', 'AGPL-3.0-only، مجاني بلا خطط مدفوعة', copy.licence],
+      ['مكان البيانات', 'قاعدة Postgres لديك وحاوية تخزين متوافقة مع S3 تملكها', copy.data],
+    ],
+    asOf: `المعلومات عن ${competitor.name} صحيحة حتى ${checked}. المصادر:`,
+    hostingSource: 'طريقة التشغيل',
+    licenceSource: 'الرخصة',
+    inShort: 'باختصار',
+    gives: 'ما يقدّمه لك Helpdock',
+    moving: `الانتقال من ${competitor.name}`,
+    guide: 'اقرأ دليل الاستيراد (بالإنجليزية)',
+    guideHref: '/docs/importing/',
+    notFit: 'متى لا يناسبك Helpdock',
+    notFitLead: 'الاختيار الصحيح أهم من اختيارنا. ابحث عن بديل آخر إذا:',
+    faq: 'أسئلة وأجوبة',
+    others: 'مقارنات أخرى',
+    vs: 'Helpdock مقابل',
+    versus: 'مقابل',
+  },
+}[locale];
+
+const crumbs = [
+  { name: t.home, href: `${prefix}/` },
+  { name: t.compare, href: `${prefix}/compare/` },
+  { name: t.h1, href: path },
+];
+const others = COMPETITORS.filter(
+  (other) => other.slug !== competitor.slug && (locale === 'en' || other.ar),
+);
+---
+<Base
+  indexed
+  title={copy.title}
+  description={copy.description}
+  locale={locale}
+  alternates={hasArabic ? { en: `/compare/helpdock-vs-${competitor.slug}/`, ar: `/ar/compare/helpdock-vs-${competitor.slug}/` } : undefined}
+  breadcrumbs={crumbs}
+  jsonLd={[faqPage(copy.faq)]}
+>
+  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.eyebrow} title={t.h1} lead={copy.lead}>
+    <div slot="mark" class="versus">
+      <Logo class="versus-logo" />
+      <span class="versus-word">{t.versus}</span>
+      <ProductMark slug={competitor.slug} name={competitor.name} size="lg" />
+    </div>
+  </PageHero>
+
+  <section class="section tight" aria-labelledby="glance-title">
+    <div class="container">
+      <h2 class="h3" id="glance-title">{t.glance}</h2>
+      <div class="table-wrap gap-top">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <td></td>
+              <th scope="col">Helpdock</th>
+              <th scope="col">{competitor.name}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              t.rows.map(([label, ours, theirs]) => (
+                <tr>
+                  <th scope="row">{label}</th>
+                  <td class="us">{ours}</td>
+                  <td>{theirs}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="source-note">
+        {t.asOf}{' '}
+        <a href={competitor.hostingSource.url} rel="nofollow">{t.hostingSource}</a>{locale === 'ar' ? '، ' : ', '}
+        <a href={competitor.licenceSource.url} rel="nofollow">{t.licenceSource}</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="section tight" aria-labelledby="short-title">
+    <div class="container stack-lg">
+      <h2 class="title" id="short-title">{t.inShort}</h2>
+      {copy.summary.map((paragraph) => <p class="lead measure">{paragraph}</p>)}
+    </div>
+  </section>
+
+  <section class="section on-surface" aria-labelledby="gives-title">
+    <div class="container">
+      <div class="section-head start reveal">
+        <h2 class="headline" id="gives-title">{t.gives}</h2>
+      </div>
+      <ul class="grid-2 reveal">
+        {
+          copy.strengths.map((point) => (
+            <li>
+              <a class="card" href={point.href}>
+                <span class="card-title">{point.title}</span>
+                <p>{point.body}</p>
+                <Icon name="arrow-right" class="card-arrow" />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="moving-title">
+    <div class="container split top">
+      <div class="stack-lg reveal">
+        <h2 class="headline" id="moving-title">{t.moving}</h2>
+        <p class="lead">{copy.migration.intro}</p>
+        <a class="more" href={t.guideHref}>{t.guide}<Icon name="chevron-right" /></a>
+      </div>
+      <ul class="ticks reveal">
+        {
+          copy.migration.points.map((point) => (
+            <li>
+              <Icon name="check" />
+              <span>{point}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section on-surface" aria-labelledby="fit-title">
+    <div class="container split top">
+      <div class="stack-lg reveal">
+        <h2 class="headline" id="fit-title">{t.notFit}</h2>
+        <p class="lead">{t.notFitLead}</p>
+      </div>
+      <ul class="ticks cross reveal">
+        {
+          copy.notFit.map((point) => (
+            <li>
+              <Icon name="circle-x" />
+              <span>{point}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <Faq items={copy.faq} title={t.faq} />
+
+  <section class="section tight" aria-labelledby="others-title" data-pagefind-ignore>
+    <div class="container">
+      <h2 class="h3" id="others-title">{t.others}</h2>
+      <ul class="chips gap-top">
+        {
+          others.map((other) => (
+            <li>
+              <a class="chip" href={`${prefix}/compare/helpdock-vs-${other.slug}/`}>
+                <ProductMark slug={other.slug} name={other.name} />
+                {t.vs} {other.name}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <Cta locale={locale} />
+</Base>

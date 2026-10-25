@@ -1,0 +1,467 @@
+---
+import { CHANNELS } from '../data/channels.ts';
+import { HOME } from '../data/home.ts';
+import {
+  ANNOUNCEMENT,
+  CONTACT_EMAIL,
+  type Locale,
+  RELEASE_VIDEO,
+  RELEASES,
+  REPO,
+  repoFile,
+  VERSION,
+} from '../data/site.ts';
+import Base from '../layouts/Base.astro';
+import { faqPage, softwareApplication } from '../lib/seo.ts';
+import ChannelMark from './ChannelMark.astro';
+import Cta from './Cta.astro';
+import Faq from './Faq.astro';
+import Icon from './Icon.astro';
+import ProductMark from './ProductMark.astro';
+
+type Props = { locale: Locale };
+const { locale } = Astro.props;
+const t = HOME[locale];
+const ar = locale === 'ar';
+const prefix = ar ? '/ar' : '';
+const shots = ar
+  ? [
+      { id: 'shot-ar', label: t.shot.ar, src: 'ticket-view-ar', alt: t.shot.altAr, lang: 'ar' },
+      { id: 'shot-en', label: t.shot.en, src: 'ticket-view-en', alt: t.shot.altEn, lang: 'en' },
+    ]
+  : [
+      { id: 'shot-en', label: t.shot.en, src: 'ticket-view-en', alt: t.shot.altEn, lang: 'en' },
+      { id: 'shot-ar', label: t.shot.ar, src: 'ticket-view-ar', alt: t.shot.altAr, lang: 'ar' },
+    ];
+const envKeys = [
+  'APP_URL',
+  'APP_MASTER_KEY',
+  'HELPDOCK_APP_PASSWORD',
+  'DATABASE_URL',
+  'POSTGRES_PASSWORD',
+  'DATABASE_MIGRATION_URL',
+  'ADMIN_HOST',
+  'API_HOST',
+  'ACME_EMAIL',
+  'S3_*',
+];
+const providers = ['Okta', 'Microsoft Entra ID', 'Google Workspace', 'Keycloak'];
+---
+<Base
+  title={t.title}
+  description={t.description}
+  locale={locale}
+  alternates={{ en: '/', ar: '/ar/' }}
+  jsonLd={[softwareApplication({ version: VERSION, description: HOME.en.description }), faqPage(t.faq)]}
+>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container">
+      <div class="hero-copy">
+        <a class="pill-link" href={`/changelog/${VERSION}/`}>
+          <span class="pill-tag">{t.newsTag}</span>
+          <span><bdi>{t.news(VERSION)}</bdi></span>
+          <Icon name="chevron-right" />
+        </a>
+        <h1 class="display" id="hero-title">{t.h1.split(/(?<=\.) /).map((line, index) => <span class="line">{index > 0 ? ' ' : ''}{line}</span>)}</h1>
+        <p class="lead">{t.lead}</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#install">{t.install}</a>
+          <a class="btn btn-secondary" href="/docs/">{t.docs}</a>
+        </div>
+        <p class="fineprint-row">
+          {t.fineprint.map((item, index) => (
+            <>
+              {index > 0 && <span aria-hidden="true">·</span>}
+              <span>{item}</span>
+            </>
+          ))}
+        </p>
+      </div>
+
+      <figure class="showcase">
+        <fieldset class="seg">
+          <legend class="visually-hidden">{t.shot.legend}</legend>
+          {shots.map((shot, index) => (
+            <>
+              <input type="radio" name="shot" id={shot.id} checked={index === 0} />
+              <label for={shot.id} lang={shot.lang}>{shot.label}</label>
+            </>
+          ))}
+        </fieldset>
+        <div class="frame">
+          {shots.map((shot, index) => (
+            <img
+              class={shot.id}
+              src={`/assets/img/${shot.src}.webp`}
+              width="1280"
+              height="720"
+              alt={shot.alt}
+              fetchpriority={index === 0 ? 'high' : undefined}
+              loading={index === 0 ? undefined : 'lazy'}
+              decoding="async"
+            />
+          ))}
+        </div>
+        <figcaption class="caption">{t.shot.caption}</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="channels" aria-labelledby="channels-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">{t.channels.eyebrow}</p>
+        <h2 class="headline" id="channels-title">{t.channels.title}</h2>
+        <p class="lead">{t.channels.lead}</p>
+      </div>
+      <ul class="grid-4 reveal">
+        {CHANNELS.map((channel) => (
+          <li>
+            <a class="card" href={`${prefix}/channels/${channel.slug}/`}>
+              <ChannelMark channel={channel} />
+              <span class="card-title">{channel[locale].name}</span>
+              <p class="small">{channel[locale].card}</p>
+              <Icon name="arrow-right" class="card-arrow" />
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="center reveal gap-top-lg">
+        <a class="more" href={`${prefix}/channels/`}>{t.channels.all}<Icon name="chevron-right" /></a>
+      </p>
+    </div>
+  </section>
+
+  <section class="section band-dark" aria-labelledby="release-title">
+    <div class="container">
+      <div class="split">
+        <div class="stack-lg reveal">
+          <p class="eyebrow">{t.release.eyebrow}</p>
+          <h2 class="headline" id="release-title">{t.release.title}</h2>
+          <p class="lead">{t.release.lead}</p>
+          <p class="muted"><strong class="on-dark"><bdi>{t.release.latest(VERSION)}</bdi></strong> <a href="/changelog/">{t.release.notes}</a></p>
+          <div class="actions start">
+            <a class="more" href={ANNOUNCEMENT}>{t.release.announcement}<Icon name="chevron-right" /></a>
+            <a class="more" href="/changelog/">{t.release.changelog}<Icon name="chevron-right" /></a>
+          </div>
+        </div>
+        <a class="poster reveal" href={RELEASE_VIDEO}>
+          <img src="/assets/img/release-1-0.webp" width="1280" height="720" alt={t.release.poster} loading="lazy" decoding="async" />
+          <span class="poster-play"><span class="play"><Icon name="play" /></span><bdi>{t.release.watch}</bdi></span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="tour-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <h2 class="headline" id="tour-title">{t.tour.title}</h2>
+        <p class="lead">{t.tour.lead}</p>
+      </div>
+      <div class="tiles">
+        <article class="tile t-full reveal">
+          <div class="stack-lg">
+            <Icon name="book-open" class="tile-icon" />
+            <h3 class="title">{t.tour.helpCenter.title}</h3>
+            <p>{t.tour.helpCenter.body}</p>
+            <a class="more" href={t.tour.helpCenter.href}>{t.tour.helpCenter.more}<Icon name="chevron-right" /></a>
+            <p class="caption">{t.tour.helpCenter.caption}</p>
+          </div>
+          <div class="tile-media">
+            <img src="/assets/img/help-center-article.webp" width="1280" height="900" alt={t.tour.helpCenter.alt} loading="lazy" decoding="async" />
+          </div>
+        </article>
+
+        <article class="tile t-half reveal">
+          <Icon name="message-circle" class="tile-icon" />
+          <h3 class="title">{t.tour.widget.title}</h3>
+          <p>{t.tour.widget.body}</p>
+          <a class="more" href={t.tour.widget.href}>{t.tour.widget.more}<Icon name="chevron-right" /></a>
+          <p class="caption">{t.tour.widget.caption}</p>
+          <div class="tile-media portrait">
+            <img src={`/assets/img/widget-${locale}.webp`} width="440" height="760" alt={t.tour.widget.alt} loading="lazy" decoding="async" />
+          </div>
+        </article>
+
+        <article class="tile t-half reveal">
+          <Icon name="key-round" class="tile-icon" />
+          <h3 class="title">{t.tour.signIn.title}</h3>
+          <p>{t.tour.signIn.body}</p>
+          <ul class="chips" aria-label={t.tour.signIn.providers}>
+            {providers.map((name) => <li class="chip" lang="en">{name}</li>)}
+          </ul>
+          <a class="more" href={t.tour.signIn.href}>{t.tour.signIn.more}<Icon name="chevron-right" /></a>
+          <div class="tile-media portrait">
+            <img src={`/assets/img/sign-in-${locale}.webp`} width="448" height="608" alt={t.tour.signIn.alt} loading="lazy" decoding="async" />
+          </div>
+        </article>
+
+        {t.tour.small.map((tile) => (
+          <article class="tile t-third reveal">
+            <Icon name={tile.icon} class="tile-icon" />
+            <h3 class="h3">{tile.title}</h3>
+            <p>{tile.body}</p>
+            <a class="more" href={tile.href}>{tile.more}<Icon name="chevron-right" /></a>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="ai" aria-labelledby="ai-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow"><Icon name="sparkles" />{t.ai.eyebrow}</p>
+        <h2 class="headline" id="ai-title">{t.ai.title}</h2>
+        <p class="lead">{t.ai.lead}</p>
+      </div>
+      <ol class="points four reveal">
+        {t.ai.points.map((point) => (
+          <li>
+            <Icon name={point.icon} />
+            <h3 class="h4">{point.title}</h3>
+            <p>{point.body}</p>
+          </li>
+        ))}
+      </ol>
+      <section class="figures reveal" aria-labelledby="eval-title">
+        <h3 class="h3" id="eval-title">{t.ai.evalTitle}</h3>
+        <div class="figure-row">
+          {t.ai.figures.map((figure) => (
+            <div>
+              <span class="figure" dir="ltr">{figure.value}</span>
+              <span class="figure-label">{figure.label}</span>
+            </div>
+          ))}
+        </div>
+        <ul class="checks">
+          {t.ai.checks.map((check) => (
+            <li>
+              <Icon name="check" />
+              {check}
+            </li>
+          ))}
+        </ul>
+        <p class="muted small">
+          {t.ai.fineprint}{' '}
+          <a href="https://github.com/Docker-Hunterpedia/Helpdock/actions/runs/39322685646">{ar ? 'التشغيل' : 'run'} <bdi>39322685646</bdi></a> ·
+          <a href="/docs/ai/#evaluation">{ar ? 'التقييم (بالإنجليزية)' : 'the evaluation'}</a>
+        </p>
+        <p><a class="more" href="/features/ai/">{t.ai.more}<Icon name="chevron-right" /></a></p>
+      </section>
+    </div>
+  </section>
+
+  <section class="section" id="arabic" aria-labelledby="arabic-title">
+    <div class="container split">
+      <figure class="stage reveal">
+        <img src={ar ? '/assets/img/widget-en.webp' : '/assets/img/widget-ar.webp'} width="440" height="760" alt={t.arabic.alt} loading="lazy" decoding="async" />
+      </figure>
+      <div class="stack-lg reveal">
+        <p class="eyebrow"><Icon name="languages" />{t.arabic.eyebrow}</p>
+        <h2 class="headline" id="arabic-title">{t.arabic.title}</h2>
+        <p class="lead">{t.arabic.lead}</p>
+        <ul class="facts">
+          {t.arabic.facts.map((fact) => (
+            <li>
+              <strong>{fact.title}</strong>
+              <span>{fact.body}</span>
+            </li>
+          ))}
+        </ul>
+        <p class="caption">
+          {t.arabic.caption}
+          {' '}
+          {ar ? <a href="/" hreflang="en" lang="en">Read this page in English</a> : <a href="/ar/" hreflang="ar" lang="ar">اقرأ هذه الصفحة بالعربية</a>}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="brands" aria-labelledby="brands-title">
+    <div class="container split">
+      <div class="stack-lg reveal">
+        <p class="eyebrow"><Icon name="building" />{t.brands.eyebrow}</p>
+        <h2 class="headline" id="brands-title">{t.brands.title}</h2>
+        <p class="lead">{t.brands.lead}</p>
+        <ul class="ticks">
+          {t.brands.points.map((point) => (
+            <li>
+              <Icon name="check" />
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
+        <a class="more" href="/features/multi-brand/">{t.brands.more}<Icon name="chevron-right" /></a>
+      </div>
+      <figure class="stack reveal">
+        <div class="code" dir="ltr">
+          <div class="code-head"><Icon name="database" /><span class="label">packages/db/drizzle/0036_telegram.sql</span></div>
+          <pre><code><span class="k">ALTER TABLE</span> "telegram_bots" <span class="k">ENABLE ROW LEVEL SECURITY</span>;
+<span class="k">ALTER TABLE</span> "telegram_bots" <span class="k">FORCE ROW LEVEL SECURITY</span>;
+
+<span class="k">CREATE POLICY</span> "telegram_bots_tenant_select"
+  <span class="k">ON</span> "telegram_bots" <span class="k">FOR SELECT</span>
+  <span class="k">USING</span> (brand_id = <span class="k">ANY</span> (
+    nullif(current_setting('app.brand_ids', true), '')::uuid[]
+  ));</code></pre>
+        </div>
+        <figcaption class="muted small">{t.brands.caption}</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section band-dark" id="security" aria-labelledby="security-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow"><Icon name="shield-check" />{t.security.eyebrow}</p>
+        <h2 class="headline" id="security-title">{t.security.title}</h2>
+        <p class="lead">{t.security.lead}</p>
+      </div>
+      <div class="sec-grid reveal">
+        {t.security.items.map((item) => (
+          <article>
+            <Icon name={item.icon} />
+            <h3 class="h4">{item.title}</h3>
+            <p>{item.body}</p>
+          </article>
+        ))}
+      </div>
+      <dl class="spec reveal" aria-label={t.security.spec.label(VERSION)}>
+        <div><dt>{t.security.spec.image}</dt><dd>ghcr.io/docker-hunterpedia/helpdock:{VERSION}</dd></div>
+        <div><dt>{t.security.spec.platforms}</dt><dd>linux/amd64, linux/arm64</dd></div>
+        <div><dt>{t.security.spec.signature}</dt><dd>Cosign keyless, GitHub OIDC</dd></div>
+        <div><dt>{t.security.spec.sbom}</dt><dd>helpdock-{VERSION}.cdx.json</dd></div>
+      </dl>
+      <div class="actions start gap-top-lg">
+        <a class="more" href="/features/security/">{t.security.more}<Icon name="chevron-right" /></a>
+        <a class="more" href="/docs/release/#verify-the-image-signature">{ar ? 'تحقّق من توقيع الصورة (بالإنجليزية)' : 'Verify the image signature'}<Icon name="chevron-right" /></a>
+        <a class="more" href={repoFile('docs/completed/asvs-l2.md')}>{ar ? 'مراجعة ASVS (بالإنجليزية)' : 'The ASVS walk-through'}<Icon name="arrow-up-right" /></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="migrate" aria-labelledby="migrate-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow"><Icon name="upload" />{t.migrate.eyebrow}</p>
+        <h2 class="headline" id="migrate-title">{t.migrate.title}</h2>
+        <p class="lead">{t.migrate.lead}</p>
+      </div>
+      <ul class="grid-3 reveal">
+        {t.migrate.sources.map((source) => (
+          <li>
+            <a class="card" href={`${prefix}/compare/helpdock-vs-${source.slug}/`}>
+              <ProductMark slug={source.slug} name={source.name} />
+              <span class="card-title">{source.name}</span>
+              <p>{source.body}</p>
+              <Icon name="arrow-right" class="card-arrow" />
+            </a>
+          </li>
+        ))}
+      </ul>
+      <div class="callout reveal gap-top-lg">
+        <Icon name="circle-check" />
+        <span>{t.migrate.note} <a href="/features/importers/">{t.migrate.csv}</a></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section on-surface" id="install" aria-labelledby="install-title">
+    <div class="container split top">
+      <div class="stack-lg reveal">
+        <p class="eyebrow"><Icon name="terminal" />{t.installSection.eyebrow}</p>
+        <h2 class="headline" id="install-title"><bdi>{t.installSection.title(VERSION)}</bdi></h2>
+        <p class="lead">{t.installSection.lead}</p>
+        <ul class="ticks">
+          {t.installSection.needs.map((need) => (
+            <li>
+              <Icon name="check" />
+              <span>{need}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="actions start">
+          <a class="btn btn-primary" href="/docs/install/">{t.installSection.guide}</a>
+          <a class="btn btn-secondary" href="/docs/deploy/">{t.installSection.deploy}</a>
+        </div>
+        <a class="more" href="/docs/configuration/">{t.installSection.config}<Icon name="chevron-right" /></a>
+        {t.installSection.docsNote && <p class="caption">{t.installSection.docsNote}</p>}
+      </div>
+
+      <div class="code reveal">
+        <div class="code-head">
+          <Icon name="terminal" /><span class="label" dir="auto">{t.installSection.step1(VERSION)}</span>
+          <button class="copy-btn" type="button" data-copy="cmd-get" data-done={t.installSection.copied} data-failed={t.installSection.failed} hidden>
+            <Icon name="copy" /><span data-label aria-live="polite">{t.installSection.copy}</span>
+          </button>
+        </div>
+        <pre><code id="cmd-get">git clone --depth 1 --branch v{VERSION} \
+  https://github.com/Docker-Hunterpedia/Helpdock.git
+cd Helpdock/docker
+cp ../.env.example .env
+openssl rand -base64 32   <span class="c"># the master key, for APP_MASTER_KEY</span></code></pre>
+        <div class="code-note">
+          <p dir="auto">{t.installSection.step2(VERSION)}</p>
+          <p class="env-keys">{envKeys.map((key) => <code>{key}</code>)}</p>
+        </div>
+        <div class="code-head">
+          <Icon name="terminal" /><span class="label" dir="auto">{t.installSection.step3}</span>
+          <button class="copy-btn" type="button" data-copy="cmd-up" data-done={t.installSection.copied} data-failed={t.installSection.failed} hidden>
+            <Icon name="copy" /><span data-label aria-live="polite">{t.installSection.copy}</span>
+          </button>
+        </div>
+        <pre><code id="cmd-up">docker compose up -d
+docker compose ps</code></pre>
+        <div class="code-note">
+          <p dir="auto">{t.installSection.step4}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow"><Icon name="calendar-clock" />{t.roadmap.eyebrow}</p>
+        <h2 class="headline" id="roadmap-title">{t.roadmap.title}</h2>
+        <p class="lead">{t.roadmap.lead}</p>
+      </div>
+      <div class="road reveal">
+        {t.roadmap.columns.map((column, index) => (
+          <article aria-labelledby={`road-${index}`}>
+            <span class:list={['status', { shipped: column.shipped }]}>{column.status}</span>
+            <h3 class="h3" id={`road-${index}`}>{column.title}</h3>
+            <ul class="ticks">
+              {column.items.map((item) => (
+                <li>
+                  <Icon name={column.shipped ? 'circle-check' : 'calendar-clock'} />
+                  <span>
+                    <strong>{item.title}</strong> {item.body}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+      <p class="muted small center gap-top-lg">
+        <a href={repoFile('docs/planning/PRD.md#phase-5--1x')}>{t.roadmap.plan}</a>
+        {' · '}
+        <a href={RELEASES}>{ar ? 'الإصدارات على GitHub' : 'Releases on GitHub'}</a>
+      </p>
+    </div>
+  </section>
+
+  <Faq items={t.faq} title={t.faqTitle}>
+    <p class="muted qa-more">
+      {ar ? 'سؤال آخر؟ راسلنا على ' : 'Something else? Write to '}
+      <a href={`mailto:${CONTACT_EMAIL}`}><bdi>{CONTACT_EMAIL}</bdi></a>
+      {ar ? ' أو ابدأ ' : ' or start a '}
+      <a href={`${REPO}/discussions`}>{ar ? 'نقاشًا على GitHub' : 'discussion on GitHub'}</a>.
+    </p>
+  </Faq>
+
+  <Cta locale={locale} />
+</Base>

@@ -24,6 +24,7 @@ docs/decisions/        ADRs
 apps/                  api, admin, helpcenter, widget      (from M0)
 packages/              db, schemas, ai, channels, ui, i18n, config, net, jobs   (from M0)
 docker/                Dockerfile, compose files, Caddyfile (from M0)
+site/                  the product website, Astro, deployed to GitHub Pages (docs/guides/website.md)
 ```
 
 Rule: `apps/*` never import each other. They share code only through `packages/*`.

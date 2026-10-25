@@ -1,0 +1,20 @@
+---
+import type { Locale } from '../data/site.ts';
+import type { Crumb } from '../lib/seo.ts';
+import Breadcrumbs from './Breadcrumbs.astro';
+
+type Props = { crumbs: Crumb[]; eyebrow?: string; title: string; lead: string; locale?: Locale };
+const { crumbs, eyebrow, title, lead, locale = 'en' } = Astro.props;
+---
+<section class="page-hero">
+  <div class="container stack-lg">
+    <Breadcrumbs crumbs={crumbs} locale={locale} />
+    <div class="stack-lg">
+      {Astro.slots.has('mark') && <div class="page-mark"><slot name="mark" /></div>}
+      {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+      <h1 class="display page-title">{title}</h1>
+      <p class="lead">{lead}</p>
+      <slot />
+    </div>
+  </div>
+</section>

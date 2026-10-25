@@ -1,0 +1,29 @@
+---
+import type { Qa } from '../lib/seo.ts';
+import Icon from './Icon.astro';
+import Rich from './Rich.astro';
+
+type Props = { items: Qa[]; id?: string; title: string };
+const { items, id = 'faq', title } = Astro.props;
+---
+<section class="section on-surface" id={id} aria-labelledby={`${id}-title`}>
+  <div class="container">
+    <div class="section-head reveal">
+      <h2 class="headline" id={`${id}-title`}>{title}</h2>
+    </div>
+    <div class="qa reveal">
+      {
+        items.map((item) => (
+          <details>
+            <summary>
+              {item.q}
+              <Icon name="plus" />
+            </summary>
+            <p><Rich text={item.a} /></p>
+          </details>
+        ))
+      }
+      <slot />
+    </div>
+  </div>
+</section>

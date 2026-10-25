@@ -1,0 +1,43 @@
+---
+import Cta from '../../components/Cta.astro';
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import { FEATURES } from '../../data/features.ts';
+import Base from '../../layouts/Base.astro';
+
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Features', href: '/features/' },
+];
+---
+<Base
+  title="Features of Helpdock, the self-hosted help desk"
+  description="What ships in Helpdock: multi-brand isolation, SLAs and business hours, automation and macros, a help center, grounded AI, SSO and passkeys, importers, the API and reports."
+  breadcrumbs={crumbs}
+>
+  <PageHero
+    crumbs={crumbs}
+    eyebrow="Features"
+    title="Everything in the one install."
+    lead="Each page below covers what ships today, how it works and what it does not do yet, with links to the guide behind it."
+  />
+  <section class="section tight">
+    <div class="container">
+      <ul class="grid-3">
+        {
+          FEATURES.map((feature) => (
+            <li>
+              <a class="card" href={`/features/${feature.slug}/`}>
+                <span class="disc"><Icon name={feature.icon} /></span>
+                <span class="card-title">{feature.name}</span>
+                <p>{feature.card}</p>
+                <Icon name="arrow-right" class="card-arrow" />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+  <Cta />
+</Base>

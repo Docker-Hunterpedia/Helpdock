@@ -1,0 +1,56 @@
+---
+import { CHROME, type Locale } from '../data/site.ts';
+import Icon from './Icon.astro';
+
+type Props = { locale: Locale };
+const { theme } = CHROME[Astro.props.locale];
+const options = [
+  { value: 'light', icon: 'sun', label: theme.light },
+  { value: 'dark', icon: 'moon', label: theme.dark },
+  { value: 'system', icon: 'monitor', label: theme.system },
+];
+---
+<div class="theme-switch" role="group" aria-label={theme.label} data-theme-switch>
+  {
+    options.map((option) => (
+      <button type="button" value={option.value} aria-pressed={option.value === 'system' ? 'true' : 'false'} title={option.label}>
+        <Icon name={option.icon} />
+        <span class="visually-hidden">{option.label}</span>
+      </button>
+    ))
+  }
+</div>
+<script is:inline>
+  // The choice lives in localStorage; "system" removes it so the page follows
+  // prefers-color-scheme again. The head script applied it before first paint.
+  // A blocked storage (private window, site data off) only means the choice
+  // does not outlive the page, so its error is ignored.
+  // The 404 page carries a header per language, so a switch may appear twice;
+  // each is wired once, and both show the same choice.
+  (() => {
+    const root = document.documentElement;
+    const groups = document.querySelectorAll('[data-theme-switch]:not([data-wired])');
+    const showPressed = () => {
+      const current = root.dataset.theme || 'system';
+      for (const button of document.querySelectorAll('[data-theme-switch] button')) {
+        button.setAttribute('aria-pressed', String(button.value === current));
+      }
+    };
+    for (const group of groups) {
+      group.dataset.wired = '';
+      group.addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        const value = button.value;
+        if (value === 'system') delete root.dataset.theme;
+        else root.dataset.theme = value;
+        try {
+          if (value === 'system') localStorage.removeItem('helpdock-theme');
+          else localStorage.setItem('helpdock-theme', value);
+        } catch {}
+        showPressed();
+      });
+    }
+    showPressed();
+  })();
+</script>

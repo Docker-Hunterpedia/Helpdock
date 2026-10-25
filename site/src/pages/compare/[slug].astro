@@ -1,0 +1,14 @@
+---
+import ComparePage from '../../components/ComparePage.astro';
+import { COMPETITORS } from '../../data/competitors.ts';
+
+export function getStaticPaths() {
+  return COMPETITORS.map((competitor) => ({
+    params: { slug: `helpdock-vs-${competitor.slug}` },
+    props: { competitor },
+  }));
+}
+
+const { competitor } = Astro.props;
+---
+<ComparePage competitor={competitor} locale="en" />

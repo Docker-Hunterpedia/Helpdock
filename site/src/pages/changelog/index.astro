@@ -1,0 +1,51 @@
+---
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import ReleaseEntry from '../../components/ReleaseEntry.astro';
+import { RELEASES } from '../../data/site.ts';
+import Base from '../../layouts/Base.astro';
+import { releaseTimeline } from '../../lib/release-list.ts';
+import { releaseAnchor } from '../../lib/release-notes.ts';
+
+// The newest release in full; the older ones as a summary that links to their
+// own page, so the index stays scannable and each release's notes live at one URL.
+const timeline = await releaseTimeline();
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Changelog', href: '/changelog/' },
+];
+---
+<Base
+  title="Helpdock changelog: every release"
+  description="What changed in each Helpdock release, newest first: new features, fixes, upgrade notes and known limits, with a page and a GitHub release for every version."
+  breadcrumbs={crumbs}
+>
+  <PageHero crumbs={crumbs} eyebrow="Changelog" title="What changed, release by release." lead="From the repository's CHANGELOG.md and the per-change list Changesets writes for each release, newest first.">
+    <div class="actions start">
+      <a class="more" href="/changelog/rss.xml"><Icon name="rss" />Subscribe to releases (RSS)</a>
+      <a class="more" href={RELEASES}>All releases on GitHub<Icon name="arrow-up-right" /></a>
+    </div>
+  </PageHero>
+  <div class="container changelog-layout">
+    <nav class="tl-jump" aria-labelledby="jump-title" data-pagefind-ignore>
+      <details open>
+        <summary id="jump-title">Jump to version</summary>
+        <ul>
+          {timeline.map(({ release }) => (
+            <li>
+              <a href={`#${releaseAnchor(release.version)}`}>
+                <span class="mono">{release.version}</span>
+                {release.date && <span class="muted">{release.date}</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </nav>
+    <ol class="timeline">
+      {timeline.map((entry) => (
+        <ReleaseEntry {...entry} mode={entry.latest ? 'full' : 'summary'} />
+      ))}
+    </ol>
+  </div>
+</Base>

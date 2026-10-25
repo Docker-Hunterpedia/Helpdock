@@ -1,0 +1,41 @@
+---
+import type { Locale } from '../data/site.ts';
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import StarLink from './StarLink.astro';
+
+type Props = { locale?: Locale; title?: string; lead?: string };
+const { locale = 'en' } = Astro.props;
+const copy = {
+  en: {
+    title: 'Run your help desk on your own server.',
+    lead: 'Install it with Docker Compose, read the guides, or star the repository to follow the releases.',
+    install: 'Install with Docker',
+    star: 'Star on GitHub',
+    docs: 'Read the docs',
+  },
+  ar: {
+    title: 'شغّل مكتب الدعم على خادمك.',
+    lead: 'ثبّته عبر Docker Compose، أو اقرأ الأدلة، أو أضف نجمة للمستودع لتتابع الإصدارات.',
+    install: 'التثبيت عبر Docker',
+    star: 'نجمة على GitHub',
+    docs: 'اقرأ الأدلة (بالإنجليزية)',
+  },
+}[locale];
+const title = Astro.props.title ?? copy.title;
+const lead = Astro.props.lead ?? copy.lead;
+---
+<section class="section" aria-labelledby="cta-title" data-pagefind-ignore>
+  <div class="container">
+    <div class="cta reveal">
+      <Logo class="cta-mark" />
+      <h2 class="headline" id="cta-title">{title}</h2>
+      <p class="lead">{lead}</p>
+      <div class="actions">
+        <a class="btn btn-primary" href={locale === 'ar' ? '/ar/#install' : '/#install'}>{copy.install}</a>
+        <StarLink locale={locale} class="btn btn-secondary" text={copy.star} />
+      </div>
+      <a class="more" href="/docs/">{copy.docs}<Icon name="chevron-right" /></a>
+    </div>
+  </div>
+</section>

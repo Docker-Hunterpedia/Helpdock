@@ -1,0 +1,87 @@
+---
+import { getCollection } from 'astro:content';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import Icon from '../../components/Icon.astro';
+import { groupGuides, REFERENCE_PAGES } from '../../data/docs.ts';
+import { REPO, VERSION } from '../../data/site.ts';
+import Base from '../../layouts/Base.astro';
+import { downloads, formatSize } from '../../lib/downloads.ts';
+
+const guides = await getCollection('guides');
+const byId = new Map(guides.map((guide) => [guide.id, guide]));
+const groups = groupGuides(guides.map((guide) => ({ id: guide.id, title: guide.data.title })));
+const files = await downloads();
+const docsZip = `helpdock-docs-${VERSION}.zip`;
+const skillZip = `helpdock-skill-${VERSION}.zip`;
+const size = (file: string) => formatSize(files.get(file)?.byteLength ?? 0);
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Docs', href: '/docs/' },
+];
+---
+<Base
+  title="Helpdock documentation"
+  description="The Helpdock guides: install and operate it, run the desk, connect channels, set up the help center and AI, sign-in and security, and the REST API."
+  breadcrumbs={crumbs}
+>
+  <div class="container docs-layout">
+    <DocsNav />
+    <div>
+      <Breadcrumbs crumbs={crumbs} />
+      <h1 class="headline docs-title">Documentation</h1>
+      <p class="lead docs-lead">
+        The guides published with Helpdock {VERSION}. Start with the <a href="/docs/install/">install guide</a>.
+      </p>
+
+      <div class="docs-cards" data-pagefind-ignore>
+        <section class="card" aria-labelledby="download-title">
+          <span class="disc"><Icon name="download" /></span>
+          <h2 class="card-title" id="download-title">Download the docs</h2>
+          <p>Every guide as Markdown, with an index, for reading offline.</p>
+          <a class="btn btn-secondary btn-sm" href={`/downloads/${docsZip}`} download>
+            <Icon name="file-archive" />Download .zip
+          </a>
+          <p class="caption">v{VERSION} · {size(docsZip)}</p>
+        </section>
+        <section class="card" aria-labelledby="agents-title">
+          <span class="disc"><Icon name="bot" /></span>
+          <h2 class="card-title" id="agents-title">Use with AI agents</h2>
+          <ul class="card-links">
+            <li>
+              <a href={`/downloads/${skillZip}`} download>The helpdock Agent Skill</a> (v{VERSION}, {size(skillZip)}):
+              unzip it into <code>.claude/skills/</code>, or read <a href="/skill/helpdock/SKILL.md">SKILL.md</a>.
+            </li>
+            <li><a href="/llms.txt">llms.txt</a> lists every guide; <a href="/llms-full.txt">llms-full.txt</a> holds them all in one file.</li>
+            <li>Every guide has a Markdown copy at <code>/docs/&lt;guide&gt;.md</code>, and its “Use with AI” menu sends it to Claude or ChatGPT.</li>
+          </ul>
+        </section>
+      </div>
+
+      {
+        groups.map((group) => (
+          <section class="docs-group">
+            <h2 class="h3">{group.title}</h2>
+            <ul class="grid-2 gap-top">
+              {group.guides.map((link) => {
+                const guide = byId.get(link.id);
+                return (
+                  <li>
+                    <a class="card compact" href={`/docs/${link.id}/`}>
+                      <span class="card-title">{link.title}</span>
+                      <p class="small">{guide?.data.description ?? REFERENCE_PAGES.find((page) => page.id === link.id)?.description}</p>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      }
+      <div class="docs-meta" data-pagefind-ignore>
+        <a class="more" href={`${REPO}/tree/main/docs/guides`}>The guides on GitHub<Icon name="arrow-up-right" /></a>
+        <a class="more" href={`${REPO}/tree/main/docs/planning`}>Planning documents<Icon name="arrow-up-right" /></a>
+      </div>
+    </div>
+  </div>
+</Base>

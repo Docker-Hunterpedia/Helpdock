@@ -1,0 +1,191 @@
+---
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+import { knownRoutes } from '../lib/routes.ts';
+
+// One file answers every missing address, in either language: both copies are
+// built, and the head script shows the Arabic one under /ar/ before paint.
+const copy = {
+  en: {
+    title: 'We could not find that page.',
+    lead: 'The address may have moved, or it never existed. Search for it, or start from one of the pages below.',
+    ticket: 'Request for this page',
+    chip: 'Closed · page not found',
+    note: 'Moved or never existed',
+    suggest: 'Did you mean',
+    searchLabel: 'Search the site',
+    searchButton: 'Search',
+    everything: 'Search everything',
+    start: 'Or start here',
+    status: {
+      loading: 'Searching…',
+      count: 'Top results for “{q}”',
+      none: 'No pages match “{q}”. Try another word.',
+      offline: 'Search is not available here. It works on the built site.',
+    },
+    links: [
+      {
+        href: '/docs/install/',
+        icon: 'terminal',
+        title: 'Install guide',
+        text: 'Run Helpdock with Docker Compose on one server.',
+      },
+      {
+        href: '/docs/',
+        icon: 'book-open',
+        title: 'Docs',
+        text: 'Guides for every channel, setting and the REST API.',
+      },
+      {
+        href: '/channels/',
+        icon: 'messages-square',
+        title: 'Channels',
+        text: 'Email, live chat, Telegram, WhatsApp, Messenger and Instagram.',
+      },
+      {
+        href: '/compare/',
+        icon: 'scale',
+        title: 'Compare',
+        text: 'How Helpdock stands against Zendesk, Freshdesk and others.',
+      },
+    ],
+  },
+  ar: {
+    title: 'لم نجد هذه الصفحة.',
+    lead: 'ربما نُقل العنوان، أو لم يكن موجودًا أصلًا. ابحث عنه، أو ابدأ من إحدى الصفحات أدناه.',
+    ticket: 'طلب هذه الصفحة',
+    chip: 'مغلقة · الصفحة غير موجودة',
+    note: 'نُقلت أو لم تكن موجودة',
+    suggest: 'هل تقصد',
+    searchLabel: 'ابحث في الموقع',
+    searchButton: 'بحث',
+    everything: 'ابحث في كل شيء',
+    start: 'أو ابدأ من هنا',
+    status: {
+      loading: 'جارٍ البحث…',
+      count: 'أفضل النتائج عن «{q}»',
+      none: 'لا صفحات تطابق «{q}». جرّب كلمة أخرى.',
+      offline: 'البحث غير متاح هنا. يعمل في الموقع المبني.',
+    },
+    links: [
+      {
+        href: '/docs/install/',
+        icon: 'terminal',
+        title: 'دليل التثبيت',
+        text: 'شغّل Helpdock على خادم واحد باستخدام Docker Compose. بالإنجليزية.',
+        lang: 'en',
+      },
+      {
+        href: '/docs/',
+        icon: 'book-open',
+        title: 'الأدلة',
+        text: 'أدلة لكل قناة وإعداد، وواجهة REST. بالإنجليزية.',
+        lang: 'en',
+      },
+      {
+        href: '/ar/channels/',
+        icon: 'messages-square',
+        title: 'القنوات',
+        text: 'البريد والدردشة المباشرة وتيليجرام وواتساب وماسنجر وإنستغرام.',
+      },
+      {
+        href: '/ar/compare/',
+        icon: 'scale',
+        title: 'المقارنات',
+        text: 'كيف يقف Helpdock أمام Zendesk وFreshdesk وغيرهما.',
+      },
+    ],
+  },
+};
+const routes = await knownRoutes();
+---
+<Base
+  title="Page not found · Helpdock"
+  description="This page does not exist. Search the Helpdock site, or go to the install guide, the docs, the channels or the comparisons."
+  noindex
+  notFound={{ arTitle: 'الصفحة غير موجودة · Helpdock' }}
+>
+  {
+    (['en', 'ar'] as const).map((locale) => {
+      const t = copy[locale];
+      return (
+        <section class={`container not-found only-${locale}`} data-not-found={locale} data-pagefind-ignore>
+          <div class="nf-hero">
+            <div class="nf-copy">
+              <p class="eyebrow">404</p>
+              <h1 class="display page-title">{t.title}</h1>
+              <p class="lead">{t.lead}</p>
+              <div class="nf-suggest" data-nf-suggest hidden>
+                <h2 class="nf-label">{t.suggest}</h2>
+                <ul class="nf-suggest-list" data-nf-suggest-list />
+              </div>
+            </div>
+            <div class="nf-ticket" role="group" aria-label={t.ticket}>
+              <div class="nf-ticket-head">
+                <span class="nf-ref"><bdi>HD-404</bdi></span>
+                <span class="nf-chip"><Icon name="circle-x" />{t.chip}</span>
+              </div>
+              <p class="nf-path"><bdi><code class="nf-code" data-nf-path /></bdi></p>
+              <p class="nf-note">{t.note}</p>
+              <div class="nf-lines" aria-hidden="true">
+                <span class="nf-line" />
+                <span class="nf-line" />
+              </div>
+            </div>
+          </div>
+
+          <form
+            class="nf-search"
+            role="search"
+            data-nf-search
+            data-loading={t.status.loading}
+            data-count={t.status.count}
+            data-none={t.status.none}
+            data-offline={t.status.offline}
+          >
+            <label class="nf-label" for={`nf-query-${locale}`}>{t.searchLabel}</label>
+            <div class="nf-field">
+              <Icon name="search" />
+              <input id={`nf-query-${locale}`} type="search" name="q" autocomplete="off" spellcheck="false" data-nf-input />
+              <button type="submit" class="btn btn-secondary btn-sm">{t.searchButton}</button>
+            </div>
+            <p class="nf-status" role="status" aria-live="polite" data-nf-status />
+            <ul class="nf-results" data-nf-results />
+            <button type="button" class="more nf-everything" data-search-open data-nf-everything>
+              {t.everything}<Icon name="arrow-right" class="flip" />
+            </button>
+          </form>
+
+          <h2 class="nf-label nf-start">{t.start}</h2>
+          <ul class="grid-4 nf-links">
+            {
+              t.links.map((link) => (
+                <li>
+                  <a class="card compact nf-link" href={link.href} hreflang={'lang' in link ? link.lang : undefined}>
+                    <Icon name={link.icon} class="tile-icon" />
+                    <span class="card-title">{link.title}</span>
+                    <p class="small">{link.text}</p>
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </section>
+      );
+    })
+  }
+  <script is:inline>
+    // Before the module script runs, so the card never shows an empty path.
+    (() => {
+      let path = location.pathname;
+      try {
+        path = decodeURI(path);
+      } catch {}
+      for (const node of document.querySelectorAll('[data-nf-path]')) node.textContent = path;
+    })();
+  </script>
+  <script type="application/json" id="nf-routes" set:html={JSON.stringify(routes)} />
+  <script>
+    import '../scripts/not-found.ts';
+  </script>
+</Base>

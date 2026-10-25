@@ -1,0 +1,138 @@
+---
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
+import DocsNav from '../../../components/DocsNav.astro';
+import FieldTable from '../../../components/FieldTable.astro';
+import Icon from '../../../components/Icon.astro';
+import document from '../../../generated/openapi.json';
+import Base from '../../../layouts/Base.astro';
+import { endpoints, type OpenApiDocument, webhookEvents } from '../../../lib/openapi.ts';
+import { techArticle } from '../../../lib/seo.ts';
+
+const api = document as unknown as OpenApiDocument;
+const groups = endpoints(api);
+const events = webhookEvents(api);
+const path = '/docs/api-reference/';
+const title = 'REST API reference';
+const description =
+  'Every endpoint of the Helpdock REST API (/api/v1): tickets, contacts, help center articles and webhooks, with scopes, parameters, bodies and responses, from its OpenAPI 3.1 document.';
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Docs', href: '/docs/' },
+  { name: title, href: path },
+];
+const anchor = (id: string) => id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+---
+<Base
+  indexed
+  title={`${title} · Helpdock docs`}
+  description={description}
+  ogType="article"
+  breadcrumbs={crumbs}
+  jsonLd={[techArticle({ title, description, path })]}
+>
+  <div class="container docs-layout">
+    <DocsNav current="api-reference" />
+    <article>
+      <Breadcrumbs crumbs={crumbs} />
+      <h1 class="headline docs-title">{title}</h1>
+      <div class="prose">
+        <p>
+          {api.info.description.split("`").map((part, index) => (index % 2 === 1 ? <code>{part}</code> : part))} Every path is relative to your install's address, <code>&lt;APP_URL&gt;</code>,
+          and a key reaches one brand. The <a href="/docs/api/">API guide</a> covers keys, limits, pagination and
+          idempotency; <a href="/docs/webhooks/">Webhooks</a> covers signatures and retries.
+        </p>
+        <p>
+          Generated from the OpenAPI 3.1 document the api serves at
+          <code>&lt;APP_URL&gt;/api/docs/openapi.json</code>, built from the same schemas its routes validate with.
+          {" "}<a href="/docs/api-reference/openapi.json" download>Download openapi.json</a>.
+        </p>
+      </div>
+
+      {
+        groups.map((group) => (
+          <section class="api-group" aria-labelledby={`tag-${group.tag.toLowerCase()}`}>
+            <h2 class="title" id={`tag-${group.tag.toLowerCase()}`}>{group.tag}</h2>
+            {group.endpoints.map((endpoint) => (
+              <section class="api-endpoint" id={anchor(endpoint.id)} aria-labelledby={`${anchor(endpoint.id)}-title`}>
+                <h3 class="api-signature" id={`${anchor(endpoint.id)}-title`}>
+                  <span class={`api-method m-${endpoint.method.toLowerCase()}`}>{endpoint.method}</span>
+                  <code>{endpoint.path}</code>
+                </h3>
+                <p class="api-summary">{endpoint.summary}</p>
+                <p class="api-meta">
+                  <span class="chip">Scope: <code>{endpoint.scope}</code></span>
+                  <a class="api-permalink" href={`#${anchor(endpoint.id)}`}>
+                    <Icon name="link" />
+                    <span class="visually-hidden">Link to {endpoint.summary}</span>
+                  </a>
+                </p>
+                {endpoint.parameters.length > 0 && (
+                  <>
+                    <h4 class="h4">Parameters</h4>
+                    <FieldTable fields={endpoint.parameters} caption={`Parameters of ${endpoint.method} ${endpoint.path}`} />
+                  </>
+                )}
+                {endpoint.body.length > 0 && (
+                  <>
+                    <h4 class="h4">Request body</h4>
+                    <FieldTable fields={endpoint.body} caption={`Request body of ${endpoint.method} ${endpoint.path}`} />
+                  </>
+                )}
+                <h4 class="h4">
+                  Response <code>{endpoint.success.status}</code>
+                </h4>
+                {endpoint.success.fields.length > 0 ? (
+                  <details class="api-response">
+                    <summary>{endpoint.success.fields.length} fields</summary>
+                    <FieldTable fields={endpoint.success.fields} caption={`Response of ${endpoint.method} ${endpoint.path}`} />
+                  </details>
+                ) : (
+                  <p class="muted small">{endpoint.success.description}.</p>
+                )}
+                <p class="api-errors small muted">
+                  Errors:{' '}
+                  {endpoint.errors.map((error, index) => (
+                    <>
+                      {index > 0 && ', '}
+                      <code>{error.status}</code> {error.description.toLowerCase()}
+                    </>
+                  ))}
+                  .
+                </p>
+              </section>
+            ))}
+          </section>
+        ))
+      }
+
+      <section class="api-group" aria-labelledby="webhook-events">
+        <h2 class="title" id="webhook-events">Webhook events</h2>
+        <div class="prose">
+          <p>
+            Each event is a signed <code>POST</code> to your endpoint; verify <code>X-Helpdock-Signature</code> and
+            deduplicate on <code>id</code>, as the <a href="/docs/webhooks/">webhooks guide</a> describes.
+          </p>
+        </div>
+        {events.map((hook) => (
+          <details class="api-response" id={`event-${hook.event.replaceAll('.', '-')}`}>
+            <summary><code>{hook.event}</code></summary>
+            <FieldTable fields={hook.fields} caption={`Payload of ${hook.event}`} />
+          </details>
+        ))}
+      </section>
+    </article>
+    <nav class="toc" aria-labelledby="toc-title" data-pagefind-ignore>
+      <div>
+        <h2 id="toc-title">Endpoints</h2>
+        <ul>
+          {groups.map((group) => (
+            <li>
+              <a href={`#tag-${group.tag.toLowerCase()}`}>{group.tag}</a>
+            </li>
+          ))}
+          <li><a href="#webhook-events">Webhook events</a></li>
+        </ul>
+      </div>
+    </nav>
+  </div>
+</Base>

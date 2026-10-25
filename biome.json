@@ -59,6 +59,17 @@
   },
   "overrides": [
     {
+      "includes": ["site/**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["apps/admin/src/**"],
       "plugins": ["./scripts/biome/bare-locale-call.grit"]
     }

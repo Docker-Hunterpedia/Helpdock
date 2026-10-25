@@ -1,0 +1,19 @@
+---
+import { brandMark, lettermark } from '../lib/brand-marks.ts';
+
+/** A competitor's logo, monochrome, or its lettermark. Decorative: its name is always beside it. */
+type Props = { slug: string; name: string; size?: 'sm' | 'lg' };
+const { slug, name, size = 'sm' } = Astro.props;
+const mark = brandMark(slug);
+---
+<span class:list={['product-mark', size]} aria-hidden="true">
+  {
+    mark ? (
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d={mark.path} fill="currentColor" />
+      </svg>
+    ) : (
+      <span class="lettermark">{lettermark(name)}</span>
+    )
+  }
+</span>

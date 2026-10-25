@@ -1,0 +1,59 @@
+---
+import { CHANNELS } from '../data/channels.ts';
+import type { Locale } from '../data/site.ts';
+import Base from '../layouts/Base.astro';
+import ChannelMark from './ChannelMark.astro';
+import Cta from './Cta.astro';
+import Icon from './Icon.astro';
+import PageHero from './PageHero.astro';
+
+type Props = { locale: Locale };
+const { locale } = Astro.props;
+const prefix = locale === 'ar' ? '/ar' : '';
+const t = {
+  en: {
+    title: 'Support channels: email, chat, WhatsApp and more · Helpdock',
+    description:
+      'Email, Telegram, WhatsApp, Messenger, Instagram, a live chat widget, a hosted web form and a REST API, all filing into the same tickets in Helpdock.',
+    home: 'Home',
+    channels: 'Channels',
+    h1: 'Every conversation. One desk.',
+    lead: 'Each brand connects its own accounts. Whichever way a customer writes, it lands in the same tickets, with the same statuses, SLAs, rules and assignment, and the reply goes back the way it came.',
+  },
+  ar: {
+    title: 'قنوات الدعم: البريد والدردشة وواتساب وغيرها · Helpdock',
+    description:
+      'البريد الإلكتروني وتيليجرام وواتساب وماسنجر وإنستغرام ونافذة دردشة مباشرة ونموذج ويب مستضاف وواجهة REST، كلها تصل إلى التذاكر نفسها في Helpdock.',
+    home: 'الرئيسية',
+    channels: 'القنوات',
+    h1: 'كل المحادثات. في مكتب واحد.',
+    lead: 'تربط كل علامة تجارية حساباتها الخاصة. ومهما كانت الطريقة التي يكتب بها العميل، تصل رسالته إلى التذاكر نفسها، بالحالات واتفاقيات مستوى الخدمة والقواعد والإسناد نفسها، ويعود الرد من حيث أتت.',
+  },
+}[locale];
+const crumbs = [
+  { name: t.home, href: `${prefix}/` },
+  { name: t.channels, href: `${prefix}/channels/` },
+];
+---
+<Base title={t.title} description={t.description} locale={locale} alternates={{ en: '/channels/', ar: '/ar/channels/' }} breadcrumbs={crumbs}>
+  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.channels} title={t.h1} lead={t.lead} />
+  <section class="section tight">
+    <div class="container">
+      <ul class="grid-4">
+        {
+          CHANNELS.map((channel) => (
+            <li>
+              <a class="card" href={`${prefix}/channels/${channel.slug}/`}>
+                <ChannelMark channel={channel} />
+                <span class="card-title">{channel[locale].name}</span>
+                <p>{channel[locale].card}</p>
+                <Icon name="arrow-right" class="card-arrow" />
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+  <Cta locale={locale} />
+</Base>

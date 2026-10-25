@@ -1,6 +1,9 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  # The product website (docs/guides/website.md), deployed to GitHub Pages and
+  # never part of the image.
+  - 'site'
 
 # pnpm 11+ reads every setting except registry and authentication from this file
 # rather than from .npmrc.

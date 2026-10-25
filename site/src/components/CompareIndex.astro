@@ -1,0 +1,108 @@
+---
+import { COMPETITORS } from '../data/competitors.ts';
+import type { Locale } from '../data/site.ts';
+import Base from '../layouts/Base.astro';
+import Cta from './Cta.astro';
+import Icon from './Icon.astro';
+import PageHero from './PageHero.astro';
+import ProductMark from './ProductMark.astro';
+
+type Props = { locale: Locale };
+const { locale } = Astro.props;
+const prefix = locale === 'ar' ? '/ar' : '';
+const t = {
+  en: {
+    title: 'Helpdock compared with Zendesk, Freshdesk, Zoho Desk and others',
+    description:
+      'How Helpdock, the open-source help desk you host yourself, compares with Zendesk, Freshdesk, Zoho Desk, Zammad, Chatwoot, FreeScout and osTicket, with sources.',
+    home: 'Home',
+    compare: 'Compare',
+    h1: 'Helpdock, compared.',
+    lead: 'What we say about other products is limited to how they are delivered and licensed, each with a source and a date. The rest is about Helpdock, backed by its guides.',
+    hosted: 'Hosted services, with a built-in importer',
+    open: 'Open-source help desks',
+    guides: 'Migration guides',
+    vs: 'Helpdock vs',
+    moving: 'Moving from',
+  },
+  ar: {
+    title: 'مقارنة Helpdock مع Zendesk وFreshdesk وZoho Desk',
+    description:
+      'كيف يقارن Helpdock، مكتب الدعم مفتوح المصدر الذي تستضيفه بنفسك، مع Zendesk وFreshdesk وZoho Desk، مع المصادر.',
+    home: 'الرئيسية',
+    compare: 'المقارنات',
+    h1: 'Helpdock في مقارنة.',
+    lead: 'ما نقوله عن المنتجات الأخرى يقتصر على طريقة تشغيلها ورخصتها، مع مصدر وتاريخ لكل معلومة. وما سوى ذلك عن Helpdock، تدعمه أدلّته.',
+    hosted: 'خدمات مستضافة، ولها أداة استيراد مدمجة',
+    open: '',
+    guides: '',
+    vs: 'Helpdock مقابل',
+    moving: '',
+  },
+}[locale];
+const crumbs = [
+  { name: t.home, href: `${prefix}/` },
+  { name: t.compare, href: `${prefix}/compare/` },
+];
+const hosted = COMPETITORS.filter((item) => item.importer);
+const open = locale === 'en' ? COMPETITORS.filter((item) => !item.importer) : [];
+const groups = [
+  { title: t.hosted, items: hosted },
+  { title: t.open, items: open },
+].filter((group) => group.items.length > 0);
+---
+<Base
+  title={t.title}
+  description={t.description}
+  locale={locale}
+  alternates={{ en: '/compare/', ar: '/ar/compare/' }}
+  breadcrumbs={crumbs}
+>
+  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.compare} title={t.h1} lead={t.lead} />
+  {
+    groups.map((group) => (
+      <section class="section tight">
+        <div class="container">
+          <h2 class="h3">{group.title}</h2>
+          <ul class="grid-3 gap-top">
+            {group.items.map((item) => {
+              const copy = item[locale] ?? item.en;
+              return (
+                <li>
+                  <a class="card" href={`${prefix}/compare/helpdock-vs-${item.slug}/`}>
+                    <ProductMark slug={item.slug} name={item.name} />
+                    <span class="card-title">
+                      {t.vs} {item.name}
+                    </span>
+                    <p>{copy.lead}</p>
+                    <Icon name="arrow-right" class="card-arrow" />
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </section>
+    ))
+  }
+  {
+    locale === 'en' && (
+      <section class="section tight">
+        <div class="container">
+          <h2 class="h3">{t.guides}</h2>
+          <ul class="chips gap-top">
+            {hosted.map((item) => (
+              <li>
+                <a class="chip" href={`/alternatives/${item.slug}/`}>
+                  <ProductMark slug={item.slug} name={item.name} />
+                  {t.moving} {item.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
+  <Cta locale={locale} />
+</Base>

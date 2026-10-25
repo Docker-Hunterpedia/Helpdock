@@ -1,0 +1,7 @@
+---
+import { splitLinks } from '../lib/inline-links.ts';
+
+type Props = { text: string };
+const pieces = splitLinks(Astro.props.text);
+---
+{pieces.map((piece) => (piece.href ? <a href={piece.href}>{piece.text}</a> : piece.text))}

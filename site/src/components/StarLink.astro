@@ -1,0 +1,13 @@
+---
+import { type Locale, REPO, STARS } from '../data/site.ts';
+import { formatStars, starLabel } from '../lib/stars.ts';
+import Icon from './Icon.astro';
+
+type Props = { locale: Locale; class?: string; text: string };
+const { locale, class: className, text } = Astro.props;
+---
+<a class:list={['star-link', className]} href={REPO} aria-label={starLabel(STARS, locale)}>
+  <Icon name="star" />
+  <span>{text}</span>
+  {STARS !== undefined && <span class="star-count" dir="ltr">{formatStars(STARS, locale)}</span>}
+</a>

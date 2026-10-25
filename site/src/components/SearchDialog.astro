@@ -1,0 +1,78 @@
+---
+import type { Locale } from '../data/site.ts';
+import Icon from './Icon.astro';
+
+type Props = { locale: Locale };
+const { locale } = Astro.props;
+const t = {
+  en: {
+    title: 'Search',
+    placeholder: 'Search the docs, features and channels',
+    close: 'Close search',
+    results: 'Results',
+    hint: 'Type to search the docs, features, channels, comparisons and changelog.',
+    loading: 'Searching…',
+    none: 'No results for “{q}”. Try another word, or browse the docs.',
+    count: '{n} results',
+    offline: 'Search is not available here. It works on the built site.',
+    move: 'to move',
+    open: 'to open',
+    leave: 'to close',
+    keys: 'Keyboard',
+  },
+  ar: {
+    title: 'البحث',
+    placeholder: 'ابحث في القنوات والمقارنات',
+    close: 'إغلاق البحث',
+    results: 'النتائج',
+    hint: 'اكتب للبحث في صفحات القنوات والمقارنات.',
+    loading: 'جارٍ البحث…',
+    none: 'لا نتائج عن «{q}». جرّب كلمة أخرى.',
+    count: 'عدد النتائج: {n}',
+    offline: 'البحث غير متاح هنا. يعمل في الموقع المبني.',
+    move: 'للتنقل',
+    open: 'للفتح',
+    leave: 'للإغلاق',
+    keys: 'لوحة المفاتيح',
+  },
+}[locale];
+const titleId = `search-title-${locale}`;
+const resultsId = `search-results-${locale}`;
+---
+<dialog
+  class="search-dialog"
+  aria-labelledby={titleId}
+  data-locale={locale}
+  data-search
+  data-hint={t.hint}
+  data-loading={t.loading}
+  data-none={t.none}
+  data-count={t.count}
+  data-offline={t.offline}
+  data-pagefind-ignore
+>
+  <div class="search-field">
+    <h2 class="visually-hidden" id={titleId}>{t.title}</h2>
+    <Icon name="search" />
+    <input
+      type="search"
+      placeholder={t.placeholder}
+      aria-label={t.title}
+      role="combobox"
+      aria-expanded="false"
+      aria-controls={resultsId}
+      aria-autocomplete="list"
+      autocomplete="off"
+      spellcheck="false"
+      data-search-input
+    />
+    <button type="button" class="search-close" aria-label={t.close} data-search-close><kbd>Esc</kbd></button>
+  </div>
+  <p class="search-status" role="status" aria-live="polite" data-search-status>{t.hint}</p>
+  <ul class="search-results" id={resultsId} role="listbox" aria-label={t.results} data-search-results></ul>
+  <ul class="search-keys" aria-label={t.keys}>
+    <li><span class="keys" dir="ltr"><kbd>↑</kbd><kbd>↓</kbd></span> {t.move}</li>
+    <li><span class="keys" dir="ltr"><kbd>↵</kbd></span> {t.open}</li>
+    <li><span class="keys" dir="ltr"><kbd>Esc</kbd></span> {t.leave}</li>
+  </ul>
+</dialog>

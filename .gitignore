@@ -33,3 +33,12 @@ blob-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Website preview screenshots (docs/guides/website.md)
+.preview-shots/
+
+# Astro
+site/.astro/
+
+# The OpenAPI document the website build writes (scripts/site/write-openapi.ts)
+site/src/generated/

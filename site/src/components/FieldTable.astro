@@ -1,0 +1,37 @@
+---
+import type { Field } from '../lib/openapi.ts';
+
+type Props = { fields: (Field & { location?: string })[]; caption: string };
+const { fields, caption } = Astro.props;
+const hasLocation = fields.some((field) => field.location);
+---
+<div class="table-wrap api-table">
+  <table class="data-table">
+    <caption class="visually-hidden">{caption}</caption>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        {hasLocation && <th scope="col">In</th>}
+        <th scope="col">Type</th>
+        <th scope="col">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        fields.map((field) => (
+          <tr>
+            <th scope="row" class="field-name">
+              <code>{field.name}</code>
+              {field.required && <span class="api-required">required</span>}
+            </th>
+            {hasLocation && <td>{field.location}</td>}
+            <td>
+              <code class="api-type">{field.type}</code>
+            </td>
+            <td>{field.notes}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>

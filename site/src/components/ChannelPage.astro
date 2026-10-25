@@ -1,0 +1,159 @@
+---
+import { CHANNELS, type Channel } from '../data/channels.ts';
+import { feature } from '../data/features.ts';
+import type { Locale } from '../data/site.ts';
+import Base from '../layouts/Base.astro';
+import ChannelMark from './ChannelMark.astro';
+import Cta from './Cta.astro';
+import Icon from './Icon.astro';
+import PageHero from './PageHero.astro';
+
+type Props = { channel: Channel; locale: Locale };
+const { channel, locale } = Astro.props;
+const copy = channel[locale];
+const prefix = locale === 'ar' ? '/ar' : '';
+const path = `${prefix}/channels/${channel.slug}/`;
+
+const t = {
+  en: {
+    home: 'Home',
+    channels: 'Channels',
+    eyebrow: 'Channel',
+    setup: 'Set it up',
+    setupLead: 'The outline. The guide has every field and the troubleshooting.',
+    supported: 'What it handles',
+    limits: 'Limits to know',
+    ai: channel.autoReply ? 'AI auto-reply available' : 'No AI auto-reply on this channel',
+    shared:
+      'Like every channel, it files into the same tickets, with the same statuses, SLAs, rules and assignment.',
+    guide: 'Read the guide',
+    features: 'Works with',
+    others: 'Other channels',
+  },
+  ar: {
+    home: 'الرئيسية',
+    channels: 'القنوات',
+    eyebrow: 'قناة',
+    setup: 'الإعداد',
+    setupLead: 'الخطوط العريضة. وفي الدليل كل حقل وحلول المشكلات.',
+    supported: 'ما تتعامل معه',
+    limits: 'حدود ينبغي معرفتها',
+    ai: channel.autoReply
+      ? 'الرد التلقائي بالذكاء الاصطناعي متاح'
+      : 'لا رد تلقائي بالذكاء الاصطناعي على هذه القناة',
+    shared:
+      'وككل قناة، تصل رسائلها إلى التذاكر نفسها، بالحالات واتفاقيات مستوى الخدمة والقواعد والإسناد نفسها.',
+    guide: 'اقرأ الدليل (بالإنجليزية)',
+    features: 'تعمل مع',
+    others: 'قنوات أخرى',
+  },
+}[locale];
+
+const crumbs = [
+  { name: t.home, href: `${prefix}/` },
+  { name: t.channels, href: `${prefix}/channels/` },
+  { name: copy.name, href: path },
+];
+const related = channel.related.flatMap((slug) => feature(slug) ?? []);
+---
+<Base
+  indexed
+  title={copy.title}
+  description={copy.description}
+  locale={locale}
+  alternates={{ en: `/channels/${channel.slug}/`, ar: `/ar/channels/${channel.slug}/` }}
+  breadcrumbs={crumbs}
+>
+  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.eyebrow} title={copy.name} lead={copy.lead}>
+    <ChannelMark slot="mark" channel={channel} size="lg" />
+    <ul class="chips">
+      <li class="chip"><span class="chip-icon"><Icon name={channel.autoReply ? 'sparkles' : 'circle-x'} /></span>{t.ai}</li>
+      {channel.guides.map((guide) => (
+        <li><a class="chip" href={guide.href}>{guide.label}</a></li>
+      ))}
+    </ul>
+  </PageHero>
+
+  <section class="section tight" aria-labelledby="setup-title">
+    <div class="container split top">
+      <div class="stack-lg">
+        <h2 class="headline" id="setup-title">{t.setup}</h2>
+        <p class="lead">{t.setupLead}</p>
+        <p class="muted">{t.shared}</p>
+      </div>
+      <ol class="steps">
+        {copy.setup.map((step) => <li><p class="step-text">{step}</p></li>)}
+      </ol>
+    </div>
+  </section>
+
+  <section class="section on-surface" aria-labelledby="supported-title">
+    <div class="container split top">
+      <h2 class="headline reveal" id="supported-title">{t.supported}</h2>
+      <ul class="ticks reveal">
+        {copy.supported.map((line) => (
+          <li>
+            <Icon name="check" />
+            <span>{line}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="limits-title">
+    <div class="container split top">
+      <div class="stack-lg reveal">
+        <h2 class="headline" id="limits-title">{t.limits}</h2>
+        <div class="actions start">
+          {channel.guides.map((guide) => (
+            <a class="more" href={guide.href}>{t.guide}: {guide.label}<Icon name="chevron-right" /></a>
+          ))}
+        </div>
+      </div>
+      <ul class="ticks cross reveal">
+        {copy.limits.map((line) => (
+          <li>
+            <Icon name="list-checks" />
+            <span>{line}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  {
+    locale === 'en' && related.length > 0 && (
+      <section class="section on-surface" aria-labelledby="features-title">
+        <div class="container">
+          <h2 class="title reveal" id="features-title">{t.features}</h2>
+          <ul class="grid-3 reveal gap-top">
+            {related.map((item) => (
+              <li>
+                <a class="card" href={`/features/${item.slug}/`}>
+                  <span class="disc"><Icon name={item.icon} /></span>
+                  <span class="card-title">{item.name}</span>
+                  <p>{item.card}</p>
+                  <Icon name="arrow-right" class="card-arrow" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section tight" aria-labelledby="others-title" data-pagefind-ignore>
+    <div class="container">
+      <h2 class="h3" id="others-title">{t.others}</h2>
+      <ul class="chips gap-top">
+        {CHANNELS.filter((other) => other.slug !== channel.slug).map((other) => (
+          <li><a class="chip" href={`${prefix}/channels/${other.slug}/`}>{other[locale].name}</a></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <Cta locale={locale} />
+</Base>

@@ -1,0 +1,65 @@
+---
+import { CHROME, type Locale, REPO } from '../data/site.ts';
+import Icon from './Icon.astro';
+import Logo from './Logo.astro';
+import StarLink from './StarLink.astro';
+import ThemeSwitch from './ThemeSwitch.astro';
+
+type Props = { locale: Locale; languageHref?: string | undefined; class?: string };
+const { locale, languageHref, class: className } = Astro.props;
+const chrome = CHROME[locale];
+const home = locale === 'ar' ? '/ar/' : '/';
+const current = Astro.url.pathname;
+const isCurrent = (href: string) =>
+  !href.includes('#') && href !== home && current.startsWith(href);
+const installHref = `${home}#install`;
+---
+<header class:list={["site-header", className]}>
+  <div class="container header-inner">
+    <a class="brand" href={home} aria-label={chrome.home}>
+      <Logo />
+      <span>Helpdock</span>
+    </a>
+    <nav class="nav" aria-label={chrome.mainNav}>
+      <ul>
+        {
+          chrome.nav.map((item) => (
+            <li>
+              <a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+    <div class="header-actions">
+      <a class="header-link hide-sm" href={languageHref ?? chrome.language.href} hreflang={chrome.language.lang} lang={chrome.language.lang}>{chrome.language.label}</a>
+      <StarLink locale={locale} class="header-link hide-sm" text="GitHub" />
+      <button type="button" class="search-trigger" data-search-open aria-label={chrome.search} aria-keyshortcuts="Meta+K Control+K /">
+        <Icon name="search" /><span class="search-trigger-label">{chrome.search}</span><kbd class="search-trigger-key">/</kbd>
+      </button>
+      <ThemeSwitch locale={locale} />
+      <a class="btn btn-primary btn-sm hide-sm" href={installHref}>{chrome.install}</a>
+      <details class="menu">
+        <summary aria-label={chrome.menu}><Icon name="menu" /></summary>
+        <nav class="menu-panel" aria-label={chrome.mainNav}>
+          <ul>
+            {chrome.nav.map((item) => (
+              <li>
+                <a href={item.href}>{item.label}</a>
+              </li>
+            ))}
+            <li><a href={REPO}>GitHub</a></li>
+            <li>
+              <a href={languageHref ?? chrome.language.href} hreflang={chrome.language.lang} lang={chrome.language.lang}>
+                {chrome.language.label}
+              </a>
+            </li>
+          </ul>
+          <a class="btn btn-primary" href={installHref}>{chrome.install}</a>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>

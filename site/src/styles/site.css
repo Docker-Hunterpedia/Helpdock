@@ -678,6 +678,27 @@ p {
   }
 }
 
+.star-link {
+  gap: 8px;
+}
+
+.star-link .icon {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.star-count {
+  padding-inline: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
 .theme-switch {
   display: inline-flex;
   gap: 2px;

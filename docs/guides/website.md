@@ -151,6 +151,22 @@ latest Release is the most recently created one, so a backport patch to an
 older line published after a newer release makes the site show the older
 number until Pages runs again after the newer one.
 
+## The star count
+
+The header's GitHub link and the "Star on GitHub" button carry the
+repository's star count, written compactly (`1.2K`; Latin digits on Arabic
+pages), and the link's accessible name gives the full number ("Star Helpdock
+on GitHub, 1,234 stars"). It is a build-time snapshot, never a request from the
+visitor's browser: the Pages workflow reads `stargazers_count` with
+`gh api repos/<repository>` and passes it as `HELPDOCK_STARS`
+(`src/lib/stars.ts`). The workflow also runs daily at 04:17 UTC, so the count
+refreshes without a push.
+
+A failed lookup only warns: the site is built and deployed without the count,
+and the links read as they would without one. A local build has no
+`HELPDOCK_STARS` and never calls the network, so it shows no count; set the
+variable by hand to see one.
+
 ## Design
 
 The colours, families, spacing, radii, elevation and motion are the tokens of
@@ -200,12 +216,13 @@ Python's static server, so build first.
 ## Deployment
 
 [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) installs the
-workspace with pnpm, runs the site's unit tests, looks up the release number,
-builds the site, runs the smoke tests and uploads `site/dist` with
-`actions/upload-pages-artifact`; `actions/deploy-pages` publishes it. It runs on
-every push to `main` that changes `site/**`, `docs/guides/**`, either changelog,
-`apps/api/package.json`, the lockfile or the workflow; on demand from
-**Actions › Pages › Run workflow**; and after each stable release. A pull
+workspace with pnpm, runs the site's unit tests, looks up the release number
+and the star count, builds the site, runs the smoke tests and uploads
+`site/dist` with `actions/upload-pages-artifact`; `actions/deploy-pages`
+publishes it. It runs on every push to `main` that changes `site/**`,
+`docs/guides/**`, either changelog, `apps/api/package.json`, the lockfile or the
+workflow; on demand from **Actions › Pages › Run workflow**; after each stable
+release; and daily at 04:17 UTC. A pull
 request that touches those paths runs the same build and tests without
 deploying. The build job's token reads the repository and the Releases API
 only; the deploy job's can only write Pages and request an OIDC token.

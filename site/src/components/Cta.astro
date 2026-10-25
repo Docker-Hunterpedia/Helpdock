@@ -1,7 +1,8 @@
 ---
-import { type Locale, REPO } from '../data/site.ts';
+import type { Locale } from '../data/site.ts';
 import Icon from './Icon.astro';
 import Logo from './Logo.astro';
+import StarLink from './StarLink.astro';
 
 type Props = { locale?: Locale; title?: string; lead?: string };
 const { locale = 'en' } = Astro.props;
@@ -32,7 +33,7 @@ const lead = Astro.props.lead ?? copy.lead;
       <p class="lead">{lead}</p>
       <div class="actions">
         <a class="btn btn-primary" href={locale === 'ar' ? '/ar/#install' : '/#install'}>{copy.install}</a>
-        <a class="btn btn-secondary" href={REPO}><Icon name="star" />{copy.star}</a>
+        <StarLink locale={locale} class="btn btn-secondary" text={copy.star} />
       </div>
       <a class="more" href="/docs/">{copy.docs}<Icon name="chevron-right" /></a>
     </div>

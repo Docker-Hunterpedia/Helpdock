@@ -2,6 +2,7 @@
 import { CHROME, type Locale, REPO } from '../data/site.ts';
 import Icon from './Icon.astro';
 import Logo from './Logo.astro';
+import StarLink from './StarLink.astro';
 import ThemeSwitch from './ThemeSwitch.astro';
 
 type Props = { locale: Locale; languageHref?: string | undefined };
@@ -34,7 +35,7 @@ const installHref = `${home}#install`;
     </nav>
     <div class="header-actions">
       <a class="header-link hide-sm" href={languageHref ?? chrome.language.href} hreflang={chrome.language.lang} lang={chrome.language.lang}>{chrome.language.label}</a>
-      <a class="header-link hide-sm" href={REPO}>GitHub</a>
+      <StarLink locale={locale} class="header-link hide-sm" text="GitHub" />
       <ThemeSwitch locale={locale} />
       <a class="btn btn-primary btn-sm hide-sm" href={installHref}>{chrome.install}</a>
       <details class="menu">

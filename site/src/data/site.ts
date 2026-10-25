@@ -10,6 +10,9 @@ export const ANNOUNCEMENT = 'https://oday-bakkour.com/blog/helpdock-1-0-open-sou
 /** The release the site describes, stamped at build time (see astro.config.ts). */
 export const VERSION: string = import.meta.env.HELPDOCK_VERSION;
 
+/** The GitHub star count at build time, when the Pages workflow could read it. */
+export const STARS: number | undefined = import.meta.env.HELPDOCK_STARS ?? undefined;
+
 export type Locale = 'en' | 'ar';
 
 export const repoFile = (path: string) => `${BLOB}/${path}`;

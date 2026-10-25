@@ -2,9 +2,12 @@ import sitemap from '@astrojs/sitemap';
 import { defineConfig } from 'astro/config';
 import { SITE_URL } from './src/data/site.ts';
 import { releaseVersion } from './src/lib/repo.ts';
+import { parseStars } from './src/lib/stars.ts';
 
 // Resolved here, once, so a wrong HELPDOCK_VERSION stops the build before any page renders.
 const version = releaseVersion(new URL('./', import.meta.url));
+// A build-time snapshot; without one the site shows its GitHub links without a count.
+const stars = parseStars(process.env.HELPDOCK_STARS);
 
 export default defineConfig({
   site: SITE_URL,
@@ -13,7 +16,10 @@ export default defineConfig({
   // Nothing on the site loads from a third party, and the dev toolbar would.
   devToolbar: { enabled: false },
   vite: {
-    define: { 'import.meta.env.HELPDOCK_VERSION': JSON.stringify(version) },
+    define: {
+      'import.meta.env.HELPDOCK_VERSION': JSON.stringify(version),
+      'import.meta.env.HELPDOCK_STARS': JSON.stringify(stars ?? null),
+    },
   },
   markdown: {
     shikiConfig: {

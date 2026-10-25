@@ -3,7 +3,8 @@ name: Pages
 # Builds the product website in `site/` (Astro, static output) and publishes it
 # to GitHub Pages, served at https://helpdock.oday-bakkour.com
 # (`site/public/CNAME`). The site renders docs/guides and the changelogs, so a
-# change to those redeploys it too. A pull request builds and tests the site
+# change to those redeploys it too, and it runs daily to refresh the star
+# count. A pull request builds and tests the site
 # without deploying it. The procedure and the one-time repository settings are
 # in docs/guides/website.md.
 on:
@@ -27,6 +28,9 @@ on:
       - 'pnpm-lock.yaml'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+  # Daily, so the GitHub star count shown on the site stays fresh without a push.
+  schedule:
+    - cron: '17 4 * * *'
 
 # One deployment at a time; a newer push waits rather than cancelling a
 # deployment that is already rolling out. Pull requests get their own group.
@@ -72,9 +76,22 @@ jobs:
           set -euo pipefail
           tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      # Unlike the version, the star count is decoration: if GitHub does not
+      # answer, the site is built without it rather than not at all.
+      - name: Look up the star count
+        id: stars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if stars=$(gh api "repos/${GITHUB_REPOSITORY}" --jq .stargazers_count); then
+            echo "count=${stars}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=No star count::The site is built without the GitHub star count."
+          fi
       - name: Build the site
         env:
           HELPDOCK_VERSION: ${{ steps.release.outputs.version }}
+          HELPDOCK_STARS: ${{ steps.stars.outputs.count }}
         run: pnpm --filter @helpdock/website build
       - name: Resolve the Playwright version
         id: playwright

@@ -34,7 +34,7 @@ allowBuilds:
 # docs/guides/security-scanning.md.
 overrides:
   # moderate, direct and via @nestjs/platform-fastify; patched before 1.0
-  'fastify@<5.12.5': '>=5.12.5'
+  'fastify@<5.12.6': '>=5.12.6'
   # critical, via @changesets/cli > launch-editor
   'shell-quote@<1.11.0': '>=1.11.0'
   # high, via @mariozechner/pi-ai > proxy-agent > pac-proxy-agent > get-uri

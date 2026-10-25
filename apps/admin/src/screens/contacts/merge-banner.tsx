@@ -63,7 +63,7 @@ export function MergeBanners({
           size="small"
           variant="outlined"
           disabled={busy}
-          startIcon={<Undo2 size={14} aria-hidden="true" />}
+          startIcon={<Undo2 size={14} aria-hidden="true" className="mirror-in-rtl" />}
           onClick={() => {
             onUndo(merge);
           }}

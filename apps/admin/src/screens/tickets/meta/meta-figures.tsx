@@ -70,7 +70,7 @@ export function UnsentCaption({ time }: { readonly time: string }): ReactNode {
       component="p"
       sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}
     >
-      <Undo2 size={14} aria-hidden="true" />
+      <Undo2 size={14} aria-hidden="true" className="mirror-in-rtl" />
       <span>
         {t('tickets:meta.unsent')}
         <span aria-hidden="true"> · </span>

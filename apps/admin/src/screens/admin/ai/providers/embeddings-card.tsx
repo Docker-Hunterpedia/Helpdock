@@ -360,7 +360,11 @@ function ModelChange({
         <Typography variant="mono" component="span" sx={{ fontSize: 12, flex: 1 }}>
           {settings.model} · {settings.dims}
         </Typography>
-        <ArrowRight size={14} aria-label={t('aiSettings:embeddings.dialog.to')} />
+        <ArrowRight
+          size={14}
+          aria-label={t('aiSettings:embeddings.dialog.to')}
+          className="mirror-in-rtl"
+        />
         <Typography variant="mono" component="span" sx={{ fontSize: 12, flex: 1, fontWeight: 600 }}>
           {next.model} · {next.dims}
         </Typography>

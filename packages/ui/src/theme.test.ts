@@ -51,6 +51,14 @@ describe('typography', () => {
     },
   );
 
+  it('mirrors a .mirror-in-rtl element under dir=rtl only (DESIGN §7)', () => {
+    const overrides = light.components?.MuiCssBaseline?.styleOverrides;
+    expect(overrides).toMatchObject({
+      '[dir="rtl"] .mirror-in-rtl': { transform: 'scaleX(-1)' },
+    });
+    expect(overrides).not.toHaveProperty('.mirror-in-rtl');
+  });
+
   it('maps the MUI variants onto the DESIGN §3.1 scale', () => {
     expect(light.typography.h1).toMatchObject({ fontSize: '24px', lineHeight: '32px' });
     expect(light.typography.h2).toMatchObject({ fontSize: '20px', lineHeight: '28px' });

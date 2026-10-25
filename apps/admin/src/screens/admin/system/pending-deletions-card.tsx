@@ -154,7 +154,7 @@ function PendingDeletionRow({
       <Button
         variant="outlined"
         size="small"
-        startIcon={<Undo2 size={16} aria-hidden="true" />}
+        startIcon={<Undo2 size={16} aria-hidden="true" className="mirror-in-rtl" />}
         disabled={restore.isPending}
         aria-label={t('system:pending.restoreBrand', { name: brand.name })}
         onClick={() => {

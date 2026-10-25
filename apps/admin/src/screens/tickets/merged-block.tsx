@@ -220,7 +220,7 @@ function MergeBanner({
           variant="outlined"
           size="small"
           disabled={busy}
-          startIcon={<Undo2 size={14} aria-hidden="true" />}
+          startIcon={<Undo2 size={14} aria-hidden="true" className="mirror-in-rtl" />}
           onClick={onUnmerge}
           sx={{ backgroundColor: tokens['bg.surface'] }}
         >

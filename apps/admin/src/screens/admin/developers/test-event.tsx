@@ -53,7 +53,7 @@ export function TestEventBox({ webhookId }: { readonly webhookId: string }): Rea
           size="small"
           variant="outlined"
           color="inherit"
-          startIcon={<Send size={14} aria-hidden="true" />}
+          startIcon={<Send size={14} aria-hidden="true" className="mirror-in-rtl" />}
           disabled={send.isPending || (ping !== undefined && awaiting(ping))}
           onClick={() => {
             send.mutate();

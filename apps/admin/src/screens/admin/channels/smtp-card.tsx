@@ -313,7 +313,7 @@ export function SmtpCard({
             test.isPending ? (
               <CircularProgress size={14} aria-hidden="true" />
             ) : (
-              <Send size={14} aria-hidden="true" />
+              <Send size={14} aria-hidden="true" className="mirror-in-rtl" />
             )
           }
           onClick={() => {

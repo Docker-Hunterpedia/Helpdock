@@ -302,7 +302,7 @@ function SmtpSettingsForm({
             onClick={sendTest}
             loading={test.isPending}
             loadingPosition="start"
-            startIcon={<Send size={16} aria-hidden="true" />}
+            startIcon={<Send size={16} aria-hidden="true" className="mirror-in-rtl" />}
             disabled={save.isPending}
           >
             {t('system:smtp.test')}

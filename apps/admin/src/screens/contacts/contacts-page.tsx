@@ -329,7 +329,7 @@ export function ContactsPage(): ReactNode {
                     });
                   }}
                 >
-                  <ChevronLeft size={16} aria-hidden="true" />
+                  <ChevronLeft size={16} aria-hidden="true" className="mirror-in-rtl" />
                 </IconButton>
                 <IconButton
                   size="small"
@@ -339,7 +339,7 @@ export function ContactsPage(): ReactNode {
                     setParam('cursor', contacts.data?.nextCursor ?? null);
                   }}
                 >
-                  <ChevronRight size={16} aria-hidden="true" />
+                  <ChevronRight size={16} aria-hidden="true" className="mirror-in-rtl" />
                 </IconButton>
               </Box>
             </Box>

@@ -116,7 +116,7 @@ export function TicketHeader({
 
         {showDetailsButton ? (
           <IconButton size="small" aria-label={t('tickets:header.details')} onClick={onShowDetails}>
-            <PanelRightOpen size={16} aria-hidden="true" />
+            <PanelRightOpen size={16} aria-hidden="true" className="mirror-in-rtl" />
           </IconButton>
         ) : null}
       </Box>

@@ -391,6 +391,8 @@ export function createHelpdockTheme({ mode, direction, brand }: CreateHelpdockTh
           body: typeStyle('body'),
           // Match explicit language markers; inherited :lang(ar) would reset mono descendants.
           ':lang(ar)[lang]': { fontFamily: 'var(--hd-font-arabic)' },
+          // DESIGN §7: the shortcut for a directional icon element, beside the sx pattern.
+          '[dir="rtl"] .mirror-in-rtl': { transform: 'scaleX(-1)' },
         },
       },
     },

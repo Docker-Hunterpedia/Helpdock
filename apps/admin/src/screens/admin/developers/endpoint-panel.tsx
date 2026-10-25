@@ -87,7 +87,7 @@ export function EndpointPanel({
               size="small"
               variant="outlined"
               color="inherit"
-              startIcon={<Send size={14} aria-hidden="true" />}
+              startIcon={<Send size={14} aria-hidden="true" className="mirror-in-rtl" />}
               aria-label={t('developers:webhooks.test.sendFor', { url: webhook.url })}
               disabled={busy}
               onClick={onTest}

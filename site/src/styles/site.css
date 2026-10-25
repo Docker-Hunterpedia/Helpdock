@@ -1242,6 +1242,10 @@ p {
   color: var(--text-secondary);
 }
 
+.card > .btn {
+  justify-self: start;
+}
+
 a.card {
   color: inherit;
   text-decoration: none;

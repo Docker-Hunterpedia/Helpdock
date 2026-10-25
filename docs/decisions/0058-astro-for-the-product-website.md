@@ -1,6 +1,6 @@
 # 0058 Astro for the product website, still on GitHub Pages
 
-Status: proposed
+Status: accepted (owner approval, 2026-10-25)
 Date: 2026-10-25
 
 ## Context

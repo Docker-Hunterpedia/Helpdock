@@ -44,8 +44,10 @@ WORKDIR /repo
 
 # `apps/helpcenter` is still a placeholder whose `build` is a `tsc` over one
 # file; `apps/widget` builds `dist/widget.js`, its lazy chunks and its fonts
-# with Vite, and the api serves them (M4-01).
-RUN pnpm build
+# with Vite, and the api serves them (M4-01). The product website is built and
+# deployed by pages.yml, not shipped in the image, and the docs it renders are
+# not in the build context.
+RUN pnpm exec turbo run build --filter='!@helpdock/website'
 
 # `pnpm deploy` writes a self-contained tree: the api's own files plus the
 # production dependency graph, with the workspace packages copied in rather than

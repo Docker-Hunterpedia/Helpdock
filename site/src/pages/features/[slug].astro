@@ -1,0 +1,121 @@
+---
+import Cta from '../../components/Cta.astro';
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import { channel as findChannel } from '../../data/channels.ts';
+import { FEATURES, type Feature } from '../../data/features.ts';
+import Base from '../../layouts/Base.astro';
+
+export function getStaticPaths() {
+  return FEATURES.map((feature) => ({ params: { slug: feature.slug }, props: { feature } }));
+}
+
+type Props = { feature: Feature };
+const { feature } = Astro.props;
+const path = `/features/${feature.slug}/`;
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Features', href: '/features/' },
+  { name: feature.name, href: path },
+];
+const channels = feature.channels.flatMap((slug) => findChannel(slug) ?? []);
+const comparisons = feature.slug === 'importers';
+---
+<Base title={feature.title} description={feature.description} breadcrumbs={crumbs}>
+  <PageHero crumbs={crumbs} eyebrow="Feature" title={feature.name} lead={feature.lead}>
+    <ul class="chips">
+      {feature.guides.map((guide) => (
+        <li><a class="chip" href={guide.href}>{guide.label}</a></li>
+      ))}
+    </ul>
+  </PageHero>
+
+  {
+    feature.sections.map((section, index) => (
+      <section class:list={['section', 'tight', { 'on-surface': index % 2 === 1 }]} aria-labelledby={`s-${index}`}>
+        <div class="container split top">
+          <h2 class="title reveal" id={`s-${index}`}>{section.heading}</h2>
+          <ul class="ticks reveal">
+            {section.points.map((point) => (
+              <li>
+                <Icon name="check" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    ))
+  }
+
+  <section class="section tight" aria-labelledby="limits-title">
+    <div class="container">
+      <div class="callout-block reveal">
+        <h2 class="h3" id="limits-title">Not yet, or not at all</h2>
+        <ul class="ticks cross">
+          {feature.limits.map((line) => (
+            <li>
+              <Icon name="circle-x" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="actions start">
+          {feature.guides.map((guide) => (
+            <a class="more" href={guide.href}>{guide.label}<Icon name="chevron-right" /></a>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {
+    comparisons && (
+      <section class="section tight" aria-labelledby="from-title">
+        <div class="container">
+          <h2 class="h3" id="from-title">Migration guides</h2>
+          <ul class="chips gap-top">
+            <li><a class="chip" href="/alternatives/zendesk/">Moving from Zendesk</a></li>
+            <li><a class="chip" href="/alternatives/freshdesk/">Moving from Freshdesk</a></li>
+            <li><a class="chip" href="/alternatives/zoho-desk/">Moving from Zoho Desk</a></li>
+          </ul>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    channels.length > 0 && (
+      <section class="section on-surface" aria-labelledby="channels-title">
+        <div class="container">
+          <h2 class="title reveal" id="channels-title">On these channels</h2>
+          <ul class="grid-3 reveal gap-top">
+            {channels.map((item) => (
+              <li>
+                <a class="card" href={`/channels/${item.slug}/`}>
+                  <span class="disc"><Icon name={item.icon} /></span>
+                  <span class="card-title">{item.en.name}</span>
+                  <p>{item.en.card}</p>
+                  <Icon name="arrow-right" class="card-arrow" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="section tight" aria-labelledby="more-title">
+    <div class="container">
+      <h2 class="h3" id="more-title">More features</h2>
+      <ul class="chips gap-top">
+        {FEATURES.filter((other) => other.slug !== feature.slug).map((other) => (
+          <li><a class="chip" href={`/features/${other.slug}/`}>{other.name}</a></li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <Cta />
+</Base>

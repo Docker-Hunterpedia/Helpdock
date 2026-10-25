@@ -1,0 +1,59 @@
+---
+import { getCollection, render } from 'astro:content';
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import { RELEASES } from '../../data/site.ts';
+import Base from '../../layouts/Base.astro';
+import { compareReleasesDescending } from '../../lib/version.ts';
+
+const releases = (await getCollection('releases')).sort((a, b) =>
+  compareReleasesDescending(a.data.version, b.data.version),
+);
+const rendered = await Promise.all(
+  releases.map(async (release) => ({ release, Content: (await render(release)).Content })),
+);
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Changelog', href: '/changelog/' },
+];
+const formatDate = (date: string) =>
+  new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(date));
+const sourceLabel = { notes: 'Release notes', changes: 'Changes', tag: 'Release' } as const;
+---
+<Base
+  title="Helpdock changelog: every release"
+  description="What changed in each Helpdock release, from the release notes and the per-change list, newest first, with a link to every GitHub release."
+  breadcrumbs={crumbs}
+>
+  <PageHero crumbs={crumbs} eyebrow="Changelog" title="What changed, release by release." lead="From CHANGELOG.md and the per-change list Changesets writes, newest first.">
+    <div class="actions start">
+      <a class="more" href="/changelog/rss.xml"><Icon name="rss" />Subscribe to releases (RSS)</a>
+      <a class="more" href={RELEASES}>All releases on GitHub<Icon name="arrow-up-right" /></a>
+    </div>
+  </PageHero>
+  <div class="container">
+    {
+      rendered.map(({ release, Content }) => (
+        <section class="release" id={`v${release.data.version}`} aria-labelledby={`h-${release.data.version}`}>
+          <div class="release-meta">
+            <h2 id={`h-${release.data.version}`}>
+              <a href={`#v${release.data.version}`}>{release.data.version}</a>
+            </h2>
+            {release.data.date && <time class="muted small" datetime={release.data.date}>{formatDate(release.data.date)}</time>}
+            <span class="caption">{sourceLabel[release.data.source]}</span>
+            <a class="more small" href={`${RELEASES}/tag/v${release.data.version}`}>GitHub release<Icon name="arrow-up-right" /></a>
+          </div>
+          <div class="prose">
+            {release.data.source === 'tag' ? (
+              <p class="muted">
+                This release has no changelog entry. Its notes are on the <a href={`${RELEASES}/tag/v${release.data.version}`}>GitHub release</a>.
+              </p>
+            ) : (
+              <Content />
+            )}
+          </div>
+        </section>
+      ))
+    }
+  </div>
+</Base>

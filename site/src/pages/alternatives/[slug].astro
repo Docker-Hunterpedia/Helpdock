@@ -1,0 +1,132 @@
+---
+import Cta from '../../components/Cta.astro';
+import Faq from '../../components/Faq.astro';
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import { COMPETITORS } from '../../data/competitors.ts';
+import { CUTOVER } from '../../data/migration.ts';
+import Base from '../../layouts/Base.astro';
+import type { Competitor } from '../../lib/competitor-schema.ts';
+import { faqPage } from '../../lib/seo.ts';
+
+export function getStaticPaths() {
+  return COMPETITORS.filter((competitor) => competitor.alternative).map((competitor) => ({
+    params: { slug: competitor.slug },
+    props: { competitor },
+  }));
+}
+
+type Props = { competitor: Competitor };
+const { competitor } = Astro.props;
+const guide = competitor.alternative;
+if (!guide) throw new Error(`${competitor.slug} has no migration guide`);
+const path = `/alternatives/${competitor.slug}/`;
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Compare', href: '/compare/' },
+  { name: `${competitor.name} alternative`, href: path },
+];
+const code = (text: string) =>
+  text.split('`').map((part, index) => ({ part, code: index % 2 === 1 }));
+---
+<Base title={guide.title} description={guide.description} breadcrumbs={crumbs} jsonLd={[faqPage(guide.faq)]}>
+  <PageHero crumbs={crumbs} eyebrow="Migration guide" title={guide.h1} lead={guide.lead}>
+    <div class="actions start">
+      <a class="btn btn-primary" href="/#install">Install Helpdock</a>
+      <a class="more" href={`/compare/helpdock-vs-${competitor.slug}/`}>Helpdock vs {competitor.name}<Icon name="chevron-right" /></a>
+    </div>
+  </PageHero>
+
+  <section class="section tight" aria-labelledby="connect-title">
+    <div class="container split top">
+      <div class="stack-lg">
+        <p class="eyebrow">Step 0</p>
+        <h2 class="headline" id="connect-title">Connect {competitor.name}</h2>
+        <p class="lead">What the importer needs from your {competitor.name} account before the first run.</p>
+      </div>
+      <ul class="ticks">
+        {
+          guide.connect.map((line) => (
+            <li>
+              <Icon name="check" />
+              <span>{code(line).map((piece) => (piece.code ? <code>{piece.part}</code> : piece.part))}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section on-surface" aria-labelledby="maps-title">
+    <div class="container">
+      <div class="block-head reveal">
+        <h2 class="headline" id="maps-title">What maps to what</h2>
+        <p class="lead">The importer proposes these and you confirm each one on the Map step. Tickets get new Helpdock numbers; their {competitor.name} IDs stay searchable.</p>
+      </div>
+      <div class="table-wrap reveal">
+        <table class="data-table">
+          <thead><tr><th scope="col">In {competitor.name}</th><th scope="col">In Helpdock</th></tr></thead>
+          <tbody>
+            {guide.maps.map((row) => (
+              <tr>
+                <th scope="row">{row.from}</th>
+                <td>{row.to}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="stack reveal gap-top-lg">
+        <h3 class="h3">Plan for</h3>
+        <ul class="ticks">
+          {guide.limits.map((line) => (
+            <li>
+              <Icon name="list-checks" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="cutover-title">
+    <div class="container">
+      <div class="block-head reveal">
+        <h2 class="headline" id="cutover-title">The cutover, step by step</h2>
+        <p class="lead">From the importing guide’s runbook. {competitor.name} stays live until the last step.</p>
+      </div>
+      <ol class="steps grid-2 reveal">
+        {CUTOVER.map((step) => (
+          <li>
+            <h3 class="h4">{step.title}</h3>
+            <p>{step.body}</p>
+          </li>
+        ))}
+      </ol>
+      <p class="reveal gap-top-lg">
+        <a class="more" href="/docs/importing/#cutover-runbook">The full runbook in the importing guide<Icon name="chevron-right" /></a>
+      </p>
+    </div>
+  </section>
+
+  <section class="section on-surface" aria-labelledby="rebuild-title">
+    <div class="container">
+      <div class="block-head reveal">
+        <h2 class="headline" id="rebuild-title">What to rebuild by hand</h2>
+        <p class="lead">The importer brings history, not configuration, and it never copies channel credentials or turns on sending.</p>
+      </div>
+      <ul class="lined reveal">
+        {guide.rebuild.map((row) => (
+          <li>
+            <span>{row.from}</span>
+            <a href={row.href}>{row.to}</a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <Faq items={guide.faq} title="Questions, answered." />
+  <Cta />
+</Base>

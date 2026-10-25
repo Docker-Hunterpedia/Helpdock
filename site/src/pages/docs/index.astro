@@ -1,0 +1,58 @@
+---
+import { getCollection } from 'astro:content';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import Icon from '../../components/Icon.astro';
+import { groupGuides } from '../../data/docs.ts';
+import { REPO } from '../../data/site.ts';
+import Base from '../../layouts/Base.astro';
+
+const guides = await getCollection('guides');
+const byId = new Map(guides.map((guide) => [guide.id, guide]));
+const groups = groupGuides(guides.map((guide) => ({ id: guide.id, title: guide.data.title })));
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Docs', href: '/docs/' },
+];
+---
+<Base
+  title="Helpdock documentation"
+  description="The Helpdock guides: install and operate it, run the desk, connect channels, set up the help center and AI, sign-in and security, and the REST API."
+  breadcrumbs={crumbs}
+>
+  <div class="container docs-layout">
+    <DocsNav />
+    <div>
+      <Breadcrumbs crumbs={crumbs} />
+      <h1 class="headline docs-title">Documentation</h1>
+      <p class="lead docs-lead">
+        The guides from the repository’s <code>docs/guides</code>, published as they are on <code>main</code>. Start with the
+        <a href="/docs/install/">install guide</a>.
+      </p>
+      {
+        groups.map((group) => (
+          <section class="docs-group">
+            <h2 class="h3">{group.title}</h2>
+            <ul class="grid-2 gap-top">
+              {group.guides.map((link) => {
+                const guide = byId.get(link.id);
+                return (
+                  <li>
+                    <a class="card compact" href={`/docs/${link.id}/`}>
+                      <span class="card-title">{link.title}</span>
+                      <p class="small">{guide?.data.description}</p>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      }
+      <div class="docs-meta">
+        <a class="more" href={`${REPO}/tree/main/docs/guides`}>The guides on GitHub<Icon name="arrow-up-right" /></a>
+        <a class="more" href={`${REPO}/tree/main/docs/planning`}>Planning documents<Icon name="arrow-up-right" /></a>
+      </div>
+    </div>
+  </div>
+</Base>

@@ -1,5 +1,5 @@
-import { readdir } from 'node:fs/promises';
 import { defineCollection } from 'astro:content';
+import { readdir } from 'node:fs/promises';
 import type { Loader } from 'astro/loaders';
 import { z } from 'astro/zod';
 import { DESCRIPTIONS, UNPUBLISHED } from './data/docs.ts';
@@ -41,7 +41,10 @@ const guidesLoader: Loader = {
 const releasesLoader: Loader = {
   name: 'helpdock-releases',
   async load({ config, store, renderMarkdown }) {
-    const context = { sourceDir: '.', publishedGuides: new Set(await publishedGuides(config.root)) };
+    const context = {
+      sourceDir: '.',
+      publishedGuides: new Set(await publishedGuides(config.root)),
+    };
     const releases = mergeReleases({
       notes: readRepoFile(config.root, 'CHANGELOG.md'),
       changes: readRepoFile(config.root, 'apps/api/CHANGELOG.md'),

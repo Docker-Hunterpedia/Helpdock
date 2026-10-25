@@ -71,7 +71,7 @@ export function classifyChanges(
         affected.add(checkedBy);
         continue;
       }
-      // Documentation and the static website (`site/`, deployed by pages.yml) do
+      // Documentation and the website (`site/`, built, tested and deployed by pages.yml) do
       // not alter runtime contracts; unknown paths fail closed.
       if (path.startsWith('docs/') || path.startsWith('site/') || path.endsWith('.md')) continue;
       if (IMPORT_PATHS.some((pattern) => pattern.test(path))) imports = true;

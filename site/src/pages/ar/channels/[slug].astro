@@ -1,0 +1,11 @@
+---
+import ChannelPage from '../../../components/ChannelPage.astro';
+import { CHANNELS } from '../../../data/channels.ts';
+
+export function getStaticPaths() {
+  return CHANNELS.map((channel) => ({ params: { slug: channel.slug }, props: { channel } }));
+}
+
+const { channel } = Astro.props;
+---
+<ChannelPage channel={channel} locale="ar" />

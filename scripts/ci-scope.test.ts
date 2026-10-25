@@ -50,26 +50,27 @@ describe('CI workspace selection', () => {
       run_image: false,
     });
   });
-  it.each(['site/index.html', 'site/assets/site.css', 'site/assets/img/ticket-view-en.webp'])(
-    'starts no suite for the static website file %s',
-    (path) => {
-      expect(scope(path)).toMatchObject({
-        run_full: false,
-        run_api: false,
-        run_admin: false,
-        run_widget: false,
-        run_unit: false,
-        run_integration: false,
-        run_browser_api: false,
-        run_image: false,
-        run_semgrep: false,
-      });
-    },
-  );
+  it.each([
+    'site/src/pages/index.astro',
+    'site/src/styles/site.css',
+    'site/public/assets/img/ticket-view-en.webp',
+  ])('starts no suite for the static website file %s', (path) => {
+    expect(scope(path)).toMatchObject({
+      run_full: false,
+      run_api: false,
+      run_admin: false,
+      run_widget: false,
+      run_unit: false,
+      run_integration: false,
+      run_browser_api: false,
+      run_image: false,
+      run_semgrep: false,
+    });
+  });
   it('still runs the suites of an app changed beside the website', () => {
     expect(
       classifyChanges(
-        [{ filename: 'site/index.html' }, { filename: 'apps/admin/src/main.tsx' }],
+        [{ filename: 'site/src/pages/index.astro' }, { filename: 'apps/admin/src/main.tsx' }],
         2,
         workspaces,
       ),

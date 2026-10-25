@@ -19,6 +19,8 @@ export default defineConfig({
     shikiConfig: {
       themes: { light: 'github-light', dark: 'github-dark' },
       defaultColor: false,
+      // install.md shows Caddyfiles, a language Shiki does not ship.
+      langAlias: { caddyfile: 'txt' },
     },
   },
   integrations: [

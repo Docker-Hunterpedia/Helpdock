@@ -1,4 +1,5 @@
 import { AUTHOR, REPO, SITE_URL } from '../data/site.ts';
+import { plainText } from './inline-links.ts';
 
 export type Crumb = { name: string; href: string };
 export type Qa = { q: string; a: string };
@@ -18,7 +19,7 @@ export function breadcrumbList(crumbs: Crumb[]) {
   };
 }
 
-/** Answers are plain text: any markup a page shows beside them stays out of the JSON-LD. */
+/** Links in an answer become plain text: the JSON-LD carries no markup. */
 export function faqPage(items: Qa[]) {
   return {
     '@context': 'https://schema.org',
@@ -26,7 +27,7 @@ export function faqPage(items: Qa[]) {
     mainEntity: items.map((item) => ({
       '@type': 'Question',
       name: item.q,
-      acceptedAnswer: { '@type': 'Answer', text: item.a },
+      acceptedAnswer: { '@type': 'Answer', text: plainText(item.a) },
     })),
   };
 }

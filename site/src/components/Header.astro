@@ -9,7 +9,8 @@ const { locale, languageHref } = Astro.props;
 const chrome = CHROME[locale];
 const home = locale === 'ar' ? '/ar/' : '/';
 const current = Astro.url.pathname;
-const isCurrent = (href: string) => !href.includes('#') && href !== home && current.startsWith(href);
+const isCurrent = (href: string) =>
+  !href.includes('#') && href !== home && current.startsWith(href);
 const installHref = `${home}#install`;
 ---
 <header class="site-header">

@@ -10,42 +10,48 @@
   font-weight: 400;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "IBM Plex Sans";
   font-weight: 500;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "IBM Plex Sans";
   font-weight: 600;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2190-2193, U+2212, U+2215, U+2318, U+21E7, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "IBM Plex Sans Arabic";
   font-weight: 400;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2") format("woff2");
-  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
 }
 @font-face {
   font-family: "IBM Plex Sans Arabic";
   font-weight: 500;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2") format("woff2");
-  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
 }
 @font-face {
   font-family: "IBM Plex Sans Arabic";
   font-weight: 600;
   font-display: swap;
   src: url("/assets/fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2") format("woff2");
-  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+  unicode-range:
+    U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
 }
 @font-face {
   font-family: "IBM Plex Mono";
@@ -270,10 +276,31 @@ kbd {
   color: var(--text-primary);
 }
 
+/* A <use> of the sprite inherits from here, not from the sprite's root <svg>. */
 .icon {
   inline-size: 16px;
   block-size: 16px;
   flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav ul,
+.menu-panel ul,
+.site-footer ul,
+.docs-nav ul,
+.toc ul,
+.crumbs ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.display .line {
+  display: block;
 }
 
 [dir="rtl"] .icon.flip {
@@ -386,6 +413,13 @@ kbd {
   gap: 16px;
 }
 
+/* A card fills its cell, so a row of cards shares one height. */
+.grid-2 > li,
+.grid-3 > li,
+.grid-4 > li {
+  display: grid;
+}
+
 @media (min-width: 640px) {
   .grid-2,
   .grid-3,
@@ -411,6 +445,11 @@ kbd {
   font-weight: 600;
   letter-spacing: -0.035em;
   text-wrap: balance;
+}
+
+.display.page-title {
+  font-size: clamp(36px, 3vw + 20px, 60px);
+  line-height: 1.06;
 }
 
 .headline {
@@ -498,6 +537,14 @@ kbd {
 
 .center {
   text-align: center;
+}
+
+.gap-top {
+  margin-block-start: 16px;
+}
+
+.gap-top-lg {
+  margin-block-start: 32px;
 }
 
 p {
@@ -609,6 +656,13 @@ p {
 
 .hide-sm {
   display: none;
+}
+
+/* The menu carries Install too; on the narrowest phones the header keeps room for the theme switch. */
+@media (max-width: 479px) {
+  .header-actions > .btn {
+    display: none;
+  }
 }
 
 @media (min-width: 960px) {
@@ -788,18 +842,6 @@ p {
   transition: transform var(--fast) ease-out;
 }
 
-.more:hover .icon {
-  transform: translateX(2px);
-}
-
-[dir="rtl"] .more .icon {
-  transform: scaleX(-1);
-}
-
-[dir="rtl"] .more:hover .icon {
-  transform: scaleX(-1) translateX(2px);
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -884,10 +926,6 @@ p {
   font-weight: 600;
 }
 
-[dir="rtl"] .pill-link .icon {
-  transform: scaleX(-1);
-}
-
 .fineprint-row {
   display: flex;
   flex-wrap: wrap;
@@ -919,7 +957,7 @@ p {
 .frame img {
   inline-size: 100%;
   border: 1px solid var(--border-default);
-  border-radius: 14px;
+  border-radius: 6px;
 }
 
 .frame .shot-ar {
@@ -1015,15 +1053,6 @@ a.card:hover {
   color: var(--text-secondary);
   opacity: 0;
   transition: opacity var(--fast) ease-out;
-}
-
-a.card:hover .card-arrow,
-a.card:focus-visible .card-arrow {
-  opacity: 1;
-}
-
-[dir="rtl"] .card-arrow {
-  transform: scaleX(-1);
 }
 
 .disc {
@@ -1136,6 +1165,47 @@ a.card:focus-visible .card-arrow {
   line-height: 20px;
 }
 
+a.chip {
+  display: inline-flex;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: border-color var(--fast) ease-out;
+}
+
+a.chip:hover {
+  border-color: var(--text-secondary);
+}
+
+.chip:has(.chip-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.chip-icon .icon {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.callout-block {
+  display: grid;
+  gap: 24px;
+  padding: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--bg-surface);
+}
+
+.steps .step-text {
+  padding-block-start: 4px;
+  color: var(--text-primary);
+}
+
 /* Lists */
 
 .ticks {
@@ -1152,10 +1222,6 @@ a.card:focus-visible .card-arrow {
 .ticks .icon {
   margin-block-start: 4px;
   color: var(--accent);
-}
-
-.ticks.cross .icon {
-  color: var(--text-secondary);
 }
 
 .points {
@@ -1192,6 +1258,42 @@ a.card:focus-visible .card-arrow {
   color: var(--text-secondary);
 }
 
+.facts {
+  display: grid;
+  gap: 20px;
+}
+
+.facts li {
+  display: grid;
+  gap: 4px;
+  padding-inline-start: 16px;
+  border-inline-start: 2px solid var(--accent-soft);
+}
+
+.facts span {
+  color: var(--text-secondary);
+}
+
+.stage {
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background:
+    radial-gradient(60% 60% at 50% 40%, var(--accent-tint), transparent 70%), var(--bg-surface);
+}
+
+.stage img {
+  inline-size: min(320px, 100%);
+  border-radius: 14px;
+  box-shadow: var(--shadow-3);
+}
+
+.on-dark {
+  color: var(--text-primary);
+}
+
 /* Figures */
 
 .figures {
@@ -1215,6 +1317,7 @@ a.card:focus-visible .card-arrow {
 
 .figure-row > div {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 
@@ -1382,19 +1485,9 @@ a.card:focus-visible .card-arrow {
   display: none;
 }
 
-.qa summary .icon {
+.qa .icon {
   color: var(--text-secondary);
   transition: transform var(--panel) var(--ease);
-}
-
-.qa details[open] summary .icon {
-  transform: rotate(45deg);
-}
-
-.qa details p {
-  padding-block-end: 24px;
-  max-inline-size: 680px;
-  color: var(--text-secondary);
 }
 
 .qa-more {
@@ -1424,8 +1517,12 @@ a.card:focus-visible .card-arrow {
   }
 }
 
-.page-hero .stack-lg {
+.page-hero .container > .stack-lg {
   max-inline-size: 800px;
+}
+
+.measure {
+  max-inline-size: 760px;
 }
 
 .crumbs ol {
@@ -1441,11 +1538,6 @@ a.card:focus-visible .card-arrow {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-.crumbs li + li::before {
-  content: "/";
-  color: var(--border-strong);
 }
 
 .crumbs a {
@@ -1498,7 +1590,7 @@ a.card:focus-visible .card-arrow {
 }
 
 .lined p,
-.lined li > span {
+.lined span {
   color: var(--text-secondary);
 }
 
@@ -1559,30 +1651,6 @@ a.card:focus-visible .card-arrow {
   vertical-align: top;
 }
 
-.data-table tr:last-child > * {
-  border-block-end: 0;
-}
-
-.data-table thead th {
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-:lang(ar) .data-table thead th {
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.data-table tbody th {
-  font-weight: 600;
-  min-inline-size: 120px;
-}
-
 .data-table td.us {
   background: var(--accent-tint);
 }
@@ -1628,8 +1696,7 @@ a.card:focus-visible .card-arrow {
   border: 1px solid var(--border-default);
   border-radius: 14px;
   background:
-    radial-gradient(70% 100% at 50% 0%, var(--accent-tint), transparent 70%),
-    var(--bg-surface);
+    radial-gradient(70% 100% at 50% 0%, var(--accent-tint), transparent 70%), var(--bg-surface);
   text-align: center;
 }
 
@@ -1755,7 +1822,7 @@ a.card:focus-visible .card-arrow {
 }
 
 .spec dd {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 20px;
@@ -1777,7 +1844,7 @@ a.card:focus-visible .card-arrow {
 
 .poster img {
   inline-size: 100%;
-  transition: transform 640ms var(--ease);
+  transition: transform var(--reveal) var(--ease);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1873,16 +1940,6 @@ a.card:focus-visible .card-arrow {
   list-style: none;
 }
 
-.site-footer nav a {
-  color: var(--text-secondary);
-  text-decoration: none;
-}
-
-.site-footer nav a:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
-}
-
 .footer-bottom {
   display: flex;
   flex-wrap: wrap;
@@ -1919,6 +1976,13 @@ a.card:focus-visible .card-arrow {
   .docs-layout {
     grid-template-columns: 220px minmax(0, 1fr) 200px;
   }
+}
+
+/* Grid items may shrink below their content, so a wide table or code block scrolls inside. */
+.docs-layout > *,
+.release > *,
+.split > * {
+  min-inline-size: 0;
 }
 
 .docs-nav {
@@ -2028,8 +2092,22 @@ a.card:focus-visible .card-arrow {
   color: var(--text-primary);
 }
 
-.toc .depth-3 a {
-  padding-inline-start: 24px;
+.docs-title {
+  margin-block: 16px 32px;
+}
+
+.docs-lead {
+  max-inline-size: 760px;
+  margin-block-end: 48px;
+}
+
+.docs-group + .docs-group {
+  margin-block-start: 48px;
+}
+
+.card.compact {
+  gap: 4px;
+  padding: 16px 20px;
 }
 
 .docs-meta {
@@ -2107,7 +2185,7 @@ a.card:focus-visible .card-arrow {
   overflow-x: auto;
   border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: var(--bg-surface) !important;
+  background: var(--bg-surface);
   font-size: 13px;
   line-height: 20px;
   direction: ltr;
@@ -2272,12 +2350,12 @@ a.card:focus-visible .card-arrow {
   }
 }
 
+/* Every transition reads these, and the entrance animations only run without reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0ms !important;
-    transition-duration: 0ms !important;
+  :root {
+    --fast: 0ms;
+    --panel: 0ms;
+    --reveal: 0ms;
   }
 }
 
@@ -2289,4 +2367,91 @@ a.card:focus-visible .card-arrow {
   .btn {
     border-color: ButtonText;
   }
+}
+
+/*
+  Rules that refine an element by direction, state or a parent. They come last,
+  in rising specificity, so no simpler rule after them reads as if it should win.
+*/
+
+.ticks.cross .icon {
+  color: var(--text-secondary);
+}
+
+.more:hover .icon {
+  transform: translateX(2px);
+}
+
+[dir="rtl"] .more .icon {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .pill-link .icon {
+  transform: scaleX(-1);
+}
+
+.qa details[open] .icon {
+  transform: rotate(45deg);
+}
+
+[dir="rtl"] .more:hover .icon {
+  transform: scaleX(-1) translateX(2px);
+}
+
+[dir="rtl"] .card-arrow {
+  transform: scaleX(-1);
+}
+
+a.card:hover .card-arrow,
+a.card:focus-visible .card-arrow {
+  opacity: 1;
+}
+
+.data-table thead th {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.data-table tbody th {
+  font-weight: 600;
+  min-inline-size: 120px;
+}
+
+:lang(ar) .data-table thead th {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.data-table tr:last-child > * {
+  border-block-end: 0;
+}
+
+.crumbs li + li::before {
+  content: "/";
+  color: var(--border-strong);
+}
+
+.site-footer nav a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.site-footer nav a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.toc .depth-3 a {
+  padding-inline-start: 24px;
+}
+
+.qa details p {
+  padding-block-end: 24px;
+  max-inline-size: 680px;
+  color: var(--text-secondary);
 }

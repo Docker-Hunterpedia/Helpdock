@@ -94,7 +94,8 @@ export const CHROME: Record<Locale, Chrome> = {
         },
       ],
       by: 'Developed by',
-      licence: 'Free software under the GNU AGPL-3.0. Product names are trademarks of their owners.',
+      licence:
+        'Free software under the GNU AGPL-3.0. Product names are trademarks of their owners.',
     },
     breadcrumb: 'Breadcrumb',
   },

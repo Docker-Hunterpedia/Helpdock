@@ -1,0 +1,35 @@
+---
+import { SITE_URL } from '../data/site.ts';
+import Icon from './Icon.astro';
+
+type Props = { slug: string; title: string };
+const { slug, title } = Astro.props;
+const markdown = `/docs/${slug}.md`;
+// Only the reader's own click leaves the site; nothing here loads from these services.
+const prompt = encodeURIComponent(
+  `Read ${SITE_URL}${markdown} and answer questions about Helpdock's ${title}.`,
+);
+---
+<details class="doc-actions" data-pagefind-ignore>
+  <summary class="btn btn-secondary btn-sm">
+    <Icon name="sparkles" />Use with AI<Icon name="chevron-down" class="doc-actions-chevron" />
+  </summary>
+  <ul class="doc-actions-menu">
+    <li>
+      <button type="button" data-copy-url={markdown} data-done="Copied" data-failed="Copy failed" hidden>
+        <Icon name="copy" /><span data-label aria-live="polite">Copy page as Markdown</span>
+      </button>
+    </li>
+    <li><a href={markdown}><Icon name="file-text" />View as Markdown</a></li>
+    <li>
+      <a href={`https://claude.ai/new?q=${prompt}`} target="_blank" rel="noopener noreferrer">
+        <Icon name="external-link" />Open in Claude
+      </a>
+    </li>
+    <li>
+      <a href={`https://chatgpt.com/?q=${prompt}`} target="_blank" rel="noopener noreferrer">
+        <Icon name="external-link" />Open in ChatGPT
+      </a>
+    </li>
+  </ul>
+</details>

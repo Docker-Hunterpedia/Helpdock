@@ -29,7 +29,7 @@ const crumbs = [
 const code = (text: string) =>
   text.split('`').map((part, index) => ({ part, code: index % 2 === 1 }));
 ---
-<Base title={guide.title} description={guide.description} breadcrumbs={crumbs} jsonLd={[faqPage(guide.faq)]}>
+<Base indexed title={guide.title} description={guide.description} breadcrumbs={crumbs} jsonLd={[faqPage(guide.faq)]}>
   <PageHero crumbs={crumbs} eyebrow="Migration guide" title={guide.h1} lead={guide.lead}>
     <div class="actions start">
       <a class="btn btn-primary" href="/#install">Install Helpdock</a>

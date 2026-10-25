@@ -21,7 +21,7 @@ const crumbs = [
 const channels = feature.channels.flatMap((slug) => findChannel(slug) ?? []);
 const comparisons = feature.slug === 'importers';
 ---
-<Base title={feature.title} description={feature.description} breadcrumbs={crumbs}>
+<Base indexed title={feature.title} description={feature.description} breadcrumbs={crumbs}>
   <PageHero crumbs={crumbs} eyebrow="Feature" title={feature.name} lead={feature.lead}>
     <ul class="chips">
       {feature.guides.map((guide) => (
@@ -106,7 +106,7 @@ const comparisons = feature.slug === 'importers';
     )
   }
 
-  <section class="section tight" aria-labelledby="more-title">
+  <section class="section tight" aria-labelledby="more-title" data-pagefind-ignore>
     <div class="container">
       <h2 class="h3" id="more-title">More features</h2>
       <ul class="chips gap-top">

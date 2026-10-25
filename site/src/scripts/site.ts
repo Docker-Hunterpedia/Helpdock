@@ -1,22 +1,40 @@
 // Progressive touches only: every page reads and works without this script.
 
 // Copy buttons: `data-copy` names an element whose text is copied (the install
-// commands), `data-copy-text` carries the text itself (a release's link).
+// commands), `data-copy-text` carries the text itself (a release's link), and
+// `data-copy-url` names a same-origin file to copy (a guide's Markdown).
 // Without script they stay hidden and the text remains selectable.
-const copyable = (button: HTMLButtonElement) =>
-  button.dataset.copyText ?? document.getElementById(button.dataset.copy ?? '')?.innerText.trim();
+async function copyFrom(button: HTMLButtonElement): Promise<void> {
+  const { copy, copyText, copyUrl } = button.dataset;
+  if (copyUrl) {
+    const text = fetch(copyUrl).then(async (response) => {
+      if (!response.ok) throw new Error(`${copyUrl} answered ${response.status}`);
+      // The clipboard takes a blob only when its type matches the key it is filed under.
+      return new Blob([await response.text()], { type: 'text/plain' });
+    });
+    // A ClipboardItem keeps the click's permission while the file loads (Safari).
+    if ('ClipboardItem' in window) {
+      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text })]);
+    } else {
+      await navigator.clipboard.writeText(await (await text).text());
+    }
+    return;
+  }
+  const source = copyText ?? document.getElementById(copy ?? '')?.innerText.trim();
+  if (source === undefined) throw new Error('nothing to copy');
+  await navigator.clipboard.writeText(source);
+}
 
 for (const button of document.querySelectorAll<HTMLButtonElement>(
-  '[data-copy], [data-copy-text]',
+  '[data-copy], [data-copy-text], [data-copy-url]',
 )) {
-  const text = copyable(button);
   const label = button.querySelector('[data-label]');
-  if (!text || !label || !navigator.clipboard) continue;
+  if (!label || !navigator.clipboard) continue;
   const idle = label.textContent;
   button.hidden = false;
   button.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyFrom(button);
       label.textContent = button.dataset.done ?? idle;
     } catch {
       label.textContent = button.dataset.failed ?? idle;
@@ -27,7 +45,21 @@ for (const button of document.querySelectorAll<HTMLButtonElement>(
   });
 }
 
-// Close the small-screen menu after one of its links is followed.
+// Disclosure menus (the phone menu, a guide's AI actions) close on Escape and
+// on a click elsewhere, and the phone menu after one of its links is followed.
+const menus = document.querySelectorAll<HTMLDetailsElement>('details.menu, details.doc-actions');
+for (const menu of menus) {
+  menu.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !menu.open) return;
+    menu.open = false;
+    menu.querySelector('summary')?.focus();
+  });
+}
+document.addEventListener('click', (event) => {
+  for (const menu of menus) {
+    if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+  }
+});
 for (const link of document.querySelectorAll('.menu-panel a')) {
   link.addEventListener('click', () => link.closest('details')?.removeAttribute('open'));
 }

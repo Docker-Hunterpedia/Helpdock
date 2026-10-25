@@ -7,7 +7,7 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "test": "vitest run --config ../vitest.config.ts --project @helpdock/website",
     "e2e": "playwright test"
@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "pagefind": "1.5.2"
   }
 }

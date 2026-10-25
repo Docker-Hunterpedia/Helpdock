@@ -1,13 +1,17 @@
 ---
 import { getCollection } from 'astro:content';
 import { groupGuides } from '../data/docs.ts';
+import Icon from './Icon.astro';
 
 type Props = { current?: string };
 const { current } = Astro.props;
 const guides = await getCollection('guides');
 const groups = groupGuides(guides.map((guide) => ({ id: guide.id, title: guide.data.title })));
 ---
-<nav class="docs-nav" aria-label="Guides">
+<nav class="docs-nav" aria-label="Guides" data-pagefind-ignore>
+  <button type="button" class="search-trigger wide" data-search-open>
+    <Icon name="search" /><span class="search-trigger-label">Search the docs</span><kbd class="search-trigger-key">/</kbd>
+  </button>
   <details open>
     <summary>All guides</summary>
     <div class="sticky">

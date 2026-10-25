@@ -56,6 +56,7 @@ const crumbs = [
 const related = channel.related.flatMap((slug) => feature(slug) ?? []);
 ---
 <Base
+  indexed
   title={copy.title}
   description={copy.description}
   locale={locale}
@@ -141,7 +142,7 @@ const related = channel.related.flatMap((slug) => feature(slug) ?? []);
     )
   }
 
-  <section class="section tight" aria-labelledby="others-title">
+  <section class="section tight" aria-labelledby="others-title" data-pagefind-ignore>
     <div class="container">
       <h2 class="h3" id="others-title">{t.others}</h2>
       <ul class="chips gap-top">

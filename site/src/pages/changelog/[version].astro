@@ -34,7 +34,7 @@ const description =
     ? `Helpdock ${release.version}${release.date ? `, released ${release.date}` : ''}: ${[...new Set(groups)].join(', ')}, with every change and its pull request.`
     : `Helpdock ${release.version}${release.date ? `, released ${release.date}` : ''}, and where to read its notes.`;
 ---
-<Base title={`Helpdock ${release.version} release notes`} description={description} ogType="article" breadcrumbs={crumbs}>
+<Base indexed title={`Helpdock ${release.version} release notes`} description={description} ogType="article" breadcrumbs={crumbs}>
   <PageHero crumbs={crumbs} eyebrow="Release notes" title={`Helpdock ${release.version}`} lead={entry.latest ? 'The latest release.' : `A ${entry.step} release.`} />
   <div class="container">
     <ol class="timeline single">

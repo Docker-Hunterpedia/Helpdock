@@ -9,11 +9,13 @@ This guide is for whoever maintains the site, so the site does not publish it.
 A static [Astro](https://astro.build) site in [`site/`](../../site/), the
 private workspace package `@helpdock/website`
 ([ADR 0058](../decisions/0058-astro-for-the-product-website.md)). Its only
-dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss` (Playwright and
-axe are its test tools); there is no UI framework and no CSS framework. Nothing
-on it calls a third party: fonts, icons and images are served from the site
-itself, and there is no analytics or tracking. The `dev`, `build` and `preview`
-scripts also turn off Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
+dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`, with `pagefind`
+to index it at build time (Playwright and axe are its test tools); there is no UI
+framework and no CSS framework. Nothing on it calls a third party: fonts, icons,
+images and the search index are served from the site itself, and there is no
+analytics or tracking. Only a reader's own click on "Open in Claude" or "Open in
+ChatGPT" leaves the site. The `dev`, `build` and `preview` scripts also turn off
+Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 
 | Path | What it is |
 |---|---|
@@ -21,11 +23,12 @@ scripts also turn off Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 | `site/src/pages/` | One file per route; `[slug].astro` files generate a page per item of a data file |
 | `site/src/data/` | The words: `home.ts`, `competitors.ts`, `channels.ts`, `features.ts`, `migration.ts`, `docs.ts` (the docs sidebar) and `site.ts` (header, footer, links) |
 | `site/src/content.config.ts` | Two collections: the guides, read from `docs/guides/`, and the releases, read from the changelogs |
-| `site/src/lib/` | Pure helpers with their tests: the release number, the link rewriter, the changelog parser, guide titles and summaries, the competitor schema, JSON-LD |
+| `site/src/lib/` | Pure helpers with their tests: the release number, the link rewriters, the changelog and release-notes parsers, guide titles and summaries, the competitor schema, the star count, the zip writer, the agent skill and llms.txt, JSON-LD |
 | `site/src/layouts/Base.astro` | The one page shell: the head tags, the header, the footer |
 | `site/src/components/` | Shared parts and the page templates shared by English and Arabic |
 | `site/src/styles/site.css` | Every style, light and dark |
-| `site/src/scripts/site.ts` | Copy buttons and the scroll reveal; every page works without it |
+| `site/src/scripts/site.ts` | Copy buttons, the menus' Escape key and the scroll reveal; every page works without it |
+| `site/src/scripts/search.ts` | The search dialog over Pagefind's index |
 | `site/public/` | Copied as is: `CNAME`, `robots.txt`, the favicon, the icon sprite, the fonts and the images |
 | `site/e2e/` | Playwright smoke tests of the built site |
 
@@ -38,8 +41,11 @@ scripts also turn off Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 | `/alternatives/<x>/` | The `alternative` part of a competitor, only for the three with an importer, and `data/migration.ts` |
 | `/channels/<x>/`, `/ar/channels/<x>/` | `data/channels.ts`, English and Arabic |
 | `/features/<x>/` | `data/features.ts`, English only |
-| `/docs/<guide>/` | `docs/guides/<guide>.md`, English only |
-| `/changelog/`, `/changelog/rss.xml` | `CHANGELOG.md`, `apps/api/CHANGELOG.md` and the release tags |
+| `/docs/<guide>/`, `/docs/<guide>.md` | `docs/guides/<guide>.md`, English only; the `.md` is the guide with absolute links |
+| `/changelog/`, `/changelog/<version>/`, `/changelog/rss.xml` | `CHANGELOG.md`, `apps/api/CHANGELOG.md` and the release tags |
+| `/llms.txt`, `/llms-full.txt` | The guides, for AI tools ([llmstxt.org](https://llmstxt.org)) |
+| `/downloads/helpdock-docs-<version>.zip`, `/downloads/helpdock-skill-<version>.zip` | The guides, and the `helpdock` Agent Skill; each also as `-latest.zip` |
+| `/skill/helpdock/SKILL.md`, `/skill/helpdock/references/<guide>.md` | The same skill, unzipped |
 | `/compare/`, `/channels/`, `/features/`, `/docs/` | Index pages over the same data |
 | `/404.html` | `pages/404.astro`, which GitHub Pages serves for an unknown path |
 
@@ -120,12 +126,29 @@ the page's only `h1`.
 
 ## The changelog
 
-`/changelog/` lists every release up to the one the site shows, newest first.
-A release's section of `CHANGELOG.md` is used when it has one; otherwise its
-section of `apps/api/CHANGELOG.md`, the list Changesets writes; a release tag
-with neither gets an entry pointing at its GitHub Release. Dates come from the
-`CHANGELOG.md` heading or the tag (the Pages workflow fetches tags). The RSS
-feed at `/changelog/rss.xml` carries the same entries.
+`/changelog/` is a timeline of every release up to the one the site shows,
+newest first. A release's section of `CHANGELOG.md` is used when it has one;
+otherwise its section of `apps/api/CHANGELOG.md`, the list Changesets writes,
+which `CHANGELOG.md` lacks for the 1.0.x patches, 1.1 and 1.2; a release tag
+with neither gets an entry pointing at its GitHub Release. Nothing is copied:
+both files are parsed at build time (`src/lib/changelog.ts`,
+`src/lib/release-notes.ts`). Dates come from the `CHANGELOG.md` heading or the
+tag (the Pages workflow fetches tags).
+
+Each release becomes its intro and its `###` groups. A group gets an icon and a
+label by its heading ("New" or a milestone, "Fixes", "Upgrading", "Known
+limits", "Before the release", or a list icon for anything else), and "Known
+limits", "Known gaps" and "Before the release" fold in a native `<details>`.
+An item's bold opening sentence becomes its title; a Changesets entry that
+opens with a name and a colon gets that name as its title. Pull request links
+that close a paragraph become chips. The rail shows the version, the date and
+"Latest" or the semver step from the release before.
+
+The index shows the newest release in full and the older ones as their intro
+and group names, each linking to `/changelog/<version>/`: one page per release,
+with its canonical URL and links to the releases on either side, which is also
+what the RSS feed at `/changelog/rss.xml` links to. That keeps the index
+scannable and each release's notes at one address.
 
 ## The release number
 
@@ -167,6 +190,53 @@ and the links read as they would without one. A local build has no
 `HELPDOCK_STARS` and never calls the network, so it shows no count; set the
 variable by hand to see one.
 
+## Search
+
+The header and the docs sidebar open a search dialog (also `⌘K`, `Ctrl+K` or
+`/`). The build runs [Pagefind](https://pagefind.app) (`pagefind --site dist`)
+after Astro, which writes a static index to `dist/pagefind/`; the dialog
+(`src/scripts/search.ts`) loads Pagefind's script from there on its first open,
+never before. It indexes the docs, features, channels, comparisons, migration
+guides and release pages, the pages whose `Base` gets `indexed`, and skips what
+carries `data-pagefind-ignore` (breadcrumbs, sidebars, calls to action, lists of
+other pages). Arabic pages are indexed under `lang="ar"`, so a search from an
+Arabic page finds Arabic pages. Results show the title, the section and the
+excerpt with its matches; arrow keys move, Enter opens, Escape closes and
+returns focus. In `pnpm dev` there is no index, and the dialog says search works
+on the built site.
+
+## Docs for AI tools and offline reading
+
+- **On every guide**, a "Use with AI" menu copies the page as Markdown, opens
+  `/docs/<guide>.md`, or opens Claude or ChatGPT with a prompt to read that
+  URL. Nothing loads from those services; only the reader's click goes there.
+- **`/llms.txt`** lists every guide's Markdown in the [llmstxt.org](https://llmstxt.org)
+  format, and **`/llms-full.txt`** holds them all in one file, each with its
+  source URL.
+- **`/downloads/helpdock-docs-<version>.zip`** holds every guide and a
+  `README.md` index; **`/downloads/helpdock-skill-<version>.zip`** holds the
+  `helpdock` Agent Skill, a `helpdock/` folder to drop into `.claude/skills/`:
+  a `SKILL.md` (when to use it, the release it documents, a task map, the
+  install and upgrade commands and the API essentials, all from the guides) and
+  the guides under `references/`. Each also exists as `-latest.zip`, and the
+  skill is served unzipped under `/skill/helpdock/`. `src/lib/zip.ts` writes the
+  archives with Node's `zlib`, so they need no dependency; `src/lib/skill.ts`
+  fails the build if its task map names a guide that is not published.
+- In every one of these, links are absolute (`src/lib/links.ts`,
+  `rewriteMarkdownLinks`), so a file reads correctly wherever it is copied.
+
+## Where the docs come from
+
+The deployed site takes `docs/guides/`, `CHANGELOG.md` and
+`apps/api/CHANGELOG.md` from the latest release's tag, not from `main`: the
+Pages workflow checks those paths out of `v<version>` after it looks the release
+up. The docs pages, the Markdown copies, the downloads, the skill and the
+changelog therefore always describe the released version. A guide edited on
+`main` reaches the site with the next release, when `release.yml` dispatches the
+Pages workflow, so a push that only changes docs does not redeploy. A pull
+request builds with its own docs, so a docs change can be previewed, and a
+local build uses the working tree.
+
 ## Design
 
 The colours, families, spacing, radii, elevation and motion are the tokens of
@@ -202,7 +272,7 @@ Convert a PNG with `cwebp -q 88 -m 6 in.png -o out.webp`, and give every
 ## Tests
 
 ```bash
-pnpm --filter @helpdock/website test    # Vitest: version, links, changelog, guides, competitor schema
+pnpm --filter @helpdock/website test    # Vitest: the helpers in src/lib
 pnpm --filter @helpdock/website build
 pnpm --filter @helpdock/website e2e     # Playwright on site/dist
 ```
@@ -210,21 +280,22 @@ pnpm --filter @helpdock/website e2e     # Playwright on site/dist
 The Playwright suite checks the theme switch (a stored choice survives a
 reload, System clears it, blocked storage breaks nothing), that the Arabic home
 is right to left with its `hreflang`, that no page loads anything from another
-origin, and axe on both home pages in both themes. It serves `site/dist` with
-Python's static server, so build first.
+origin, axe on both home pages in both themes, search ("telegram" from the
+keyboard, an empty result, focus back on Escape) and the docs AI menu. It
+serves `site/dist` with Python's static server, so build first.
 
 ## Deployment
 
 [`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) installs the
-workspace with pnpm, runs the site's unit tests, looks up the release number
-and the star count, builds the site, runs the smoke tests and uploads
-`site/dist` with `actions/upload-pages-artifact`; `actions/deploy-pages`
-publishes it. It runs on every push to `main` that changes `site/**`,
-`docs/guides/**`, either changelog, `apps/api/package.json`, the lockfile or the
-workflow; on demand from **Actions › Pages › Run workflow**; after each stable
-release; and daily at 04:17 UTC. A pull
-request that touches those paths runs the same build and tests without
-deploying. The build job's token reads the repository and the Releases API
+workspace with pnpm, runs the site's unit tests, looks up the release number,
+takes the docs and changelogs from its tag, looks up the star count, builds the
+site and its search index, runs the smoke tests and uploads `site/dist` with
+`actions/upload-pages-artifact`; `actions/deploy-pages` publishes it. It runs on
+every push to `main` that changes `site/**`, the lockfile or the workflow; on
+demand from **Actions › Pages › Run workflow**; after each stable release; and
+daily at 04:17 UTC. A pull request that touches the site, the guides, either
+changelog, `apps/api/package.json`, the lockfile or the workflow runs the same
+build and tests without deploying. The build job's token reads the repository and the Releases API
 only; the deploy job's can only write Pages and request an OIDC token.
 
 CI's path classifier, [`scripts/ci-scope.ts`](../../scripts/ci-scope.ts),

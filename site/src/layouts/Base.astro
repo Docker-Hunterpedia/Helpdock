@@ -1,6 +1,7 @@
 ---
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
+import SearchDialog from '../components/SearchDialog.astro';
 import { CHROME, type Locale } from '../data/site.ts';
 import { absolute, breadcrumbList, type Crumb, jsonLdText } from '../lib/seo.ts';
 import '../styles/site.css';
@@ -16,6 +17,8 @@ type Props = {
   breadcrumbs?: Crumb[];
   jsonLd?: unknown[];
   noindex?: boolean;
+  /** Whether site search indexes this page's main content. */
+  indexed?: boolean;
 };
 
 const {
@@ -28,6 +31,7 @@ const {
   breadcrumbs,
   jsonLd = [],
   noindex = false,
+  indexed = false,
 } = Astro.props;
 
 const chrome = CHROME[locale];
@@ -97,12 +101,14 @@ const fonts =
   <body>
     <a class="skip-link" href="#main">{chrome.skip}</a>
     <Header locale={locale} languageHref={languageHref} />
-    <main id="main" tabindex="-1">
+    <main id="main" tabindex="-1" data-pagefind-body={indexed ? "" : undefined}>
       <slot />
     </main>
     <Footer locale={locale} languageHref={languageHref} />
+    <SearchDialog locale={locale} />
     <script>
       import '../scripts/site.ts';
+      import '../scripts/search.ts';
     </script>
   </body>
 </html>

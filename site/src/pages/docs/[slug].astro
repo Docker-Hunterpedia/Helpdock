@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from 'astro:content';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import DocActions from '../../components/DocActions.astro';
 import DocsNav from '../../components/DocsNav.astro';
 import Icon from '../../components/Icon.astro';
 import { REPO } from '../../data/site.ts';
@@ -23,6 +24,7 @@ const crumbs = [
 ];
 ---
 <Base
+  indexed
   title={`${guide.data.title} · Helpdock docs`}
   description={guide.data.description}
   ogType="article"
@@ -33,18 +35,21 @@ const crumbs = [
     <DocsNav current={guide.id} />
     <article>
       <Breadcrumbs crumbs={crumbs} />
-      <h1 class="headline docs-title">{guide.data.title}</h1>
+      <div class="docs-head">
+        <h1 class="headline docs-title">{guide.data.title}</h1>
+        <DocActions slug={guide.id} title={guide.data.title} />
+      </div>
       <div class="prose">
         <Content />
       </div>
-      <div class="docs-meta">
+      <div class="docs-meta" data-pagefind-ignore>
         <a class="more" href={`${REPO}/edit/main/${guide.data.path}`}>Edit this page on GitHub<Icon name="arrow-up-right" /></a>
         <a class="more" href={`${REPO}/blob/main/${guide.data.path}`}>View the Markdown source<Icon name="arrow-up-right" /></a>
       </div>
     </article>
     {
       toc.length > 1 && (
-        <nav class="toc" aria-labelledby="toc-title">
+        <nav class="toc" aria-labelledby="toc-title" data-pagefind-ignore>
           <div class="sticky">
             <h2 id="toc-title">On this page</h2>
             <ul>

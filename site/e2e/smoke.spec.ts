@@ -55,6 +55,49 @@ test.describe('theme switch', () => {
   });
 });
 
+test.describe('search', () => {
+  test('finds a guide from the keyboard and opens it', async ({ page }) => {
+    await page.goto('/docs/');
+    await page.keyboard.press('/');
+    const dialog = page.getByRole('dialog', { name: 'Search' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('combobox', { name: 'Search' }).fill('telegram');
+    const first = dialog.getByRole('option').first();
+    await expect(first).toContainText(/telegram/i);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/(docs|channels)\/[^/]*telegram/);
+  });
+
+  test('says so when nothing matches, and returns focus on Escape', async ({ page }) => {
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: 'Search' }).first();
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Search' });
+    await dialog.getByRole('combobox').fill('zzqqxxnothing');
+    await expect(dialog.getByRole('status')).toContainText('No results');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+});
+
+test('the docs AI menu copies the page and links to its Markdown', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/docs/telegram/');
+  await page.getByText('Use with AI').click();
+  await expect(page.getByRole('link', { name: 'View as Markdown' })).toHaveAttribute(
+    'href',
+    '/docs/telegram.md',
+  );
+  await expect(page.getByRole('link', { name: 'Open in Claude' })).toHaveAttribute(
+    'href',
+    /^https:\/\/claude\.ai\/new\?q=Read%20https%3A%2F%2Fhelpdock\.oday-bakkour\.com%2Fdocs%2Ftelegram\.md/,
+  );
+  await page.getByRole('button', { name: 'Copy page as Markdown' }).click();
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^# Telegram/);
+});
+
 test('the pages load nothing from another origin', async ({ page, baseURL }) => {
   const foreign: string[] = [];
   page.on('request', (request) => {

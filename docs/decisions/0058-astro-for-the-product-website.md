@@ -44,7 +44,15 @@ wrong release number.
    Pages workflow sets from the latest published non-prerelease Release, or
    the `@helpdock/api` version for a local build. A value that is not a plain
    `x.y.z` fails the build. The stamp script is removed.
-6. **Hosting stays on GitHub Pages**, at the same domain (`site/public/CNAME`),
+6. **Search is [Pagefind](https://pagefind.app)** (`pagefind`, pinned exactly,
+   build-time only): it indexes `dist/` after Astro and writes a static index the
+   site serves itself. The search dialog is the site's own, over Pagefind's JS
+   API, and loads it on first open. Pagefind runs locally, needs no service and
+   sends no query anywhere, which a hosted search could not promise.
+7. **The docs downloads and the agent skill are zipped without a dependency:**
+   Node's `zlib` deflates and checksums, and about sixty lines write the zip
+   container, so `fflate` or a similar library is not added.
+8. **Hosting stays on GitHub Pages**, at the same domain (`site/public/CNAME`),
    deployed by `.github/workflows/pages.yml`, which now installs with pnpm,
    tests the site's helpers, builds it, smoke-tests the built pages and uploads
    `site/dist`. The site's dev, build and preview scripts turn Astro's telemetry off.

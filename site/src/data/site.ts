@@ -23,6 +23,7 @@ type Chrome = {
   nav: { href: string; label: string }[];
   menu: string;
   mainNav: string;
+  search: string;
   theme: { label: string; light: string; dark: string; system: string };
   language: { href: string; label: string; lang: Locale };
   install: string;
@@ -48,6 +49,7 @@ export const CHROME: Record<Locale, Chrome> = {
     ],
     menu: 'Menu',
     mainNav: 'Main',
+    search: 'Search',
     theme: { label: 'Colour theme', light: 'Light', dark: 'Dark', system: 'System' },
     language: { href: '/ar/', label: 'العربية', lang: 'ar' },
     install: 'Install',
@@ -113,6 +115,7 @@ export const CHROME: Record<Locale, Chrome> = {
     ],
     menu: 'القائمة',
     mainNav: 'التنقل الرئيسي',
+    search: 'بحث',
     theme: { label: 'مظهر الألوان', light: 'فاتح', dark: 'داكن', system: 'حسب النظام' },
     language: { href: '/', label: 'English', lang: 'en' },
     install: 'التثبيت',

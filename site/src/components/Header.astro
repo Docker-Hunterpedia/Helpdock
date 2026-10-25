@@ -36,6 +36,9 @@ const installHref = `${home}#install`;
     <div class="header-actions">
       <a class="header-link hide-sm" href={languageHref ?? chrome.language.href} hreflang={chrome.language.lang} lang={chrome.language.lang}>{chrome.language.label}</a>
       <StarLink locale={locale} class="header-link hide-sm" text="GitHub" />
+      <button type="button" class="search-trigger" data-search-open aria-label={chrome.search} aria-keyshortcuts="Meta+K Control+K /">
+        <Icon name="search" /><span class="search-trigger-label">{chrome.search}</span><kbd class="search-trigger-key">/</kbd>
+      </button>
       <ThemeSwitch locale={locale} />
       <a class="btn btn-primary btn-sm hide-sm" href={installHref}>{chrome.install}</a>
       <details class="menu">

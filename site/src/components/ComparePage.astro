@@ -87,6 +87,7 @@ const others = COMPETITORS.filter(
 );
 ---
 <Base
+  indexed
   title={copy.title}
   description={copy.description}
   locale={locale}
@@ -198,7 +199,7 @@ const others = COMPETITORS.filter(
 
   <Faq items={copy.faq} title={t.faq} />
 
-  <section class="section tight" aria-labelledby="others-title">
+  <section class="section tight" aria-labelledby="others-title" data-pagefind-ignore>
     <div class="container">
       <h2 class="h3" id="others-title">{t.others}</h2>
       <ul class="chips gap-top">

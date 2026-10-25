@@ -5,7 +5,7 @@ import type { Crumb } from '../lib/seo.ts';
 type Props = { crumbs: Crumb[]; locale?: Locale };
 const { crumbs, locale = 'en' } = Astro.props;
 ---
-<nav class="crumbs" aria-label={CHROME[locale].breadcrumb}>
+<nav class="crumbs" aria-label={CHROME[locale].breadcrumb} data-pagefind-ignore>
   <ol>
     {
       crumbs.map((crumb, index) =>

@@ -2,7 +2,7 @@
 // on the best suggestion's title (or the address's words), its top results
 // shown inline.
 
-import { type KnownRoute, notFoundHelp } from '../lib/suggest.ts';
+import { isSitePath, type KnownRoute, notFoundHelp } from '../lib/suggest.ts';
 import { excerpt, icon, loadPagefind, pageIcon, span } from './pagefind.ts';
 
 const INLINE_RESULTS = 5;
@@ -14,6 +14,7 @@ const isRoute = (value: unknown): value is KnownRoute =>
   typeof value === 'object' &&
   value !== null &&
   typeof (value as KnownRoute).path === 'string' &&
+  isSitePath((value as KnownRoute).path) &&
   typeof (value as KnownRoute).title === 'string';
 
 function routes(): KnownRoute[] {
@@ -36,7 +37,7 @@ function showSuggestions(root: HTMLElement) {
     ...help.suggestions.map(({ path: route }) => {
       const item = document.createElement('li');
       const link = document.createElement('a');
-      link.href = route;
+      link.href = new URL(route, location.origin).pathname;
       link.className = 'nf-suggestion';
       const code = document.createElement('code');
       code.className = 'nf-code';

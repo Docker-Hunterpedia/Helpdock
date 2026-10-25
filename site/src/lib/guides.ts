@@ -8,11 +8,21 @@ export function splitTitle(markdown: string, fallback: string): { title: string;
 // A parenthesis that only cites the plan, such as "(M8-01, REQUIREMENTS §4.11)".
 const CITATION = /\s*\((?=[^()]*(?:\bM\d+-\d+\b|§|\bADR\b))[^()]*\)/g;
 
+/** The text with every HTML comment removed, nested or unterminated ones included. */
+function withoutComments(text: string): string {
+  let previous: string;
+  let current = text;
+  do {
+    previous = current;
+    current = current.replace(/<!--[\s\S]*?-->/g, '');
+  } while (current !== previous);
+  return current.replace(/<!--[\s\S]*$/, '');
+}
+
 /** The guide's first paragraph as plain text, cut to fit a meta description. */
 export function summarise(body: string, limit = 160): string {
   const paragraph =
-    body
-      .replace(/<!--[\s\S]*?-->/g, '')
+    withoutComments(body)
       .split(/\n\s*\n/)
       .map((block) => block.trim())
       .find((block) => block !== '' && !/^(#|```|\||<|-\s|\d+\.\s)/.test(block)) ?? '';

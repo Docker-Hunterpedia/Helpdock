@@ -76,6 +76,14 @@ export function routeScore(path: string, route: string): number {
   return Math.max(whole, last) * (sameLanguage ? 1 : 0.8);
 }
 
+// Built routes are slash-led and slash-ended, with lowercase slugs and dotted versions.
+const SITE_PATH = /^\/(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*\/)*$/;
+
+/** Whether a path is one of this site's own pages, safe to use as a link. */
+export function isSitePath(path: string): boolean {
+  return SITE_PATH.test(path);
+}
+
 /** A page of the site and the title search knows it by. */
 export type KnownRoute = { path: string; title: string };
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { editDistance, notFoundHelp, queryFromPath, routeScore, suggestRoutes } from './suggest.ts';
+import {
+  editDistance,
+  isSitePath,
+  notFoundHelp,
+  queryFromPath,
+  routeScore,
+  suggestRoutes,
+} from './suggest.ts';
 
 const routes = [
   '/',
@@ -92,4 +99,21 @@ describe('notFoundHelp', () => {
     const help = notFoundHelp('/docs/install/', known);
     expect(help.suggestions.map((route) => route.path)).not.toContain('/docs/install/');
   });
+});
+
+describe('isSitePath', () => {
+  it.each(['/', '/ar/', '/docs/install/', '/changelog/1.2.0/', '/ar/compare/helpdock-vs-zendesk/'])(
+    'accepts the built route %s',
+    (path) => expect(isSitePath(path)).toBe(true),
+  );
+
+  it.each([
+    'javascript:alert(1)',
+    '//evil.example/',
+    'https://evil.example/',
+    '/docs/install',
+    '/docs/../admin/',
+    '/docs/<b>/',
+    '',
+  ])('rejects %s', (path) => expect(isSitePath(path)).toBe(false));
 });

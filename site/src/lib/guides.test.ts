@@ -37,6 +37,12 @@ describe('summarise', () => {
     );
   });
 
+  it('leaves no comment opener behind from nested or unterminated comments', () => {
+    // One pass turns `<!<!-- x -->-- y -->` into a new `<!-- y -->`; the loop removes that too.
+    expect(summarise('<!<!-- x -->-- y -->\n\nKept text.\n\n<!-- open')).toBe('Kept text.');
+    expect(summarise('Text <!-- never closed')).toBe('Text');
+  });
+
   it('cuts a long paragraph at a word and marks the cut', () => {
     const text = `${'word '.repeat(60)}end.`;
     const summary = summarise(text, 40);

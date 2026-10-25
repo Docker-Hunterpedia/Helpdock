@@ -27,8 +27,8 @@
     "@helpdock/ui": "workspace:*",
     "grammy": "1.46.0",
     "imapflow": "2.0.7",
-    "mailparser": "3.9.28",
-    "nodemailer": "10.0.10",
+    "mailparser": "3.9.47",
+    "nodemailer": "10.1.7",
     "sanitize-html": "2.18.1",
     "zod": "4.6.7"
   },

@@ -131,7 +131,7 @@ Release as a pre-release and does **not** move `:latest`.
 | **Signature** | Cosign keyless signing over the multi-architecture image digest. GitHub OIDC issues the short-lived Fulcio certificate; no private signing key is stored. The workflow verifies the signature and its exact workflow identity before continuing. |
 | **SBOM** | `anchore/sbom-action` in CycloneDX JSON, generated **from the pushed image** so it covers the base image's Debian packages and ffmpeg, not only `node_modules`. Attached to the Release as `helpdock-<version>.cdx.json`. |
 | **Release** | Created from the tag. Its body is the `CHANGELOG.md` section for that version, followed by GitHub's generated list of merged pull requests. |
-| **Website** | A last job, holding only `actions: write`, dispatches the [Pages workflow](website.md#the-release-number), which stamps the new version and its links into the site. Skipped for a pre-release, and when the run only re-signs a tag that already has a Release. |
+| **Website** | A last job, holding only `actions: write`, dispatches the [Pages workflow](website.md#the-release-number), which rebuilds the site with the new version. Skipped for a pre-release, and when the run only re-signs a tag that already has a Release. |
 
 The package is public and linked to this repository. A new registry or renamed
 package starts private; make it public before calling that release complete.

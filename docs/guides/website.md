@@ -1,134 +1,219 @@
 # Website
 
-The product website at <https://helpdock.oday-bakkour.com>: what is in it, how
-to change it, and how it is deployed to GitHub Pages.
+The product website at <https://helpdock.oday-bakkour.com>: how it is built,
+what it may say, how to add a page, and how it is deployed to GitHub Pages.
+This guide is for whoever maintains the site, so the site does not publish it.
 
 ## What it is
 
-Plain static HTML and CSS in [`site/`](../../site/), with no framework, no build
-step and no dependency. Nothing on it calls a third party: fonts, icons and
-images are served from the site itself, and there is no analytics or tracking.
+A static [Astro](https://astro.build) site in [`site/`](../../site/), the
+private workspace package `@helpdock/website`
+([ADR 0058](../decisions/0058-astro-for-the-product-website.md)). Its only
+dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`; there is no UI
+framework and no CSS framework. Nothing on it calls a third party: fonts, icons
+and images are served from the site itself, there is no analytics or tracking,
+and Astro's own telemetry is turned off in every `site` script
+(`ASTRO_TELEMETRY_DISABLED=1`).
 
 | Path | What it is |
 |---|---|
-| `site/index.html` | The English landing page |
-| `site/ar/index.html` | The same page in Arabic, right to left |
-| `site/404.html` | The page GitHub Pages serves for an unknown path |
-| `site/assets/site.css` | All styles, light and dark through `prefers-color-scheme` |
-| `site/assets/site.js` | The copy buttons on the install commands and the scroll reveal; the page works without it |
-| `site/assets/icons.svg` | A sprite of the Lucide icons the pages use |
-| `site/assets/fonts/` | IBM Plex Sans, IBM Plex Sans Arabic and IBM Plex Mono, copied from `packages/ui/fonts/` |
-| `site/assets/img/` | The screenshots as WebP, the Open Graph image (`og.png`) and the touch icon |
-| `site/CNAME`, `site/robots.txt`, `site/sitemap.xml` | The custom domain, crawler rules and the sitemap |
+| `site/astro.config.ts` | Site URL, trailing slashes, the release number, the sitemap and the code-highlighting themes |
+| `site/src/pages/` | One file per route; `[slug].astro` files generate a page per item of a data file |
+| `site/src/data/` | The words: `home.ts`, `competitors.ts`, `channels.ts`, `features.ts`, `migration.ts`, `docs.ts` (the docs sidebar) and `site.ts` (header, footer, links) |
+| `site/src/content.config.ts` | Two collections: the guides, read from `docs/guides/`, and the releases, read from the changelogs |
+| `site/src/lib/` | Pure helpers with their tests: the release number, the link rewriter, the changelog parser, guide titles and summaries, the competitor schema, JSON-LD |
+| `site/src/layouts/Base.astro` | The one page shell: the head tags, the header, the footer |
+| `site/src/components/` | Shared parts and the page templates shared by English and Arabic |
+| `site/src/styles/site.css` | Every style, light and dark |
+| `site/src/scripts/site.ts` | Copy buttons and the scroll reveal; every page works without it |
+| `site/public/` | Copied as is: `CNAME`, `robots.txt`, the favicon, the icon sprite, the fonts and the images |
+| `site/e2e/` | Playwright smoke tests of the built site |
 
-The colours, families, spacing, radii, elevation and motion are the tokens of
-[DESIGN.md](../../DESIGN.md). The website adds its own display sizes, two
-section spacings (96 and 128 px) and a 640 ms reveal, all listed in DESIGN.md
-§11; the product screens keep DESIGN.md's scales. Layout uses logical CSS
-properties only, so the Arabic page is the English one mirrored.
+## Pages
 
-## Layout
+| Route | Built from |
+|---|---|
+| `/`, `/ar/` | `data/home.ts` through `components/HomePage.astro` |
+| `/compare/helpdock-vs-<x>/`, `/ar/compare/…` | `data/competitors.ts`; Arabic only for a competitor with an `ar` copy |
+| `/alternatives/<x>/` | The `alternative` part of a competitor, only for the three with an importer, and `data/migration.ts` |
+| `/channels/<x>/`, `/ar/channels/<x>/` | `data/channels.ts`, English and Arabic |
+| `/features/<x>/` | `data/features.ts`, English only |
+| `/docs/<guide>/` | `docs/guides/<guide>.md`, English only |
+| `/changelog/`, `/changelog/rss.xml` | `CHANGELOG.md`, `apps/api/CHANGELOG.md` and the release tags |
+| `/compare/`, `/channels/`, `/features/`, `/docs/` | Index pages over the same data |
+| `/404.html` | `pages/404.astro`, which GitHub Pages serves for an unknown path |
 
-Each section makes one point, on alternating grounds: the canvas, the white
-surface, and a dark `n900` band for the release video and for security. The
-hero is a short headline, one sentence, a primary pill button and a text link,
-then the ticket workspace screenshot with an English and Arabic switch. Buttons
-are pills; most secondary actions are teal text links with a chevron. The FAQ uses
-native `<details>`, so it opens without script.
-
-`site.js` lets blocks marked `.reveal` rise into place the first time they
-scroll into view. It only holds back blocks that start below the fold, and it
-does nothing under `prefers-reduced-motion: reduce` or without
-`IntersectionObserver`, so no content depends on it. The hero's own entrance
-is CSS and is dropped under reduced motion too.
+Every page gets a title and a description of its own, a canonical URL, Open
+Graph and Twitter tags, and `lang` and `dir`. A page with a counterpart in the
+other language also gets `hreflang` links for `en`, `ar` and `x-default`; a page
+without one gets none. JSON-LD: `SoftwareApplication` on the home pages,
+`FAQPage` where the page shows a FAQ, `BreadcrumbList` on inner pages and
+`TechArticle` on the docs. `@astrojs/sitemap` writes `sitemap-index.xml` with the
+same language alternates, and `robots.txt` points at it.
 
 ## What it may say
 
 Every statement on the site must be backed by the repository: the README, the
-[changelog](../../CHANGELOG.md), the guides, the [PRD](../planning/PRD.md) for
-the roadmap, and the recorded AI evaluation. No invented customers, figures,
-testimonials or logos. The roadmap section says that the 1.x releases are
-proposed and not started, as the PRD does; update both together.
+changelogs, the guides, the [PRD](../planning/PRD.md) for the roadmap, and the
+recorded AI evaluation. No invented customers, figures, testimonials or logos.
+The roadmap on the home page separates what shipped in a release from what the
+PRD only proposes; update it with the PRD.
 
-When a change affects what the site describes (the install commands, the
-evaluation figures, the roadmap), change both pages in the same pull request.
-The install commands are copied from the [install guide](install.md); their
-version is stamped, see below.
+About another product the site states two things only: how it is delivered
+(hosted, self-hosted, or both) and its licence. Each fact carries its source
+link and the date it was checked (`checked` in `competitors.ts`), and the page
+prints both. No prices, and no feature-by-feature claims. Everything else on a
+comparison page is about Helpdock, and each page needs content that is true of
+that competitor only (its migration path, its licence's consequences); a
+competitor with too little for that gets no page. Intercom, Help Scout and Front
+are left out for that reason: hosted and proprietary, with no importer yet.
+
+Only Zendesk, Freshdesk and Zoho Desk have an importer. The schema in
+`lib/competitor-schema.ts` refuses `importer: true` for any other source, and
+requires the Arabic page and the migration guide for those three.
+
+Arabic copy is Modern Standard Arabic, with the terms of
+`packages/i18n/locales/ar/` (تذكرة، مركز المساعدة، العلامة التجارية،
+اتفاقية مستوى الخدمة، نافذة الدردشة…). Links from an Arabic page to an English
+page say so: «(بالإنجليزية)».
+
+## Develop and preview
+
+```bash
+pnpm install
+pnpm --filter @helpdock/website dev        # http://localhost:4321, rebuilds on change
+pnpm --filter @helpdock/website build      # writes site/dist
+pnpm --filter @helpdock/website preview    # serves site/dist on http://localhost:4321
+```
+
+`astro preview` detaches into the background when it is not started from a
+terminal; stop it with `pnpm --filter @helpdock/website exec astro preview stop`.
+Any static server works on `site/dist` too, for example
+`python3 -m http.server 4321 --directory site/dist`.
+
+`pnpm build` at the root builds the site with every other workspace. The image
+build leaves it out (`docker/Dockerfile`), because the docs it renders are not
+in the image's build context.
+
+## Adding a page
+
+- **A competitor:** add an entry to `site/src/data/competitors.ts` with its
+  delivery and licence, a source for each and the date checked, then the
+  English copy. The comparison page, its card on `/compare/` and the links
+  from the other comparisons follow. `pnpm --filter @helpdock/website test`
+  checks the entry against the schema.
+- **A channel:** add an entry to `site/src/data/channels.ts`, in English and
+  Arabic, with its Lucide icon name and the guides it is from. A new icon goes
+  into `site/public/assets/icons.svg` as a `<symbol>` copied from Lucide.
+- **A feature:** add an entry to `site/src/data/features.ts`. Only a feature
+  that ships in a release, and "Not yet" lists only what its guides say is
+  missing.
+- **A guide:** add the Markdown file to `docs/guides/`; it appears under
+  `/docs/` without a change here. Place it in a sidebar group in
+  `site/src/data/docs.ts` (otherwise it lands under "More guides"), and give it
+  a description there if its first paragraph is not a good one. A guide that is
+  not for Helpdock's users goes in `UNPUBLISHED`, as this one does.
+
+In a guide, a link to another published guide becomes `/docs/<guide>/`; any
+other repository path becomes its page on GitHub. The guide's `# Title` becomes
+the page's only `h1`.
+
+## The changelog
+
+`/changelog/` lists every release up to the one the site shows, newest first.
+A release's section of `CHANGELOG.md` is used when it has one; otherwise its
+section of `apps/api/CHANGELOG.md`, the list Changesets writes; a release tag
+with neither gets an entry pointing at its GitHub Release. Dates come from the
+`CHANGELOG.md` heading or the tag (the Pages workflow fetches tags). The RSS
+feed at `/changelog/rss.xml` carries the same entries.
 
 ## The release number
 
-Nobody edits the version by hand. Both pages carry a real version, so a local
-preview and the page without script are correct, and mark it with
-`<meta name="helpdock-release" content="1.0.1">`, the single marker of the
-version the files currently hold. At deploy,
-[`scripts/site/stamp-release.mjs`](../../scripts/site/stamp-release.mjs)
-`<version> [site-dir]` rewrites every occurrence of that version in every
-`site/**/*.html` that has the meta: the `v` tags and release URLs, the image,
-the SBOM name, `HELPDOCK_VERSION`, `--branch`, the JSON-LD
-`softwareVersion` and `downloadUrl`, aria-labels and the Arabic `<bdi>` spans.
-It accepts only plain `x.y.z`, leaves other versions (`1.0.10`, `11.0.1`,
-`1.0.1-rc.1`) alone, does nothing when the files are already current, and exits
-non-zero when no page has the meta.
+Nobody edits the version by hand. The site reads it once, at build time
+(`src/lib/version.ts`):
 
-The Pages workflow asks GitHub for the latest published non-prerelease Release
-and stamps it into the checked-out files before upload; if the lookup fails the
-build fails rather than publish a wrong version. `release.yml` dispatches the
-Pages workflow after it creates a stable Release (a Release made with
-`GITHUB_TOKEN` does not fire `release` events), so a release updates both pages
-without a site pull request. If that dispatch fails, the release run stays
+- The Pages workflow asks GitHub for the latest published, non-prerelease
+  Release and passes its number as `HELPDOCK_VERSION`. If the lookup fails, the
+  step fails and nothing is published.
+- A value that is set but is not a plain `x.y.z`, an empty one included, fails
+  the build rather than publish a wrong number.
+- A local build without `HELPDOCK_VERSION` uses the `@helpdock/api` package
+  version.
+
+The number appears wherever a page needs it (the release pill, the install
+commands, the image name, the JSON-LD) from that one value, and the changelog
+leaves out any release newer than it, so a version bump merged before its
+Release is created shows nothing early. `release.yml` dispatches the Pages
+workflow after it creates a stable Release (a Release made with `GITHUB_TOKEN`
+does not fire `release` events). If that dispatch fails, the release run stays
 green with a warning; run **Actions › Pages › Run workflow** by hand. GitHub's
 latest Release is the most recently created one, so a backport patch to an
 older line published after a newer release makes the site show the older
-number until Pages runs again after the newer one. The committed version only moves when someone runs
-the script and commits, which is optional.
+number until Pages runs again after the newer one.
 
-Two rules follow for what you write on the pages:
+## Design
 
-- Release prose must be true for any version. Say "read the release notes",
-  not what 1.0.1 fixed, and do not write "upgrading from X" notes.
-- A version that is a historical fact (the 1.0 release video, "before 1.0.0")
-  is still matched if it equals the stamped version. Keep such text on a
-  different version than the one the files hold, or write it without a number.
+The colours, families, spacing, radii, elevation and motion are the tokens of
+[DESIGN.md](../../DESIGN.md), as CSS custom properties. The website adds the
+display sizes, the 96 and 128 px section spacings and the reveal listed in
+DESIGN.md §11; the product screens keep DESIGN.md's scales. Layout uses logical
+CSS properties only, so an Arabic page is its English one mirrored.
+
+The header carries a light, dark and system switch: three buttons with
+`aria-pressed` in a labelled group. A choice is stored in `localStorage`
+(`helpdock-theme`), inside `try`, and an inline script in the `<head>` applies
+it before the first paint, so the wrong theme never flashes. With no stored
+choice, or with storage blocked, the page follows `prefers-color-scheme`.
+Without script the switch is hidden and the page follows the system.
+
+Blocks marked `.reveal` rise into place the first time they scroll into view.
+Only blocks that start below the fold are held back, and nothing moves under
+`prefers-reduced-motion: reduce`.
 
 ## Images
 
-| File | Source |
+| File in `site/public/assets/img/` | Source |
 |---|---|
 | `ticket-view-en.webp`, `ticket-view-ar.webp` | The admin's Playwright baselines, `apps/admin/e2e/__screenshots__/{en,ar}/ticket-view.png` |
 | `sign-in-en.webp`, `sign-in-ar.webp` | The same baselines' `sign-in.png`, cropped to the form |
 | `widget-en.webp`, `widget-ar.webp`, `help-center-article.webp` | Renders of the design artboards in `docs/design/screens/applications/`; the pages say so |
-| `release-1-0.webp` | The poster of the 1.0 release video, which links to the video on X. The poster carries its own title, so the play control sits in its empty lower band |
-| `og.png` | The 1280 × 640 social preview |
+| `release-1-0.webp` | The poster of the 1.0 release video, which links to the video on X |
+| `og.png` | The 1280 × 640 social preview, used by every page |
 
-Convert a PNG with `cwebp -q 88 -m 6 in.png -o out.webp`. Keep the HTML, CSS,
-script and fonts of one page under 300 KB as served (gzip), screenshots aside.
+Convert a PNG with `cwebp -q 88 -m 6 in.png -o out.webp`, and give every
+`<img>` its `width` and `height`; images below the fold load lazily.
 
-## Preview locally
-
-Any static server works; the icon sprite does not load from `file://`.
+## Tests
 
 ```bash
-python3 -m http.server 8080 --directory site
+pnpm --filter @helpdock/website test    # Vitest: version, links, changelog, guides, competitor schema
+pnpm --filter @helpdock/website build
+pnpm --filter @helpdock/website e2e     # Playwright on site/dist
 ```
 
-Open <http://localhost:8080/> and <http://localhost:8080/ar/>. `pnpm lint`
-checks the site's HTML, CSS and script with Biome, like the rest of the
-repository.
+The Playwright suite checks the theme switch (a stored choice survives a
+reload, System clears it, blocked storage breaks nothing), that the Arabic home
+is right to left with its `hreflang`, that no page loads anything from another
+origin, and axe on both home pages in both themes. It serves `site/dist` with
+Python's static server, so build first.
 
 ## Deployment
 
-[`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) uploads `site/`
-with `actions/upload-pages-artifact` and publishes it with `actions/deploy-pages`
-on every push to `main` that changes `site/**`, `scripts/site/**` or the
-workflow, on demand from **Actions › Pages › Run workflow**, and after each
-release. Its token can only write Pages and request an OIDC token; the build
-job reads the repository and the Releases API and nothing else.
+[`.github/workflows/pages.yml`](../../.github/workflows/pages.yml) installs the
+workspace with pnpm, runs the site's unit tests, looks up the release number,
+builds the site, runs the smoke tests and uploads `site/dist` with
+`actions/upload-pages-artifact`; `actions/deploy-pages` publishes it. It runs on
+every push to `main` that changes `site/**`, `docs/guides/**`, either changelog,
+`apps/api/package.json`, the lockfile or the workflow; on demand from
+**Actions › Pages › Run workflow**; and after each stable release. A pull
+request that touches those paths runs the same build and tests without
+deploying. The build job's token reads the repository and the Releases API
+only; the deploy job's can only write Pages and request an OIDC token.
 
-A pull request that changes only `site/` starts none of the test suites, the
-image build or Semgrep: CI's path classifier,
-[`scripts/ci-scope.ts`](../../scripts/ci-scope.ts), treats the website like
-documentation. Lint and the other repository-wide checks still run. A change to
-`pages.yml` itself is a workflow change and runs everything.
+CI's path classifier, [`scripts/ci-scope.ts`](../../scripts/ci-scope.ts),
+treats `site/` like documentation, so a pull request that changes only the site
+starts none of the app suites, the image build or Semgrep; the Pages workflow
+covers it. Lint and the other repository-wide checks still run.
 
 ### One-time setup
 

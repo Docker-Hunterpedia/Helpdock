@@ -491,20 +491,22 @@ Every PR that touches UI ticks these in the description:
 | `packages/ui/src/brand.ts` | `resolveBrandTheme(brandTokens)`: derives hover/active/tint/text-on-accent, validates contrast, returns the final token set for a brand. Unit-tested against §8. |
 | `packages/ui/fonts/` | Subset woff2 files for the three families; served by the api with long cache headers. |
 | `packages/ui/src/__tests__/contrast.test.ts` | Asserts every pair in §2.2 and every status tint/text pair meets AA. |
-| `site/assets/site.css` | The product website ([website guide](docs/guides/website.md)). The §2 colours, §3 families, §4 spacing, radius, elevation and motion, and §5 icons, copied as CSS custom properties. It adds the website-only values in the table below; product screens keep §3.1 and §4. |
+| `site/src/styles/site.css` | The product website, built with Astro ([website guide](docs/guides/website.md)). The §2 colours, §3 families, §4 spacing, radius, elevation and motion, and §5 icons, copied as CSS custom properties, with the light and dark blocks under `prefers-color-scheme` and `[data-theme]`. It adds the website-only values in the table below; product screens keep §3.1 and §4. |
 
 Website-only values, used by `site/` and nowhere else:
 
 | Kind | Value | Use |
 |---|---|---|
-| Size | `clamp(48px, 6.4vw + 8px, 104px)` / 1.02, 600, −0.04em | Hero heading |
-| Size | `clamp(36px, 3.4vw + 16px, 64px)` / 1.06, 600, −0.035em | Section headings, roadmap version numbers |
-| Size | `clamp(28px, 1.8vw + 18px, 48px)` / 1.18, 600, −0.03em | The channels statement |
-| Size | `clamp(28px, 1.2vw + 20px, 40px)` / 1.12, 600, −0.03em | Feature tile headings |
-| Size | `clamp(56px, 4vw + 32px, 96px)` / 1, 600, −0.04em | AI evaluation figures |
-| Size | `clamp(18px, 0.5vw + 16px, 24px)` / 1.45, 400 | Lead paragraphs |
+| Size | `clamp(44px, 4.8vw + 12px, 80px)` / 1.04, 600, −0.035em | Hero heading |
+| Size | `clamp(36px, 3vw + 20px, 60px)` / 1.06, 600, −0.035em | The heading of an inner page |
+| Size | `clamp(32px, 2.6vw + 16px, 52px)` / 1.08, 600, −0.03em | Section headings |
+| Size | `clamp(28px, 1.2vw + 20px, 40px)` / 1.12, 600, −0.025em | Tile and sub-section headings |
+| Size | `clamp(48px, 3vw + 28px, 80px)` / 1, 600, −0.04em | AI evaluation figures |
+| Size | `clamp(18px, 0.5vw + 16px, 22px)` / 1.5, 400 | Lead paragraphs |
+| Size | 16 / 28, 400 | Docs and changelog text |
 | Spacing | 96, 128 | Section padding (phone, desktop) and the gap above the evaluation figures |
 | Motion | 640 ms `cubic-bezier(0.2, 0, 0, 1)` | Blocks rising into place once as they scroll into view; 0 ms under reduced motion |
+| Colour | `bg.canvas` at 82 % (light) and 80 % (dark) opacity, with a 16 px backdrop blur | The sticky header |
 
 Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line height. The dark bands (release, security) use `n900` with the dark-mode tokens in both appearances.
 
@@ -570,3 +572,4 @@ Arabic headings keep the same sizes with `letter-spacing: 0` and a 1.32 line hei
 | 2026-10-24 | 1.54. M14-13, `Admin/SetupChecklist`: §6.5 adds SetupChecklist, built from existing tokens and the Popover of the rail's Views group. Drawn at the nearest steps of §3–§4: the board's 10 px gaps at 8 and 12 and its 10 px entry padding at 12. The collapsed rail has no entry because the board draws none. |
 | 2026-10-24 | 1.55. M14-21, `Admin/Settings-Shell`: §6.5 replaces the sidebar's Admin group with one Settings item, moves the Views group under Tickets and makes it foldable, and adds SettingsNav and the Settings breadcrumb. Drawn at the nearest steps of §3–§4: the board's 28 px page padding at 24, its 11 px group label drawn at the 12 px caption size, its lighter label grey replaced by `text.secondary` for contrast. Channels, Brand, AI and Developers pages are links of SettingsNav and no longer tab rows. No new token. |
 | 2026-10-25 | 1.56. `mirror-in-rtl` made real (#411): §7 documents the class as the icon-element shortcut for the RTL flip, defined once in the theme's `MuiCssBaseline` overrides. Back arrows, pagination chevrons, the details-panel toggle, undo arrows, the embeddings "to" arrow and send-action icons now mirror. No token, size or radius is added. |
+| 2026-10-25 | 1.57. Issue #418, the website on Astro: §11 points at `site/src/styles/site.css` and its website-only sizes become quieter (hero 80 px at most, section headings 52 px), adding an inner-page heading, docs and changelog text at 16 / 28 and the translucent sticky header; the channels statement size is gone with the statement. The header gains a light, dark and system switch built from three §6.1 IconButtons (sm 28) in a pill. |

@@ -6,5 +6,6 @@ export const getStaticPaths = (async () =>
 
 export const GET: APIRoute = async ({ params }) => {
   const bytes = (await downloads()).get(params.file as string) as Uint8Array;
-  return new Response(bytes, { headers: { 'Content-Type': 'application/zip' } });
+  // A plain ArrayBuffer-backed view, which is what BodyInit accepts.
+  return new Response(new Uint8Array(bytes), { headers: { 'Content-Type': 'application/zip' } });
 };

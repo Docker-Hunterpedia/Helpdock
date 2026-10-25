@@ -11,7 +11,9 @@ const stars = parseStars(process.env.HELPDOCK_STARS);
 
 export default defineConfig({
   site: SITE_URL,
-  trailingSlash: 'always',
+  // Every link and canonical URL is written with its slash; 'ignore' lets an
+  // address typed without one still reach the page or the site's own 404.
+  trailingSlash: 'ignore',
   build: { format: 'directory', inlineStylesheets: 'auto' },
   // Nothing on the site loads from a third party, and the dev toolbar would.
   devToolbar: { enabled: false },
@@ -31,7 +33,7 @@ export default defineConfig({
   },
   integrations: [
     sitemap({
-      filter: (page) => !page.endsWith('/404/'),
+      filter: (page) => !/\/404\/?$/.test(page),
       i18n: { defaultLocale: 'en', locales: { en: 'en', ar: 'ar' } },
     }),
   ],

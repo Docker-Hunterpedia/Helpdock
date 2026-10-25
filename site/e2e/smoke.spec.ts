@@ -100,7 +100,9 @@ test('the docs AI menu copies the page and links to its Markdown', async ({ page
 
 test('the API reference lists the endpoints from the OpenAPI document', async ({ page }) => {
   await page.goto('/docs/api-reference/');
-  await expect(page.getByRole('heading', { name: 'POST /api/v1/tickets', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'POST /api/v1/tickets', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Webhook events' })).toBeVisible();
   const response = await page.request.get('/docs/api-reference/openapi.json');
   expect((await response.json()).openapi).toBe('3.1.0');

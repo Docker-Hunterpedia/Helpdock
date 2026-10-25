@@ -29,7 +29,8 @@ Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 | `site/src/styles/site.css` | Every style, light and dark |
 | `site/src/scripts/site.ts` | Copy buttons, the menus' Escape key and the scroll reveal; every page works without it |
 | `site/src/scripts/search.ts` | The search dialog over Pagefind's index |
-| `site/public/` | Copied as is: `CNAME`, `robots.txt`, the favicon, the icon sprite, the fonts and the images |
+| `site/src/scripts/not-found.ts` | The 404 page's "did you mean" and inline search |
+| `site/public/` | Copied as is: `CNAME`, the favicon, the icon sprite, the fonts and the images |
 | `site/e2e/` | Playwright smoke tests of the built site |
 
 ## Pages
@@ -48,7 +49,7 @@ Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 | `/downloads/helpdock-docs-<version>.zip`, `/downloads/helpdock-skill-<version>.zip` | The guides, and the `helpdock` Agent Skill; each also as `-latest.zip` |
 | `/skill/helpdock/SKILL.md`, `/skill/helpdock/references/<guide>.md` | The same skill, unzipped |
 | `/compare/`, `/channels/`, `/features/`, `/docs/` | Index pages over the same data |
-| `/404.html` | `pages/404.astro`, which GitHub Pages serves for an unknown path |
+| `/404.html` | `pages/404.astro`, which GitHub Pages serves for an unknown path, in English or, under `/ar/`, in Arabic ([The 404 page](#the-404-page)) |
 
 Every page gets a title and a description of its own, a canonical URL, Open
 Graph and Twitter tags, and `lang` and `dir`. A page with a counterpart in the
@@ -57,6 +58,21 @@ without one gets none. JSON-LD: `SoftwareApplication` on the home pages,
 `FAQPage` where the page shows a FAQ, `BreadcrumbList` on inner pages and
 `TechArticle` on the docs. `@astrojs/sitemap` writes `sitemap-index.xml` with the
 same language alternates, and `robots.txt` points at it.
+
+Every page but the 404 carries `<meta name="robots" content="index, follow,
+max-image-preview:large, max-snippet:-1, max-video-preview:-1">`, set in
+`Base.astro` from `src/lib/robots.ts`, so search results and Google Discover may
+show large image previews and full snippets; the 404 page carries `noindex`.
+
+The Markdown copies of the guides (`/docs/<guide>.md`, the skill's `.md` files
+and `/llms-full.txt`) repeat the HTML guides, which stay the canonical pages.
+`robots.txt`, written by `src/pages/robots.txt.ts`, lets every crawler read
+everything under `User-agent: *`, so AI agents still get the Markdown, and adds
+groups for `Googlebot` and `Bingbot` with `Disallow: /*.md$` and
+`Disallow: /llms-full.txt` before their `Allow: /`, so the search engines index
+the HTML guides and not their duplicates. A unit test checks those rules, and a
+browser test checks that every page in the sitemap has the index meta and a
+canonical URL of its own.
 
 ## What it may say
 
@@ -95,8 +111,9 @@ pnpm --filter @helpdock/website preview    # serves site/dist on http://localhos
 
 `astro preview` detaches into the background when it is not started from a
 terminal; stop it with `pnpm --filter @helpdock/website exec astro preview stop`.
-Any static server works on `site/dist` too, for example
-`python3 -m http.server 4321 --directory site/dist`.
+Any static server works on `site/dist` too, though only one that answers a
+missing path with `404.html` shows the site's own 404 page:
+`node site/e2e/static-server.ts 4321` does, as GitHub Pages does.
 
 `pnpm build` at the root builds the site with every other workspace. The image
 build leaves it out (`docker/Dockerfile`), because the docs it renders are not
@@ -201,10 +218,31 @@ never before. It indexes the docs, features, channels, comparisons, migration
 guides and release pages, the pages whose `Base` gets `indexed`, and skips what
 carries `data-pagefind-ignore` (breadcrumbs, sidebars, calls to action, lists of
 other pages). Arabic pages are indexed under `lang="ar"`, so a search from an
-Arabic page finds Arabic pages. Results show the title, the section and the
-excerpt with its matches; arrow keys move, Enter opens, Escape closes and
-returns focus. In `pnpm dev` there is no index, and the dialog says search works
+Arabic page finds Arabic pages. Results are grouped by page: the page's title
+once, with an icon for its kind (guide, feature, channel, comparison, release),
+then up to three matching sections under it, each with a two-line excerpt.
+Arrow keys move, Enter opens, Escape closes and returns focus; a footer line
+says so. The dialog uses the product's 12, 13, 14 and 16 px sizes, as a command
+palette would. In `pnpm dev` there is no index, and the dialog says search works
 on the built site.
+
+## The 404 page
+
+GitHub Pages answers an unknown path with `404.html` and a 404 status, and a
+folder asked for without its slash (`/docs/install`) with a redirect to
+`/docs/install/`. `astro.config.ts` sets `trailingSlash: 'ignore'` so that
+`astro dev` and `astro preview` answer the same way; every link, canonical URL,
+`hreflang` and sitemap entry is still written with its slash.
+
+One `404.html` serves both languages. A head script switches it to Arabic
+(`lang="ar"`, `dir="rtl"`, the Arabic header, copy and footer) before paint when
+the path starts with `/ar/`. The page shows the missing path on a closed
+"HD-404" ticket card, offers up to three "did you mean" links from the site's
+routes (`src/lib/routes.ts`, matched by `src/lib/suggest.ts`), runs the site
+search on the path's words once the page has painted and shows its top five
+results inline, with "Search everything" opening the search dialog on the same
+words, and links to the install guide, the docs, the channels and the
+comparisons. It is `noindex` and left out of the sitemap.
 
 ## The API reference
 
@@ -316,8 +354,11 @@ The Playwright suite checks the theme switch (a stored choice survives a
 reload, System clears it, blocked storage breaks nothing), that the Arabic home
 is right to left with its `hreflang`, that no page loads anything from another
 origin, axe on both home pages in both themes, search ("telegram" from the
-keyboard, an empty result, focus back on Escape) and the docs AI menu. It
-serves `site/dist` with Python's static server, so build first.
+keyboard, an empty result, focus back on Escape), the docs AI menu and the 404
+page (the custom page with a 404 status, a "did you mean" for a misspelt guide,
+"Search everything", Arabic and right to left under `/ar/`, a slashless address
+reaching its page, and axe in both languages). It serves `site/dist` with
+`e2e/static-server.ts`, which answers as GitHub Pages does, so build first.
 
 ## Deployment
 

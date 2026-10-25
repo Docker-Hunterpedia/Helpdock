@@ -5,8 +5,8 @@ import Logo from './Logo.astro';
 import StarLink from './StarLink.astro';
 import ThemeSwitch from './ThemeSwitch.astro';
 
-type Props = { locale: Locale; languageHref?: string | undefined };
-const { locale, languageHref } = Astro.props;
+type Props = { locale: Locale; languageHref?: string | undefined; class?: string };
+const { locale, languageHref, class: className } = Astro.props;
 const chrome = CHROME[locale];
 const home = locale === 'ar' ? '/ar/' : '/';
 const current = Astro.url.pathname;
@@ -14,7 +14,7 @@ const isCurrent = (href: string) =>
   !href.includes('#') && href !== home && current.startsWith(href);
 const installHref = `${home}#install`;
 ---
-<header class="site-header">
+<header class:list={["site-header", className]}>
   <div class="container header-inner">
     <a class="brand" href={home} aria-label={chrome.home}>
       <Logo />

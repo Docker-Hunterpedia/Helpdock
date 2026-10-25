@@ -3,6 +3,7 @@ import type { Locale } from '../data/site.ts';
 import Icon from './Icon.astro';
 
 type Props = { locale: Locale };
+const { locale } = Astro.props;
 const t = {
   en: {
     title: 'Search',
@@ -14,6 +15,10 @@ const t = {
     none: 'No results for “{q}”. Try another word, or browse the docs.',
     count: '{n} results',
     offline: 'Search is not available here. It works on the built site.',
+    move: 'to move',
+    open: 'to open',
+    leave: 'to close',
+    keys: 'Keyboard',
   },
   ar: {
     title: 'البحث',
@@ -25,12 +30,19 @@ const t = {
     none: 'لا نتائج عن «{q}». جرّب كلمة أخرى.',
     count: 'عدد النتائج: {n}',
     offline: 'البحث غير متاح هنا. يعمل في الموقع المبني.',
+    move: 'للتنقل',
+    open: 'للفتح',
+    leave: 'للإغلاق',
+    keys: 'لوحة المفاتيح',
   },
-}[Astro.props.locale];
+}[locale];
+const titleId = `search-title-${locale}`;
+const resultsId = `search-results-${locale}`;
 ---
 <dialog
   class="search-dialog"
-  aria-labelledby="search-title"
+  aria-labelledby={titleId}
+  data-locale={locale}
   data-search
   data-hint={t.hint}
   data-loading={t.loading}
@@ -40,7 +52,7 @@ const t = {
   data-pagefind-ignore
 >
   <div class="search-field">
-    <h2 class="visually-hidden" id="search-title">{t.title}</h2>
+    <h2 class="visually-hidden" id={titleId}>{t.title}</h2>
     <Icon name="search" />
     <input
       type="search"
@@ -48,7 +60,7 @@ const t = {
       aria-label={t.title}
       role="combobox"
       aria-expanded="false"
-      aria-controls="search-results"
+      aria-controls={resultsId}
       aria-autocomplete="list"
       autocomplete="off"
       spellcheck="false"
@@ -57,5 +69,10 @@ const t = {
     <button type="button" class="search-close" aria-label={t.close} data-search-close><kbd>Esc</kbd></button>
   </div>
   <p class="search-status" role="status" aria-live="polite" data-search-status>{t.hint}</p>
-  <ul class="search-results" id="search-results" role="listbox" aria-label={t.results} data-search-results></ul>
+  <ul class="search-results" id={resultsId} role="listbox" aria-label={t.results} data-search-results></ul>
+  <ul class="search-keys" aria-label={t.keys}>
+    <li><span class="keys" dir="ltr"><kbd>↑</kbd><kbd>↓</kbd></span> {t.move}</li>
+    <li><span class="keys" dir="ltr"><kbd>↵</kbd></span> {t.open}</li>
+    <li><span class="keys" dir="ltr"><kbd>Esc</kbd></span> {t.leave}</li>
+  </ul>
 </dialog>

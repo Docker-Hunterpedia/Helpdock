@@ -5,8 +5,9 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 /**
  * Smoke tests of the built website (`pnpm build` first). `dist/` is served by
- * a plain static server, as GitHub Pages serves it; `astro preview` detaches
- * into the background when it has no terminal, which Playwright cannot wait on.
+ * a small static server that answers as GitHub Pages does, 404.html included;
+ * `astro preview` detaches into the background when it has no terminal, which
+ * Playwright cannot wait on.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -20,7 +21,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: {
-    command: `python3 -m http.server ${PORT} --bind 127.0.0.1 --directory dist`,
+    command: `node e2e/static-server.ts ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     stdout: 'ignore',

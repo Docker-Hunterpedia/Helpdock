@@ -17,7 +17,7 @@ const HEADING = /^## (\d+\.\d+\.\d+)(?:\s+[—-]\s+(\d{4}-\d{2}-\d{2}))?\s*$/;
 /** Splits a changelog into its `## x.y.z` sections. Text before the first is dropped. */
 export function splitSections(markdown: string): Section[] {
   const sections: Section[] = [];
-  let current: Section | undefined;
+  let current: Omit<Section, 'body'> | undefined;
   const lines: string[] = [];
   const close = () => {
     if (current) sections.push({ ...current, body: lines.join('\n').trim() });

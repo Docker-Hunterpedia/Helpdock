@@ -1,37 +1,30 @@
-// The site search: a dialog over Pagefind's static index, served from this
-// origin. Pagefind's own script loads on the first open, never before.
+// The site search: a command palette over Pagefind's index. A page that
+// matches in several sections shows its title once, its sections under it.
 
-type PagefindResult = {
-  url: string;
-  excerpt: string;
-  meta: { title?: string };
-  sub_results?: { title: string; url: string; excerpt: string }[];
-};
-type Pagefind = {
-  init: () => Promise<void>;
-  debouncedSearch: (
-    query: string,
-  ) => Promise<{ results: { data: () => Promise<PagefindResult> }[] } | null>;
-};
+import {
+  excerpt,
+  icon,
+  loadPagefind,
+  type PagefindResult,
+  pageIcon,
+  sectionsOf,
+  span,
+} from './pagefind.ts';
 
-const dialog = document.querySelector<HTMLDialogElement>('[data-search]');
+const MAX_PAGES = 8;
+const MAX_SECTIONS = 3;
+
+// The 404 page carries a dialog per language; the one in the page's language is used.
+const dialog =
+  document.querySelector<HTMLDialogElement>(
+    `[data-search][data-locale="${document.documentElement.lang}"]`,
+  ) ?? document.querySelector<HTMLDialogElement>('[data-search]');
 const input = dialog?.querySelector<HTMLInputElement>('[data-search-input]');
 const list = dialog?.querySelector<HTMLUListElement>('[data-search-results]');
 const status = dialog?.querySelector<HTMLElement>('[data-search-status]');
-const PAGEFIND = '/pagefind/pagefind.js';
-const MAX_RESULTS = 8;
 
-let pagefind: Promise<Pagefind> | undefined;
 let opener: HTMLElement | null = null;
 let active = -1;
-
-function loadPagefind(): Promise<Pagefind> {
-  pagefind ??= import(/* @vite-ignore */ PAGEFIND).then(async (module: Pagefind) => {
-    await module.init();
-    return module;
-  });
-  return pagefind;
-}
 
 function say(
   key: 'hint' | 'loading' | 'none' | 'count' | 'offline',
@@ -47,7 +40,7 @@ function options(): HTMLLIElement[] {
   return [...(list?.querySelectorAll<HTMLLIElement>('[role="option"]') ?? [])];
 }
 
-function select(index: number) {
+function select(index: number, scroll = true) {
   const all = options();
   if (!input || all.length === 0) return;
   active = (index + all.length) % all.length;
@@ -56,41 +49,51 @@ function select(index: number) {
   }
   const current = all[active];
   input.setAttribute('aria-activedescendant', current?.id ?? '');
-  current?.scrollIntoView({ block: 'nearest' });
+  if (scroll) current?.scrollIntoView({ block: 'nearest' });
+}
+
+function option(id: string, className: string, href: string, parts: Node[]): HTMLLIElement {
+  const item = document.createElement('li');
+  item.id = id;
+  item.className = className;
+  item.setAttribute('role', 'option');
+  item.setAttribute('aria-selected', 'false');
+  const link = document.createElement('a');
+  link.href = href;
+  link.className = 'search-hit';
+  link.tabIndex = -1;
+  link.append(...parts);
+  item.append(link);
+  item.addEventListener('mousemove', () => {
+    const index = options().indexOf(item);
+    if (index !== active) select(index, false);
+  });
+  return item;
+}
+
+function rows(result: PagefindResult, page: number): HTMLLIElement[] {
+  const title = result.meta.title ?? result.url;
+  const sections = sectionsOf(result, MAX_SECTIONS);
+  const head = option(`search-option-${page}`, 'search-page', result.url, [
+    icon(pageIcon(result.url)),
+    span('search-title', title),
+    ...(sections.length === 0 ? [excerpt(result.excerpt)] : []),
+  ]);
+  return [
+    head,
+    ...sections.map((section, index) =>
+      option(`search-option-${page}-${index}`, 'search-sub', section.url, [
+        span('visually-hidden', `${title}: `),
+        span('search-section', section.title),
+        excerpt(section.excerpt),
+      ]),
+    ),
+  ];
 }
 
 function render(results: PagefindResult[]) {
   if (!list || !input) return;
-  list.replaceChildren(
-    ...results.map((result, index) => {
-      const section = result.sub_results?.find((sub) => sub.url !== result.url);
-      const item = document.createElement('li');
-      item.id = `search-option-${index}`;
-      item.setAttribute('role', 'option');
-      item.setAttribute('aria-selected', 'false');
-      const link = document.createElement('a');
-      link.href = section?.url ?? result.url;
-      link.className = 'search-hit';
-      link.tabIndex = -1;
-      const title = document.createElement('span');
-      title.className = 'search-title';
-      title.textContent = result.meta.title ?? result.url;
-      link.append(title);
-      if (section) {
-        const where = document.createElement('span');
-        where.className = 'search-section';
-        where.textContent = section.title;
-        link.append(where);
-      }
-      const excerpt = document.createElement('span');
-      excerpt.className = 'search-excerpt';
-      // Pagefind encodes the excerpt's text and adds only <mark>, so it is safe as HTML.
-      excerpt.innerHTML = section?.excerpt ?? result.excerpt;
-      link.append(excerpt);
-      item.append(link);
-      return item;
-    }),
-  );
+  list.replaceChildren(...results.flatMap(rows));
   active = -1;
   input.removeAttribute('aria-activedescendant');
   input.setAttribute('aria-expanded', String(results.length > 0));
@@ -108,7 +111,7 @@ async function search(query: string) {
     const found = await (await loadPagefind()).debouncedSearch(query);
     if (found === null) return; // a newer query took over
     const results = await Promise.all(
-      found.results.slice(0, MAX_RESULTS).map((result) => result.data()),
+      found.results.slice(0, MAX_PAGES).map((result) => result.data()),
     );
     render(results);
     if (results.length === 0) say('none', { q: query });
@@ -119,17 +122,21 @@ async function search(query: string) {
   }
 }
 
-function open() {
+function open(query?: string) {
   if (!dialog || !input || dialog.open) return;
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   dialog.showModal();
+  if (query !== undefined) {
+    input.value = query;
+    void search(query);
+  }
   input.select();
   void loadPagefind().catch(() => say('offline'));
 }
 
 if (dialog && input) {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-search-open]')) {
-    button.addEventListener('click', open);
+    button.addEventListener('click', () => open(button.dataset.searchQuery));
   }
   dialog.querySelector('[data-search-close]')?.addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', (event) => {

@@ -3,6 +3,7 @@ import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
 import SearchDialog from '../components/SearchDialog.astro';
 import { CHROME, type Locale } from '../data/site.ts';
+import { INDEX_ROBOTS } from '../lib/robots.ts';
 import { absolute, breadcrumbList, type Crumb, jsonLdText } from '../lib/seo.ts';
 import '../styles/site.css';
 
@@ -19,6 +20,11 @@ type Props = {
   noindex?: boolean;
   /** Whether site search indexes this page's main content. */
   indexed?: boolean;
+  /**
+   * The 404 page: one file answers every missing address, so it carries the
+   * chrome of both languages and switches to Arabic before paint under /ar/.
+   */
+  notFound?: { arTitle: string };
 };
 
 const {
@@ -32,6 +38,7 @@ const {
   jsonLd = [],
   noindex = false,
   indexed = false,
+  notFound,
 } = Astro.props;
 
 const chrome = CHROME[locale];
@@ -61,6 +68,19 @@ const fonts =
         } catch {}
       })();
     </script>
+    {
+      notFound && (
+        <script is:inline define:vars={{ arTitle: notFound.arTitle }}>
+          if (/^\/ar(\/|$)/.test(location.pathname)) {
+            const root = document.documentElement;
+            root.lang = 'ar';
+            root.dir = 'rtl';
+            root.classList.add('lang-ar');
+            document.title = arTitle;
+          }
+        </script>
+      )
+    }
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -73,7 +93,7 @@ const fonts =
         </>
       )
     }
-    {noindex && <meta name="robots" content="noindex" />}
+    <meta name="robots" content={noindex ? 'noindex' : INDEX_ROBOTS} />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5F0" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15171B" />
@@ -99,13 +119,39 @@ const fonts =
     {structured.map((data) => <script type="application/ld+json" set:html={jsonLdText(data)} />)}
   </head>
   <body>
-    <a class="skip-link" href="#main">{chrome.skip}</a>
-    <Header locale={locale} languageHref={languageHref} />
+    {
+      notFound ? (
+        <>
+          <a class="skip-link only-en" href="#main">{CHROME.en.skip}</a>
+          <a class="skip-link only-ar" href="#main" lang="ar">{CHROME.ar.skip}</a>
+          <Header locale="en" class="only-en" />
+          <Header locale="ar" class="only-ar" />
+        </>
+      ) : (
+        <>
+          <a class="skip-link" href="#main">{chrome.skip}</a>
+          <Header locale={locale} languageHref={languageHref} />
+        </>
+      )
+    }
     <main id="main" tabindex="-1" data-pagefind-body={indexed ? "" : undefined}>
       <slot />
     </main>
-    <Footer locale={locale} languageHref={languageHref} />
-    <SearchDialog locale={locale} />
+    {
+      notFound ? (
+        <>
+          <Footer locale="en" class="only-en" />
+          <Footer locale="ar" class="only-ar" />
+          <SearchDialog locale="en" />
+          <SearchDialog locale="ar" />
+        </>
+      ) : (
+        <>
+          <Footer locale={locale} languageHref={languageHref} />
+          <SearchDialog locale={locale} />
+        </>
+      )
+    }
     <script>
       import '../scripts/site.ts';
       import '../scripts/search.ts';

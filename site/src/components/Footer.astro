@@ -2,12 +2,12 @@
 import { AUTHOR, CHROME, CONTACT_EMAIL, type Locale } from '../data/site.ts';
 import Logo from './Logo.astro';
 
-type Props = { locale: Locale; languageHref?: string | undefined };
-const { locale, languageHref } = Astro.props;
+type Props = { locale: Locale; languageHref?: string | undefined; class?: string };
+const { locale, languageHref, class: className } = Astro.props;
 const chrome = CHROME[locale];
 const home = locale === 'ar' ? '/ar/' : '/';
 ---
-<footer class="site-footer">
+<footer class:list={["site-footer", className]}>
   <div class="container">
     <div class="footer-grid">
       <div class="footer-about">
@@ -16,8 +16,8 @@ const home = locale === 'ar' ? '/ar/' : '/';
       </div>
       {
         chrome.footer.groups.map((group, index) => (
-          <nav aria-labelledby={`footer-${index}`}>
-            <h2 id={`footer-${index}`}>{group.title}</h2>
+          <nav aria-labelledby={`footer-${locale}-${index}`}>
+            <h2 id={`footer-${locale}-${index}`}>{group.title}</h2>
             <ul>
               {group.links.map((link) => (
                 <li>

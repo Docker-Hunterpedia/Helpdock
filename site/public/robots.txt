@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://helpdock.oday-bakkour.com/sitemap.xml
+Sitemap: https://helpdock.oday-bakkour.com/sitemap-index.xml

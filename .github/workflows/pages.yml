@@ -76,6 +76,20 @@ jobs:
         env:
           HELPDOCK_VERSION: ${{ steps.release.outputs.version }}
         run: pnpm --filter @helpdock/website build
+      - name: Resolve the Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @helpdock/website exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browsers
+        run: pnpm --filter @helpdock/website exec playwright install --with-deps chromium
+      # The theme switch, the Arabic page, axe in both themes, and that no page
+      # loads anything from another origin.
+      - name: Smoke-test the built site
+        run: pnpm --filter @helpdock/website e2e
       - name: Upload the site
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

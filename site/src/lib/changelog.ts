@@ -90,6 +90,16 @@ export function mergeReleases(input: {
     .sort((a, b) => compareReleasesDescending(a.version, b.version));
 }
 
+/**
+ * Every release has its own "Minor changes" heading, and they share one page,
+ * so each release's ids (and the links to them) get the release as a prefix.
+ */
+export function prefixIds(html: string, prefix: string): string {
+  return html
+    .replace(/(\sid=")([^"]+")/g, `$1${prefix}-$2`)
+    .replace(/(\shref="#)([^"]+")/g, `$1${prefix}-$2`);
+}
+
 /** Reads `git for-each-ref` output (`v1.2.0 2026-10-24` per line) into version → date. */
 export function parseTagDates(output: string): Map<string, string> {
   const dates = new Map<string, string>();

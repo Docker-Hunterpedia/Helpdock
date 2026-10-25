@@ -392,6 +392,7 @@ kbd {
 
 .split {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 48px;
   align-items: center;
 }
@@ -1981,7 +1982,8 @@ a.chip:hover {
 /* Grid items may shrink below their content, so a wide table or code block scrolls inside. */
 .docs-layout > *,
 .release > *,
-.split > * {
+.split > *,
+.stack > * {
   min-inline-size: 0;
 }
 

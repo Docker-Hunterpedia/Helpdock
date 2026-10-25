@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { mergeReleases, parseTagDates, splitSections, tidyChangesetBody } from './changelog.ts';
+import {
+  mergeReleases,
+  parseTagDates,
+  prefixIds,
+  splitSections,
+  tidyChangesetBody,
+} from './changelog.ts';
 
 const notes = `# Changelog
 
@@ -72,6 +78,19 @@ describe('mergeReleases', () => {
   it('leaves out releases newer than the one the site shows', () => {
     const releases = mergeReleases({ notes, changes, tagDates, current: '1.1.1' });
     expect(releases.map((release) => release.version)).toEqual(['1.1.1', '1.0.0', '0.5.1']);
+  });
+});
+
+describe('prefixIds', () => {
+  it('makes heading ids unique per release and keeps in-page links pointing at them', () => {
+    expect(
+      prefixIds(
+        '<h3 id="minor-changes">Minor</h3><a href="#minor-changes">up</a><a href="/x/">x</a>',
+        'v1.2.0',
+      ),
+    ).toBe(
+      '<h3 id="v1.2.0-minor-changes">Minor</h3><a href="#v1.2.0-minor-changes">up</a><a href="/x/">x</a>',
+    );
   });
 });
 

@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises';
 import type { Loader } from 'astro/loaders';
 import { z } from 'astro/zod';
 import { DESCRIPTIONS, UNPUBLISHED } from './data/docs.ts';
-import { mergeReleases } from './lib/changelog.ts';
+import { mergeReleases, prefixIds } from './lib/changelog.ts';
 import { splitTitle, summarise } from './lib/guides.ts';
 import { GUIDES_DIR, rewriteGuideLinks } from './lib/links.ts';
 import { readRepoFile, readTagDates, releaseVersion, repoRoot } from './lib/repo.ts';
@@ -57,7 +57,10 @@ const releasesLoader: Loader = {
       store.set({
         id: release.version,
         data: { version: release.version, date: release.date, source: release.source },
-        rendered: { ...rendered, html: rewriteGuideLinks(rendered.html, context) },
+        rendered: {
+          ...rendered,
+          html: prefixIds(rewriteGuideLinks(rendered.html, context), `v${release.version}`),
+        },
       });
     }
   },

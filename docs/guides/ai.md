@@ -569,6 +569,17 @@ otherwise `mode` is `lexical`. Each chunk carries its 1-based `index`, which
 is how the model cites it, and its `visibility`, so assist can mark internal
 citations.
 
+The vector ranker is an exact nearest-neighbour scan of the brand's own
+chunks, not an approximate one. Its `order by` is `distance, id`; the
+install-wide HNSW index cannot supply that key, so Postgres reads the brand's
+rows through the brand indexes and sorts them. Recall is therefore complete
+even for a brand holding a small share of the install's chunks, and one
+brand's vectors never crowd out another's. The cost is that a query reads
+every chunk of the brand in the active model, so it grows with the size of
+that brand's knowledge base. The HNSW index is built when the embedding space
+becomes `ready` but retrieval does not use it today: an approximate scan is
+filtered only after `hnsw.ef_search` candidates and would starve small brands.
+
 After the model answers, `validateCitations(answer, retrieved)` from
 `@helpdock/ai` drops every `[n]` that was not in the retrieved set and sets
 `handoff` when it dropped one: the reply must then be replaced by the handoff

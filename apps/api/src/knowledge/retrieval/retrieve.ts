@@ -128,6 +128,13 @@ export const lexicalChunksSql = (
   order by ts_rank_cd(c.search, to_tsquery(${configOf}, ${anyTerms}), 32) desc, c.id
   limit ${RETRIEVAL_CANDIDATES}`;
 
+/**
+ * An exact nearest-neighbour scan of the brand's own rows. The `c.id`
+ * tie-breaker is load-bearing: the shared HNSW index cannot supply a composite
+ * sort key, so the planner reads the brand's rows and sorts them, with full
+ * recall. An ordered HNSW scan would be post-filtered after `hnsw.ef_search`
+ * candidates and starve a brand holding a small share of the chunks (#326).
+ */
 export const vectorChunksSql = (
   brandId: string,
   audience: RetrievalAudience,

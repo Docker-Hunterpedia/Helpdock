@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
+import { REPO } from '../data/site.ts';
 
-export const REPO_URL = 'https://github.com/Docker-Hunterpedia/Helpdock';
 export const GUIDES_DIR = 'docs/guides';
 
 export type LinkContext = {
@@ -34,7 +34,7 @@ export function rewriteHref(href: string, context: LinkContext): string {
   }
   const directory = path.endsWith('/') || resolved === '.';
   const target = resolved === '.' ? '' : resolved.replace(/\/$/, '');
-  return `${REPO_URL}/${directory ? 'tree' : 'blob'}/main/${target}${hash}`;
+  return `${REPO}/${directory ? 'tree' : 'blob'}/main/${target}${hash}`;
 }
 
 /** Rewrites the `href` of every anchor and the `src` of every image in rendered HTML. */

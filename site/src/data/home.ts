@@ -6,6 +6,7 @@
 import type { Locale } from './site.ts';
 
 type Tile = { title: string; body: string; href: string; more: string };
+type SmallTile = Tile & { icon: string };
 
 export type HomeCopy = {
   title: string;
@@ -36,7 +37,7 @@ export type HomeCopy = {
     helpCenter: Tile & { alt: string; caption: string };
     widget: Tile & { alt: string; caption: string };
     signIn: Tile & { alt: string; providers: string };
-    small: Tile[];
+    small: SmallTile[];
   };
   ai: {
     eyebrow: string;
@@ -190,18 +191,21 @@ export const HOME: Record<Locale, HomeCopy> = {
           title: 'SLAs on your hours.',
           body: 'Business hours with holidays and time zones. Clocks pause in the statuses you mark. A CSAT survey goes out when a ticket closes.',
           href: '/features/slas-and-business-hours/',
+          icon: 'clock',
           more: 'SLAs',
         },
         {
           title: 'Rules, macros and views.',
           body: 'Workflow and time-based rules with a test run. Macros with placeholders. Saved views, snooze, bulk edit and a command palette.',
           href: '/features/automation-and-macros/',
+          icon: 'workflow',
           more: 'Automation',
         },
         {
           title: 'Reports, API and webhooks.',
           body: 'Volume, response times, SLA compliance, CSAT and workload, with CSV export. A REST API with scoped keys and signed webhooks.',
           href: '/features/reports/',
+          icon: 'chart-column',
           more: 'Reports',
         },
       ],
@@ -554,18 +558,21 @@ export const HOME: Record<Locale, HomeCopy> = {
           title: 'اتفاقيات مستوى الخدمة على ساعات عملك.',
           body: 'ساعات عمل مع العطلات والمناطق الزمنية. تتوقف العدّادات في الحالات التي تحدّدها. ويُرسل استبيان رضا العملاء عند إغلاق التذكرة.',
           href: '/features/slas-and-business-hours/',
+          icon: 'clock',
           more: 'اتفاقيات مستوى الخدمة (بالإنجليزية)',
         },
         {
           title: 'القواعد والماكرو والعروض.',
           body: 'قواعد سير عمل وقواعد زمنية مع تشغيل تجريبي. ماكرو بمتغيرات. عروض محفوظة، وتأجيل، وتعديل جماعي، ولوحة أوامر.',
           href: '/features/automation-and-macros/',
+          icon: 'workflow',
           more: 'الأتمتة (بالإنجليزية)',
         },
         {
           title: 'التقارير والواجهة البرمجية وخطافات الويب.',
           body: 'الحجم وأزمنة الاستجابة والالتزام باتفاقيات مستوى الخدمة ورضا العملاء وعبء العمل، مع التصدير إلى CSV. وواجهة REST بمفاتيح محدودة الصلاحيات وخطافات ويب موقّعة.',
           href: '/features/reports/',
+          icon: 'chart-column',
           more: 'التقارير (بالإنجليزية)',
         },
       ],

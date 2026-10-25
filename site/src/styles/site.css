@@ -1604,6 +1604,7 @@ a.chip:hover {
 .steps > li {
   position: relative;
   display: grid;
+  align-content: start;
   gap: 4px;
   padding-inline-start: 48px;
   counter-increment: step;

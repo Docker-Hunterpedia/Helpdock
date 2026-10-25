@@ -12,7 +12,6 @@ export const VERSION: string = import.meta.env.HELPDOCK_VERSION;
 
 export type Locale = 'en' | 'ar';
 
-export const guide = (name: string, anchor = '') => `/docs/${name}/${anchor ? `#${anchor}` : ''}`;
 export const repoFile = (path: string) => `${BLOB}/${path}`;
 
 type Chrome = {

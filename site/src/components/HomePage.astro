@@ -195,9 +195,9 @@ const providers = ['Okta', 'Microsoft Entra ID', 'Google Workspace', 'Keycloak']
           </div>
         </article>
 
-        {t.tour.small.map((tile, index) => (
+        {t.tour.small.map((tile) => (
           <article class="tile t-third reveal">
-            <Icon name={['clock', 'workflow', 'chart-column'][index] ?? 'check'} class="tile-icon" />
+            <Icon name={tile.icon} class="tile-icon" />
             <h3 class="h3">{tile.title}</h3>
             <p>{tile.body}</p>
             <a class="more" href={tile.href}>{tile.more}<Icon name="chevron-right" /></a>

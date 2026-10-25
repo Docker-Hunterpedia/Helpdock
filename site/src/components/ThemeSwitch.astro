@@ -23,30 +23,29 @@ const options = [
 <script is:inline>
   // The choice lives in localStorage; "system" removes it so the page follows
   // prefers-color-scheme again. The head script applied it before first paint.
+  // A blocked storage (private window, site data off) only means the choice
+  // does not outlive the page, so its error is ignored.
   (() => {
     const root = document.documentElement;
-    const key = 'helpdock-theme';
-    for (const group of document.querySelectorAll('[data-theme-switch]')) {
-      const sync = () => {
-        const current = root.dataset.theme || 'system';
-        for (const button of group.querySelectorAll('button')) {
-          button.setAttribute('aria-pressed', String(button.value === current));
-        }
-      };
-      group.addEventListener('click', (event) => {
-        const button = event.target.closest('button');
-        if (!button) return;
-        const value = button.value;
-        if (value === 'system') delete root.dataset.theme;
-        else root.dataset.theme = value;
-        try {
-          if (value === 'system') localStorage.removeItem(key);
-          else localStorage.setItem(key, value);
-        } catch {}
-        for (const other of document.querySelectorAll('[data-theme-switch]')) other.dispatchEvent(new Event('theme-sync'));
-      });
-      group.addEventListener('theme-sync', sync);
-      sync();
-    }
+    const group = document.querySelector('[data-theme-switch]');
+    const showPressed = () => {
+      const current = root.dataset.theme || 'system';
+      for (const button of group.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.value === current));
+      }
+    };
+    group.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      const value = button.value;
+      if (value === 'system') delete root.dataset.theme;
+      else root.dataset.theme = value;
+      try {
+        if (value === 'system') localStorage.removeItem('helpdock-theme');
+        else localStorage.setItem('helpdock-theme', value);
+      } catch {}
+      showPressed();
+    });
+    showPressed();
   })();
 </script>

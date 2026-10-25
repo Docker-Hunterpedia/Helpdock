@@ -801,4 +801,3 @@ const competitors: Competitor[] = [
 ];
 
 export const COMPETITORS = CompetitorsSchema.parse(competitors);
-export const competitor = (slug: string) => COMPETITORS.find((item) => item.slug === slug);

@@ -11,10 +11,12 @@ import {
   knowledgeChunks,
   knowledgeSources,
   outbox,
+  systemContext,
   userBrandRoles,
   users,
   uuidv7,
   withSystem,
+  withTenant,
 } from '@helpdock/db';
 import { createOutboxDispatcher } from '@helpdock/jobs';
 import type {
@@ -31,7 +33,7 @@ import type {
 } from '@helpdock/schemas';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
-import { and, eq, like, or, sql } from 'drizzle-orm';
+import { and, eq, like, or, type SQL, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAiRuntime } from '../ai/db-ai-ports.js';
 import { PasswordHasher } from '../auth/password.js';
@@ -52,6 +54,7 @@ import { knowledgeFileKey, type SourceLoaderDeps } from './load-source.js';
 import {
   createQueryEmbedder,
   createRetriever,
+  RETRIEVAL_CANDIDATES,
   type Retriever,
   vectorChunksSql,
 } from './retrieval/retrieve.js';
@@ -936,5 +939,91 @@ describe.skipIf(!hasDocker)('knowledge ingest and retrieval (M7-03, M7-04)', () 
     );
 
     expect(outsider).toEqual([]);
+  });
+
+  /**
+   * Issue #326. The install has one HNSW index over every brand's vectors, and
+   * pgvector filters an HNSW scan only after `hnsw.ef_search` candidates, so a
+   * brand with a small share of the chunks would get few or no rows back if
+   * the planner scanned that index. Retrieval is exact instead: the planner
+   * reads the brand's own rows through the brand btrees and sorts them, and
+   * `order by distance, c.id` keeps an ordered HNSW scan out of the plan,
+   * because an index cannot supply the composite key. This test pins that
+   * plan and the full-depth, single-brand result it gives. At this table size
+   * the planner avoids HNSW even without the `c.id` tie-breaker, so the plan
+   * check guards against a future change that does reach the index.
+   */
+  describe('vector recall for a small brand on the shared index (#326)', () => {
+    const BIG_CHUNKS = 20_000;
+    const SMALL_CHUNKS = 1_500;
+    const QUERY_VECTOR = `[${Array.from({ length: DIMS }, () => 1).join(',')}]`;
+    const smallBrandId = uuidv7();
+    const bigBrandIds = [uuidv7(), uuidv7()];
+    let smallChunkIds: string[];
+
+    // `noise` is the spread around the query vector, so big brands sit nearer
+    // to the query than the small one. `0 * g.n` makes the vector per row.
+    const seedBrand = async (id: string, prefix: string, chunks: number, noise: number) => {
+      const source = uuidv7();
+      const document = uuidv7();
+      await owner.db.execute(sql`
+        insert into brands (id, name, prefix) values (${id}, ${prefix}, ${prefix})`);
+      await owner.db.execute(sql`
+        insert into knowledge_sources (id, brand_id, kind, name, visibility)
+        values (${source}, ${id}, 'file', ${prefix}, 'internal')`);
+      await owner.db.execute(sql`
+        insert into knowledge_documents (id, brand_id, source_id, external_id, content_hash)
+        values (${document}, ${id}, ${source}, ${prefix}, ${prefix})`);
+      await owner.db.execute(sql`
+        insert into knowledge_chunks
+          (id, brand_id, source_id, document_id, ordinal, locale, visibility, content,
+           content_hash, embedding_model, embedding)
+        select gen_random_uuid(), ${id}, ${source}, ${document}, g.n, 'en', 'internal',
+          ${prefix} || ' chunk ' || g.n, ${prefix} || g.n, 'bag',
+          ('[' || array_to_string(array(
+            select 1 + (random() - 0.5) * ${noise} + 0 * g.n from generate_series(1, ${DIMS})
+          ), ',') || ']')::vector
+        from generate_series(1, ${chunks}) as g(n)`);
+    };
+
+    const smallBrandRows = (statement: SQL) =>
+      withTenant(runtime.db, systemContext(smallBrandId, 'knowledge.retrieve'), (tx) =>
+        tx.execute<Record<string, string>>(statement),
+      );
+
+    beforeAll(async () => {
+      await Promise.all(
+        bigBrandIds.map((id, index) => seedBrand(id, `BIG${index}`, BIG_CHUNKS, 0.002)),
+      );
+      await seedBrand(smallBrandId, 'SMALL', SMALL_CHUNKS, 0.4);
+      await owner.db.execute(sql`analyze`);
+      smallChunkIds = (
+        await withSystem(runtime.db, smallBrandId, (tx) =>
+          tx.select({ id: knowledgeChunks.id }).from(knowledgeChunks),
+        )
+      ).map((row) => row.id);
+    }, 120_000);
+
+    it('has the shared HNSW index, which the query does not scan', async () => {
+      const indexes = await owner.db.execute<{ indexname: string }>(
+        sql`select indexname from pg_indexes where tablename = 'knowledge_chunks'`,
+      );
+      const plan = await smallBrandRows(
+        sql`explain ${vectorChunksSql(smallBrandId, 'staff', { model: 'bag', literal: QUERY_VECTOR })}`,
+      );
+      const text = plan.map((row) => row['QUERY PLAN']).join('\n');
+
+      expect(indexes.map((row) => row.indexname)).toContain('knowledge_chunks_embedding_hnsw_idx');
+      expect(text).not.toContain('knowledge_chunks_embedding_hnsw_idx');
+    });
+
+    it('returns the small brand at full depth and nothing of another', async () => {
+      const rows = await smallBrandRows(
+        vectorChunksSql(smallBrandId, 'staff', { model: 'bag', literal: QUERY_VECTOR }),
+      );
+
+      expect(rows).toHaveLength(RETRIEVAL_CANDIDATES);
+      expect(smallChunkIds).toEqual(expect.arrayContaining(rows.map((row) => row.id)));
+    });
   });
 });

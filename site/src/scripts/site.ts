@@ -64,6 +64,18 @@ for (const link of document.querySelectorAll('.menu-panel a')) {
   link.addEventListener('click', () => link.closest('details')?.removeAttribute('open'));
 }
 
+// The docs sidebar folds on narrow screens (it is open in the markup, so it
+// works without script) and keeps the current guide in view in its own scroll.
+const docsNav = document.querySelector<HTMLElement>('.docs-nav');
+if (docsNav) {
+  const fold = docsNav.querySelector('details');
+  if (fold && !window.matchMedia('(min-width: 900px)').matches) fold.open = false;
+  const current = docsNav.querySelector<HTMLElement>('[aria-current="page"]');
+  if (current && docsNav.scrollHeight > docsNav.clientHeight) {
+    docsNav.scrollTop = current.offsetTop - docsNav.clientHeight / 2;
+  }
+}
+
 // Blocks rise into place the first time they scroll into view. Only blocks that
 // start below the fold are held back, and with reduced motion or without
 // IntersectionObserver nothing is held back at all.

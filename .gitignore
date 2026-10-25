@@ -39,3 +39,6 @@ blob-report/
 
 # Astro
 site/.astro/
+
+# The OpenAPI document the website build writes (scripts/site/write-openapi.ts)
+site/src/generated/

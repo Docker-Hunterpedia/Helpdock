@@ -15,11 +15,15 @@ on:
     # takes those from the release tag.
     paths:
       - 'site/**'
+      - 'scripts/site/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
       - 'site/**'
+      - 'scripts/site/**'
+      - 'apps/api/src/api-v1/openapi.ts'
+      - 'packages/schemas/src/**'
       - 'docs/guides/**'
       - 'CHANGELOG.md'
       - 'apps/api/CHANGELOG.md'
@@ -75,17 +79,18 @@ jobs:
           set -euo pipefail
           tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-      # The guides and changelogs as released. A pull request keeps its own, so
-      # a docs change can be previewed before it ships.
-      - name: Take the docs and changelogs from the release tag
+      # The guides, changelogs and API schemas as released. A pull request keeps
+      # its own, so a docs change can be previewed before it ships.
+      - name: Take the docs, changelogs and API schemas from the release tag
         if: github.event_name != 'pull_request'
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           git fetch --depth=1 --no-tags origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
-          rm -rf docs/guides
-          git checkout "v${VERSION}" -- docs/guides CHANGELOG.md apps/api/CHANGELOG.md
+          rm -rf docs/guides packages/schemas/src
+          git checkout "v${VERSION}" -- docs/guides CHANGELOG.md apps/api/CHANGELOG.md \
+            packages/schemas/src apps/api/src/api-v1/openapi.ts
       # Unlike the version, the star count is decoration: if GitHub does not
       # answer, the site is built without it rather than not at all.
       - name: Look up the star count

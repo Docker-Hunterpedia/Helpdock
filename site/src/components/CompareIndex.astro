@@ -5,6 +5,7 @@ import Base from '../layouts/Base.astro';
 import Cta from './Cta.astro';
 import Icon from './Icon.astro';
 import PageHero from './PageHero.astro';
+import ProductMark from './ProductMark.astro';
 
 type Props = { locale: Locale };
 const { locale } = Astro.props;
@@ -69,6 +70,7 @@ const groups = [
               return (
                 <li>
                   <a class="card" href={`${prefix}/compare/helpdock-vs-${item.slug}/`}>
+                    <ProductMark slug={item.slug} name={item.name} />
                     <span class="card-title">
                       {t.vs} {item.name}
                     </span>
@@ -92,6 +94,7 @@ const groups = [
             {hosted.map((item) => (
               <li>
                 <a class="chip" href={`/alternatives/${item.slug}/`}>
+                  <ProductMark slug={item.slug} name={item.name} />
                   {t.moving} {item.name}
                 </a>
               </li>

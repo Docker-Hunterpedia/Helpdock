@@ -51,7 +51,9 @@ function select(index: number) {
   const all = options();
   if (!input || all.length === 0) return;
   active = (index + all.length) % all.length;
-  all.forEach((option, i) => option.setAttribute('aria-selected', String(i === active)));
+  for (const [i, option] of all.entries()) {
+    option.setAttribute('aria-selected', String(i === active));
+  }
   const current = all[active];
   input.setAttribute('aria-activedescendant', current?.id ?? '');
   current?.scrollIntoView({ block: 'nearest' });
@@ -68,6 +70,7 @@ function render(results: PagefindResult[]) {
       item.setAttribute('aria-selected', 'false');
       const link = document.createElement('a');
       link.href = section?.url ?? result.url;
+      link.className = 'search-hit';
       link.tabIndex = -1;
       const title = document.createElement('span');
       title.className = 'search-title';

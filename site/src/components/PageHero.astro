@@ -10,6 +10,7 @@ const { crumbs, eyebrow, title, lead, locale = 'en' } = Astro.props;
   <div class="container stack-lg">
     <Breadcrumbs crumbs={crumbs} locale={locale} />
     <div class="stack-lg">
+      {Astro.slots.has('mark') && <div class="page-mark"><slot name="mark" /></div>}
       {eyebrow && <p class="eyebrow">{eyebrow}</p>}
       <h1 class="display page-title">{title}</h1>
       <p class="lead">{lead}</p>

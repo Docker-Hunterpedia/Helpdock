@@ -69,14 +69,24 @@ export const DOC_GROUPS: { title: string; guides: string[] }[] = [
   },
   { title: 'Knowledge and AI', guides: ['help-center', 'ai', 'importing'] },
   { title: 'Sign-in and security', guides: ['authentication', 'sso', 'security', 'audit-log'] },
-  { title: 'Developers', guides: ['api', 'webhooks', 'development'] },
+  { title: 'Developers', guides: ['api', 'api-reference', 'webhooks', 'development'] },
   { title: 'Project', guides: ['release', 'security-scanning', 'screen-reader-pass'] },
 ];
 
 export type DocLink = { id: string; title: string };
 
+/** Docs pages that are not guides: the API reference, built from the OpenAPI document. */
+export const REFERENCE_PAGES: (DocLink & { description: string })[] = [
+  {
+    id: 'api-reference',
+    title: 'REST API reference',
+    description:
+      'Every /api/v1 endpoint with its scope, parameters, request body and response, and every webhook event’s payload.',
+  },
+];
+
 export function groupGuides(guides: DocLink[]): { title: string; guides: DocLink[] }[] {
-  const byId = new Map(guides.map((guide) => [guide.id, guide]));
+  const byId = new Map([...guides, ...REFERENCE_PAGES].map((guide) => [guide.id, guide]));
   const named = new Set(DOC_GROUPS.flatMap((group) => group.guides));
   const groups = DOC_GROUPS.map((group) => ({
     title: group.title,

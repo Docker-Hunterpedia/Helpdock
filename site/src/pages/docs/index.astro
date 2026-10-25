@@ -3,7 +3,7 @@ import { getCollection } from 'astro:content';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import DocsNav from '../../components/DocsNav.astro';
 import Icon from '../../components/Icon.astro';
-import { groupGuides } from '../../data/docs.ts';
+import { groupGuides, REFERENCE_PAGES } from '../../data/docs.ts';
 import { REPO, VERSION } from '../../data/site.ts';
 import Base from '../../layouts/Base.astro';
 import { downloads, formatSize } from '../../lib/downloads.ts';
@@ -40,13 +40,14 @@ const crumbs = [
           <h2 class="card-title" id="download-title">Download the docs</h2>
           <p>Every guide as Markdown, with an index, for reading offline.</p>
           <a class="btn btn-secondary btn-sm" href={`/downloads/${docsZip}`} download>
-            <Icon name="file-archive" />Download the docs (v{VERSION}, .zip, {size(docsZip)})
+            <Icon name="file-archive" />Download .zip
           </a>
+          <p class="caption">v{VERSION} · {size(docsZip)}</p>
         </section>
         <section class="card" aria-labelledby="agents-title">
           <span class="disc"><Icon name="bot" /></span>
           <h2 class="card-title" id="agents-title">Use with AI agents</h2>
-          <ul>
+          <ul class="card-links">
             <li>
               <a href={`/downloads/${skillZip}`} download>The helpdock Agent Skill</a> (v{VERSION}, {size(skillZip)}):
               unzip it into <code>.claude/skills/</code>, or read <a href="/skill/helpdock/SKILL.md">SKILL.md</a>.
@@ -68,7 +69,7 @@ const crumbs = [
                   <li>
                     <a class="card compact" href={`/docs/${link.id}/`}>
                       <span class="card-title">{link.title}</span>
-                      <p class="small">{guide?.data.description}</p>
+                      <p class="small">{guide?.data.description ?? REFERENCE_PAGES.find((page) => page.id === link.id)?.description}</p>
                     </a>
                   </li>
                 );

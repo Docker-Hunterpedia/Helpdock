@@ -6,8 +6,9 @@
   "description": "The product website at https://helpdock.oday-bakkour.com, built with Astro.",
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
+    "openapi": "pnpm --filter @helpdock/schemas build && node ../scripts/site/write-openapi.ts",
+    "dev": "pnpm openapi && ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "pnpm openapi && ASTRO_TELEMETRY_DISABLED=1 astro build && pagefind --site dist",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "test": "vitest run --config ../vitest.config.ts --project @helpdock/website",
     "e2e": "playwright test"
@@ -15,7 +16,8 @@
   "dependencies": {
     "@astrojs/rss": "4.0.19",
     "@astrojs/sitemap": "3.7.4",
-    "astro": "7.4.2"
+    "astro": "7.4.2",
+    "simple-icons": "16.35.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

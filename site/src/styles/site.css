@@ -836,7 +836,7 @@ p {
   list-style: none;
 }
 
-.search-results a {
+.search-hit {
   display: grid;
   gap: 2px;
   padding: 12px;
@@ -845,7 +845,7 @@ p {
   text-decoration: none;
 }
 
-.search-results [aria-selected="true"] a {
+[aria-selected="true"] > .search-hit {
   background: var(--accent-tint);
   outline: 1px solid var(--accent);
 }
@@ -1000,8 +1000,8 @@ p {
   font-size: 16px;
   line-height: 24px;
   font-weight: 500;
+  text-align: center;
   text-decoration: none;
-  white-space: nowrap;
   cursor: pointer;
   transition:
     background-color var(--fast) ease-out,
@@ -1284,6 +1284,111 @@ a.card:hover {
 .disc .icon {
   inline-size: 20px;
   block-size: 20px;
+}
+
+/*
+  Logos and channel tiles (Simple Icons, CC0): quiet and monochrome for
+  products, the platform's own colour for channels, all in one tile size.
+  Sizes are custom properties, so a large tile needs no compound selectors.
+*/
+
+.product-mark {
+  --mark-box: 24px;
+  --mark: 20px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--mark-box);
+  block-size: var(--mark-box);
+  color: var(--text-secondary);
+}
+
+.product-mark.lg {
+  --mark-box: 48px;
+  --mark: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.chip .product-mark {
+  --mark-box: 16px;
+  --mark: 14px;
+}
+
+.product-mark svg {
+  inline-size: var(--mark);
+  block-size: var(--mark);
+}
+
+.lettermark {
+  display: grid;
+  place-items: center;
+  inline-size: var(--mark);
+  block-size: var(--mark);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.channel-mark {
+  --mark-box: 40px;
+  --mark: 20px;
+  display: grid;
+  place-items: center;
+  inline-size: var(--mark-box);
+  block-size: var(--mark-box);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-canvas);
+  color: var(--accent);
+}
+
+.channel-mark.lg {
+  --mark-box: 56px;
+  --mark: 28px;
+  border-radius: 14px;
+  background: var(--bg-surface);
+}
+
+.channel-mark > svg {
+  inline-size: var(--mark);
+  block-size: var(--mark);
+}
+
+.versus {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.versus-logo {
+  inline-size: 48px;
+  block-size: 48px;
+}
+
+.versus-word {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.versus-arrow {
+  color: var(--text-secondary);
+}
+
+.mark-glyph {
+  inline-size: var(--mark);
+  block-size: var(--mark);
+}
+
+a.chip:has(.product-mark) {
+  align-items: center;
+  gap: 8px;
 }
 
 .card-title {
@@ -1714,7 +1819,7 @@ a.chip:hover {
 
 .page-hero {
   position: relative;
-  padding-block: 48px 64px;
+  padding-block: 48px 16px;
   isolation: isolate;
 }
 
@@ -1729,7 +1834,7 @@ a.chip:hover {
 
 @media (min-width: 1024px) {
   .page-hero {
-    padding-block: 64px 96px;
+    padding-block: 64px 32px;
   }
 }
 
@@ -2211,7 +2316,7 @@ a.chip:hover {
   line-height: 20px;
 }
 
-.docs-nav details > summary {
+.docs-nav summary {
   padding: 12px 16px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
@@ -2220,17 +2325,29 @@ a.chip:hover {
   cursor: pointer;
 }
 
+/*
+  From 900 px the guide list stays put below the header and scrolls on its own;
+  below it, it folds into "All guides" above the page.
+*/
 @media (min-width: 900px) {
-  .docs-nav .sticky {
+  .docs-nav {
     position: sticky;
     inset-block-start: calc(var(--header) + 24px);
-    max-block-size: calc(100vh - var(--header) - 48px);
+    align-self: start;
+    max-block-size: calc(100dvh - var(--header) - 48px);
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding-inline-end: 8px;
   }
-  .docs-nav details > summary {
+  .docs-nav summary {
     display: none;
   }
+}
+
+.docs-nav,
+.toc {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .docs-nav h2 {
@@ -2278,11 +2395,13 @@ a.chip:hover {
   .toc {
     display: block;
   }
-  .toc .sticky {
+  .toc {
     position: sticky;
     inset-block-start: calc(var(--header) + 24px);
-    max-block-size: calc(100vh - var(--header) - 48px);
+    align-self: start;
+    max-block-size: calc(100dvh - var(--header) - 48px);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 
@@ -2391,6 +2510,102 @@ a.chip:hover {
   color: var(--text-secondary);
 }
 
+/* The API reference. Methods stay neutral, GET aside: a status hue would borrow a meaning. */
+
+.api-group {
+  display: grid;
+  gap: 24px;
+  margin-block-start: 64px;
+}
+
+.api-endpoint {
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--bg-surface);
+  scroll-margin-block-start: calc(var(--header) + 16px);
+}
+
+.api-signature {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.api-method {
+  padding-inline: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.api-method.m-get {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.api-summary {
+  color: var(--text-secondary);
+}
+
+.api-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.api-permalink {
+  color: var(--text-secondary);
+}
+
+.api-table th,
+.api-table td {
+  padding: 8px 12px;
+}
+
+.api-table .field-name {
+  font-weight: 400;
+}
+
+.api-type {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.api-required {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.api-response > summary {
+  color: var(--link);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.api-response[open] > summary {
+  margin-block-end: 12px;
+}
+
+.api-errors code {
+  font-size: 12px;
+}
+
 .docs-cards {
   display: grid;
   gap: 16px;
@@ -2403,7 +2618,7 @@ a.chip:hover {
   }
 }
 
-.docs-cards .card ul {
+.card-links {
   display: grid;
   gap: 8px;
   margin: 0;
@@ -2411,7 +2626,7 @@ a.chip:hover {
   list-style: none;
 }
 
-.docs-cards .card li {
+.card-links > li {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 20px;

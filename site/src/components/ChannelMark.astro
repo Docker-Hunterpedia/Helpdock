@@ -1,0 +1,26 @@
+---
+import type { Channel } from '../data/channels.ts';
+import { brandMark } from '../lib/brand-marks.ts';
+import Icon from './Icon.astro';
+
+/**
+ * A channel's tile: the platform's own mark in its brand colour for Telegram,
+ * WhatsApp, Messenger and Instagram, the Lucide glyph (DESIGN.md §5) for the
+ * rest, on one neutral tile so the eight read as a set. Decorative: the
+ * channel's name is always beside it.
+ */
+type Props = { channel: Channel; size?: 'md' | 'lg' };
+const { channel, size = 'md' } = Astro.props;
+const mark = brandMark(channel.slug);
+---
+<span class:list={['channel-mark', size]} aria-hidden="true">
+  {
+    mark ? (
+      <svg viewBox="0 0 24 24" focusable="false" style={`color: #${mark.hex}`}>
+        <path d={mark.path} fill="currentColor" />
+      </svg>
+    ) : (
+      <Icon name={channel.icon} class="mark-glyph" />
+    )
+  }
+</span>

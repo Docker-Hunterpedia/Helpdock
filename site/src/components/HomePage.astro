@@ -13,9 +13,11 @@ import {
 } from '../data/site.ts';
 import Base from '../layouts/Base.astro';
 import { faqPage, softwareApplication } from '../lib/seo.ts';
+import ChannelMark from './ChannelMark.astro';
 import Cta from './Cta.astro';
 import Faq from './Faq.astro';
 import Icon from './Icon.astro';
+import ProductMark from './ProductMark.astro';
 
 type Props = { locale: Locale };
 const { locale } = Astro.props;
@@ -116,7 +118,7 @@ const providers = ['Okta', 'Microsoft Entra ID', 'Google Workspace', 'Keycloak']
         {CHANNELS.map((channel) => (
           <li>
             <a class="card" href={`${prefix}/channels/${channel.slug}/`}>
-              <span class="disc"><Icon name={channel.icon} /></span>
+              <ChannelMark channel={channel} />
               <span class="card-title">{channel[locale].name}</span>
               <p class="small">{channel[locale].card}</p>
               <Icon name="arrow-right" class="card-arrow" />
@@ -351,6 +353,7 @@ const providers = ['Okta', 'Microsoft Entra ID', 'Google Workspace', 'Keycloak']
         {t.migrate.sources.map((source) => (
           <li>
             <a class="card" href={`${prefix}/compare/helpdock-vs-${source.slug}/`}>
+              <ProductMark slug={source.slug} name={source.name} />
               <span class="card-title">{source.name}</span>
               <p>{source.body}</p>
               <Icon name="arrow-right" class="card-arrow" />

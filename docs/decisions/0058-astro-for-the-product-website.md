@@ -28,7 +28,7 @@ wrong release number.
 
 1. The website is an **Astro** project with **static output**, in `site/`, a
    private workspace package `@helpdock/website` that Changesets ignores.
-2. Its only dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`;
+2. Its only runtime dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`, with `pagefind` and `simple-icons` at build time (items 6 and 8);
    its smoke tests use the Playwright and axe versions the apps already pin. No
    UI framework, no CSS framework and no client-side framework: plain CSS with
    DESIGN.md's tokens as custom properties, and two small inline scripts (the
@@ -52,7 +52,16 @@ wrong release number.
 7. **The docs downloads and the agent skill are zipped without a dependency:**
    Node's `zlib` deflates and checksums, and about sixty lines write the zip
    container, so `fflate` or a similar library is not added.
-8. **Hosting stays on GitHub Pages**, at the same domain (`site/public/CNAME`),
+8. **Logos come from [Simple Icons](https://simpleicons.org)** (`simple-icons`,
+   CC0-1.0, pinned exactly, build-time only): the few marks the comparison and
+   channel pages use are inlined, so no logo is hotlinked. A product the set
+   does not carry gets a lettermark. Brand marks stay out of the product, as
+   DESIGN.md §5 requires; the website is the one exception (§11).
+9. **The API reference is generated** from the api's own OpenAPI document:
+   `scripts/site/write-openapi.ts` calls the function the api serves it with
+   and writes JSON the site renders, so the reference cannot drift from the
+   routes. The site imports nothing else from `apps/api`.
+10. **Hosting stays on GitHub Pages**, at the same domain (`site/public/CNAME`),
    deployed by `.github/workflows/pages.yml`, which now installs with pnpm,
    tests the site's helpers, builds it, smoke-tests the built pages and uploads
    `site/dist`. The site's dev, build and preview scripts turn Astro's telemetry off.

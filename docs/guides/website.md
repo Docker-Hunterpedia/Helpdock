@@ -42,6 +42,7 @@ Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 | `/channels/<x>/`, `/ar/channels/<x>/` | `data/channels.ts`, English and Arabic |
 | `/features/<x>/` | `data/features.ts`, English only |
 | `/docs/<guide>/`, `/docs/<guide>.md` | `docs/guides/<guide>.md`, English only; the `.md` is the guide with absolute links |
+| `/docs/api-reference/`, `/docs/api-reference/openapi.json` | The api's OpenAPI 3.1 document, written at build time by `scripts/site/write-openapi.ts` |
 | `/changelog/`, `/changelog/<version>/`, `/changelog/rss.xml` | `CHANGELOG.md`, `apps/api/CHANGELOG.md` and the release tags |
 | `/llms.txt`, `/llms-full.txt` | The guides, for AI tools ([llmstxt.org](https://llmstxt.org)) |
 | `/downloads/helpdock-docs-<version>.zip`, `/downloads/helpdock-skill-<version>.zip` | The guides, and the `helpdock` Agent Skill; each also as `-latest.zip` |
@@ -205,6 +206,19 @@ excerpt with its matches; arrow keys move, Enter opens, Escape closes and
 returns focus. In `pnpm dev` there is no index, and the dialog says search works
 on the built site.
 
+## The API reference
+
+`/docs/api-reference/` lists every `/api/v1` endpoint by tag (its method and
+path, summary, required scope, parameters, request body and success response
+as field tables, and its errors) and every webhook event's payload. It is built
+from the OpenAPI 3.1 document, not written by hand: the site's `build` and
+`dev` scripts run `pnpm openapi`, which builds `@helpdock/schemas` and runs
+`scripts/site/write-openapi.ts`. That script calls `buildOpenApiDocument()` from
+`apps/api/src/api-v1/openapi.ts`, the function the api serves at
+`/api/docs/openapi.json`, and writes `site/src/generated/openapi.json`
+(gitignored); `src/lib/openapi.ts` turns it into the page. The document is also
+published at `/docs/api-reference/openapi.json`.
+
 ## Docs for AI tools and offline reading
 
 - **On every guide**, a "Use with AI" menu copies the page as Markdown, opens
@@ -227,15 +241,32 @@ on the built site.
 
 ## Where the docs come from
 
-The deployed site takes `docs/guides/`, `CHANGELOG.md` and
-`apps/api/CHANGELOG.md` from the latest release's tag, not from `main`: the
-Pages workflow checks those paths out of `v<version>` after it looks the release
-up. The docs pages, the Markdown copies, the downloads, the skill and the
+The deployed site takes `docs/guides/`, `CHANGELOG.md`,
+`apps/api/CHANGELOG.md`, `packages/schemas/src` and
+`apps/api/src/api-v1/openapi.ts` from the latest release's tag, not from `main`:
+the Pages workflow checks those paths out of `v<version>` after it looks the
+release up, so the API reference describes the released API too. The docs pages, the Markdown copies, the downloads, the skill and the
 changelog therefore always describe the released version. A guide edited on
 `main` reaches the site with the next release, when `release.yml` dispatches the
 Pages workflow, so a push that only changes docs does not redeploy. A pull
 request builds with its own docs, so a docs change can be previewed, and a
 local build uses the working tree.
+
+## Logos
+
+The comparison pages and cards show each competitor's logo, and the channel
+tiles show Telegram's, WhatsApp's, Messenger's and Instagram's. They come from
+[Simple Icons](https://simpleicons.org) (`simple-icons`, CC0-1.0, pinned exactly
+and used at build time only): `src/lib/brand-marks.ts` imports the few it
+needs, and their paths are inlined into the pages, so nothing loads from
+elsewhere. Competitor logos are monochrome (`currentColor`); channel marks keep
+the platform's colour on a neutral tile, beside the Lucide glyphs of email, the
+widget, the web form and the API. A product Simple Icons does not carry
+(Freshdesk, Zoho Desk, Zammad, FreeScout, osTicket) gets a lettermark tile,
+never a drawn imitation. The product itself keeps DESIGN.md §5's generic channel
+icons; brand marks are a website-only exception (DESIGN.md §11). The footer
+says that product names and logos are trademarks of their owners, used only to
+identify the products compared.
 
 ## Design
 
@@ -251,6 +282,10 @@ The header carries a light, dark and system switch: three buttons with
 it before the first paint, so the wrong theme never flashes. With no stored
 choice, or with storage blocked, the page follows `prefers-color-scheme`.
 Without script the switch is hidden and the page follows the system.
+
+On the docs pages the guide list and the on-page contents stay below the header
+while the page scrolls, each scrolling on its own; the list opens scrolled to
+the current guide. Below 900 px the list folds into "All guides" above the page.
 
 Blocks marked `.reveal` rise into place the first time they scroll into view.
 Only blocks that start below the fold are held back, and nothing moves under

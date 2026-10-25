@@ -1,7 +1,9 @@
 ---
+import ChannelMark from '../../components/ChannelMark.astro';
 import Cta from '../../components/Cta.astro';
 import Icon from '../../components/Icon.astro';
 import PageHero from '../../components/PageHero.astro';
+import ProductMark from '../../components/ProductMark.astro';
 import { channel as findChannel } from '../../data/channels.ts';
 import { FEATURES, type Feature } from '../../data/features.ts';
 import Base from '../../layouts/Base.astro';
@@ -75,9 +77,9 @@ const comparisons = feature.slug === 'importers';
         <div class="container">
           <h2 class="h3" id="from-title">Migration guides</h2>
           <ul class="chips gap-top">
-            <li><a class="chip" href="/alternatives/zendesk/">Moving from Zendesk</a></li>
-            <li><a class="chip" href="/alternatives/freshdesk/">Moving from Freshdesk</a></li>
-            <li><a class="chip" href="/alternatives/zoho-desk/">Moving from Zoho Desk</a></li>
+            <li><a class="chip" href="/alternatives/zendesk/"><ProductMark slug="zendesk" name="Zendesk" />Moving from Zendesk</a></li>
+            <li><a class="chip" href="/alternatives/freshdesk/"><ProductMark slug="freshdesk" name="Freshdesk" />Moving from Freshdesk</a></li>
+            <li><a class="chip" href="/alternatives/zoho-desk/"><ProductMark slug="zoho-desk" name="Zoho Desk" />Moving from Zoho Desk</a></li>
           </ul>
         </div>
       </section>
@@ -93,7 +95,7 @@ const comparisons = feature.slug === 'importers';
             {channels.map((item) => (
               <li>
                 <a class="card" href={`/channels/${item.slug}/`}>
-                  <span class="disc"><Icon name={item.icon} /></span>
+                  <ChannelMark channel={item} />
                   <span class="card-title">{item.en.name}</span>
                   <p>{item.en.card}</p>
                   <Icon name="arrow-right" class="card-arrow" />

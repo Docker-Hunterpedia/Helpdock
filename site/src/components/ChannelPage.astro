@@ -3,6 +3,7 @@ import { CHANNELS, type Channel } from '../data/channels.ts';
 import { feature } from '../data/features.ts';
 import type { Locale } from '../data/site.ts';
 import Base from '../layouts/Base.astro';
+import ChannelMark from './ChannelMark.astro';
 import Cta from './Cta.astro';
 import Icon from './Icon.astro';
 import PageHero from './PageHero.astro';
@@ -64,6 +65,7 @@ const related = channel.related.flatMap((slug) => feature(slug) ?? []);
   breadcrumbs={crumbs}
 >
   <PageHero crumbs={crumbs} locale={locale} eyebrow={t.eyebrow} title={copy.name} lead={copy.lead}>
+    <ChannelMark slot="mark" channel={channel} size="lg" />
     <ul class="chips">
       <li class="chip"><span class="chip-icon"><Icon name={channel.autoReply ? 'sparkles' : 'circle-x'} /></span>{t.ai}</li>
       {channel.guides.map((guide) => (

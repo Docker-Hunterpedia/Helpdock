@@ -2,6 +2,7 @@
 import { CHANNELS } from '../data/channels.ts';
 import type { Locale } from '../data/site.ts';
 import Base from '../layouts/Base.astro';
+import ChannelMark from './ChannelMark.astro';
 import Cta from './Cta.astro';
 import Icon from './Icon.astro';
 import PageHero from './PageHero.astro';
@@ -43,7 +44,7 @@ const crumbs = [
           CHANNELS.map((channel) => (
             <li>
               <a class="card" href={`${prefix}/channels/${channel.slug}/`}>
-                <span class="disc"><Icon name={channel.icon} /></span>
+                <ChannelMark channel={channel} />
                 <span class="card-title">{channel[locale].name}</span>
                 <p>{channel[locale].card}</p>
                 <Icon name="arrow-right" class="card-arrow" />

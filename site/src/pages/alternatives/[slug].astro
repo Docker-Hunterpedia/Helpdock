@@ -2,7 +2,9 @@
 import Cta from '../../components/Cta.astro';
 import Faq from '../../components/Faq.astro';
 import Icon from '../../components/Icon.astro';
+import Logo from '../../components/Logo.astro';
 import PageHero from '../../components/PageHero.astro';
+import ProductMark from '../../components/ProductMark.astro';
 import { COMPETITORS } from '../../data/competitors.ts';
 import { CUTOVER } from '../../data/migration.ts';
 import Base from '../../layouts/Base.astro';
@@ -31,6 +33,11 @@ const code = (text: string) =>
 ---
 <Base indexed title={guide.title} description={guide.description} breadcrumbs={crumbs} jsonLd={[faqPage(guide.faq)]}>
   <PageHero crumbs={crumbs} eyebrow="Migration guide" title={guide.h1} lead={guide.lead}>
+    <div slot="mark" class="versus">
+      <ProductMark slug={competitor.slug} name={competitor.name} size="lg" />
+      <Icon name="arrow-right" class="versus-arrow" />
+      <Logo class="versus-logo" />
+    </div>
     <div class="actions start">
       <a class="btn btn-primary" href="/#install">Install Helpdock</a>
       <a class="more" href={`/compare/helpdock-vs-${competitor.slug}/`}>Helpdock vs {competitor.name}<Icon name="chevron-right" /></a>

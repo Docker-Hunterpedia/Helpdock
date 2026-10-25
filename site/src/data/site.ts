@@ -99,7 +99,7 @@ export const CHROME: Record<Locale, Chrome> = {
       ],
       by: 'Developed by',
       licence:
-        'Free software under the GNU AGPL-3.0. Product names are trademarks of their owners.',
+        'Free software under the GNU AGPL-3.0. Product names and logos are trademarks of their respective owners. Their use here only identifies the products compared. Logos from Simple Icons (CC0).',
     },
     breadcrumb: 'Breadcrumb',
   },
@@ -161,7 +161,8 @@ export const CHROME: Record<Locale, Chrome> = {
         },
       ],
       by: 'من تطوير',
-      licence: 'برمجيات حرة بموجب رخصة GNU AGPL-3.0. أسماء المنتجات علامات تجارية لأصحابها.',
+      licence:
+        'برمجيات حرة بموجب رخصة GNU AGPL-3.0. أسماء المنتجات وشعاراتها علامات تجارية لأصحابها، واستخدامها هنا للتعريف بالمنتجات المقارنة فقط. الشعارات من Simple Icons (CC0).',
     },
     breadcrumb: 'مسار التنقل',
   },

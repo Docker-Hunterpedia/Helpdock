@@ -7,7 +7,9 @@ import { faqPage } from '../lib/seo.ts';
 import Cta from './Cta.astro';
 import Faq from './Faq.astro';
 import Icon from './Icon.astro';
+import Logo from './Logo.astro';
 import PageHero from './PageHero.astro';
+import ProductMark from './ProductMark.astro';
 
 type Props = { competitor: Competitor; locale: Locale };
 const { competitor, locale } = Astro.props;
@@ -49,6 +51,7 @@ const t = {
     faq: 'Questions, answered.',
     others: 'Other comparisons',
     vs: 'Helpdock vs',
+    versus: 'vs',
   },
   ar: {
     home: 'الرئيسية',
@@ -74,6 +77,7 @@ const t = {
     faq: 'أسئلة وأجوبة',
     others: 'مقارنات أخرى',
     vs: 'Helpdock مقابل',
+    versus: 'مقابل',
   },
 }[locale];
 
@@ -95,7 +99,13 @@ const others = COMPETITORS.filter(
   breadcrumbs={crumbs}
   jsonLd={[faqPage(copy.faq)]}
 >
-  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.eyebrow} title={t.h1} lead={copy.lead} />
+  <PageHero crumbs={crumbs} locale={locale} eyebrow={t.eyebrow} title={t.h1} lead={copy.lead}>
+    <div slot="mark" class="versus">
+      <Logo class="versus-logo" />
+      <span class="versus-word">{t.versus}</span>
+      <ProductMark slug={competitor.slug} name={competitor.name} size="lg" />
+    </div>
+  </PageHero>
 
   <section class="section tight" aria-labelledby="glance-title">
     <div class="container">
@@ -207,6 +217,7 @@ const others = COMPETITORS.filter(
           others.map((other) => (
             <li>
               <a class="chip" href={`${prefix}/compare/helpdock-vs-${other.slug}/`}>
+                <ProductMark slug={other.slug} name={other.name} />
                 {t.vs} {other.name}
               </a>
             </li>

@@ -18,6 +18,7 @@
     "@helpdock/jobs",
     "@helpdock/net",
     "@helpdock/schemas",
-    "@helpdock/ui"
+    "@helpdock/ui",
+    "@helpdock/website"
   ]
 }

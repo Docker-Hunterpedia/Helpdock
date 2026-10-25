@@ -1,17 +1,19 @@
-// Copy buttons on the code panels. Without script the buttons stay hidden and the
-// commands remain selectable text.
-for (const button of document.querySelectorAll('[data-copy]')) {
-  const source = document.getElementById(button.dataset.copy);
-  if (!source || !navigator.clipboard) continue;
+// Progressive touches only: every page reads and works without this script.
+
+// Copy buttons on code panels. Without script they stay hidden and the commands
+// remain selectable text.
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+  const source = document.getElementById(button.dataset.copy ?? '');
   const label = button.querySelector('[data-label]');
+  if (!source || !label || !navigator.clipboard) continue;
   const idle = label.textContent;
   button.hidden = false;
   button.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(source.innerText.trim());
-      label.textContent = button.dataset.done;
+      label.textContent = button.dataset.done ?? idle;
     } catch {
-      label.textContent = button.dataset.failed;
+      label.textContent = button.dataset.failed ?? idle;
     }
     setTimeout(() => {
       label.textContent = idle;
@@ -19,14 +21,14 @@ for (const button of document.querySelectorAll('[data-copy]')) {
   });
 }
 
-// Close the small-screen menu after a link in it is followed.
+// Close the small-screen menu after one of its links is followed.
 for (const link of document.querySelectorAll('.menu-panel a')) {
   link.addEventListener('click', () => link.closest('details')?.removeAttribute('open'));
 }
 
-// Let blocks rise into place as they scroll into view. Only blocks that start
-// below the fold are held back, so nothing on screen disappears, and with
-// reduced motion or without IntersectionObserver nothing is held back at all.
+// Blocks rise into place the first time they scroll into view. Only blocks that
+// start below the fold are held back, and with reduced motion or without
+// IntersectionObserver nothing is held back at all.
 const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (!calm && 'IntersectionObserver' in window) {
   const observer = new IntersectionObserver(
@@ -37,7 +39,7 @@ if (!calm && 'IntersectionObserver' in window) {
         observer.unobserve(entry.target);
       }
     },
-    { rootMargin: '0px 0px -10% 0px' },
+    { rootMargin: '0px 0px -8% 0px' },
   );
   for (const block of document.querySelectorAll('.reveal')) {
     if (block.getBoundingClientRect().top < window.innerHeight) continue;

@@ -1,0 +1,108 @@
+---
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { CHROME, type Locale } from '../data/site.ts';
+import { absolute, breadcrumbList, type Crumb, jsonLdText } from '../lib/seo.ts';
+import '../styles/site.css';
+
+type Props = {
+  title: string;
+  description: string;
+  locale?: Locale;
+  /** Paths of this page in each language, when a counterpart exists. */
+  alternates?: { en?: string; ar?: string };
+  ogImage?: string;
+  ogType?: 'website' | 'article';
+  breadcrumbs?: Crumb[];
+  jsonLd?: unknown[];
+  noindex?: boolean;
+};
+
+const {
+  title,
+  description,
+  locale = 'en',
+  alternates,
+  ogImage = '/assets/img/og.png',
+  ogType = 'website',
+  breadcrumbs,
+  jsonLd = [],
+  noindex = false,
+} = Astro.props;
+
+const chrome = CHROME[locale];
+const canonical = absolute(Astro.url.pathname);
+const pairs = alternates?.en && alternates.ar ? alternates : undefined;
+const languageHref = locale === 'en' ? alternates?.ar : alternates?.en;
+const structured = [...jsonLd, ...(breadcrumbs ? [breadcrumbList(breadcrumbs)] : [])];
+const fonts =
+  locale === 'ar'
+    ? ['ibm-plex-sans-arabic-arabic-400-normal', 'ibm-plex-sans-arabic-arabic-600-normal']
+    : ['ibm-plex-sans-latin-400-normal', 'ibm-plex-sans-latin-600-normal'];
+---
+<!doctype html>
+<html lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'} class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline>
+      // Before first paint: apply a stored light or dark choice, so the wrong
+      // theme never flashes. Without one, CSS follows prefers-color-scheme.
+      (() => {
+        const root = document.documentElement;
+        root.classList.remove('no-js');
+        try {
+          const stored = localStorage.getItem('helpdock-theme');
+          if (stored === 'light' || stored === 'dark') root.dataset.theme = stored;
+        } catch {}
+      })();
+    </script>
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {
+      pairs && (
+        <>
+          <link rel="alternate" hreflang="en" href={absolute(pairs.en as string)} />
+          <link rel="alternate" hreflang="ar" href={absolute(pairs.ar as string)} />
+          <link rel="alternate" hreflang="x-default" href={absolute(pairs.en as string)} />
+        </>
+      )
+    }
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5F0" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#15171B" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="alternate" type="application/rss+xml" title="Helpdock releases" href="/changelog/rss.xml" />
+    {fonts.map((font) => <link rel="preload" href={`/assets/fonts/${font}.woff2`} as="font" type="font/woff2" crossorigin />)}
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="Helpdock" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={absolute(ogImage)} />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:locale" content={locale === 'ar' ? 'ar_AR' : 'en_US'} />
+    {pairs && <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_AR'} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:creator" content="@Oday_Hunter" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={absolute(ogImage)} />
+    {structured.map((data) => <script type="application/ld+json" set:html={jsonLdText(data)} />)}
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{chrome.skip}</a>
+    <Header locale={locale} languageHref={languageHref} />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <Footer locale={locale} languageHref={languageHref} />
+    <script>
+      import '../scripts/site.ts';
+    </script>
+  </body>
+</html>

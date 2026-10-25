@@ -1,0 +1,62 @@
+---
+import { getCollection, render } from 'astro:content';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import Icon from '../../components/Icon.astro';
+import { REPO } from '../../data/site.ts';
+import Base from '../../layouts/Base.astro';
+import { techArticle } from '../../lib/seo.ts';
+
+export async function getStaticPaths() {
+  const guides = await getCollection('guides');
+  return guides.map((guide) => ({ params: { slug: guide.id }, props: { guide } }));
+}
+
+const { guide } = Astro.props;
+const { Content, headings } = await render(guide);
+const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const path = `/docs/${guide.id}/`;
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Docs', href: '/docs/' },
+  { name: guide.data.title, href: path },
+];
+---
+<Base
+  title={`${guide.data.title} · Helpdock docs`}
+  description={guide.data.description}
+  ogType="article"
+  breadcrumbs={crumbs}
+  jsonLd={[techArticle({ title: guide.data.title, description: guide.data.description, path })]}
+>
+  <div class="container docs-layout">
+    <DocsNav current={guide.id} />
+    <article>
+      <Breadcrumbs crumbs={crumbs} />
+      <h1 class="headline docs-title">{guide.data.title}</h1>
+      <div class="prose">
+        <Content />
+      </div>
+      <div class="docs-meta">
+        <a class="more" href={`${REPO}/edit/main/${guide.data.path}`}>Edit this page on GitHub<Icon name="arrow-up-right" /></a>
+        <a class="more" href={`${REPO}/blob/main/${guide.data.path}`}>View the Markdown source<Icon name="arrow-up-right" /></a>
+      </div>
+    </article>
+    {
+      toc.length > 1 && (
+        <nav class="toc" aria-labelledby="toc-title">
+          <div class="sticky">
+            <h2 id="toc-title">On this page</h2>
+            <ul>
+              {toc.map((heading) => (
+                <li class={`depth-${heading.depth}`}>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </nav>
+      )
+    }
+  </div>
+</Base>

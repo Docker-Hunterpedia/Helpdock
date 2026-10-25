@@ -33,3 +33,9 @@ blob-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Website preview screenshots (docs/guides/website.md)
+.preview-shots/
+
+# Astro
+site/.astro/

@@ -1,0 +1,37 @@
+---
+import { AUTHOR, CHROME, CONTACT_EMAIL, type Locale } from '../data/site.ts';
+import Logo from './Logo.astro';
+
+type Props = { locale: Locale; languageHref?: string | undefined };
+const { locale, languageHref } = Astro.props;
+const chrome = CHROME[locale];
+const home = locale === 'ar' ? '/ar/' : '/';
+---
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href={home}><Logo /><span>Helpdock</span></a>
+        <p>{chrome.footer.about}</p>
+      </div>
+      {
+        chrome.footer.groups.map((group, index) => (
+          <nav aria-labelledby={`footer-${index}`}>
+            <h2 id={`footer-${index}`}>{group.title}</h2>
+            <ul>
+              {group.links.map((link) => (
+                <li>
+                  <a href={link.href}>{link.label}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))
+      }
+    </div>
+    <div class="footer-bottom">
+      <p>{chrome.footer.by} <a href={AUTHOR.url} lang="en">{AUTHOR.name}</a> · <a href={`mailto:${CONTACT_EMAIL}`}><bdi>{CONTACT_EMAIL}</bdi></a></p>
+      <p><a href={languageHref ?? chrome.language.href} hreflang={chrome.language.lang} lang={chrome.language.lang}>{chrome.language.label}</a> · {chrome.footer.licence}</p>
+    </div>
+  </div>
+</footer>

@@ -10,6 +10,7 @@ export default defineConfig({
     projects: [
       'apps/*',
       'packages/*',
+      'site',
       {
         test: {
           name: 'tooling',

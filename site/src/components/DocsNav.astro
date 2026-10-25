@@ -1,0 +1,35 @@
+---
+import { getCollection } from 'astro:content';
+import { groupGuides } from '../data/docs.ts';
+
+type Props = { current?: string };
+const { current } = Astro.props;
+const guides = await getCollection('guides');
+const groups = groupGuides(guides.map((guide) => ({ id: guide.id, title: guide.data.title })));
+---
+<nav class="docs-nav" aria-label="Guides">
+  <details open>
+    <summary>All guides</summary>
+    <div class="sticky">
+      <ul>
+        <li><a href="/docs/" aria-current={current === undefined ? 'page' : undefined}>Overview</a></li>
+      </ul>
+      {
+        groups.map((group) => (
+          <>
+            <h2>{group.title}</h2>
+            <ul>
+              {group.guides.map((guide) => (
+                <li>
+                  <a href={`/docs/${guide.id}/`} aria-current={guide.id === current ? 'page' : undefined}>
+                    {guide.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
+        ))
+      }
+    </div>
+  </details>
+</nav>

@@ -1,0 +1,19 @@
+{
+  "name": "@helpdock/website",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The product website at https://helpdock.oday-bakkour.com, built with Astro.",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "test": "vitest run --config ../vitest.config.ts --project @helpdock/website"
+  },
+  "dependencies": {
+    "@astrojs/rss": "4.0.19",
+    "@astrojs/sitemap": "3.7.4",
+    "astro": "7.4.2"
+  }
+}

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boldLead,
   mergeReleases,
   parseTagDates,
-  prefixIds,
   splitSections,
   tidyChangesetBody,
 } from './changelog.ts';
@@ -58,6 +58,26 @@ describe('tidyChangesetBody', () => {
   });
 });
 
+describe('boldLead', () => {
+  it('turns a name before the first colon into the bold lead', () => {
+    expect(boldLead('Command palette (M14-05): `Ctrl`+`K` opens a dialog.')).toBe(
+      '**Command palette (M14-05).** `Ctrl`+`K` opens a dialog.',
+    );
+  });
+
+  it.each([
+    ['a sentence that ends before any colon', 'Snooze a ticket. Wake paths: time and reply.'],
+    ['a colon inside a code span', 'Set `HD_X: 1` to keep it.'],
+    [
+      'an entry that already has a lead',
+      '**Clearer copy.** The caption counts people: all of them.',
+    ],
+    ['no colon at all', 'Inbox empty states name why a view is empty.'],
+  ])('leaves %s alone', (_case, text) => {
+    expect(boldLead(text)).toBe(text);
+  });
+});
+
 describe('mergeReleases', () => {
   const tagDates = new Map([
     ['1.2.0', '2026-10-24'],
@@ -78,19 +98,6 @@ describe('mergeReleases', () => {
   it('leaves out releases newer than the one the site shows', () => {
     const releases = mergeReleases({ notes, changes, tagDates, current: '1.1.1' });
     expect(releases.map((release) => release.version)).toEqual(['1.1.1', '1.0.0', '0.5.1']);
-  });
-});
-
-describe('prefixIds', () => {
-  it('makes heading ids unique per release and keeps in-page links pointing at them', () => {
-    expect(
-      prefixIds(
-        '<h3 id="minor-changes">Minor</h3><a href="#minor-changes">up</a><a href="/x/">x</a>',
-        'v1.2.0',
-      ),
-    ).toBe(
-      '<h3 id="v1.2.0-minor-changes">Minor</h3><a href="#v1.2.0-minor-changes">up</a><a href="/x/">x</a>',
-    );
   });
 });
 

@@ -1,16 +1,22 @@
 // Progressive touches only: every page reads and works without this script.
 
-// Copy buttons on code panels. Without script they stay hidden and the commands
-// remain selectable text.
-for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
-  const source = document.getElementById(button.dataset.copy ?? '');
+// Copy buttons: `data-copy` names an element whose text is copied (the install
+// commands), `data-copy-text` carries the text itself (a release's link).
+// Without script they stay hidden and the text remains selectable.
+const copyable = (button: HTMLButtonElement) =>
+  button.dataset.copyText ?? document.getElementById(button.dataset.copy ?? '')?.innerText.trim();
+
+for (const button of document.querySelectorAll<HTMLButtonElement>(
+  '[data-copy], [data-copy-text]',
+)) {
+  const text = copyable(button);
   const label = button.querySelector('[data-label]');
-  if (!source || !label || !navigator.clipboard) continue;
+  if (!text || !label || !navigator.clipboard) continue;
   const idle = label.textContent;
   button.hidden = false;
   button.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(source.innerText.trim());
+      await navigator.clipboard.writeText(text);
       label.textContent = button.dataset.done ?? idle;
     } catch {
       label.textContent = button.dataset.failed ?? idle;

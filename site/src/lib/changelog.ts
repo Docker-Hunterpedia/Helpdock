@@ -40,13 +40,31 @@ export function splitSections(markdown: string): Section[] {
 const CHANGESET_ITEM =
   /^- \[(#\d+)\]\(([^)]+)\) \[`[0-9a-f]+`\]\([^)]+\) Thanks \[@[^\]]+\]\([^)]+\)! - (.*)$/;
 
+/**
+ * A Changesets entry often opens with a name and a colon ("Command palette
+ * (M14-05): `Ctrl`+`K` opens…"). That name becomes the bold lead the
+ * hand-written changelog uses, when the colon comes before the first sentence ends.
+ */
+export function boldLead(text: string): string {
+  const colon = text.indexOf(': ');
+  const stop = text.indexOf('. ');
+  if (text.startsWith('**') || colon < 1 || colon > 100 || (stop !== -1 && stop < colon)) {
+    return text;
+  }
+  const lead = text.slice(0, colon);
+  // A colon inside a code span is not the end of a name.
+  if ((lead.match(/`/g)?.length ?? 0) % 2 === 1) return text;
+  const rest = text.slice(colon + 2);
+  return `**${lead}.** ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+}
+
 /** Rewrites a Changesets entry list into plain items that end with their pull request. */
 export function tidyChangesetBody(body: string): string {
   return body
     .split('\n')
     .map((line) => {
       const item = CHANGESET_ITEM.exec(line);
-      return item ? `- ${item[3]} ([${item[1]}](${item[2]}))` : line;
+      return item ? `- ${boldLead(item[3] as string)} ([${item[1]}](${item[2]}))` : line;
     })
     .join('\n')
     .replace(/^### (Major|Minor|Patch) Changes$/gm, (_all, kind: string) => `### ${kind} changes`);
@@ -88,16 +106,6 @@ export function mergeReleases(input: {
       return date ? { ...release, date } : release;
     })
     .sort((a, b) => compareReleasesDescending(a.version, b.version));
-}
-
-/**
- * Every release has its own "Minor changes" heading, and they share one page,
- * so each release's ids (and the links to them) get the release as a prefix.
- */
-export function prefixIds(html: string, prefix: string): string {
-  return html
-    .replace(/(\sid=")([^"]+")/g, `$1${prefix}-$2`)
-    .replace(/(\shref="#)([^"]+")/g, `$1${prefix}-$2`);
 }
 
 /** Reads `git for-each-ref` output (`v1.2.0 2026-10-24` per line) into version → date. */

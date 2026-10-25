@@ -46,6 +46,45 @@ export function rewriteGuideLinks(html: string, context: LinkContext): string {
   );
 }
 
+const INLINE_LINK = /(\]\()([^)\s]+)((?:\s+"[^"]*")?\))/g;
+const REFERENCE = /^(\s*\[[^\]]+\]:\s*)(\S+)/;
+
+/**
+ * The same rewrite on Markdown source, made absolute against the page the
+ * guide is published at, so the file reads correctly anywhere it is copied.
+ * Fenced code and inline code are left exactly as written.
+ */
+export function rewriteMarkdownLinks(
+  markdown: string,
+  context: LinkContext,
+  pageUrl: string,
+): string {
+  const absolute = (href: string) => new URL(rewriteHref(href, context), pageUrl).href;
+  let fenced = false;
+  return markdown
+    .split('\n')
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        fenced = !fenced;
+        return line;
+      }
+      if (fenced) return line;
+      const reference = REFERENCE.exec(line);
+      if (reference) return `${reference[1]}${absolute(reference[2] as string)}`;
+      return line
+        .split('`')
+        .map((part, index) =>
+          index % 2 === 1
+            ? part
+            : part.replace(INLINE_LINK, (_all, open: string, href: string, close: string) => {
+                return `${open}${absolute(href)}${close}`;
+              }),
+        )
+        .join('`');
+    })
+    .join('\n');
+}
+
 function escapeAttribute(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;');
 }

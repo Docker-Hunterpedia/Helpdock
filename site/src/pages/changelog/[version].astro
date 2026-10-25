@@ -1,0 +1,48 @@
+---
+import Icon from '../../components/Icon.astro';
+import PageHero from '../../components/PageHero.astro';
+import ReleaseEntry from '../../components/ReleaseEntry.astro';
+import Base from '../../layouts/Base.astro';
+import { releaseTimeline } from '../../lib/release-list.ts';
+import { groupLabel } from '../../lib/release-notes.ts';
+
+export async function getStaticPaths() {
+  const timeline = await releaseTimeline();
+  return timeline.map((entry, index) => ({
+    params: { version: entry.release.version },
+    props: {
+      entry,
+      newer: timeline[index - 1]?.release.version,
+      older: timeline[index + 1]?.release.version,
+    },
+  }));
+}
+
+type Entry = Awaited<ReturnType<typeof releaseTimeline>>[number];
+type Props = { entry: Entry; newer?: string | undefined; older?: string | undefined };
+const { entry, newer, older } = Astro.props;
+const { release } = entry;
+const path = `/changelog/${release.version}/`;
+const crumbs = [
+  { name: 'Home', href: '/' },
+  { name: 'Changelog', href: '/changelog/' },
+  { name: release.version, href: path },
+];
+const groups = release.groups.map((group) => groupLabel(group.heading).toLowerCase());
+const description =
+  groups.length > 0
+    ? `Helpdock ${release.version}${release.date ? `, released ${release.date}` : ''}: ${[...new Set(groups)].join(', ')}, with every change and its pull request.`
+    : `Helpdock ${release.version}${release.date ? `, released ${release.date}` : ''}, and where to read its notes.`;
+---
+<Base title={`Helpdock ${release.version} release notes`} description={description} ogType="article" breadcrumbs={crumbs}>
+  <PageHero crumbs={crumbs} eyebrow="Release notes" title={`Helpdock ${release.version}`} lead={entry.latest ? 'The latest release.' : `A ${entry.step} release.`} />
+  <div class="container">
+    <ol class="timeline single">
+      <ReleaseEntry {...entry} mode="full" />
+    </ol>
+    <nav class="tl-pager" aria-label="Other releases" data-pagefind-ignore>
+      {older ? <a class="more" href={`/changelog/${older}/`}><Icon name="chevron-left" />Older: {older}</a> : <span />}
+      {newer && <a class="more" href={`/changelog/${newer}/`}>Newer: {newer}<Icon name="chevron-right" /></a>}
+    </nav>
+  </div>
+</Base>

@@ -1,0 +1,126 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { RELEASES, SITE_URL } from '../data/site.ts';
+import {
+  type GroupKind,
+  groupLabel,
+  type ReleaseStep,
+  releaseAnchor,
+} from '../lib/release-notes.ts';
+import Icon from './Icon.astro';
+
+type Props = {
+  release: CollectionEntry<'releases'>['data'];
+  latest: boolean;
+  step: ReleaseStep;
+  /** `summary` shows the intro and the group names, and links to the release's page. */
+  mode: 'full' | 'summary';
+};
+const { release, latest, step, mode } = Astro.props;
+const anchor = releaseAnchor(release.version);
+const page = `/changelog/${release.version}/`;
+const githubRelease = `${RELEASES}/tag/v${release.version}`;
+const stepLabel = { major: 'Major', minor: 'Minor', patch: 'Patch' }[step];
+const icons: Record<GroupKind, string> = {
+  new: 'sparkles',
+  milestone: 'package',
+  fixes: 'wrench',
+  upgrade: 'circle-arrow-up',
+  limits: 'triangle-alert',
+  checks: 'circle-check',
+  other: 'list',
+};
+const formatDate = (date: string) =>
+  new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(date));
+const itemCount = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
+---
+<li class="tl-release" id={anchor}>
+  <div class="tl-rail">
+    <h2 class="tl-version"><a href={mode === 'full' ? `#${anchor}` : page}>{release.version}</a></h2>
+    {release.date && <time class="tl-date" datetime={release.date}>{formatDate(release.date)}</time>}
+    <span class:list={['tl-badge', { latest }]}>{latest ? 'Latest' : stepLabel}</span>
+    <div class="tl-links">
+      <button class="tl-copy" type="button" data-copy-text={`${SITE_URL}${page}`} data-done="Link copied" data-failed="Copy failed" hidden>
+        <Icon name="link" /><span data-label aria-live="polite">Copy link</span>
+      </button>
+      <a href={githubRelease}>GitHub release<Icon name="arrow-up-right" /></a>
+    </div>
+  </div>
+
+  <div class="tl-card">
+    {release.intro && <div class="tl-intro" set:html={release.intro} />}
+    {
+      release.source === 'tag' && (
+        <p class="muted">
+          This release has no changelog entry. Its notes are on the <a href={githubRelease}>GitHub release</a>.
+        </p>
+      )
+    }
+    {
+      mode === 'summary' && release.groups.length > 0 && (
+        <>
+          <ul class="tl-summary">
+            {release.groups.map((group) => (
+              <li class:list={['tl-label', `kind-${group.kind}`]}>
+                <Icon name={icons[group.kind]} />
+                {groupLabel(group.heading)}
+                {group.items.length > 0 && <span class="tl-count">{group.items.length}</span>}
+              </li>
+            ))}
+          </ul>
+          <a class="more" href={page}>Read the full notes for {release.version}<Icon name="chevron-right" /></a>
+        </>
+      )
+    }
+    {
+      mode === 'full' &&
+        release.groups.map((group) => {
+          const label = (
+            <h3 class:list={['tl-label', `kind-${group.kind}`]}>
+              <Icon name={icons[group.kind]} />
+              {groupLabel(group.heading)}
+            </h3>
+          );
+          const content = (
+            <>
+              {group.items.length > 0 && (
+                <ul class="tl-items">
+                  {group.items.map((item) => (
+                    <li>
+                      {item.lead && <p class="tl-lead" set:html={item.lead} />}
+                      {item.body && <div class="tl-body" set:html={item.body} />}
+                      {item.pullRequests.length > 0 && (
+                        <span class="pr-chips">
+                          {item.pullRequests.map((pull) => (
+                            <a class="pr-chip" href={pull.url} aria-label={`Pull request ${pull.number}`}>
+                              #{pull.number}
+                            </a>
+                          ))}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {group.paragraphs && <div class="tl-body" set:html={group.paragraphs} />}
+            </>
+          );
+          return group.folded ? (
+            <details class="tl-group">
+              <summary>
+                {label}
+                {group.items.length > 0 && <span class="tl-count">{itemCount(group.items.length)}</span>}
+                <Icon name="chevron-down" class="tl-chevron" />
+              </summary>
+              {content}
+            </details>
+          ) : (
+            <section class="tl-group">
+              {label}
+              {content}
+            </section>
+          );
+        })
+    }
+  </div>
+</li>

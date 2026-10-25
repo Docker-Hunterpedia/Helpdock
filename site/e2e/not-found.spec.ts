@@ -26,10 +26,22 @@ test.describe('404 page', () => {
     await expect(suggestion).toBeVisible();
     await expect(page.locator('[data-nf-results] a').first()).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Top results' })).toHaveText(
-      'Top results for “instal”',
+      'Top results for “Install”',
     );
     await suggestion.click();
     await expect(page).toHaveURL(/\/docs\/install\/$/);
+  });
+
+  test('a misspelt guide is searched by the title it meant', async ({ page }) => {
+    await page.goto('/docs/telgram-bot');
+    await expect(page.getByRole('link', { name: '/docs/telegram/' })).toBeVisible();
+    const field = page.getByLabel('Search the site');
+    await expect(field).toHaveValue('Telegram');
+    const first = page.locator('[data-nf-results] a').first();
+    await expect(first).toHaveAttribute('href', /^\/docs\/telegram\//);
+    await expect(first).toContainText('Telegram');
+    await field.fill('webhooks');
+    await expect(field).toHaveValue('webhooks');
   });
 
   test('Search everything opens the site search with the same words', async ({ page }) => {

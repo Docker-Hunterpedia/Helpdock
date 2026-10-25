@@ -1,7 +1,8 @@
 // The 404 page: "did you mean" from the known routes, and the site search run
-// on the words of the missing address, its top results shown inline.
+// on the best suggestion's title (or the address's words), its top results
+// shown inline.
 
-import { queryFromPath, suggestRoutes } from '../lib/suggest.ts';
+import { type KnownRoute, notFoundHelp } from '../lib/suggest.ts';
 import { excerpt, icon, loadPagefind, pageIcon, span } from './pagefind.ts';
 
 const INLINE_RESULTS = 5;
@@ -9,23 +10,30 @@ const locale = document.documentElement.lang === 'ar' ? 'ar' : 'en';
 const section = document.querySelector<HTMLElement>(`[data-not-found="${locale}"]`);
 const path = location.pathname;
 
-function routes(): string[] {
+const isRoute = (value: unknown): value is KnownRoute =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as KnownRoute).path === 'string' &&
+  typeof (value as KnownRoute).title === 'string';
+
+function routes(): KnownRoute[] {
   try {
     const parsed: unknown = JSON.parse(document.getElementById('nf-routes')?.textContent ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((route) => typeof route === 'string') : [];
+    return Array.isArray(parsed) ? parsed.filter(isRoute) : [];
   } catch (error) {
     if (error instanceof SyntaxError) return [];
     throw error;
   }
 }
 
+const help = notFoundHelp(path, routes());
+
 function showSuggestions(root: HTMLElement) {
   const box = root.querySelector<HTMLElement>('[data-nf-suggest]');
   const list = root.querySelector<HTMLUListElement>('[data-nf-suggest-list]');
-  const found = suggestRoutes(path, routes(), 3).filter((route) => route !== path);
-  if (!box || !list || found.length === 0) return;
+  if (!box || !list || help.suggestions.length === 0) return;
   list.replaceChildren(
-    ...found.map((route) => {
+    ...help.suggestions.map(({ path: route }) => {
       const item = document.createElement('li');
       const link = document.createElement('a');
       link.href = route;
@@ -96,7 +104,7 @@ function setUpSearch(root: HTMLElement) {
     }
   };
 
-  input.value = queryFromPath(path);
+  input.value = help.query;
   remember();
   input.addEventListener('input', remember);
   form.addEventListener('submit', (event) => {

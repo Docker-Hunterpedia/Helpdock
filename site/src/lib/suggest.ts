@@ -76,6 +76,30 @@ export function routeScore(path: string, route: string): number {
   return Math.max(whole, last) * (sameLanguage ? 1 : 0.8);
 }
 
+/** A page of the site and the title search knows it by. */
+export type KnownRoute = { path: string; title: string };
+
+/**
+ * What the 404 page offers: the closest routes, and the words to search for.
+ * The best suggestion's title searches better than a misspelt address
+ * ("telgram bot" matches "both"), so the path's own words are the fallback.
+ */
+export function notFoundHelp(
+  path: string,
+  routes: KnownRoute[],
+  limit = 3,
+): { suggestions: KnownRoute[]; query: string } {
+  const byPath = new Map(routes.map((route) => [route.path, route]));
+  const suggestions = suggestRoutes(
+    path,
+    routes.map((route) => route.path),
+    limit,
+  )
+    .filter((route) => route !== path)
+    .map((route) => byPath.get(route) as KnownRoute);
+  return { suggestions, query: suggestions[0]?.title ?? queryFromPath(path) };
+}
+
 /** The closest routes to a missing path, best first, if any is close enough. */
 export function suggestRoutes(
   path: string,

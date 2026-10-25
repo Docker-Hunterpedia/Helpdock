@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { editDistance, queryFromPath, routeScore, suggestRoutes } from './suggest.ts';
+import { editDistance, notFoundHelp, queryFromPath, routeScore, suggestRoutes } from './suggest.ts';
 
 const routes = [
   '/',
@@ -65,5 +65,31 @@ describe('routeScore', () => {
   it('scores an exact match 1 and a different language lower', () => {
     expect(routeScore('/docs/telegram/', '/docs/telegram/')).toBe(1);
     expect(routeScore('/ar/channels/telegram/', '/channels/telegram/')).toBeLessThan(1);
+  });
+});
+
+describe('notFoundHelp', () => {
+  const known = [
+    { path: '/docs/telegram/', title: 'Telegram' },
+    { path: '/docs/install/', title: 'Install' },
+    { path: '/channels/telegram/', title: 'Telegram' },
+  ];
+
+  it('searches for the best suggestion’s title, not the misspelt words', () => {
+    const help = notFoundHelp('/docs/telgram-bot', known);
+    expect(help.suggestions[0]).toEqual({ path: '/docs/telegram/', title: 'Telegram' });
+    expect(help.query).toBe('Telegram');
+  });
+
+  it('falls back to the address’s words when nothing is close', () => {
+    expect(notFoundHelp('/does-not-exist', known)).toEqual({
+      suggestions: [],
+      query: 'does not exist',
+    });
+  });
+
+  it('never suggests the missing address itself', () => {
+    const help = notFoundHelp('/docs/install/', known);
+    expect(help.suggestions.map((route) => route.path)).not.toContain('/docs/install/');
   });
 });

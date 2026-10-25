@@ -238,10 +238,12 @@ One `404.html` serves both languages. A head script switches it to Arabic
 (`lang="ar"`, `dir="rtl"`, the Arabic header, copy and footer) before paint when
 the path starts with `/ar/`. The page shows the missing path on a closed
 "HD-404" ticket card, offers up to three "did you mean" links from the site's
-routes (`src/lib/routes.ts`, matched by `src/lib/suggest.ts`), runs the site
-search on the path's words once the page has painted and shows its top five
-results inline, with "Search everything" opening the search dialog on the same
-words, and links to the install guide, the docs, the channels and the
+routes (`src/lib/routes.ts`, matched by `src/lib/suggest.ts`), and runs the
+site search once the page has painted, showing its top five results inline. The
+search field is prefilled with the best suggestion's title (`/docs/telgram-bot`
+searches for "Telegram"), or with the path's words when nothing is close, and
+stays editable; "Search everything" opens the search dialog on the same words.
+The page also links to the install guide, the docs, the channels and the
 comparisons. It is `noindex` and left out of the sitemap.
 
 ## The API reference

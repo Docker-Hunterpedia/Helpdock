@@ -28,7 +28,8 @@ wrong release number.
 
 1. The website is an **Astro** project with **static output**, in `site/`, a
    private workspace package `@helpdock/website` that Changesets ignores.
-2. Its only dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`. No
+2. Its only dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`;
+   its smoke tests use the Playwright and axe versions the apps already pin. No
    UI framework, no CSS framework and no client-side framework: plain CSS with
    DESIGN.md's tokens as custom properties, and two small inline scripts (the
    theme, applied before first paint, and its switch) plus one bundled script
@@ -46,7 +47,7 @@ wrong release number.
 6. **Hosting stays on GitHub Pages**, at the same domain (`site/public/CNAME`),
    deployed by `.github/workflows/pages.yml`, which now installs with pnpm,
    tests the site's helpers, builds it, smoke-tests the built pages and uploads
-   `site/dist`. Astro's telemetry is turned off in every script.
+   `site/dist`. The site's dev, build and preview scripts turn Astro's telemetry off.
 
 ## Consequences
 

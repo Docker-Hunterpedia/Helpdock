@@ -9,11 +9,11 @@ This guide is for whoever maintains the site, so the site does not publish it.
 A static [Astro](https://astro.build) site in [`site/`](../../site/), the
 private workspace package `@helpdock/website`
 ([ADR 0058](../decisions/0058-astro-for-the-product-website.md)). Its only
-dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss`; there is no UI
-framework and no CSS framework. Nothing on it calls a third party: fonts, icons
-and images are served from the site itself, there is no analytics or tracking,
-and Astro's own telemetry is turned off in every `site` script
-(`ASTRO_TELEMETRY_DISABLED=1`).
+dependencies are `astro`, `@astrojs/sitemap` and `@astrojs/rss` (Playwright and
+axe are its test tools); there is no UI framework and no CSS framework. Nothing
+on it calls a third party: fonts, icons and images are served from the site
+itself, and there is no analytics or tracking. The `dev`, `build` and `preview`
+scripts also turn off Astro's own telemetry (`ASTRO_TELEMETRY_DISABLED=1`).
 
 | Path | What it is |
 |---|---|

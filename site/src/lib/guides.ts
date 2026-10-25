@@ -20,6 +20,8 @@ export function summarise(body: string, limit = 160): string {
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/[`*_]/g, '')
     .replace(CITATION, '')
+    // "Specified by REQUIREMENTS §5.1 and …" points at the plan, not the reader's task.
+    .replace(/\s*Specified by .*?\.(?=\s|$)/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (text.length <= limit) return text;

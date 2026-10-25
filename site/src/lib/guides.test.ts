@@ -23,6 +23,14 @@ describe('summarise', () => {
     ).toBe('Tickets of one brand, for an integration. Outbound events are in Webhooks.');
   });
 
+  it('drops a sentence that only says which plan sections specify the guide', () => {
+    expect(
+      summarise(
+        'How staff sign in. Specified by [REQUIREMENTS §5.1](x.md), [ARCHITECTURE §7](y.md) and DOMAIN-RULES §2.',
+      ),
+    ).toBe('How staff sign in.');
+  });
+
   it('skips comments, headings and lists to find the first paragraph', () => {
     expect(summarise('<!-- generated -->\n\n## Heading\n\n- item\n\nThe `real` one.')).toBe(
       'The real one.',

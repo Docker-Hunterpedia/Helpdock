@@ -90,7 +90,7 @@ export function AuditLogPage({ api }: { readonly api?: SystemApi } = {}): ReactN
       to={ROUTES.system}
       variant="outlined"
       size="small"
-      startIcon={<ArrowLeft size={16} aria-hidden="true" />}
+      startIcon={<ArrowLeft size={16} aria-hidden="true" className="mirror-in-rtl" />}
     >
       {t('system:auditLog.back')}
     </Button>

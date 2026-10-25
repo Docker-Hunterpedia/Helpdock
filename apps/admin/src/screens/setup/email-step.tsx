@@ -351,7 +351,7 @@ export function EmailStep({
           onClick={test}
           loading={testPending}
           loadingPosition="start"
-          startIcon={<Send size={16} aria-hidden="true" />}
+          startIcon={<Send size={16} aria-hidden="true" className="mirror-in-rtl" />}
           disabled={pending}
         >
           {t('wizard:email.test')}

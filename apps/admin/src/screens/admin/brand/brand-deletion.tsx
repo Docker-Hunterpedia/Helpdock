@@ -92,7 +92,7 @@ export function PendingDeletionBanner({
           <Button
             variant="outlined"
             size="small"
-            startIcon={<Undo2 size={16} aria-hidden="true" />}
+            startIcon={<Undo2 size={16} aria-hidden="true" className="mirror-in-rtl" />}
             disabled={restore.isPending}
             onClick={() => {
               restore.mutate();

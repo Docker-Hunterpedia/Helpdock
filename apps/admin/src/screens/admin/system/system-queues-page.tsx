@@ -37,7 +37,7 @@ export function SystemQueuesPage({ api }: { readonly api?: SystemApi } = {}): Re
       to={ROUTES.system}
       variant="outlined"
       size="small"
-      startIcon={<ArrowLeft size={16} aria-hidden="true" />}
+      startIcon={<ArrowLeft size={16} aria-hidden="true" className="mirror-in-rtl" />}
     >
       {t('common:actions.back')}
     </Button>

@@ -52,6 +52,25 @@ test.describe('Channels › Mailboxes', () => {
     expect(await violations(page)).toEqual([]);
   });
 
+  test('points the mailbox form back arrow with the reading direction', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openChannels(page, locale);
+
+    await page.getByRole('link', { name: t('channels:addMailbox') }).click();
+    const back = page.getByRole('link', { name: t('channels:form.back') });
+    await expect(back).toBeVisible();
+
+    // `mirror-in-rtl` is defined once in the global styles (DESIGN §7).
+    await expect(back.locator('.mirror-in-rtl')).toHaveCSS(
+      'transform',
+      locale === 'ar' ? 'matrix(-1, 0, 0, 1, 0, 0)' : 'none',
+    );
+  });
+
   test('adds an inbound-parse mailbox, and refuses an address already taken', async ({
     page,
     appLocale: locale,

@@ -1,5 +1,13 @@
 # @helpdock/api
 
+## 1.2.1
+
+### Patch Changes
+
+- [#413](https://github.com/Docker-Hunterpedia/Helpdock/pull/413) [`b07f759`](https://github.com/Docker-Hunterpedia/Helpdock/commit/b07f759f6ece9b1d72c7d394aa2010f7bc421a7c) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Update nodemailer to 10.1.7 (with mailparser 3.9.47, which uses the same release) to fix three address-parsing flaws, where a nested comment, a `;` inside quotes or a `>` inside a quoted local part could turn header text into an extra recipient or a different domain. Update Fastify to 5.12.7 to fix a header validation bypass.
+
+- [#417](https://github.com/Docker-Hunterpedia/Helpdock/pull/417) [`c3d7d6c`](https://github.com/Docker-Hunterpedia/Helpdock/commit/c3d7d6c65f057b5a658ffa9f3746bbfde277eed9) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Arabic back arrows and other directional icons in the admin now point the right way.
+
 ## 1.2.0
 
 ### Minor Changes

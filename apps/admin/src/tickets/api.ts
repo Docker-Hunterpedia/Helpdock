@@ -7,6 +7,7 @@ import type {
   MacroRunRequest,
   MacroRunResponse,
   MarkSpamRequest,
+  MentionCandidateList,
   MessageCreateRequest,
   RenderedMacro,
   SnoozePresets,
@@ -176,6 +177,15 @@ export interface TicketsApi {
   ): Promise<RenderedMacro>;
   /** The reply and the kept actions, in one request and one activity entry. */
   runMacro(brandId: string, ticketId: string, request: MacroRunRequest): Promise<MacroRunResponse>;
+
+  // ---------------------------------------------------------------- M14-15
+
+  /** Who a note on this ticket can `@`-mention: people who can see its department. */
+  mentionCandidates(
+    brandId: string,
+    ticketId: string,
+    query?: string,
+  ): Promise<MentionCandidateList>;
 }
 
 /**

@@ -9,6 +9,13 @@
 
 export type ComposerTrigger =
   | {
+      /** `@om`: the people a note can mention (M14-15). */
+      readonly kind: 'mention';
+      readonly start: number;
+      readonly end: number;
+      readonly query: string;
+    }
+  | {
       /** `/refund`: saved replies and macros. */
       readonly kind: 'slash';
       readonly start: number;
@@ -26,10 +33,17 @@ export type ComposerTrigger =
 export interface TriggerOptions {
   /** Replies only: a note has no saved replies. */
   readonly slash: boolean;
+  /** Notes only: a public reply never mentions a colleague. */
+  readonly mention?: boolean;
 }
 
 /** A `/` at the start of the text, a line, or after a space, and the word after it. */
 const SLASH = /(?:^|\s)(\/([\p{L}\p{N}_-]*))$/u;
+/**
+ * `@` and the handle typed after it. Like the server's parser, the `@` must not
+ * follow a letter, digit, `_` or `.`, so an email address is not a mention.
+ */
+const AT = /(?:^|[^\p{L}\p{N}_.])(@([\p{L}\p{N}._-]*))$/u;
 /** `{{` and whatever of a name has been typed after it. */
 const BRACES = /(\{\{\s*([a-z_.]*))$/iu;
 
@@ -48,6 +62,11 @@ export const detectTrigger = (
       end: caret,
       query: braces[2] ?? '',
     };
+  }
+
+  const at = options.mention === true ? AT.exec(before) : null;
+  if (at?.[1] !== undefined) {
+    return { kind: 'mention', start: caret - at[1].length, end: caret, query: at[2] ?? '' };
   }
 
   const slash = options.slash ? SLASH.exec(before) : null;

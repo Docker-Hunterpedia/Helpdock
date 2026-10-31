@@ -43,6 +43,7 @@ export * from './keyboard.js';
 export * from './knowledge.js';
 export * from './macros.js';
 export * from './media.js';
+export * from './mentions.js';
 export * from './merge.js';
 export * from './meta.js';
 export * from './notifications.js';

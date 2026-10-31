@@ -226,6 +226,17 @@
       "used_many": "استُخدم {{count}} مرة · {{who}}",
       "used_other": "استُخدم {{count}} مرة · {{who}}",
       "placeholderHint": "اختيار أحدها يُدرج قيمته لهذه التذكرة."
+    },
+    "mention": {
+      "label": "من يمكنه رؤية هذه التذكرة",
+      "none": "لا أحد ممن يرون هذه التذكرة يطابق ذلك.",
+      "count_zero": "لا أحد",
+      "count_one": "شخص واحد",
+      "count_two": "شخصان",
+      "count_few": "{{count}} أشخاص",
+      "count_many": "{{count}} شخصًا",
+      "count_other": "{{count}} شخص",
+      "loading": "جارٍ تحميل الأشخاص"
     }
   },
   "details": {

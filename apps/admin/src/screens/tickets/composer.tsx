@@ -32,6 +32,7 @@ import type { ShortcutId } from '../../keyboard/registry.js';
 import { PlaceholderPicker } from '../admin/automation/placeholder-picker.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
 import {
+  MentionSuggestions,
   SavedReplySuggestions,
   type SuggestionKeys,
   type SuggestionList,
@@ -97,6 +98,7 @@ export const COMPOSER_SHORTCUTS = [
 export interface ComposerInline {
   readonly brandId: string;
   readonly departmentId: string;
+  readonly ticketId: string;
   /** What each placeholder is for this ticket; one with no value is not offered. */
   readonly placeholderValues: ReadonlyMap<string, string>;
   /**
@@ -252,7 +254,7 @@ export function Composer({
     const found =
       inline === undefined || caret === null || caret !== area.selectionEnd
         ? null
-        : detectTrigger(area.value, caret, { slash: !note && singleKeys });
+        : detectTrigger(area.value, caret, { slash: !note && singleKeys, mention: note });
     setTrigger(found);
     if (found === null) {
       setDismissedAt(null);
@@ -382,7 +384,7 @@ export function Composer({
         slotProps={{
           htmlInput: {
             'aria-label': t('tickets:composer.bodyLabel'),
-            ...(open && trigger.kind === 'slash'
+            ...(open && trigger.kind !== 'placeholder'
               ? {
                   'aria-controls': listId,
                   ...(activeOption === null ? {} : { 'aria-activedescendant': activeOption }),
@@ -413,6 +415,17 @@ export function Composer({
                 }
               });
             });
+          }}
+        />
+      ) : null}
+      {open && trigger.kind === 'mention' ? (
+        <MentionSuggestions
+          brandId={inline.brandId}
+          ticketId={inline.ticketId}
+          query={trigger.query}
+          list={suggestionList}
+          onPick={(handle) => {
+            insertAtTrigger(`@${handle} `);
           }}
         />
       ) : null}

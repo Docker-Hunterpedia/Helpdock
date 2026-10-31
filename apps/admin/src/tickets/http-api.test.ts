@@ -526,6 +526,22 @@ describe('macros (M3-06)', () => {
     expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/macro-runs`);
     expect(lastInit().method).toBe('POST');
   });
+
+  it('reads who a note can mention, narrowed by what was typed (M14-15)', async () => {
+    const candidate = {
+      userId: '0192c3f0-1a2b-7c3d-8e4f-0000000000a1',
+      name: 'Omar Aziz',
+      handle: 'omar.aziz',
+      presence: 'online',
+    };
+    fetchMock.mockImplementation(async () => json({ candidates: [candidate] }));
+
+    expect((await api.mentionCandidates(BRAND, TICKET, ' om ')).candidates).toEqual([candidate]);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/mention-candidates?q=om`);
+
+    await api.mentionCandidates(BRAND, TICKET);
+    expect(lastUrl()).toBe(`/api/brands/${BRAND}/tickets/${TICKET}/mention-candidates`);
+  });
 });
 
 describe('bulk edit (M14-04)', () => {

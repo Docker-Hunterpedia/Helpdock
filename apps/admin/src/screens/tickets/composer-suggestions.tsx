@@ -1,7 +1,7 @@
 import type { Macro } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
 import { Box, Paper, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   type KeyboardEvent,
   type MutableRefObject,
@@ -12,7 +12,8 @@ import {
 } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { useTicketingApi } from '../../auth/session.tsx';
+import { useTicketingApi, useTicketsApi } from '../../auth/session.tsx';
+import { PresenceDot } from '../../ui/presence-dot.tsx';
 import { matchSavedReplies } from './saved-reply-order.js';
 
 /**
@@ -287,3 +288,121 @@ const caption = (macro: Macro, t: ReturnType<typeof useT>): string => {
     ? who
     : t('tickets:composer.suggest.used', { count: macro.useCount, who });
 };
+
+export interface MentionSuggestionsProps {
+  readonly brandId: string;
+  readonly ticketId: string;
+  /** What follows the `@`. */
+  readonly query: string;
+  readonly list: SuggestionList;
+  /** The handle to write after the `@`. */
+  onPick(handle: string): void;
+}
+
+/**
+ * `@` in a note (M14-15): the people who can see this ticket's department, with
+ * presence, filtered as one types in either script. The api decides who may be
+ * offered; choosing writes the handle its notification path already reads.
+ */
+export function MentionSuggestions({
+  brandId,
+  ticketId,
+  query,
+  list,
+  onPick,
+}: MentionSuggestionsProps): ReactNode {
+  const t = useT();
+  const ticketsApi = useTicketsApi();
+  const [active, setActive] = useState(0);
+
+  const people = useQuery({
+    queryKey: ['mention-candidates', brandId, ticketId, query],
+    queryFn: () => ticketsApi.mentionCandidates(brandId, ticketId, query),
+    // The previous word's people stay up while the next word's arrive.
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  });
+  const candidates = people.data?.candidates ?? [];
+  const current = Math.min(active, Math.max(candidates.length - 1, 0));
+  const selected = candidates[current];
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the query is the trigger, not a read.
+  useEffect(() => {
+    setActive(0);
+  }, [query]);
+
+  const { onActive } = list;
+  useEffect(() => {
+    onActive(selected === undefined ? null : `${list.id}-${selected.userId}`);
+    return () => {
+      onActive(null);
+    };
+  }, [onActive, list.id, selected]);
+
+  useSuggestionKeys(list, {
+    count: candidates.length,
+    active: current,
+    setActive,
+    pick: () => {
+      if (selected !== undefined) {
+        onPick(selected.handle);
+      }
+    },
+  });
+
+  if (people.isPending) {
+    return null;
+  }
+
+  return (
+    <>
+      <SuggestionCard
+        id={list.id}
+        label={t('tickets:composer.mention.label')}
+        hint={t('tickets:composer.suggest.hint')}
+      >
+        {candidates.map((person, index) => (
+          <SuggestionOption
+            key={person.userId}
+            id={`${list.id}-${person.userId}`}
+            selected={index === current}
+            name={
+              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <PresenceDot status={person.presence} />
+                <bdi>{person.name}</bdi>
+              </Box>
+            }
+            caption={
+              <>
+                <bdi>@{person.handle}</bdi> · {t(`admin:presence.status.${person.presence}`)}
+              </>
+            }
+            onChoose={() => {
+              onPick(person.handle);
+            }}
+            onHover={() => {
+              setActive(index);
+            }}
+          />
+        ))}
+        {candidates.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary', padding: 2 }}>
+            {t('tickets:composer.mention.none')}
+          </Typography>
+        ) : null}
+      </SuggestionCard>
+      <Typography
+        role="status"
+        sx={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          clip: 'rect(0 0 0 0)',
+        }}
+      >
+        {t('tickets:composer.mention.count', { count: candidates.length })}
+      </Typography>
+    </>
+  );
+}

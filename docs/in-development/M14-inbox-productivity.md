@@ -1131,6 +1131,29 @@ script. Choosing inserts the handle the existing resolver already understands
 still works. A person outside the ticket's department never appears; the
 endpoint is the assignee picker's list, which already applies that rule.
 
+**Status: built, in review** (issue [#302](https://github.com/Docker-Hunterpedia/Helpdock/issues/302)).
+Built as above, with these differences:
+
+- [x] `GET /api/brands/:brandId/tickets/:ticketId/mention-candidates?q=`
+  (`ticket:write`), as the API table says, **not** the assignee picker's list: that
+  list drops people above the writer's role (an Agent cannot assign to an Admin),
+  which would hide a colleague the fan-out does tell. Candidates are computed with
+  the fan-out's own `canSeeDepartment`, so everyone listed will be notified and
+  nobody outside the department is listed; the writer and deactivated staff are
+  left out. The ticket is read through the caller's transaction (unseen ticket,
+  `404`). Integration-tested against Postgres and Redis, with a note written with
+  an offered handle then notifying exactly that person.
+- [x] Each person is offered with the first spelling `resolveMention` maps back to
+  them alone (email name, whole name, first name); someone no spelling names alone
+  is not listed, since text that tells the wrong colleague is worse than a missing
+  row. The email address never leaves the api.
+- [x] The composer opens the list on `@` in a note only (never a public reply, never
+  after a letter, digit, `_` or `.`, as the server's parser reads it), reusing
+  `SuggestionList` from M14-14; Tab or Enter write `@handle ` and Esc keeps the
+  text. Not gated by the single-key switch: it is a typed trigger in a text field
+  with no registry entry.
+- No new table, setting or migration.
+
 ### M14-16 Custom-field filters and pinned chip
 
 The ticket list and the view editor take filters on ticket custom fields:

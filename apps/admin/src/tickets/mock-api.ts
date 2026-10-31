@@ -13,6 +13,7 @@ import type {
   MacroRunRequest,
   MacroRunResponse,
   MarkSpamRequest,
+  MentionCandidateList,
   MergedTicket,
   MessageCreateRequest,
   RelatedTicket,
@@ -2016,6 +2017,29 @@ export class MockTicketsApi implements TicketsApi {
     }
 
     return this.update(brandId, ticketId, { statusId: this.#defaultStatus().id });
+  }
+
+  async mentionCandidates(
+    _brandId: string,
+    ticketId: string,
+    query = '',
+  ): Promise<MentionCandidateList> {
+    const ticket = this.#require(ticketId);
+    const needle = query.trim().replace(/^@/, '').toLowerCase();
+
+    return {
+      candidates: mockAssignable(ticket.departmentId)
+        .agents.filter((agent) => agent.userId !== MOCK_SELF_ID)
+        .map((agent) => ({
+          userId: agent.userId,
+          name: agent.name,
+          handle: agent.name.trim().toLowerCase().replace(/\s+/g, '.'),
+          presence: agent.presence,
+        }))
+        .filter(
+          (row) => needle === '' || `${row.name} ${row.handle}`.toLowerCase().includes(needle),
+        ),
+    };
   }
 
   async assignable(_brandId: string, departmentId: string): Promise<AssignableAgentList> {

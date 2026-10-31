@@ -170,6 +170,59 @@ describe('the macro picker', () => {
     }
   });
 
+  it('lists who can see the ticket after @ in a note, and writes the handle (M14-15)', async () => {
+    const { user } = await openRefund();
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, 'Can you check? @om');
+    const list = await screen.findByRole('listbox', { name: 'People who can see this ticket' });
+    const options = await within(list).findAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent('Omar Nasser');
+    expect(options[0]).toHaveTextContent('@omar.nasser');
+    expect(options[0]).toHaveTextContent('Online');
+    expect(body).toHaveAttribute('aria-activedescendant', options[0]?.id);
+
+    await user.keyboard('{Enter}');
+
+    expect(body).toHaveValue('Can you check? @omar.nasser ');
+    expect(
+      screen.queryByRole('listbox', { name: 'People who can see this ticket' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says so when nobody matches, and Esc keeps what was typed (M14-15)', async () => {
+    const { user } = await openRefund();
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, '@zzz');
+    expect(await screen.findByText('No one who can see this ticket matches.')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(
+      screen.queryByRole('listbox', { name: 'People who can see this ticket' }),
+    ).not.toBeInTheDocument();
+    expect(body).toHaveValue('@zzz');
+  });
+
+  it('does not offer people in a public reply or inside an email address (M14-15)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+    await user.type(body, 'ask @om');
+    expect(
+      screen.queryByRole('listbox', { name: 'People who can see this ticket' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+    await user.clear(body);
+    await user.type(body, 'write to lina@om');
+    expect(
+      screen.queryByRole('listbox', { name: 'People who can see this ticket' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('does not offer saved replies in a note (M14-14)', async () => {
     const { user } = await openRefund();
     await user.click(screen.getByRole('button', { name: 'Internal note' }));

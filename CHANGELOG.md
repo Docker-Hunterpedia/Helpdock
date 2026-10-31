@@ -14,16 +14,48 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
-## 1.2.1 — 2026-10-31
+## 1.3.0 — 2026-11-01
 
-A security patch. Upgrade if you receive email into Helpdock.
+Inbox productivity (M14) and a security patch. Upgrade if you receive email
+into Helpdock.
 
-- **Email address parsing.** nodemailer 10.1.7 and mailparser 3.9.47 fix three
-  flaws where a nested comment, a `;` inside quotes or a `>` inside a quoted
-  local part could turn header text into an extra recipient or a different
-  domain.
-- **HTTP headers.** Fastify 5.12.7 fixes a header validation bypass.
-- **Arabic admin.** Back arrows and other directional icons point the right way.
+- **Security.** nodemailer 10.1.7 and mailparser 3.9.47 fix three
+  address-parsing flaws, where a nested comment, a `;` inside quotes or a `>`
+  inside a quoted local part could turn header text into an extra recipient or
+  a different domain. Fastify 5.12.7 fixes a header validation bypass. Entra ID
+  first links also check the ID token's `idp` claim, so a B2B member whose home
+  tenant vouches for the domain can no longer link by email. The passkey
+  routes refuse bodies over 64 KiB.
+- **A composer that leaves room for the thread.** The reply box is one line
+  until opened, grows with its text and is capped below half the column; the
+  details panel becomes a drawer below 1440 px; `[` hides the ticket list.
+  Below 1024 px the workspace opens on the list and a ticket is pushed over it
+  with a back button.
+- **Faster replies.** Saved replies and macros get a shortcut (`/refund`, then
+  Tab), placeholders take a fallback (`{{contact.first_name|there}}`) and are
+  checked on save, `{{` lists what the ticket can fill, and `@` in a note
+  mentions the people who can see the ticket.
+- **Mailbox-aware views and rules.** Filter tickets by the mailbox they arrived
+  at and the address the customer wrote to; rules can test both, set the reply
+  address and mark a ticket as spam.
+- **Custom fields.** Four new types: long text, link (https, never fetched),
+  email and person (staff of the brand).
+- **Notifications.** Optional sounds per event, with a once-a-minute reminder
+  while a live chat waits.
+- **Admin.** Ticket rows name the assignee for every role; first-run screens
+  say what goes there and offer the action that fills them; lists show a
+  skeleton while they load; Arabic directional icons point the right way.
+- **Sign-in.** Google and GitHub buttons appear only once both the client id
+  and the client secret are set.
+
+### Upgrade notes
+
+- Four migrations (0074 to 0077) run on start. 0076 backfills each email
+  ticket's arrival mailbox and address from its activity, which takes a moment
+  on a large install.
+- A Google or GitHub sign-in configured with a client id but no secret no
+  longer shows its button. Set `HD_OAUTH_GOOGLE_CLIENT_SECRET` or
+  `HD_OAUTH_GITHUB_CLIENT_SECRET` to bring it back.
 
 ## 1.2.0 — 2026-10-24
 

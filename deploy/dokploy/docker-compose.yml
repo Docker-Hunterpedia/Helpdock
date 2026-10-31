@@ -1,7 +1,7 @@
 # Flattened external-proxy topology for Dokploy's self-contained template import.
 # Domain routing is injected by Dokploy from template.toml; no host ports/Caddy.
 x-helpdock: &helpdock
-  image: ghcr.io/docker-hunterpedia/helpdock:1.2.1
+  image: ghcr.io/docker-hunterpedia/helpdock:1.3.0
   restart: unless-stopped
   stop_grace_period: 30s
   environment: &environment

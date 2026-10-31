@@ -802,10 +802,70 @@ Backlog or never:
     workflow's artifact.
 - [ ] The other deliverables.
 
+### Security pass (M18-13)
+
+Done on 2026-10-31 ([#287](https://github.com/Docker-Hunterpedia/Helpdock/issues/287)),
+against `main` after M18-01 to M18-11, as a source review with the
+`security-audit` skill in guidance mode (no deployed system was probed, and no
+external pentest is claimed).
+
+**What was walked.** The ASVS 4.0.3 V2 and V3 rows this milestone touches, and 4.3.1, 7.1.3,
+11.1.4 and 13.2.3, in [asvs-l2.md](../completed/asvs-l2.md#found-in-the-m18-re-walk):
+2.3.2 and 2.9.1 to 2.9.3 move to Met, and 3.7.1 stays Partial because API key,
+webhook, bot and provider-key changes still need no fresh credential. The code
+read: the ceremony store, `WebAuthnService`, the passkey, passwordless and
+second-factor flows, TOTP enrolment (including the 1.1.1 fix that refuses a
+stale enrolment challenge once the account has a factor), OAuth state, nonce and
+binding, Workspace domains, the Entra rule (`entra.ts`), break-glass and
+`enforcementAllows`, the proof-of-work provider and the CAPTCHA verifier.
+
+**Negative tests the plan lists, and where they are.**
+
+| Plan item | Proof |
+|---|---|
+| One account cannot list, rename or delete another's passkey or identity | `passkeys.integration.test.ts` (stranger id looks like a missing one; rename and remove answer 404 before asking for a proof), `oauth-identity.integration.test.ts` (lists and removes only the caller's own) |
+| A ceremony of one purpose cannot complete another | `ceremony-store.test.ts`, `webauthn.service.test.ts` (cannot finish a ceremony of another purpose), `passkeys.integration.test.ts` (a step-up ceremony offered as a registration) |
+| A challenge cannot be replayed | `webauthn.integration.test.ts` (exactly one of many concurrent answers spends a ceremony), `passkey-sign-in.integration.test.ts`, `passkey-second-factor.integration.test.ts` |
+| Passwordless sign-in under enforcement fails | `passkey-sign-in.integration.test.ts` (`sso-required`, no session), `break-glass.integration.test.ts` |
+| A GitHub email cannot first-link | `oauth-identity.integration.test.ts` (never links GitHub by address) |
+| A second subject for a bound provider is refused | `oauth-identity.integration.test.ts`, `oauth-microsoft.integration.test.ts` |
+| Microsoft: wrong `tid`, missing `xms_edov` | `oauth-microsoft.integration.test.ts`, `oauth-microsoft.service.test.ts`, `entra.test.ts`, `oidc-contracts.test.ts` |
+| Proof-of-work single spend under concurrency | `pow-captcha.test.ts`, `widget.integration.test.ts` and `web-form.integration.test.ts` (a replay is refused) |
+| Both new tables are in `GLOBAL_TABLES` | `packages/db/src/schema/index.test.ts` |
+| Malformed `authenticatorData` and `clientDataJSON` | `webauthn.service.test.ts` (too-short authenticator data, client data that is not JSON, an attestation that is not CBOR) |
+
+No test was missing, so none was added in this pass.
+
+**Finding.** One, low: the unauthenticated passkey endpoints have no route-level
+body cap, which the risk table promised ([#424](https://github.com/Docker-Hunterpedia/Helpdock/issues/424)).
+Zod bounds every field (at most 16 KiB each), so nothing unbounded reaches
+`@simplewebauthn/server`; the worst case is a 1 MiB JSON parse behind the
+sign-in IP budgets. Nothing confirmed as exploitable was found. Two items stay
+with the owner: the Entra checks against a real tenant
+([#330](https://github.com/Docker-Hunterpedia/Helpdock/issues/330) part 2) and
+the manual Safari and Firefox pass the risks table asks for.
+
+**Threat-model notes.**
+
+| Threat | Control | Residual |
+|---|---|---|
+| Phishing of a staff credential | A passkey is bound to the RP ID, which is pinned by the first registration; a ceremony begun before a re-pin cannot finish after it | An XSS in the admin origin can drive the real origin's ceremony; the CSP and the sanitiser (ADR 0007) remain the control. A synced passkey is only as safe as its cloud account |
+| Replay or substitution of a WebAuthn answer | 256-bit challenge, one `GETDEL`, held as a hash, purpose and person (or browser session) bound, `id` must equal `rawId`, origin and RP ID checked, counter regression refused only after the signature verifies | None found |
+| Account enumeration | Passwordless options name nobody; `allowCredentials` only after a first factor; an unknown credential costs the same signature check as a known one; unknown, bad, deactivated and no-brand accounts answer `invalid-credentials`; `oauth-link-required` is the same with or without an account | The stand-in check differs by about 1 ms, accepted. `no-account` and `oauth-identity-conflict` are said only after the provider proved it controls the address |
+| Brute force of the second factor | One three-attempt budget and lock across app code, recovery code and passkey, reserved before any guess is evaluated; per-IP and per-account buckets on every options endpoint | None found |
+| Social-login account takeover (nOAuth, recycled address) | Subject binding, first link only where the provider controls the address (Google `hd` or Gmail, Microsoft pinned tenant with `acct` 0 and, with PR #422, `idp`; GitHub never), a state, a browser nonce and PKCE | A takeover of the provider account itself signs in as the linked user; the local second factor still applies unless a trusted browser is held |
+| Persistence after session compromise | A step-up for each passkey or identity change, an email to the holder, an audit row, and the Security page lists each with last use | A password reset and "sign out everywhere" deliberately leave passkeys and identities; the guides say so |
+| Lock-out | Recovery codes with the first factor of either kind, an admin reset, last-factor refusal under a per-account lock, break-glass with an app or a user-verified passkey, and a recovery code after SSO | Break-glass accepts no recovery code; a passkey added before 1.2 counts as unverified for it (upgrade note in the changelog and `sso.md`) |
+| Break-glass abuse under enforcement | `enforcementAllows` is the one decision for every local path; a challenge begun before demotion or enforcement is refused; a listed admin's challenge cannot be answered by another account's passkey | None found |
+| CAPTCHA bypass or farming | Third-party tokens are held to the brand's hostnames, the Turnstile `action` per surface and the brand as `cData`; a built-in solution is HMAC-signed per brand and surface, expires and is spent once by `SET NX`; the origin check and rate limits stand beside it | Proof-of-work is cost, not detection, and a solved challenge is not tied to the visitor who solved it |
+| Parser attack on the unauthenticated WebAuthn endpoints | Pinned `@simplewebauthn/server`, attestation `none` or a self-attestation, every response field a bounded base64url string, malformed-input tests | No route-level body cap (#424) |
+| Cross-tenant exposure | `webauthn_credentials` and `user_oauth_identities` are install-scope tables in `GLOBAL_TABLES` and reached only through the signed-in or challenged person | None found |
+
 ## Task status
 
 | Id | Status | Notes |
 |---|---|---|
+| M18-13 | in review | Done: see Security pass (M18-13) above; ASVS V2 and V3 re-walked, one low finding filed as #424. Not done: the Entra tenant check (#330 part 2) and the Safari and Firefox pass. |
 | M18-05 | in review (#279) | Done: see the Progress entry. ADR 0053 is implemented; D-50 was accepted on 2026-10-20. |
 | M18-08 | in review (#282) | Done: see the Progress entry. Tests: `oauth-microsoft.service.test.ts` (wrong `tid`, wrong issuer, wrong audience and nonce, guest, no `xms_edov`, replayed state, other browser, other provider's state, discovery that lies), `oauth-microsoft.integration.test.ts` (the same over HTTP against Postgres and Redis, with binding, connect, invitation, a tenant change that strands the old identities and their lazy replacement (first link, connect, rollback, Microsoft-only), and personal accounts on and off), `microsoftIsAuthoritative`, the settings service and schemas, the admin card, sign-in, refusal and invitation screens, Playwright in `en` and `ar`. Screenshot baselines of Settings are regenerated by the Screenshots workflow. |
 | M18-06 | in review (#280) | Done: see the Progress entry. Not built: staff-list badges and an admin's view of a person's passkeys (no board). Tests: `passkey.service.test.ts` (status, move, refusals, recovery codes, a holder who cannot be emailed), `passkeys.integration.test.ts` (the install routes over HTTP on real Postgres and Redis), `passkeys-section.test.tsx`, `passkeys-drift.test.tsx`, `passkeys-card.test.tsx` (redraw), `passkeys-admin.spec.ts` in `en` and `ar` with axe. |
@@ -1212,7 +1272,7 @@ DESIGN.md changes in the same PRs:
       under 40 KB.
 - [ ] A Turnstile or hCaptcha token whose `hostname` is not the brand's is
       refused.
-- [ ] ASVS 2.3.2 and 2.9.1–2.9.3 are Met in `asvs-l2.md`, with evidence.
+- [x] ASVS 2.3.2 and 2.9.1–2.9.3 are Met in `asvs-l2.md`, with evidence.
 - [ ] Every new or changed screen passes Playwright in `en` and `ar` with axe.
       The guides, `.env.example` and ADRs 0050–0053 are merged.
 

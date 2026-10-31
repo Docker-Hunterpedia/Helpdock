@@ -30,7 +30,7 @@ what to do. Paths are relative to the repository root; `api` is `apps/api/src`.
 | Chapter | Met | Partial | Gap | N/A | Operator |
 |---|---|---|---|---|---|
 | V1 Architecture, design and threat modeling | 31 | 6 | 0 | 1 | 0 |
-| V2 Authentication | 35 | 4 | 0 | 11 | 0 |
+| V2 Authentication | 39 | 3 | 0 | 8 | 0 |
 | V3 Session management | 14 | 4 | 0 | 0 | 0 |
 | V4 Access control | 9 | 0 | 0 | 0 | 0 |
 | V5 Validation, sanitisation and encoding | 25 | 0 | 0 | 5 | 0 |
@@ -43,7 +43,7 @@ what to do. Paths are relative to the repository root; `api` is `apps/api/src`.
 | V12 Files and resources | 13 | 2 | 0 | 0 | 0 |
 | V13 API and web services | 8 | 1 | 0 | 4 | 0 |
 | V14 Configuration | 20 | 3 | 0 | 1 | 0 |
-| **All** | **198** | **35** | **0** | **24** | **1** |
+| **All** | **202** | **34** | **0** | **21** | **1** |
 
 ### Gaps and partials closed before 1.0
 
@@ -152,11 +152,11 @@ their protocols require.
 | 2.1.10 | No periodic rotation | Met | None exists |
 | 2.1.11 | Paste and password managers allowed | Met | Plain `type="password"` inputs with `autocomplete="current-password"` (`apps/admin/src/screens/sign-in.tsx`, `security.tsx`) |
 | 2.1.12 | Show the masked password on request | Met | A show/hide toggle with `aria-pressed` on every field that chooses a password, hidden again on submit (`password-field.tsx`, `password-field.test.tsx`, `e2e/password-field.spec.ts`). The sign-in field has none: it chooses nothing |
-| 2.2.1 | Anti-automation | Met | Sliding-window limits per address and per IP (`api/auth/rate-limit.ts`), challenge lock after three second-factor failures. Behind a proxy the address is the visitor's only when `TRUST_PROXY` names that proxy (`packages/config/src/env.ts`, F2) |
+| 2.2.1 | Anti-automation | Met | Sliding-window limits per address and per IP (`api/auth/rate-limit.ts`), challenge lock after three second-factor failures. Passkey sign-in and its options share the sign-in IP budget or have buckets of their own (`passkey-signin-options`, `passkey-ceremony-options`), a passkey answer spends the same three attempts as a code, sign-in-link and reset requests have a per-IP bucket (`email-dispatch-ip`) (`passkey-sign-in.integration.test.ts`, `passkey-second-factor.integration.test.ts` › "evaluates at most three guesses across a parallel burst"). Behind a proxy the address is the visitor's only when `TRUST_PROXY` names that proxy (`packages/config/src/env.ts`, F2) |
 | 2.2.2 | Weak authenticators limited | Met | Email links are single-use and short-lived; SMS is not offered |
-| 2.2.3 | Notification after authentication details change | Met | A `securityChange` email on password change and reset, second factor on and off, recovery codes redrawn, through the outbox in the change's transaction, `en` and `ar` (`auth.service.ts` `#notifySecurityChange`, `email-templates.test.ts`) |
+| 2.2.3 | Notification after authentication details change | Met | A `securityChange` email on password change and reset, second factor on and off, recovery codes redrawn, a passkey added, renamed or removed, a sign-in method connected or disconnected, passkeys moved to a new host, through the outbox in the change's transaction, `en` and `ar` (`auth.service.ts` `#notifySecurityChange`, `email-templates.test.ts`) |
 | 2.3.1 | Initial secrets random, expire, not long-term | Met | Invitation tokens 256 bits, 7 days, single use (`api/auth/email-token.store.ts`) |
-| 2.3.2 | Hardware authenticator enrolment supported | Partial | TOTP only; no WebAuthn/FIDO |
+| 2.3.2 | Hardware authenticator enrolment supported | Met | Staff register passkeys (platform or security key) over WebAuthn, with a step-up and at most ten per account (`api/auth/passkeys/`, `api/auth/webauthn/`, ADR 0050; `passkeys.integration.test.ts`), or enrol one in place of an authenticator app when the account must have a second factor (`passkey-second-factor.integration.test.ts`) |
 | 2.3.3 | Renewal instructions for time-bound authenticators | N/A | No time-bound authenticators issued |
 | 2.4.1 | Passwords stored with an approved one-way function | Met | Argon2id (`api/auth/password.ts`) |
 | 2.4.2 | Salt at least 32 bits, unique | Met | argon2's per-hash random salt |
@@ -169,7 +169,7 @@ their protocols require.
 | 2.5.4 | No shared or default accounts | Met | The first admin is created by the wizard; no seeded credentials in production |
 | 2.5.5 | Notification when an authentication factor changes | Met | As 2.2.3 |
 | 2.5.6 | Forgotten password uses a secure recovery mechanism | Met | 10-minute single-use reset link; the second factor is still asked afterwards |
-| 2.5.7 | Lost second factor re-proven at enrolment strength | Partial | Recovery codes, or an Admin resets the factor (`staff` lifecycle); no identity proofing beyond the Admin's judgement |
+| 2.5.7 | Lost second factor re-proven at enrolment strength | Partial | Recovery codes (one set, shared by an app and passkeys), or an Admin resets the factor, which removes passkeys too (`staff` lifecycle); no identity proofing beyond the Admin's judgement |
 | 2.6.1 | Lookup secrets used once | Met | Recovery codes consumed on use (`replaceRecoveryCodes`) |
 | 2.6.2 | Lookup secrets have enough randomness | Met | Ten codes from `randomBytes`, argon2-hashed (`authentication.md` "Recovery codes") |
 | 2.6.3 | Lookup secrets resist offline attack | Met | Argon2id with the pepper |
@@ -183,9 +183,9 @@ their protocols require.
 | 2.8.4 | A TOTP code used only once in its window | Met | The last accepted step per account is kept in Redis for as long as it can match, and only later steps pass, by compare-and-set (`api/auth/totp/used-steps.ts`); proved against Redis in `auth.integration.test.ts` |
 | 2.8.5 | Reuse of a TOTP code logged and refused | Met | A replayed code is refused as a wrong one, logged at `warn` and audited as `auth.second_factor.replayed` |
 | 2.8.6 | Physical OTP generators revocable | N/A | None issued |
-| 2.9.1 | Crypto device keys stored securely | N/A | No cryptographic authenticators |
-| 2.9.2 | Challenge nonce at least 64 bits | N/A | As above |
-| 2.9.3 | Approved algorithms for crypto authenticators | N/A | As above |
+| 2.9.1 | Crypto device keys stored securely | Met | The private key never leaves the authenticator; Helpdock stores only the public key and credential id (`webauthn_credentials`, `api/auth/passkeys/passkey.repository.ts`) |
+| 2.9.2 | Challenge nonce at least 64 bits | Met | A 256-bit challenge per ceremony, spent by one `GETDEL` and held in Redis only as the SHA-256 of its id (`api/auth/webauthn/ceremony-store.ts`; `ceremony-store.test.ts`) |
+| 2.9.3 | Approved algorithms for crypto authenticators | Met | EdDSA, ES256 and RS256 only, attestation `none` or a self-attestation (`webauthn.service.ts`, `SUPPORTED_ALGORITHM_IDS`; `webauthn.service.test.ts` › "offers EdDSA, ES256 and RS256 only") |
 | 2.10.1 | Intra-service secrets are not static credentials | Partial | Services authenticate with per-install generated secrets (`APP_MASTER_KEY`, database role passwords); no shared human account. Integrations calling `/api/v1` hold `hd_live_` keys that live until an Admin revokes them or until their `expiresAt`, which is optional and set only through the API (`docs/guides/api.md`, "Expiry"; `api/api-keys/api-keys.service.ts`, migration `0049_api_key_expiry`). A key made without one, and every key issued before 2026-10-11, never expires, and nothing prompts a rotation; the Create dialog has no field for it yet. Webhook signing secrets have Rotate; each bot's webhook secret is drawn once, when the bot is added |
 | 2.10.2 | No default service passwords | Met | `.env.example` ships no passwords; the install guide generates each one (`docs/guides/install.md`). What Helpdock issues is random per object: API keys (`randomBytes(32)`, `api/api-keys/api-key-credential.ts`), webhook signing secrets (`issueWebhookSecret`, `api/webhooks/webhook-signature.ts`), each bot's webhook secret (`api/telegram/telegram-bots.service.ts`) |
 | 2.10.3 | Service passwords stored protected | Met | In `.env` (operator-held) or encrypted settings. Bot tokens, bot webhook secrets, webhook signing secrets and connector credentials are AES-256-GCM envelopes (`ENVELOPE_COLUMNS`, `packages/db/src/master-key-rotation.ts`); provider keys and OAuth app secrets are secret settings (`ai.providers`, `embedding.apiKey`, `transcription.apiKey`, `knowledge.*.clientSecret` in `packages/config/src/registry.ts`); API keys are kept as their SHA-256 only |
@@ -210,7 +210,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
 | 3.1.1 | Session tokens never in URLs | Met | Bearer header and httpOnly cookie only; email tokens in a path are scrubbed from logs (`authentication.md` "A token in a path never reaches the log") |
-| 3.2.1 | New session token on authentication | Met | Each sign-in opens a new refresh family (`SessionService.open`) |
+| 3.2.1 | New session token on authentication | Met | Each sign-in, passwordless passkey and SSO included, opens a new refresh family (`SessionService.open`) |
 | 3.2.2 | At least 64 bits of entropy | Met | Refresh token 256 bits |
 | 3.2.3 | Tokens stored securely in the browser | Met | Access token in memory, refresh token in an httpOnly cookie |
 | 3.2.4 | Approved algorithms for tokens | Met | ES256 JWT (`jose`), SHA-256 of the refresh token at rest |
@@ -226,7 +226,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 3.5.1 | Users can revoke OAuth tokens of linked apps | Met | An Admin revokes an integration's API key on Developers › API keys and its next call is refused (`DELETE /api/brands/:brandId/api-keys/:keyId`; `api-v1.integration.test.ts` › "answers 401 once a key is revoked, and audits the revocation"). A Notion or Drive connection is deleted with its source (`api/knowledge/knowledge.repository.ts` `remove`), a provider's credentials with the provider; Helpdock does not call the service's own revoke endpoint |
 | 3.5.2 | Session tokens, not static API secrets | Partial | People use sessions only. Integrations on `/api/v1` use static `hd_live_` keys, as REQUIREMENTS §4.11 specifies ([ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)): 256 random bits kept as SHA-256, held to their scopes and their one brand, throttled per key, refused at once when revoked or past `expiresAt`, refused on every `@Requires` staff route and on the staff socket, and answered 403 on the routes that act for a person (`api/auth/permission.guard.ts`) (`api/api-keys/`, `api/realtime/handshake.ts`; `api-v1.integration.test.ts` › "API keys (M8-01)"). A key expires only if it was given an `expiresAt` (2.10.1), so the static key stays Partial |
 | 3.5.3 | Stateless tokens signed, short-lived, replay-resistant | Met | ES256, 10 minutes, revocation marker checked on every request and socket event |
-| 3.7.1 | Full session or re-auth before sensitive actions | Partial | Password change, second-factor removal and recovery code regeneration re-prove a credential; other administrative changes do not, among them creating an API key, adding a webhook endpoint or rotating its secret, adding a bot and saving a provider key (each `brand:manage` or install admin, each audited) |
+| 3.7.1 | Full session or re-auth before sensitive actions | Partial | Password change, second-factor removal, recovery code regeneration, passkey add, rename and removal, and connecting or disconnecting a sign-in method re-prove a credential (password, live code or an assertion from a held passkey, on a shared five-in-fifteen-minutes budget); other administrative changes do not, among them creating an API key, adding a webhook endpoint or rotating its secret, adding a bot and saving a provider key (each `brand:manage` or install admin, each audited) |
 
 ## V4 Access control
 
@@ -238,7 +238,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 4.1.5 | Fails securely | Met | Undeclared route refused (`PermissionGuard`), no tenant context means no rows (`FORCE ROW LEVEL SECURITY`) |
 | 4.2.1 | Protected against IDOR | Met | RLS by brand and department; the RLS isolation suite (`packages/db/src/rls.integration.test.ts`) covers M6–M8's tenant tables too (`telegram_*`, `ai_calls`, `knowledge_*`, `api_keys`, `webhooks`, `webhook_deliveries` among them, `TENANT_TABLES` in `packages/db/src/rls.ts`), and DOMAIN-RULES §1.6 negative tests |
 | 4.2.2 | Anti-CSRF | Met | API authenticated by bearer header, not cookies, `/api/v1` included; the refresh cookie is `SameSite=Lax` on `/api/auth` only; the setup wizard checks `Sec-Fetch-Site` (`api/install/same-site.ts`); the Telegram webhook needs the bot's secret header, the knowledge OAuth callback a signed, single-use `state` (13.1.3), and the sign-in OAuth callback the `hd_oauth` cookie of the browser that started its flow (F4, `api/auth/oauth/oauth.service.ts`) |
-| 4.3.1 | Admin interfaces use MFA | Met | Required for every Admin and install admin whatever `auth.require2fa` says; one without is sent to enrolment at sign-in and cannot turn it off (`auth.service.ts` `isSecondFactorRequired`) |
+| 4.3.1 | Admin interfaces use MFA | Met | Required for every Admin and install admin whatever `auth.require2fa` says, met by an authenticator app or a passkey, and neither can be removed while it is the account's last second factor; one without is sent to enrolment at sign-in and cannot turn it off (`auth.service.ts` `isSecondFactorRequired`) |
 | 4.3.2 | Directory browsing disabled, no metadata exposed | Met | `@fastify/static` without listing; no `.git` in the image (`.dockerignore`) |
 | 4.3.3 | Step-up or segregation for high-value actions | Met | Step-up for credential changes; destructive brand actions need `brand:manage` (Admin) and are audited |
 
@@ -301,7 +301,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 |---|---|---|---|
 | 7.1.1 | No credentials or session tokens logged | Met | pino `redact` with `remove: true` (`api/logging/logger.ts`), token paths scrubbed, Semgrep `helpdock-secret-in-log`. The access line carries no header, query or body (`api/context/request-context.middleware.ts`), so neither an API key nor `X-Telegram-Bot-Api-Secret-Token` reaches it; the bot token is cut out of every Bot API error (`toTelegramFailure`, `packages/channels/src/telegram/bot-api.ts`; `bot-api.test.ts` › "never repeats the token from a transport error") |
 | 7.1.2 | No other sensitive data logged | Met | `operations.md` "What a line never carries"; a webhook attempt logs ids and status, never the URL or the body (`api/webhooks/webhook-deliver.job.ts`), a blocked destination its host only (`api/worker/start-worker.ts`); prompts and answers go to `ai_calls`, not the log |
-| 7.1.3 | Security-relevant events logged | Met | Every sign-in success and failure, lock, refused step-up, replayed code, reused refresh token and credential change is an `auth.*` row in install scope with address and user agent (`api/auth/auth-audit.ts`, ADR 0022), the address being the visitor's behind a proxy that `TRUST_PROXY` names (F2); rate-limit refusals are counted in `rate_limit_refusals_total`. M6–M8 audit API keys issued and revoked (`api_key.*`), revoked or expired keys refused (`api_key.refused`), bots (`telegram_bot.*`), webhook endpoints and their secrets (`webhook.*`), AI settings, modes and prompts (`ai.*.updated`), the budget alert (`ai.budget_alert`) and master key rotation (`install.master_key_rotated`) |
+| 7.1.3 | Security-relevant events logged | Met | Every sign-in success and failure, lock, refused step-up, replayed code, reused refresh token and credential change is an `auth.*` row in install scope with address and user agent (`api/auth/auth-audit.ts`, ADR 0022), the address being the visitor's behind a proxy that `TRUST_PROXY` names (F2); rate-limit refusals are counted in `rate_limit_refusals_total`. M18 adds `auth.passkey.{added,renamed,removed,counter_regressed,rp_pinned,rp_moved}` and `auth.oauth.{linked,unlinked,link_refused,identity_replaced}`, and a sign-in row records `method: passkey`. M6–M8 audit API keys issued and revoked (`api_key.*`), revoked or expired keys refused (`api_key.refused`), bots (`telegram_bot.*`), webhook endpoints and their secrets (`webhook.*`), AI settings, modes and prompts (`ai.*.updated`), the budget alert (`ai.budget_alert`) and master key rotation (`install.master_key_rotated`) |
 | 7.1.4 | Enough detail for an investigation | Met | Request id, role, user id, brand id on every line |
 | 7.2.1 | Authentication decisions logged | Partial | Sign-in decisions as 7.1.3. An API key refused as unknown, revoked or past its `expiresAt` is logged at `warn` with its prefix and the caller's address (`api/api-keys/api-key-principal-resolver.ts` `#recordRefusal`); a revoked or expired key also writes an `api_key.refused` row to its brand's audit log, at most once a minute per key (`api/api-keys/refused-api-key.ts`). Open: a Telegram update refused for its secret is answered 401 and logged only at `debug` by the exception filter (`api/telegram/telegram-webhook.service.ts`) |
 | 7.2.2 | Access control decisions logged | Partial | Refusals logged at `debug` by the exception filter, a key's missing scope included; not audited |
@@ -362,7 +362,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 11.1.1 | Flows processed in order | Met | Ticket transitions validated against DOMAIN-RULES §2; wizard steps need the setup token |
 | 11.1.2 | Realistic human timing | Partial | Rate limits cap speed; there is no minimum-time check |
 | 11.1.3 | Limits per business action | Met | Widget per-visitor write budget, sign-in budgets, transcript cap (`widget-protocol.md` "Throttles"), socket event budgets (`realtime.md` "Event budgets"), and every `/widget` socket event spends from its visitor's budget of 120 a minute (`WIDGET_SOCKET_EVENT_RULE`, `api/widget/widget-gate.ts`, F1); a per-minute budget per API key (600 by default, `api/api-keys/api-key-principal-resolver.ts`); a daily and monthly AI budget per brand with a hard stop (`BudgetExceededError`, `packages/ai/src/complete.ts`) |
-| 11.1.4 | Anti-automation against excessive calls | Met | Same, plus CAPTCHA on the widget and web form (ADR 0003); the Telegram webhook is limited per address before its secret is checked (`api/telegram/telegram-webhook.controller.ts`); every `/widget` socket event is spent from its visitor's budget before its payload is parsed (F1). Open (N1, found in the M9-01 review): the `/widget` handshake's `widget-ip` budget is keyed on the socket address, which behind Caddy is Caddy's, so every visitor of a brand who connects through it shares one budget (`api/widget/widget.gateway.ts`) |
+| 11.1.4 | Anti-automation against excessive calls | Met | Same, plus CAPTCHA on the widget and web form (ADR 0003), with a built-in proof-of-work provider that is HMAC-signed per brand and surface and spent once by `SET NX` (ADR 0052), a Turnstile `action` and `cData` per surface, a hostname check, and per-IP buckets on sign-in-link, reset and help-center feedback requests; the Telegram webhook is limited per address before its secret is checked (`api/telegram/telegram-webhook.controller.ts`); every `/widget` socket event is spent from its visitor's budget before its payload is parsed (F1). Open (N1, found in the M9-01 review): the `/widget` handshake's `widget-ip` budget is keyed on the socket address, which behind Caddy is Caddy's, so every visitor of a brand who connects through it shares one budget (`api/widget/widget.gateway.ts`) |
 | 11.1.5 | Business logic limits against likely risks | Met | Load caps on assignment, depth guard on rules (`automation.md`), attachment caps; a webhook delivery stops after eight attempts and an endpoint is switched off after 10 failed deliveries in a row (`api/webhooks/webhook-deliver.job.ts`); a crawl stops at its page cap; an auto-reply never follows a handoff (`api/ai/auto-reply/ai-pause.ts`) |
 | 11.1.6 | No TOCTOU on sensitive operations | Met | Advisory locks (wizard step 1, assignment, outbox), unique constraints with `clientId`; an `Idempotency-Key` is claimed on a unique index and a concurrent request waits for the first (`api/api-v1/idempotency.repository.ts` `claim`); a Telegram message is filed once (`ticket_messages_external_key`); an auto-reply re-reads the pause and newer messages under the ticket's row lock before it writes (`auto-reply.integration.test.ts`) |
 | 11.1.7 | Unusual activity monitored | Partial | Metrics and logs exist; no anomaly alerting. An AI budget crossing 80 % reaches the audit log and the settings answer only (`api/ai/budget-alert.handler.ts`) |
@@ -398,7 +398,7 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 13.1.5 | Unexpected content types refused | Met | Fastify answers 415 for unsupported content types |
 | 13.2.1 | Methods valid for the action | Met | Each route declares one method; Fastify answers 404/405 otherwise; `/api/v1` lists each method with its scope (`API_OPERATIONS`, `api/api-v1/openapi.ts`) |
 | 13.2.2 | JSON schema validation | Met | Zod; the OpenAPI 3.1 document at `/api/docs/openapi.json` is generated from the same route schemas, and `openapi.test.ts` fails when a v1 route is missing from it ([ADR 0019](../decisions/0019-api-scopes-and-openapi-from-zod.md)); a Telegram update is read through `telegramUpdateSchema` |
-| 13.2.3 | Cookie-authenticated REST protected from CSRF | Met | Only `/api/auth` reads the session cookie, `SameSite=Lax`; the sign-in OAuth callback also needs the `hd_oauth` cookie of the browser that started its flow (F4); the help center's staff cookie is `SameSite=Lax` too (`api/help-center/site/site.controller.ts`); `/api/v1` reads only `Authorization` and sends no CORS headers |
+| 13.2.3 | Cookie-authenticated REST protected from CSRF | Met | Only `/api/auth` reads the session cookie, `SameSite=Lax`; the sign-in OAuth callback also needs the `hd_oauth` cookie of the browser that started its flow (F4); the passkey and connect routes are JSON POSTs that take a Bearer token or a purpose-bound ceremony id, never the cookie; the help center's staff cookie is `SameSite=Lax` too (`api/help-center/site/site.controller.ts`); `/api/v1` reads only `Authorization` and sends no CORS headers |
 | 13.2.5 | Content-Type checked | Met | As 13.1.5 |
 | 13.2.6 | Message integrity in transit | Met | TLS (V9). Outbound webhooks carry `X-Helpdock-Signature: t=…,v1=…`, an HMAC-SHA256 of the timestamp and the body under the endpoint's secret, so a receiver can refuse an altered or replayed request (`api/webhooks/webhook-signature.ts`, `webhook-signature.test.ts`; `api-v1.integration.test.ts` verifies one end to end); a Telegram update must carry the bot's secret token, compared in constant time (`sameSecret`, `api/telegram/telegram-webhook.service.ts`) |
 | 13.3.1 | SOAP schema validation | N/A | No SOAP |
@@ -434,6 +434,23 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 14.5.2 | Origin not used for authentication | Met | Origin only narrows the widget (an allow list on top of the visitor credential) and the staff socket |
 | 14.5.3 | CORS with a strict allow list | Partial | Widget routes echo the origin on preflight and refuse a disallowed one at the gate, without credentials; the staff API and `/api/v1` send no CORS headers |
 | 14.5.4 | Proxy-added headers authenticated | Met | `X-Forwarded-*` are believed only from the proxies `TRUST_PROXY` names: addresses, CIDRs, or `loopback`, `linklocal` and `uniquelocal`. Compose sets `uniquelocal`, so only the hop from Caddy is believed, and a hop count is refused; `true` still believes every hop (`packages/config/src/env.ts`, `api/bootstrap.ts`, F2). Behind Cloudflare, `CF-Connecting-IP` is read only from Cloudflare's ranges (`docker/caddy/Caddyfile.cloudflare`). Caddy overwrites `X-Request-Id` |
+
+### Found in the M18 re-walk
+
+Walked on 2026-10-31 against `main` after M18-01 to M18-11 (M18-13, #287), with
+a source review of the passkey, OAuth, SSO preset, break-glass, built-in
+CAPTCHA and step-up code; the threat-model notes and the one finding are in the
+[milestone doc](../in-development/M18-sign-in-options.md#security-pass-m18-13).
+Also read: the 1.1.1 fix that stops a challenge handed out earlier from adding
+or replacing a second factor the account has since set (`auth.service.ts`
+`completeEnrolment`, tests in `passkey-second-factor.integration.test.ts`).
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| 2.3.2 | Partial | Met | WebAuthn passkeys |
+| 2.9.1, 2.9.2, 2.9.3 | N/A | Met | Passkeys are cryptographic authenticators |
+| 3.7.1 | Partial | Partial | Passkey and sign-in-method changes now re-prove a credential; the API key, webhook, bot and provider-key changes still do not |
+| 2.2.1, 2.2.3, 2.5.5, 2.5.7, 2.6.1, 3.2.1, 4.3.1, 7.1.3, 11.1.4, 13.2.3 | as before | as before | Evidence extended to the M18 paths |
 
 ## How to keep this current
 

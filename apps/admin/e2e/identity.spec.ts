@@ -180,6 +180,9 @@ test.describe('the participants card', () => {
     await openTicket(page, locale);
 
     const card = page.getByRole('region', { name: t('tickets:participants.title') });
+    await card
+      .getByRole('button', { name: t('tickets:participants.summary', { count: 2 }) })
+      .click();
     await expect(card.getByText('finance@acme.de')).toBeVisible();
 
     await card
@@ -200,6 +203,9 @@ test.describe('the participants card', () => {
     await openTicket(page, locale);
 
     const card = page.getByRole('region', { name: t('tickets:participants.title') });
+    await card
+      .getByRole('button', { name: t('tickets:participants.summary', { count: 2 }) })
+      .click();
     await card
       .getByRole('textbox', { name: t('tickets:participants.addLabel') })
       .fill('not an address');

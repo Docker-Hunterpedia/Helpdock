@@ -1,4 +1,10 @@
-import type { CustomFieldDef, Department, TagSummary, TicketView } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  Department,
+  TagSummary,
+  TicketMailbox,
+  TicketView,
+} from '@helpdock/schemas';
 import { ticketPrioritySchema, VIEW_NAME_MAX_LENGTH } from '@helpdock/schemas';
 import {
   Box,
@@ -16,7 +22,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { viewLabel } from '../../../tickets/views.js';
 import { Field } from '../../../ui/field.tsx';
-import { useTicketMailboxes, WrittenToField } from '../../tickets/arrival-filters.tsx';
+import { WrittenToField } from '../../tickets/arrival-filters.tsx';
 import { FieldFilterEditor } from '../../tickets/field-filter-editor.tsx';
 import { DepartmentChoice } from '../../tickets/view-dialogs.tsx';
 import {
@@ -55,6 +61,7 @@ export function ViewEditor({
   departments,
   tags,
   fields,
+  mailboxes,
   busy,
   onSubmit,
   onCancel,
@@ -66,6 +73,8 @@ export function ViewEditor({
   readonly tags: readonly TagSummary[];
   /** M14-16: the ticket fields a filter may name. A shared view offers the ones Agents see. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: the brand's mailboxes a view may filter by. */
+  readonly mailboxes: readonly TicketMailbox[];
   readonly busy: boolean;
   onSubmit(draft: ViewDraft): void;
   onCancel(): void;
@@ -81,7 +90,6 @@ export function ViewEditor({
   const tagsId = useId();
   const fieldsId = useId();
   const mailboxId = useId();
-  const mailboxes = useTicketMailboxes();
   const ids = {
     state: useId(),
     assignee: useId(),

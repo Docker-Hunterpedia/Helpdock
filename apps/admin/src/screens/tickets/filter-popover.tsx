@@ -2,6 +2,7 @@ import type {
   CustomFieldDef,
   Department,
   TagSummary,
+  TicketMailbox,
   TicketStatus,
   TicketSystemState,
 } from '@helpdock/schemas';
@@ -11,7 +12,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
-import { useTicketMailboxes, WrittenToField } from './arrival-filters.tsx';
+import { WrittenToField } from './arrival-filters.tsx';
 import { FieldFilterEditor } from './field-filter-editor.tsx';
 import { statusName } from './format.js';
 
@@ -92,6 +93,7 @@ export function FilterPopover({
   tags,
   staff,
   fields,
+  mailboxes,
   viewerId,
   onChange,
   onClose,
@@ -104,13 +106,14 @@ export function FilterPopover({
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
   /** M14-16: the ticket fields the reader may filter by. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: the brand's mailboxes. */
+  readonly mailboxes: readonly TicketMailbox[];
   readonly viewerId: string;
   onChange(filters: WorkspaceFilters): void;
   onClose(): void;
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
-  const mailboxes = useTicketMailboxes();
 
   return (
     <Popover

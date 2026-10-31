@@ -3,6 +3,7 @@ import type {
   Department,
   TagSummary,
   Ticket,
+  TicketMailbox,
   TicketStatus,
 } from '@helpdock/schemas';
 import { Box, Button, Checkbox, Chip, InputAdornment, TextField, Typography } from '@mui/material';
@@ -94,6 +95,7 @@ export function TicketList({
   tags,
   staff,
   fields,
+  mailboxes,
   pinnedField,
   viewerId,
   changes,
@@ -127,6 +129,8 @@ export function TicketList({
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
   /** M14-16: the ticket fields the reader may filter by. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: the brand's mailboxes, for the Mailbox filter and its chip. */
+  readonly mailboxes: readonly TicketMailbox[];
   /** M14-16: the brand's pinned field, shown as a chip on each row. */
   readonly pinnedField: CustomFieldDef | undefined;
   readonly viewerId: string;
@@ -168,7 +172,7 @@ export function TicketList({
   const active = activeFilterCount(filters);
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
-  const summary = useFilterSummary({ statuses, departments, tags, staff, fields });
+  const summary = useFilterSummary({ statuses, departments, tags, staff, fields, mailboxes });
   const viewStatusId = singleStatusOf(filters, statuses);
   const chips = summary.chips(filters);
 
@@ -422,6 +426,7 @@ export function TicketList({
         tags={tags}
         staff={staff}
         fields={fields}
+        mailboxes={mailboxes}
         viewerId={viewerId}
         onChange={onFiltersChange}
         onClose={() => {

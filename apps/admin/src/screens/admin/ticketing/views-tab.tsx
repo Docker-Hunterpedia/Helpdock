@@ -347,6 +347,7 @@ export function ViewsTab(): ReactNode {
             tags={directory.tags}
             // A shared view is read by Agents, so it may only name fields they see.
             fields={ticketFieldsFor(directory.fields, false)}
+            mailboxes={directory.mailboxes}
             busy={busy}
             onSubmit={(draft) => {
               if (selected === null) {

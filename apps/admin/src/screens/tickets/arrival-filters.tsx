@@ -1,37 +1,14 @@
-import type { TicketMailbox } from '@helpdock/schemas';
 import { TextField } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../app/i18n.js';
-import { currentBrand, useSession, useTicketsApi } from '../../auth/session.tsx';
-import { ticketKeys } from '../../tickets/keys.js';
 
 /**
  * M14-26's two filters on where a ticket arrived (`Admin/Ticketing-FieldFilters`):
  * the mailbox, picked from the brand's, and the address the customer wrote to,
  * typed. Shared by the Filter popover and the view editor, which draw the
  * mailbox as chips in their own style and the address with {@link WrittenToField}.
+ * The brand's mailboxes arrive with the workspace's other directory reads.
  */
-
-const MAILBOXES_STALE_MS = 60_000;
-
-/**
- * The brand's mailboxes. A read that fails leaves the list empty, which hides
- * the mailbox row: the filter is a convenience, not something to block the
- * list on.
- */
-export function useTicketMailboxes(): readonly TicketMailbox[] {
-  const api = useTicketsApi();
-  const brandId = currentBrand(useSession()).id;
-  const mailboxes = useQuery({
-    queryKey: ticketKeys.mailboxes(brandId),
-    queryFn: () => api.mailboxes(brandId),
-    staleTime: MAILBOXES_STALE_MS,
-    retry: false,
-  });
-
-  return mailboxes.data?.mailboxes ?? [];
-}
 
 /**
  * The address a customer wrote to. It applies on Enter or when the field

@@ -4,6 +4,7 @@ import type {
   StaffMember,
   TagSummary,
   TicketFieldFilter,
+  TicketMailbox,
   TicketStatus,
 } from '@helpdock/schemas';
 import { useT } from '../../app/i18n.js';
@@ -32,6 +33,8 @@ export interface FilterDirectory {
   readonly staff: readonly Pick<StaffMember, 'userId' | 'name'>[];
   /** M14-16: what a custom-field filter names its field by. A key not among them prints as itself. */
   readonly fields?: readonly CustomFieldDef[];
+  /** M14-26: what a mailbox filter names its mailbox by. An id not among them prints shortened. */
+  readonly mailboxes?: readonly TicketMailbox[];
 }
 
 /** One chip: what it says, and the filters without it. */
@@ -165,7 +168,8 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       field: 'mailboxId' as const,
       name: t('tickets:filters.mailbox'),
       values: filters.mailboxId,
-      label: (id: string) => mailboxes.find((mailbox) => mailbox.id === id)?.address ?? shortId(id),
+      label: (id: string) =>
+        directory.mailboxes?.find((mailbox) => mailbox.id === id)?.address ?? shortId(id),
     },
     {
       field: 'channel' as const,

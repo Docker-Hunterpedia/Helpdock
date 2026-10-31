@@ -20,6 +20,7 @@ import {
 } from '@helpdock/jobs';
 import {
   NOTIFICATION_PREFERENCE_DEFAULTS,
+  NOTIFICATION_SOUND_DEFAULTS,
   type NotificationList,
   type NotificationPreferencesView,
   type PushSubscriptionView,
@@ -481,6 +482,43 @@ describe.skipIf(!hasDocker)('notifications', () => {
           unsubscribedAt: null,
         },
       });
+    });
+
+    it('keeps a person’s sounds off by default, saves them on their own and shows them to that person only (M14-25)', async () => {
+      const read = async (who: typeof sam) =>
+        (await call<NotificationPreferencesView>('GET', '/api/me/notification-preferences', who))
+          .body;
+      expect((await read(sam)).sounds).toEqual(NOTIFICATION_SOUND_DEFAULTS);
+
+      const sounds = {
+        ...NOTIFICATION_SOUND_DEFAULTS,
+        waitingChat: true,
+        waitingChatReminder: true,
+        assignedOrMentioned: true,
+      };
+      const saved = await call<NotificationPreferencesView>(
+        'PUT',
+        '/api/me/notification-preferences',
+        sam,
+        { sounds },
+      );
+
+      expect(saved.status).toBe(200);
+      expect(saved.body.sounds).toEqual(sounds);
+      // The matrix was not touched, and a later read, as from another browser, sees the same.
+      expect(saved.body.preferences).toEqual((await read(sam)).preferences);
+      expect((await read(sam)).sounds).toEqual(sounds);
+      expect((await read(bo)).sounds).toEqual(NOTIFICATION_SOUND_DEFAULTS);
+    });
+
+    it('refuses sounds that name an unknown event or a non-boolean', async () => {
+      const bad = [
+        { sounds: { ...NOTIFICATION_SOUND_DEFAULTS, party: true } },
+        { sounds: { ...NOTIFICATION_SOUND_DEFAULTS, waitingChat: 'yes' } },
+      ];
+      for (const body of bad) {
+        expect((await call('PUT', '/api/me/notification-preferences', sam, body)).status).toBe(400);
+      }
     });
 
     it('refuses a preference set that leaves a kind out', async () => {

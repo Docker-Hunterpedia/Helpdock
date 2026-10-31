@@ -345,6 +345,20 @@
         "failed": "That did not work. Nothing was changed."
       },
       "urgent": "Urgent"
+    },
+    "sounds": {
+      "heading": "Sounds",
+      "caption": "Off by default. Follows you to other browsers.",
+      "events": {
+        "waitingChat": "A live chat is waiting for an agent",
+        "newConversation": "A new conversation",
+        "customerReply": "A customer replied",
+        "assignedOrMentioned": "Assigned to me or mentioned"
+      },
+      "reminder": "Remind me every minute while it waits",
+      "play": "Play: {{event}}",
+      "note": "Sounds play only in a Helpdock tab that is open. This browser may block sound in background tabs; the bell and the waiting-chat count always show it too.",
+      "failed": "The sound setting could not be saved."
     }
   },
   "profile": {

@@ -1443,6 +1443,55 @@ files are short, bundled, and lazy-loaded with the settings; the choice is
 stored with the notification preferences (install scope, per person) so it
 follows the person to another browser. Artboard `Admin/Account-Notifications-Sounds`.
 
+**Status: built, in review** (issue #312). Built as above, with these
+differences and choices:
+
+- **Storage.** A `sounds` jsonb column on `notification_prefs` (migration
+  `0074_notification_sounds`, default `{}`), read and saved through
+  `GET`/`PUT /api/me/notification-preferences` as `sounds` (five booleans: the
+  four events and `waitingChatReminder`). A missing or malformed key reads as
+  off. No new table, so no RLS-test addition: the row is global per person like
+  the rest of `notification_prefs`.
+- **Detection.** The socket frames carry ids only, so the shell's
+  `useNotificationSounds` reads the ticket over REST (which also applies the
+  person's department scope) before anything plays. A *waiting chat* is a
+  `chat` ticket that is unassigned, not merged and open or escalated; the
+  *new conversation* sound is any other newly created ticket except a
+  `manual` one (typed in on the desk, mostly the person's own); *a customer
+  replied* is a public message by a contact, after the opening one, on a ticket
+  assigned to the person; *assigned or mentioned* is the `notification:created`
+  frame of those two kinds (the server never makes one for its actor). The
+  hook joins the brand's department rooms only while a ticket sound is on.
+- **Reminder.** One interval per waiting chat, once a minute, re-reading the
+  chat each beat and stopping when it is assigned, closed, merged or can no
+  longer be read; a `ticket:changed` frame stops it at once. A chat already
+  waiting when the tab opens does not ring: only chats that arrive while the
+  tab is open do.
+- **One at a time.** A single player per tab drops a sound that arrives while
+  another is playing (a Play button cuts in). Two open tabs each play; a
+  cross-tab lock is not built.
+- **Files.** Four short WAVs under `apps/admin/public/sounds/`, synthesised by
+  `apps/admin/scripts/generate-sounds.ts` (sine tones, 16 kHz mono, 9 to 21 KB
+  each, about 59 KB in all), so they are the project's own work and released
+  under CC0 1.0. They are created only when a sound is first played, so a person
+  with every sound off never downloads one. No dependency was added.
+- **Card.** The Sounds card saves as each control moves (the board draws no
+  Save), with an optimistic switch that goes back with a toast if the save
+  fails; the reminder checkbox is disabled, not hidden, while its switch is
+  off. The board's note mentions "the waiting-chat count": there is no such
+  count in the admin yet, so today the bell is the always-visible equivalent.
+- **Tests.** Unit: `rules.test.ts`, `player.test.ts`, `waiting-reminder.test.ts`,
+  `use-notification-sounds.test.tsx`, `sounds-card.test.tsx`, the schema,
+  service and `http-api` tests; integration: the preferences route in
+  `notifications.integration.test.ts` (default off, saved on its own, seen by a
+  second read, refused when malformed) and the migration list; Playwright:
+  `notification-sounds.spec.ts` (en and ar, audio stubbed, `page.clock`).
+
+- [x] `sounds` on the preferences view and update; migration `0074`.
+- [x] `useNotificationSounds`, the player, the reminder and the rules.
+- [x] The Sounds card, en and ar, with Play buttons and the background-tab note.
+- [x] The four sound files and `generate-sounds.ts`; guide, DESIGN §6.4 and change log 1.60.
+
 ### M14-26 Mailbox-aware views and rules
 
 The arrival record of M14-08 names the entry point and the address a message

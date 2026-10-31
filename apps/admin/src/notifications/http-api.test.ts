@@ -1,5 +1,6 @@
 import {
   NOTIFICATION_PREFERENCE_DEFAULTS,
+  NOTIFICATION_SOUND_DEFAULTS,
   type NotificationPreferencesView,
 } from '@helpdock/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ const noContent = (): Response => new Response(null, { status: 204 });
 
 const view: NotificationPreferencesView = {
   preferences: NOTIFICATION_PREFERENCE_DEFAULTS,
+  sounds: NOTIFICATION_SOUND_DEFAULTS,
   email: 'lina@helpdock.com',
   locale: 'en',
   push: { configured: false, publicKey: null, subscriptions: [] },
@@ -105,6 +107,15 @@ describe('HttpNotificationsApi', () => {
       ['/api/me/notification-preferences', 'PUT', { pausedUntil: '2026-10-22T09:00:00.000Z' }],
       ['/api/me/notification-preferences', 'PUT', { emailUnsubscribed: false }],
     ]);
+  });
+
+  it('saves the sounds on their own, without the matrix (M14-25)', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(view)));
+    const sounds = { ...NOTIFICATION_SOUND_DEFAULTS, waitingChat: true, waitingChatReminder: true };
+
+    await api.updateSettings({ sounds });
+
+    expect(calls()).toEqual([['/api/me/notification-preferences', 'PUT', { sounds }]]);
   });
 
   it('asks for a test email on the brand route, with no address in the request', async () => {

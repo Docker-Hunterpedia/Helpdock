@@ -1,10 +1,12 @@
 import {
   type EmailDelivery,
   NOTIFICATION_PREFERENCE_DEFAULTS,
+  NOTIFICATION_SOUND_DEFAULTS,
   type NotificationList,
   type NotificationPreferences,
   type NotificationPreferencesUpdate,
   type NotificationPreferencesView,
+  type NotificationSounds,
   type NotificationView,
   type PushSubscriptionCreate,
   type PushSubscriptionView,
@@ -160,6 +162,7 @@ const readStorage = (key: string): string | null => {
 export class MockNotificationsApi implements NotificationsApi {
   readonly #items: NotificationView[];
   #preferences: NotificationPreferences = NOTIFICATION_PREFERENCE_DEFAULTS;
+  #sounds: NotificationSounds = NOTIFICATION_SOUND_DEFAULTS;
   readonly #subscriptions: (PushSubscriptionView & { endpoint: string })[] = [];
   readonly #pushConfigured: boolean;
   /** Test pushes "sent", for a unit test to read. */
@@ -226,6 +229,7 @@ export class MockNotificationsApi implements NotificationsApi {
   async preferences(): Promise<NotificationPreferencesView> {
     return {
       preferences: this.#preferences,
+      sounds: this.#sounds,
       email: MOCK_EMAIL,
       locale: 'en',
       push: {
@@ -251,6 +255,9 @@ export class MockNotificationsApi implements NotificationsApi {
   ): Promise<NotificationPreferencesView> {
     if (update.preferences !== undefined) {
       this.#preferences = update.preferences;
+    }
+    if (update.sounds !== undefined) {
+      this.#sounds = update.sounds;
     }
     this.#delivery = {
       ...this.#delivery,

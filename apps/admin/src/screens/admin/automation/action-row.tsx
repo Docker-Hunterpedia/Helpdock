@@ -156,7 +156,14 @@ export function ActionRow({
               label={t('rules:builder.customField')}
               value={action.key}
               onChange={(key) => {
-                onChange({ ...action, key });
+                // A person's value is an id, which no other field's value is.
+                const was = options?.customFields.find((field) => field.key === action.key)?.type;
+                const now = options?.customFields.find((field) => field.key === key)?.type;
+                onChange({
+                  ...action,
+                  key,
+                  value: (was === 'person') !== (now === 'person') ? '' : action.value,
+                });
               }}
             >
               <option value="">{t('rules:builder.choose')}</option>
@@ -166,14 +173,31 @@ export function ActionRow({
                 </option>
               ))}
             </Choice>
-            <TextField
-              size="small"
-              value={action.value ?? ''}
-              onChange={(event) => {
-                onChange({ ...action, value: event.target.value });
-              }}
-              slotProps={{ htmlInput: { dir: 'auto', 'aria-label': t('rules:builder.value') } }}
-            />
+            {options?.customFields.find((field) => field.key === action.key)?.type === 'person' ? (
+              <Choice
+                label={t('rules:builder.value')}
+                value={action.value ?? ''}
+                onChange={(value) => {
+                  onChange({ ...action, value });
+                }}
+              >
+                <option value="">{t('rules:builder.choose')}</option>
+                {(options?.members ?? []).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+              </Choice>
+            ) : (
+              <TextField
+                size="small"
+                value={action.value ?? ''}
+                onChange={(event) => {
+                  onChange({ ...action, value: event.target.value });
+                }}
+                slotProps={{ htmlInput: { dir: 'auto', 'aria-label': t('rules:builder.value') } }}
+              />
+            )}
           </>
         );
       case 'assign_team':

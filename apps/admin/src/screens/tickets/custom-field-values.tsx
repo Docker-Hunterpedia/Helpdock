@@ -38,10 +38,15 @@ const usePeople = () => useCustomFieldPeople();
 export function PersonValue({ userId }: { readonly userId: string }): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
-  const { people, loaded } = usePeople();
+  const { people, loaded, failed } = usePeople();
   const person = people.find((candidate) => candidate.userId === userId);
   if (person === undefined && !loaded) {
-    return null;
+    // Still reading, or the read failed: say nothing wrong about the person.
+    return failed ? (
+      <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
+        {t('tickets:details.customNone')}
+      </Typography>
+    ) : null;
   }
 
   return (
@@ -155,7 +160,7 @@ export function LinkValue({
       aria-label={t('tickets:details.linkOpen', { field: label })}
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, overflowWrap: 'anywhere' }}
     >
-      <bdi dir="ltr">{value}</bdi>
+      <bdi dir="ltr">{href}</bdi>
       <ExternalLink size={14} aria-hidden="true" className="mirror-in-rtl" />
     </Link>
   );

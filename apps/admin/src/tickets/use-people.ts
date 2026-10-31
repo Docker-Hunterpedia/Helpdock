@@ -17,6 +17,8 @@ export interface CustomFieldPeopleRead {
   readonly people: readonly CustomFieldPerson[];
   /** False until the list has arrived, so a stored id is not called "former staff" before it is known. */
   readonly loaded: boolean;
+  /** The read failed: callers show a neutral fallback, never "former staff". */
+  readonly failed: boolean;
 }
 
 export function useCustomFieldPeople(enabled = true): CustomFieldPeopleRead {
@@ -30,5 +32,5 @@ export function useCustomFieldPeople(enabled = true): CustomFieldPeopleRead {
     enabled: enabled && brandId !== null,
   });
 
-  return { people: people.data?.people ?? [], loaded: people.isSuccess || people.isError };
+  return { people: people.data?.people ?? [], loaded: people.isSuccess, failed: people.isError };
 }

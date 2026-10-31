@@ -331,7 +331,21 @@ const dateValueSchema = z
 
 const textValueSchema = z.string().trim().min(1).max(CUSTOM_FIELD_TEXT_VALUE_MAX);
 
-const longTextValueSchema = z.string().trim().min(1).max(CUSTOM_FIELD_LONG_TEXT_VALUE_MAX);
+/**
+ * Bidirectional control characters (U+202A to U+202E, U+2066 to U+2069) can
+ * reorder what a reader sees so that an address looks like another one. They
+ * are removed on write from the types that are shown as addresses or prose.
+ */
+export const stripBidiControls = (value: string): string =>
+  value.replace(/[\u202A-\u202E\u2066-\u2069]/gu, '');
+
+const noBidi = (value: unknown): unknown =>
+  typeof value === 'string' ? stripBidiControls(value) : value;
+
+const longTextValueSchema = z.preprocess(
+  noBidi,
+  z.string().trim().min(1).max(CUSTOM_FIELD_LONG_TEXT_VALUE_MAX),
+);
 
 /**
  * An `https` URL and nothing else: `javascript:`, `data:` and plain `http` are
@@ -349,19 +363,25 @@ export const isHttpsUrl = (value: string): boolean => {
   }
 };
 
-const linkValueSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(CUSTOM_FIELD_LINK_VALUE_MAX)
-  .refine(isHttpsUrl, 'A link is an https address');
+const linkValueSchema = z.preprocess(
+  noBidi,
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(CUSTOM_FIELD_LINK_VALUE_MAX)
+    .refine(isHttpsUrl, 'A link is an https address'),
+);
 
-const emailValueSchema = z
-  .string()
-  .trim()
-  .max(CUSTOM_FIELD_EMAIL_VALUE_MAX)
-  .pipe(z.email())
-  .transform((value) => value.toLowerCase());
+const emailValueSchema = z.preprocess(
+  noBidi,
+  z
+    .string()
+    .trim()
+    .max(CUSTOM_FIELD_EMAIL_VALUE_MAX)
+    .pipe(z.email())
+    .transform((value) => value.toLowerCase()),
+);
 
 /**
  * A staff member, by id. Whether that person belongs to the brand is the api's

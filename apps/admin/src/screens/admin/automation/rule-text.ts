@@ -91,6 +91,10 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
     return t('rules:fields.custom', { label });
   };
 
+  /** A person-field value is an id; words are what a rule's sentence shows. */
+  const isPerson = (key: string | undefined): boolean =>
+    options?.customFields.find((candidate) => candidate.key === key)?.type === 'person';
+
   const condition = (entry: RuleCondition): string => {
     const subject = field(entry);
     const operator = t(`rules:operators.${entry.operator}`);
@@ -104,9 +108,12 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         value: t(`rules:text.duration.${entry.duration.unit}`, { count: entry.duration.amount }),
       });
     }
-    const values = entry.values.map((raw) => value(entry.field, raw));
+    const person = isPerson(entry.key);
+    const values = entry.values.map((raw) =>
+      person ? lookup(options?.members, raw) : value(entry.field, raw),
+    );
     const quoted =
-      RULE_FIELD_VALUE_KIND[entry.field] === 'text'
+      RULE_FIELD_VALUE_KIND[entry.field] === 'text' && !person
         ? values.map((text) => t('rules:text.quoted', { text }))
         : values;
     return t('rules:text.condition', {
@@ -132,7 +139,9 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
       case 'set_field':
         return t('rules:text.action.set_field', {
           field: field({ field: 'custom_field', key: entry.key }),
-          value: entry.value ?? '',
+          value: isPerson(entry.key)
+            ? lookup(options?.members, entry.value ?? '')
+            : (entry.value ?? ''),
         });
       case 'assign_team':
         return t('rules:text.action.assign_team', { team: lookup(options?.teams, entry.teamId) });

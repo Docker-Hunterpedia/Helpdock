@@ -242,6 +242,13 @@ describe('CustomFieldsCard, the M14-27 types', () => {
       expect(screen.getByText('short')).toBeVisible();
     });
 
+    it('shows the address the link really goes to, not the raw stored text', () => {
+      renderNew({ link: 'HTTPS://Status.Example.COM' }, false);
+
+      expect(screen.getByRole('link')).toHaveAttribute('href', 'https://status.example.com/');
+      expect(screen.getByText('https://status.example.com/')).toBeVisible();
+    });
+
     it('never makes a link of a stored value that is not https', () => {
       renderNew({ link: 'javascript:alert(1)' }, false);
 

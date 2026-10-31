@@ -195,7 +195,8 @@ const prechatFields = async (
       ];
     }
     const def = byKey.get(field.key);
-    return def === undefined
+    // A person field is staff-only: the visitor is never asked it (M14-27).
+    return def === undefined || def.type === 'person'
       ? []
       : [
           {

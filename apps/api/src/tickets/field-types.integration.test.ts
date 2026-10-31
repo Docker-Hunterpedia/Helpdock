@@ -1,5 +1,6 @@
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
+  brands,
   createDb,
   type Db,
   type DbHandle,
@@ -78,6 +79,12 @@ describe.skipIf(!hasDocker)('custom field types (M14-27)', () => {
   let outsider: Person;
   /** Staff whose role the last test removes. */
   let leaver: Person;
+  /** Staff of another brand and of nothing here. */
+  let brandB: Person;
+  /** An Agent of this brand who has been deactivated. */
+  let deactivated: Person;
+  /** Staff of this brand whose role a template test removes. */
+  let templateLeaver: Person;
 
   const envFor = (): Env =>
     ({
@@ -221,6 +228,39 @@ describe.skipIf(!hasDocker)('custom field types (M14-27)', () => {
     sam = await addPerson(runtime.db, 'sam');
     outsider = await addPerson(runtime.db, 'outsider');
     leaver = await addPerson(runtime.db, 'leaver');
+    brandB = await addPerson(runtime.db, 'brandb');
+    deactivated = await addPerson(runtime.db, 'deactivated');
+    templateLeaver = await addPerson(runtime.db, 'templateleaver');
+    const otherBrand = uuidv7();
+    await withSystem(runtime.db, otherBrand, async (tx) => {
+      await tx.insert(brands).values({ id: otherBrand, name: 'Other', prefix: 'OTH' });
+      await tx.insert(userBrandRoles).values({
+        userId: brandB.id,
+        brandId: otherBrand,
+        role: 'agent',
+        departmentIds: [],
+      });
+    });
+    await withSystem(runtime.db, seeded.brandId, (tx) =>
+      tx.insert(userBrandRoles).values([
+        {
+          userId: deactivated.id,
+          brandId: seeded.brandId,
+          role: 'agent',
+          departmentIds: [support],
+        },
+        {
+          userId: templateLeaver.id,
+          brandId: seeded.brandId,
+          role: 'agent',
+          departmentIds: [support],
+        },
+      ]),
+    );
+    await runtime.db
+      .update(users)
+      .set({ status: 'deactivated' })
+      .where(eq(users.id, deactivated.id));
     await withSystem(runtime.db, seeded.brandId, (tx) =>
       tx.insert(userBrandRoles).values([
         { userId: sam.id, brandId: seeded.brandId, role: 'agent', departmentIds: [support] },
@@ -413,6 +453,145 @@ describe.skipIf(!hasDocker)('custom field types (M14-27)', () => {
       );
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('who counts as staff of this brand (M14-27)', () => {
+    it('refuses a user whose only role is in another brand, and leaves them out of the people list', async () => {
+      const id = await createTicket(support);
+
+      const refused = await patchTicket(id, { owner: brandB.id });
+      expect(refused.status).toBe(400);
+      expect(JSON.stringify(refused.body)).not.toContain(brandB.id);
+
+      const people = await call<CustomFieldPeople>(
+        'GET',
+        `${brandPath()}/custom-fields/people`,
+        ada,
+      );
+      expect(people.body.people.map((person) => person.userId)).not.toContain(brandB.id);
+    });
+
+    it('refuses a deactivated user and leaves them out of the people list', async () => {
+      const id = await createTicket(support);
+
+      expect((await patchTicket(id, { owner: deactivated.id })).status).toBe(400);
+
+      const people = await call<CustomFieldPeople>(
+        'GET',
+        `${brandPath()}/custom-fields/people`,
+        ada,
+      );
+      expect(people.body.people.map((person) => person.userId)).not.toContain(deactivated.id);
+    });
+  });
+
+  describe('rules (M14-27)', () => {
+    const rule = (value: string) => ({
+      name: `Owner ${uuidv7()}`,
+      kind: 'event',
+      trigger: 'ticket_created',
+      conditions: { match: 'all', groups: [] },
+      actions: [{ type: 'set_field', key: 'owner', value }],
+    });
+
+    it('saves a set_field naming a member of staff, and refuses one who is not', async () => {
+      const saved = await call('POST', `${brandPath()}/rules`, ada, rule(sam.id));
+      expect(saved.status).toBe(201);
+
+      for (const stranger of [outsider.id, brandB.id, deactivated.id, 'not-an-id']) {
+        const refused = await call('POST', `${brandPath()}/rules`, ada, rule(stranger));
+        expect(refused.status).toBe(400);
+      }
+    });
+
+    it('refuses a condition that compares a person field with someone who is not staff', async () => {
+      const draft = (value: string) => ({
+        ...rule(sam.id),
+        conditions: {
+          match: 'all',
+          groups: [
+            {
+              match: 'all',
+              conditions: [
+                { field: 'custom_field', key: 'owner', operator: 'is', values: [value] },
+              ],
+            },
+          ],
+        },
+      });
+
+      expect((await call('POST', `${brandPath()}/rules`, ada, draft(sam.id))).status).toBe(201);
+      expect((await call('POST', `${brandPath()}/rules`, ada, draft(outsider.id))).status).toBe(
+        400,
+      );
+    });
+
+    it('offers the builder each custom field with its type', async () => {
+      const options = await call<{ customFields: { key: string; type: string }[] }>(
+        'GET',
+        `${brandPath()}/rules/options`,
+        ada,
+      );
+
+      expect(options.body.customFields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: 'owner', type: 'person' }),
+          expect.objectContaining({ key: 'notes', type: 'long_text' }),
+        ]),
+      );
+    });
+  });
+
+  describe('templates (M14-27)', () => {
+    const addTemplate = async (custom: Record<string, unknown>): Promise<string> => {
+      const response = await call<{ id: string }>('POST', `${brandPath()}/ticket-templates`, ada, {
+        name: `Template ${uuidv7()}`,
+        subject: 'From the template',
+        bodyText: 'Body',
+        customDefaults: custom,
+      });
+      expect(response.status).toBe(201);
+
+      return response.body.id;
+    };
+
+    it('refuses a default that names someone who is not staff', async () => {
+      const response = await call('POST', `${brandPath()}/ticket-templates`, ada, {
+        name: `Template ${uuidv7()}`,
+        subject: 'x',
+        bodyText: 'y',
+        customDefaults: { owner: brandB.id },
+      });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('files a ticket from a template whose default person has since left, without that default', async () => {
+      const templateId = await addTemplate({ owner: templateLeaver.id, notes: 'kept' });
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.delete(userBrandRoles).where(eq(userBrandRoles.userId, templateLeaver.id)),
+      );
+
+      const response = await call<TicketDetail>('POST', `${brandPath()}/tickets`, ada, {
+        templateId,
+        departmentId: support,
+      });
+
+      expect(response.status).toBe(201);
+      expect(response.body.ticket.custom).toEqual({ notes: 'kept' });
+    });
+
+    it('keeps a default whose person is still staff', async () => {
+      const templateId = await addTemplate({ owner: sam.id });
+
+      const response = await call<TicketDetail>('POST', `${brandPath()}/tickets`, ada, {
+        templateId,
+        departmentId: support,
+      });
+
+      expect(response.status).toBe(201);
+      expect(response.body.ticket.custom).toEqual({ owner: sam.id });
     });
   });
 

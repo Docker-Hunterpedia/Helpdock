@@ -573,6 +573,57 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
     });
   });
 
+  // ------------------------------------------------- staff-only field types
+
+  describe('a person custom field (M14-27)', () => {
+    it('is never asked of a visitor, and an answer a visitor sends is ignored without a word about staff', async () => {
+      const owner = await staff<{ key: string }>(
+        'POST',
+        `/api/brands/${seeded.brandId}/custom-fields`,
+        ada,
+        { target: 'ticket', key: 'owner', label: 'Owner', type: 'person' },
+      );
+      expect(owner.status).toBe(201);
+      await staff('POST', `/api/brands/${seeded.brandId}/custom-fields`, ada, {
+        target: 'ticket',
+        key: 'order_ref',
+        label: 'Order reference',
+        type: 'text',
+      });
+      const saved = await staff('PUT', `/api/brands/${seeded.brandId}/widget/conversation`, ada, {
+        prechatEnabled: true,
+        prechatFields: [
+          { kind: 'custom', key: 'owner', required: false },
+          { kind: 'custom', key: 'order_ref', required: false },
+        ],
+        showAgentIdentity: true,
+        whenUnavailable: 'form',
+        transcriptEnabled: false,
+      });
+      expect(saved.status).toBe(200);
+
+      const config = await widget<WidgetConfig>('GET', '/config');
+      expect(config.body.prechat.fields.map((field) => field.key)).toEqual(['order_ref']);
+
+      const staffId = seeded.userId;
+      const strangerId = uuidv7();
+      for (const answer of [staffId, strangerId]) {
+        const visitor = await newVisitor();
+        const started = await start(visitor, {
+          prechat: { custom: { owner: answer, order_ref: 'A-1' } },
+        });
+        // Staff and not staff are answered alike: the field is simply not one a visitor has.
+        expect(started.status).toBe(201);
+        const ticket = await staff<TicketDetail>(
+          'GET',
+          `/api/brands/${seeded.brandId}/tickets/${started.body.conversation.id}`,
+          ada,
+        );
+        expect(ticket.body.ticket.custom).toEqual({ order_ref: 'A-1' });
+      }
+    });
+  });
+
   // -------------------------------------------------------------- origins
 
   describe('the origin allow-list (M4-03)', () => {

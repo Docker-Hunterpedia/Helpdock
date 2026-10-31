@@ -230,6 +230,24 @@ describe('customValuesSchema', () => {
     });
   });
 
+  describe('bidi controls (M14-27)', () => {
+    it('strips them from a link, an email and a long text on write', () => {
+      const rules = [
+        rule({ key: 'page', type: 'link' }),
+        rule({ key: 'billing', type: 'email' }),
+        rule({ key: 'notes', type: 'long_text' }),
+      ];
+
+      expect(
+        parse(rules, {
+          page: 'https://\u202Eexample.com/a\u2066',
+          billing: 'a\u202E@b.co',
+          notes: 'x\u2067y\u202Cz',
+        }),
+      ).toEqual({ page: 'https://example.com/a', billing: 'a@b.co', notes: 'xyz' });
+    });
+  });
+
   describe('isHttpsUrl', () => {
     it('is true for https and for nothing else', () => {
       expect(isHttpsUrl('https://example.com')).toBe(true);

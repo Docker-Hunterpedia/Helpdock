@@ -51,6 +51,7 @@ event reaches. Conditions:
 | Field | Operators |
 |---|---|
 | Subject, Contact email, a custom field | contains, does not contain, is, is not, is set |
+| A **person** custom field (M14-27) | is, is not, is set; the builder shows a picker of staff by name, and a person who is not staff of the brand is refused when the rule is saved. A *Set a field* action on a person field picks the person the same way. Long text, link and email fields use the text operators, long text starting on *contains*. |
 | Body (the newest public message from the contact) | contains, does not contain |
 | Channel, Priority, Department, Status | is, is not, is any of |
 | Team, Assignee, Tag, Account | is, is not, is any of, is set |

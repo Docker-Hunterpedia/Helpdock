@@ -422,8 +422,11 @@ even in an Arabic sentence. A **person** is shown by their public name with an
 avatar; a person who has since left the brand reads "Former staff member", and a
 write that names someone who is not staff of the brand is refused with `400`.
 **Long text** is shown collapsed to three lines with *Show all*. A person field
-cannot be shown on the web form (a visitor cannot choose a staff member) and is
-not an import destination; a multi-line field from a migration source can map to
+cannot be shown on the web form or asked in the chat widget's pre-chat (a visitor
+cannot choose a staff member; an answer a visitor sends is ignored) and is
+not an import destination; a template default or a rule that names a person who
+is not staff is refused when saved, and a template default whose person has since
+left the brand is dropped when a ticket is filed from it; a multi-line field from a migration source can map to
 a Long text field. The picker reads `GET /api/brands/:brandId/custom-fields/people`
 (`ticket:read`: id and public name only).
 

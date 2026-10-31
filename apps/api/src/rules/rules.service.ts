@@ -42,6 +42,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { writeTicketingAudit } from '../ticketing/audit.js';
+import { brandStaffAmong, readFieldRules } from '../ticketing/custom-values.js';
 import type { TicketingContext } from '../ticketing/ticketing-context.js';
 import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import type { BusinessHoursProbe, CannedResponseCatalog } from './ports.js';
@@ -301,6 +302,7 @@ export class RulesService {
             key: customFieldDefs.key,
             label: customFieldDefs.label,
             labelAr: customFieldDefs.labelAr,
+            type: customFieldDefs.type,
           })
           .from(customFieldDefs)
           .where(eq(customFieldDefs.target, 'ticket'))
@@ -428,11 +430,54 @@ export class RulesService {
         throw new BadRequestException(`The rule names a ${what} that is not in this brand`);
       }
     }
+    await this.#requirePeopleInPersonFields(tx, draft);
     if (
       ids.users.size > 0 &&
       (await this.#rules.countMembers(tx, brandId, [...ids.users])) !== ids.users.size
     ) {
       throw new BadRequestException('The rule names a person who is not in this brand');
+    }
+  }
+
+  /**
+   * A person-field value in a rule (a `set_field` action, or a condition that
+   * compares the field) has to be staff of this brand when the rule is saved,
+   * as it has to be when a ticket is written (M14-27). Roles are tenant rows,
+   * so the transaction's policy is the brand filter.
+   */
+  async #requirePeopleInPersonFields(tx: DbTransaction, draft: RuleDraft): Promise<void> {
+    const personKeys = new Set(
+      (await readFieldRules(tx, 'ticket'))
+        .filter((rule) => rule.type === 'person')
+        .map((r) => r.key),
+    );
+    if (personKeys.size === 0) {
+      return;
+    }
+    const named = [
+      ...draft.actions.flatMap((action) =>
+        action.type === 'set_field' && personKeys.has(action.key) && action.value
+          ? [action.value]
+          : [],
+      ),
+      ...draft.conditions.groups.flatMap((group) =>
+        group.conditions.flatMap((condition) =>
+          condition.field === 'custom_field' &&
+          condition.key !== undefined &&
+          personKeys.has(condition.key)
+            ? (condition.values ?? [])
+            : [],
+        ),
+      ),
+    ];
+    if (named.length === 0) {
+      return;
+    }
+    // Not an id is not staff, and must not reach a uuid column.
+    const ids = named.filter((id) => z.uuid().safeParse(id).success);
+    const staff = await brandStaffAmong(tx, ids);
+    if (ids.length !== named.length || named.some((id) => !staff.has(id))) {
+      throw new BadRequestException('The rule names a person who is not staff of this brand');
     }
   }
 

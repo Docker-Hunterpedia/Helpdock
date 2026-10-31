@@ -126,10 +126,10 @@ Guides: [security](docs/guides/security.md), [security scanning](docs/guides/sec
 configuration step. DigitalOcean opens the manual import guide because its
 one-click button does not support the required worker and managed Valkey.
 
-You need a Linux server with Docker Engine and the Compose v2 plugin, 2 vCPU and 4 GB of memory, two DNS names pointing at it (one for the admin app, one for the API and widget), ports 80 and 443 open, and an S3-compatible bucket. The commands below install 1.0.0.
+You need a Linux server with Docker Engine and the Compose v2 plugin, 2 vCPU and 4 GB of memory, two DNS names pointing at it (one for the admin app, one for the API and widget), ports 80 and 443 open, and an S3-compatible bucket. The commands below install 1.2.1.
 
 ```bash
-git clone --depth 1 --branch v1.0.0 https://github.com/Docker-Hunterpedia/Helpdock.git
+git clone --depth 1 --branch v1.2.1 https://github.com/Docker-Hunterpedia/Helpdock.git
 cd Helpdock/docker
 cp ../.env.example .env
 openssl rand -base64 32   # the master key, for APP_MASTER_KEY
@@ -139,7 +139,7 @@ Edit `.env` and set at least:
 
 | Key | Value |
 |---|---|
-| `HELPDOCK_VERSION` | `1.0.0` |
+| `HELPDOCK_VERSION` | `1.2.1` |
 | `APP_URL` | `https://` plus the admin host |
 | `APP_MASTER_KEY` | The key you just generated |
 | `HELPDOCK_APP_PASSWORD`, `DATABASE_URL` | The runtime database role's password, and the same password inside the URL |
@@ -180,7 +180,7 @@ How the documents are organised is in [docs/README.md](docs/README.md).
 
 ## Project status
 
-**1.0.0** is the first stable release. Every milestone of the 1.0 plan has shipped; what each one built, and the gaps it left open, is in [docs/completed/](docs/completed/README.md). Read the [changelog](CHANGELOG.md) for what changed and the known limits, and the [PRD status board](docs/planning/PRD.md#status-board) for milestone status.
+**1.2.1** is the current release. 1.0.0, the first stable release, shipped every milestone of the 1.0 plan, and 1.1 and 1.2 added a keyboard-first inbox, bulk edit, snooze, passkeys and more sign-in options. What each milestone built, and the gaps it left open, is in [docs/completed/](docs/completed/README.md). Read the [changelog](CHANGELOG.md) for what changed and the known limits, and the [PRD status board](docs/planning/PRD.md#status-board) for milestone status.
 
 Versions follow [semantic versioning](https://semver.org). Each release is published as `ghcr.io/docker-hunterpedia/helpdock:<version>` with notes on the [releases page](https://github.com/Docker-Hunterpedia/Helpdock/releases).
 

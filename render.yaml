@@ -6,7 +6,7 @@ services:
     name: helpdock-api
     runtime: image
     image:
-      url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
+      url: ghcr.io/docker-hunterpedia/helpdock:1.2.1
     plan: standard
     region: frankfurt
     healthCheckPath: /ready
@@ -57,7 +57,7 @@ services:
     name: helpdock-worker
     runtime: image
     image:
-      url: ghcr.io/docker-hunterpedia/helpdock:1.0.3
+      url: ghcr.io/docker-hunterpedia/helpdock:1.2.1
     plan: standard
     region: frankfurt
     envVars:

@@ -1,6 +1,6 @@
 # Deploy paths
 
-These templates pin `ghcr.io/docker-hunterpedia/helpdock:1.0.3`. They run the
+These templates pin `ghcr.io/docker-hunterpedia/helpdock:1.2.1`. They run the
 existing image without rebuilding it: `APP_ROLE=api` serves HTTP, the admin,
 help center, widget and Socket.IO; `APP_ROLE=worker` runs queues and channel
 pollers. The api runs migrations at boot under a PostgreSQL advisory lock. The

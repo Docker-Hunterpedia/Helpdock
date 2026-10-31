@@ -34,6 +34,7 @@ import {
 import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 import { EmailScheduleCard } from './email-schedule-card.tsx';
+import { SoundsCard } from './sounds-card.tsx';
 
 /**
  * The Notifications tab of Your account (M3-07, artboard `AdminNotifications`
@@ -105,6 +106,7 @@ export function NotificationsTab(): ReactNode {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
         <EmailScheduleCard view={view.data} />
         <PreferencesForm view={view.data} />
+        <SoundsCard view={view.data} />
       </Box>
       <PushCard view={view.data} />
     </Box>

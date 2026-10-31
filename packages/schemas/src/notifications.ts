@@ -88,6 +88,57 @@ export const resolveNotificationPreferences = (stored: unknown): NotificationPre
   return resolved;
 };
 
+// ---------------------------------------------------------------- sounds
+
+/**
+ * M14-25. The four events a staff browser can play a sound for, in the order
+ * the Sounds card lists them. Each is off by default; none carries information
+ * that the bell or the waiting-chat count does not (DESIGN §10).
+ */
+export const SOUND_EVENTS = [
+  'waitingChat',
+  'newConversation',
+  'customerReply',
+  'assignedOrMentioned',
+] as const;
+export const soundEventSchema = z.enum(SOUND_EVENTS);
+export type SoundEvent = z.infer<typeof soundEventSchema>;
+
+/** How often the waiting-chat sound repeats while nobody has picked the chat up. */
+export const WAITING_CHAT_REMINDER_MS = 60_000;
+
+export const notificationSoundsSchema = z.strictObject({
+  waitingChat: z.boolean(),
+  newConversation: z.boolean(),
+  customerReply: z.boolean(),
+  assignedOrMentioned: z.boolean(),
+  /** "Remind me every minute while a chat waits"; only meaningful with `waitingChat`. */
+  waitingChatReminder: z.boolean(),
+});
+export type NotificationSounds = z.infer<typeof notificationSoundsSchema>;
+
+export const NOTIFICATION_SOUND_DEFAULTS: NotificationSounds = Object.freeze({
+  waitingChat: false,
+  newConversation: false,
+  customerReply: false,
+  assignedOrMentioned: false,
+  waitingChatReminder: false,
+});
+
+/** A stored row read back; a missing or malformed key falls back to off. */
+export const resolveNotificationSounds = (stored: unknown): NotificationSounds => {
+  const record = typeof stored === 'object' && stored !== null ? stored : {};
+  const resolved: Record<string, boolean> = { ...NOTIFICATION_SOUND_DEFAULTS };
+  for (const key of Object.keys(NOTIFICATION_SOUND_DEFAULTS)) {
+    const value = (record as Record<string, unknown>)[key];
+    if (typeof value === 'boolean') {
+      resolved[key] = value;
+    }
+  }
+
+  return resolved as NotificationSounds;
+};
+
 // ------------------------------------------------------- email schedule
 
 /**
@@ -134,6 +185,8 @@ export const notificationPreferencesViewSchema = z.object({
     subscriptions: z.array(pushSubscriptionSchema),
   }),
   emailDelivery: emailDeliverySchema,
+  /** M14-25. Per person, so the choice follows them to another browser. */
+  sounds: notificationSoundsSchema,
   /** False while the install has no SMTP settings: notification emails cannot be sent at all. */
   emailConfigured: z.boolean(),
   /**
@@ -152,6 +205,7 @@ export type NotificationPreferencesView = z.infer<typeof notificationPreferences
 export const notificationPreferencesUpdateSchema = z
   .strictObject({
     preferences: notificationPreferencesSchema.optional(),
+    sounds: notificationSoundsSchema.optional(),
     emailSchedule: emailScheduleSchema.optional(),
     digestHour: z.int().min(0).max(23).optional(),
     pausedUntil: z.iso.datetime().nullable().optional(),

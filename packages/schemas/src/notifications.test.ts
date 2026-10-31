@@ -3,12 +3,15 @@ import {
   excerptOf,
   NOTIFICATION_KINDS,
   NOTIFICATION_PREFERENCE_DEFAULTS,
+  NOTIFICATION_SOUND_DEFAULTS,
   notificationListQuerySchema,
   notificationPreferencesSchema,
   notificationPreferencesUpdateSchema,
   notificationSchema,
+  notificationSoundsSchema,
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
+  resolveNotificationSounds,
   UNSUBSCRIBE_TOKEN_PATTERN,
   unsubscribeRequestSchema,
   unsubscribeTokenParamSchema,
@@ -206,5 +209,41 @@ describe('the unsubscribe contract (M14-11)', () => {
     expect(notificationPreferencesUpdateSchema.safeParse({ emailUnsubscribed: true }).success).toBe(
       false,
     );
+  });
+});
+
+describe('notification sounds (M14-25)', () => {
+  it('are all off by default, and the defaults parse', () => {
+    expect(Object.values(NOTIFICATION_SOUND_DEFAULTS).every((on) => on === false)).toBe(true);
+    expect(notificationSoundsSchema.parse(NOTIFICATION_SOUND_DEFAULTS)).toEqual(
+      NOTIFICATION_SOUND_DEFAULTS,
+    );
+  });
+
+  it('reads a stored row, falling back to off for a missing or malformed key', () => {
+    expect(resolveNotificationSounds(undefined)).toEqual(NOTIFICATION_SOUND_DEFAULTS);
+    expect(resolveNotificationSounds('nope')).toEqual(NOTIFICATION_SOUND_DEFAULTS);
+    expect(
+      resolveNotificationSounds({ waitingChat: true, customerReply: 'yes', extra: true }),
+    ).toEqual({ ...NOTIFICATION_SOUND_DEFAULTS, waitingChat: true });
+  });
+
+  it('refuses an unknown event, a missing event and a non-boolean', () => {
+    expect(
+      notificationSoundsSchema.safeParse({ ...NOTIFICATION_SOUND_DEFAULTS, party: true }).success,
+    ).toBe(false);
+    const { waitingChat: _left, ...partial } = NOTIFICATION_SOUND_DEFAULTS;
+    expect(notificationSoundsSchema.safeParse(partial).success).toBe(false);
+    expect(
+      notificationSoundsSchema.safeParse({ ...NOTIFICATION_SOUND_DEFAULTS, waitingChat: 1 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('can be saved on their own through the update schema', () => {
+    expect(
+      notificationPreferencesUpdateSchema.safeParse({ sounds: NOTIFICATION_SOUND_DEFAULTS })
+        .success,
+    ).toBe(true);
   });
 });

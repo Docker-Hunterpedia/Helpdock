@@ -5,9 +5,9 @@ Step-by-step setup of the three "Sign in with" buttons staff see on the login sc
 ## Before you start
 
 - You are an install admin. The fields live under **Settings → Install → Authentication** (`/settings/install/authentication`), and every value can instead be pinned with an `HD_*` environment variable, which the page then marks **Set by environment**.
-- `APP_URL` is final. The redirect URL you give a provider is built from it, and a provider refuses a callback whose address it was not told. The page shows the exact URLs in its **Redirect URLs** aside, each with a **Copy** button.
+- `APP_URL` is final. The redirect URL you give a provider is built from the origin of it (any path in `APP_URL` is dropped), and a provider refuses a callback whose address it was not told. The page shows the exact URLs in its **Redirect URLs** aside, each with a **Copy** button.
 - A button never creates an account. People are invited first ([staff and roles](staff-and-roles.md#inviting-somebody)); a provider only signs in somebody who already has an account here.
-- A provider with no client id, or no client secret, is reported as disabled and its button is not drawn. For Microsoft the tenant id is also required.
+- A provider with no client id is reported as disabled and its button is not drawn. Microsoft also needs its tenant id and client secret. For Google and GitHub the button is drawn on the client id alone, so a missing or wrong secret shows only after the consent screen (see [When it does not work](#when-it-does-not-work); [#428](https://github.com/Docker-Hunterpedia/Helpdock/issues/428) tracks drawing the button only with a secret). The buttons are also not drawn while SSO is enforced.
 - Client secrets are write-only: after saving, the page shows only that one is saved, and **Replace** opens an empty field.
 
 The redirect URL for each provider is `<APP_URL>/api/auth/oauth/<provider>/callback`:
@@ -73,12 +73,12 @@ Helpdock asks for `read:user user:email`, to learn which verified address is sig
 
 | What you see | Cause |
 |---|---|
-| The button is missing | The client id or secret is empty, or for Microsoft the tenant id is. |
+| The button is missing | The client id is empty (for Microsoft also the tenant id or client secret), or SSO enforcement is on, which draws no provider buttons. |
+| After the consent screen: "That account cannot sign in here. Ask an administrator to invite you." | For Google and GitHub, usually a missing or wrong client secret, because the token exchange fails after the button was drawn. Re-enter the secret. It is also what a person without an account sees. |
 | The provider says the redirect URI does not match | The URL registered there differs from the one in the aside, usually `http` against `https`, a trailing slash, or an old `APP_URL`. |
 | "Connect your Google account first" (`oauth-link-required`, named for the provider) | The provider account has not been linked. Sign in with a password or a sign-in link and press **Connect** on the security page. |
 | "This Google account can't sign in here" (`oauth-domain-not-allowed`) | The account's Workspace domain is not in **Allowed Workspace domains**. |
 | "This Microsoft account can't sign in here" (`oauth-tenant-mismatch`) | The token comes from another tenant than the one configured. |
-| "Single sign-on is required" (`sso-required`) | SSO enforcement is on, which refuses the provider buttons. Use the SSO button, or a break-glass account ([sso](sso.md#roles-mfa-and-enforcement)). |
-| Sign-in fails a day after it worked, on Microsoft | The client secret expired. |
+| Everyone on Microsoft sees "That account cannot sign in here" | The client secret has expired. Create a new one in Entra and **Replace** it. |
 
-Every refusal is written to the audit trail ([audit log](audit-log.md)). Rate limits for the sign-in routes are in [authentication](authentication.md#rate-limits).
+Refusals of a recognised provider account (domain not allowed, tenant mismatch, not linked) are written to the audit trail ([audit log](audit-log.md)); other failures (an expired state, a provider not configured, a failed token exchange, a declined consent, `sso-required`) appear only in the api log. Under SSO enforcement the buttons are gone: staff use the SSO button, or a break-glass account ([sso](sso.md#roles-mfa-and-enforcement)); a direct start answers "Use single sign-on to continue." Rate limits for the sign-in routes are in [authentication](authentication.md#rate-limits).

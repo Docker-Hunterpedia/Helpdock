@@ -5,7 +5,7 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01, adding and managing passkeys by M18-02, a passkey as a second factor by M18-03, passwordless sign-in by M18-04, break-glass with a passkey by M18-05, the passkey screens by M18-06, OAuth identities bound by subject by M18-07 and Microsoft sign-in by M18-08. Setting up the Google, Microsoft and GitHub apps, step by step, is [sign-in providers](sign-in-providers.md).
+Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01, adding and managing passkeys by M18-02, a passkey as a second factor by M18-03, passwordless sign-in by M18-04, SSO and break-glass integration by M18-05, the passkey screens by M18-06, OAuth identities bound by subject by M18-07 and Microsoft sign-in by M18-08. Setting up the Google, Microsoft and GitHub apps, step by step, is [sign-in providers](sign-in-providers.md).
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
@@ -1103,8 +1103,11 @@ the same.
 
 The step-by-step setup of each provider's app is [sign-in providers](sign-in-providers.md). An install admin sets these under **Settings → Install → Authentication** (or
 with the matching `HD_*` environment variable). The page shows the exact
-redirect URLs derived from `APP_URL`. A provider with no client id or client
-secret is reported as disabled and its button is not drawn.
+redirect URLs derived from `APP_URL`. A provider with no client id is reported as
+disabled and its button is not drawn; Microsoft also needs its tenant id and
+client secret. Google and GitHub are drawn on the client id alone, so a missing
+or wrong secret shows after the consent screen as "That account cannot sign in
+here. Ask an administrator to invite you." ([#428](https://github.com/Docker-Hunterpedia/Helpdock/issues/428)).
 
 Client secrets are write-only: after one is saved the browser receives only
 `clientSecretConfigured: true` and a fixed mask. Replacing it opens an empty

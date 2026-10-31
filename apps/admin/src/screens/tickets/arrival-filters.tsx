@@ -48,7 +48,8 @@ export function WrittenToField({
       disabled={disabled}
       label={t('tickets:filters.writtenTo')}
       placeholder={t('tickets:filters.writtenToPlaceholder')}
-      helperText={t('tickets:filters.writtenToHint')}
+      // A fixed (built-in) view's field is read-only, and disabled helper text fails contrast.
+      helperText={disabled ? undefined : t('tickets:filters.writtenToHint')}
       onChange={(event) => {
         setTyped(event.target.value);
       }}

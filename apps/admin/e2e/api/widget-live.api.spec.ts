@@ -183,9 +183,10 @@ test.describe('the widget against the real api', () => {
     let dialog = admin.getByRole('dialog', { name: t('helpCenter:tree.dialog.category') });
     await dialog.getByLabel(t('helpCenter:tree.dialog.english')).fill(CATEGORY);
     await dialog.getByRole('button', { name: t('helpCenter:tree.dialog.create') }).click();
+    // The first category is created from the empty state, so the tree mounts with it already open.
     await admin
-      .getByRole('button', { name: t('helpCenter:tree.expand', { name: CATEGORY }) })
-      .click();
+      .getByRole('button', { name: t('helpCenter:tree.collapse', { name: CATEGORY }) })
+      .waitFor();
     await admin.getByRole('button', { name: t('helpCenter:tree.addSection') }).click();
     dialog = admin.getByRole('dialog', { name: t('helpCenter:tree.dialog.section') });
     await dialog.getByLabel(t('helpCenter:tree.dialog.english')).fill(SECTION);

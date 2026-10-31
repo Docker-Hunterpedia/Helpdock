@@ -104,13 +104,19 @@ describe('Help center', () => {
   it('starts with a category when there is none, and the button names one', async () => {
     const { apis, rendered } = await render('/help-center');
     const structure = await apis.helpCenter.structure(BRAND);
-    vi.spyOn(apis.helpCenter, 'structure').mockResolvedValue({
-      ...structure,
-      categories: [],
-      sections: [],
-      articles: [],
-    });
-    const create = vi.spyOn(apis.helpCenter, 'createCategory');
+    const realCreate = apis.helpCenter.createCategory.bind(apis.helpCenter);
+    let created = false;
+    vi.spyOn(apis.helpCenter, 'structure').mockImplementation(async () =>
+      Promise.resolve(
+        created ? structure : { ...structure, categories: [], sections: [], articles: [] },
+      ),
+    );
+    const create = vi
+      .spyOn(apis.helpCenter, 'createCategory')
+      .mockImplementation(async (...args) => {
+        created = true;
+        return realCreate(...args);
+      });
     const { user } = rendered();
 
     await screen.findByRole('heading', { name: 'Start your help center' });
@@ -126,6 +132,12 @@ describe('Help center', () => {
       });
     });
     expect(await screen.findByText('Category "Payments" created')).toBeInTheDocument();
+    // The create answers with the category, not the structure: the refetch brings the tree,
+    // and it mounts with its first category open.
+    expect(
+      await screen.findByRole('button', { name: 'Collapse Orders' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Section' })).toBeInTheDocument();
   });
 
   it('says no article exists yet, with no section selected, and offers New article', async () => {

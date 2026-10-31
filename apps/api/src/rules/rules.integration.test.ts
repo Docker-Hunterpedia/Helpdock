@@ -1567,12 +1567,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     let billingBox: string;
 
     /** What email intake keeps on the ticket from M14-08's arrival record. */
-    const arriveAt = (
-      ticketId: string,
-      mailboxId: string,
-      address: string,
-      _departmentId: string,
-    ) =>
+    const arriveAt = (ticketId: string, mailboxId: string, address: string) =>
       inBrand((tx) =>
         tx
           .update(tickets)
@@ -1618,7 +1613,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
 
     it('matches conditions on the mailbox and the address written to, and never a ticket with no mailbox arrival', async () => {
       await disableAll();
-      const rule = await saveRule({
+      await saveRule({
         name: 'Refund mailbox',
         kind: 'event',
         trigger: 'ticket_created',
@@ -1636,7 +1631,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         },
         actions: [{ type: 'add_tag', tagId: refundTag }],
       });
-      const notMailbox = await saveRule({
+      await saveRule({
         name: 'Not the billing mailbox',
         kind: 'event',
         trigger: 'ticket_created',
@@ -1655,8 +1650,8 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       const written = await createTicket('Wrote to the refunds alias');
       const other = await createTicket('Wrote to the main address');
       const legacy = await createTicket('Filed before M14');
-      await arriveAt(written.id, supportBox, 'refunds@acme.test', support);
-      await arriveAt(other.id, supportBox, 'support@acme.test', support);
+      await arriveAt(written.id, supportBox, 'refunds@acme.test');
+      await arriveAt(other.id, supportBox, 'support@acme.test');
       // The legacy ticket has no mailbox arrival: its creation row says it was typed in by staff.
       await drain();
 
@@ -1670,6 +1665,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       expect((await ticketRow(written.id))?.priority).toBe('high');
       expect((await ticketRow(legacy.id))?.priority).toBe('medium');
       const legacyRuns = await runsOf(legacy.id);
+      expect(legacyRuns.length).toBeGreaterThan(0);
       expect(legacyRuns.every((run) => run.result === 'skipped')).toBe(true);
 
       // The test run answers the same, and the options list the mailboxes for the builder.
@@ -1678,8 +1674,6 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
         'billing@acme.test',
         'support@acme.test',
       ]);
-      void rule;
-      void notMailbox;
       await disableAll();
     });
 
@@ -1687,9 +1681,9 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       const first = await createTicket('Arrived at support');
       const second = await createTicket('Arrived at support, other alias');
       const billed = await createTicket('Arrived at billing', billing);
-      await arriveAt(first.id, supportBox, 'support@acme.test', support);
-      await arriveAt(second.id, supportBox, 'help@acme.test', support);
-      await arriveAt(billed.id, billingBox, 'billing@acme.test', billing);
+      await arriveAt(first.id, supportBox, 'support@acme.test');
+      await arriveAt(second.id, supportBox, 'help@acme.test');
+      await arriveAt(billed.id, billingBox, 'billing@acme.test');
 
       const bySupport = await listIds(ada, `mailboxId=${supportBox}`);
       expect(bySupport).toEqual(expect.arrayContaining([first.id, second.id]));
@@ -1732,7 +1726,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       expect(boxes.body.mailboxes.map((mailbox) => mailbox.address)).toContain('support@acme.test');
     });
 
-    it('still finds a ticket in the mailbox view after it moves to another department (M14-26)', async () => {
+    it('keeps a ticket in the mailbox view after it moves to another department (M14-26 regression)', async () => {
       const bea = await addPerson(runtime.db, 'bea');
       await inBrand((tx) =>
         tx.insert(userBrandRoles).values({
@@ -1745,7 +1739,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       bea.token = await signIn(bea.email, PASSWORD);
 
       const moved = await createTicket('Arrived at support, then transferred', support);
-      await arriveAt(moved.id, supportBox, 'support@acme.test', support);
+      await arriveAt(moved.id, supportBox, 'support@acme.test');
       // Before the transfer a Billing-only Agent cannot see it.
       expect(await listIds(bea, `mailboxId=${supportBox}`)).not.toContain(moved.id);
 
@@ -1756,7 +1750,7 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
           .where(eq(tickets.id, moved.id)),
       );
 
-      // The arrival activity row keeps the old department under RLS; the ticket's own columns do not.
+      // Regression: a transferred ticket stays in its mailbox view for whoever works it now.
       expect(await listIds(bea, `mailboxId=${supportBox}`)).toContain(moved.id);
       expect(await listIds(bea, 'toAddress=support@acme.test')).toContain(moved.id);
     });

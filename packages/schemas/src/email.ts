@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { brandIdParamSchema, localeSchema } from './brand.js';
+import { emailSenderKeySchema } from './email-sender-key.js';
 import { SMTP_RESPONSE_MAX_LENGTH, smtpErrorCodeSchema, smtpTlsModeSchema } from './install.js';
 import { ticketParamSchema } from './ticket.js';
 
@@ -230,19 +231,11 @@ export const EMAIL_REPLY_CHANNELS = ['email', 'form', 'manual'] as const;
 export const repliesByEmail = (channel: string): boolean =>
   (EMAIL_REPLY_CHANNELS as readonly string[]).includes(channel);
 
-/** The key of the mailbox a rule chose for a ticket's replies (M14-26): `mailbox:<id>`. */
-export const mailboxSenderKey = (mailboxId: string): `mailbox:${string}` => `mailbox:${mailboxId}`;
-
-/**
- * `default`, a department id, or `mailbox:<id>` (M14-26): which sender a reply
- * goes out as. The mailbox key is only honoured for the ticket's own reply mailbox.
- */
-export const emailSenderKeySchema = z.union([
-  z.literal('default'),
-  z.uuid(),
-  z.templateLiteral(['mailbox:', z.uuid()]),
-]);
-export type EmailSenderKey = z.infer<typeof emailSenderKeySchema>;
+export {
+  type EmailSenderKey,
+  emailSenderKeySchema,
+  mailboxSenderKey,
+} from './email-sender-key.js';
 
 export const ticketEmailContextSchema = z.object({
   /** Every sender the brand has, for the From select. */

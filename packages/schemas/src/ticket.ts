@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ticketAiStateSchema, ticketMessageAiSchema } from './ai.js';
 import { ticketCsatSchema } from './csat.js';
 import { emailMessageViewSchema } from './email-inbound.js';
+import { emailSenderKeySchema } from './email-sender-key.js';
 import { importMessageDetailsSchema, importSourceSchema } from './import.js';
 import { importSourceLink } from './import-source-link.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
@@ -862,10 +863,10 @@ export const messageCreateRequestSchema = z.object({
   timeSpentSeconds: timeEntrySecondsSchema.optional(),
   /**
    * M2-05. On a public reply to an email ticket, the sender it goes out as:
-   * `default` or a department id (`emailSenderKeySchema`). Left out, the
+   * `default`, a department id or `mailbox:<id>` (`emailSenderKeySchema`). Left out, the
    * ticket's own department's sender is used. Ignored on anything else.
    */
-  emailFrom: z.union([z.literal('default'), z.uuid()]).optional(),
+  emailFrom: emailSenderKeySchema.optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

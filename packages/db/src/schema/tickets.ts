@@ -165,9 +165,9 @@ export const tickets = pgTable(
     /**
      * M14-26. Where the ticket arrived, copied once from the M14-08 arrival
      * record at email intake: the mailbox and the address the customer wrote to
-     * (lower-cased). Kept on the ticket because the activity rows keep their
-     * original department under row-level security, so a transferred ticket
-     * would vanish from a mailbox view if the filter read them. Null for any
+     * (lower-cased). Kept on the ticket so the list filters on an indexed,
+     * brand-scoped column instead of scanning activity JSON per query, and so
+     * the fact stays stable whatever happens to the activity log. Null for any
      * ticket that did not arrive at a mailbox; `set null` on mailbox deletion.
      */
     arrivalMailboxId: uuid('arrival_mailbox_id').references((): AnyPgColumn => mailboxes.id, {

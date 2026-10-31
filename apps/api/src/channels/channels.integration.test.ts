@@ -1003,6 +1003,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         reason: 'continued_from',
         department: { id: support },
       });
+      // M14-26: the continuation keeps where the reply came in, on the ticket itself.
+      const continued = await ticketOf(reply?.ticketId ?? '');
+      expect(continued).toMatchObject({
+        arrivalMailboxId: expect.any(String),
+        arrivalToAddress: 'refunds@helpdock.test',
+      });
     });
 
     it('drops automated mail unless the mailbox allow-lists the sender, and blocked senders', async () => {

@@ -1542,10 +1542,9 @@ Built as above, with these decisions:
   `tickets.arrival_to_address` (lower-cased), indexed per brand. They are
   written once at email intake (a new ticket, and a reopen-policy continuation)
   from the same entry point the M14-08 arrival activity records. The plan said
-  "no new column"; a copy is kept because activity rows keep their original
-  `department_id` under row-level security, so a ticket transferred to another
-  department would vanish from its mailbox view for the people now working it.
-  Migration `0076` backfills existing tickets from their arrival activity.
+  "no new column"; a copy is kept so the list filters on an indexed,
+  brand-scoped column instead of scanning activity JSON per query, and the fact
+  is stable. Migration `0076` backfills existing tickets from their arrival activity.
 - [x] Filter popover rows "Mailbox" and "Written to", and the same two in the
   Views tab's editor; the mailbox list comes from `GET /ticket-mailboxes`
   (`ticket:read`), because `GET /mailboxes` needs `brand:manage`.

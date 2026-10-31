@@ -22,6 +22,11 @@ const ENTRA_TENANT_ISSUER =
  * names: then that tenant is the one vouching. Personal accounts choose their
  * own addresses and are never vouched for. Only the JSON boolean `true` and
  * the number `0` count; a string never does.
+ *
+ * A B2B user made a member (for example by cross-tenant synchronisation) has
+ * `acct` 0 while its `xms_edov` speaks for its home tenant. Microsoft sets
+ * `idp` to the issuer unless the account lives in another tenant, so `idp`, when
+ * present, must name the pinned tenant too.
  */
 export function entraVouchesForEmail(issuer: string, claims: Record<string, unknown>): boolean {
   const tenant = ENTRA_TENANT_ISSUER.exec(issuer)?.[1];
@@ -31,6 +36,11 @@ export function entraVouchesForEmail(issuer: string, claims: Record<string, unkn
     claims.iss === issuer &&
     claims.tid === tenant &&
     claims.acct === 0 &&
-    claims.xms_edov === true
+    claims.xms_edov === true &&
+    identityProviderIsTenant(claims.idp, issuer, tenant)
   );
+}
+
+function identityProviderIsTenant(idp: unknown, issuer: string, tenant: string): boolean {
+  return idp === undefined || idp === issuer || idp === `https://sts.windows.net/${tenant}/`;
 }

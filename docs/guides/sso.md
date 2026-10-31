@@ -200,10 +200,10 @@ refuses to save while the issuer still contains `{tenant-id}`.
    paste the **Application (client) ID** and the secret value.
 5. Under **Email domains**, enter only domains verified in **this** tenant
    (**Domain names** in the admin center), never a partner's. Helpdock trusts
-   `xms_edov` only from members (`acct` 0), but a B2B user made a member, for
-   example by cross-tenant synchronisation, also has `acct` 0 while its
-   `xms_edov` speaks for its home tenant. Listing only this tenant's domains
-   keeps such addresses out. Map group **object IDs**, not display names, in
+   `xms_edov` only from members (`acct` 0) whose `idp` claim, when present,
+   names this tenant, which keeps out a B2B user made a member (for example by
+   cross-tenant synchronisation) whose `xms_edov` speaks for its home tenant.
+   Listing only this tenant's domains is still the right setting. Map group **object IDs**, not display names, in
    the role mappings.
 6. Under **Enterprise applications**, set **Assignment required** and assign
    only the intended staff or groups. An assigned guest still cannot make a
@@ -227,6 +227,8 @@ when all of these hold; otherwise the first sign-in is refused with
   cloud qualifies: government and China cloud issuers fail closed;
 - the token's `iss` is that issuer and its `tid` is that tenant GUID;
 - `acct` is `0`, a member of the tenant (a guest is `1`);
+- `idp`, if the token has it, is the issuer or `https://sts.windows.net/<tenant GUID>/`
+  (a member whose account lives in another tenant carries that tenant there);
 - `xms_edov` is the boolean `true`.
 
 Then the pinned tenant is the one vouching for the address. Without the

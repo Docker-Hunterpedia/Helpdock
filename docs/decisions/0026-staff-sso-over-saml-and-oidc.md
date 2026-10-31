@@ -260,15 +260,27 @@ hand an already-linked account to another identity. The rules are now:
   `xms_edov` says the domain is verified by the tenant that holds the account.
   For a guest that is the guest's home tenant or a personal Microsoft, Google
   or one-time-passcode account, so guests are excluded and the pinned tenant
-  vouches. One residue stays with the operator: a B2B user turned member (for
-  example by cross-tenant synchronisation) has `acct` 0 while its `xms_edov`
-  speaks for its home tenant, so the connection's email domains must list only
-  domains verified in the pinned tenant, as the guide says. Guests cannot make a first link through an Entra OIDC
+  vouches. One residue was left with the operator: a B2B user turned member
+  (for example by cross-tenant synchronisation) has `acct` 0 while its
+  `xms_edov` speaks for its home tenant; the 2026-10-31 amendment below closes
+  it in code. Guests cannot make a first link through an Entra OIDC
   connection; Helpdock has no manual SSO link. Recorded in DOMAIN-RULES §12.
   The Entra preset tells admins to add the `email`, `xms_edov` and `acct`
   optional claims. An existing Entra OIDC connection whose tokens already carry
   them starts linking by email, and creating accounts when JIT is on, at the
   next sign-in after the upgrade.
+- **Amendment 2026-10-31 (#330): `idp` must name the pinned tenant.** The ID
+  token's `idp` claim, when present, must equal the issuer or
+  `https://sts.windows.net/<tid>/`; otherwise `xms_edov` is not trusted. Microsoft
+  sets `idp` to the issuer unless the account lives in another tenant, and it is
+  a default claim, so admins configure nothing. A B2B member whose home tenant
+  vouched for the domain is therefore refused (`sso-email-unverified` on SSO,
+  `oauth-tenant-mismatch` on the Microsoft button). An absent `idp` is accepted,
+  because Microsoft does not document it as always present; the operator advice
+  to list only this tenant's domains stays as defence in depth. Not yet checked
+  against a real Entra tenant: the exact `idp` form for native members and that
+  `acct` arrives as the number 0 (a string fails closed, refusing first links).
+  Tracked in #330.
 - **The OIDC issuer refuses `{` and `}`.** The Entra preset's `{tenant-id}`
   template parses as a URL, so the connection schema refuses braces in the
   issuer as well as the form.

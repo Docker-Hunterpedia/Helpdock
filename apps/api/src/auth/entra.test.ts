@@ -11,6 +11,34 @@ describe('entraVouchesForEmail', () => {
   });
 
   it.each([
+    ['idp equal to the issuer', { idp: ISSUER }],
+    [
+      'idp in the sts.windows.net form of the tenant',
+      { idp: `https://sts.windows.net/${TENANT}/` },
+    ],
+  ])('vouches for a member whose token has %s', (_why, change) => {
+    expect(entraVouchesForEmail(ISSUER, { ...member, ...change })).toBe(true);
+  });
+
+  it.each([
+    [
+      'a B2B member whose idp names another tenant',
+      { idp: 'https://sts.windows.net/9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d/' },
+    ],
+    [
+      'a B2B member whose idp is another tenant v2.0 issuer',
+      { idp: 'https://login.microsoftonline.com/9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d/v2.0' },
+    ],
+    ['a personal-account idp', { idp: 'live.com' }],
+    ['an empty idp', { idp: '' }],
+    ['a null idp', { idp: null }],
+    ['a non-string idp', { idp: 0 }],
+    ['an idp without the trailing slash', { idp: `https://sts.windows.net/${TENANT}` }],
+  ])('does not vouch for %s', (_why, change) => {
+    expect(entraVouchesForEmail(ISSUER, { ...member, ...change })).toBe(false);
+  });
+
+  it.each([
     ['a guest', { acct: 1 }],
     ['no acct claim', { acct: undefined }],
     ['an unverified domain', { xms_edov: false }],

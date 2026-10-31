@@ -98,7 +98,7 @@ export class MacrosService {
       throw new ConflictException(`A brand keeps at most ${MAX_MACROS_PER_BRAND} of these`);
     }
 
-    await this.#assertShortcutFree(context.tx, request.shortcut, ownership, null);
+    await this.#assertShortcutFree(context, request.shortcut, ownership, null);
 
     const row = await this.#guardShortcut(() =>
       this.#repository.create(context.tx, {
@@ -150,9 +150,17 @@ export class MacrosService {
     }
     await this.#assertDepartment(context.tx, ownership.departmentId);
     await this.#assertReferences(context.tx, merged.actions);
-    // Moving an item into another scope can collide as surely as renaming it.
+    // Checked only when the shortcut, the scope or the department moves, so an
+    // item whose shortcut later collided (a colleague's personal one, say) can
+    // still have its name or text edited.
     const shortcut = request.shortcut === undefined ? row.shortcut : request.shortcut;
-    await this.#assertShortcutFree(context.tx, shortcut, ownership, id);
+    const moved =
+      shortcut !== row.shortcut ||
+      ownership.ownerId !== row.ownerId ||
+      ownership.departmentId !== row.departmentId;
+    if (moved) {
+      await this.#assertShortcutFree(context, shortcut, ownership, id);
+    }
 
     const updated = await this.#guardShortcut(() =>
       this.#repository.update(context.tx, id, {
@@ -207,9 +215,17 @@ export class MacrosService {
     }
   }
 
-  /** M14-14: no other item this reader can see, offered in the same place, answers to the shortcut. */
+  /**
+   * M14-14: no other item offered in the same place answers to the shortcut.
+   *
+   * Only items the actor can see count (`seesMacro`): a refusal because of an
+   * item they cannot see would tell them it exists. The check runs under a
+   * transaction lock on the brand and the word, so two saves in different
+   * scopes (which no single unique index spans) take turns instead of both
+   * passing; the partial indexes still back up saves in the same scope.
+   */
   async #assertShortcutFree(
-    tx: DbTransaction,
+    context: MacrosContext,
     shortcut: string | null,
     ownership: MacroOwnership,
     exceptId: string | null,
@@ -217,13 +233,16 @@ export class MacrosService {
     if (shortcut === null) {
       return;
     }
-    const others = await this.#repository.withShortcut(tx, shortcut, exceptId);
-    if (others.some((other) => shortcutsOverlap(ownership, other))) {
+    await this.#repository.lockShortcut(context.tx, context.brandId, shortcut);
+    const others = await this.#repository.withShortcut(context.tx, shortcut, exceptId);
+    if (
+      others.some((other) => seesMacro(context.actor, other) && shortcutsOverlap(ownership, other))
+    ) {
       throw new TicketingFailure('shortcut-taken');
     }
   }
 
-  /** The unique indexes catch what two saves at once get past the check above. */
+  /** The unique indexes catch a duplicate within one scope that gets past the check above. */
   async #guardShortcut<T>(write: () => Promise<T>): Promise<T> {
     try {
       return await write();

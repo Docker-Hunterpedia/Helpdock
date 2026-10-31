@@ -148,7 +148,11 @@ export const draftPlaceholderProblems = (
     placeholderProblems(draft[locale]).map((problem) => ({ locale, problem })),
   );
 
-export const problemOf = (draft: MacroDraft): DraftProblem | null => {
+export const problemOf = (
+  draft: MacroDraft,
+  /** The saved item, when there is one: a reply left as it was is not re-checked, so its name can still change. */
+  saved: Pick<Macro, 'bodies'> | null = null,
+): DraftProblem | null => {
   if (draft.name.trim() === '') {
     return 'nameRequired';
   }
@@ -167,7 +171,9 @@ export const problemOf = (draft: MacroDraft): DraftProblem | null => {
   if (shortcutProblem(draft.shortcut)) {
     return 'shortcutInvalid';
   }
-  if (draftPlaceholderProblems(draft).length > 0) {
+  const textChanged =
+    saved === null || draft.en !== saved.bodies.en || draft.ar !== saved.bodies.ar;
+  if (textChanged && draftPlaceholderProblems(draft).length > 0) {
     return 'placeholders';
   }
 

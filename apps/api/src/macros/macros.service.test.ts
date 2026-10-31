@@ -48,6 +48,7 @@ const repository = {
   list: async () => rows.filter((row) => readable(row, current)),
   find: async (_tx: DbTransaction, id: string) =>
     rows.filter((row) => readable(row, current)).find((row) => row.id === id),
+  lockShortcut: async () => undefined,
   withShortcut: async (_tx: DbTransaction, shortcut: string, exceptId: string | null) =>
     rows.filter(
       (row) => readable(row, current) && row.shortcut === shortcut && row.id !== exceptId,
@@ -386,5 +387,60 @@ describe('shortcuts (M14-14)', () => {
     await expect(
       service.update(contextFor(ADMIN), mine.id, { shortcut: 'refund' }),
     ).rejects.toBeInstanceOf(TicketingFailure);
+  });
+
+  it('does not let a refusal reveal a shared item of a department the reader does not work in', async () => {
+    await service.create(contextFor(ADMIN), canned({ shortcut: 'hours', departmentId: BILLING }));
+
+    // AGENT works Support only: Billing's item is not theirs to collide with.
+    const mine = await service.create(
+      contextFor(AGENT),
+      canned({ name: 'Mine', scope: 'personal', shortcut: 'hours' }),
+    );
+    expect(mine.shortcut).toBe('hours');
+  });
+
+  it('still refuses a personal shortcut a shared item the reader can see has', async () => {
+    await service.create(contextFor(ADMIN), canned({ shortcut: 'hi', departmentId: SUPPORT }));
+
+    await expect(
+      service.create(
+        contextFor(AGENT),
+        canned({ name: 'Mine', scope: 'personal', shortcut: 'hi' }),
+      ),
+    ).rejects.toMatchObject({ reason: 'shortcut-taken' });
+  });
+
+  it('lets a name or text change through on an item whose shortcut later collided', async () => {
+    const created = await service.create(contextFor(ADMIN), canned({ shortcut: 'refund' }));
+    // A colleague's item took the same word since (or the rows predate the check).
+    rows.push({ ...rows[0], id: 'later', name: 'Later', shortcut: 'refund' } as CannedResponse);
+
+    const renamed = await service.update(contextFor(ADMIN), created.id, { name: 'Renamed' });
+    expect(renamed.name).toBe('Renamed');
+    const reworded = await service.update(contextFor(ADMIN), created.id, {
+      bodies: { en: 'New text', ar: '' },
+    });
+    expect(reworded.bodies.en).toBe('New text');
+
+    // Keeping the same word in the patch is not a change either.
+    await expect(
+      service.update(contextFor(ADMIN), created.id, { shortcut: 'refund2' }),
+    ).resolves.toMatchObject({ shortcut: 'refund2' });
+    await expect(
+      service.update(contextFor(ADMIN), created.id, { shortcut: 'refund' }),
+    ).rejects.toMatchObject({ reason: 'shortcut-taken' });
+  });
+
+  it('checks again when the item moves scope', async () => {
+    await service.create(contextFor(ADMIN), canned({ shortcut: 'sla', departmentId: BILLING }));
+    const other = await service.create(
+      contextFor(ADMIN),
+      canned({ name: 'B', shortcut: 'sla', departmentId: SUPPORT }),
+    );
+
+    await expect(
+      service.update(contextFor(ADMIN), other.id, { departmentId: BILLING }),
+    ).rejects.toMatchObject({ reason: 'shortcut-taken' });
   });
 });

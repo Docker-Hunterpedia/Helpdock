@@ -6,18 +6,21 @@ import type { Macro } from '@helpdock/schemas';
  *
  * **Most used first, yours before the brand's.** A person's own items come
  * before the shared ones, because they put them there; within each, the one
- * used most recently, then the one used most often, then by name. An item never
+ * used on the latest day, then the one used most often, then by name. An item never
  * used sorts after one that has been.
  */
 
-const time = (macro: Macro): number =>
-  macro.lastUsedAt === null ? 0 : Date.parse(macro.lastUsedAt);
+const DAY = 24 * 60 * 60 * 1000;
+
+/** The day an item was last used (UTC), so `useCount` breaks ties within a day. */
+const day = (macro: Macro): number =>
+  macro.lastUsedAt === null ? 0 : Math.floor(Date.parse(macro.lastUsedAt) / DAY);
 
 export const sortByUse = (macros: readonly Macro[]): Macro[] =>
   [...macros].sort(
     (a, b) =>
       Number(b.scope === 'personal') - Number(a.scope === 'personal') ||
-      time(b) - time(a) ||
+      day(b) - day(a) ||
       b.useCount - a.useCount ||
       a.name.localeCompare(b.name),
   );

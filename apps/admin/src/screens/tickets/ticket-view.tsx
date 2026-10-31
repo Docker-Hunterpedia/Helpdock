@@ -483,7 +483,11 @@ export function TicketView({
     contact:
       contact.data === undefined
         ? null
-        : { name: contact.data.name, email: contact.data.primaryIdentity?.value ?? null },
+        : {
+            name: contact.data.name,
+            // `{{contact.email}}` is an address, not a phone number or chat id.
+            email: emailOf(contact.data),
+          },
     viewerName: viewer.name,
     locale: contact.data?.locale ?? brand.data?.defaultLocale ?? 'en',
     body,
@@ -1416,3 +1420,15 @@ const patchOf = (patch: {
   ...(patch.departmentId === undefined ? {} : { departmentId: patch.departmentId }),
   ...(patch.assigneeId === undefined ? {} : { assigneeId: patch.assigneeId }),
 });
+
+/** The contact's email address: the primary identity when it is one, else the first email identity. */
+const emailOf = (contact: {
+  readonly primaryIdentity: { readonly kind: string; readonly value: string } | null;
+  readonly identities?: readonly { readonly kind: string; readonly value: string }[] | undefined;
+}): string | null => {
+  if (contact.primaryIdentity?.kind === 'email') {
+    return contact.primaryIdentity.value;
+  }
+
+  return contact.identities?.find((identity) => identity.kind === 'email')?.value ?? null;
+};

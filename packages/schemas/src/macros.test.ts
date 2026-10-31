@@ -167,6 +167,15 @@ describe('placeholderProblems (M14-14)', () => {
     expect(placeholderProblems('{{x.y}} {{x.y}} {{a.b}} {{')).toHaveLength(3);
   });
 
+  it.each([
+    '{{contact.first_name|Sir|Madam}}',
+    '{{contact.first_name|a}b}}',
+    '{{contact.first_name|{x}}}',
+  ])('refuses a fallback the renderer would not read: %s', (text) => {
+    expect(placeholderProblems(text)).toMatchObject([{ kind: 'fallback' }]);
+    expect(placeholderProblemSentence({ en: text, ar: '' })).toContain('cannot contain');
+  });
+
   it('treats text that is not a name as unknown', () => {
     expect(placeholderProblems('{{ not a name }}')).toMatchObject([{ kind: 'unknown' }]);
   });

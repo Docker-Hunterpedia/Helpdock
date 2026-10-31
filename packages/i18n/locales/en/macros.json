@@ -109,7 +109,8 @@
     "placeholderErrors": {
       "unknown": "Unknown placeholder {{text}}.",
       "unclosed": "Unclosed {{text}}. Add }} to close it.",
-      "didYouMean": "Did you mean {{name}}?"
+      "didYouMean": "Did you mean {{name}}?",
+      "fallback": "The fallback in {{text}} cannot contain |, { or }."
     }
   },
   "actions": {

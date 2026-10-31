@@ -68,7 +68,9 @@ export const macroShortcutSchema = z
 /** A problem with a reply's placeholders. `text` is what was written, `suggestion` the nearest real name. */
 export type PlaceholderProblem =
   | { readonly kind: 'unknown'; readonly text: string; readonly suggestion: string | null }
-  | { readonly kind: 'unclosed'; readonly text: string };
+  | { readonly kind: 'unclosed'; readonly text: string }
+  /** A known name whose fallback the renderer would not read (`|`, `{` or `}` in it). */
+  | { readonly kind: 'fallback'; readonly text: string };
 
 const WRITTEN_NAME = /^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?$/i;
 
@@ -131,7 +133,8 @@ export const placeholderProblems = (text: string): PlaceholderProblem[] => {
       continue;
     }
     const inner = text.slice(open + 2, close);
-    const name = (inner.split('|')[0] ?? '').trim();
+    const [head = '', ...rest] = inner.split('|');
+    const name = head.trim();
     if (
       !(
         WRITTEN_NAME.test(name) &&
@@ -139,6 +142,9 @@ export const placeholderProblems = (text: string): PlaceholderProblem[] => {
       )
     ) {
       add({ kind: 'unknown', text: `{{${inner}}}`, suggestion: nearestPlaceholder(name) });
+    } else if (rest.length > 1 || /[{}]/u.test(rest.join('|'))) {
+      // The renderer reads one fallback made of anything but `|`, `{` and `}`.
+      add({ kind: 'fallback', text: `{{${inner}}}` });
     }
     from = close + 2;
   }
@@ -155,7 +161,9 @@ export const placeholderProblemSentence = (bodies: {
     placeholderProblems(bodies[locale]).map((problem) =>
       problem.kind === 'unknown'
         ? `Unknown placeholder ${problem.text} in the ${locale} reply`
-        : `Unclosed ${problem.text} in the ${locale} reply`,
+        : problem.kind === 'fallback'
+          ? `Fallback of ${problem.text} in the ${locale} reply cannot contain |, { or }`
+          : `Unclosed ${problem.text} in the ${locale} reply`,
     ),
   );
 

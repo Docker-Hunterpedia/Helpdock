@@ -746,6 +746,68 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
       ).rejects.toThrow();
     });
 
+    it('does not let a 409 reveal a shared item of a department the reader does not work in', async () => {
+      // Sam works Support; this item is Billing's.
+      await createMacro(ada, {
+        ...fees,
+        name: 'Billing hours',
+        departmentId: billing,
+        shortcut: 'bh',
+      });
+
+      const mine = await call('POST', `${brandPath()}/macros`, sam, {
+        ...fees,
+        name: 'My bh',
+        scope: 'personal',
+        shortcut: 'bh',
+      });
+      expect(mine.status).toBe(201);
+    });
+
+    it('lets a name change through on an item whose shortcut a wider item later took', async () => {
+      const first = await createMacro(ada, {
+        ...fees,
+        name: 'Early',
+        departmentId: support,
+        shortcut: 'early',
+      });
+      // Cross-scope, which no unique index spans: written around the service.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.insert(cannedResponses).values({
+          brandId: seeded.brandId,
+          kind: 'canned',
+          name: 'Wide',
+          bodies: { en: 'x' },
+          shortcut: 'early',
+        }),
+      );
+
+      const rename = await call<Macro>('PATCH', `${brandPath()}/macros/${first.id}`, ada, {
+        name: 'Early renamed',
+      });
+      expect(rename.status).toBe(200);
+
+      const keep = await call('PATCH', `${brandPath()}/macros/${first.id}`, ada, {
+        shortcut: 'early',
+        name: 'Early again',
+      });
+      expect(keep.status).toBe(200);
+    });
+
+    it('serialises two saves of one word in different scopes: one wins, one is refused', async () => {
+      const results = await Promise.all([
+        call('POST', `${brandPath()}/macros`, ada, {
+          ...fees,
+          name: 'Race dept',
+          departmentId: support,
+          shortcut: 'dup',
+        }),
+        call('POST', `${brandPath()}/macros`, ada, { ...fees, name: 'Race all', shortcut: 'dup' }),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    });
+
     it('refuses an unknown placeholder and an unclosed {{ on save, naming each', async () => {
       const typo = await call<{ error: { message?: string } }>(
         'POST',

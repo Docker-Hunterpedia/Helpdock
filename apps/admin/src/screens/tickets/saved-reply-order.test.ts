@@ -39,6 +39,15 @@ describe('sortByUse', () => {
     ]);
   });
 
+  it('breaks a tie within a day by how often, not by the hour', () => {
+    const rows = [
+      macro({ name: 'rare', lastUsedAt: '2026-10-01T23:00:00Z', useCount: 1 }),
+      macro({ name: 'often', lastUsedAt: '2026-10-01T01:00:00Z', useCount: 40 }),
+    ];
+
+    expect(names(sortByUse(rows))).toEqual(['often', 'rare']);
+  });
+
   it('does not change the list it was given', () => {
     const rows = [macro({ name: 'b' }), macro({ name: 'a' })];
     sortByUse(rows);

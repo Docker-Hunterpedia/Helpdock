@@ -113,7 +113,8 @@
     "placeholderErrors": {
       "unknown": "عنصر نائب غير معروف {{text}}.",
       "unclosed": "عنصر نائب غير مغلق {{text}}. أضف }} لإغلاقه.",
-      "didYouMean": "هل تقصد {{name}}؟"
+      "didYouMean": "هل تقصد {{name}}؟",
+      "fallback": "لا يمكن أن يحتوي البديل في {{text}} على | أو { أو }."
     }
   },
   "actions": {

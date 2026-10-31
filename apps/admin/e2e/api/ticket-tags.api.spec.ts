@@ -89,7 +89,7 @@ test.describe('tagging a ticket against the real api', () => {
       .getByRole('textbox', { name: t('tickets:newTicket.messageLabel') })
       .fill('The left hinge snapped.');
     await dialog.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
-    await expect(page.getByRole('heading', { name: SUBJECT, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: SUBJECT, level: 2 })).toBeVisible();
     const ticketId = new URL(page.url()).pathname.split('/').at(-1) ?? '';
 
     const details = page.getByRole('complementary', { name: t('tickets:details.label') });

@@ -114,7 +114,7 @@ describe('merge', () => {
     expect(await screen.findByText('Merged into HD-1035')).toBeVisible();
     await screen.findByRole(
       'heading',
-      { name: 'Invoice 2291 shows the wrong VAT', level: 1 },
+      { name: 'Invoice 2291 shows the wrong VAT', level: 2 },
       NAVIGATION,
     );
     const banner = await within(thread()).findByText(
@@ -227,7 +227,7 @@ describe('split', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create ticket' }));
 
     expect(await screen.findByText('HD-1043 created')).toBeVisible();
-    await screen.findByRole('heading', { name: 'The return label', level: 1 }, NAVIGATION);
+    await screen.findByRole('heading', { name: 'The return label', level: 2 }, NAVIGATION);
     const back = await within(thread()).findByRole('link', { name: 'HD-1042' });
     expect(back).toHaveAttribute('href', `/tickets/${MOCK_TICKET_REFUND}`);
     expect(within(thread()).getByText(/I returned order 42 three weeks ago/)).toBeVisible();

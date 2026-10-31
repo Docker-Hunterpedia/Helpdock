@@ -45,7 +45,7 @@ test.describe('the ticket workspace against the real api', () => {
       .fill('Where is my refund?');
     await dialog.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
 
-    await expect(page.getByRole('heading', { name: SUBJECT, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: SUBJECT, level: 2 })).toBeVisible();
     const thread = page.getByRole('list', { name: t('tickets:thread.label') });
     await expect(thread.getByText('Where is my refund?')).toBeVisible();
 
@@ -87,7 +87,7 @@ test.describe('the ticket workspace against the real api', () => {
     // The whole thread survives a reload, which is the api holding it and not
     // the browser: the fixture's session does not, but this one's cookie does.
     await page.reload();
-    await expect(page.getByRole('heading', { name: SUBJECT, level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: SUBJECT, level: 2 })).toBeVisible();
     await expect(thread.getByText(REPLY)).toBeVisible();
     await expect(thread.getByText(NOTE)).toBeVisible();
   });

@@ -512,6 +512,13 @@
       "when": 1793465500066,
       "tag": "0074_custom_field_types",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793478456448,
+      "tag": "0077_canned_shortcuts",
+      "breakpoints": true
     }
   ]
 }

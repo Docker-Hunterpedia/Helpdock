@@ -1,0 +1,5 @@
+ALTER TABLE "canned_responses" ADD COLUMN "shortcut" varchar(32);--> statement-breakpoint
+ALTER TABLE "canned_responses" ADD COLUMN "use_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "canned_responses_shortcut_all_idx" ON "canned_responses" USING btree ("brand_id","shortcut") WHERE "canned_responses"."owner_id" is null and "canned_responses"."department_id" is null and "canned_responses"."shortcut" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "canned_responses_shortcut_department_idx" ON "canned_responses" USING btree ("brand_id","department_id","shortcut") WHERE "canned_responses"."owner_id" is null and "canned_responses"."department_id" is not null and "canned_responses"."shortcut" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "canned_responses_shortcut_owner_idx" ON "canned_responses" USING btree ("brand_id","owner_id","shortcut") WHERE "canned_responses"."owner_id" is not null and "canned_responses"."shortcut" is not null;

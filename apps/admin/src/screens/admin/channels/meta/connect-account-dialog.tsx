@@ -14,15 +14,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Info, PlugZap, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../../app/tokens.js';
-import { currentBrand, useSession, useTicketingApi } from '../../../../auth/session.tsx';
+import { currentBrand, useSession } from '../../../../auth/session.tsx';
 import { isMetaError, metaKeys } from '../../../../meta/api.js';
 import { useMetaApi } from '../../../../meta/context.tsx';
+import { useDepartmentsQuery } from '../../../../ticketing/use-departments.js';
 import { Field, fieldDescribedBy } from '../../../../ui/field.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { looksLikeId, looksLikeToken } from './account-draft.js';
@@ -48,7 +49,6 @@ export function ConnectAccountDialog({
 }): ReactNode {
   const t = useT();
   const api = useMetaApi();
-  const ticketing = useTicketingApi();
   const brand = currentBrand(useSession());
   const tokens = useSemanticTokens();
   const toast = useToast();
@@ -79,11 +79,7 @@ export function ConnectAccountDialog({
   });
   const { tested, problem, setProblem, forget } = test;
 
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-    enabled: open,
-  });
+  const departments = useDepartmentsQuery(brand.id, { enabled: open });
   const first = departments.data?.departments[0]?.id ?? '';
 
   useEffect(() => {

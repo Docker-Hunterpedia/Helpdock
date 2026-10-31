@@ -6,9 +6,10 @@ import { type ReactNode, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { useT } from '../../../app/i18n.js';
 import { channelsRoute, ROUTES } from '../../../app/route-paths.js';
-import { currentBrand, useEmailApi, useSession, useTicketingApi } from '../../../auth/session.tsx';
+import { currentBrand, useEmailApi, useSession } from '../../../auth/session.tsx';
 import { emailKeys } from '../../../email/api.js';
 import { PageHeader } from '../../../shell/page-header.tsx';
+import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { AutoRepliesCard } from './auto-replies-card.tsx';
 import { FailedSendsCard } from './failed-sends-card.tsx';
@@ -156,17 +157,13 @@ function TabBody({
 function OutgoingTab({ brandId }: { readonly brandId: string }): ReactNode {
   const t = useT();
   const api = useEmailApi();
-  const ticketing = useTicketingApi();
   const queryClient = useQueryClient();
 
   const outgoing = useQuery({
     queryKey: emailKeys.outgoing(brandId),
     queryFn: () => api.outgoing(brandId),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brandId],
-    queryFn: () => ticketing.departments(brandId),
-  });
+  const departments = useDepartmentsQuery(brandId);
 
   const saved = (settings: EmailOutgoingSettings): void => {
     queryClient.setQueryData(emailKeys.outgoing(brandId), settings);

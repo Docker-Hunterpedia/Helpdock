@@ -94,6 +94,7 @@ const MIGRATION_TAGS = [
   '0073_setup_checklist',
   '0074_custom_field_types',
   '0075_notification_sounds',
+  '0076_ticket_arrival_and_reply_mailbox',
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

@@ -13,6 +13,7 @@ import {
   useTicketingApi,
   useTicketsApi,
 } from '../../auth/session.tsx';
+import { useDepartmentsQuery } from '../../ticketing/use-departments.js';
 import { ticketKeys } from '../../tickets/keys.js';
 
 /**
@@ -52,13 +53,7 @@ export interface WorkspaceData {
  * needs them.
  */
 export function useDepartments(brandId: string, enabled = true): readonly Department[] {
-  const staffApi = useStaffApi();
-  const departments = useQuery({
-    queryKey: ['departments', brandId],
-    queryFn: () => staffApi.departments(brandId),
-    staleTime: DIRECTORY_STALE_MS,
-    enabled,
-  });
+  const departments = useDepartmentsQuery(brandId, { staleTime: DIRECTORY_STALE_MS, enabled });
 
   return departments.data?.departments ?? [];
 }

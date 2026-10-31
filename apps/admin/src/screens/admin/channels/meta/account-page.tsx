@@ -19,10 +19,11 @@ import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { channelsRoute, ROUTES } from '../../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
-import { currentBrand, useSession, useTicketingApi } from '../../../../auth/session.tsx';
+import { currentBrand, useSession } from '../../../../auth/session.tsx';
 import { isMetaError, metaKeys } from '../../../../meta/api.js';
 import { useMetaApi } from '../../../../meta/context.tsx';
 import { EmptyState } from '../../../../shell/empty-state.tsx';
+import { useDepartmentsQuery } from '../../../../ticketing/use-departments.js';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { clockTime, shortDate } from '../format.js';
 import { Card } from '../telegram/form-section.tsx';
@@ -52,7 +53,6 @@ import { SubscriptionSection } from './subscription-section.tsx';
 export function MetaAccountPage({ accountId }: { readonly accountId: string }): ReactNode {
   const t = useT();
   const api = useMetaApi();
-  const ticketing = useTicketingApi();
   const brand = currentBrand(useSession());
 
   const account = useQuery({
@@ -63,10 +63,7 @@ export function MetaAccountPage({ accountId }: { readonly accountId: string }): 
     queryKey: metaKeys.status(brand.id, accountId),
     queryFn: () => api.status(brand.id, accountId),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
 
   if (account.isError) {
     return (

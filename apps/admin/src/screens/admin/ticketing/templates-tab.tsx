@@ -20,6 +20,7 @@ import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { type TemplateDraft, TemplateEditor } from './template-editor.tsx';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
@@ -54,10 +55,7 @@ export function TemplatesTab(): ReactNode {
     queryKey: ['ticket-templates', brand.id],
     queryFn: () => api.ticketTemplates(brand.id),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => api.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
   const tags = useQuery({ queryKey: ['tags', brand.id], queryFn: () => api.tags(brand.id) });
   const fields = useQuery({
     queryKey: ['custom-fields', brand.id],

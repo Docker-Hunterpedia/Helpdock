@@ -38,6 +38,7 @@ import { isAuthError } from '../auth/api.js';
 import { currentBrand, useSession, useStaffApi } from '../auth/session.tsx';
 import { PageHeader } from '../shell/page-header.tsx';
 import { isStaffError } from '../staff/api.js';
+import { useDepartmentsQuery } from '../ticketing/use-departments.js';
 import { ConfirmDialog } from '../ui/confirm-dialog.tsx';
 import { formatDay } from '../ui/format.js';
 import { useToast } from '../ui/toasts.tsx';
@@ -93,11 +94,7 @@ export function StaffScreen(): ReactNode {
     queryFn: () => api.listStaff(brand.id, search),
   });
 
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => api.departments(brand.id),
-    staleTime: Number.POSITIVE_INFINITY,
-  });
+  const departments = useDepartmentsQuery(brand.id, { staleTime: Number.POSITIVE_INFINITY });
 
   const refresh = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: ['staff', brand.id] });

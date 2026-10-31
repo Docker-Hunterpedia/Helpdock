@@ -35,6 +35,7 @@ export const REFUSAL_COPY = {
   'pin-conflict': 'ticketing:toast.pinConflict',
   'status-has-closed-tickets': 'ticketing:toast.statusHasClosedTickets',
   'status-change-needs-confirmation': 'ticketing:toast.statusChangeNeedsConfirmation',
+  'shortcut-taken': 'ticketing:toast.shortcutTaken',
 } as const satisfies Record<TicketingRefusal, string>;
 
 /** The catalog key for one refusal, keeping the literal type `useT()` needs. */

@@ -49,6 +49,7 @@ const STATUS_BY_REASON: Readonly<Record<TicketingRefusal, number>> = {
   // #361. The state change would touch more tickets than one save should.
   'status-has-closed-tickets': HttpStatus.CONFLICT,
   'status-change-needs-confirmation': HttpStatus.CONFLICT,
+  'shortcut-taken': HttpStatus.CONFLICT,
 };
 
 const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
@@ -77,6 +78,7 @@ const MESSAGE_BY_REASON: Readonly<Record<TicketingRefusal, string>> = {
     'Closed tickets still sit in this status; move or merge them before it stops being closed',
   'status-change-needs-confirmation':
     'Closing this status closes the tickets in it; send confirmCount to confirm the number',
+  'shortcut-taken': 'Another saved reply or macro that is offered here already uses that shortcut',
 };
 
 export class TicketingFailure extends HttpException {

@@ -14,6 +14,7 @@ import {
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
+import { isUniqueViolation } from '../http/unique-violation.js';
 import { writeTicketingAudit } from '../ticketing/audit.js';
 import { referencesOf } from './macro-actions.js';
 import {
@@ -21,6 +22,7 @@ import {
   type MacroActor,
   type MacroOwnership,
   seesMacro,
+  shortcutsOverlap,
   usableIn,
 } from './macro-rules.js';
 import { type MacrosRepository, readRenderTicket } from './macros.repository.js';
@@ -96,15 +98,20 @@ export class MacrosService {
       throw new ConflictException(`A brand keeps at most ${MAX_MACROS_PER_BRAND} of these`);
     }
 
-    const row = await this.#repository.create(context.tx, {
-      brandId: context.brandId,
-      ...ownership,
-      kind: request.kind,
-      name: request.name,
-      bodies: request.bodies,
-      actions: request.actions,
-      updatedBy: context.actor.userId,
-    });
+    await this.#assertShortcutFree(context, request.shortcut, ownership, null);
+
+    const row = await this.#guardShortcut(() =>
+      this.#repository.create(context.tx, {
+        brandId: context.brandId,
+        ...ownership,
+        kind: request.kind,
+        name: request.name,
+        bodies: request.bodies,
+        shortcut: request.shortcut,
+        actions: request.actions,
+        updatedBy: context.actor.userId,
+      }),
+    );
 
     if (row.ownerId === null) {
       await this.#audit(context, 'macro.created', row, { after: auditShape(row) });
@@ -143,14 +150,28 @@ export class MacrosService {
     }
     await this.#assertDepartment(context.tx, ownership.departmentId);
     await this.#assertReferences(context.tx, merged.actions);
+    // Checked only when the shortcut, the scope or the department moves, so an
+    // item whose shortcut later collided (a colleague's personal one, say) can
+    // still have its name or text edited.
+    const shortcut = request.shortcut === undefined ? row.shortcut : request.shortcut;
+    const moved =
+      shortcut !== row.shortcut ||
+      ownership.ownerId !== row.ownerId ||
+      ownership.departmentId !== row.departmentId;
+    if (moved) {
+      await this.#assertShortcutFree(context, shortcut, ownership, id);
+    }
 
-    const updated = await this.#repository.update(context.tx, id, {
-      ...ownership,
-      ...(request.name === undefined ? {} : { name: request.name }),
-      bodies: merged.bodies,
-      actions: merged.actions,
-      updatedBy: context.actor.userId,
-    });
+    const updated = await this.#guardShortcut(() =>
+      this.#repository.update(context.tx, id, {
+        ...ownership,
+        ...(request.name === undefined ? {} : { name: request.name }),
+        bodies: merged.bodies,
+        shortcut,
+        actions: merged.actions,
+        updatedBy: context.actor.userId,
+      }),
+    );
     /* c8 ignore next 3 -- the read above proved the row is visible and editable. */
     if (updated === undefined) {
       throw new NotFoundException('No such macro or canned response');
@@ -191,6 +212,42 @@ export class MacrosService {
   #assertMayEdit(actor: MacroActor, item: MacroOwnership): void {
     if (!editsMacro(actor, item)) {
       throw new TicketingFailure('out-of-scope');
+    }
+  }
+
+  /**
+   * M14-14: no other item offered in the same place answers to the shortcut.
+   *
+   * Only items the actor can see count (`seesMacro`): a refusal because of an
+   * item they cannot see would tell them it exists. The check runs under a
+   * transaction lock on the brand and the word, so two saves in different
+   * scopes (which no single unique index spans) take turns instead of both
+   * passing; the partial indexes still back up saves in the same scope.
+   */
+  async #assertShortcutFree(
+    context: MacrosContext,
+    shortcut: string | null,
+    ownership: MacroOwnership,
+    exceptId: string | null,
+  ): Promise<void> {
+    if (shortcut === null) {
+      return;
+    }
+    await this.#repository.lockShortcut(context.tx, context.brandId, shortcut);
+    const others = await this.#repository.withShortcut(context.tx, shortcut, exceptId);
+    if (
+      others.some((other) => seesMacro(context.actor, other) && shortcutsOverlap(ownership, other))
+    ) {
+      throw new TicketingFailure('shortcut-taken');
+    }
+  }
+
+  /** The unique indexes catch a duplicate within one scope that gets past the check above. */
+  async #guardShortcut<T>(write: () => Promise<T>): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      throw isUniqueViolation(error) ? new TicketingFailure('shortcut-taken') : error;
     }
   }
 
@@ -260,8 +317,10 @@ export const toMacro = (row: CannedResponse, actor: MacroActor): Macro => ({
   scope: row.ownerId === null ? 'shared' : 'personal',
   departmentId: row.departmentId,
   bodies: bodiesOf(row),
+  shortcut: row.shortcut,
   actions: actionsOf(row),
   lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+  useCount: row.useCount,
   updatedAt: row.updatedAt.toISOString(),
   updatedById: row.updatedBy,
   canEdit: editsMacro(actor, row),
@@ -280,6 +339,7 @@ const auditShape = (row: CannedResponse): Record<string, unknown> => {
     departmentId: row.departmentId,
     'bodies.en': truncate(bodies.en),
     'bodies.ar': truncate(bodies.ar),
+    shortcut: row.shortcut,
     actions: actionsOf(row),
   };
 };

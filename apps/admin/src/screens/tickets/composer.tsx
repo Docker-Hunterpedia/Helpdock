@@ -1,4 +1,4 @@
-import type { Attachment, TicketStatus } from '@helpdock/schemas';
+import type { Attachment, CannedPlaceholder, Macro, TicketStatus } from '@helpdock/schemas';
 import {
   Box,
   Button,
@@ -11,7 +11,15 @@ import {
   Typography,
 } from '@mui/material';
 import { Paperclip, Send, Zap } from 'lucide-react';
-import { type ReactNode, useId, useLayoutEffect, useRef } from 'react';
+import {
+  type ReactNode,
+  type SyntheticEvent,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -20,8 +28,15 @@ import {
   useKeyboard,
   useShortcutHandlers,
 } from '../../keyboard/keyboard-provider.tsx';
-import { type ShortcutId, shortcutById } from '../../keyboard/registry.js';
+import type { ShortcutId } from '../../keyboard/registry.js';
+import { PlaceholderPicker } from '../admin/automation/placeholder-picker.tsx';
 import { AttachmentChip, chipState } from './attachment-chip.tsx';
+import {
+  SavedReplySuggestions,
+  type SuggestionKeys,
+  type SuggestionList,
+} from './composer-suggestions.tsx';
+import { type ComposerTrigger, detectTrigger, replaceRange } from './composer-triggers.js';
 import {
   type ComposerEmail,
   FromSelect,
@@ -41,8 +56,16 @@ import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
  * without their say.
  *
  * **Macros and canned responses are M3-06.** The button opens the picker
- * (`macro-picker.tsx`), and so does `/` typed into an empty reply; what a macro
- * stages is drawn above the composer by the ticket view.
+ * (`macro-picker.tsx`); what a macro stages is drawn above the composer by the
+ * ticket view.
+ *
+ * **Typing opens lists (M14-14).** In a reply, `/` at the start of a line or
+ * after a space lists the saved replies and macros under the text, narrowing as
+ * the word after it grows (`/refund`, then Tab or Enter), unless single-key
+ * shortcuts are off (the registry's `composer.savedReply` is one of them);
+ * `{{` lists the placeholders and inserts the value this ticket gives it. A `/` inside a word
+ * or a URL is text. The textarea keeps focus for the slash list; the
+ * placeholder list takes it, as the editor's does.
  *
  * **Attach is real from M1-10.** A file goes up as soon as it is chosen and the
  * message may be sent while the pipeline is still working on it: `upload`
@@ -70,8 +93,22 @@ export const COMPOSER_SHORTCUTS = [
   'composer.sendAndClose',
 ] as const satisfies readonly ShortcutId[];
 
-/** `/`, typed into an empty reply, opens the saved replies. */
-const SAVED_REPLY_TRIGGER = shortcutById('composer.savedReply').keys[0]?.key;
+/** What the composer needs to offer the lists that open as one types. */
+export interface ComposerInline {
+  readonly brandId: string;
+  readonly departmentId: string;
+  /** What each placeholder is for this ticket; one with no value is not offered. */
+  readonly placeholderValues: ReadonlyMap<string, string>;
+  /**
+   * Insert a saved reply or macro in place of the `/word` at `[start, end)`.
+   * Answers where the caret goes once the text is in, or null when nothing was
+   * inserted (a macro that has no reply runs at once).
+   */
+  onInsertSaved(
+    macro: Macro,
+    range: { readonly start: number; readonly end: number },
+  ): Promise<number | null>;
+}
 
 export interface ComposerProps {
   readonly mode: ComposerMode;
@@ -123,6 +160,8 @@ export interface ComposerProps {
    * the strip). A note is unchanged and never held.
    */
   readonly meta?: ComposerMeta | undefined;
+  /** M14-14: the lists that open under the text on `/` and `{{`. Absent for a reader who cannot reply. */
+  readonly inline?: ComposerInline | undefined;
   /** M3-06: opens the macro picker. Absent for a reader who cannot reply. */
   onOpenMacros?: (() => void) | undefined;
   /** Whether the picker is open, for the button's `aria-expanded`. */
@@ -155,6 +194,7 @@ export function Composer({
   email,
   telegram,
   meta,
+  inline,
   onOpenMacros,
   macrosOpen = false,
   assist,
@@ -185,6 +225,53 @@ export function Composer({
     'composer.send': canSend ? onSend : null,
     'composer.sendAndClose': canSend && onSendAndClose !== undefined ? onSendAndClose : null,
   });
+
+  // M14-14: the list the text under the caret asks for, and the one a person
+  // has put away (kept by where it starts, so typing on does not reopen it).
+  const listId = useId();
+  const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const [activeOption, setActiveOption] = useState<string | null>(null);
+  const suggestionKeys = useRef<SuggestionKeys | null>(null);
+  const open = inline !== undefined && trigger !== null && trigger.start !== dismissedAt;
+  const onActive = useCallback((id: string | null) => {
+    setActiveOption(id);
+  }, []);
+  const dismiss = useCallback(() => {
+    setDismissedAt(trigger?.start ?? null);
+  }, [trigger]);
+  const suggestionList: SuggestionList = {
+    id: listId,
+    onActive,
+    keys: suggestionKeys,
+    onDismiss: dismiss,
+  };
+
+  const syncTrigger = (area: HTMLInputElement | HTMLTextAreaElement): void => {
+    const caret = area.selectionStart;
+    const found =
+      inline === undefined || caret === null || caret !== area.selectionEnd
+        ? null
+        : detectTrigger(area.value, caret, { slash: !note && singleKeys });
+    setTrigger(found);
+    if (found === null) {
+      setDismissedAt(null);
+    }
+  };
+
+  const insertAtTrigger = (text: string): void => {
+    if (trigger === null) {
+      return;
+    }
+    const { text: next, caret } = replaceRange(body, trigger.start, trigger.end, text);
+    onBodyChange(next);
+    setTrigger(null);
+    setDismissedAt(null);
+    requestAnimationFrame(() => {
+      bodyRef.current?.focus();
+      bodyRef.current?.setSelectionRange(caret, caret);
+    });
+  };
 
   // A layout effect: refs are attached and the caret moves before the browser
   // paints, so `r` never shows a frame of the composer without a caret in it.
@@ -279,24 +366,72 @@ export function Composer({
         minRows={3}
         value={body}
         onChange={(event) => {
-          // `/` typed into an empty reply opens the picker instead of being text.
-          if (
-            singleKeys &&
-            body === '' &&
-            event.target.value === SAVED_REPLY_TRIGGER &&
-            onOpenMacros !== undefined
-          ) {
-            onOpenMacros();
-            return;
-          }
           onBodyChange(event.target.value);
+          syncTrigger(event.target);
+        }}
+        onKeyDown={(event) => {
+          // The open list gets the key first; it says whether it used it.
+          if (open && suggestionKeys.current?.(event) === true) {
+            event.stopPropagation();
+          }
         }}
         onFocus={onBodyFocus}
         placeholder={t(
           note ? 'tickets:composer.notePlaceholder' : 'tickets:composer.replyPlaceholder',
         )}
-        slotProps={{ htmlInput: { 'aria-label': t('tickets:composer.bodyLabel') } }}
+        slotProps={{
+          htmlInput: {
+            'aria-label': t('tickets:composer.bodyLabel'),
+            ...(open && trigger.kind === 'slash'
+              ? {
+                  'aria-controls': listId,
+                  ...(activeOption === null ? {} : { 'aria-activedescendant': activeOption }),
+                }
+              : {}),
+            // A click or an arrow key moves the caret without changing the text.
+            onSelect: (event: SyntheticEvent<HTMLTextAreaElement>) => {
+              syncTrigger(event.currentTarget);
+            },
+          },
+        }}
       />
+
+      {open && trigger.kind === 'slash' ? (
+        <SavedReplySuggestions
+          brandId={inline.brandId}
+          departmentId={inline.departmentId}
+          query={trigger.query}
+          list={suggestionList}
+          onPick={(macro) => {
+            const range = { start: trigger.start, end: trigger.end };
+            setTrigger(null);
+            void inline.onInsertSaved(macro, range).then((caret) => {
+              requestAnimationFrame(() => {
+                bodyRef.current?.focus();
+                if (caret !== null) {
+                  bodyRef.current?.setSelectionRange(caret, caret);
+                }
+              });
+            });
+          }}
+        />
+      ) : null}
+      {open && trigger.kind === 'placeholder' ? (
+        <PlaceholderPicker
+          samples={inline.placeholderValues}
+          names={[...inline.placeholderValues]
+            .filter(([, value]) => value.trim() !== '')
+            .map(([name]) => name as CannedPlaceholder)}
+          hint={t('tickets:composer.suggest.placeholderHint')}
+          onPick={(name) => {
+            insertAtTrigger(inline.placeholderValues.get(name) ?? '');
+          }}
+          onClose={() => {
+            setDismissedAt(trigger.start);
+            bodyRef.current?.focus();
+          }}
+        />
+      ) : null}
 
       {emailReply ? <SignaturePreview signature={email.signature} /> : null}
       {telegramReply ? (

@@ -1083,6 +1083,45 @@ owner decision D-31.
 - **Most used first:** `use_count` beside the existing `last_used_at`; the
   picker orders by the person's recent use, then the brand's.
 
+**Status: built, in review** (issue [#301](https://github.com/Docker-Hunterpedia/Helpdock/issues/301)).
+Built as above, with these differences and details:
+
+- [x] `canned_responses` gains `shortcut` (varchar 32, lower-cased) and `use_count`
+  (migration `0077_canned_shortcuts`), with three partial unique indexes as the
+  backstop: the brand's items shared with every department, those shared with one
+  department, and each person's own. The service checks the wider rule first
+  (`shortcutsOverlap` in `macro-rules.ts`): a department's item meets an
+  all-departments one, a personal item meets every shared one and the owner's other
+  personal ones, two people may each keep the same personal shortcut. A refusal is
+  the ticketing refusal `shortcut-taken` (409). `canned_responses` is an existing
+  tenant table, so there is nothing new for the RLS suite.
+- [x] **Fallbacks** are `{{name|words}}`, rendered by the shared renderer in
+  `@helpdock/schemas` (so the api, the previews and the signature renderer agree).
+  The fallback stands in for an empty value and for a name this subject cannot
+  fill (a ticket without a contact). It is literal text, one pass, no expressions.
+- [x] **Save-time check:** `placeholderProblems` (schemas) lists unknown names
+  (with the nearest real one) and unclosed `{{`. The create schema runs it, and the
+  update schema runs it when `bodies` is sent, so an old item with a typo can still
+  be renamed. The editor shows the same list live under the replies, by language,
+  and refuses to save until it is empty.
+- [x] **`/` and `{{` in the composer** (`composer-triggers.ts`, `composer-suggestions.tsx`,
+  `use-composer-inline.ts`): `/` at the start of the text, a line or after a space or
+  tab, in a reply only and while single-key shortcuts are on, lists the items under the text;
+  Tab or Enter insert, Esc puts the list away, an empty match leaves Enter a new line.
+  `{{` opens the existing `PlaceholderPicker`, limited to what this ticket can fill,
+  and inserts the **value**.
+- [x] **Ordering:** `sortByUse` puts the reader's own items first, then by
+  `last_used_at`, then `use_count`, then name. `use_count` counts the item, not the
+  person, so the brand's items are ordered by the brand's use. A per-person usage
+  table would be new scope.
+- Differences from the board: the inline ghost completion (the rest of `/refund` in
+  faint text) is the list's exact-match option, because a textarea cannot hold
+  styled text; the empty-reply `/` no longer opens the full picker (it opens this
+  list; the toolbar button and `m` still open the picker, which also finds an item
+  by its shortcut). `{{agent.name}}`, `{{agent.title}}` and `{{agent.phone}}` are not
+  offered by the composer's `{{`, because the profile is not on the client; they
+  work in saved replies and signatures. The list is not offered in a note.
+
 ### M14-15 Mention picker
 
 `@` in a note (not in a public reply) opens a listbox of the people who can see

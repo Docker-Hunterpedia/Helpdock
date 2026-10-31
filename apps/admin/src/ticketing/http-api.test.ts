@@ -593,8 +593,10 @@ describe('macros (M3-06)', () => {
     scope: 'shared',
     departmentId: null,
     bodies: { en: 'Hi', ar: '' },
+    shortcut: null,
     actions: [],
     lastUsedAt: null,
+    useCount: 0,
     updatedAt: '2026-09-24T10:00:00.000Z',
     updatedById: null,
     canEdit: true,
@@ -618,6 +620,7 @@ describe('macros (M3-06)', () => {
       scope: 'shared',
       departmentId: null,
       bodies: { en: 'Hi', ar: '' },
+      shortcut: null,
       actions: [],
     });
     expect(lastCall().init.method).toBe('POST');

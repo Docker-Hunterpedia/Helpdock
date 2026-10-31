@@ -1,3 +1,4 @@
+import type { MacroCreateRequest } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import { MOCK_MACRO_PERSONAL, MOCK_MACRO_REFUND, MockMacros } from './mock-macros.js';
 
@@ -33,6 +34,7 @@ describe('MockMacros', () => {
       scope: 'personal',
       departmentId: BILLING,
       bodies: { en: 'Thanks', ar: '' },
+      shortcut: null,
       actions: [],
     });
     expect(created.departmentId).toBeNull();
@@ -46,11 +48,50 @@ describe('MockMacros', () => {
 
     store.touch(created.id);
     expect(store.find(created.id)?.lastUsedAt).not.toBeNull();
+    expect(store.find(created.id)?.useCount).toBe(1);
 
     store.remove(created.id);
     expect(store.find(created.id)).toBeUndefined();
     expect(() => {
       store.remove(created.id);
     }).toThrow('No such macro');
+  });
+
+  it('refuses a shortcut another item offered in the same place has, as the api does (M14-14)', () => {
+    const store = new MockMacros();
+    const shape: Omit<MacroCreateRequest, 'name' | 'shortcut'> = {
+      kind: 'canned',
+      scope: 'shared',
+      departmentId: null,
+      bodies: { en: 'Hi', ar: '' },
+      actions: [],
+    };
+
+    expect(() => store.create({ ...shape, name: 'Again', shortcut: 'refund' })).toThrow(
+      expect.objectContaining({ reason: 'shortcut-taken' }) as Error,
+    );
+    // The personal item meets a shared one, and an item keeps its own on save.
+    expect(() =>
+      store.create({ ...shape, name: 'Mine', scope: 'personal', shortcut: 'shipping' }),
+    ).toThrow();
+    expect(store.update(MOCK_MACRO_REFUND, { name: 'Refund issued' }).shortcut).toBe('refund');
+    expect(store.update(MOCK_MACRO_REFUND, { shortcut: null }).shortcut).toBeNull();
+    expect(store.create({ ...shape, name: 'Free now', shortcut: 'refund' }).shortcut).toBe(
+      'refund',
+    );
+  });
+
+  it('refuses an unknown placeholder, as the api does (M14-14)', () => {
+    expect(() =>
+      new MockMacros().create({
+        kind: 'canned',
+        name: 'Typo',
+        scope: 'shared',
+        departmentId: null,
+        bodies: { en: 'Hi {{agent.nmae}}', ar: '' },
+        shortcut: null,
+        actions: [],
+      }),
+    ).toThrow('Unknown placeholder {{agent.nmae}}');
   });
 });

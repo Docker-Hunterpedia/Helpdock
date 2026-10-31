@@ -135,6 +135,51 @@ test.describe('the Macros tab', () => {
 
     expect(await violations(page)).toEqual([]);
   });
+  test('names a placeholder that does not exist, suggests the nearest, and will not save (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openMacros(page, locale);
+    await page.getByRole('button', { name: /Ask for the order number/ }).click();
+
+    const english = page.getByLabel(t('macros:editor.reply.en'), { exact: true });
+    await english.fill('Thanks, {{agent.nmae}}');
+
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('{{agent.nmae}}');
+    await expect(alert).toContainText('{{agent.name}}');
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('macros:editor.save') }).click();
+    await expect(page.getByText(t('macros:editor.problems.placeholders'))).toBeVisible();
+  });
+
+  test('refuses a shortcut another item has, on the field (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openMacros(page, locale);
+    await page.getByRole('button', { name: /Ask for the order number/ }).click();
+
+    const shortcut = page.getByLabel(t('macros:editor.shortcut.label'));
+    await shortcut.fill('shipping');
+    await page.getByRole('button', { name: t('macros:editor.save') }).click();
+
+    await expect(
+      page.getByText(t('macros:editor.problems.shortcutTaken'), { exact: true }),
+    ).toBeVisible();
+    await expect(shortcut).toHaveAttribute('aria-invalid', 'true');
+    expect(await violations(page)).toEqual([]);
+
+    await shortcut.fill('order');
+    await page.getByRole('button', { name: t('macros:editor.save') }).click();
+    await expect(page.getByText(/Ask for the order number/).first()).toBeVisible();
+    await expect(page.getByText('/order', { exact: true })).toBeVisible();
+  });
 });
 
 test.describe('the composer’s macro picker', () => {
@@ -175,7 +220,10 @@ test.describe('the composer’s macro picker', () => {
     ).toBeVisible();
   });
 
-  test('closes on Esc without touching the reply', async ({ page, appLocale: locale }) => {
+  test('lists the saved replies after /, and Esc puts the list away (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
     const t = strings(locale);
     await signIn(page, locale);
     await openTicket(page, locale);
@@ -183,10 +231,82 @@ test.describe('the composer’s macro picker', () => {
     const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
     await body.click();
     await page.keyboard.type('/');
-    await expect(page.getByRole('dialog', { name: t('macros:picker.label') })).toBeVisible();
+    const list = page.getByRole('listbox', { name: t('tickets:composer.suggest.savedReplies') });
+    await expect(list).toBeVisible();
+    expect(await violations(page)).toEqual([]);
 
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: t('macros:picker.label') })).toBeHidden();
-    await expect(body).toHaveValue('');
+    await expect(list).toBeHidden();
+    await expect(body).toHaveValue('/');
+  });
+
+  test('completes /shipping with Tab in the middle of a reply (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+    await body.click();
+    await page.keyboard.type('Thanks for waiting. /shipp');
+    const list = page.getByRole('listbox', { name: t('tickets:composer.suggest.savedReplies') });
+    await expect(list.getByRole('option')).toHaveCount(1);
+    await expect(list.getByRole('option')).toContainText('/shipping');
+
+    await page.keyboard.press('Tab');
+
+    await expect(list).toBeHidden();
+    await expect(body).toHaveValue(/^Thanks for waiting\. Hi Mona, the charge you saw/);
+    await expect(
+      page.getByRole('group', {
+        name: t('macros:staged.label', { name: 'Shipping fees explained' }),
+      }),
+    ).toBeVisible();
+    // The caret is after the inserted text and the textarea still has focus.
+    await expect(body).toBeFocused();
+  });
+
+  test('leaves a / in a URL alone and says so when nothing answers (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+    await body.click();
+    await page.keyboard.type('see https://example.com/shipping');
+    await expect(
+      page.getByRole('listbox', { name: t('tickets:composer.suggest.savedReplies') }),
+    ).toBeHidden();
+
+    await page.keyboard.type(' /zzz');
+    await expect(page.getByText(t('tickets:composer.suggest.none'))).toBeVisible();
+  });
+
+  test('{{ inserts the value this ticket gives a placeholder (M14-14)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+    await body.click();
+    await page.keyboard.type('Hello {{');
+    const list = page.getByRole('listbox', { name: t('macros:editor.placeholders.list') });
+    await expect(list).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+
+    await page
+      .getByRole('combobox', { name: t('macros:editor.placeholders.search') })
+      .fill('first');
+    await page.keyboard.press('Enter');
+
+    await expect(body).toHaveValue('Hello Mona');
   });
 });

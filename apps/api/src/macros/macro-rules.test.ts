@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { editsMacro, type MacroActor, seesMacro, usableIn } from './macro-rules.js';
+import {
+  editsMacro,
+  type MacroActor,
+  seesMacro,
+  shortcutsOverlap,
+  usableIn,
+} from './macro-rules.js';
 
 const SUPPORT = '01937f5e-7e53-7000-8000-000000000011';
 const BILLING = '01937f5e-7e53-7000-8000-000000000012';
@@ -66,5 +72,31 @@ describe('usableIn', () => {
     expect(usableIn(shared(null), SUPPORT)).toBe(true);
     expect(usableIn(personal('me'), SUPPORT)).toBe(true);
     expect(usableIn(shared(BILLING), SUPPORT)).toBe(false);
+  });
+});
+
+describe('shortcutsOverlap (M14-14)', () => {
+  const shared = (departmentId: string | null) => ({ ownerId: null, departmentId });
+  const personal = (ownerId: string) => ({ ownerId, departmentId: null });
+
+  it('treats a personal item as meeting every shared one and the owner’s others', () => {
+    expect(shortcutsOverlap(personal('a'), shared('d1'))).toBe(true);
+    expect(shortcutsOverlap(shared(null), personal('a'))).toBe(true);
+    expect(shortcutsOverlap(personal('a'), personal('a'))).toBe(true);
+  });
+
+  it('keeps two people’s personal items apart', () => {
+    expect(shortcutsOverlap(personal('a'), personal('b'))).toBe(false);
+  });
+
+  it('meets shared items of one department or of all of them', () => {
+    expect(shortcutsOverlap(shared('d1'), shared('d1'))).toBe(true);
+    expect(shortcutsOverlap(shared(null), shared('d1'))).toBe(true);
+    expect(shortcutsOverlap(shared('d1'), shared(null))).toBe(true);
+    expect(shortcutsOverlap(shared(null), shared(null))).toBe(true);
+  });
+
+  it('keeps two departments apart', () => {
+    expect(shortcutsOverlap(shared('d1'), shared('d2'))).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { Macro, MacroKind } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import {
   Box,
   Button,
@@ -26,13 +27,21 @@ import {
   useTicketsApi,
 } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { isTicketingError } from '../../../ticketing/api.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { latinNumbering } from '../../../ui/format.js';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
 import { useTicketingAction, useTicketingReport } from '../ticketing/use-ticketing-action.js';
-import { draftOf, duplicateOf, emptyDraft, type MacroDraft, requestOf } from './macro-draft.js';
+import {
+  cleanShortcut,
+  draftOf,
+  duplicateOf,
+  emptyDraft,
+  type MacroDraft,
+  requestOf,
+} from './macro-draft.js';
 import { MacroEditor } from './macro-editor.tsx';
 import { lastUsedLabel, sampleValues } from './macro-format.js';
 
@@ -75,6 +84,13 @@ export function MacrosTab(): ReactNode {
   const [department, setDepartment] = useState('');
   const [newMenu, setNewMenu] = useState<HTMLElement | null>(null);
   const [confirming, setConfirming] = useState<Macro | null>(null);
+  // M14-14: the shortcut the api refused as taken, so the editor can say so by the field.
+  const [takenShortcut, setTakenShortcut] = useState<string | null>(null);
+  const noteTaken = (error: unknown, draft: MacroDraft): void => {
+    if (isTicketingError(error) && error.reason === 'shortcut-taken') {
+      setTakenShortcut(cleanShortcut(draft.shortcut).toLowerCase());
+    }
+  };
 
   const macros = useQuery({
     queryKey: ['macros', brand.id],
@@ -136,8 +152,15 @@ export function MacrosTab(): ReactNode {
   );
   const update = useTicketingAction(
     (input: { macro: Macro; draft: MacroDraft }) => {
-      const { kind: _kind, ...request } = requestOf(input.draft);
-      return api.updateMacro(brand.id, input.macro.id, request);
+      const { kind: _kind, bodies, ...request } = requestOf(input.draft);
+      // Text left as it was is not sent, so the api does not re-check an old typo.
+      const textChanged =
+        bodies.en !== input.macro.bodies.en || bodies.ar !== input.macro.bodies.ar;
+      return api.updateMacro(
+        brand.id,
+        input.macro.id,
+        textChanged ? { ...request, bodies } : request,
+      );
     },
     (input) => t('macros:toast.updated', { name: input.draft.name.trim() }),
     refresh,
@@ -322,6 +345,19 @@ export function MacrosTab(): ReactNode {
                         >
                           <Box component="span" sx={{ fontWeight: 500 }}>
                             {row.name}
+                            {row.shortcut === null ? null : (
+                              <Box
+                                component="code"
+                                sx={{
+                                  ...monoFontStyle,
+                                  fontSize: 12,
+                                  marginInlineStart: 2,
+                                  color: 'text.secondary',
+                                }}
+                              >
+                                <bdi>/{row.shortcut}</bdi>
+                              </Box>
+                            )}
                           </Box>
                           <Typography
                             variant="caption"
@@ -394,6 +430,7 @@ export function MacrosTab(): ReactNode {
             samples={samples}
             editedBy={editedBy(editing.macro)}
             busy={busy}
+            takenShortcut={takenShortcut}
             onDepartmentChange={setDepartment}
             onDiscard={() => {
               setEditing(null);
@@ -404,6 +441,9 @@ export function MacrosTab(): ReactNode {
                 create.mutate(draft, {
                   onSuccess: (created) => {
                     open({ key: created.id, macro: created, draft: draftOf(created) });
+                  },
+                  onError: (error) => {
+                    noteTaken(error, draft);
                   },
                 });
                 return;
@@ -417,6 +457,9 @@ export function MacrosTab(): ReactNode {
                       macro: updated,
                       draft: draftOf(updated),
                     });
+                  },
+                  onError: (error) => {
+                    noteTaken(error, draft);
                   },
                 },
               );

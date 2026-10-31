@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../../app/routes.tsx';
+import { MOCK_SINGLE_KEY_STORAGE } from '../../auth/mock-api.js';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
 import { MOCK_TICKET_REFUND } from '../../tickets/mock-api.js';
@@ -63,15 +64,136 @@ describe('the macro picker', () => {
     expect(names.some((name) => name.startsWith('Refund issued'))).toBe(false);
   });
 
-  it('opens from "/" typed into an empty reply, and closes on Esc', async () => {
+  it('lists the saved replies after "/" typed into an empty reply, and closes on Esc (M14-14)', async () => {
     const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
 
-    await user.type(screen.getByRole('textbox', { name: 'Message' }), '/');
-    expect(screen.getByRole('dialog', { name: /Insert a macro/ })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+    await user.type(body, '/');
+    expect(
+      await screen.findByRole('listbox', { name: 'Saved replies and macros' }),
+    ).toBeInTheDocument();
+    // The slash is the person's text until they choose something.
+    expect(body).toHaveValue('/');
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: /Insert a macro/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('listbox', { name: 'Saved replies and macros' }),
+    ).not.toBeInTheDocument();
+    expect(body).toHaveValue('/');
+  });
+
+  it('completes /shipping with Tab, in the middle of a reply (M14-14)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, 'Hi Mona, /shipp');
+    const list = await screen.findByRole('listbox', { name: 'Saved replies and macros' });
+    const options = await within(list).findAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent('Shipping fees explained');
+    expect(options[0]).toHaveTextContent('/shipping');
+    expect(body).toHaveAttribute('aria-activedescendant', options[0]?.id);
+
+    await user.keyboard('{Tab}');
+
+    await waitFor(() => {
+      expect(body).toHaveValue(
+        'Hi Mona, Hi Mona, the charge you saw at delivery is the carrier’s customs fee, not a shipping fee from us.',
+      );
+    });
+    expect(
+      screen.queryByRole('listbox', { name: 'Saved replies and macros' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: 'Staged by macro Shipping fees explained' }),
+    ).toBeInTheDocument();
+  });
+
+  it('inserts with Enter and lets the arrows pick another (M14-14)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, '/');
+    const list = await screen.findByRole('listbox', { name: 'Saved replies and macros' });
+    const options = await within(list).findAllByRole('option');
+    // Yours first, then the brand's by recent use.
+    expect(options[0]).toHaveTextContent('My follow-up line');
+    expect(options[1]).toHaveTextContent('Shipping fees explained');
+
+    await user.keyboard('{ArrowDown}');
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowUp}{Enter}');
+
+    await waitFor(() => {
+      expect(body).toHaveValue('I will check back with you tomorrow.');
+    });
+  });
+
+  it('leaves a slash inside a word or a URL alone (M14-14)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, 'see https://example.com/shipping and a/b');
+
+    expect(
+      screen.queryByRole('listbox', { name: 'Saved replies and macros' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says so when nothing answers to the shortcut, and Enter stays a new line (M14-14)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, '/zzz');
+    expect(await screen.findByText('No saved reply or macro matches that.')).toBeInTheDocument();
+
+    await user.keyboard('{Enter}');
+    expect(body).toHaveValue('/zzz\n');
+  });
+
+  it('does not open on "/" while single-key shortcuts are off, but {{ still works (M14-14)', async () => {
+    localStorage.setItem(MOCK_SINGLE_KEY_STORAGE, 'off');
+    try {
+      const { user } = await openRefund();
+      const body = screen.getByRole('textbox', { name: 'Message' });
+
+      await user.type(body, '/shipp');
+      expect(
+        screen.queryByRole('listbox', { name: 'Saved replies and macros' }),
+      ).not.toBeInTheDocument();
+
+      await user.clear(body);
+      await user.type(body, '{{{{');
+      expect(await screen.findByRole('listbox', { name: 'Placeholders' })).toBeInTheDocument();
+    } finally {
+      localStorage.removeItem(MOCK_SINGLE_KEY_STORAGE);
+    }
+  });
+
+  it('does not offer saved replies in a note (M14-14)', async () => {
+    const { user } = await openRefund();
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), '/shipp');
+
+    expect(
+      screen.queryByRole('listbox', { name: 'Saved replies and macros' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the placeholder list on {{ and inserts the value for this ticket (M14-14)', async () => {
+    const { user } = await openRefund();
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, 'Hello {{{{');
+    const list = await screen.findByRole('listbox', { name: 'Placeholders' });
+    expect(within(list).getByText('Mona', { selector: 'bdi' })).toBeInTheDocument();
+    // Only what this ticket can answer is offered; the sender's title is not known here.
+    expect(within(list).queryByText('{{agent.title}}')).not.toBeInTheDocument();
+
+    await user.click(within(list).getByRole('option', { name: /contact\.first_name/ }));
+
+    expect(body).toHaveValue('Hello Mona');
   });
 
   it('previews the filled-in reply with placeholders marked, and the actions it will run', async () => {

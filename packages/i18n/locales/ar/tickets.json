@@ -208,7 +208,27 @@
     "thenSetStatus": "ثم اضبط الحالة",
     "keepStatus": "اترك الحالة",
     "suggestion": "رد مقترح",
-    "insert": "إدراج"
+    "insert": "إدراج",
+    "suggest": {
+      "savedReplies": "الردود المحفوظة والإجراءات",
+      "hint": "Tab أو Enter للإدراج · Esc للإغلاق",
+      "none": "لا يوجد رد محفوظ أو إجراء يطابق ذلك.",
+      "count_zero": "لا نتائج",
+      "count_one": "نتيجة واحدة",
+      "count_two": "نتيجتان",
+      "count_few": "{{count}} نتائج",
+      "count_many": "{{count}} نتيجة",
+      "count_other": "{{count}} نتيجة",
+      "you": "أنت",
+      "brand": "العلامة",
+      "used_zero": "لم يُستخدم · {{who}}",
+      "used_one": "استُخدم مرة واحدة · {{who}}",
+      "used_two": "استُخدم مرتين · {{who}}",
+      "used_few": "استُخدم {{count}} مرات · {{who}}",
+      "used_many": "استُخدم {{count}} مرة · {{who}}",
+      "used_other": "استُخدم {{count}} مرة · {{who}}",
+      "placeholderHint": "اختيار أحدها يُدرج قيمته لهذه التذكرة."
+    }
   },
   "details": {
     "label": "تفاصيل التذكرة",

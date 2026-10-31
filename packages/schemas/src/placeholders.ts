@@ -17,9 +17,11 @@
 
 /**
  * A placeholder as a text may write it: `{{ name }}` with optional spaces, one
- * or two dotted segments. Anything else is not a placeholder and is left alone.
+ * or two dotted segments, and after a `|` the words to use when it has no value
+ * (`{{contact.first_name|there}}`, M14-14). Anything else is not a placeholder
+ * and is left alone.
  */
-const PLACEHOLDER = /\{\{\s*([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*\}\}/gi;
+const PLACEHOLDER = /\{\{\s*([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?)\s*(?:\|([^{}|]*))?\}\}/gi;
 
 /**
  * The first whitespace-separated word of a name, and the rest. A single-word
@@ -76,19 +78,23 @@ export const renderSegments = (
   let cursor = 0;
 
   for (const match of text.matchAll(PLACEHOLDER)) {
-    const [whole, name = ''] = match;
+    const [whole, name = '', fallback] = match;
     const key = name.toLowerCase();
     const value = values.get(key);
     const at = match.index;
+    // A fallback stands in for a value that is empty or that this subject
+    // cannot fill; it is literal text, so it is never expanded again.
+    const stand = fallback?.trim() ?? '';
+    const shown = value === undefined || value === '' ? (stand === '' ? value : stand) : value;
 
     if (at > cursor) {
       segments.push({ text: text.slice(cursor, at), placeholder: null });
     }
-    if (value === undefined) {
+    if (shown === undefined) {
       unknown.add(key);
       segments.push({ text: whole, placeholder: null });
     } else {
-      segments.push({ text: value, placeholder: key });
+      segments.push({ text: shown, placeholder: key });
     }
     cursor = at + whole.length;
   }

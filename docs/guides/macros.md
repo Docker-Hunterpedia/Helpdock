@@ -53,6 +53,71 @@ An unknown placeholder is left as written, so a typo shows. Rendering is one
 pass over a fixed list of names (`packages/schemas/src/placeholders.ts`), never
 a path into an object.
 
+**Fallbacks (M14-14).** `{{contact.first_name|there}}` renders "there" when the
+value is empty or this ticket cannot give one (a ticket with no contact). The
+words after `|` are literal text: they are never read as another placeholder,
+and a fallback cannot hold `{`, `}` or `|` (a save with one is refused). Without a fallback an empty value
+renders as nothing, as before.
+
+**Checked when you save (M14-14).** The editor lists every placeholder that is
+not on the list above and every `{{` with no closing `}}`, under the reply and
+by language, with the nearest real name when it is a likely typo
+("Unknown placeholder `{{agent.nmae}}`. Did you mean `{{agent.name}}`?"), and
+will not save until they are fixed. The api refuses the same text with
+`400` naming each one, on create and on any update that sends bodies. A
+fallback is one run of text without `|`, `{` or `}` (the renderer reads no
+more), so `{{contact.first_name|Sir|Madam}}` is refused too. An item saved
+before this check that still holds a typo keeps working, and can be renamed or
+re-scoped without touching its text (the editor and the api only re-check text
+that changed); rendering leaves the typo as written.
+
+## Shortcuts
+
+Give a saved reply or a macro a **shortcut** (`refund`) in its editor. In a
+reply, type `/refund` and press **Tab** or **Enter** to insert it without
+opening the picker.
+
+- A shortcut is one word: letters in any script, digits, `-` and `_`, up to 32
+  characters, lower-cased when saved. The editor shows it after a `/`.
+- It is **unique where it is offered**: two items shared with the same
+  department (or one shared with every department and one with a department)
+  cannot share one, a personal item cannot take a shortcut a shared item has,
+  and two people may each keep the same personal shortcut. Saving a taken one
+  is refused with the ticketing refusal `shortcut-taken` (409) and the field
+  says so. Only items you can see count, so a refusal never reveals a
+  colleague's personal item or a department you do not work in. The check runs
+  under a transaction lock on the brand and the word, so two saves in different
+  scopes take turns; a partial unique index per scope backs up saves in one
+  scope. The check runs only when a save changes the shortcut, the scope or the
+  department, so an item whose shortcut later collided can still be renamed or
+  re-worded. If a person's personal shortcut and a shared one still meet (the shared
+  item was created by someone who cannot see the personal one), `/word` offers
+  the person's own first.
+- Nothing is inserted until you choose. `/` opens a list under the text as soon
+  as it is typed **at the start of the text, at the start of a line, or after a
+  space or tab**; a `/` inside a word or a URL (`https://example.com/refund`,
+  `and/or`) is text. The list narrows as the word grows: the exact shortcut
+  first, then shortcuts that start with it, then names that contain it.
+  ↑ and ↓ move, **Tab** or **Enter** insert, **Esc** puts the list away and
+  keeps what you typed. With nothing matching, Enter is a new line.
+- It is for **replies**. A note has no saved replies (use the toolbar button).
+- Choosing one fills it in for the ticket, in the contact's language, in place
+  of the `/word`, and stages a macro's actions as chips, exactly as the picker
+  does. A macro with no reply runs at once and the `/word` goes.
+- The list and the picker are ordered by use: **your own items first**, then
+  the brand's; within each, the one used most recently, then the one used most
+  often (`use_count`, counted when a reply sent with it leaves, beside
+  `last_used_at`). The count is the item's own, so a shared item's order is the
+  brand's, not each person's.
+
+**`{{` in the composer** opens the placeholder list under the text. Choosing
+one inserts the **value** for this ticket ("Mona", "HD-1042"), not the
+`{{…}}`, because a reply is sent as typed. Only placeholders the composer can
+fill are offered: the contact's, the ticket number, the brand and department,
+and the sender's first and full name. `{{agent.name}}`, `{{agent.title}}` and
+`{{agent.phone}}` are for saved replies and signatures, which the api fills in
+from the sender's profile.
+
 ## Languages
 
 Each item has an English and an Arabic body. The variant used is the one asked
@@ -62,9 +127,11 @@ variant falls back to English, and the picker says so.
 ## Applying one in the composer
 
 **Macros and canned** in the composer toolbar, the **Macro** button in the
-ticket header, or `/` typed into an empty reply opens the picker. It offers
-what is shared with the ticket's department, shared with every department, or
-the reader's own. ↑ and ↓ move, Enter applies, Esc closes.
+ticket header opens the picker (`/` in a reply opens the shortcut list instead,
+see [Shortcuts](#shortcuts)). It offers what is shared with the ticket's
+department, shared with every department, or the reader's own, yours first and
+then by use; its search finds an item by its shortcut too. ↑ and ↓ move, Enter
+applies, Esc closes.
 
 Applying fills the composer with the rendered reply (plain text you can edit)
 and stages the macro's actions as chips above it; each can be removed. Sending
@@ -84,13 +151,16 @@ status". A macro without a reply runs as soon as it is applied.
 | `GET` | `/api/brands/:brandId/tickets/:ticketId/macros/:macroId/render?locale=` | `ticket:write` |
 | `POST` | `/api/brands/:brandId/tickets/:ticketId/macro-runs` | `ticket:write` |
 
+An item carries `shortcut` (a string or `null`) and `useCount`; create and
+update take `shortcut`, and `PATCH` with `shortcut: null` clears it.
+
 A run takes `{ macroId, actions, reply? }`. Every staged action must be one of
 the macro's own, or the run is refused with the ticketing refusal
 `macro-changed` (409). Each action goes through the same checks a person's
 own edit does; one refusal rolls back the reply too.
 
 Changes to shared items are audited as `macro.created`, `macro.updated` and
-`macro.deleted`, with the fields that moved. Personal items are not audited.
+`macro.deleted`, with the fields that moved (the shortcut included). Personal items are not audited.
 
 ## For the rules engine
 

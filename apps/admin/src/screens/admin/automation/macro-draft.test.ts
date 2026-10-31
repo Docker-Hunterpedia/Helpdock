@@ -2,7 +2,9 @@ import type { Macro } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
   actionOf,
+  cleanShortcut,
   draftOf,
+  draftPlaceholderProblems,
   duplicateOf,
   emptyDraft,
   insertAt,
@@ -22,6 +24,7 @@ const macro: Macro = {
   scope: 'shared',
   departmentId: BILLING,
   bodies: { en: 'Hi {{contact.first_name}}', ar: '' },
+  shortcut: 'refund',
   actions: [
     { type: 'set_priority', priority: 'high' },
     { type: 'assign', assignee: { kind: 'user', userId: USER } },
@@ -29,6 +32,7 @@ const macro: Macro = {
     { type: 'assign', assignee: { kind: 'self' } },
   ],
   lastUsedAt: null,
+  useCount: 0,
   updatedAt: '2026-09-24T10:00:00.000Z',
   updatedById: null,
   canEdit: true,
@@ -43,9 +47,17 @@ const draft = (overrides: Partial<MacroDraft> = {}): MacroDraft => ({
 
 describe('draftOf and requestOf', () => {
   it('round-trip a saved macro, assignees included', () => {
-    const { kind, name, scope, departmentId, bodies, actions } = macro;
+    const { kind, name, scope, departmentId, bodies, shortcut, actions } = macro;
 
-    expect(requestOf(draftOf(macro))).toEqual({ kind, name, scope, departmentId, bodies, actions });
+    expect(requestOf(draftOf(macro))).toEqual({
+      kind,
+      name,
+      scope,
+      departmentId,
+      bodies,
+      shortcut,
+      actions,
+    });
   });
 
   it('shares with every department when none is chosen, and never files a personal one', () => {
@@ -119,5 +131,48 @@ describe('insertAt', () => {
 
   it('appends when the caret is unknown', () => {
     expect(insertAt('Hi ', '{{a.b}}', null).text).toBe('Hi {{a.b}}');
+  });
+});
+
+describe('the shortcut (M14-14)', () => {
+  it('is held without the slash and sent lower-case, or as null when blank', () => {
+    expect(cleanShortcut(' /Refund ')).toBe('Refund');
+    expect(requestOf(draft({ shortcut: '/Refund' })).shortcut).toBe('refund');
+    expect(requestOf(draft({ shortcut: '  ' })).shortcut).toBeNull();
+    expect(draftOf({ ...macro, shortcut: null }).shortcut).toBe('');
+  });
+
+  it('refuses a shortcut with a space in it', () => {
+    expect(problemOf(draft({ shortcut: 'two words' }))).toBe('shortcutInvalid');
+    expect(problemOf(draft({ shortcut: 'fine-1' }))).toBeNull();
+  });
+});
+
+describe('the save-time placeholder check (M14-14)', () => {
+  it('does not re-check a reply left as it was, so an old item can be renamed', () => {
+    const old = { bodies: { en: 'Hi {{agent.nmae}}', ar: '' } };
+
+    expect(problemOf(draft({ en: 'Hi {{agent.nmae}}', name: 'Renamed' }), old)).toBeNull();
+    expect(problemOf(draft({ en: 'Hi {{agent.nmae}}!' }), old)).toBe('placeholders');
+  });
+
+  it('refuses a fallback the renderer would not read', () => {
+    expect(problemOf(draft({ en: '{{contact.first_name|Sir|Madam}}' }))).toBe('placeholders');
+  });
+
+  it('refuses an unknown placeholder or an unclosed {{, in either language', () => {
+    expect(problemOf(draft({ en: 'Hi {{agent.nmae}}' }))).toBe('placeholders');
+    expect(problemOf(draft({ en: 'Hi', ar: 'مرحبا {{' }))).toBe('placeholders');
+  });
+
+  it('accepts a fallback', () => {
+    expect(problemOf(draft({ en: 'Hi {{contact.first_name|there}}' }))).toBeNull();
+  });
+
+  it('names each problem with its language', () => {
+    expect(draftPlaceholderProblems(draft({ en: '{{x.y}}', ar: '{{' }))).toEqual([
+      { locale: 'en', problem: { kind: 'unknown', text: '{{x.y}}', suggestion: null } },
+      { locale: 'ar', problem: { kind: 'unclosed', text: '{{' } },
+    ]);
   });
 });

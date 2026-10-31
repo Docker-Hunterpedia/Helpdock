@@ -92,7 +92,10 @@
       "englishRequired": "A canned response needs its English text.",
       "nothingToDo": "A macro needs a reply, an action, or both.",
       "actionIncomplete": "Choose a value for every action, or remove it.",
-      "arabicWithoutEnglish": "English is the default variant; write it before the Arabic one."
+      "arabicWithoutEnglish": "English is the default variant; write it before the Arabic one.",
+      "shortcutInvalid": "A shortcut is one word: letters, digits, - and _.",
+      "shortcutTaken": "Another saved reply or macro already uses that shortcut.",
+      "placeholders": "Fix the placeholders listed under the reply."
     },
     "cannedNote": "A canned response has the same editor without Actions.",
     "discard": "Discard",
@@ -101,6 +104,16 @@
     "nothing": {
       "heading": "Nothing selected",
       "body": "Choose a macro or canned response to edit it, or create a new one."
+    },
+    "shortcut": {
+      "label": "Shortcut",
+      "hint": "Type /word then Tab or Enter to insert it. Unique among your and the brand's replies."
+    },
+    "placeholderErrors": {
+      "unknown": "Unknown placeholder {{text}}.",
+      "unclosed": "Unclosed {{text}}. Add }} to close it.",
+      "didYouMean": "Did you mean {{name}}?",
+      "fallback": "The fallback in {{text}} cannot contain |, { or }."
     }
   },
   "actions": {

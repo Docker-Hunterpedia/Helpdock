@@ -1,4 +1,5 @@
 import type { Macro, MacroKind, RenderedMacro, Ticket } from '@helpdock/schemas';
+import { monoFontStyle } from '@helpdock/ui';
 import { Box, Button, Paper, TextField, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
@@ -10,6 +11,7 @@ import {
   type StagedLine,
   type StagingLookups,
 } from '../../tickets/macro-staging.js';
+import { sortByUse } from './saved-reply-order.js';
 
 /**
  * "Insert a macro or canned response" (M3-06, artboard `AdminComposerMacros`,
@@ -66,11 +68,13 @@ export function MacroPicker({
   });
 
   const needle = term.trim().toLowerCase();
-  const results = (macros.data?.macros ?? []).filter(
+  // Yours first, then the most recently and most often used (M14-14).
+  const results = sortByUse(macros.data?.macros ?? []).filter(
     (row) =>
       (filter === 'all' || row.kind === filter) &&
       (needle === '' ||
         row.name.toLowerCase().includes(needle) ||
+        (row.shortcut ?? '').includes(needle.replace(/^\//, '')) ||
         `${row.bodies.en} ${row.bodies.ar}`.toLowerCase().includes(needle)),
   );
   const selected = results[Math.min(active, results.length - 1)];
@@ -192,6 +196,19 @@ export function MacroPicker({
               >
                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
                   {row.name}
+                  {row.shortcut === null ? null : (
+                    <Box
+                      component="code"
+                      sx={{
+                        ...monoFontStyle,
+                        fontSize: 12,
+                        marginInlineStart: 2,
+                        color: 'text.secondary',
+                      }}
+                    >
+                      <bdi>/{row.shortcut}</bdi>
+                    </Box>
+                  )}
                 </Typography>
                 <Typography variant="caption" noWrap sx={{ color: 'text.secondary' }}>
                   {optionCaption(row, t)}

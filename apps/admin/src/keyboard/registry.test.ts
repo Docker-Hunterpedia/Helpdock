@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COMPOSER_SHORTCUTS } from '../screens/tickets/composer.tsx';
+import { detectTrigger } from '../screens/tickets/composer-triggers.js';
 import { TICKET_SHORTCUTS } from '../screens/tickets/ticket-shortcuts.js';
 import { LIST_SHORTCUTS } from '../screens/tickets/tickets-page.tsx';
 import { SHELL_SHORTCUTS } from '../shell/app-shell.tsx';
@@ -14,6 +15,7 @@ import {
   SHORTCUT_LIST,
   type Shortcut,
   type ShortcutPermission,
+  shortcutById,
 } from './registry.js';
 
 /**
@@ -82,13 +84,15 @@ describe('the shortcut registry', () => {
     expect({ unattached, unmounted }).toEqual({ unattached: [], unmounted: [] });
   });
 
-  it('reads the typed saved-reply trigger from the registry in the composer', () => {
+  it('opens the saved replies on the registry’s typed trigger, anywhere a word can start (M14-14)', () => {
     expect(SHORTCUT_LIST.filter((shortcut) => shortcut.typed === true).map((s) => s.id)).toEqual([
       'composer.savedReply',
     ]);
-    expect(repoFile('apps/admin/src/screens/tickets/composer.tsx')).toContain(
-      "shortcutById('composer.savedReply')",
-    );
+    const key = shortcutById('composer.savedReply').keys[0]?.key ?? '';
+
+    expect(detectTrigger(key, 1, { slash: true })?.kind).toBe('slash');
+    expect(detectTrigger(`Hi ${key}`, 4, { slash: true })?.kind).toBe('slash');
+    expect(detectTrigger(`a${key}`, 2, { slash: true })).toBeNull();
   });
 
   it('never gives two shortcuts that can answer at once the same keys', () => {

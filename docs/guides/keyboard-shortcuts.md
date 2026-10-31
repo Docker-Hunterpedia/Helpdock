@@ -17,8 +17,8 @@ is in no screen's list of handled ids, when a listed id is not in the
 registry, when a screen does not attach its list (checked in its source:
 `useShortcutHandlers` is typed so that every listed id needs a handler), or
 when these tables differ from the registry. The one shortcut typed rather
-than pressed — `/` in an empty reply — has no key handler; the test holds the
-composer to reading it from the registry instead. Whether a handler is
+than pressed — `/` in a reply — has no key handler; the test holds the
+composer's trigger to the key the registry names instead. Whether a handler is
 attached at a given moment (a ticket open, a person who may write) is covered
 by the screens' own tests. To change a table, change the registry and the
 `tickets:keyboard` strings, run that test, and paste the text it expects
@@ -108,8 +108,10 @@ it.
   has none, so `h` does nothing there ([Snooze](snooze.md)).
 - **Composer** answers only while the caret is in the composer, so `⌘`+`Enter`
   in the list's search box sends nothing. "Send and close" sends, then moves
-  the ticket to the same status `e` does. `/` typed into an empty reply opens
-  the saved replies, as it did before.
+  the ticket to the same status `e` does. `/` typed in a reply, at the start of a
+  line or after a space, lists the saved replies under the text (M14-14; see
+  [Shortcuts](macros.md#shortcuts)); it follows the single-key switch, so with
+  the switch off `/` is just a slash.
 
 A key without a modifier is never taken from you while you are writing: in a
 text field, a select, the composer or a rich-text editor, a letter is a

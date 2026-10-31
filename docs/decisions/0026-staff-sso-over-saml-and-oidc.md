@@ -274,8 +274,9 @@ hand an already-linked account to another identity. The rules are now:
   `https://sts.windows.net/<tid>/`; otherwise `xms_edov` is not trusted. Microsoft
   sets `idp` to the issuer unless the account lives in another tenant, and it is
   a default claim, so admins configure nothing. A B2B member whose home tenant
-  vouched for the domain is therefore refused (`sso-email-unverified` on SSO,
-  `oauth-tenant-mismatch` on the Microsoft button). An absent `idp` is accepted,
+  vouched for the domain is therefore not vouched for (`sso-email-unverified` on
+  SSO; on the Microsoft button the address is not authoritative, so the first
+  link is `oauth-link-required`). An absent `idp` is accepted,
   because Microsoft does not document it as always present; the operator advice
   to list only this tenant's domains stays as defence in depth. Not yet checked
   against a real Entra tenant: the exact `idp` form for native members and that

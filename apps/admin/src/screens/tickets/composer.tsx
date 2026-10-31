@@ -10,16 +10,18 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { Paperclip, Send, Zap } from 'lucide-react';
+import { ChevronDown, Paperclip, Send, Zap } from 'lucide-react';
 import {
   type ReactNode,
   type SyntheticEvent,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -43,6 +45,7 @@ import {
   FromSelect,
   RecipientLines,
   SignaturePreview,
+  summaryOf,
 } from './email-compose.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
@@ -74,6 +77,14 @@ import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
  * them in the same transaction. A file the brand's policy would refuse is
  * refused here, in the picker, rather than after a minute of uploading — and
  * again by the api, because a client's opinion is not an authorisation.
+ *
+ * **Compact (M14-19, `Admin/Ticket-CompactComposer`).** The reply of an email
+ * ticket is one line, "To Mona Khalil · from billing@", until it is opened:
+ * From, To, Cc and the signature are behind it. The text starts at two rows and
+ * grows with what is typed, one toolbar row, and the card is as tall as the
+ * ticket view lets it be (`ticket-view.tsx` caps it at 45 % of the column and
+ * scrolls inside it), with the toolbar kept in reach. The open state belongs
+ * here, so a send that failed leaves it as it was.
  *
  * **Note mode tints the whole card.** It is the one state where getting it
  * wrong is unrecoverable — a note posted as a public reply has left the
@@ -132,6 +143,13 @@ export interface ComposerProps {
    * is this component's and nobody else should have to know which one it is.
    */
   readonly focusSignal?: number | undefined;
+  /** Changes whenever a send succeeded: the recipients line goes back to one line. */
+  readonly collapseSignal?: number | undefined;
+  /**
+   * Where the `/`, `{{` and `@` lists are drawn when the card scrolls inside a
+   * cap: outside it, so the list is never under the toolbar or out of view.
+   */
+  readonly suggestionHost?: HTMLElement | null | undefined;
   onModeChange(mode: ComposerMode): void;
   onBodyChange(body: string): void;
   onThenStatusChange(statusId: string): void;
@@ -185,6 +203,8 @@ export function Composer({
   uploading,
   attachmentsEnabled,
   focusSignal,
+  collapseSignal,
+  suggestionHost,
   onModeChange,
   onBodyChange,
   onThenStatusChange,
@@ -210,6 +230,16 @@ export function Composer({
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
+  const surface = note ? tokens['status.warning.tint'] : tokens['bg.surface'];
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
+  // Nothing to choose from, or nobody to send to: the explanation is the line.
+  const forcedOpen = email !== undefined && (email.to === null || email.senders.length === 0);
+  const showDetails = detailsOpen || forcedOpen;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the signal is the trigger.
+  useEffect(() => {
+    setDetailsOpen(false);
+  }, [collapseSignal]);
   const emailReply = email !== undefined && !note;
   const telegramReply = telegram !== undefined && !note;
   const metaReply = meta !== undefined && !note;
@@ -248,6 +278,11 @@ export function Composer({
     keys: suggestionKeys,
     onDismiss: dismiss,
   };
+
+  const floated = (lists: ReactNode): ReactNode =>
+    suggestionHost === undefined || suggestionHost === null
+      ? lists
+      : createPortal(lists, suggestionHost);
 
   const syncTrigger = (area: HTMLInputElement | HTMLTextAreaElement): void => {
     const caret = area.selectionStart;
@@ -303,7 +338,7 @@ export function Composer({
         display: 'flex',
         flexDirection: 'column',
         gap: 3,
-        backgroundColor: note ? tokens['status.warning.tint'] : tokens['bg.surface'],
+        backgroundColor: surface,
         border: `1px solid ${note ? tokens['status.warning'] : tokens['border.default']}`,
       }}
     >
@@ -327,9 +362,7 @@ export function Composer({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        {emailReply ? (
-          <FromSelect email={email} />
-        ) : metaReply ? (
+        {emailReply ? null : metaReply ? (
           <MetaRecipient meta={meta} />
         ) : telegramReply ? (
           <Typography
@@ -357,7 +390,44 @@ export function Composer({
         )}
       </Box>
 
-      {emailReply ? <RecipientLines email={email} /> : null}
+      {emailReply && !forcedOpen ? (
+        <Button
+          variant="text"
+          size="small"
+          aria-expanded={showDetails}
+          aria-controls={detailsId}
+          endIcon={
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              style={{ transform: detailsOpen ? 'rotate(180deg)' : undefined }}
+            />
+          }
+          onClick={() => {
+            setDetailsOpen((open) => !open);
+          }}
+          sx={{
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            justifyContent: 'flex-start',
+            color: 'text.secondary',
+            textAlign: 'start',
+          }}
+        >
+          <bdi>{summaryOf(t, email)}</bdi>
+        </Button>
+      ) : null}
+
+      {emailReply ? (
+        <Box
+          id={detailsId}
+          hidden={!showDetails}
+          sx={{ display: showDetails ? 'flex' : 'none', flexDirection: 'column', gap: 2 }}
+        >
+          <FromSelect email={email} />
+          <RecipientLines email={email} />
+        </Box>
+      ) : null}
 
       {suggestion}
 
@@ -365,7 +435,7 @@ export function Composer({
         id={bodyId}
         inputRef={bodyRef}
         multiline
-        minRows={3}
+        minRows={2}
         value={body}
         onChange={(event) => {
           onBodyChange(event.target.value);
@@ -398,55 +468,59 @@ export function Composer({
         }}
       />
 
-      {open && trigger.kind === 'slash' ? (
-        <SavedReplySuggestions
-          brandId={inline.brandId}
-          departmentId={inline.departmentId}
-          query={trigger.query}
-          list={suggestionList}
-          onPick={(macro) => {
-            const range = { start: trigger.start, end: trigger.end };
-            setTrigger(null);
-            void inline.onInsertSaved(macro, range).then((caret) => {
-              requestAnimationFrame(() => {
+      {floated(
+        <>
+          {open && trigger.kind === 'slash' ? (
+            <SavedReplySuggestions
+              brandId={inline.brandId}
+              departmentId={inline.departmentId}
+              query={trigger.query}
+              list={suggestionList}
+              onPick={(macro) => {
+                const range = { start: trigger.start, end: trigger.end };
+                setTrigger(null);
+                void inline.onInsertSaved(macro, range).then((caret) => {
+                  requestAnimationFrame(() => {
+                    bodyRef.current?.focus();
+                    if (caret !== null) {
+                      bodyRef.current?.setSelectionRange(caret, caret);
+                    }
+                  });
+                });
+              }}
+            />
+          ) : null}
+          {open && trigger.kind === 'mention' ? (
+            <MentionSuggestions
+              brandId={inline.brandId}
+              ticketId={inline.ticketId}
+              query={trigger.query}
+              list={suggestionList}
+              onPick={(handle) => {
+                insertAtTrigger(`@${handle} `);
+              }}
+            />
+          ) : null}
+          {open && trigger.kind === 'placeholder' ? (
+            <PlaceholderPicker
+              samples={inline.placeholderValues}
+              names={[...inline.placeholderValues]
+                .filter(([, value]) => value.trim() !== '')
+                .map(([name]) => name as CannedPlaceholder)}
+              hint={t('tickets:composer.suggest.placeholderHint')}
+              onPick={(name) => {
+                insertAtTrigger(inline.placeholderValues.get(name) ?? '');
+              }}
+              onClose={() => {
+                setDismissedAt(trigger.start);
                 bodyRef.current?.focus();
-                if (caret !== null) {
-                  bodyRef.current?.setSelectionRange(caret, caret);
-                }
-              });
-            });
-          }}
-        />
-      ) : null}
-      {open && trigger.kind === 'mention' ? (
-        <MentionSuggestions
-          brandId={inline.brandId}
-          ticketId={inline.ticketId}
-          query={trigger.query}
-          list={suggestionList}
-          onPick={(handle) => {
-            insertAtTrigger(`@${handle} `);
-          }}
-        />
-      ) : null}
-      {open && trigger.kind === 'placeholder' ? (
-        <PlaceholderPicker
-          samples={inline.placeholderValues}
-          names={[...inline.placeholderValues]
-            .filter(([, value]) => value.trim() !== '')
-            .map(([name]) => name as CannedPlaceholder)}
-          hint={t('tickets:composer.suggest.placeholderHint')}
-          onPick={(name) => {
-            insertAtTrigger(inline.placeholderValues.get(name) ?? '');
-          }}
-          onClose={() => {
-            setDismissedAt(trigger.start);
-            bodyRef.current?.focus();
-          }}
-        />
-      ) : null}
+              }}
+            />
+          ) : null}
+        </>,
+      )}
 
-      {emailReply ? <SignaturePreview signature={email.signature} /> : null}
+      {emailReply && showDetails ? <SignaturePreview signature={email.signature} /> : null}
       {telegramReply ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           <bdi>{t('tickets:telegram.composerFoot', { bot: telegram.bot })}</bdi>
@@ -471,7 +545,18 @@ export function Composer({
 
       {metaReply ? <MetaCount meta={meta} body={body} attachments={attachments} /> : null}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
+          // Kept in reach when the card scrolls inside its cap.
+          position: 'sticky',
+          insetBlockEnd: 0,
+          backgroundColor: surface,
+        }}
+      >
         <input
           ref={fileRef}
           type="file"
@@ -511,10 +596,11 @@ export function Composer({
           aria-haspopup="dialog"
           aria-expanded={macrosOpen}
           aria-keyshortcuts={macrosKeys}
+          aria-label={t('tickets:composer.canned')}
           startIcon={<Zap size={14} aria-hidden="true" />}
           onClick={onOpenMacros}
         >
-          {t('tickets:composer.canned')}
+          {t('tickets:composer.macros')}
         </Button>
 
         <TextField

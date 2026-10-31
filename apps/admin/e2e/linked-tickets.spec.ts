@@ -76,7 +76,7 @@ test.describe('the ticket view’s width', () => {
     test(`never scrolls sideways at ${String(width)}px`, async ({ page, appLocale: locale }) => {
       await page.setViewportSize({ width, height: 900 });
       await signIn(page, locale);
-      await openTicket(page, locale);
+      await openTicket(page, locale, 'HD-1042', { compact: true });
 
       const overflow = await page.evaluate(() => ({
         scroll: document.documentElement.scrollWidth,

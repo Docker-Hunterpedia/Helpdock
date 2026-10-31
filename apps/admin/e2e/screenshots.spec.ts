@@ -144,6 +144,24 @@ test.describe('reference screens @screenshot', () => {
     await signInToShell(page, locale);
     // The fixture's fullest ticket: every badge, all four kinds of message, an
     // activity event between them and a colleague viewing it.
+    // At 1280 × 720 (M14-19, `Admin/Ticket-CompactComposer`): the details are a
+    // drawer, the composer is one line, and the thread has the room.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openTicket(page, locale, 'HD-1042', { compact: true });
+    await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).waitFor();
+    await page
+      .getByRole('form', { name: t('tickets:composer.label') })
+      .getByRole('button', { name: /billing@helpdock\.io/ })
+      .waitFor();
+
+    await expect(page).toHaveScreenshot('ticket-view.png');
+  });
+
+  test('one ticket with its details', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+
+    await page.clock.setFixedTime(FIXED_CLOCK);
+    await signInToShell(page, locale);
     await openTicket(page, locale);
     await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).waitFor();
     // The contact's timeline arrives after the ticket; until it does, the
@@ -155,7 +173,7 @@ test.describe('reference screens @screenshot', () => {
       .getByText('support@helpdock.test')
       .waitFor();
 
-    await expect(page).toHaveScreenshot('ticket-view.png');
+    await expect(page).toHaveScreenshot('ticket-view-details.png');
   });
 
   test('one contact', async ({ page, appLocale: locale }) => {

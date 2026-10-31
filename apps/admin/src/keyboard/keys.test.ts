@@ -43,6 +43,9 @@ describe('keyOf', () => {
     // The Arabic layout types ظ on the US slash key.
     expect(keyOf({ key: 'ظ', code: 'Slash' })).toBe('/');
     expect(keyOf({ key: 'ذ', code: 'Backslash' })).toBe('\\');
+    // M14-19: `[` hides the list column; an Arabic layout types ج on that key.
+    expect(keyOf({ key: '[', code: 'BracketLeft' })).toBe('[');
+    expect(keyOf({ key: 'ج', code: 'BracketLeft' })).toBe('[');
     expect(keyOf({ key: '١', code: 'Digit1' })).toBe('1');
   });
 

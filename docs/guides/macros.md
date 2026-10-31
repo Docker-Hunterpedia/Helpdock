@@ -126,8 +126,9 @@ variant falls back to English, and the picker says so.
 
 ## Applying one in the composer
 
-**Macros and canned** in the composer toolbar, the **Macro** button in the
-ticket header opens the picker (`/` in a reply opens the shortcut list instead,
+**Macros** in the composer toolbar opens the picker, as does `m` and **Apply a
+macro** in the command palette (the ticket header has no Macro button since
+M14-19; `/` in a reply opens the shortcut list instead,
 see [Shortcuts](#shortcuts)). It offers what is shared with the ticket's
 department, shared with every department, or the reader's own, yours first and
 then by use; its search finds an item by its shortcut too. ↑ and ↓ move, Enter

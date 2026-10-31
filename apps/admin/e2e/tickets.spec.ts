@@ -100,7 +100,11 @@ test.describe('the ticket list', () => {
       .getByRole('textbox', { name: t('tickets:newTicket.messageLabel') })
       .fill('No name given.');
     await page.getByRole('button', { name: t('tickets:newTicket.submit') }).click();
-    await expect(page.getByRole('heading', { level: 1 }).last()).toContainText('Walk-in');
+    await expect(
+      page
+        .getByRole('region', { name: t('tickets:header.label') })
+        .getByRole('heading', { level: 2 }),
+    ).toContainText('Walk-in');
     // Opening the new ticket lands the list on the default view, which is
     // "My open"; the unassigned walk-in is on the whole desk.
     await page.getByRole('link', { name: t('tickets:views.all'), exact: true }).click();
@@ -233,7 +237,11 @@ test.describe('the keyboard', () => {
     // next press acts on what the person is looking at.
     const opened = async (id: string, subject: string): Promise<void> => {
       await expect(page).toHaveURL(new RegExp(id));
-      await expect(page.getByRole('heading', { level: 1 }).last()).toContainText(subject);
+      await expect(
+        page
+          .getByRole('region', { name: strings(locale)('tickets:header.label') })
+          .getByRole('heading', { level: 2 }),
+      ).toContainText(subject);
     };
 
     await page.keyboard.press('j');
@@ -279,7 +287,10 @@ test.describe('the keyboard', () => {
       page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }),
     ).toBeFocused();
 
-    await page.getByRole('heading', { level: 1 }).last().click();
+    await page
+      .getByRole('region', { name: t('tickets:header.label') })
+      .getByRole('heading', { level: 2 })
+      .click();
     await page.keyboard.press('n');
     await expect(page.getByRole('button', { name: t('tickets:composer.note') })).toHaveAttribute(
       'aria-pressed',
@@ -294,7 +305,7 @@ test.describe('one ticket', () => {
     await openTicket(page, locale);
 
     const subject = 'Refund for order 42 has not arrived';
-    await expect(page.getByRole('heading', { level: 1, name: subject })).toHaveAttribute(
+    await expect(page.getByRole('heading', { level: 2, name: subject })).toHaveAttribute(
       'dir',
       'auto',
     );
@@ -305,7 +316,7 @@ test.describe('one ticket', () => {
     // An English line resolves to left to right, inside the Arabic page too.
     expect(
       await page
-        .getByRole('heading', { level: 1, name: subject })
+        .getByRole('heading', { level: 2, name: subject })
         .evaluate((node) => node.matches(':dir(ltr)')),
     ).toBe(true);
   });
@@ -446,7 +457,11 @@ test.describe('one ticket', () => {
         .getByRole('status')
         .filter({ hasText: t('tickets:toast.created', { reference: 'HD-1043' }) }),
     ).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1 }).last()).toContainText('Typed in by hand');
+    await expect(
+      page
+        .getByRole('region', { name: t('tickets:header.label') })
+        .getByRole('heading', { level: 2 }),
+    ).toContainText('Typed in by hand');
   });
 
   test('refuses to file a ticket with no subject', async ({ page, appLocale: locale }) => {
@@ -534,7 +549,7 @@ test.describe('fields required to close (M14-17)', () => {
 });
 
 test.describe('the breakpoints of DESIGN §6.5', () => {
-  test('puts the details panel in a drawer below 1280 px', async ({ page, appLocale: locale }) => {
+  test('puts the details panel in a drawer below 1440 px', async ({ page, appLocale: locale }) => {
     const t = strings(locale);
     // Signed in at the artboard's width first: below 1280 px the sidebar opens
     // as the icon rail, and the flow that gets here clicks a view by its name.

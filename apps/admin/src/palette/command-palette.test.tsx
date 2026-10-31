@@ -354,6 +354,21 @@ describe('the actions', () => {
     expect(await screen.findByRole('listbox', { name: /priority/i })).toBeVisible();
   });
 
+  it('opens the macro picker from "Apply a macro", now that the header has no Macro button (UX-21)', async () => {
+    const { user } = await renderAt(`/tickets/${MOCK_TICKET_REFUND}`);
+    await screen.findByRole('heading', { name: /Refund for order 42/ });
+    expect(screen.queryByRole('button', { name: 'Macro' })).toBeNull();
+
+    await user.keyboard('{Control>}k{/Control}');
+    await screen.findByRole('dialog', { name: 'Command palette' });
+    await user.type(input(), 'macro');
+    await user.click(await within(palette()).findByRole('option', { name: /Apply a macro/ }));
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Insert a macro or canned response' }),
+    ).toBeVisible();
+  });
+
   it('does not offer ticket actions on another screen', async () => {
     const { user } = await renderAt('/contacts');
     await user.keyboard('{Control>}k{/Control}');

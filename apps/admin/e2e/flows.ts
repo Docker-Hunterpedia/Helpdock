@@ -203,10 +203,28 @@ export async function openTickets(page: Page, locale: Locale, view?: string): Pr
   }
 }
 
-/** Opens `HD-1042`, the fixture's fullest ticket, from whichever view holds it. */
-export async function openTicket(page: Page, locale: Locale, reference = 'HD-1042'): Promise<void> {
+/** The width from which the details panel sits beside the thread (`DETAILS_BREAKPOINT`, M14-19). */
+export const DETAILS_INLINE_WIDTH = 1440;
+
+/**
+ * Opens `HD-1042`, the fixture's fullest ticket, from whichever view holds it.
+ *
+ * The window is widened to {@link DETAILS_INLINE_WIDTH} first, because below it
+ * the details panel is a drawer and most specs read the panel in place. A spec
+ * about the 1280 px layout passes `{ compact: true }` and keeps the window it has.
+ */
+export async function openTicket(
+  page: Page,
+  locale: Locale,
+  reference = 'HD-1042',
+  { compact = false }: { readonly compact?: boolean } = {},
+): Promise<void> {
   const t = strings(locale);
 
+  const size = page.viewportSize();
+  if (!compact && size !== null && size.width < DETAILS_INLINE_WIDTH) {
+    await page.setViewportSize({ width: DETAILS_INLINE_WIDTH, height: size.height });
+  }
   await openTickets(page, locale, 'all');
   await page.getByRole('link', { name: new RegExp(reference) }).click();
   await page.getByRole('region', { name: t('tickets:header.label') }).waitFor();

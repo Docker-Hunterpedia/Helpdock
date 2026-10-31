@@ -101,6 +101,9 @@ const EXPIRY_TICK_MS = 1000;
 /** How many tickets the merge dialog offers at once; the search narrows the rest. */
 const MERGE_SEARCH_LIMIT = 8;
 
+/** The most of the ticket column the composer takes before it scrolls inside (M14-19). */
+const COMPOSER_CAP = '45cqh';
+
 export function TicketView({
   brandId,
   ticketId,
@@ -151,6 +154,9 @@ export function TicketView({
   // pending send carries which macro — kept by `clientId`, so a retry of a
   // failed send runs the same actions with the same reply.
   const [picking, setPicking] = useState(false);
+  // M14-19: where the composer's lists float, outside its scrolling box.
+  const [listHost, setListHost] = useState<HTMLElement | null>(null);
+  const [collapseSignal, setCollapseSignal] = useState(0);
   const [staged, setStaged] = useState<StagedMacro | null>(null);
   const macroBySend = useRef(new Map<string, StagedMacro>());
   // M10-08: the files of each send, so a reply the platform's window refuses
@@ -348,6 +354,8 @@ export function TicketView({
         tone: 'success',
         message: t(message.kind === 'note' ? 'tickets:toast.noted' : 'tickets:toast.replied'),
       });
+      // The next reply starts compact (M14-19).
+      setCollapseSignal(Date.now());
 
       // "Then set status" is applied after the send, never with it: a status
       // moved by a reply that never left would be a lie about what happened.
@@ -1020,7 +1028,18 @@ export function TicketView({
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          // M14-19: the composer's cap is a share of this column, whatever the
+          // screen's height (`COMPOSER_CAP`).
+          containerType: 'size',
+        }}
+      >
         <TicketHeader
           ticket={ticket}
           departmentName={departmentName}
@@ -1036,7 +1055,6 @@ export function TicketView({
           onShowDetails={() => {
             onDetailsOpenChange(true);
           }}
-          macroOpen={picking}
           snooze={
             canWrite && mergedInto === null && ticket.status.systemState !== 'closed' ? (
               <SnoozeControl
@@ -1050,13 +1068,6 @@ export function TicketView({
               />
             ) : undefined
           }
-          {...(canWrite && mergedInto === null
-            ? {
-                onMacro: () => {
-                  setPicking((open) => !open);
-                },
-              }
-            : {})}
         />
 
         {/* M1-09: above the thread rather than in it, so "this ticket was
@@ -1188,7 +1199,7 @@ export function TicketView({
           <Box
             sx={{
               position: 'relative',
-              padding: 5,
+              flexShrink: 0,
               borderBlockStart: `1px solid ${tokens['border.default']}`,
               backgroundColor: tokens['bg.canvas'],
             }}
@@ -1221,79 +1232,94 @@ export function TicketView({
                 />
               </Box>
             ) : null}
-            {staged === null ? null : (
-              <StagedMacroChips
-                staged={staged}
-                ticket={ticket}
-                lookups={lookups}
-                onRemove={(index) => {
-                  setStaged((held) =>
-                    held === null
-                      ? held
-                      : { ...held, actions: held.actions.filter((_action, at) => at !== index) },
-                  );
-                }}
-                onClear={() => {
-                  setStaged(null);
-                }}
-              />
-            )}
-            <Composer
-              mode={mode}
-              body={body}
-              recipient={contact.data?.name ?? null}
-              statuses={directory.statuses}
-              thenStatusId={thenStatusId}
-              busy={send.isPending}
-              attachments={attachments}
-              uploading={uploading}
-              // Until the brand read answers, the defaults are what the picker
-              // measures against; the api is the one that decides either way.
-              attachmentsEnabled={!brand.isPending || brand.isError}
-              focusSignal={focusSignal}
-              onModeChange={setMode}
-              onBodyChange={setBody}
-              onThenStatusChange={setThenStatusId}
-              onAttach={(files) => {
-                void attach(files);
-              }}
-              onRemoveAttachment={(attachmentId) => {
-                setAttachments((held) => held.filter((row) => row.id !== attachmentId));
-              }}
-              onSend={() => {
-                queueSend();
-              }}
-              onSendAndClose={
-                closeStatus === null
-                  ? undefined
-                  : () => {
-                      queueSend({ close: true });
-                    }
-              }
-              email={ticketEmail.composer}
-              meta={ticketMeta.composer}
-              telegram={
-                telegramChat === undefined
-                  ? undefined
-                  : { bot: telegramChat.bot.username, username: telegramChat.username }
-              }
-              macrosOpen={picking}
-              inline={canWrite ? composerInline : undefined}
-              assist={assist.menu}
-              suggestion={assist.composerCard}
-              {...(canWrite
-                ? {
-                    onOpenMacros: () => {
-                      setPicking((open) => !open);
-                    },
-                  }
-                : {})}
-              onBodyFocus={() => {
-                if (tracking && timerWithComposer && canWrite && !timer.running) {
-                  timer.start();
-                }
+            <Box
+              ref={setListHost}
+              sx={{
+                position: 'absolute',
+                insetInline: 20,
+                insetBlockEnd: '100%',
+                // The lists cap and scroll themselves (SuggestionList), so this
+                // box does not: a scroller nobody can focus fails axe.
+                zIndex: 2,
               }}
             />
+            <Box sx={{ padding: 5, maxHeight: COMPOSER_CAP, overflowY: 'auto' }}>
+              {staged === null ? null : (
+                <StagedMacroChips
+                  staged={staged}
+                  ticket={ticket}
+                  lookups={lookups}
+                  onRemove={(index) => {
+                    setStaged((held) =>
+                      held === null
+                        ? held
+                        : { ...held, actions: held.actions.filter((_action, at) => at !== index) },
+                    );
+                  }}
+                  onClear={() => {
+                    setStaged(null);
+                  }}
+                />
+              )}
+              <Composer
+                mode={mode}
+                body={body}
+                recipient={contact.data?.name ?? null}
+                statuses={directory.statuses}
+                thenStatusId={thenStatusId}
+                busy={send.isPending}
+                attachments={attachments}
+                uploading={uploading}
+                // Until the brand read answers, the defaults are what the picker
+                // measures against; the api is the one that decides either way.
+                attachmentsEnabled={!brand.isPending || brand.isError}
+                focusSignal={focusSignal}
+                collapseSignal={collapseSignal}
+                suggestionHost={listHost}
+                onModeChange={setMode}
+                onBodyChange={setBody}
+                onThenStatusChange={setThenStatusId}
+                onAttach={(files) => {
+                  void attach(files);
+                }}
+                onRemoveAttachment={(attachmentId) => {
+                  setAttachments((held) => held.filter((row) => row.id !== attachmentId));
+                }}
+                onSend={() => {
+                  queueSend();
+                }}
+                onSendAndClose={
+                  closeStatus === null
+                    ? undefined
+                    : () => {
+                        queueSend({ close: true });
+                      }
+                }
+                email={ticketEmail.composer}
+                meta={ticketMeta.composer}
+                telegram={
+                  telegramChat === undefined
+                    ? undefined
+                    : { bot: telegramChat.bot.username, username: telegramChat.username }
+                }
+                macrosOpen={picking}
+                inline={canWrite ? composerInline : undefined}
+                assist={assist.menu}
+                suggestion={assist.composerCard}
+                {...(canWrite
+                  ? {
+                      onOpenMacros: () => {
+                        setPicking((open) => !open);
+                      },
+                    }
+                  : {})}
+                onBodyFocus={() => {
+                  if (tracking && timerWithComposer && canWrite && !timer.running) {
+                    timer.start();
+                  }
+                }}
+              />
+            </Box>
           </Box>
         ) : null}
       </Box>

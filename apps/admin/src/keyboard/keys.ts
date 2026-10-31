@@ -52,6 +52,9 @@ const fromCode = (code: string | undefined, shift: boolean): string | null => {
   if (code === 'Backslash') {
     return '\\';
   }
+  if (code === 'BracketLeft') {
+    return '[';
+  }
   return null;
 };
 

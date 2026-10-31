@@ -135,7 +135,7 @@ describe('the ? sheet', () => {
     // Settings holds Your account, which every role has (M14-21).
     expect(terms('Go to')).toContain('Settings');
     expect(terms('Go to')).toContain('Reports');
-    expect(terms('List')).toEqual(['Next ticket', 'Previous ticket']);
+    expect(terms('List')).toEqual(['Next ticket', 'Previous ticket', 'Hide or show the list']);
   });
 });
 
@@ -394,6 +394,31 @@ describe('the ticket shortcuts', () => {
       const { ticket } = await ticketsApi.ticket('brand', MOCK_TICKET_REFUND);
       expect(ticket.status.id).toBe(MOCK_STATUS_CLOSED);
     });
+  });
+
+  it('puts the list column away with [ and brings it back, on the key or the button', async () => {
+    const { user } = await openRefund();
+    const list = (): HTMLElement | null => screen.queryByRole('region', { name: 'Ticket list' });
+    expect(list()).not.toBeNull();
+
+    await user.keyboard('[[');
+    expect(list()).toBeNull();
+
+    await user.keyboard('[[');
+    expect(list()).not.toBeNull();
+
+    await user.keyboard('[[');
+    await user.click(screen.getByRole('button', { name: 'Show the ticket list' }));
+    expect(list()).not.toBeNull();
+  });
+
+  it('leaves [ typed into the composer alone', async () => {
+    const { user } = await openRefund();
+
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    await user.keyboard('[[');
+
+    expect(screen.queryByRole('region', { name: 'Ticket list' })).not.toBeNull();
   });
 
   it('leaves ⌘Enter in the list’s search box alone', async () => {

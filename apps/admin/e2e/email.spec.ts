@@ -180,6 +180,9 @@ test.describe('the ticket view by email', () => {
     await openTicket(page, locale);
 
     const composer = page.getByRole('form', { name: t('tickets:composer.label') });
+    // M14-19: the recipients are behind the one-line summary until it is opened.
+    await expect(composer.getByRole('combobox', { name: t('tickets:email.from') })).toBeHidden();
+    await composer.getByRole('button', { name: /billing@helpdock\.io/ }).click();
     await expect(composer.getByRole('combobox', { name: t('tickets:email.from') })).toBeVisible();
     await expect(composer.getByText('mona@example.com')).toBeVisible();
     await expect(composer.getByText(t('tickets:email.signatureCaption'))).toBeVisible();

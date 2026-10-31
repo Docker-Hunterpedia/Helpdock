@@ -81,7 +81,6 @@
   "header": {
     "label": "Ticket header",
     "more": "More actions",
-    "macro": "Macro",
     "viewingOne": "{{name}} is viewing",
     "viewingMany": "{{name}} and {{others}} others are viewing",
     "details": "Details",
@@ -205,6 +204,10 @@
     "attach": "Attach a file",
     "attachFiles": "Choose files to attach",
     "canned": "Macros and canned",
+    "macros": "Macros",
+    "summary": "To {{name}} · from {{from}}",
+    "summaryTo": "To {{name}}",
+    "summaryCc": "Cc {{n}}",
     "thenSetStatus": "Then set status",
     "keepStatus": "Leave the status",
     "suggestion": "Suggested reply",
@@ -434,7 +437,8 @@
         "close": "Close",
         "select": "Select the focused ticket",
         "selectRange": "Select a range of tickets",
-        "clearSelection": "Clear the selection"
+        "clearSelection": "Clear the selection",
+        "toggleColumn": "Hide or show the list"
       },
       "ticket": {
         "reply": "Reply",

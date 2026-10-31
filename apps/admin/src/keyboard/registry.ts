@@ -82,6 +82,8 @@ export const SHORTCUTS = [
     keys: [KEY('Escape')],
     permission: 'ticket:write',
   },
+  // M14-19. Puts the list column away for a wider thread, and brings it back.
+  { id: 'list.toggleColumn', scope: 'list', keys: [KEY('[')] },
   // Ticket
   { id: 'ticket.reply', scope: 'ticket', keys: [KEY('r')], permission: 'ticket:write' },
   { id: 'ticket.note', scope: 'ticket', keys: [KEY('n')], permission: 'ticket:write' },

@@ -1029,7 +1029,10 @@ tenant admin typed. What the code checks on every callback:
 identity yet) needs Microsoft to vouch for the address: the token must carry the
 `email` claim with **`xms_edov` as the JSON boolean `true`** (the email's domain
 owner is verified) **and `acct` as the number `0`** (a member of the tenant,
-never a guest). Strings such as `"true"` or `"0"` do not count. Without either,
+never a guest). Strings such as `"true"` or `"0"` do not count. The `idp` claim,
+if the token has one, must be the issuer or `https://sts.windows.net/<tenant
+GUID>/`: a member whose account lives in another tenant (a B2B user made a
+member) is not vouched for. Without any of these,
 or without the claim at all, the answer is `oauth-link-required`, as for GitHub:
 sign in another way once and connect Microsoft from the security page. A bound
 account signs in whatever the token says its address is, and the sign-in name

@@ -16,6 +16,8 @@ import {
   ticketMessages,
   ticketStatuses,
   tickets,
+  userBrandRoles,
+  users,
 } from '@helpdock/db';
 import type { TicketFieldFilter, TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
@@ -400,6 +402,37 @@ export class TicketRepository {
       .select({ id: contacts.id, name: contacts.name })
       .from(contacts)
       .where(inArray(contacts.id, [...new Set(contactIds)]));
+
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  /**
+   * The name of each assignee a page of tickets names, keyed by user id
+   * (M14-20): one read for the page, so a row can draw initials without the
+   * staff list, which an Agent may not read. Only people holding a role in this
+   * brand are returned; a former member is simply absent and the row draws a
+   * neutral disc. `user_brand_roles` is brand-scoped, so the brand filter is the
+   * policy's, repeated for the reader.
+   */
+  async assigneeNames(
+    tx: DbTransaction,
+    brandId: string,
+    userIds: readonly string[],
+  ): Promise<ReadonlyMap<string, string>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await tx
+      .select({ id: users.id, name: users.name })
+      .from(userBrandRoles)
+      .innerJoin(users, eq(users.id, userBrandRoles.userId))
+      .where(
+        and(
+          eq(userBrandRoles.brandId, brandId),
+          inArray(userBrandRoles.userId, [...new Set(userIds)]),
+        ),
+      );
 
     return new Map(rows.map((row) => [row.id, row.name]));
   }

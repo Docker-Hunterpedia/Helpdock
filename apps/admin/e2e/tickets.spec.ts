@@ -107,8 +107,9 @@ test.describe('the ticket list', () => {
 
     const row = page.getByRole('link', { name: /HD-1043/ });
     await expect(row).toBeVisible();
-    // No separator and no stand-in: the caption is the reference alone.
-    await expect(row.locator('p').last()).toHaveText('HD-1043');
+    // No stand-in for the contact: the status follows the reference directly.
+    const open = locale === 'ar' ? 'مفتوحة' : 'Open';
+    await expect(row.locator('p').last()).toHaveText(new RegExp(`^HD-1043\\s*·\\s*${open}$`));
   });
 
   test('says which conversations the assistant paused and which it answered (M7-06)', async ({

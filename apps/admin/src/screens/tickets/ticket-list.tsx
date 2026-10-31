@@ -21,6 +21,7 @@ import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
+import { singleStatusOf } from './single-status.js';
 import { SortMenu } from './sort-menu.tsx';
 import { TicketRow } from './ticket-row.tsx';
 import { TicketListSkeleton } from './ticket-skeletons.tsx';
@@ -168,6 +169,7 @@ export function TicketList({
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
   const summary = useFilterSummary({ statuses, departments, tags, staff, fields });
+  const viewStatusId = singleStatusOf(filters, statuses);
   const chips = summary.chips(filters);
 
   const emptyAction =
@@ -378,6 +380,8 @@ export function TicketList({
                   now={now}
                   search={linkSearch}
                   pinnedField={pinnedField}
+                  assigneeName={ticket.assignee?.name ?? null}
+                  hideStatus={ticket.status.id === viewStatusId}
                   selection={
                     selection === undefined
                       ? undefined

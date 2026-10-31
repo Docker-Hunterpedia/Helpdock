@@ -3,6 +3,7 @@ import { ChevronLeft, PanelRightOpen } from 'lucide-react';
 import type { ReactNode, Ref } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
 
 /**
  * The bar over a pushed ticket below 1024 px (`Admin/Tickets-Narrow`, M14-22):
@@ -35,6 +36,9 @@ export function NarrowBar({
         borderBlockEnd: `1px solid ${tokens['border.default']}`,
       }}
     >
+      <Box component="h1" sx={visuallyHidden}>
+        {viewName}
+      </Box>
       <Button
         ref={backRef}
         variant="text"

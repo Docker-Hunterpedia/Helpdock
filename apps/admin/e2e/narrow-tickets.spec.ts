@@ -146,19 +146,50 @@ test.describe('the ticket workspace at 768 px', () => {
     await expect(list).toBeVisible();
     await expect(page.getByRole('button', { name: t('tickets:list.open') })).toHaveCount(0);
 
+    const shown = async (): Promise<string> =>
+      (await reference.textContent({ timeout: 1000 }).catch(() => null)) ?? '';
     await page.keyboard.press('j');
-    await expect(header).toBeVisible();
-    const first = await reference.textContent();
+    await expect.poll(shown).toMatch(/HD-/);
+    const first = await shown();
     await page.keyboard.press('j');
-    await expect(reference).not.toHaveText(first ?? '');
+    await expect.poll(shown).toMatch(/HD-/);
+    await expect.poll(shown).not.toBe(first);
+    const second = await shown();
     await page.keyboard.press('k');
-    await expect(reference).toHaveText(first ?? '');
+    await expect.poll(shown).toBe(first);
+    await page.keyboard.press('j');
+    await expect.poll(shown).toBe(second);
 
     await back.click();
     await expect(list).toBeVisible();
-    // Focus is back on the row that was open, and Enter follows its link.
-    await expect(page.getByRole('link', { name: new RegExp(first ?? '') })).toBeFocused();
+    // Focus is on the row of the ticket last open (not the first), and Enter follows its link.
+    const row = page.getByRole('link', { name: new RegExp(second ?? '') });
+    await expect(row).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(header).toBeVisible();
+  });
+
+  test('falls back to the search box when the row it opened from is not loaded', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const { t, list, header } = await open(page, locale);
+    await page.getByRole('link', { name: /HD-1042/ }).click();
+    await expect(header).toBeVisible();
+    // A link to the ticket under a search that does not list it, as a deep link has.
+    await page.evaluate((view) => {
+      window.history.pushState({}, '', `${window.location.pathname}?view=${view}`);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, '0192c3f0-1a2b-7c3d-8e4f-0000000000e2');
+    await expect(header).toBeVisible();
+    await page
+      .getByRole('button', {
+        name: t('tickets:narrow.back', { view: t('tickets:views.unassigned') }),
+      })
+      .click();
+    await expect(list).toBeVisible();
+    await expect(
+      page.getByRole('searchbox', { name: t('tickets:list.searchLabel') }),
+    ).toBeFocused();
   });
 });

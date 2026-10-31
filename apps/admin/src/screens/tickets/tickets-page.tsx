@@ -225,15 +225,15 @@ export function TicketsPage(): ReactNode {
   // The list was asked for from a ticket and has now come back; later returns
   // to it, by the back button, should not repeat the request.
   useEffect(() => {
-    if (layout === 'ticket') {
+    if (layout === 'ticket' && intent === null) {
       setOpenFiltersToken(null);
       setFocusSearchToken(null);
     }
-  }, [layout]);
+  }, [layout, intent]);
 
   // A pushed ticket takes focus to its back button when the row that opened it
-  // has gone, and the list gives it back to that row (without scrolling it).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `layout` is the trigger; `ticketId` is read at that moment.
+  // has gone, and the list gives it back to the row of the ticket last open
+  // (scrolled into view only if needed), else to the search box, never the page.
   useEffect(() => {
     if (layout === 'ticket') {
       lastOpened.current = ticketId;
@@ -248,10 +248,15 @@ export function TicketsPage(): ReactNode {
         const row = document.querySelector(`[data-ticket-id="${id}"] a`);
         if (row instanceof HTMLElement) {
           row.focus({ preventScroll: true });
+          row.scrollIntoView({ block: 'nearest' });
+        } else {
+          setFocusSearchToken(Date.now());
         }
       });
+    } else if (layout === 'split') {
+      lastOpened.current = null;
     }
-  }, [layout]);
+  }, [layout, ticketId]);
 
   const query = useMemo(() => queryOf(filters), [filters]);
 
@@ -327,6 +332,7 @@ export function TicketsPage(): ReactNode {
   useEffect(() => {
     setSelection(NO_SELECTION);
     setCapped(false);
+    listScroll.current = 0;
   }, [listKey]);
 
   // A row that left the list (closed elsewhere, moved) is no longer selected,
@@ -469,22 +475,24 @@ export function TicketsPage(): ReactNode {
     'list.previous': () => {
       move(-1);
     },
-    'list.select': canWrite
-      ? () => {
-          const id = focusedRow();
-          if (id !== null && latest.current.listedIds.includes(id)) {
-            change(toggle(latest.current.selection, id));
+    'list.select':
+      canWrite && layout !== 'ticket'
+        ? () => {
+            const id = focusedRow();
+            if (id !== null && latest.current.listedIds.includes(id)) {
+              change(toggle(latest.current.selection, id));
+            }
           }
-        }
-      : null,
-    'list.selectRange': canWrite
-      ? () => {
-          const id = focusedRow();
-          if (id !== null) {
-            change(range(latest.current.selection, id, latest.current.listedIds));
+        : null,
+    'list.selectRange':
+      canWrite && layout !== 'ticket'
+        ? () => {
+            const id = focusedRow();
+            if (id !== null) {
+              change(range(latest.current.selection, id, latest.current.listedIds));
+            }
           }
-        }
-      : null,
+        : null,
     'list.toggleColumn': wideList
       ? () => {
           setListHidden((hidden) => {
@@ -495,7 +503,7 @@ export function TicketsPage(): ReactNode {
       : null,
     // Attached only while something is ticked, so Esc is the page's otherwise.
     'list.clearSelection':
-      canWrite && selection.ids.length > 0
+      canWrite && layout !== 'ticket' && selection.ids.length > 0
         ? () => {
             const active = document.activeElement;
             const inBar = active instanceof Element && active.closest('[role="toolbar"]') !== null;

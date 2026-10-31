@@ -122,4 +122,16 @@ describe('the ticket workspace below 1024 px', () => {
 
     expect(await screen.findByRole('region', { name: 'Ticket header' })).toBeVisible();
   });
+
+  it('leaves the selection alone from a pushed ticket: x and Esc do nothing there', async () => {
+    const { user } = await renderNarrow();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select HD-1041' }));
+    await user.click(screen.getByRole('link', { name: /HD-1042/ }));
+    await screen.findByRole('region', { name: 'Ticket header' });
+    await user.keyboard('x');
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Back to All tickets' }));
+
+    expect(await screen.findByText(/^1 of \d+ selected/)).toBeVisible();
+  });
 });

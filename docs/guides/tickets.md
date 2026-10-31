@@ -1334,10 +1334,14 @@ opens it over the list, under a bar with **Back to** the view you came from (for
 example "Back to My open"; the arrow points the other way in Arabic) and a
 **Details** button, which opens the ticket's details as a drawer from the
 inline end. **Back**, or your browser's back, returns to the list where you left
-it, scrolled to the same place, with the ticket you read focused. Ticking rows,
+it, scrolled to the same place, with the last ticket you read focused (scrolled
+into view if it was off screen). Ticking rows,
 the bulk bar and `j`, `k`, `Enter`, `x` and `/` work as they do on a wide
-screen (`/` and a filter chosen from the sidebar bring the list back first);
-`[` does nothing, since there is no second column to put away. Phone layouts
+screen while the list shows (`/` and a filter chosen from the sidebar bring the
+list back first). With a ticket open, `x`, `Shift`+`x` and `Esc` do nothing, so
+a selection you cannot see is never changed; `[` does nothing either, since
+there is no second column to put away. **Back** adds a history entry (it is a
+step to the list, not an undo), so the browser's back then returns to the ticket. Phone layouts
 under 600 px are a later milestone (M17-07).
 
 ### The compact composer and the 1280 px layout (M14-19)

@@ -93,6 +93,8 @@ const MIGRATION_TAGS = [
   '0072_unsubscribe_after_resubscribe',
   '0073_setup_checklist',
   '0074_custom_field_types',
+  '0077_canned_shortcuts',
+||||||| parent of 4e61d43b (feat(macros): shortcuts, fallbacks, save-time placeholder check and composer lists (M14-14))
 ];
 
 const hasDocker = await promisify(execFile)('docker', ['info', '--format', '{{.ServerVersion}}'], {

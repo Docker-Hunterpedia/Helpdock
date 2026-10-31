@@ -688,6 +688,127 @@ describe.skipIf(!hasDocker)('macros and canned responses', () => {
     });
   });
 
+  describe('shortcuts, fallbacks and use counts (M14-14)', () => {
+    const fees = {
+      kind: 'canned',
+      name: 'Fees',
+      scope: 'shared',
+      bodies: { en: 'Hi {{contact.first_name|there}}, fees are shown at checkout.', ar: '' },
+    };
+
+    it('refuses a second item with a shortcut the brand’s shared item has, and names the reason', async () => {
+      const first = await createMacro(ada, { ...fees, shortcut: 'Fees' });
+      expect(first.shortcut).toBe('fees');
+
+      const second = await call<Refusal>('POST', `${brandPath()}/macros`, ada, {
+        ...fees,
+        name: 'Fees again',
+        shortcut: 'fees',
+      });
+      expect(second.status).toBe(409);
+      expect(second.body.error.ticketing?.reason).toBe('shortcut-taken');
+
+      // An agent’s personal item meets the brand’s shared shortcut too.
+      const personal = await call<Refusal>('POST', `${brandPath()}/macros`, sam, {
+        ...fees,
+        name: 'My fees',
+        scope: 'personal',
+        shortcut: 'fees',
+      });
+      expect(personal.status).toBe(409);
+    });
+
+    it('lets two departments use one shortcut but not a department and the whole brand', async () => {
+      await createMacro(ada, { ...fees, name: 'Hours S', departmentId: support, shortcut: 'hrs' });
+      await createMacro(ada, { ...fees, name: 'Hours B', departmentId: billing, shortcut: 'hrs' });
+
+      const clash = await call('POST', `${brandPath()}/macros`, ada, {
+        ...fees,
+        name: 'Hours all',
+        shortcut: 'hrs',
+      });
+      expect(clash.status).toBe(409);
+    });
+
+    it('keeps the database index as the backstop for two saves at once', async () => {
+      await createMacro(ada, { ...fees, name: 'Race', shortcut: 'race' });
+
+      await expect(
+        withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.insert(cannedResponses).values({
+            brandId: seeded.brandId,
+            kind: 'canned',
+            name: 'Race too',
+            bodies: { en: 'x' },
+            shortcut: 'race',
+          }),
+        ),
+      ).rejects.toThrow();
+    });
+
+    it('refuses an unknown placeholder and an unclosed {{ on save, naming each', async () => {
+      const typo = await call<{ error: { message?: string } }>(
+        'POST',
+        `${brandPath()}/macros`,
+        ada,
+        { ...fees, name: 'Typo', bodies: { en: 'Hi {{agent.nmae}}, see {{', ar: '' } },
+      );
+      expect(typo.status).toBe(400);
+      expect(JSON.stringify(typo.body)).toContain('{{agent.nmae}}');
+      expect(JSON.stringify(typo.body)).toContain('Unclosed');
+
+      const created = await createMacro(ada, { ...fees, name: 'Fine' });
+      const patch = await call('PATCH', `${brandPath()}/macros/${created.id}`, ada, {
+        bodies: { en: '{{nope}}', ar: '' },
+      });
+      expect(patch.status).toBe(400);
+    });
+
+    it('renders a fallback for a value the contact has not got', async () => {
+      const contact = await call<ContactDetail>('POST', `${brandPath()}/contacts`, ada, {
+        name: '',
+        identities: [{ kind: 'email', value: 'anon.fees@example.com' }],
+      });
+      const ticket = await createTicket(support, contact.body.id);
+      const macro = await createMacro(ada, { ...fees, name: 'Fallback' });
+
+      const rendered = await call<RenderedMacro>(
+        'GET',
+        `${brandPath()}/tickets/${ticket.ticket.id}/macros/${macro.id}/render`,
+        ada,
+      );
+      expect(rendered.body.text).toBe('Hi there, fees are shown at checkout.');
+    });
+
+    it('counts a use when the item is applied, and only then', async () => {
+      const ticket = await createTicket(support);
+      const macro = await createMacro(sam, { ...fees, name: 'Counted', scope: 'personal' });
+      expect(macro.useCount).toBe(0);
+
+      await call(
+        'GET',
+        `${brandPath()}/tickets/${ticket.ticket.id}/macros/${macro.id}/render`,
+        sam,
+      );
+      for (let index = 0; index < 2; index += 1) {
+        const run = await call(
+          'POST',
+          `${brandPath()}/tickets/${ticket.ticket.id}/macro-runs`,
+          sam,
+          {
+            macroId: macro.id,
+            actions: [],
+            reply: { kind: 'public', bodyHtml: '<p>Hi</p>', clientId: uuidv7() },
+          },
+        );
+        expect(run.status).toBe(201);
+      }
+
+      const list = await call<MacroList>('GET', `${brandPath()}/macros`, sam);
+      expect(list.body.macros.find((row) => row.id === macro.id)?.useCount).toBe(2);
+    });
+  });
+
   describe('the audit trail', () => {
     it('records a shared change with where the request came from', async () => {
       const created = await createMacro(ada, {

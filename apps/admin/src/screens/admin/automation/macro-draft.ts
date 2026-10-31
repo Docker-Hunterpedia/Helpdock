@@ -5,6 +5,9 @@ import {
   type MacroCreateRequest,
   type MacroKind,
   type MacroScope,
+  macroShortcutSchema,
+  type PlaceholderProblem,
+  placeholderProblems,
   snoozePresetKeySchema,
   type TicketPriority,
 } from '@helpdock/schemas';
@@ -33,6 +36,8 @@ export interface MacroDraft {
   readonly departmentId: string;
   readonly en: string;
   readonly ar: string;
+  /** M14-14: what is typed after `/`; '' is none. Held without the slash. */
+  readonly shortcut: string;
   readonly actions: readonly DraftAction[];
 }
 
@@ -43,6 +48,7 @@ export const emptyDraft = (kind: MacroKind, scope: MacroScope): MacroDraft => ({
   departmentId: '',
   en: '',
   ar: '',
+  shortcut: '',
   actions: [],
 });
 
@@ -75,6 +81,7 @@ export const draftOf = (macro: Macro): MacroDraft => ({
   departmentId: macro.departmentId ?? '',
   en: macro.bodies.en,
   ar: macro.bodies.ar,
+  shortcut: macro.shortcut ?? '',
   actions: macro.actions.map((action) => ({ type: action.type, value: selectValueOf(action) })),
 });
 
@@ -119,7 +126,27 @@ export type DraftProblem =
   | 'englishRequired'
   | 'nothingToDo'
   | 'actionIncomplete'
-  | 'arabicWithoutEnglish';
+  | 'arabicWithoutEnglish'
+  | 'shortcutInvalid'
+  | 'placeholders';
+
+/** The word as typed in the field: no slash, no spaces at the ends. */
+export const cleanShortcut = (raw: string): string => raw.trim().replace(/^\/+/, '');
+
+/** Whether a non-empty shortcut would be accepted. */
+export const shortcutProblem = (raw: string): boolean => {
+  const word = cleanShortcut(raw);
+
+  return word !== '' && !macroShortcutSchema.safeParse(word).success;
+};
+
+/** The placeholder problems of each reply, with the language they are in. */
+export const draftPlaceholderProblems = (
+  draft: Pick<MacroDraft, 'en' | 'ar'>,
+): readonly { readonly locale: 'en' | 'ar'; readonly problem: PlaceholderProblem }[] =>
+  (['en', 'ar'] as const).flatMap((locale) =>
+    placeholderProblems(draft[locale]).map((problem) => ({ locale, problem })),
+  );
 
 export const problemOf = (draft: MacroDraft): DraftProblem | null => {
   if (draft.name.trim() === '') {
@@ -137,20 +164,34 @@ export const problemOf = (draft: MacroDraft): DraftProblem | null => {
   if (draft.en.trim() === '' && draft.ar.trim() !== '') {
     return 'arabicWithoutEnglish';
   }
+  if (shortcutProblem(draft.shortcut)) {
+    return 'shortcutInvalid';
+  }
+  if (draftPlaceholderProblems(draft).length > 0) {
+    return 'placeholders';
+  }
 
   return null;
 };
 
 /** The create request, once {@link problemOf} has nothing to say. */
-export const requestOf = (draft: MacroDraft): MacroCreateRequest => ({
-  kind: draft.kind,
-  name: draft.name.trim(),
-  scope: draft.scope,
-  departmentId: draft.scope === 'personal' || draft.departmentId === '' ? null : draft.departmentId,
-  bodies: { en: draft.en, ar: draft.ar },
-  actions:
-    draft.kind === 'canned' ? [] : draft.actions.map(actionOf).filter((action) => action !== null),
-});
+export const requestOf = (draft: MacroDraft): MacroCreateRequest => {
+  const shortcut = cleanShortcut(draft.shortcut);
+
+  return {
+    kind: draft.kind,
+    name: draft.name.trim(),
+    scope: draft.scope,
+    departmentId:
+      draft.scope === 'personal' || draft.departmentId === '' ? null : draft.departmentId,
+    bodies: { en: draft.en, ar: draft.ar },
+    shortcut: shortcut === '' ? null : macroShortcutSchema.parse(shortcut),
+    actions:
+      draft.kind === 'canned'
+        ? []
+        : draft.actions.map(actionOf).filter((action) => action !== null),
+  };
+};
 
 /** A copy for the Duplicate button: the same item, not yet saved, named so. */
 export const duplicateOf = (draft: MacroDraft, copyName: string): MacroDraft => ({

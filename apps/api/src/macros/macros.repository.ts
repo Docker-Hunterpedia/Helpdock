@@ -14,7 +14,7 @@ import {
   users,
 } from '@helpdock/db';
 import type { MacroKind, MacroLocale } from '@helpdock/schemas';
-import { and, asc, count, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 
 /**
  * Every statement the macro endpoints make (M3-06).
@@ -54,6 +54,23 @@ export class MacrosRepository {
     return rows[0];
   }
 
+  /** The items this transaction can read that answer to `shortcut`, other than `exceptId`. */
+  async withShortcut(
+    tx: DbTransaction,
+    shortcut: string,
+    exceptId: string | null,
+  ): Promise<CannedResponse[]> {
+    return tx
+      .select()
+      .from(cannedResponses)
+      .where(
+        and(
+          eq(cannedResponses.shortcut, shortcut),
+          exceptId === null ? undefined : ne(cannedResponses.id, exceptId),
+        ),
+      );
+  }
+
   async count(tx: DbTransaction): Promise<number> {
     const [row] = await tx.select({ value: count() }).from(cannedResponses);
 
@@ -88,11 +105,15 @@ export class MacrosRepository {
     await tx.delete(cannedResponses).where(eq(cannedResponses.id, id));
   }
 
-  /** "Last used" on the list. Not `updated_at`: using an item is not editing it. */
+  /** "Last used" and the use count on the list. Not `updated_at`: using an item is not editing it. */
   async touchUsed(tx: DbTransaction, id: string, at: Date): Promise<void> {
     await tx
       .update(cannedResponses)
-      .set({ lastUsedAt: at, updatedAt: sql`${cannedResponses.updatedAt}` })
+      .set({
+        lastUsedAt: at,
+        useCount: sql`${cannedResponses.useCount} + 1`,
+        updatedAt: sql`${cannedResponses.updatedAt}`,
+      })
       .where(eq(cannedResponses.id, id));
   }
 

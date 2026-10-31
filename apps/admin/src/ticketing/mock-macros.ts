@@ -5,8 +5,10 @@ import {
   type MacroListQuery,
   type MacroUpdateRequest,
   macroShapeProblem,
+  placeholderProblemSentence,
 } from '@helpdock/schemas';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
+import { TicketingError } from './api.js';
 
 /**
  * The macros and canned responses the mock adapters share (M3-06): the rows of
@@ -36,8 +38,10 @@ const macro = (overrides: Partial<Macro> & Pick<Macro, 'id' | 'name' | 'kind'>):
   scope: 'shared',
   departmentId: null,
   bodies: { en: '', ar: '' },
+  shortcut: null,
   actions: [],
   lastUsedAt: null,
+  useCount: 0,
   updatedAt: '2026-09-24T10:12:00.000Z',
   updatedById: '0192c3f0-1a2b-7c3d-8e4f-00000000000b',
   canEdit: true,
@@ -49,6 +53,8 @@ const seed = (now: number): Macro[] => [
     id: MOCK_MACRO_REFUND,
     kind: 'macro',
     name: 'Refund issued',
+    shortcut: 'refund',
+    useCount: 42,
     departmentId: BILLING?.id ?? null,
     bodies: {
       en: 'Hi {{contact.first_name}},\n\nWe issued your refund for {{ticket.number}} today. Card refunds take 3 to 5 business days to appear on your statement.\n\n{{agent.first_name}}, {{brand.name}}',
@@ -65,6 +71,8 @@ const seed = (now: number): Macro[] => [
     id: MOCK_MACRO_SHIPPING,
     kind: 'canned',
     name: 'Shipping fees explained',
+    shortcut: 'shipping',
+    useCount: 7,
     bodies: {
       en: 'Hi {{contact.first_name}}, the charge you saw at delivery is the carrier’s customs fee, not a shipping fee from us.',
       ar: 'مرحباً {{contact.first_name}}، الرسوم التي رأيتها عند الاستلام هي رسوم جمركية تفرضها شركة الشحن، وليست رسوم شحن منّا.',
@@ -86,6 +94,7 @@ const seed = (now: number): Macro[] => [
     id: '0192c3f0-1a2b-7c3d-8e4f-000000000704',
     kind: 'macro',
     name: 'Hand to finance',
+    shortcut: 'fin',
     departmentId: BILLING?.id ?? null,
     actions: [
       { type: 'set_priority', priority: 'high' },
@@ -120,6 +129,8 @@ const seed = (now: number): Macro[] => [
     id: MOCK_MACRO_PERSONAL,
     kind: 'canned',
     name: 'My follow-up line',
+    shortcut: 'later',
+    useCount: 3,
     scope: 'personal',
     bodies: { en: 'I will check back with you tomorrow.', ar: '' },
     updatedById: MOCK_SELF_ID,
@@ -165,6 +176,7 @@ export class MockMacros {
   create(request: MacroCreateRequest): Macro {
     const departmentId = request.scope === 'personal' ? null : request.departmentId;
     this.#assertShape({ ...request, departmentId });
+    this.#assertShortcutFree(request.shortcut, { scope: request.scope, departmentId }, null);
     this.#next += 1;
     const created = macro({
       ...request,
@@ -186,6 +198,7 @@ export class MockMacros {
       ...(request.name === undefined ? {} : { name: request.name }),
       ...(request.bodies === undefined ? {} : { bodies: request.bodies }),
       ...(request.actions === undefined ? {} : { actions: request.actions }),
+      ...(request.shortcut === undefined ? {} : { shortcut: request.shortcut }),
       scope,
       departmentId:
         scope === 'personal' ? null : (request.departmentId ?? current.departmentId ?? null),
@@ -193,6 +206,7 @@ export class MockMacros {
       updatedById: MOCK_SELF_ID,
     };
     this.#assertShape(next);
+    this.#assertShortcutFree(next.shortcut, next, id);
     this.#rows = this.#rows.map((row) => (row.id === id ? next : row));
 
     return next;
@@ -205,7 +219,9 @@ export class MockMacros {
 
   touch(id: string): void {
     this.#rows = this.#rows.map((row) =>
-      row.id === id ? { ...row, lastUsedAt: new Date().toISOString() } : row,
+      row.id === id
+        ? { ...row, lastUsedAt: new Date().toISOString(), useCount: row.useCount + 1 }
+        : row,
     );
   }
 
@@ -218,8 +234,32 @@ export class MockMacros {
     return row;
   }
 
-  #assertShape(shape: Parameters<typeof macroShapeProblem>[0]): void {
-    const problem = macroShapeProblem(shape);
+  /** The api's rule: no other item offered in the same place answers to the shortcut. */
+  #assertShortcutFree(
+    shortcut: string | null,
+    shape: Pick<Macro, 'scope' | 'departmentId'>,
+    exceptId: string | null,
+  ): void {
+    const clash = this.#rows.some(
+      (row) =>
+        row.id !== exceptId &&
+        shortcut !== null &&
+        row.shortcut === shortcut &&
+        (row.scope === 'personal' ||
+          shape.scope === 'personal' ||
+          row.departmentId === null ||
+          shape.departmentId === null ||
+          row.departmentId === shape.departmentId),
+    );
+    if (clash) {
+      throw new TicketingError('shortcut-taken');
+    }
+  }
+
+  #assertShape(
+    shape: Parameters<typeof macroShapeProblem>[0] & Pick<MacroCreateRequest, 'bodies'>,
+  ): void {
+    const problem = macroShapeProblem(shape) ?? placeholderProblemSentence(shape.bodies);
     if (problem !== null) {
       throw new Error(problem);
     }

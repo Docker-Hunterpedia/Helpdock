@@ -155,6 +155,7 @@
     "slaSettingsSaved": "SLA settings saved",
     "macroChanged": "That macro changed after you applied it. Apply it again.",
     "pinConflict": "The pinned field changed at the same moment. Try again.",
+    "shortcutTaken": "Another saved reply or macro already uses that shortcut. Pick a different one.",
     "statusHasClosedTickets": "This status still holds closed tickets. Move or merge them first.",
     "statusChangeNeedsConfirmation": "The number of tickets changed. Review the confirmation and try again."
   },

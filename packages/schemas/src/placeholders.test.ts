@@ -42,6 +42,40 @@ describe('renderSegments', () => {
   });
 });
 
+describe('fallbacks (M14-14)', () => {
+  const sparse = new Map([
+    ['contact.first_name', ''],
+    ['ticket.number', 'HD-1042'],
+  ]);
+
+  it('renders the words after | when the value is empty', () => {
+    expect(renderTemplate('Hi {{contact.first_name|there}},', sparse).text).toBe('Hi there,');
+    expect(renderTemplate('Hi {{ contact.first_name | there friend }},', sparse).text).toBe(
+      'Hi there friend,',
+    );
+  });
+
+  it('renders the value, not the fallback, when there is one', () => {
+    expect(renderTemplate('Hi {{contact.first_name|there}},', values).text).toBe('Hi Mona,');
+  });
+
+  it('uses the fallback for a name the subject cannot fill, without calling it unknown', () => {
+    expect(renderSegments('{{contact.email|your email}}', values)).toEqual({
+      segments: [{ text: 'your email', placeholder: 'contact.email' }],
+      unknown: [],
+    });
+  });
+
+  it('still renders an empty value as nothing when no fallback is given', () => {
+    expect(renderTemplate('Hi {{contact.first_name}}!', sparse).text).toBe('Hi !');
+    expect(renderTemplate('Hi {{contact.first_name|}}!', sparse).text).toBe('Hi !');
+  });
+
+  it('inserts a fallback literally, never expanding it', () => {
+    expect(renderTemplate('{{contact.first_name|$& x}}', sparse).text).toBe('$& x');
+  });
+});
+
 describe('renderTemplate', () => {
   it('is the segments joined', () => {
     expect(renderTemplate('Re: {{ticket.number}}', values)).toEqual({

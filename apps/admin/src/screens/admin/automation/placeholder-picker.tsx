@@ -30,11 +30,21 @@ const GROUPS: readonly { key: 'contact' | 'ticket'; names: readonly CannedPlaceh
 export interface PlaceholderPickerProps {
   /** The sample each placeholder shows beside it. */
   readonly samples: ReadonlyMap<string, string>;
+  /** Offer only these (the composer: the ones this ticket has a value for). Default: every placeholder. */
+  readonly names?: readonly CannedPlaceholder[] | undefined;
+  /** The line under the list. Default: "Inserted at the cursor. Sample values shown." */
+  readonly hint?: string | undefined;
   onPick(name: CannedPlaceholder): void;
   onClose(): void;
 }
 
-export function PlaceholderPicker({ samples, onPick, onClose }: PlaceholderPickerProps): ReactNode {
+export function PlaceholderPicker({
+  samples,
+  names,
+  hint,
+  onPick,
+  onClose,
+}: PlaceholderPickerProps): ReactNode {
   const t = useT();
   const tokens = useSemanticTokens();
   const listId = useId();
@@ -46,9 +56,10 @@ export function PlaceholderPicker({ samples, onPick, onClose }: PlaceholderPicke
     ...group,
     names: group.names.filter(
       (name) =>
-        needle === '' ||
-        name.includes(needle) ||
-        (samples.get(name) ?? '').toLowerCase().includes(needle),
+        (names === undefined || names.includes(name)) &&
+        (needle === '' ||
+          name.includes(needle) ||
+          (samples.get(name) ?? '').toLowerCase().includes(needle)),
     ),
   })).filter((group) => group.names.length > 0);
   const flat = groups.flatMap((group) => group.names);
@@ -148,7 +159,7 @@ export function PlaceholderPicker({ samples, onPick, onClose }: PlaceholderPicke
         ))}
       </Box>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-        {t('macros:editor.placeholders.hint')}
+        {hint ?? t('macros:editor.placeholders.hint')}
       </Typography>
     </Paper>
   );

@@ -206,7 +206,19 @@
     "thenSetStatus": "Then set status",
     "keepStatus": "Leave the status",
     "suggestion": "Suggested reply",
-    "insert": "Insert"
+    "insert": "Insert",
+    "suggest": {
+      "savedReplies": "Saved replies and macros",
+      "hint": "Tab or Enter inserts · Esc closes",
+      "none": "No saved reply or macro matches that.",
+      "count_one": "{{count}} saved reply or macro",
+      "count_other": "{{count}} saved replies and macros",
+      "you": "you",
+      "brand": "Brand",
+      "used_one": "Used {{count}} time · {{who}}",
+      "used_other": "Used {{count}} times · {{who}}",
+      "placeholderHint": "Choosing one inserts its value for this ticket."
+    }
   },
   "details": {
     "label": "Ticket details",

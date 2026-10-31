@@ -152,3 +152,106 @@ describe('the editor', () => {
     });
   });
 });
+
+describe('the shortcut and the save-time check (M14-14)', () => {
+  it('shows the shortcut in the list and in the editor', async () => {
+    const { user } = await renderMacros();
+
+    expect(screen.getByText('/shipping')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Shipping fees explained/ }));
+
+    expect(screen.getByLabelText('Shortcut')).toHaveValue('shipping');
+  });
+
+  it('saves a shortcut typed with the slash, lower-cased, and clears it when emptied', async () => {
+    const { user, apis } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Ask for the order number/ }));
+
+    await user.type(screen.getByLabelText('Shortcut'), '/Order');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Ask for the order number saved.')).toBeInTheDocument();
+    let saved = (await apis.ticketing.macros('brand')).macros.find(
+      (macro) => macro.name === 'Ask for the order number',
+    );
+    expect(saved?.shortcut).toBe('order');
+
+    await user.clear(screen.getByLabelText('Shortcut'));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(async () => {
+      saved = (await apis.ticketing.macros('brand')).macros.find(
+        (macro) => macro.name === 'Ask for the order number',
+      );
+      expect(saved?.shortcut).toBeNull();
+    });
+  });
+
+  it('says on the field when another item has the shortcut, and keeps the draft', async () => {
+    const { user, apis } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Ask for the order number/ }));
+
+    await user.type(screen.getByLabelText('Shortcut'), 'shipping');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByText('Another saved reply or macro already uses that shortcut.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Shortcut')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Shortcut')).toHaveValue('shipping');
+    const { macros } = await apis.ticketing.macros('brand');
+    expect(macros.find((macro) => macro.name === 'Ask for the order number')?.shortcut).toBeNull();
+
+    // Changing it clears the complaint.
+    await user.type(screen.getByLabelText('Shortcut'), '2');
+    expect(
+      screen.queryByText('Another saved reply or macro already uses that shortcut.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('refuses a shortcut with a space in it before it is sent', async () => {
+    const { user } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Ask for the order number/ }));
+
+    await user.type(screen.getByLabelText('Shortcut'), 'two words');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      screen.getAllByText('A shortcut is one word: letters, digits, - and _.').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('names an unknown placeholder, suggests the nearest, and will not save it', async () => {
+    const { user, apis } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Ask for the order number/ }));
+
+    const english = screen.getByLabelText('English');
+    await user.clear(english);
+    await user.type(english, 'Thanks, {{{{agent.nmae}}');
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Unknown placeholder {{agent.nmae}}.');
+    expect(alert).toHaveTextContent('Did you mean {{agent.name}}?');
+    expect(english).toHaveAttribute('aria-invalid', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(
+      screen.getAllByText('Fix the placeholders listed under the reply.').length,
+    ).toBeGreaterThan(0);
+    const { macros } = await apis.ticketing.macros('brand');
+    expect(macros.find((macro) => macro.name === 'Ask for the order number')?.bodies.en).toContain(
+      'order number',
+    );
+  });
+
+  it('names an unclosed {{, and accepts a fallback', async () => {
+    const { user } = await renderMacros();
+    await user.click(screen.getByRole('button', { name: /Ask for the order number/ }));
+
+    const english = screen.getByLabelText('English');
+    await user.clear(english);
+    await user.type(english, 'Hi {{{{contact.first_name');
+    expect(screen.getByRole('alert')).toHaveTextContent('Unclosed {{contact.first_name');
+
+    await user.type(english, '|there}}');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});

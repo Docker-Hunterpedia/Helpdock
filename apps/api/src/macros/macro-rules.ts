@@ -69,6 +69,20 @@ export const editsMacro = (actor: MacroActor, item: MacroOwnership): boolean => 
 };
 
 /**
+ * Whether two items would be offered on the same ticket, so that one shortcut
+ * could not tell them apart (M14-14). A personal item is offered everywhere its
+ * owner works, so it meets every shared item and the owner's other personal
+ * ones; two shared items meet when they share a department or either is for all.
+ */
+export const shortcutsOverlap = (a: MacroOwnership, b: MacroOwnership): boolean => {
+  if (a.ownerId !== null || b.ownerId !== null) {
+    return a.ownerId === null || b.ownerId === null || a.ownerId === b.ownerId;
+  }
+
+  return a.departmentId === null || b.departmentId === null || a.departmentId === b.departmentId;
+};
+
+/**
  * Whether the item is offered on a ticket of this department: the composer's
  * "only items shared with Billing, shared with all departments, or your own".
  */

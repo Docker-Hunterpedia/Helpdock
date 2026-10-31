@@ -267,6 +267,11 @@ export const ticketingRefusalSchema = z.enum([
    * send `confirmCount` equal to the `count` this answers with (409).
    */
   'status-change-needs-confirmation',
+  /**
+   * M14-14. Another saved reply or macro already answers to that shortcut where
+   * this one would be offered: yours, or the brand's (409).
+   */
+  'shortcut-taken',
 ]);
 export type TicketingRefusal = z.infer<typeof ticketingRefusalSchema>;
 

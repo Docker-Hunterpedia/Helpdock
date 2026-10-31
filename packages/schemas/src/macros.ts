@@ -46,6 +46,122 @@ export const CANNED_PLACEHOLDERS = [
 ] as const;
 export type CannedPlaceholder = (typeof CANNED_PLACEHOLDERS)[number];
 
+export const MACRO_SHORTCUT_MAX_LENGTH = 32;
+
+/**
+ * The word typed after `/` to insert an item (M14-14): letters of any script,
+ * digits, `-` and `_`, never starting with a separator, with no spaces so the
+ * composer knows where it ends. Lower-cased, so `/Refund` and `/refund` are one.
+ */
+export const macroShortcutSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1)
+  .max(MACRO_SHORTCUT_MAX_LENGTH)
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N}_-]*$/u, 'Use letters, digits, - and _ only');
+
+// --------------------------------------------------------------------------
+// The check at save time (M14-14)
+// --------------------------------------------------------------------------
+
+/** A problem with a reply's placeholders. `text` is what was written, `suggestion` the nearest real name. */
+export type PlaceholderProblem =
+  | { readonly kind: 'unknown'; readonly text: string; readonly suggestion: string | null }
+  | { readonly kind: 'unclosed'; readonly text: string };
+
+const WRITTEN_NAME = /^[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)?$/i;
+
+/** Edit distance, for "Did you mean": names are short, so the plain table is fine. */
+const distance = (a: string, b: string): number => {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= b.length; column += 1) {
+      current[column] = Math.min(
+        (previous[column] ?? 0) + 1,
+        (current[column - 1] ?? 0) + 1,
+        (previous[column - 1] ?? 0) + (a[row - 1] === b[column - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+
+  return previous[b.length] ?? 0;
+};
+
+const nearestPlaceholder = (name: string): string | null => {
+  let best: { name: string; score: number } | null = null;
+  for (const candidate of CANNED_PLACEHOLDERS) {
+    const score = distance(name.toLowerCase(), candidate);
+    if (score <= 2 && (best === null || score < best.score)) {
+      best = { name: candidate, score };
+    }
+  }
+
+  return best?.name ?? null;
+};
+
+/**
+ * Every `{{` in a reply that would not render: a name that is not on the
+ * allow-list, or an opening with no closing `}}`. Rendering leaves such text as
+ * written (so an author sees the typo), and saving refuses it so the typo never
+ * reaches a customer. A `|fallback` is allowed after any real name. Each problem
+ * is reported once, in the order it first appears.
+ */
+export const placeholderProblems = (text: string): PlaceholderProblem[] => {
+  const problems: PlaceholderProblem[] = [];
+  const seen = new Set<string>();
+  const add = (problem: PlaceholderProblem): void => {
+    const key = `${problem.kind}:${problem.text}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      problems.push(problem);
+    }
+  };
+
+  let from = 0;
+  for (let open = text.indexOf('{{', from); open !== -1; open = text.indexOf('{{', from)) {
+    const close = text.indexOf('}}', open + 2);
+    const next = text.indexOf('{{', open + 2);
+    if (close === -1 || (next !== -1 && next < close)) {
+      const end = next === -1 ? open + 24 : Math.min(open + 24, next);
+      add({ kind: 'unclosed', text: text.slice(open, end) });
+      from = open + 2;
+      continue;
+    }
+    const inner = text.slice(open + 2, close);
+    const name = (inner.split('|')[0] ?? '').trim();
+    if (
+      !(
+        WRITTEN_NAME.test(name) &&
+        (CANNED_PLACEHOLDERS as readonly string[]).includes(name.toLowerCase())
+      )
+    ) {
+      add({ kind: 'unknown', text: `{{${inner}}}`, suggestion: nearestPlaceholder(name) });
+    }
+    from = close + 2;
+  }
+
+  return problems;
+};
+
+/** The sentence the api answers with: each problem named. Null when the replies are sound. */
+export const placeholderProblemSentence = (bodies: {
+  readonly en: string;
+  readonly ar: string;
+}): string | null => {
+  const lines = (['en', 'ar'] as const).flatMap((locale) =>
+    placeholderProblems(bodies[locale]).map((problem) =>
+      problem.kind === 'unknown'
+        ? `Unknown placeholder ${problem.text} in the ${locale} reply`
+        : `Unclosed ${problem.text} in the ${locale} reply`,
+    ),
+  );
+
+  return lines.length === 0 ? null : lines.join('; ');
+};
+
 /** The languages a reply is written in: the interface's two (REQUIREMENTS §4.13). */
 export type MacroLocale = z.infer<typeof localeSchema>;
 
@@ -103,9 +219,13 @@ export const macroSchema = z.object({
   /** Shared only: null is every department. Always null for a personal one. */
   departmentId: z.uuid().nullable(),
   bodies: macroBodiesSchema,
+  /** M14-14: the word after `/` that inserts it, unique within its scope. Null for none. */
+  shortcut: z.string().nullable(),
   /** Empty for a canned response. */
   actions: z.array(macroActionSchema).max(MAX_MACRO_ACTIONS),
   lastUsedAt: z.iso.datetime().nullable(),
+  /** M14-14: how many times it has been used, for the picker's order. */
+  useCount: z.number().int().nonnegative(),
   updatedAt: z.iso.datetime(),
   /** The staff member who last saved it. Null for a row written before M3-06 kept it. */
   updatedById: z.uuid().nullable(),
@@ -137,6 +257,7 @@ const macroFieldsSchema = z.object({
   scope: macroScopeSchema,
   departmentId: z.uuid().nullable().default(null),
   bodies: macroBodiesSchema,
+  shortcut: macroShortcutSchema.nullable().default(null),
   actions: z.array(macroActionSchema).max(MAX_MACRO_ACTIONS).default([]),
 });
 
@@ -172,7 +293,7 @@ export const macroShapeProblem = (macro: {
 };
 
 export const macroCreateRequestSchema = macroFieldsSchema.superRefine((value, context) => {
-  const problem = macroShapeProblem(value);
+  const problem = macroShapeProblem(value) ?? placeholderProblemSentence(value.bodies);
   if (problem !== null) {
     context.addIssue({ code: 'custom', message: problem });
   }
@@ -185,12 +306,19 @@ export const macroUpdateRequestSchema = z
     scope: macroScopeSchema.optional(),
     departmentId: z.uuid().nullable().optional(),
     bodies: macroBodiesSchema.optional(),
+    shortcut: macroShortcutSchema.nullable().optional(),
     actions: z.array(macroActionSchema).max(MAX_MACRO_ACTIONS).optional(),
   })
   .refine(
     (value) => Object.values(value).some((field) => field !== undefined),
     'Send at least one field to change',
-  );
+  )
+  .superRefine((value, context) => {
+    const problem = value.bodies === undefined ? null : placeholderProblemSentence(value.bodies);
+    if (problem !== null) {
+      context.addIssue({ code: 'custom', path: ['bodies'], message: problem });
+    }
+  });
 export type MacroUpdateRequest = z.infer<typeof macroUpdateRequestSchema>;
 
 export const macroParamSchema = z.object({ brandId: z.uuid(), macroId: z.uuid() });

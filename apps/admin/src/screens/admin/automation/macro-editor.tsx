@@ -2,6 +2,7 @@ import {
   type CannedPlaceholder,
   MACRO_BODY_MAX,
   MACRO_NAME_MAX_LENGTH,
+  MACRO_SHORTCUT_MAX_LENGTH,
   type Macro,
   renderTemplate,
 } from '@helpdock/schemas';
@@ -11,9 +12,16 @@ import { type FormEvent, type ReactNode, useId, useRef, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
-import { Field } from '../../../ui/field.tsx';
+import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { type ActionChoices, MacroActionsField } from './macro-actions-field.tsx';
-import { insertAt, type MacroDraft, problemOf } from './macro-draft.js';
+import {
+  cleanShortcut,
+  draftPlaceholderProblems,
+  insertAt,
+  type MacroDraft,
+  problemOf,
+  shortcutProblem,
+} from './macro-draft.js';
 import { PlaceholderPicker } from './placeholder-picker.tsx';
 
 /**
@@ -41,6 +49,8 @@ export interface MacroEditorProps {
   /** "Edited by Omar Nasser · Sep 24", when there is somebody to name. */
   readonly editedBy: string | null;
   readonly busy: boolean;
+  /** M14-14: the shortcut the api last refused as taken, so the field can say so until it changes. */
+  readonly takenShortcut?: string | null | undefined;
   onDepartmentChange(departmentId: string): void;
   onSubmit(draft: MacroDraft): void;
   onDiscard(): void;
@@ -56,6 +66,7 @@ export function MacroEditor({
   samples,
   editedBy,
   busy,
+  takenShortcut = null,
   onDepartmentChange,
   onSubmit,
   onDiscard,
@@ -68,6 +79,8 @@ export function MacroEditor({
   const headingId = useId();
   const nameId = useId();
   const scopeId = useId();
+  const shortcutId = useId();
+  const problemsId = useId();
   const departmentId = useId();
   const [draft, setDraft] = useState(initial);
   const [picking, setPicking] = useState<Locale | null>(null);
@@ -104,6 +117,14 @@ export function MacroEditor({
       onSubmit(draft);
     }
   };
+
+  const placeholderIssues = draftPlaceholderProblems(draft);
+  const shortcutWord = cleanShortcut(draft.shortcut).toLowerCase();
+  const shortcutError = shortcutProblem(draft.shortcut)
+    ? t('macros:editor.problems.shortcutInvalid')
+    : takenShortcut !== null && shortcutWord === takenShortcut
+      ? t('macros:editor.problems.shortcutTaken')
+      : null;
 
   const previewLocale: Locale = locale === 'ar' && draft.ar.trim() !== '' ? 'ar' : 'en';
   const preview = renderTemplate(draft[previewLocale], samples).text;
@@ -142,12 +163,16 @@ export function MacroEditor({
           minRows={6}
           value={draft[target]}
           disabled={readOnly}
+          error={placeholderIssues.some((issue) => issue.locale === target)}
           onChange={(event) => {
             change({ [target]: event.target.value });
           }}
           slotProps={{
             htmlInput: {
               maxLength: MACRO_BODY_MAX,
+              ...(placeholderIssues.some((issue) => issue.locale === target)
+                ? { 'aria-invalid': true, 'aria-describedby': problemsId }
+                : {}),
               ...(target === 'ar' ? { lang: 'ar', dir: 'rtl' } : { dir: 'auto' }),
             },
           }}
@@ -281,6 +306,46 @@ export function MacroEditor({
             ))}
           </TextField>
         </Field>
+        <Field
+          id={shortcutId}
+          label={t('macros:editor.shortcut.label')}
+          hint={shortcutError === null ? t('macros:editor.shortcut.hint') : undefined}
+          error={shortcutError ?? undefined}
+        >
+          <TextField
+            id={shortcutId}
+            size="small"
+            value={draft.shortcut}
+            disabled={readOnly}
+            error={shortcutError !== null}
+            onChange={(event) => {
+              change({ shortcut: event.target.value });
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <Box
+                    component="span"
+                    aria-hidden="true"
+                    sx={{ color: 'text.secondary', marginInlineEnd: 0.5 }}
+                  >
+                    /
+                  </Box>
+                ),
+              },
+              htmlInput: {
+                maxLength: MACRO_SHORTCUT_MAX_LENGTH + 1,
+                dir: 'ltr',
+                'aria-describedby': fieldDescribedBy(shortcutId, {
+                  hint: t('macros:editor.shortcut.hint'),
+                  error: shortcutError ?? undefined,
+                }),
+                autoCapitalize: 'none',
+                spellCheck: false,
+              },
+            }}
+          />
+        </Field>
         <Typography variant="caption" sx={{ color: 'text.secondary', gridColumn: '1 / -1' }}>
           {t('macros:editor.scopeNote')}
         </Typography>
@@ -303,6 +368,30 @@ export function MacroEditor({
           {reply('en')}
           {reply('ar')}
         </Box>
+        {placeholderIssues.length === 0 ? null : (
+          <Box id={problemsId} role="alert">
+            <Box
+              component="ul"
+              sx={{
+                margin: 0,
+                paddingInlineStart: 5,
+                color: tokens['status.danger.text'],
+                fontSize: 13,
+              }}
+            >
+              {placeholderIssues.map(({ locale: language, problem }) => (
+                <li key={`${language}-${problem.kind}-${problem.text}`}>
+                  {problem.kind === 'unknown'
+                    ? t('macros:editor.placeholderErrors.unknown', { text: problem.text })
+                    : t('macros:editor.placeholderErrors.unclosed', { text: problem.text })}
+                  {problem.kind === 'unknown' && problem.suggestion !== null
+                    ? ` ${t('macros:editor.placeholderErrors.didYouMean', { name: `{{${problem.suggestion}}}` })}`
+                    : null}
+                </li>
+              ))}
+            </Box>
+          </Box>
+        )}
         {preview.trim() === '' ? null : (
           <Box
             sx={{

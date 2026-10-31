@@ -73,6 +73,7 @@ import { closeStatusOf, type DetailsRequest, useTicketShortcuts } from './ticket
 import { TicketViewSkeleton } from './ticket-skeletons.tsx';
 import { TimeCard } from './time-card.tsx';
 import { loggableSeconds } from './time-format.js';
+import { useComposerInline } from './use-composer-inline.js';
 import { useSpamActions } from './use-spam-actions.tsx';
 import { useTicketActivity } from './use-ticket-activity.js';
 import { useTicketEmail } from './use-ticket-email.tsx';
@@ -361,6 +362,10 @@ export function TicketView({
       }
       setThenStatusId('');
 
+      if (macro !== undefined) {
+        // Using one moves it up the picker's order (M14-14).
+        await queryClient.invalidateQueries({ queryKey: ['macros', brandId] });
+      }
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
       await ticketEmail.refresh();
@@ -409,6 +414,7 @@ export function TicketView({
     onSuccess: async (_result, macro) => {
       await queryClient.invalidateQueries({ queryKey: ticketKeys.detail(brandId, ticketId) });
       await queryClient.invalidateQueries({ queryKey: ticketKeys.lists(brandId) });
+      await queryClient.invalidateQueries({ queryKey: ['macros', brandId] });
       toast({ tone: 'success', message: t('macros:toast.applied', { name: macro.name }) });
     },
     onError: (error: unknown) => {
@@ -463,6 +469,31 @@ export function TicketView({
           : t('tickets:toast.failed'),
     });
   };
+
+  // M14-14: the lists `/` and `{{` open under the composer's text.
+  const composerInline = useComposerInline({
+    brandId,
+    ticketId,
+    departmentId: detail.data?.ticket.departmentId ?? '',
+    departmentName:
+      directory.departments.find((row) => row.id === detail.data?.ticket.departmentId)?.name ??
+      null,
+    reference: detail.data === undefined ? '' : ticketReference(detail.data.ticket),
+    brandName: brand.data?.name ?? null,
+    contact:
+      contact.data === undefined
+        ? null
+        : { name: contact.data.name, email: contact.data.primaryIdentity?.value ?? null },
+    viewerName: viewer.name,
+    locale: contact.data?.locale ?? brand.data?.defaultLocale ?? 'en',
+    body,
+    setBody,
+    setStaged,
+    runNow: (macro) => {
+      runNow.mutate(macro);
+    },
+    onError: refused,
+  });
 
   const update = useMutation({
     mutationFn: (patch: TicketUpdateRequest) => api.update(brandId, ticketId, patch),
@@ -1243,6 +1274,7 @@ export function TicketView({
                   : { bot: telegramChat.bot.username, username: telegramChat.username }
               }
               macrosOpen={picking}
+              inline={canWrite ? composerInline : undefined}
               assist={assist.menu}
               suggestion={assist.composerCard}
               {...(canWrite

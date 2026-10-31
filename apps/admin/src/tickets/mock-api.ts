@@ -125,6 +125,9 @@ import { MockViews } from './mock-views.js';
  */
 
 const [SUPPORT, BILLING] = MOCK_DEPARTMENTS;
+
+/** How a mention search finds a colleague typed in Arabic; the real api matches the name as stored. */
+const MOCK_ARABIC_NAMES: Readonly<Record<string, string>> = { 'Omar Nasser': 'عمر ناصر' };
 const SUPPORT_ID = SUPPORT?.id ?? '';
 const BILLING_ID = BILLING?.id ?? '';
 
@@ -2037,7 +2040,11 @@ export class MockTicketsApi implements TicketsApi {
           presence: agent.presence,
         }))
         .filter(
-          (row) => needle === '' || `${row.name} ${row.handle}`.toLowerCase().includes(needle),
+          (row) =>
+            needle === '' ||
+            `${row.name} ${row.handle} ${MOCK_ARABIC_NAMES[row.name] ?? ''}`
+              .toLowerCase()
+              .includes(needle),
         ),
     };
   }

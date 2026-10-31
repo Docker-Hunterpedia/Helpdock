@@ -429,7 +429,49 @@ describe.skipIf(!hasDocker)('notifications', () => {
         await drain();
 
         const items = (await panelOf(sam)).items.filter((item) => item.ticketId === ticket.id);
-        expect(items.map((item) => item.kind)).toContain('mentioned');
+        expect(items.map((item) => item.kind)).toEqual(['mentioned']);
+        // Only the person the picker named was told: not the writer, not Billing's Bo.
+        for (const other of [ada, bo]) {
+          const theirs = (await panelOf(other)).items.filter((item) => item.ticketId === ticket.id);
+          expect(theirs).toEqual([]);
+        }
+      });
+
+      it('leaves out two people with one name when no spelling is theirs alone, and notifies neither', async () => {
+        const twins = [
+          await addPerson(runtime.db, 'Twin Person'),
+          await addPerson(runtime.db, 'Twin Person'),
+        ];
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.insert(userBrandRoles).values(
+            twins.map((twin) => ({
+              userId: twin.id,
+              brandId: seeded.brandId,
+              role: 'agent' as const,
+              departmentIds: [billing],
+            })),
+          ),
+        );
+        const ticket = (await createTicket({ departmentId: billing })).ticket;
+
+        // Their whole name and first name are shared, and the fixture’s address
+        // has a space in its name part, so no spelling is a handle: better a
+        // missing row than text that tells the wrong colleague.
+        const response = await call<Candidates>(
+          'GET',
+          `${brandPath()}/tickets/${ticket.id}/mention-candidates?q=twin`,
+          ada,
+        );
+        expect(response.body.candidates).toEqual([]);
+
+        await call('POST', `${brandPath()}/tickets/${ticket.id}/messages`, ada, {
+          kind: 'note',
+          bodyHtml: '<p>@Twin and @TwinPerson, please look</p>',
+        });
+        await drain();
+        for (const twin of twins) {
+          expect((await rowsFor(twin.id)).filter((row) => row.ticketId === ticket.id)).toEqual([]);
+        }
       });
     });
   });

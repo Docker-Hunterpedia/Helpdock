@@ -236,7 +236,9 @@
       "count_few": "{{count}} أشخاص",
       "count_many": "{{count}} شخصًا",
       "count_other": "{{count}} شخص",
-      "loading": "جارٍ تحميل الأشخاص"
+      "loading": "جارٍ تحميل الأشخاص",
+      "error": "تعذّر تحميل الأشخاص.",
+      "retry": "حاول مرة أخرى"
     }
   },
   "details": {

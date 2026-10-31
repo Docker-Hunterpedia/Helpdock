@@ -177,8 +177,11 @@ describe('the macro picker', () => {
 
     await user.type(body, 'Can you check? @om');
     const list = await screen.findByRole('listbox', { name: 'People who can see this ticket' });
-    const options = await within(list).findAllByRole('option');
-    expect(options).toHaveLength(1);
+    // The query is sent after a short pause, so the list narrows a moment later.
+    await waitFor(() => {
+      expect(within(list).getAllByRole('option')).toHaveLength(1);
+    });
+    const options = within(list).getAllByRole('option');
     expect(options[0]).toHaveTextContent('Omar Nasser');
     expect(options[0]).toHaveTextContent('@omar.nasser');
     expect(options[0]).toHaveTextContent('Online');
@@ -205,6 +208,52 @@ describe('the macro picker', () => {
       screen.queryByRole('listbox', { name: 'People who can see this ticket' }),
     ).not.toBeInTheDocument();
     expect(body).toHaveValue('@zzz');
+  });
+
+  it('finds a colleague typed in Arabic (M14-15)', async () => {
+    const { user } = await openRefund();
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), '@عمر');
+
+    const list = await screen.findByRole('listbox', { name: 'People who can see this ticket' });
+    await waitFor(() => {
+      expect(within(list).getAllByRole('option')).toHaveLength(1);
+    });
+    expect(within(list).getByRole('option')).toHaveTextContent('Omar Nasser');
+  });
+
+  it('shows the card while loading, and keeps Enter from becoming a new line (M14-15)', async () => {
+    const { user, apis } = await openRefund();
+    vi.spyOn(apis.tickets, 'mentionCandidates').mockImplementation(() => new Promise(() => {}));
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+    const body = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(body, '@om');
+    const list = await screen.findByRole('listbox', { name: 'People who can see this ticket' });
+    expect(within(list).getByText('Loading people')).toBeInTheDocument();
+    expect(body).toHaveAttribute('aria-controls', list.id);
+
+    await user.keyboard('{Enter}');
+    expect(body).toHaveValue('@om');
+  });
+
+  it('says so when the people cannot be loaded, and tries again on request (M14-15)', async () => {
+    const { user, apis } = await openRefund();
+    const real = apis.tickets.mentionCandidates.bind(apis.tickets);
+    vi.spyOn(apis.tickets, 'mentionCandidates')
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementation(real);
+    await user.click(screen.getByRole('button', { name: 'Internal note' }));
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), '@om');
+    expect(await screen.findByRole('alert')).toHaveTextContent("People couldn't be loaded.");
+    // A failure is not "nobody matches".
+    expect(screen.queryByText('No one who can see this ticket matches.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('option', { name: /Omar Nasser/ })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('does not offer people in a public reply or inside an email address (M14-15)', async () => {

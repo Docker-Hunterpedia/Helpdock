@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { handleFor, mentionCandidates } from './mention-candidates.js';
+import { handleFor, mentionCandidates, mentionIndex } from './mention-candidates.js';
 import type { StaffFacts } from './recipients.js';
+import { resolveMention } from './recipients.js';
 
 const BILLING = '01937f5e-7e53-7000-8000-000000000012';
 const SUPPORT = '01937f5e-7e53-7000-8000-000000000011';
@@ -83,15 +84,74 @@ describe('mentionCandidates', () => {
 describe('handleFor', () => {
   it('falls back to the full name, then the first name, when the email name does not parse', () => {
     const odd = person('Lina Haddad', "li'na+tag@x.test");
-    expect(handleFor(odd, [odd])).toBe('LinaHaddad');
+    expect(handleFor(odd, mentionIndex([odd]))).toBe('LinaHaddad');
 
     const solo = person('Lina', 'a+b@x.test');
-    expect(handleFor(solo, [solo])).toBe('Lina');
+    expect(handleFor(solo, mentionIndex([solo]))).toBe('Lina');
   });
 
   it('is undefined when two people share every spelling', () => {
     const a = person('Ann Lee', 'ann@a.test');
     const b = person('Ann Lee', 'ann@b.test');
-    expect(handleFor(a, [a, b])).toBeUndefined();
+    expect(handleFor(a, mentionIndex([a, b]))).toBeUndefined();
+  });
+});
+
+describe('mentionIndex agrees with resolveMention', () => {
+  const mixed = [
+    person('Ann Lee', 'ann@a.test'),
+    person('Ann Lee', 'ann@b.test'),
+    person('Ann Marie', 'annmarie@c.test'),
+    person('Ann', 'lee@d.test'),
+    person('Omar Aziz', 'omar.aziz@x.test'),
+    person('عمر الخطيب', 'omar.khateeb@x.test'),
+    person('عمر', 'omar@x.test'),
+    person('İlker Yılmaz', 'ilker@x.test'),
+    person('Ilker Demir', 'ILKER@y.test'),
+    person('İSMAİL Kaya', 'ismail@x.test'),
+    person('Lina Haddad', 'LinaHaddad@z.test'),
+    person('Solo', 'a+b@x.test'),
+  ];
+  const probes = [
+    ...mixed.flatMap((member) => [
+      member.email.split('@')[0] ?? '',
+      member.name.replace(/\s+/gu, ''),
+      member.name.split(' ')[0] ?? '',
+    ]),
+    'nobody',
+    'ANN',
+    'İlker',
+    'ilker',
+    'i̇lker',
+  ];
+
+  it.each(probes)('resolves %j as resolveMention does', (probe) => {
+    const resolve = mentionIndex(mixed);
+
+    expect(resolve(probe)?.userId).toBe(resolveMention(probe, mixed)?.userId);
+  });
+
+  it('gives the same handle to everyone as the scan would', () => {
+    const resolve = mentionIndex(mixed);
+    const scan = (member: (typeof mixed)[number]) =>
+      handleFor(member, (handle) => resolveMention(handle, mixed));
+
+    expect(mixed.map((member) => handleFor(member, resolve))).toEqual(mixed.map(scan));
+  });
+
+  it('stays linear: three thousand people list quickly', () => {
+    const many = Array.from({ length: 3000 }, (_, index) =>
+      person(`Person ${String(index)}`, `p${String(index)}@x.test`),
+    );
+    const started = performance.now();
+    mentionCandidates({
+      members: many,
+      departmentId: BILLING,
+      actorId: 'x',
+      presence: {},
+      query: '',
+    });
+
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

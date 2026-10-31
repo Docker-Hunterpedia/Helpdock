@@ -1,6 +1,6 @@
 import type { Macro } from '@helpdock/schemas';
 import { monoFontStyle } from '@helpdock/ui';
-import { Box, Paper, Typography } from '@mui/material';
+import { Box, Button, Paper, Typography } from '@mui/material';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   type KeyboardEvent,
@@ -14,6 +14,7 @@ import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useTicketingApi, useTicketsApi } from '../../auth/session.tsx';
 import { PresenceDot } from '../../ui/presence-dot.tsx';
+import { useDebounced } from '../../ui/use-debounced.js';
 import { matchSavedReplies } from './saved-reply-order.js';
 
 /**
@@ -41,10 +42,17 @@ export interface SuggestionList {
 /** Registers the open list's key handling with the composer for as long as it is mounted. */
 export const useSuggestionKeys = (
   list: SuggestionList,
-  options: { readonly count: number; active: number; setActive(next: number): void; pick(): void },
+  options: {
+    readonly count: number;
+    active: number;
+    setActive(next: number): void;
+    pick(): void;
+    /** Still loading: Enter and Tab are kept from falling through to the text. */
+    readonly hold?: boolean;
+  },
 ): void => {
   const { keys, onDismiss } = list;
-  const { count, active, setActive, pick } = options;
+  const { count, active, setActive, pick, hold = false } = options;
 
   useEffect(() => {
     keys.current = (event) => {
@@ -54,6 +62,11 @@ export const useSuggestionKeys = (
         return true;
       }
       if (count === 0) {
+        if (hold && (event.key === 'Enter' || event.key === 'Tab')) {
+          event.preventDefault();
+          return true;
+        }
+
         return false;
       }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -76,7 +89,7 @@ export const useSuggestionKeys = (
     return () => {
       keys.current = null;
     };
-  }, [keys, onDismiss, count, active, setActive, pick]);
+  }, [keys, onDismiss, count, active, setActive, pick, hold]);
 };
 
 /** The shell of a suggestion list: a listbox in a small card, with a hint line. */
@@ -84,11 +97,14 @@ export function SuggestionCard({
   id,
   label,
   hint,
+  status,
   children,
 }: {
   readonly id: string;
   readonly label: string;
   readonly hint: string;
+  /** Under the options and above the hint: a failure and its retry. */
+  readonly status?: ReactNode;
   readonly children: ReactNode;
 }): ReactNode {
   return (
@@ -99,6 +115,7 @@ export function SuggestionCard({
       <Box id={id} role="listbox" aria-label={label} sx={{ maxHeight: 240, overflowY: 'auto' }}>
         {children}
       </Box>
+      {status}
       <Typography variant="caption" sx={{ color: 'text.secondary', paddingInline: 2 }}>
         {hint}
       </Typography>
@@ -289,6 +306,9 @@ const caption = (macro: Macro, t: ReturnType<typeof useT>): string => {
     : t('tickets:composer.suggest.used', { count: macro.useCount, who });
 };
 
+/** How long a pause in typing before the people are asked for. */
+const MENTION_DEBOUNCE_MS = 150;
+
 export interface MentionSuggestionsProps {
   readonly brandId: string;
   readonly ticketId: string;
@@ -315,9 +335,11 @@ export function MentionSuggestions({
   const ticketsApi = useTicketsApi();
   const [active, setActive] = useState(0);
 
+  // Not a request per keystroke.
+  const word = useDebounced(query, MENTION_DEBOUNCE_MS);
   const people = useQuery({
-    queryKey: ['mention-candidates', brandId, ticketId, query],
-    queryFn: () => ticketsApi.mentionCandidates(brandId, ticketId, query),
+    queryKey: ['mention-candidates', brandId, ticketId, word],
+    queryFn: () => ticketsApi.mentionCandidates(brandId, ticketId, word),
     // The previous word's people stay up while the next word's arrive.
     placeholderData: keepPreviousData,
     staleTime: 15_000,
@@ -348,11 +370,8 @@ export function MentionSuggestions({
         onPick(selected.handle);
       }
     },
+    hold: people.isPending,
   });
-
-  if (people.isPending) {
-    return null;
-  }
 
   return (
     <>
@@ -360,6 +379,31 @@ export function MentionSuggestions({
         id={list.id}
         label={t('tickets:composer.mention.label')}
         hint={t('tickets:composer.suggest.hint')}
+        status={
+          people.isError ? (
+            <Box
+              role="alert"
+              sx={{ display: 'flex', alignItems: 'center', gap: 2, paddingInline: 2 }}
+            >
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {t('tickets:composer.mention.error')}
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                // Before the textarea blurs, so the caret stays where it was.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={() => {
+                  void people.refetch();
+                }}
+              >
+                {t('tickets:composer.mention.retry')}
+              </Button>
+            </Box>
+          ) : null
+        }
       >
         {candidates.map((person, index) => (
           <SuggestionOption
@@ -385,7 +429,11 @@ export function MentionSuggestions({
             }}
           />
         ))}
-        {candidates.length === 0 ? (
+        {people.isPending ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary', padding: 2 }}>
+            {t('tickets:composer.mention.loading')}
+          </Typography>
+        ) : candidates.length === 0 && !people.isError ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', padding: 2 }}>
             {t('tickets:composer.mention.none')}
           </Typography>
@@ -401,7 +449,11 @@ export function MentionSuggestions({
           clip: 'rect(0 0 0 0)',
         }}
       >
-        {t('tickets:composer.mention.count', { count: candidates.length })}
+        {people.isPending
+          ? t('tickets:composer.mention.loading')
+          : people.isError
+            ? ''
+            : t('tickets:composer.mention.count', { count: candidates.length })}
       </Typography>
     </>
   );

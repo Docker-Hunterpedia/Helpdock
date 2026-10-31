@@ -1,6 +1,6 @@
 import type { MentionCandidate, PresenceMap } from '@helpdock/schemas';
 import { MENTION_CANDIDATES_MAX } from '@helpdock/schemas';
-import { canSeeDepartment, mentionHandles, resolveMention, type StaffFacts } from './recipients.js';
+import { canSeeDepartment, mentionHandles, type StaffFacts } from './recipients.js';
 
 /**
  * Who the `@` picker offers on a ticket (M14-15), as pure functions over what
@@ -27,10 +27,57 @@ const spellings = (member: StaffFacts): readonly string[] => [
   member.name.trim().split(/\s+/u)[0] ?? '',
 ];
 
+interface Owners {
+  readonly count: number;
+  readonly owner: StaffFacts;
+}
+
+const tally = (
+  everyone: readonly StaffFacts[],
+  spell: (member: StaffFacts) => string,
+): Map<string, Owners> => {
+  const owners = new Map<string, Owners>();
+  for (const member of everyone) {
+    const key = fold(spell(member));
+    const seen = owners.get(key);
+    owners.set(key, { count: (seen?.count ?? 0) + 1, owner: seen?.owner ?? member });
+  }
+
+  return owners;
+};
+
+/**
+ * `resolveMention` over a set of staff, built once: its three spellings are
+ * counted up front, so a handle resolves in constant time instead of scanning
+ * everybody three times. Same answers as `resolveMention` (a test holds them
+ * to it): the first spelling kind with exactly one owner wins.
+ */
+export const mentionIndex = (
+  everyone: readonly StaffFacts[],
+): ((handle: string) => StaffFacts | undefined) => {
+  const kinds = [
+    tally(everyone, (member) => spellings(member)[0] ?? ''),
+    tally(everyone, (member) => spellings(member)[1] ?? ''),
+    tally(everyone, (member) => spellings(member)[2] ?? ''),
+  ];
+
+  return (handle) => {
+    const folded = fold(handle);
+    for (const owners of kinds) {
+      const found = owners.get(folded);
+      if (found?.count === 1) {
+        return found.owner;
+      }
+    }
+
+    return undefined;
+  };
+};
+
 /** The handle to write for `member`, or undefined when no spelling names them alone. */
 export const handleFor = (
   member: StaffFacts,
-  everyone: readonly StaffFacts[],
+  resolve: (handle: string) => StaffFacts | undefined,
 ): string | undefined =>
   spellings(member).find((spelling) => {
     // It has to survive the same parsing a note goes through, not just resolve.
@@ -39,7 +86,7 @@ export const handleFor = (
     return (
       parsed !== undefined &&
       parsed === fold(spelling) &&
-      resolveMention(spelling, everyone)?.userId === member.userId
+      resolve(spelling)?.userId === member.userId
     );
   });
 
@@ -59,11 +106,12 @@ export const mentionCandidates = ({
   readonly query: string;
 }): MentionCandidate[] => {
   const needle = fold(query.trim().replace(/^@/u, ''));
+  const resolve = mentionIndex(members);
 
   return members
     .filter((member) => member.userId !== actorId && canSeeDepartment(member, departmentId))
     .flatMap((member) => {
-      const handle = handleFor(member, members);
+      const handle = handleFor(member, resolve);
       if (handle === undefined) {
         return [];
       }

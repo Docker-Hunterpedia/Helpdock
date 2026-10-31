@@ -311,6 +311,21 @@ test.describe('the composer’s macro picker', () => {
     await expect(body).toBeFocused();
   });
 
+  test('@ finds a colleague typed in Arabic (M14-15)', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    await page.getByRole('button', { name: t('tickets:composer.note'), exact: true }).click();
+    await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).click();
+    await page.keyboard.type('@عمر');
+
+    const list = page.getByRole('listbox', { name: t('tickets:composer.mention.label') });
+    await expect(list.getByRole('option')).toHaveCount(1);
+    await expect(list.getByRole('option')).toContainText('@omar.nasser');
+    expect(await violations(page)).toEqual([]);
+  });
+
   test('@ names nobody who cannot be found, and is not offered in a public reply (M14-15)', async ({
     page,
     appLocale: locale,

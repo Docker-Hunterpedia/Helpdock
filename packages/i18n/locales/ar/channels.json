@@ -449,7 +449,10 @@
         "date": "تاريخ",
         "select": "قائمة",
         "multi_select": "قائمة متعددة",
-        "checkbox": "مربع اختيار"
+        "checkbox": "مربع اختيار",
+        "long_text": "نص طويل",
+        "link": "رابط",
+        "person": "شخص"
       },
       "reorder": "إعادة ترتيب {{field}}",
       "requiredField": "{{field}} إلزامي",
@@ -611,7 +614,9 @@
         "date": "تاريخ",
         "select": "قائمة",
         "multi_select": "اختيار متعدد",
-        "checkbox": "خانة اختيار"
+        "checkbox": "خانة اختيار",
+        "link": "رابط",
+        "person": "شخص"
       }
     },
     "after": {

@@ -1,7 +1,9 @@
-import type { CustomFieldDef, CustomFieldType } from '@helpdock/schemas';
+import type { CustomFieldDef, CustomFieldType, Session } from '@helpdock/schemas';
 import { screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { SessionProvider } from '../../auth/session.tsx';
 import { renderApp } from '../../test/render.tsx';
+import { signedInMockApis } from '../../test/signed-in.js';
 import { CustomFieldsCard } from './custom-fields-card.tsx';
 
 /**
@@ -129,5 +131,142 @@ describe('CustomFieldsCard', () => {
       'Required to close',
     );
     expect(screen.getByRole('combobox', { name: 'Carrier' })).not.toHaveAccessibleDescription();
+  });
+});
+
+describe('CustomFieldsCard, the M14-27 types', () => {
+  const NEW_FIELDS = [
+    def('long_text', 'Notes'),
+    def('link', 'Status page'),
+    def('email', 'Billing email'),
+    def('person', 'Owner'),
+  ];
+  // The mock ticketing api's first staff member.
+  const LINA = '0192c3f0-1a2b-7c3d-8e4f-00000000000a';
+
+  // The person picker reads the signed-in brand's staff, so it needs a session.
+  let session: Session;
+  beforeAll(async () => {
+    const signedIn = await (await signedInMockApis()).auth.me();
+    if (!signedIn) throw new Error('Missing session');
+    session = signedIn;
+  });
+
+  const renderNew = (values: Record<string, unknown> = {}, canWrite = true) => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const rendered = renderApp(
+      <SessionProvider session={session}>
+        <CustomFieldsCard fields={NEW_FIELDS} values={values} canWrite={canWrite} onSave={onSave} />
+      </SessionProvider>,
+    );
+
+    return { ...rendered, onSave };
+  };
+
+  it('saves a long text, a link and an email on blur, trimmed', async () => {
+    const { user, onSave } = renderNew();
+
+    await user.type(screen.getByRole('textbox', { name: 'Notes' }), '  first line');
+    await user.tab();
+    expect(onSave).toHaveBeenLastCalledWith('long_text', 'first line');
+
+    await user.type(screen.getByRole('textbox', { name: 'Status page' }), 'https://a.co/x');
+    await user.tab();
+    expect(onSave).toHaveBeenLastCalledWith('link', 'https://a.co/x');
+
+    await user.type(screen.getByRole('textbox', { name: 'Billing email' }), 'Ops@B.co');
+    await user.tab();
+    expect(onSave).toHaveBeenLastCalledWith('email', 'Ops@B.co');
+  });
+
+  it('keeps Enter as a line break in a long text', async () => {
+    const { user, onSave } = renderNew();
+
+    await user.type(screen.getByRole('textbox', { name: 'Notes' }), 'a{Enter}b');
+
+    expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveValue('a\nb');
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('offers to open a link only once it is an https address, in a new tab that cannot reach back', async () => {
+    const { user } = renderNew();
+    const box = screen.getByRole('textbox', { name: 'Status page' });
+
+    await user.type(box, 'javascript:alert(1)');
+    expect(screen.queryByRole('link')).toBeNull();
+
+    await user.clear(box);
+    await user.type(box, 'https://status.example.com/a');
+    const open = screen.getByRole('link');
+    expect(open).toHaveAttribute('href', 'https://status.example.com/a');
+    expect(open).toHaveAttribute('target', '_blank');
+    expect(open).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('chooses a person by name and saves the id; "Nobody" clears it', async () => {
+    const { user, onSave } = renderNew({ person: LINA });
+
+    await user.click(screen.getByRole('combobox', { name: 'Owner' }));
+    await user.click(await screen.findByRole('option', { name: 'Omar Nasser' }));
+    expect(onSave).toHaveBeenLastCalledWith('person', '0192c3f0-1a2b-7c3d-8e4f-00000000000b');
+
+    await user.click(screen.getByRole('combobox', { name: 'Owner' }));
+    await user.click(await screen.findByRole('option', { name: 'Nobody' }));
+    expect(onSave).toHaveBeenLastCalledWith('person', null);
+  });
+
+  it('reads a person who is no longer in the brand as a former staff member, once the list is known', async () => {
+    renderNew({ person: '0192c3f0-1a2b-7c3d-8e4f-0000000000ff' });
+
+    expect(await screen.findByText('Former staff member')).toBeVisible();
+  });
+
+  describe('for a reader who cannot write', () => {
+    it('shows a link that opens in a new tab, an email as a left-to-right run, and a person by name', async () => {
+      renderNew(
+        {
+          link: 'https://status.stripe.com/incidents/42',
+          email: 'finance@globex.com',
+          person: LINA,
+          long_text: 'short',
+        },
+        false,
+      );
+
+      const link = screen.getByRole('link', { name: /Status page/ });
+      expect(link).toHaveAttribute('href', 'https://status.stripe.com/incidents/42');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(screen.getByText('finance@globex.com').closest('bdi')).toHaveAttribute('dir', 'ltr');
+      expect(await screen.findByText('Lina Haddad')).toBeVisible();
+      expect(screen.getByText('short')).toBeVisible();
+    });
+
+    it('never makes a link of a stored value that is not https', () => {
+      renderNew({ link: 'javascript:alert(1)' }, false);
+
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(screen.getByText('javascript:alert(1)')).toBeVisible();
+    });
+
+    it('collapses a long text and expands it with Show all', async () => {
+      const text = 'word '.repeat(80);
+      const { user } = renderNew({ long_text: text }, false);
+
+      const toggle = screen.getByRole('button', { name: 'Show all' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await user.click(toggle);
+
+      expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('says "—" for an empty value', () => {
+      renderNew({}, false);
+
+      expect(screen.getAllByText('—')).toHaveLength(4);
+    });
   });
 });

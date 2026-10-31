@@ -1,8 +1,10 @@
 import type { CustomFieldDef } from '@helpdock/schemas';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { LOCALE_STORAGE_KEY } from '../../app/preferences.js';
+import { SessionProvider } from '../../auth/session.tsx';
 import { renderApp } from '../../test/render.tsx';
+import { signedInMockApis } from '../../test/signed-in.js';
 import { EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
 import { useFilterSummary } from './filter-summary.js';
 
@@ -80,5 +82,60 @@ describe('field filters in words', () => {
     localStorage.removeItem(LOCALE_STORAGE_KEY);
 
     expect(screen.getByTestId('sentence')).toHaveTextContent('الخطورة');
+  });
+});
+
+describe('a person filter in words (M14-27)', () => {
+  const OMAR = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
+  const personFields: CustomFieldDef[] = [
+    { ...(fields[0] as CustomFieldDef), id: 'f2', key: 'owner', label: 'Owner', type: 'person' },
+  ];
+
+  function PersonProbe({ ids }: { readonly ids: readonly string[] }): React.ReactNode {
+    const summary = useFilterSummary({
+      statuses: [],
+      departments: [],
+      tags: [],
+      staff: [],
+      fields: personFields,
+    });
+
+    return (
+      <p data-testid="sentence">
+        {summary.sentence({
+          ...EMPTY_FILTERS,
+          fieldFilter: [{ key: 'owner', op: 'any_of', values: [...ids] }],
+        })}
+      </p>
+    );
+  }
+
+  it('names the staff by their public name once the people are read', async () => {
+    const session = await (await signedInMockApis()).auth.me();
+    if (!session) throw new Error('Missing session');
+    renderApp(
+      <SessionProvider session={session}>
+        <PersonProbe ids={[OMAR]} />
+      </SessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sentence')).toHaveTextContent('Owner is Omar Nasser');
+    });
+  });
+
+  it('shortens an id it cannot name, rather than printing a narrower filter than the query', async () => {
+    const session = await (await signedInMockApis()).auth.me();
+    if (!session) throw new Error('Missing session');
+    renderApp(
+      <SessionProvider session={session}>
+        <PersonProbe ids={['0192c3f0-1a2b-7c3d-8e4f-0000000000ff']} />
+      </SessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sentence')).toHaveTextContent(/^Owner is \S+$/);
+    });
+    expect(screen.getByTestId('sentence')).not.toHaveTextContent('Omar Nasser');
   });
 });

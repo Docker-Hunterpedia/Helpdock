@@ -136,7 +136,7 @@ function NewFieldDefinition({
       target: field.target === 'organization' ? 'account' : field.target,
       type:
         field.type === 'textarea'
-          ? 'text'
+          ? 'long_text'
           : field.type === 'multiselect'
             ? 'multi_select'
             : field.type,

@@ -2,6 +2,7 @@ import type { CustomFieldDef } from '@helpdock/schemas';
 import { Checkbox, FormControlLabel, MenuItem, Select, TextField } from '@mui/material';
 import { type ReactNode, useId } from 'react';
 import { Field } from '../../../ui/field.tsx';
+import { PersonSelect } from '../../tickets/custom-field-values.tsx';
 
 /**
  * One custom field, as a template's default value.
@@ -99,16 +100,38 @@ export function CustomDefaultField({
     );
   }
 
+  if (def.type === 'person') {
+    return (
+      <Field id={id} label={def.label}>
+        <PersonSelect
+          id={id}
+          value={typeof value === 'string' ? value : ''}
+          disabled={disabled}
+          describedBy={undefined}
+          invalid={false}
+          label={def.label}
+          onChange={(next) => {
+            onChange(next === '' ? undefined : next);
+          }}
+        />
+      </Field>
+    );
+  }
+
   return (
     <Field id={id} label={def.label}>
       <TextField
         id={id}
+        multiline={def.type === 'long_text'}
         value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
         disabled={disabled}
         size="small"
         // `number` and `date` are coerced by the api from the string a form
         // field holds, which is what these input types produce.
         type={def.type === 'number' ? 'number' : def.type === 'date' ? 'date' : 'text'}
+        slotProps={{
+          htmlInput: def.type === 'link' || def.type === 'email' ? { dir: 'ltr' } : {},
+        }}
         onChange={(event) => {
           onChange(event.target.value === '' ? undefined : event.target.value);
         }}

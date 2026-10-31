@@ -56,6 +56,15 @@ describe('valueOfDraft', () => {
     expect(valueOfDraft(def('number'), 'twelve')).toBe('twelve');
   });
 
+  it('trims the free-text types, and sends a person as the id', () => {
+    expect(valueOfDraft(def('long_text'), '  two\nlines ')).toBe('two\nlines');
+    expect(valueOfDraft(def('link'), ' https://a.co ')).toBe('https://a.co');
+    expect(valueOfDraft(def('email'), ' a@b.co ')).toBe('a@b.co');
+    expect(valueOfDraft(def('person'), 'user-1')).toBe('user-1');
+    expect(valueOfDraft(def('link'), '  ')).toBeNull();
+    expect(valueOfDraft(def('person'), '')).toBeNull();
+  });
+
   it('trims text, and sends dates, choices and ticks as they are', () => {
     expect(valueOfDraft(def('text'), ' ORD-1 ')).toBe('ORD-1');
     expect(valueOfDraft(def('date'), '2026-09-02')).toBe('2026-09-02');

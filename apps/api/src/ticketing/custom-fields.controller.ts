@@ -1,4 +1,9 @@
-import type { CustomFieldDef, CustomFieldDefList, CustomFieldUsage } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  CustomFieldDefList,
+  CustomFieldPeople,
+  CustomFieldUsage,
+} from '@helpdock/schemas';
 import {
   Body,
   Controller,
@@ -21,6 +26,7 @@ import {
   CustomFieldDefDto,
   CustomFieldDefListDto,
   CustomFieldParamDto,
+  CustomFieldPeopleDto,
   CustomFieldQueryDto,
   CustomFieldReorderRequestDto,
   CustomFieldUpdateRequestDto,
@@ -57,6 +63,15 @@ export class CustomFieldsController {
     @Query(new ZodValidationPipe(CustomFieldQueryDto)) query: CustomFieldQueryDto,
   ): Promise<CustomFieldDefList> {
     return this.#fields.list(getTx(), query.target);
+  }
+
+  @Get('people')
+  @Requires('ticket:read')
+  @ZodSerializerDto(CustomFieldPeopleDto)
+  people(
+    @Param(new ZodValidationPipe(TicketingBrandParamDto)) _params: TicketingBrandParamDto,
+  ): Promise<CustomFieldPeople> {
+    return this.#fields.people(getTx());
   }
 
   @Post()

@@ -6,9 +6,11 @@ import {
   type DbTransaction,
   type NewCustomFieldDef,
   tickets,
+  userBrandRoles,
+  users,
 } from '@helpdock/db';
-import type { CustomFieldTarget } from '@helpdock/schemas';
-import { and, asc, eq, ne, type SQL, sql } from 'drizzle-orm';
+import { type CustomFieldTarget, publicNameOf } from '@helpdock/schemas';
+import { and, asc, eq, inArray, ne, type SQL, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 
 /**
@@ -50,6 +52,21 @@ const countOf = async (tx: DbTransaction, table: PgTable, where: SQL): Promise<n
 };
 
 export class CustomFieldsRepository {
+  /** The brand's staff a `person` field may name, by public name. Roles are tenant rows, so the policy is the brand filter. */
+  async people(tx: DbTransaction): Promise<{ userId: string; name: string }[]> {
+    const rows = await tx
+      .select({ userId: users.id, fullName: users.name, publicName: users.publicName })
+      .from(userBrandRoles)
+      .innerJoin(users, eq(users.id, userBrandRoles.userId))
+      .where(inArray(users.status, ['active', 'invited']))
+      .orderBy(asc(users.name), asc(users.id));
+
+    return rows.map((row) => ({
+      userId: row.userId,
+      name: publicNameOf({ fullName: row.fullName, publicName: row.publicName }),
+    }));
+  }
+
   async list(
     tx: DbTransaction,
     target?: CustomFieldTarget | undefined,

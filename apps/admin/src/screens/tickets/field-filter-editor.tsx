@@ -22,6 +22,7 @@ import {
   filtersOfDrafts,
   operatorsOf,
 } from '../../tickets/field-filter-draft.js';
+import { useCustomFieldPeople } from '../../tickets/use-people.js';
 
 /**
  * The custom-field rows of the Filter popover and of the view editor
@@ -265,6 +266,13 @@ function ValueControl({
   onPatch(change: Partial<FieldFilterDraft>): void;
 }): ReactNode {
   const t = useT();
+  // Only a person field names people; every other brand never asks.
+  const { people } = useCustomFieldPeople(def.type === 'person');
+  // A person is chosen by name and filtered by id; a choice field lists its options.
+  const choices: readonly { readonly value: string; readonly label: string }[] =
+    def.type === 'person'
+      ? people.map((person) => ({ value: person.userId, label: person.name }))
+      : def.options.map((option) => ({ value: option, label: option }));
   const type = def.type === 'number' ? 'number' : def.type === 'date' ? 'date' : 'text';
   const box = (name: string, text: string, onText: (text: string) => void): ReactNode => (
     <TextField
@@ -291,13 +299,13 @@ function ValueControl({
           aria-label={t('tickets:fieldFilters.valueOf', { field: label })}
           sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
         >
-          {def.options.map((option) => {
+          {choices.map(({ value: option, label: optionLabel }) => {
             const on = row.values.includes(option);
             return (
               <Chip
                 key={option}
                 size="small"
-                label={option}
+                label={optionLabel}
                 variant={on ? 'filled' : 'outlined'}
                 disabled={disabled}
                 role="switch"

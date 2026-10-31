@@ -347,7 +347,11 @@
       "date": "تاريخ",
       "select": "اختيار واحد",
       "multi_select": "اختيار متعدد",
-      "checkbox": "مربع اختيار"
+      "checkbox": "مربع اختيار",
+      "long_text": "نص طويل",
+      "link": "رابط",
+      "email": "بريد إلكتروني",
+      "person": "شخص"
     },
     "table": {
       "caption": "الحقول المخصصة على {{target}}",

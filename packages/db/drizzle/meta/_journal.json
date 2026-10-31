@@ -505,6 +505,13 @@
       "when": 1792867170550,
       "tag": "0073_setup_checklist",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793465500066,
+      "tag": "0074_custom_field_types",
+      "breakpoints": true
     }
   ]
 }

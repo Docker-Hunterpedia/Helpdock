@@ -3,6 +3,7 @@ import type {
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
+  CustomFieldPeople,
   CustomFieldReorderRequest,
   CustomFieldTarget,
   CustomFieldType,
@@ -58,6 +59,11 @@ export class CustomFieldsService {
     const rows = await this.#repository.list(tx, target);
 
     return { fields: rows.map(toDef) };
+  }
+
+  /** Who a `person` field can name: readable by anybody who reads the field itself. */
+  async people(tx: DbTransaction): Promise<CustomFieldPeople> {
+    return { people: await this.#repository.people(tx) };
   }
 
   async usage(tx: DbTransaction, fieldId: string): Promise<CustomFieldUsage> {

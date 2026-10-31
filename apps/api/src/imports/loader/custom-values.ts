@@ -19,7 +19,10 @@ export async function validatedImportedCustom(
     .where(
       and(eq(customFieldDefs.brandId, scope.brandId), eq(customFieldDefs.target, scope.target)),
     );
-  const parsed = customValuesSchema(definitions, { partial: scope.operation === 'patch' }).parse(
+  // A person is a staff id of this brand; a foreign system has none to give, so
+  // a person field is not an import destination and its key is refused as unknown.
+  const importable = definitions.filter((definition) => definition.type !== 'person');
+  const parsed = customValuesSchema(importable, { partial: scope.operation === 'patch' }).parse(
     scope.custom,
   );
   return z.record(z.string(), z.json()).parse(mergeCustomValues({}, parsed));

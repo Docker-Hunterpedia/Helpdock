@@ -10,6 +10,14 @@ import {
   draftOf,
   valueOfDraft,
 } from '../../tickets/custom-values.js';
+import {
+  EmailValue,
+  LinkInput,
+  LinkValue,
+  LongTextValue,
+  PersonSelect,
+  PersonValue,
+} from './custom-field-values.tsx';
 
 /**
  * The details panel's custom fields, editable (`AdminTicketTags`, panel 3;
@@ -107,6 +115,8 @@ function CustomFieldEditor({
   };
 
   const label = locale === 'ar' && def.labelAr !== null ? def.labelAr : def.label;
+  // A reader who cannot write sees the M14-27 types as they read, not as disabled inputs.
+  const display = disabled ? displayFor(def, label, stored, t('tickets:details.customNone')) : null;
   // The marker and a refusal both describe the control, so a reader hears the former first.
   const described =
     [def.requiredToClose ? markerId : undefined, refused ? errorId : undefined]
@@ -125,8 +135,8 @@ function CustomFieldEditor({
     >
       <Box sx={{ minWidth: 0 }}>
         <Typography
-          component="label"
-          htmlFor={id}
+          component={display === null ? 'label' : 'span'}
+          htmlFor={display === null ? id : undefined}
           variant="caption"
           sx={{ display: 'block', color: 'text.secondary', overflowWrap: 'anywhere' }}
         >
@@ -143,20 +153,21 @@ function CustomFieldEditor({
         ) : null}
       </Box>
 
-      {editorFor({
-        def,
-        id,
-        label,
-        draft,
-        disabled,
-        refused,
-        described,
-        none: t('tickets:details.customNone'),
-        onDraft: setDraft,
-        onCommit: (next) => {
-          void save(next);
-        },
-      })}
+      {display ??
+        editorFor({
+          def,
+          id,
+          label,
+          draft,
+          disabled,
+          refused,
+          described,
+          none: t('tickets:details.customNone'),
+          onDraft: setDraft,
+          onCommit: (next) => {
+            void save(next);
+          },
+        })}
 
       {refused ? (
         <Typography
@@ -170,6 +181,36 @@ function CustomFieldEditor({
       ) : null}
     </Box>
   );
+}
+
+/** The read-only rendering of the types that read differently from a form control; `null` for the rest. */
+function displayFor(
+  def: CustomFieldDef,
+  label: string,
+  stored: unknown,
+  none: string,
+): ReactNode | null {
+  if (!['long_text', 'link', 'email', 'person'].includes(def.type)) {
+    return null;
+  }
+  if (typeof stored !== 'string' || stored === '') {
+    return (
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        {none}
+      </Typography>
+    );
+  }
+
+  switch (def.type) {
+    case 'long_text':
+      return <LongTextValue value={stored} />;
+    case 'link':
+      return <LinkValue value={stored} label={label} />;
+    case 'email':
+      return <EmailValue value={stored} />;
+    default:
+      return <PersonValue userId={stored} />;
+  }
 }
 
 export interface EditorProps {
@@ -268,6 +309,57 @@ export function editorFor(props: EditorProps): ReactNode {
         />
       );
 
+    case 'person':
+      return (
+        <PersonSelect
+          id={id}
+          value={typeof draft === 'string' ? draft : ''}
+          disabled={disabled}
+          describedBy={described}
+          invalid={refused}
+          label={label}
+          onChange={(next) => {
+            onDraft(next);
+            onCommit(next);
+          }}
+        />
+      );
+
+    case 'long_text':
+      return (
+        <TextField
+          id={id}
+          size="small"
+          multiline
+          minRows={3}
+          maxRows={8}
+          disabled={disabled}
+          value={typeof draft === 'string' ? draft : ''}
+          error={refused}
+          onChange={(event) => {
+            onDraft(event.target.value);
+          }}
+          onBlur={(event) => {
+            onCommit(event.target.value);
+          }}
+          slotProps={{ htmlInput: aria }}
+        />
+      );
+
+    case 'link':
+      return (
+        <LinkInput
+          id={id}
+          label={label}
+          value={typeof draft === 'string' ? draft : ''}
+          disabled={disabled}
+          invalid={refused}
+          describedBy={described}
+          onDraft={onDraft}
+          onCommit={onCommit}
+        />
+      );
+
     default:
       return (
         <TextField
@@ -288,7 +380,9 @@ export function editorFor(props: EditorProps): ReactNode {
               (event.target as HTMLInputElement).blur();
             }
           }}
-          slotProps={{ htmlInput: aria }}
+          slotProps={{
+            htmlInput: def.type === 'email' ? { ...aria, dir: 'ltr' } : aria,
+          }}
         />
       );
   }

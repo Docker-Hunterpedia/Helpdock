@@ -1032,7 +1032,8 @@ the list accepts a view can keep.
 | `is` | checkbox | `{"key","op","value":true}` | ticked; `false` is "not ticked" and includes a box never touched |
 | `before`, `after` | number, date | `{"key","op","value":10}` or `"2026-03-01"` | strictly less or greater |
 | `between` | number, date | `{"key","op","from":1,"to":9}` | both ends included; `from` may not be after `to` |
-| `contains` | text | `{"key","op","value":"stripe"}` | a case-insensitive substring; `%` and `_` mean themselves |
+| `any_of` | person | `{"key","op","values":["<user id>"]}` | the value is one of the staff ids (M14-27); the filter popover offers names |
+| `contains` | text, long text, link, email | `{"key","op","value":"stripe"}` | a case-insensitive substring; `%` and `_` mean themselves |
 
 The api reads the field's type from the brand's definition, never from the
 request, and refuses with `400` a key that is not a ticket field (a typo is not

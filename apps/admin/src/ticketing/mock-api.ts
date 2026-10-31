@@ -13,6 +13,7 @@ import type {
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
+  CustomFieldPeople,
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
@@ -1070,6 +1071,10 @@ export class MockTicketingApi implements TicketingApi {
     );
 
     return this.customFields(brandId);
+  }
+
+  async customFieldPeople(_brandId: string): Promise<CustomFieldPeople> {
+    return { people: MEMBERS.map(({ userId, name }) => ({ userId, name })) };
   }
 
   async customFieldUsage(_brandId: string, fieldId: string): Promise<CustomFieldUsage> {

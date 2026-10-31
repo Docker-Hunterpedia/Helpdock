@@ -73,8 +73,12 @@ test.describe('search', () => {
     const trigger = page.getByRole('button', { name: 'Search' }).first();
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'Search' });
-    await dialog.getByRole('combobox').fill('zzqqxxnothing');
+    // Pagefind matches word prefixes and every term must hit the same page, so
+    // one made-up word can still match a page holding a one-letter word like
+    // "Z."; three unrelated made-up terms cannot.
+    await dialog.getByRole('combobox').fill('zzqqxxnothing qwxzvkjp xqzjvkwp');
     await expect(dialog.getByRole('status')).toContainText('No results');
+    await expect(dialog.getByRole('option')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();

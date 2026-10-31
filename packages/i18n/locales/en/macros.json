@@ -9,6 +9,7 @@
     "personalOnlyMe": "Personal · only me"
   },
   "list": {
+    "loading": "Loading saved replies",
     "heading": "Macros and canned responses",
     "caption": "Shared ones for your departments, and your own.",
     "new": "New",
@@ -41,9 +42,11 @@
     "justNow": "Just now",
     "footer": "{{shown}} of {{total}} · Personal items are visible to their owner only.",
     "empty": {
-      "heading": "No macros yet",
-      "body": "Create a canned response for a reply you write often, or a macro that also sets status, tags and the assignee."
-    }
+      "heading": "No saved replies yet",
+      "body": "Answer common questions in one step, with /shortcut.",
+      "action": "New saved reply"
+    },
+    "loadFailed": "The saved replies could not be loaded."
   },
   "editor": {
     "new": {

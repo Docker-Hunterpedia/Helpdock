@@ -70,6 +70,8 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         return lookup(options?.members, raw);
       case 'account':
         return lookup(options?.accounts, raw);
+      case 'mailbox':
+        return options?.mailboxes.find((mailbox) => mailbox.id === raw)?.address ?? deleted;
       case 'business_hours':
         return t(`rules:businessHours.${raw === 'outside' ? 'outside' : 'inside'}`);
       default:
@@ -174,6 +176,14 @@ export function useRuleText(options: RuleBuilderOptions | undefined): RuleText {
         return t('rules:text.action.escalate');
       case 'close':
         return t('rules:text.action.close');
+      case 'set_reply_mailbox':
+        return t('rules:text.action.set_reply_mailbox', {
+          mailbox:
+            options?.mailboxes.find((mailbox) => mailbox.id === entry.mailboxId)?.address ??
+            deleted,
+        });
+      case 'mark_spam':
+        return t('rules:text.action.mark_spam');
       case 'snooze':
         return t(`rules:text.action.snooze.${entry.preset}`);
       case 'ai_triage':

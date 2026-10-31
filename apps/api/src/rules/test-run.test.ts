@@ -39,6 +39,8 @@ const facts = (overrides: Partial<TicketFacts> = {}): TicketFacts => ({
   custom: {},
   contactId: null,
   contactLocale: null,
+  mailboxId: null,
+  toAddress: null,
   inert: false,
   ...overrides,
 });

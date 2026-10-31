@@ -9,6 +9,7 @@ import { currentBrand, useSession } from '../auth/session.tsx';
 import { useGlobalShortcuts } from '../keyboard/global-shortcuts.js';
 import { KeyboardProvider, useShortcutHandlers } from '../keyboard/keyboard-provider.tsx';
 import type { ShortcutId } from '../keyboard/registry.js';
+import { useNotificationSounds } from '../notifications/sounds/use-notification-sounds.js';
 import { PaletteProvider } from '../palette/palette-provider.tsx';
 import { BulkUndoProvider } from '../tickets/bulk-undo.tsx';
 import { BrandMark } from '../ui/brand-mark.tsx';
@@ -56,6 +57,8 @@ function ShellLayout({ flush }: { readonly flush: boolean }): ReactNode {
   const wide = useMediaQuery(SIDEBAR_BREAKPOINT, { noSsr: true });
   const { collapsed, toggle } = useSidebarCollapse();
   useGlobalShortcuts();
+  // M14-25: the live sounds, off for everybody until they switch one on.
+  useNotificationSounds();
   // Only where the sidebar is a column: a toggle nobody can see would
   // silently change the remembered choice.
   useShortcutHandlers<(typeof SHELL_SHORTCUTS)[number]>({

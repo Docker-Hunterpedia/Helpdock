@@ -3,6 +3,7 @@ import {
   customFieldDefs,
   type DbTransaction,
   departments,
+  mailboxes,
   tags,
   teams,
   ticketStatuses,
@@ -101,6 +102,7 @@ const referencesOf = (conditions: RuleConditions, actions: readonly RuleAction[]
     teams: new Set<string>(),
     tags: new Set<string>(),
     users: new Set<string>(),
+    mailboxes: new Set<string>(),
   };
   const byField: Partial<Record<string, Set<string>>> = {
     status: ids.statuses,
@@ -108,6 +110,7 @@ const referencesOf = (conditions: RuleConditions, actions: readonly RuleAction[]
     team: ids.teams,
     tag: ids.tags,
     assignee: ids.users,
+    mailbox: ids.mailboxes,
   };
 
   for (const condition of conditions.groups.flatMap((group) => group.conditions)) {
@@ -119,6 +122,7 @@ const referencesOf = (conditions: RuleConditions, actions: readonly RuleAction[]
     if (action.type === 'set_status') ids.statuses.add(action.statusId);
     if (action.type === 'assign_team') ids.teams.add(action.teamId);
     if (action.type === 'assign_agent') ids.users.add(action.userId);
+    if (action.type === 'set_reply_mailbox') ids.mailboxes.add(action.mailboxId);
     if (action.type === 'add_tag' || action.type === 'remove_tag') ids.tags.add(action.tagId);
     if (action.type === 'notify' && action.recipient.kind === 'team') {
       ids.teams.add(action.recipient.teamId);
@@ -263,52 +267,71 @@ export class RulesService {
 
   async options(context: TicketingContext): Promise<RuleBuilderOptions> {
     const { tx, brandId } = context;
-    const [statuses, departmentRows, teamRows, tagRows, members, accountRows, fields, canned] =
-      await Promise.all([
-        tx
-          .select({
-            id: ticketStatuses.id,
-            name: ticketStatuses.name,
-            nameAr: ticketStatuses.nameAr,
-            systemKey: ticketStatuses.systemKey,
-          })
-          .from(ticketStatuses)
-          .orderBy(asc(ticketStatuses.sortOrder)),
-        tx
-          .select({ id: departments.id, name: departments.name, nameAr: departments.nameAr })
-          .from(departments)
-          .orderBy(asc(departments.sortOrder), asc(departments.name)),
-        tx
-          .select({ id: teams.id, name: teams.name, departmentId: teams.departmentId })
-          .from(teams)
-          .orderBy(asc(teams.sortOrder), asc(teams.name)),
-        tx
-          .select({ id: tags.id, name: tags.name, nameAr: tags.nameAr })
-          .from(tags)
-          .orderBy(asc(tags.sortOrder), asc(tags.name)),
-        tx
-          .select({ id: users.id, name: users.name })
-          .from(userBrandRoles)
-          .innerJoin(users, eq(users.id, userBrandRoles.userId))
-          .where(and(eq(userBrandRoles.brandId, brandId), isNull(users.deactivatedAt)))
-          .orderBy(asc(users.name)),
-        tx
-          .select({ id: accounts.id, name: accounts.name })
-          .from(accounts)
-          .orderBy(asc(accounts.name))
-          .limit(RULE_OPTIONS_ACCOUNTS_MAX),
-        tx
-          .select({
-            key: customFieldDefs.key,
-            label: customFieldDefs.label,
-            labelAr: customFieldDefs.labelAr,
-            type: customFieldDefs.type,
-          })
-          .from(customFieldDefs)
-          .where(eq(customFieldDefs.target, 'ticket'))
-          .orderBy(asc(customFieldDefs.sortOrder)),
-        this.#deps.cannedResponses.list(tx),
-      ]);
+    const [
+      statuses,
+      departmentRows,
+      teamRows,
+      tagRows,
+      members,
+      accountRows,
+      fields,
+      canned,
+      mailboxRows,
+    ] = await Promise.all([
+      tx
+        .select({
+          id: ticketStatuses.id,
+          name: ticketStatuses.name,
+          nameAr: ticketStatuses.nameAr,
+          systemKey: ticketStatuses.systemKey,
+        })
+        .from(ticketStatuses)
+        .orderBy(asc(ticketStatuses.sortOrder)),
+      tx
+        .select({ id: departments.id, name: departments.name, nameAr: departments.nameAr })
+        .from(departments)
+        .orderBy(asc(departments.sortOrder), asc(departments.name)),
+      tx
+        .select({ id: teams.id, name: teams.name, departmentId: teams.departmentId })
+        .from(teams)
+        .orderBy(asc(teams.sortOrder), asc(teams.name)),
+      tx
+        .select({ id: tags.id, name: tags.name, nameAr: tags.nameAr })
+        .from(tags)
+        .orderBy(asc(tags.sortOrder), asc(tags.name)),
+      tx
+        .select({ id: users.id, name: users.name })
+        .from(userBrandRoles)
+        .innerJoin(users, eq(users.id, userBrandRoles.userId))
+        .where(and(eq(userBrandRoles.brandId, brandId), isNull(users.deactivatedAt)))
+        .orderBy(asc(users.name)),
+      tx
+        .select({ id: accounts.id, name: accounts.name })
+        .from(accounts)
+        .orderBy(asc(accounts.name))
+        .limit(RULE_OPTIONS_ACCOUNTS_MAX),
+      tx
+        .select({
+          key: customFieldDefs.key,
+          label: customFieldDefs.label,
+          labelAr: customFieldDefs.labelAr,
+          type: customFieldDefs.type,
+        })
+        .from(customFieldDefs)
+        .where(eq(customFieldDefs.target, 'ticket'))
+        .orderBy(asc(customFieldDefs.sortOrder)),
+      this.#deps.cannedResponses.list(tx),
+      tx
+        .select({
+          id: mailboxes.id,
+          address: mailboxes.address,
+          displayName: mailboxes.displayName,
+          departmentId: mailboxes.departmentId,
+        })
+        .from(mailboxes)
+        .where(eq(mailboxes.brandId, brandId))
+        .orderBy(asc(mailboxes.address)),
+    ]);
 
     return {
       statuses: statuses.map(({ systemKey, ...status }) => ({
@@ -321,6 +344,7 @@ export class RulesService {
       members,
       accounts: accountRows,
       customFields: fields,
+      mailboxes: mailboxRows,
       cannedResponses: canned,
     };
   }
@@ -420,6 +444,7 @@ export class RulesService {
       ['department', ids.departments],
       ['team', ids.teams],
       ['tag', ids.tags],
+      ['mailbox', ids.mailboxes],
     ] as const;
 
     for (const [what, wanted] of checks) {

@@ -28,6 +28,7 @@ const options: RuleBuilderOptions = {
     { key: 'owner', label: 'Owner', labelAr: null, type: 'person' },
     { key: 'notes', label: 'Notes', labelAr: null, type: 'long_text' },
   ],
+  mailboxes: [],
   cannedResponses: [],
 };
 

@@ -165,6 +165,8 @@
       "bulk_undo": "by undoing a bulk change"
     },
     "sourceArticle": "Came from the help center article “{{title}}”",
+    "replyMailboxSet": "{{actor}} chose the mailbox replies leave from",
+    "replyMailboxCleared": "{{actor}} put replies back on the department’s sender",
     "articleProposed": "{{actor}} proposed an article · waiting for approval",
     "imported": "Imported from {{source}} on {{importedAt}} · original ticket #{{number}}",
     "importedCreated": "Imported from {{source}} on {{importedAt}} · original ticket #{{number}} · created {{createdAt}}",
@@ -337,7 +339,11 @@
     "source": "Source",
     "allSources": "All sources",
     "imported": "Imported",
-    "native": "Created in Helpdock"
+    "native": "Created in Helpdock",
+    "mailbox": "Mailbox",
+    "writtenTo": "Written to",
+    "writtenToHint": "The exact address the customer wrote to. Press Enter to apply.",
+    "writtenToPlaceholder": "refunds@example.com"
   },
   "newTicket": {
     "action": "New ticket",

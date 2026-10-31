@@ -108,7 +108,7 @@ describe('the Articles tab', () => {
     await screen.findByText('Section "الفواتير" created');
 
     await user.click(await screen.findByRole('button', { name: 'الفواتير' }));
-    expect(await screen.findByText('No articles here yet')).toBeInTheDocument();
+    expect(await screen.findByText('No articles in الفواتير')).toBeInTheDocument();
   });
 
   it('refuses to delete a published article and says why', async () => {

@@ -13,6 +13,7 @@ import {
   ruleNotifyPayloadSchema,
   type SnoozeAction,
 } from '@helpdock/schemas';
+import { ConflictException } from '@nestjs/common';
 import type { AssignmentRepository } from '../assignment/assignment.repository.js';
 import { requestAutoAssign } from '../assignment/assignment-events.js';
 import { canWorkDepartment } from '../assignment/rotation.js';
@@ -25,6 +26,7 @@ import type {
   LifecycleContext,
   TicketLifecycleService,
 } from '../tickets/lifecycle/lifecycle.service.js';
+import { TicketLifecycleFailure } from '../tickets/lifecycle/lifecycle-failure.js';
 import type { SnoozeResolver } from '../tickets/snooze/snooze-calendar.js';
 import { planSnooze, recordSnooze } from '../tickets/snooze/snooze-plan.js';
 import { isSnoozedStatus, writeWokeActivity } from '../tickets/snooze/snooze-wake.js';
@@ -84,7 +86,7 @@ const actorOf = (context: RuleActionContext): ActivityActor =>
  */
 export type LifecycleMoments = Pick<
   TicketLifecycleService,
-  'onClosed' | 'onReopened' | 'onChanged' | 'onResponded'
+  'onClosed' | 'onReopened' | 'onChanged' | 'onResponded' | 'markSpam'
 >;
 
 export interface RuleActionDeps {
@@ -279,6 +281,78 @@ const statusEventFor = (
     return TICKET_EVENTS.closed;
   }
   return result.reopening ? TICKET_EVENTS.reopened : null;
+};
+
+/**
+ * M14-26. Later public replies on email leave from this mailbox. Limited to a
+ * mailbox of the ticket's department, checked when the rule runs: the rule may
+ * have been saved before the ticket moved, or the mailbox may have been
+ * deleted or moved to another department since.
+ */
+const setReplyMailbox = async (
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  state: RunState,
+  mailboxId: string,
+): Promise<Effect> => {
+  const mailbox = await deps.rules.mailbox(context.tx, mailboxId);
+  if (mailbox === undefined || mailbox.departmentId !== state.ticket.departmentId) {
+    return UNAVAILABLE;
+  }
+  if (state.ticket.replyMailboxId === mailbox.id) {
+    return UNCHANGED;
+  }
+
+  const updated = await deps.tickets.updateTicket(context.tx, state.ticket.id, {
+    replyMailboxId: mailbox.id,
+  });
+  /* c8 ignore next 3 -- the system transaction read the row a moment ago. */
+  if (updated === undefined) {
+    throw new Error('The ticket a rule was acting on disappeared');
+  }
+  await writeTicketActivity(context.tx, {
+    brandId: context.brandId,
+    ticketId: updated.id,
+    departmentId: updated.departmentId,
+    actor: actorOf(context),
+    action: 'ticket.reply_mailbox.changed',
+    from: { replyMailboxId: state.ticket.replyMailboxId },
+    to: { replyMailboxId: mailbox.id },
+  });
+  state.ticket = updated;
+  return CHANGED;
+};
+
+/**
+ * M14-26. The existing spam transition (DOMAIN-RULES §2.2 row 7), so the
+ * ticket leaves the same trail a person's mark leaves and nothing queued
+ * answers it: no acknowledgment is sent once it is spam, and no survey is
+ * scheduled. Refused where a person would be (a merged or deleted ticket).
+ */
+const markSpam = async (
+  deps: RuleActionDeps,
+  context: RuleActionContext,
+  state: RunState,
+): Promise<Effect> => {
+  try {
+    const marked = await deps.lifecycle.markSpam(
+      lifecycleContext(context),
+      state.ticket,
+      state.status,
+    );
+    if (!marked.changed) {
+      return UNCHANGED;
+    }
+    state.ticket = marked.ticket;
+    state.status = marked.status;
+    state.changes.add('status');
+    return CHANGED;
+  } catch (error) {
+    if (error instanceof TicketLifecycleFailure || error instanceof ConflictException) {
+      return UNAVAILABLE;
+    }
+    throw error;
+  }
 };
 
 const assignTeam = async (
@@ -776,6 +850,10 @@ const runOne = async (
       return CHANGED;
     case 'notify':
       return notify(deps, context, state, action.recipient, action.message ?? null);
+    case 'set_reply_mailbox':
+      return setReplyMailbox(deps, context, state, action.mailboxId);
+    case 'mark_spam':
+      return markSpam(deps, context, state);
   }
 };
 

@@ -18,6 +18,7 @@ import {
   type EmailSchedule,
   type NotificationKind,
   type NotificationPreferences,
+  type NotificationSounds,
   resolveNotificationPreferences,
   type TicketChannel,
   type TicketPriority,
@@ -584,6 +585,17 @@ export class NotificationsRepository {
     return row?.preferences;
   }
 
+  /** M14-25. The person's sound choices as stored; resolved by the caller. */
+  async storedSounds(tx: DbTransaction, userId: string): Promise<unknown> {
+    const [row] = await tx
+      .select({ sounds: notificationPrefs.sounds })
+      .from(notificationPrefs)
+      .where(eq(notificationPrefs.userId, userId))
+      .limit(1);
+
+    return row?.sounds;
+  }
+
   /** M14-10's schedule, digest hour, pause and unsubscribe; the defaults without a row. */
   async emailDelivery(tx: DbTransaction, userId: string): Promise<EmailDelivery> {
     const [row] = await tx
@@ -618,6 +630,8 @@ export class NotificationsRepository {
       readonly emailUnsubscribedAt?: null | undefined;
       /** Stamped only when this save lifts an unsubscribe, so unsubscribe links issued before it stop working. */
       readonly resubscribedAt?: Date | undefined;
+      /** M14-25. Replaces the stored sound choices. */
+      readonly sounds?: NotificationSounds | undefined;
     } = {},
   ): Promise<void> {
     const { resubscribedAt, ...rest } = email;

@@ -109,6 +109,8 @@ export const newAction = (type: RuleActionType): RuleAction => {
       return { type, body: '' };
     case 'notify':
       return { type, recipient: { kind: 'department_leads' }, message: null };
+    case 'set_reply_mailbox':
+      return { type, mailboxId: '' };
     case 'snooze':
       return { type, preset: 'in_1_hour' };
     case 'ai_triage':

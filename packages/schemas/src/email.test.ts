@@ -4,6 +4,7 @@ import {
   emailSenderKeySchema,
   emailSendersSchema,
   emailSignatureSchema,
+  mailboxSenderKey,
   outgoingSmtpUpdateSchema,
 } from './email.js';
 
@@ -86,6 +87,13 @@ describe('autoRepliesSchema', () => {
 });
 
 describe('emailSenderKeySchema', () => {
+  it('accepts a reply mailbox key and nothing else shaped like it (M14-26)', () => {
+    const id = '01924f00-0000-7000-8000-000000000001';
+    expect(emailSenderKeySchema.safeParse(mailboxSenderKey(id)).success).toBe(true);
+    expect(emailSenderKeySchema.safeParse('mailbox:support').success).toBe(false);
+    expect(emailSenderKeySchema.safeParse(`box:${id}`).success).toBe(false);
+  });
+
   it('is the word default or a department id', () => {
     expect(emailSenderKeySchema.safeParse('default').success).toBe(true);
     expect(emailSenderKeySchema.safeParse(DEPARTMENT).success).toBe(true);

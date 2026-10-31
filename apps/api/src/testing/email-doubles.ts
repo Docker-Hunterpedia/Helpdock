@@ -61,6 +61,7 @@ export const addressing = (overrides: Partial<ReplyAddressing> = {}): ReplyAddre
   contact: { name: 'Mona Khalil', address: 'mona@example.com' },
   locale: 'en',
   cc: ['karim@acme.de'],
+  replyMailbox: null,
   ...overrides,
 });
 
@@ -155,6 +156,11 @@ export class FakeEmailRepository {
     }
     this.#update(id, { status: 'discarded' });
     return true;
+  };
+  discardQueued = async (_tx: DbTransaction, id: string) => {
+    if (this.deliveries.find((candidate) => candidate.id === id)?.status === 'queued') {
+      this.#update(id, { status: 'discarded' });
+    }
   };
   failedIds = async () =>
     this.deliveries.filter((row) => row.status === 'failed').map((row) => row.id);

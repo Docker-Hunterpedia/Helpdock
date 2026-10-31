@@ -21,6 +21,8 @@ export interface TicketFacts extends RuleTicketFacts {
   readonly reference: string;
   readonly contactId: string | null;
   readonly contactLocale: 'en' | 'ar' | null;
+  /** M14-26. The mailbox later public replies leave from, when a rule set one. */
+  readonly replyMailboxId?: string | null;
   /** Spam, merged, soft-deleted: no rule acts on these (DOMAIN-RULES §2.2). */
   readonly inert: boolean;
   /** #368. When the ticket's snooze ends, so a `snooze` action can tell it would change nothing. */
@@ -127,6 +129,9 @@ export const loadTicketFacts = async (
     contactLocale: contact.locale,
     accountId: contact.accountId,
     custom: ticket.custom,
+    replyMailboxId: ticket.replyMailboxId,
+    mailboxId: ticket.arrivalMailboxId,
+    toAddress: ticket.arrivalToAddress,
     snoozedUntil: ticket.snoozedUntil,
     inert: row.isSpam || ticket.mergedIntoId !== null || ticket.deletedAt !== null,
   };

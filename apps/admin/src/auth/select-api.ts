@@ -241,3 +241,15 @@ export function createApis(
     quickSearch: new MockQuickSearchApi({ tickets, contacts, helpCenter }),
   };
 }
+
+/**
+ * The browser suite picks a chat up through the fixture the app is using
+ * (M14-25), so the fixture says where it is once the app has settled on it: a
+ * StrictMode render builds the set twice and keeps one. A real api is never a
+ * `MockTicketsApi`, so nothing is exposed in production.
+ */
+export function exposeMockTickets(tickets: TicketsApi): void {
+  if (tickets instanceof MockTicketsApi) {
+    (globalThis as { __helpdockMockTickets?: MockTicketsApi }).__helpdockMockTickets = tickets;
+  }
+}

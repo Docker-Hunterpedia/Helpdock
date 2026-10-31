@@ -26,15 +26,12 @@ import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'reac
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
-import {
-  currentBrand,
-  useChannelsApi,
-  useSession,
-  useTicketingApi,
-} from '../../../auth/session.tsx';
+import { currentBrand, useChannelsApi, useSession } from '../../../auth/session.tsx';
 import { channelsKeys } from '../../../channels/api.js';
+import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { moveBy } from '../ticketing/reorder.js';
 import { SectionCard, useEmailAction } from './section-card.tsx';
@@ -65,7 +62,6 @@ export const withShown = (field: WebFormField, shown: boolean): WebFormField =>
 export function WebFormTab(): ReactNode {
   const t = useT();
   const api = useChannelsApi();
-  const ticketing = useTicketingApi();
   const brand = currentBrand(useSession());
   const queryClient = useQueryClient();
 
@@ -73,10 +69,7 @@ export function WebFormTab(): ReactNode {
     queryKey: channelsKeys.webForm(brand.id),
     queryFn: () => api.webForm(brand.id),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
 
   // What `{{ticket.number}}` looks like for this brand, in the hint and the preview.
   const sample = `${brand.ticketPrefix}-1043`;
@@ -89,7 +82,7 @@ export function WebFormTab(): ReactNode {
     return <AlertBanner tone="danger">{t('channels:webForm.loadFailed')}</AlertBanner>;
   }
   if (settings.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   return (

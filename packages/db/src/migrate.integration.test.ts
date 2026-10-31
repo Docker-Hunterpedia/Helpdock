@@ -93,6 +93,8 @@ const MIGRATION_TAGS = [
   '0072_unsubscribe_after_resubscribe',
   '0073_setup_checklist',
   '0074_custom_field_types',
+  '0075_notification_sounds',
+  '0076_ticket_arrival_and_reply_mailbox',
   '0077_canned_shortcuts',
 ];
 

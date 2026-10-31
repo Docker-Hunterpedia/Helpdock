@@ -2,6 +2,7 @@ import type { TicketChannel, TicketPriority } from './ticket.js';
 import {
   type ConditionTrace,
   type GroupTrace,
+  RULE_ARRIVAL_FIELDS,
   RULE_FIELD_VALUE_KIND,
   type RuleCondition,
   type RuleConditionGroup,
@@ -42,6 +43,10 @@ export interface RuleTicketFacts {
   readonly contactEmails: readonly string[];
   readonly accountId: string | null;
   readonly custom: Readonly<Record<string, unknown>>;
+  /** M14-26. The mailbox the ticket arrived at, from its arrival record; null when it has none. */
+  readonly mailboxId: string | null;
+  /** M14-26. The address the customer wrote to, as recorded on arrival at a mailbox. */
+  readonly toAddress: string | null;
 }
 
 export interface EvaluationContext {
@@ -67,7 +72,7 @@ export interface ConditionsOutcome {
 /** Case- and form-insensitive, so "Refund" finds "refund" and Arabic presentation forms fold. */
 const fold = (text: string): string => text.normalize('NFKC').toLocaleLowerCase().trim();
 
-const TEXT_FIELDS = new Set(['subject', 'body', 'contact_email', 'custom_field']);
+const TEXT_FIELDS = new Set(['subject', 'body', 'contact_email', 'custom_field', 'to_address']);
 
 /** What the ticket holds for a field, as strings. */
 const actualOf = (
@@ -102,6 +107,10 @@ const actualOf = (
       return [...facts.tagIds];
     case 'account':
       return facts.accountId === null ? [] : [facts.accountId];
+    case 'mailbox':
+      return facts.mailboxId === null ? [] : [facts.mailboxId];
+    case 'to_address':
+      return facts.toAddress === null ? [] : [facts.toAddress];
     case 'time_in_status':
       return [String(minutesInStatus(facts, context.now))];
     case 'business_hours':
@@ -155,6 +164,9 @@ export const conditionHolds = (
 ): boolean => {
   const actual = actualOf(condition, facts, context);
 
+  if (RULE_ARRIVAL_FIELDS.includes(condition.field) && actual.length === 0) {
+    return false;
+  }
   if (condition.operator === 'is_set') {
     return actual.some((value) => value.trim() !== '');
   }

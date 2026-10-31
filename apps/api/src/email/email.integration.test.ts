@@ -6,7 +6,9 @@ import {
   type DbHandle,
   departments,
   emailDeliveries,
+  mailboxes,
   outbox,
+  tickets,
   userBrandRoles,
   users,
   uuidv7,
@@ -468,6 +470,50 @@ describe.skipIf(!hasDocker)('outbound email', () => {
     });
     expect(delivered[0]?.Cc?.map((address) => address.Address)).toEqual(['karim@acme.test']);
     expect((await deliveryFor(message.id)).status).toBe('sent');
+  });
+
+  it("sends a composer reply from the rule's reply mailbox, and falls back for a mailbox that is not the ticket's (M14-26)", async () => {
+    const rows = await owner.db
+      .insert(mailboxes)
+      .values([
+        {
+          brandId: seeded.brandId,
+          address: 'refunds@helpdock.test',
+          displayName: 'Helpdock Refunds',
+          departmentId: billing,
+          method: 'inbound_parse',
+        },
+        {
+          brandId: seeded.brandId,
+          address: 'help@helpdock.test',
+          displayName: 'Helpdock Help',
+          departmentId: support,
+          method: 'inbound_parse',
+        },
+      ])
+      .returning({ id: mailboxes.id, address: mailboxes.address });
+    const own = rows.find((row) => row.address === 'refunds@helpdock.test')?.id ?? '';
+    const other = rows.find((row) => row.address === 'help@helpdock.test')?.id ?? '';
+    const ticketId = await createTicket(billing);
+    await owner.db.update(tickets).set({ replyMailboxId: own }).where(eq(tickets.id, ticketId));
+
+    // The composer preselects the mailbox and sends its key back.
+    const context = await call<TicketEmailContext>(
+      'GET',
+      `${brandPath()}/tickets/${ticketId}/email`,
+      admin,
+    );
+    expect(context.body.selectedKey).toBe(`mailbox:${own}`);
+    const viaMailbox = await reply(ticketId, `mailbox:${own}`);
+    expect((await deliveryFor(viaMailbox.id)).fromAddress).toBe('refunds@helpdock.test');
+
+    // A mailbox of another department is not this ticket's: the department's sender is used.
+    const viaOther = await reply(ticketId, `mailbox:${other}`);
+    expect((await deliveryFor(viaOther.id)).fromAddress).toBe('billing@helpdock.test');
+
+    // An agent who picks the department's sender wins over the rule.
+    const viaDepartment = await reply(ticketId, billing);
+    expect((await deliveryFor(viaDepartment.id)).fromAddress).toBe('billing@helpdock.test');
   });
 
   it("signs a reply with the sender's public profile and shows customers the public name (M14-12)", async () => {

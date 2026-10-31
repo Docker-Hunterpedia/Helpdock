@@ -12,6 +12,8 @@ import type { TicketQuery } from './api.js';
 export const ticketKeys = {
   brand: (brandId: string) => ['tickets', brandId] as const,
   statuses: (brandId: string) => ['tickets', brandId, 'statuses'] as const,
+  /** M14-26: the mailboxes the list can be filtered by. */
+  mailboxes: (brandId: string) => ['tickets', brandId, 'mailboxes'] as const,
   /** Every list, for the invalidation a created ticket needs. */
   lists: (brandId: string) => ['tickets', brandId, 'list'] as const,
   list: (brandId: string, query: TicketQuery) => ['tickets', brandId, 'list', query] as const,

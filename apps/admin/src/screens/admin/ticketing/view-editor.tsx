@@ -1,4 +1,10 @@
-import type { CustomFieldDef, Department, TagSummary, TicketView } from '@helpdock/schemas';
+import type {
+  CustomFieldDef,
+  Department,
+  TagSummary,
+  TicketMailbox,
+  TicketView,
+} from '@helpdock/schemas';
 import { ticketPrioritySchema, VIEW_NAME_MAX_LENGTH } from '@helpdock/schemas';
 import {
   Box,
@@ -16,6 +22,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { viewLabel } from '../../../tickets/views.js';
 import { Field } from '../../../ui/field.tsx';
+import { WrittenToField } from '../../tickets/arrival-filters.tsx';
 import { FieldFilterEditor } from '../../tickets/field-filter-editor.tsx';
 import { DepartmentChoice } from '../../tickets/view-dialogs.tsx';
 import {
@@ -54,6 +61,7 @@ export function ViewEditor({
   departments,
   tags,
   fields,
+  mailboxes,
   busy,
   onSubmit,
   onCancel,
@@ -65,6 +73,8 @@ export function ViewEditor({
   readonly tags: readonly TagSummary[];
   /** M14-16: the ticket fields a filter may name. A shared view offers the ones Agents see. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: the brand's mailboxes a view may filter by. */
+  readonly mailboxes: readonly TicketMailbox[];
   readonly busy: boolean;
   onSubmit(draft: ViewDraft): void;
   onCancel(): void;
@@ -79,6 +89,7 @@ export function ViewEditor({
   const audienceId = useId();
   const tagsId = useId();
   const fieldsId = useId();
+  const mailboxId = useId();
   const ids = {
     state: useId(),
     assignee: useId(),
@@ -380,6 +391,56 @@ export function ViewEditor({
                 set({ filters: withSortChoice(filters, value as SortChoice) });
               }
             },
+          )}
+          {mailboxes.length === 0 ? null : (
+            <>
+              <Typography
+                id={mailboxId}
+                component="span"
+                sx={{ fontSize: 12, color: 'text.secondary' }}
+              >
+                {t('tickets:filters.mailbox')}
+              </Typography>
+              <Box
+                role="group"
+                aria-labelledby={mailboxId}
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+              >
+                {mailboxes.map((mailbox) => {
+                  const on = filters.mailboxId.includes(mailbox.id);
+                  return (
+                    <Chip
+                      key={mailbox.id}
+                      size="small"
+                      disabled={fixed}
+                      label={mailbox.address}
+                      color={on ? 'primary' : 'default'}
+                      variant={on ? 'filled' : 'outlined'}
+                      aria-pressed={on}
+                      onClick={() => {
+                        set({
+                          filters: {
+                            ...filters,
+                            mailboxId: on
+                              ? filters.mailboxId.filter((id) => id !== mailbox.id)
+                              : [...filters.mailboxId, mailbox.id],
+                          },
+                        });
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <WrittenToField
+                  value={filters.toAddress}
+                  disabled={fixed}
+                  onChange={(toAddress) => {
+                    set({ filters: { ...filters, toAddress } });
+                  }}
+                />
+              </Box>
+            </>
           )}
           {fields.length === 0 ? null : (
             <>

@@ -75,6 +75,11 @@ export function useValueOptions(
         return named(options?.members ?? []);
       case 'account':
         return named(options?.accounts ?? []);
+      case 'mailbox':
+        return (options?.mailboxes ?? []).map((mailbox) => ({
+          value: mailbox.id,
+          label: mailbox.address,
+        }));
       case 'business_hours':
         return (['inside', 'outside'] as const).map((value) => ({
           value,

@@ -3,6 +3,7 @@ import {
   contacts,
   type DbTransaction,
   departments,
+  mailboxes,
   type NewWorkflowRuleRow,
   type NewWorkflowRunRow,
   type TicketStatus as TicketStatusRow,
@@ -371,6 +372,29 @@ export class RulesRepository {
     return row;
   }
 
+  /** M14-26. A mailbox of this brand and the department it files tickets in. */
+  async mailbox(
+    tx: DbTransaction,
+    mailboxId: string,
+  ): Promise<{ id: string; departmentId: string } | undefined> {
+    const [row] = await tx
+      .select({ id: mailboxes.id, departmentId: mailboxes.departmentId })
+      .from(mailboxes)
+      .where(eq(mailboxes.id, mailboxId))
+      .limit(1);
+    return row;
+  }
+
+  /** M14-26. The brand's Spam status, which `mark_spam` moves a ticket to. */
+  async spamStatus(tx: DbTransaction): Promise<TicketStatusRow | undefined> {
+    const [row] = await tx
+      .select()
+      .from(ticketStatuses)
+      .where(eq(ticketStatuses.isSpam, true))
+      .limit(1);
+    return row;
+  }
+
   async tagExists(tx: DbTransaction, tagId: string): Promise<boolean> {
     const [row] = await tx.select({ id: tags.id }).from(tags).where(eq(tags.id, tagId)).limit(1);
     return row !== undefined;
@@ -484,7 +508,7 @@ export class RulesRepository {
   /** How many of `ids` are rows of that kind in this brand. */
   async countExisting(
     tx: DbTransaction,
-    kind: 'status' | 'department' | 'team' | 'tag',
+    kind: 'status' | 'department' | 'team' | 'tag' | 'mailbox',
     ids: readonly string[],
   ): Promise<number> {
     const wanted = [...ids];
@@ -504,6 +528,11 @@ export class RulesRepository {
           return tx.select({ id: teams.id }).from(teams).where(inArray(teams.id, wanted));
         case 'tag':
           return tx.select({ id: tags.id }).from(tags).where(inArray(tags.id, wanted));
+        case 'mailbox':
+          return tx
+            .select({ id: mailboxes.id })
+            .from(mailboxes)
+            .where(inArray(mailboxes.id, wanted));
       }
     })();
     return rows.length;

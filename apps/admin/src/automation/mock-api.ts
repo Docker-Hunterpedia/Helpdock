@@ -24,6 +24,7 @@ import {
   type WorkflowRunList,
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
+import { isMockEmpty } from '../auth/mock-empty.js';
 import type { AutomationApi } from './api.js';
 import { mockRoutingOverview, mockRoutingTest } from './mock-routing.js';
 
@@ -54,6 +55,7 @@ export const MOCK_AUTOMATION = {
   members: { karim: id(501), omar: id(502), lina: id(503) },
   canned: { refundReceived: id(601), orderStatus: id(602), closing: id(603) },
   tickets: { hd1042: id(701), hd1039: id(702), hd1041: id(703), hd1038: id(704) },
+  mailboxes: { support: id(901), billing: id(902) },
 } as const;
 
 const M = MOCK_AUTOMATION;
@@ -89,6 +91,20 @@ const OPTIONS: RuleBuilderOptions = {
     { id: M.members.omar, name: 'Omar Aziz' },
   ],
   accounts: [{ id: id(801), name: 'Acme Trading' }],
+  mailboxes: [
+    {
+      id: M.mailboxes.support,
+      address: 'support@helpdock.com',
+      displayName: 'Helpdock Support',
+      departmentId: M.departments.support,
+    },
+    {
+      id: M.mailboxes.billing,
+      address: 'billing@helpdock.com',
+      displayName: 'Helpdock Billing',
+      departmentId: M.departments.billing,
+    },
+  ],
   customFields: [
     { key: 'order_number', label: 'Order number', labelAr: 'رقم الطلب', type: 'text' },
     { key: 'notes', label: 'Notes', labelAr: 'ملاحظات', type: 'long_text' },
@@ -127,6 +143,8 @@ const TICKETS: readonly MockTicket[] = [
       contactEmails: ['mona.k@example.com'],
       accountId: null,
       custom: { order_number: '88412' },
+      mailboxId: M.mailboxes.billing,
+      toAddress: 'refunds@helpdock.com',
     },
   },
   {
@@ -147,6 +165,8 @@ const TICKETS: readonly MockTicket[] = [
       contactEmails: [],
       accountId: null,
       custom: {},
+      mailboxId: null,
+      toAddress: null,
     },
   },
 ];
@@ -451,6 +471,13 @@ const preview = (
         after = { ...after, priority: action.priority };
         return { action, effect: 'changed' };
       }
+      case 'set_reply_mailbox': {
+        const mailbox = OPTIONS.mailboxes.find((candidate) => candidate.id === action.mailboxId);
+        return {
+          action,
+          effect: mailbox?.departmentId === after.departmentId ? 'changed' : 'unavailable',
+        };
+      }
       case 'notify':
         return action.recipient.kind === 'assignee' && after.assigneeId === null
           ? { action, effect: 'unavailable' }
@@ -480,7 +507,7 @@ export class MockAutomationApi implements AutomationApi {
   async rules(_brandId: string, kind?: RuleKind): Promise<WorkflowRuleList> {
     await Promise.resolve();
     return {
-      rules: this.#rules
+      rules: (isMockEmpty('rules') ? [] : this.#rules)
         .filter((rule) => kind === undefined || rule.kind === kind)
         .sort((a, b) => a.kind.localeCompare(b.kind) || a.position - b.position),
     };

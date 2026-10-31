@@ -2,6 +2,7 @@ import type {
   CustomFieldDef,
   Department,
   TagSummary,
+  TicketMailbox,
   TicketStatus,
   TicketSystemState,
 } from '@helpdock/schemas';
@@ -11,6 +12,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
+import { WrittenToField } from './arrival-filters.tsx';
 import { FieldFilterEditor } from './field-filter-editor.tsx';
 import { statusName } from './format.js';
 
@@ -91,6 +93,7 @@ export function FilterPopover({
   tags,
   staff,
   fields,
+  mailboxes,
   viewerId,
   onChange,
   onClose,
@@ -103,6 +106,8 @@ export function FilterPopover({
   readonly staff: readonly { readonly userId: string; readonly name: string }[];
   /** M14-16: the ticket fields the reader may filter by. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: the brand's mailboxes. */
+  readonly mailboxes: readonly TicketMailbox[];
   readonly viewerId: string;
   onChange(filters: WorkspaceFilters): void;
   onClose(): void;
@@ -225,6 +230,29 @@ export function FilterPopover({
               />
             ))}
           </Group>
+        )}
+
+        {mailboxes.length === 0 ? null : (
+          <Group label={t('tickets:filters.mailbox')}>
+            {mailboxes.map((mailbox) => (
+              <FilterChip
+                key={mailbox.id}
+                label={mailbox.address}
+                on={filters.mailboxId.includes(mailbox.id)}
+                onToggle={() => {
+                  onChange({ ...filters, mailboxId: toggle(filters.mailboxId, mailbox.id) });
+                }}
+              />
+            ))}
+          </Group>
+        )}
+        {mailboxes.length === 0 ? null : (
+          <WrittenToField
+            value={filters.toAddress}
+            onChange={(toAddress) => {
+              onChange({ ...filters, toAddress });
+            }}
+          />
         )}
 
         <Group label={t('tickets:filters.sla')}>

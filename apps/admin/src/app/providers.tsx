@@ -21,7 +21,7 @@ import { AiApiProvider } from '../ai/context.tsx';
 import type { AssistApi } from '../assist/api.js';
 import { AssistApiProvider } from '../assist/context.tsx';
 import type { AuthApi } from '../auth/api.js';
-import { createApis } from '../auth/select-api.js';
+import { createApis, exposeMockTickets } from '../auth/select-api.js';
 import { AuthApiProvider } from '../auth/session.tsx';
 import type { AutomationApi } from '../automation/api.js';
 import { AutomationApiProvider } from '../automation/context.tsx';
@@ -235,6 +235,9 @@ export function AppProviders({
   const contacts = contactsApi ?? fallback.contacts;
   const ticketing = ticketingApi ?? fallback.ticketing;
   const tickets = ticketsApi ?? fallback.tickets;
+  useEffect(() => {
+    exposeMockTickets(tickets);
+  }, [tickets]);
   const attachments = uploader ?? fallback.uploader;
   const email = emailApi ?? fallback.email;
   const channels = channelsApi ?? fallback.channels;

@@ -8,6 +8,7 @@ import { useT } from '../../../../app/i18n.js';
 import { aiRoute } from '../../../../app/route-paths.js';
 import { useSession } from '../../../../auth/session.tsx';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { ActivityCard } from './activity-card.tsx';
 import { BudgetBanner } from './budget-banner.tsx';
 import { BudgetCard } from './budget-card.tsx';
@@ -37,7 +38,7 @@ export function AssistantTab({ brandId }: { readonly brandId: string }): ReactNo
     return <AlertBanner tone="danger">{t('aiSettings:loadFailed')}</AlertBanner>;
   }
   if (settings.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   return (

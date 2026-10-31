@@ -6,10 +6,11 @@ import { type ReactNode, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { currentBrand, useSession, useTicketingApi } from '../../auth/session.tsx';
+import { currentBrand, useSession } from '../../auth/session.tsx';
 import { useReportsApi } from '../../reports/context.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { useDepartmentsQuery } from '../../ticketing/use-departments.js';
 import { formatClock } from '../../ui/format.js';
 import { useToast } from '../../ui/toasts.tsx';
 import { KpiTiles } from './kpi-tiles.js';
@@ -62,7 +63,6 @@ export function ReportsPage(): ReactNode {
   const session = useSession();
   const brand = currentBrand(session);
   const api = useReportsApi();
-  const ticketing = useTicketingApi();
   const toast = useToast();
   const rangeLabel = useRangeLabel();
   const [filters, setFilters] = useState<ReportFilters>(() => ({
@@ -85,11 +85,7 @@ export function ReportsPage(): ReactNode {
     enabled: summary.isSuccess,
   });
   // A Viewer may not read departments; the filter then offers "All" alone.
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-    retry: false,
-  });
+  const departments = useDepartmentsQuery(brand.id, { retry: false });
 
   const exporter = useMutation({
     mutationFn: async (report: ReportExport) => {

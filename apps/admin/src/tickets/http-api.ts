@@ -19,6 +19,7 @@ import type {
   TicketCreateRequest,
   TicketDetail,
   TicketList,
+  TicketMailboxList,
   TicketMergeRequest,
   TicketMergeResult,
   TicketMessage,
@@ -51,6 +52,7 @@ import {
   ticketAiStateSchema,
   ticketDetailSchema,
   ticketListSchema,
+  ticketMailboxListSchema,
   ticketMergeResultSchema,
   ticketMessagePageSchema,
   ticketMessageSchema,
@@ -85,6 +87,12 @@ export class HttpTicketsApi implements TicketsApi {
   async statuses(brandId: string): Promise<TicketStatusList> {
     return ticketStatusListSchema.parse(
       await this.#transport.request('GET', `${this.#brand(brandId)}/ticket-statuses`),
+    );
+  }
+
+  async mailboxes(brandId: string): Promise<TicketMailboxList> {
+    return ticketMailboxListSchema.parse(
+      await this.#transport.request('GET', `${this.#brand(brandId)}/ticket-mailboxes`),
     );
   }
 

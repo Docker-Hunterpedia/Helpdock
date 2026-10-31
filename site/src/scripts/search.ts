@@ -27,7 +27,7 @@ let opener: HTMLElement | null = null;
 let active = -1;
 
 function say(
-  key: 'hint' | 'loading' | 'none' | 'count' | 'offline',
+  key: 'hint' | 'loading' | 'none' | 'count' | 'countOne' | 'offline',
   values: Record<string, string> = {},
 ) {
   if (!status || !dialog) return;
@@ -115,6 +115,7 @@ async function search(query: string) {
     );
     render(results);
     if (results.length === 0) say('none', { q: query });
+    else if (found.results.length === 1) say('countOne');
     else say('count', { n: String(found.results.length) });
   } catch {
     render([]);

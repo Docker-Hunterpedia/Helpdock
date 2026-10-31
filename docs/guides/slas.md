@@ -8,7 +8,7 @@ Ticketing tabs do. The screens are the artboards `Admin/Ticketing-BusinessHours`
 
 ## Business hours
 
-**Ticketing › Business hours.** One save for the brand's zone, its week and
+**Inbox › Business hours.** One save for the brand's zone, its week and
 every department override, because a save recomputes every open ticket's due
 times. Holidays are saved as they are added or deleted.
 
@@ -53,7 +53,7 @@ out-of-hours reply instead of the acknowledgment.
 
 ## SLA policies
 
-**Ticketing › SLAs.** Policies are tried top to bottom and the first whose
+**Inbox › SLA policies.** Policies are tried top to bottom and the first whose
 conditions all match applies. A ticket no policy matches has no clocks; the
 list says which department and priority pairs are uncovered.
 

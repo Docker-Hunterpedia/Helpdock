@@ -16,7 +16,7 @@ Constraints: a worker job runs inside one brand (D §1.4); state that matters
 must survive Redis loss (D §10); every side effect goes through the outbox;
 staff tokens are derived from `APP_MASTER_KEY`.
 
-The plan is [M14-10 and M14-11 in M14 Inbox productivity](../in-development/M14-inbox-productivity.md#m14-10-notification-pacing-engine);
+The plan is [M14-10 and M14-11 in M14 Inbox productivity](../completed/M14-inbox-productivity.md#m14-10-notification-pacing-engine);
 owner decisions D-25, D-26 and D-27.
 
 ## Decision

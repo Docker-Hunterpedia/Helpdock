@@ -195,7 +195,7 @@ Each row links the rendered screen and its source. Deliverable ids refer to the 
 
 ### M14 Inbox productivity
 
-Drawn for [M14](../in-development/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
+Drawn for [M14](../completed/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
 
 | Artboard | Deliverables | Screen | Source |
 |---|---|---|---|
@@ -717,7 +717,7 @@ Drawn 2026-10-13 for [M11](../completed/M11-sso-and-migration.md#artboards-to-dr
 
 ### M14 Inbox productivity
 
-Drawn for [M14](../in-development/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
+Drawn for [M14](../completed/M14-inbox-productivity.md#artboards-to-draw), before implementation. Work in progress for 1.1: the canvas section may still change.
 
 #### `Admin/ShortcutSheet`
 

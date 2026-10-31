@@ -29,7 +29,7 @@ oversized article bodies and category/section names must be resolved before load
 
 An article not written in the language asked for is shown in the brand's default language with a notice. A visitor asking for a draft or an internal article gets the same "We can’t find that page" (404) as for an address that never existed; an archived article answers "This article was archived" (410).
 
-"Still need help?" links to the [web form](web-form.md). Where the brand's widget may run on the help center's address (Channels › Widget, allowed origins, for example `https://support.acme.com`), the page loads the widget and "Chat with us" opens it.
+"Still need help?" links to the [web form](web-form.md). Where the brand's widget may run on the help center's address (Channels › Chat widget, allowed origins, for example `https://support.acme.com`), the page loads the widget and "Chat with us" opens it.
 
 Every page starts with a **Skip to content** link, hidden until a keyboard user reaches it, that moves focus past the header to the page's content (M9-04).
 
@@ -80,7 +80,7 @@ Admins and Team Leaders (`help_center:manage`); a Viewer sees the cards read-onl
 | Header and footer links | Up to eight each: an English and an Arabic label and an `https://`, `http://` or `mailto:` address. |
 | Custom CSS | Up to 20 000 characters, applied after the theme. Saving keeps only plain style rules and `@media` blocks; it removes `@import` and other at-rules, `url()` other than an inline image or an image uploaded here, `expression()` and script addresses, `position: fixed`, and anything with a backslash or a `<`. The card lists what it removed and why. |
 
-The help center's address and certificate are on **Brand › Domains**; the widget's own theme is on **Channels › Widget**.
+The help center's address and certificate are on **Brand › Domains**; the widget's own theme is on **Channels › Chat widget**.
 
 ## Article proposals
 

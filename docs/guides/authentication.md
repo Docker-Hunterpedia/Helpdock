@@ -769,13 +769,13 @@ logs a link: the lines name the kind of email and the account id.
 is claimed and nothing pretends. A sign-in link or password reset is refused
 with `email-unavailable`, the same answer for every address (it says how the
 install is configured, never which accounts exist), and the screen says no
-link was sent and points to **Admin › System › Outgoing email** instead of an
+link was sent and points to **Settings › Install › System › Outgoing email** instead of an
 inbox. A job that was already queued when the sender disappeared logs, at
 `warn`, that the email *would* have been sent, with the kind and the account
 id, and finishes; it never logs the link, in any `NODE_ENV`.
 
 **Setting the sender after setup** needs no `.env` edit and no restart:
-**Admin › System › Outgoing email** (install admins) holds the same fields the
+**Settings › Install › System › Outgoing email** (install admins) holds the same fields the
 wizard's step 3 does — server, port, TLS mode, credentials, the From address
 and name — plus **Send a test email** showing the server's answer. The
 password is write-only: the field shows "Saved · type to change", and the

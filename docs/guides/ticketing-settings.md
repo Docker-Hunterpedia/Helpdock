@@ -7,10 +7,12 @@ navigation, and the ticketing settings are the first pages of its Inbox group,
 at `/settings/inbox/<page>`; the old `/admin/ticketing/…` addresses redirect).
 This guide follows them in their order.
 
-Nine tabs are built: **Departments** (M1-01), **Statuses** (M1-08), **Tags**,
-**Custom fields** and **Templates** (M1-06), **Views** (M1-05), **Assignment**
-(M1-07), **Spam** (M1-11) and **Feedback** (M1-12). The tenth exists so the row
-is whole and says which deliverable fills it: Priorities with M1-02.
+The Inbox group holds these pages: **Departments** (M1-01), **Statuses**
+(M1-08), **Priorities**, **Tags**, **Custom fields** and **Templates** (M1-06),
+**Views** (M1-05), **Assignment** (M1-07), **Business hours** and **SLA
+policies** ([SLAs](slas.md)), **Spam** (M1-11) and **Feedback** (M1-12), then
+Rules, Time-based, Routing and Macros ([Automation](automation.md),
+[Macros](macros.md)). What each role is offered there is the table below.
 
 Who may do what comes from
 [DOMAIN-RULES §1.2](../planning/DOMAIN-RULES.md#12-scope-rules). The short
@@ -134,7 +136,7 @@ maps to one of the four **system states** of
 `escalated`, `closed` — so SLA maths and reports stay the same however a brand
 names its own.
 
-Every brand starts with six, written by `seedBrandStatuses` when the brand is
+Every brand starts with seven, written by `seedBrandStatuses` when the brand is
 created:
 
 | Name | System state | Flags | Why it exists |
@@ -142,6 +144,7 @@ created:
 | Open | `open` | default | Where a new or reopened ticket lands |
 | Awaiting customer | `on_hold` | pauses SLA, awaiting customer | §2.1 ships it with every brand |
 | Escalated | `escalated` | — | So the fourth state is reachable without adding a status |
+| Snoozed | `on_hold` | pauses SLA (the resolution clock only) | M14-02: where a ticket waits until the time its agent chose, or a customer reply or an SLA warning wakes it. Set from the ticket's **Snooze** menu, not the status menu; see [Snooze](snooze.md) |
 | Closed | `closed` | — | §2.2 |
 | Spam | `closed` | excluded from reports | §2.1: no auto-responder, no CSAT, out of reports |
 | Merged | `closed` | excluded from reports | §2.4: what the secondary of a merge closes into |
@@ -446,6 +449,11 @@ the wrong field must not become the number one.
 | Placement | Which target the field hangs off. Fixed after creation. |
 | Visible to agents | Off keeps the field for administrators and rules. It **hides** the field; it does not protect it — the value sits in the same jsonb column either way. A hidden field is also not offered as a list filter to Agents, and the api refuses it from them (see [Filtering by a custom field](tickets.md#filtering-by-a-custom-field)). |
 | Pin on rows and the ticket header | Only for a **ticket Select** that Agents can see (M14-16). Its value is shown as a neutral chip on every list row and in the ticket header. **One field per brand:** pinning another lets the first go, and the table marks the pinned one. A pinned field cannot be hidden from Agents or retyped until it is unpinned (`400`). |
+
+Helpdock has no Severity field of its own. A team that wants one adds a Select
+field named Severity with Sev 1 to Sev 4, pins it, saves a "Sev 1 open" view and
+adds a rule on it; the steps are the **Severity recipe** in
+[Tickets](tickets.md#filtering-by-a-custom-field).
 
 ### The two rules that exist because values are already stored
 

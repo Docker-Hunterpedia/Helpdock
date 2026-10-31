@@ -32,7 +32,7 @@ These rules follow from it:
 ## Base URL and headers
 
 Every route lives under `/api/widget/:brandId`, where `brandId` is the brand's
-UUID. The admin shows it in the embed tag under **Channels › Widget**:
+UUID. The admin shows it in the embed tag under **Channels › Chat widget**:
 
 ```html
 <script type="module" src="https://support.example.com/widget.js" data-brand="0192c3f0-…"></script>

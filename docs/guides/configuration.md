@@ -463,7 +463,7 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_ROLES_VIEWER_ENABLED` | `roles.viewerEnabled` | install | no | `true` | Whether the optional read-only Viewer role can be assigned (REQUIREMENTS §2). |
 | `HD_CONTACTS_DEFAULT_CALLING_CODE` | `contacts.defaultCallingCode` | brand | no | — | Country calling code prefixed to phone numbers typed without one, for example 49. Empty refuses them instead (ADR 0008). |
 | `HD_CAPTCHA_PROVIDER` | `captcha.provider` | brand | no | `none` | CAPTCHA for visitor-facing forms. Off by default; a brand that turns it on starts with the built-in proof-of-work check, `pow`, which sends nothing to a third party (ADR 0052). Turnstile is the stronger bot detection (ADR 0003). |
-| — (not pinnable) | `captcha.difficulty` | brand | no | `low` | How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Channels › Widget. |
+| — (not pinnable) | `captcha.difficulty` | brand | no | `low` | How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Settings › Channels › Chat widget. |
 | `HD_CAPTCHA_SITE_KEY` | `captcha.siteKey` | brand | no | — | Public CAPTCHA site key, rendered by the widget and the web form. |
 | `HD_CAPTCHA_SECRET` | `captcha.secret` | brand | yes | — | CAPTCHA secret used server-side to verify a challenge token. |
 | `HD_PUSH_VAPID_PUBLIC_KEY` | `push.vapidPublicKey` | install | no | — | VAPID public key served to the admin app as applicationServerKey (ADR 0002). |

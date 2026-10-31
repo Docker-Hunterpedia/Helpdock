@@ -15,7 +15,7 @@ engine whose timers are delayed jobs rebuilt by `sla.rebuild` after Redis loss
 
 The risk with snooze is that it becomes a way to hide a ticket from its SLA.
 
-The plan is [M14-02 in M14 Inbox productivity](../in-development/M14-inbox-productivity.md#m14-02-snooze);
+The plan is [M14-02 in M14 Inbox productivity](../completed/M14-inbox-productivity.md#m14-02-snooze);
 owner decisions D-19 and D-20.
 
 ## Decision

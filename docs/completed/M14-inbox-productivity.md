@@ -1,15 +1,92 @@
 # M14 Inbox productivity
 
-Status: in development since 2026-10-20 (issues #288 to #316, GitHub milestone “M14 Inbox productivity”)
+Status: shipped (issues #288 to #316, GitHub milestone “M14 Inbox productivity”)
+Started: 2026-10-20
+Shipped: 2026-11-01, for release 1.1
 Owner: @Docker-Hunterpedia
 Phase: 5 — 1.x. Proposed release: 1.1 (owner decision D-01)
 Depends on: M1 (tickets, views, assignment, presence), M3 (SLA engine, rules and their test run, macros, notifications), M4 (widget agent name), M5 (help center search), M7 (AI triage, for the routing trail only), M8 (webhooks, OpenAPI), M11 (imported tickets, which every new path must leave alone)
 Effort: about 103.5 working days for one person (see [Deliverables](#deliverables))
 PRD: [Phase 5 · M14](../planning/PRD.md#m14-inbox-productivity)
 Owner decisions: D-19 to D-32 in [decisions-1-x.md](../planning/decisions-1-x.md#m14-inbox-productivity)
-ADRs (proposed): [0035](../decisions/0035-snooze-as-a-system-status.md), [0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md), [0037](../decisions/0037-paced-notification-email-and-digests.md), [0038](../decisions/0038-keyboard-registry-and-command-palette.md)
+ADRs (accepted): [0035](../decisions/0035-snooze-as-a-system-status.md), [0036](../decisions/0036-bulk-changes-previewed-all-or-nothing-with-undo.md), [0037](../decisions/0037-paced-notification-email-and-digests.md), [0038](../decisions/0038-keyboard-registry-and-command-palette.md)
 
 Snooze, bulk edit with undo, a keyboard registry and command palette, a routing explainer, paced notification email, a profile for customers, a setup checklist, and the agent-workspace fixes from the [1.0 UX review](../completed/ux-review-1-0.md#findings) (group B).
+
+## Close-out (2026-11-01)
+
+All 29 deliverables are merged; All of them shipped. The plan below is kept as it was built:
+each deliverable's section ends with a **Status: shipped** line and the
+differences from the plan, and the guides under `docs/guides/` describe what
+runs today.
+
+| Deliverables | Pull requests |
+|---|---|
+| M14-01 keyboard, M14-05 palette, M14-06 empty states | #324, #370, #362 |
+| M14-02 snooze, M14-03 and M14-04 bulk edit | #367, #372, #380 |
+| M14-07 sort by SLA due, M14-08 and M14-09 routing | #334, #323, #365 |
+| M14-10 and M14-11 notification pacing and settings | #333, #383 (with #357, #403) |
+| M14-12 profile, M14-13 checklist, M14-14 macros, M14-15 mentions | #385, #406, #433, #434 |
+| M14-16 field filters, M14-17 required to close, M14-18 idle away | #384, #395, #382 |
+| M14-19 to M14-23 workspace and Settings | #439, #427, #409, #441, #436 (with #440) |
+| M14-24 docs and decisions | this change |
+| M14-25 sounds, M14-26 mailbox views and rules, M14-27 field types, M14-28 webhook events, M14-29 reports | #431, #432, #429, #335, #329 |
+
+### Exit criteria
+
+Each criterion is covered by the tests below, run on CI as each deliverable
+merged; this close-out re-ran none of them. The boxes in
+[Exit criteria](#exit-criteria) are left as drawn, and this table is the record.
+
+| Criterion | Covered by | Status |
+|---|---|---|
+| Snooze to the next business day, return to the previous status, early wake on a reply, wake after Redis is flushed | `apps/api/src/tickets/snooze/snooze.integration.test.ts` (wake by time, by reply, and `snooze.rebuild` re-adding timers), `apps/admin/e2e/snooze.spec.ts` | Met |
+| Resolution clock paused, response clock running, SLA warning wakes | The same integration file; the worked examples 5 and 6 of [DOMAIN-RULES §3.6](../planning/DOMAIN-RULES.md#36-worked-examples) | Met |
+| Select 30 with `x` and Shift-click, close in one request, Undo, no survey | `apps/api/src/tickets/bulk/bulk.integration.test.ts` (undo of a close sends no survey), `apps/admin/e2e/bulk-edit.spec.ts` | Met |
+| Bulk over two departments, one unseen | `bulk.integration.test.ts` ("applies to the tickets in scope", "rolls the whole batch back") | Met |
+| `⌘K` finds a number, a contact, an article and an Arabic settings term, runs an action; a Viewer sees navigation only | `apps/api/src/quick-search/quick-search.integration.test.ts`, `apps/admin/e2e/command-palette.spec.ts` | Met |
+| Every shortcut on an English and an Arabic layout, none with the switch off | `apps/admin/src/keyboard/keys.test.ts`, `registry.test.ts`, `apps/admin/e2e/keyboard.spec.ts` | Met |
+| Each ticket shows how it arrived; Test routing changes nothing | `apps/api/src/routing/routing.integration.test.ts`, `apps/admin/e2e/routing.spec.ts`, `automation-routing.spec.ts` | Met |
+| *Right away* sends at most six emails an hour, a read leaves one out, a digest at the chosen hour, pause sends nothing | `apps/api/src/notifications/notification-email.integration.test.ts`, `email-pacing.test.ts`, `apps/admin/e2e/notification-schedule.spec.ts` | Met |
+| One-click unsubscribe POST stops emails, GET changes nothing | `unsubscribe-body.test.ts`, `notification-email.integration.test.ts`, `apps/admin/e2e/unsubscribe.spec.ts` | Met |
+| `{{agent.name}}, {{agent.title}}` in email and the widget | `packages/schemas/src/placeholders.test.ts`, `apps/admin/e2e/profile.spec.ts`, `macros.spec.ts` | Met |
+| A new brand's Admin sees the checklist and it ticks itself | `apps/api/src/setup-checklist/setup-checklist.integration.test.ts`, `apps/admin/e2e/setup-checklist.spec.ts` | Met |
+| Compact composer at 1280 × 720 | `apps/admin/e2e/compact-composer.spec.ts` | Met |
+| Row with assignee avatar and one meta line; details panel order | `apps/admin/e2e/tickets.spec.ts` and the M14-20 unit tests | Met |
+| Every admin page under Settings; every old URL redirects | `apps/admin/src/app/route-paths.test.ts`, `apps/admin/e2e/settings-shell.spec.ts` | Met |
+| Below 1024 px the Tickets screen opens on the list | `apps/admin/e2e/narrow-tickets.spec.ts` (#441) | Met when #441 merges |
+| Mailbox view and a rule on the address written to; set reply address | `apps/api/src/rules/rules.integration.test.ts`, `apps/api/src/tickets/ticket-query.test.ts`, `apps/api/src/email/email.integration.test.ts` | Met |
+| Long text, link, email and person fields | `apps/admin/e2e/field-types.spec.ts`, `rules-person-field.spec.ts`, `packages/schemas/src/custom-fields.test.ts` | Met |
+| Each new webhook event reaches a test endpoint, signed, once | `apps/api/src/webhooks/webhook-events.integration.test.ts` | Met |
+| Brand A cannot read brand B in the new tables; an Agent cannot read another department's bulk items | `packages/db/src/rls.integration.test.ts` | Met |
+| Playwright in `en` and `ar` with axe; manual NVDA and VoiceOver run on the sheet and the palette | `apps/admin/e2e/a11y.spec.ts` and each screen's spec | Axe met. **The manual screen-reader run was not done** and is carried (see [screen-reader-pass.md](../guides/screen-reader-pass.md)) |
+
+### Gaps left open
+
+- **Screen-reader pass.** No person has run NVDA or VoiceOver over the `?` sheet,
+  the palette and the bulk bar. Automated axe and keyboard specs pass.
+- **Two tabs both play a sound** (M14-25): the one-at-a-time rule holds per
+  tab, and a cross-tab lock is not built.
+- **Palette actions** "Assign HD-1042 to me" and "Snooze HD-1042" on a ticket
+  that is found rather than open, and the Tab hand-off to the assistant, wait
+  for M12-13. The palette's ticket actions act on the open ticket.
+- **Photos** are read only through the profile endpoint: the staff list, the
+  ticket header and the other admin avatars still draw initials until M19-03.
+- **The widget** still files into the brand's first department; Test routing
+  shows it, and M19-02 adds the setting.
+- **Empty states without an action**: Tags, Templates, Departments, Custom
+  fields, Statuses, Mailboxes, Domains, the audit log and Passkeys still show a
+  sentence, because the board does not draw them (M14-23).
+- **Settings board**: Departments, Templates, Time-based and Outgoing email are
+  entries the board omits; the board should gain them (M14-21).
+- **Phones below 600 px** keep today's layout until M17-07.
+- **Not in v1 of the public API**: bulk edits, quick search, the setup
+  checklist and the routing endpoints are staff-session routes. `snoozedUntil`,
+  the `snoozed`, `mailboxId`, `toAddress` and `fieldFilter` parameters, the
+  `assignee` of a ticket and the four new custom field types are in `/api/v1`
+  and its OpenAPI document.
+- **Owner questions** D-19 to D-32 are answered in
+  [decisions-1-x.md](../planning/decisions-1-x.md#m14-inbox-productivity).
 
 ## Goal
 
@@ -171,16 +248,16 @@ L 6 d.
 | M14-04 | Bulk edit UI: checkboxes, `x` / `Shift`+`x` / Shift-click, bulk bar, preview dialog, Undo toast | 4 d | M14-01, M14-03 |
 | M14-05 | Command palette: quick-search read, page and settings registry, actions, recents | 6 d | M14-01 |
 | M14-06 | Inbox empty states with keyboard hints, and the `Kbd` component | 1.5 d | M14-01 |
-| M14-07 | Sort by SLA due — implemented, pending review (#294) | 1.5 d | — |
+| M14-07 | Sort by SLA due | 1.5 d | — |
 | M14-08 | Routing trail: arrival recorded on every creation path, "How it got here" on the ticket | 4 d | — |
 | M14-09 | Routing page and Test routing dry run | 6 d | M14-08 |
 | M14-10 | Notification pacing engine: batching with back-off, digests, pause, read re-check, presence hold | 8 d | — |
 | M14-11 | Notification settings and one-click unsubscribe | 4 d | M14-10 |
 | M14-12 | Profile for customers: public name, title, phone, photo, time zone; agent placeholders | 5 d | — |
-| M14-13 | Setup checklist — built, in review (#300) | 3 d | M14-12 (no step reads it in the end) |
+| M14-13 | Setup checklist | 3 d | M14-12 (no step reads it in the end) |
 | M14-14 | Saved-reply and macro polish | 3 d | M14-12 (placeholders) |
 | M14-15 | `@` mention picker in notes | 2 d | — |
-| M14-16 | Custom-field filters in the list and views, pinned field chip (the Severity answer) — built, in review (#303) | 3 d | — |
+| M14-16 | Custom-field filters in the list and views, pinned field chip (the Severity answer) | 3 d | — |
 | M14-17 | Fields required to close | 2.5 d | M14-03 (bulk refusals) |
 | M14-18 | Idle agents marked away | 2 d | — |
 | M14-19 | Compact composer and workspace breakpoints (UX-01, UX-21) | 3 d (M) | — |
@@ -207,7 +284,7 @@ screen agents use most.
 
 ### M14-01 Keyboard foundation
 
-**Status: built, in review** (issue #288). Built as below, with these
+**Status: shipped** (issue #288). Built as below, with these
 differences: letters follow the character a Latin layout types and fall back
 to `event.code` only on a layout that types no Latin letter, which is what
 1.0's keys already did since #244 (so the Arabic layout needed no failing test
@@ -256,7 +333,7 @@ strings already in the catalog are used by the sheet (UX-09).
 
 ### M14-02 Snooze
 
-**Status: built, in review** (issue #289). Built as below, with these
+**Status: shipped** (issue #289). Built as below, with these
 differences: the Snoozed view is written for an existing brand by the api at
 boot (`backfillBuiltInViews`, which calls the idempotent `seedBrandViews`)
 rather than by the migration, because a value added to the
@@ -335,7 +412,7 @@ wake). Public API v1 returns `snoozedUntil` on tickets and accepts it on
 
 ### M14-03 Bulk edit API
 
-**Status: built, in review** (issue #290). Built as below, with these
+**Status: shipped** (issue #290). Built as below, with these
 differences. **Preview is the apply, rolled back:** each ticket runs through the
 single edit's methods inside a savepoint, and a preview rolls the savepoint
 back, so its answer cannot drift from what an apply does; the savepoint also
@@ -422,7 +499,7 @@ client can loop with idempotency keys).
 
 ### M14-04 Bulk edit UI
 
-**Status: built, in review** (issue #291). Built as below, with these
+**Status: shipped** (issue #291). Built as below, with these
 differences:
 
 - **Where the bar sits.** `Admin/Tickets-Bulk` draws it as one 700 px row
@@ -487,7 +564,7 @@ focus). *Undo last bulk change* also sits in the palette for the server's 60 s.
 
 ### M14-05 Command palette
 
-**Status: built, in review** (issue #292). Built as below, with these
+**Status: shipped** (issue #292). Built as below, with these
 differences:
 
 - **Opening.** `⌘K` / `Ctrl+K` is registry entry `general.palette`, a modifier
@@ -579,7 +656,7 @@ text matching does.
 
 ### M14-06 Inbox empty states with keyboard hints
 
-**Status: built, in review** (issue #293). `Kbd` already landed with M14-01
+**Status: shipped** (issue #293). `Kbd` already landed with M14-01
 (`apps/admin/src/ui/kbd.tsx`; `KeyCombo` draws a registry shortcut with it), so
 this deliverable adds `ShortcutHints`
 (`apps/admin/src/keyboard/shortcut-hints.tsx`: a list of hints read from the
@@ -678,7 +755,7 @@ show "Imported from Zendesk" and nothing else (M11 sends and runs nothing).
 No new table: the activity log is the source of truth, and the trail is read
 under the ticket's own department policy.
 
-**Status: done** ([#295](https://github.com/Docker-Hunterpedia/Helpdock/issues/295)).
+**Status: shipped** ([#295](https://github.com/Docker-Hunterpedia/Helpdock/issues/295)).
 - [x] `arrivalOf` (`apps/api/src/tickets/routing/arrival.ts`) used by the six
   writers, by a split, by a reopen-policy continuation (on its
   `ticket.continued` row, recording where the customer's reply came in) and
@@ -731,7 +808,7 @@ per-brand widget department setting here (about 1 d) is owner decision D-29;
 M19-02 (several widgets per brand) gives each widget a department default in
 any case.
 
-**Status: built, in review** (issue [#296](https://github.com/Docker-Hunterpedia/Helpdock/issues/296)).
+**Status: shipped** (issue [#296](https://github.com/Docker-Hunterpedia/Helpdock/issues/296)).
 - [x] `GET /routing` and `POST /routing/test` (`ticketing:manage`), schemas in
   `automation-routing.ts`; the walk is `apps/api/src/routing/routing-test.ts`.
 - [x] The Routing tab (`RoutingSteps`) and Test routing (`RoutingResult`),
@@ -755,7 +832,7 @@ any case.
 
 ### M14-10 Notification pacing engine
 
-**Status: built, in review** (issue #297). Built as below, with
+**Status: shipped** (issue #297). Built as below, with
 [ADR 0037](../decisions/0037-paced-notification-email-and-digests.md) accepted
 and [DOMAIN-RULES §20](../planning/DOMAIN-RULES.md#20-notification-delivery)
 written, and these differences: the schedule's Right away value is
@@ -861,7 +938,7 @@ rows in the same preference matrix and follow these pacing rules.
 
 ### M14-11 Notification settings and unsubscribe
 
-**Status: built, in review** (issue #298). Built as below, with these
+**Status: shipped** (issue #298). Built as below, with these
 differences: no migration, because `notification_prefs.email_unsubscribed_at`
 arrived with M14-10; the token is `<user id + issue time>.<mac>` and the page
 route is `/unsubscribe/<token>`, while the one-click address in
@@ -940,7 +1017,7 @@ agent. For a rule's canned reply the agent is the assignee, as today. Customer
 surfaces (email, widget, Telegram, Meta) show the public name instead of the
 full name from M14 on.
 
-**Status: built, in review** (issue [#299](https://github.com/Docker-Hunterpedia/Helpdock/issues/299)).
+**Status: shipped** (issue [#299](https://github.com/Docker-Hunterpedia/Helpdock/issues/299)).
 Built as above, with these differences and details:
 
 - [x] `users` gains `public_name`, `job_title_en`, `job_title_ar`, `public_phone`,
@@ -1035,7 +1112,7 @@ never stored as ticked:
 steps are done. Imported tickets do not count as the first ticket. Audience is
 owner decision D-31.
 
-**Status: built, in review** (issue [#300](https://github.com/Docker-Hunterpedia/Helpdock/issues/300)).
+**Status: shipped** (issue [#300](https://github.com/Docker-Hunterpedia/Helpdock/issues/300)).
 - [x] `GET /api/brands/:brandId/setup-checklist` and `POST …/setup-checklist/dismiss`,
   both `brand:manage`. The reply is step ids with `done` and `optional`, the counts,
   `complete` (every required step done) and `dismissed`; the admin app owns each step's
@@ -1083,7 +1160,7 @@ owner decision D-31.
 - **Most used first:** `use_count` beside the existing `last_used_at`; the
   picker orders by the person's recent use, then the brand's.
 
-**Status: built, in review** (issue [#301](https://github.com/Docker-Hunterpedia/Helpdock/issues/301)).
+**Status: shipped** (issue [#301](https://github.com/Docker-Hunterpedia/Helpdock/issues/301)).
 Built as above, with these differences and details:
 
 - [x] `canned_responses` gains `shortcut` (varchar 32, lower-cased) and `use_count`
@@ -1131,7 +1208,7 @@ script. Choosing inserts the handle the existing resolver already understands
 still works. A person outside the ticket's department never appears; the
 endpoint is the assignee picker's list, which already applies that rule.
 
-**Status: built, in review** (issue [#302](https://github.com/Docker-Hunterpedia/Helpdock/issues/302)).
+**Status: shipped** (issue [#302](https://github.com/Docker-Hunterpedia/Helpdock/issues/302)).
 Built as above, with these differences:
 
 - [x] `GET /api/brands/:brandId/tickets/:ticketId/mention-candidates?q=`
@@ -1164,7 +1241,7 @@ A brand may **pin one select field** (Admin › Ticketing › Custom fields): it
 value shows as a `Tag`-style chip on the row's caption line and in the ticket
 header, without a new hue. The guide gains the Severity recipe.
 
-**Status: built, in review** (issue [#303](https://github.com/Docker-Hunterpedia/Helpdock/issues/303)).
+**Status: shipped** (issue [#303](https://github.com/Docker-Hunterpedia/Helpdock/issues/303)).
 - [x] `fieldFilter` on `GET /tickets` and in a view's filters (`ticket-field-filter.ts`
   in `@helpdock/schemas`): one JSON object per filter, all of which have to match.
   The api checks each against the brand's definitions
@@ -1203,7 +1280,7 @@ header, without a new hue. The guide gains the Severity recipe.
 
 ### M14-17 Fields required to close
 
-**Status: built, in review** (issue #304). Built as below, with these
+**Status: shipped** (issue #304). Built as below, with these
 clarifications the implementation had to fix down:
 
 - **"Empty" per type.** Absent and `null` are empty for every type, as are a
@@ -1242,7 +1319,7 @@ gap the report can show. API keys are owner decision D-30.
 
 ### M14-18 Idle agents marked away
 
-**Status: built, in review** (issue #305). Built as below, with these
+**Status: shipped** (issue #305). Built as below, with these
 differences:
 
 - **The existing five-minute away timer is gone.** The plan's "what exists"
@@ -1316,7 +1393,7 @@ all of it. This is the screen agents use for hours.
 Artboard: `Admin/Ticket-CompactComposer` (the compact composer collapsed and
 expanded, and the 1280 × 720 layout).
 
-**Status: built, in review** (issue [#306](https://github.com/Docker-Hunterpedia/Helpdock/issues/306)).
+**Status: shipped** (issue [#306](https://github.com/Docker-Hunterpedia/Helpdock/issues/306)).
 Built as above, with these differences:
 - [x] The board settles the breakpoint: `DETAILS_BREAKPOINT` is 1440 px, so at
   1280 × 720 the details panel is the drawer the header's Details button opens,
@@ -1476,7 +1553,7 @@ Where the build departs from the board, and why:
 
 ### M14-22 List-first tickets on narrow screens
 
-**Status: built, in review** (issue #309). Built from `Admin/Tickets-Narrow`
+**Status: shipped** (issue #309). Built from `Admin/Tickets-Narrow`
 (`AdminTicketsNarrow.dc.html`) as below, with these differences: the bar over
 the pushed ticket holds Back and Details, but not the ticket's reference, which
 the header directly under it already shows (and the header's own Details icon
@@ -1510,7 +1587,7 @@ Artboard: `Admin/Tickets-Narrow` (list, ticket and details drawer at 768 px,
 
 ### M14-23 Skeletons and empty states beyond 1.0.1
 
-**Status: built, in review** (issue #310). Built from `Admin/Empty-States`
+**Status: shipped** (issue #310). Built from `Admin/Empty-States`
 (`AdminEmptyStates.dc.html`): Contacts (people, and New account on the
 Accounts tab), the Help center (no categories; no articles, named after the
 selected section), Views, Macros and saved replies, and Rules (event rules;
@@ -1573,7 +1650,7 @@ files are short, bundled, and lazy-loaded with the settings; the choice is
 stored with the notification preferences (install scope, per person) so it
 follows the person to another browser. Artboard `Admin/Account-Notifications-Sounds`.
 
-**Status: built, in review** (issue #312). Built as above, with these
+**Status: shipped** (issue #312). Built as above, with these
 differences and choices:
 
 - **Storage.** A `sounds` jsonb column on `notification_prefs` (migration
@@ -1644,7 +1721,7 @@ address condition; the guide says so. Artboard `Admin/Ticketing-FieldFilters`
 gains the two filters and `Admin/RuleBuilder` (amended) the conditions and
 actions.
 
-**Status: built, in review** (issue [#313](https://github.com/Docker-Hunterpedia/Helpdock/issues/313)).
+**Status: shipped** (issue [#313](https://github.com/Docker-Hunterpedia/Helpdock/issues/313)).
 Built as above, with these decisions:
 
 - [x] `mailboxId` / `toAddress` on `GET /tickets` (and so in views, the public
@@ -1690,7 +1767,7 @@ rules (`is`, `is set`, and `contains` for long text), in imports' field
 mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 (amended).
 
-Status: implemented for #314.
+**Status: shipped** (issue #314).
 
 - [x] `custom_field_type` gains `long_text`, `link`, `email` and `person` (migration `0074_custom_field_types`); one validator per type in `@helpdock/schemas` (https-only link without credentials, 254-character address stored lower-cased, 5,000-character long text, person by id).
 - [x] A person must be staff of the brand on every write that goes through `parseCustomValues` (tickets, contacts, accounts, rules, templates); `GET /api/brands/:brandId/custom-fields/people` (`ticket:read`) feeds the picker with ids and public names.
@@ -1702,7 +1779,7 @@ Status: implemented for #314.
 
 Rebase compatibility: SLA assignment notifications retain their automatic source in batched and digest emails, with English and Arabic labels. The notes opt-in migration is `0062_webhook_note_opt_in`, generated after `0061_ticket_sla_next_due`.
 
-Status: implemented for #315; PR #335 second-review fixes applied; pending independent re-review and CI. Migration regenerated as `0062_webhook_note_opt_in` after `0061_ticket_sla_next_due` at the owner's queue signal.
+**Status: shipped** (issue #315). PR #335 second-review fixes applied; migration `0062_webhook_note_opt_in`.
 
 - [x] Eight additional events, Zod source/output contracts, transactional producers, brand and department scope.
 - [x] Per-endpoint `include_internal_notes` (default false), note-body redaction and grouped en/ar event picker from `Admin/M14-Amendments`.
@@ -1731,7 +1808,7 @@ the share that is unassigned), both under the reader's department scope and
 both from the existing `stats.rollup` data plus one rollup column per tag.
 Artboard `Admin/Reports` (amended).
 
-**Status: done** ([#316](https://github.com/Docker-Hunterpedia/Helpdock/issues/316)).
+**Status: shipped** ([#316](https://github.com/Docker-Hunterpedia/Helpdock/issues/316)).
 - [x] `volume.byTag` (top 20) and `backlogByStatus` in `reportSummarySchema`,
   and the `volume_by_tag` CSV (`tag_id,tag,tag_ar,created`, every tag).
 - [x] The two ChartCards on Reports, drawn from `Admin/M14-Amendments`; the

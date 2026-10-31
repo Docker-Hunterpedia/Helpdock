@@ -14,7 +14,7 @@ Ids are stable: plan docs refer to them as `D-nn`.
 |---|---|---|---|---|
 | D-01 | **Release mapping.** Ship 1.x as: **1.0.1** the security and UX patch (in flight); **1.1** M12 AI workspace, M14 Inbox productivity, M18 Sign-in options, and M13's MCP-server deliverables M13-09 to M13-11; **1.2** the rest of M13, M15 Self-host operations, M16 More importers and undo, M19 Customer surfaces polish; **1.3** M17 Apps and languages; **later 1.x, on demand** M20 Native clients and SDKs. Answers the version questions of M12 (Q8), M13 (Q9) and M18 (Q7). | Accept as proposed. M18 goes in 1.1 because its OAuth binding change alters sign-in for existing users and wants a minor version with a release note. | All plans | Accepted as recommended. (2026-10-20) |
 | D-02 | **Split the apps and languages work in two.** M17 Apps and languages keeps the locale registry, translation workflow, customer-facing and admin locales, the installable admin (PWA) and mobile agent layouts (about 59 days); M20 Native clients and SDKs takes the headless widget client, the React Native and Flutter SDKs and the Electron desktop shell (about 45–57 days). | Split. M20 is a separate milestone rather than "M17b" so deliverable ids, issues and GitHub milestones keep the `M<n>-<nn>` form, and because the halves have different dependencies and timing. | [M17](../in-development/M17-apps-and-languages.md), [M20](../in-development/M20-native-clients-and-sdks.md) | Accepted as recommended. (2026-10-20) |
-| D-03 | **The command palette and the assistant panel.** M14-05's palette offers a person's own actions only and has no AI of its own. M12-13 adds one hook: Tab in the palette hands the typed text to the read-only assistant panel as a new question. Built by whichever of the two lands second. | Accept. The panel changes nothing in M12, so the hook gives the palette no new power; any change the assistant proposes waits for M13's approval cards. | [M12-13](../in-development/M12-ai-workspace.md), [M14-05](../in-development/M14-inbox-productivity.md) | Accepted as recommended. (2026-10-20) |
+| D-03 | **The command palette and the assistant panel.** M14-05's palette offers a person's own actions only and has no AI of its own. M12-13 adds one hook: Tab in the palette hands the typed text to the read-only assistant panel as a new question. Built by whichever of the two lands second. | Accept. The panel changes nothing in M12, so the hook gives the palette no new power; any change the assistant proposes waits for M13's approval cards. | [M12-13](../in-development/M12-ai-workspace.md), [M14-05](../completed/M14-inbox-productivity.md) | Accepted as recommended. (2026-10-20) |
 
 ## M12 AI workspace
 
@@ -47,7 +47,7 @@ Plan: [M13-ai-actions-and-integrations.md](../in-development/M13-ai-actions-and-
 
 ## M14 Inbox productivity
 
-Plan: [M14-inbox-productivity.md](../in-development/M14-inbox-productivity.md).
+Plan: [M14-inbox-productivity.md](../completed/M14-inbox-productivity.md).
 
 | Id | Question | Recommendation | Source | Answer |
 |---|---|---|---|---|

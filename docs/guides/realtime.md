@@ -269,13 +269,13 @@ The message carries the brand and nothing else: never which key or element.
 
 The server keeps one clock per person per brand, not per socket, so a second
 tab's silence does not undo the first's work. A department may set **Mark idle
-agents away after** (10 to 240 minutes, Ticketing › Assignment); a person's
+agents away after** (10 to 240 minutes, Inbox › Assignment); a person's
 limit is the shortest among the departments that set one and whose rotation
 includes them. Departments that already existed when the setting arrived
 (migration `0068`) were backfilled to a 10-minute limit — the closest to 1.0's
 five-minute away timer the 10-minute minimum allows; departments created after
 it default to off (NULL). Admins can change it or turn it off per department on
-Ticketing › Assignment. The reaper's 30 s sweep marks whoever is past their
+Inbox › Assignment. The reaper's 30 s sweep marks whoever is past their
 limit, and
 `presence:changed` says `away`. Checking the clock, the person's presence and
 marking them is one Lua script on Redis's own clock (`TIME`), so a report

@@ -42,7 +42,7 @@ export const CHANNELS: Channel[] = [
       lead: 'Each brand receives mail into its own mailboxes, by IMAP polling or a provider’s inbound-parse webhook, and replies go out from its own SMTP server.',
       card: 'IMAP or inbound parse, replies over the brand’s SMTP',
       setup: [
-        'In Settings › Channels, add a mailbox with its address and the department it files into.',
+        'In Settings › Channels › Email, add a mailbox with its address and the department it files into.',
         'Choose how mail arrives: IMAP (host, port 993 or 143, username, app password, folder) and press Test IMAP, or point Postmark, SendGrid, Mailgun or Resend at the inbound-parse address with the brand’s shared secret.',
         'Set the brand’s outgoing SMTP server, or fall back to the install’s, and press Test SMTP.',
         'Set From and Reply-To per department, and turn on the acknowledgment and out-of-hours auto-replies if you want them, in English and Arabic.',
@@ -181,10 +181,10 @@ export const CHANNELS: Channel[] = [
       card: 'The brand’s number, through Meta’s Cloud API',
       setup: [
         'Once per install, create a Meta Business app and set HD_META_APP_ID and HD_META_APP_SECRET in .env, then restart the api and worker.',
-        'In Meta’s dashboard, paste the callback URL and verify token from Channels › Meta, subscribe the messages field and switch the app to Live mode.',
+        'In Meta’s dashboard, paste the callback URL and verify token from Settings › Channels › WhatsApp, Messenger, Instagram, subscribe the messages field and switch the app to Live mode.',
         'Register a number that is not on the consumer app, verify it, and add a payment method.',
         'Create a system-user token that never expires, with the WhatsApp messaging and management scopes.',
-        'In Channels › Meta, choose Connect account, enter the phone number id, paste the token, pick a department, press Test, then Connect.',
+        'In Settings › Channels › WhatsApp, Messenger, Instagram, choose Connect account, enter the phone number id, paste the token, pick a department, press Test, then Connect.',
       ],
       supported: [
         'Text, images, video, documents, audio, voice notes, stickers, locations, shared contacts, quoted replies and reactions.',
@@ -245,9 +245,9 @@ export const CHANNELS: Channel[] = [
       lead: 'Customers message the brand’s Facebook Page; the conversation becomes a ticket, and agents reply in Messenger.',
       card: 'The brand’s Facebook Page',
       setup: [
-        'Once per install, create a Meta Business app, set its id and secret in .env and register the callback URL from Channels › Meta.',
+        'Once per install, create a Meta Business app, set its id and secret in .env and register the callback URL from Settings › Channels › WhatsApp, Messenger, Instagram.',
         'Add the Messenger product, generate a Page access token with pages_messaging and pages_manage_metadata, and subscribe the Page’s message fields.',
-        'In Channels › Meta, connect the Page with its id and token, pick a department, press Test, then Connect.',
+        'In Settings › Channels › WhatsApp, Messenger, Instagram, connect the Page with its id and token, pick a department, press Test, then Connect.',
         'Before the public can message you, Meta must approve the app in App Review.',
       ],
       supported: [
@@ -306,10 +306,10 @@ export const CHANNELS: Channel[] = [
       lead: 'Customers send direct messages to the brand’s Instagram professional account; each conversation becomes a ticket, and agents reply in Instagram.',
       card: 'The brand’s professional account',
       setup: [
-        'Once per install, create a Meta Business app, set its id and secret (and the Instagram app secret) in .env and register the callback URL from Channels › Meta.',
+        'Once per install, create a Meta Business app, set its id and secret (and the Instagram app secret) in .env and register the callback URL from Settings › Channels › WhatsApp, Messenger, Instagram.',
         'Add “API setup with Instagram business login”, allow messages from connected tools in the Instagram app, and generate an Instagram user token.',
         'Subscribe the messages, reactions, seen, postbacks and referral fields.',
-        'In Channels › Meta, connect the account with its id and token, pick a department, press Test, then Connect.',
+        'In Settings › Channels › WhatsApp, Messenger, Instagram, connect the account with its id and token, pick a department, press Test, then Connect.',
       ],
       supported: [
         'Text, images, video, audio, files and stickers, story replies and story mentions with their media, shared posts and reels as links, and reactions.',
@@ -372,7 +372,7 @@ export const CHANNELS: Channel[] = [
       lead: 'A chat widget for the brand’s website, live over WebSocket, with the help center inside it and AI that answers from the brand’s knowledge or hands off.',
       card: 'Live over WebSocket, signed identity',
       setup: [
-        'In Settings › Channels, copy the widget’s embed tag: one module script with the brand’s id.',
+        'In Settings › Channels › Chat widget, copy the widget’s embed tag: one module script with the brand’s id.',
         'Add the sites it may run on to the brand’s allowed origins.',
         'Choose its theme, mode, pre-chat form, content policy and greeting.',
         'Optionally turn on a bot check: the built-in proof-of-work check, Turnstile or hCaptcha.',

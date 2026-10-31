@@ -7,9 +7,11 @@ import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { ticketRoute } from '../../app/route-paths.js';
 import { useSemanticTokens } from '../../app/tokens.js';
+import { visuallyHidden } from '../../ui/visually-hidden.js';
+import { initialsOf } from '../contacts/format.js';
 import { TicketAiMark } from './ai/ticket-ai-mark.tsx';
-import { ChannelMark, PriorityDot, SlaTimer, StatusBadge } from './badges.tsx';
-import { elapsed, ticketReference, wakeTime } from './format.js';
+import { ChannelMark, PriorityDot, SlaTimer } from './badges.tsx';
+import { elapsed, statusName, ticketReference, wakeTime } from './format.js';
 import { PinnedFieldChip, pinnedValueOf } from './pinned-field-chip.tsx';
 
 /** WhatsApp, Messenger and Instagram rows say which platform they are with an icon (M10-08). */
@@ -18,7 +20,10 @@ const isMetaChannel = (channel: Ticket['channel']): boolean =>
 
 /**
  * DESIGN §6.3 TicketRow, in its 64 px side-list form: the priority dot, the
- * subject, one caption line and the time at the end.
+ * subject, one meta line (reference, contact, status, SLA, pinned chip) and, at
+ * the end, the time over the assignee's Avatar 24 or the dashed unassigned ring
+ * (M14-20, `Admin/TicketRow-360`). The status word is left out when the view
+ * already filters to that one status.
  *
  * It is a link, not a row with a click handler. The whole workspace is
  * addressable — `/tickets/:ticketId` is the ticket — so a row has to be
@@ -59,6 +64,8 @@ export function TicketRow({
   search,
   selection,
   pinnedField,
+  assigneeName = null,
+  hideStatus = false,
 }: {
   readonly ticket: Ticket;
   readonly selected: boolean;
@@ -69,6 +76,10 @@ export function TicketRow({
   readonly selection?: RowSelection | undefined;
   /** M14-16: the brand's pinned field, whose value this row shows as a chip. */
   readonly pinnedField?: CustomFieldDef | undefined;
+  /** M14-20: the assignee's name, from the staff list; `null` when unknown. */
+  readonly assigneeName?: string | null | undefined;
+  /** M14-20: the view is filtered to one status, so the row does not repeat it. */
+  readonly hideStatus?: boolean | undefined;
 }): ReactNode {
   const tokens = useSemanticTokens();
   const t = useT();
@@ -76,6 +87,7 @@ export function TicketRow({
   const reference = ticketReference(ticket);
   const contactName = ticket.contact?.name ?? null;
   const pinnedValue = pinnedValueOf(ticket, pinnedField);
+  const assigned = ticket.assigneeId !== null;
 
   const ticked = selection?.checked === true;
   const tinted = selected || ticked;
@@ -157,16 +169,12 @@ export function TicketRow({
                 </Box>
               </>
             )}
-            <TicketAiMark state={ticket.ai} />
-            {pinnedField === undefined || pinnedValue === null ? null : (
-              <PinnedFieldChip def={pinnedField} value={pinnedValue} size="row" />
+            {hideStatus ? null : (
+              <>
+                <span aria-hidden="true">·</span>
+                <Box component="span">{statusName(ticket.status, locale)}</Box>
+              </>
             )}
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
-          <StatusBadge status={ticket.status} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {ticket.snoozedUntil == null ? (
               <SlaTimer ticket={ticket} now={now} compact />
             ) : (
@@ -187,12 +195,81 @@ export function TicketRow({
                 <bdi>{wakeTime(ticket.snoozedUntil, locale, now)}</bdi>
               </Box>
             )}
-            <Typography variant="mono" sx={{ color: 'text.secondary', fontSize: 12 }}>
-              {elapsed(ticket.updatedAt, now)}
-            </Typography>
-          </Box>
+            <TicketAiMark state={ticket.ai} />
+            {pinnedField === undefined || pinnedValue === null ? null : (
+              <PinnedFieldChip def={pinnedField} value={pinnedValue} size="row" />
+            )}
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 1,
+            flexShrink: 0,
+          }}
+        >
+          <Typography variant="mono" sx={{ color: 'text.secondary', fontSize: 12 }}>
+            {elapsed(ticket.updatedAt, now)}
+          </Typography>
+          <AssigneeMark assigned={assigned} name={assigneeName} />
         </Box>
       </Box>
     </Box>
+  );
+}
+
+/**
+ * DESIGN §6.1 Avatar 24 for the person the ticket is with, solid teal with
+ * white initials, or the dashed `border.strong` ring when nobody is. The circle
+ * is a drawing; who it is, or that nobody is, is said in words for the link's
+ * name (DESIGN §10).
+ */
+function AssigneeMark({
+  assigned,
+  name,
+}: {
+  readonly assigned: boolean;
+  readonly name: string | null | undefined;
+}): ReactNode {
+  const t = useT();
+  const tokens = useSemanticTokens();
+
+  return (
+    <>
+      <Box
+        component="span"
+        aria-hidden="true"
+        sx={{
+          width: 24,
+          height: 24,
+          flexShrink: 0,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxSizing: 'border-box',
+          fontSize: 12,
+          fontWeight: 600,
+          ...(assigned
+            ? {
+                backgroundColor: tokens['action.primary'],
+                color: tokens['action.primary.text'],
+              }
+            : { border: `1px dashed ${tokens['border.strong']}` }),
+        }}
+      >
+        {assigned && name != null ? initialsOf(name) : null}
+      </Box>
+      <Box component="span" sx={visuallyHidden}>
+        {!assigned
+          ? t('tickets:list.unassigned')
+          : name == null
+            ? t('tickets:list.assigned')
+            : t('tickets:list.assignedTo', { name })}
+      </Box>
+    </>
   );
 }

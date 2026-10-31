@@ -1296,6 +1296,20 @@ The tooltips do not capture clicks and close when you open a menu or move focus
 away. Closing a menu restores focus without reopening its tooltip; tab away and
 back to read it again.
 
+A **row** in the list (M14-20) has one meta line under the subject: the
+reference, the contact, the status as a plain word, the SLA time (or the wake time
+of a snoozed ticket) and the pinned field. At the end of the row sit the time of
+the last update and the assignee: their initials in a teal circle, or a dashed
+ring when nobody has the ticket. The status word is left out when the view is
+already filtered to one status, such as Escalated. A screen reader hears the same
+things in the row link's name, ending in "Assigned to Lina Haddad" or
+"Unassigned".
+
+In the **details panel** the order is the contact, Assignee, Status, Priority,
+Department, SLA, Tags, custom fields and Participants. Each select has its label
+above it. Participants is one line, "2 participants · Add CC"; press it to see
+the list and the field for copying somebody in.
+
 `apps/admin/src/screens/tickets/` is the `Admin · ticket view` artboard: the
 list, the thread and the details panel, on one route. The boundary it reads
 through is `apps/admin/src/tickets/` — `TicketsApi`, an http adapter and a

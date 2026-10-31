@@ -11,7 +11,7 @@ import type {
   TicketStatus,
 } from '@helpdock/schemas';
 import { ticketPrioritySchema } from '@helpdock/schemas';
-import { Box, MenuItem, Link as MuiLink, TextField, Typography } from '@mui/material';
+import { Box, MenuItem, Link as MuiLink, Typography } from '@mui/material';
 import { BadgeCheck } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -24,6 +24,7 @@ import { initialsOf } from '../contacts/format.js';
 import { AssigneePicker } from './assignee-picker.tsx';
 import { ChannelLabel } from './badges.tsx';
 import { CustomFieldsCard } from './custom-fields-card.tsx';
+import { DetailsSelect } from './details-select.tsx';
 import { messageTime, statusName } from './format.js';
 import { LinkedTickets } from './linked-tickets.tsx';
 import { ParticipantsCard } from './participants-card.tsx';
@@ -258,9 +259,6 @@ export function DetailsPanel({
 
       {channelIdentity}
 
-      {/* M1-13: the contact, the CCs and a field to copy somebody in. */}
-      <ParticipantsCard ticketId={ticket.id} />
-
       <AssigneePicker
         id={assigneeId}
         buttonRef={assigneeButton}
@@ -279,28 +277,8 @@ export function DetailsPanel({
         }}
       />
 
-      <TextField
-        id={departmentId}
-        select
-        size="small"
-        disabled={busy || departments.length === 0}
-        label={t('tickets:details.department')}
-        value={departments.some((d) => d.id === ticket.departmentId) ? ticket.departmentId : ''}
-        onChange={(event) => {
-          onChange({ departmentId: event.target.value });
-        }}
-      >
-        {departments.map((department) => (
-          <MenuItem key={department.id} value={department.id}>
-            {department.name}
-          </MenuItem>
-        ))}
-      </TextField>
-
-      <TextField
+      <DetailsSelect
         id={statusId}
-        select
-        size="small"
         disabled={busy}
         label={t('tickets:details.status')}
         value={ticket.status.id}
@@ -317,12 +295,10 @@ export function DetailsPanel({
               {statusName(status, locale)}
             </MenuItem>
           ))}
-      </TextField>
+      </DetailsSelect>
 
-      <TextField
+      <DetailsSelect
         id={priorityId}
-        select
-        size="small"
         disabled={busy}
         label={t('tickets:details.priority')}
         value={ticket.priority}
@@ -336,15 +312,23 @@ export function DetailsPanel({
             {t(`tickets:priority.${priority}`)}
           </MenuItem>
         ))}
-      </TextField>
+      </DetailsSelect>
 
-      <TicketTags
-        tags={ticket.tags ?? []}
-        brandTags={brandTags}
-        canWrite={canWrite}
-        buttonRef={tagsButton}
-        onChange={onTagsChange}
-      />
+      <DetailsSelect
+        id={departmentId}
+        disabled={busy || departments.length === 0}
+        label={t('tickets:details.department')}
+        value={departments.some((d) => d.id === ticket.departmentId) ? ticket.departmentId : ''}
+        onChange={(event) => {
+          onChange({ departmentId: event.target.value });
+        }}
+      >
+        {departments.map((department) => (
+          <MenuItem key={department.id} value={department.id}>
+            {department.name}
+          </MenuItem>
+        ))}
+      </DetailsSelect>
 
       <SlaCard
         ticket={ticket}
@@ -358,6 +342,14 @@ export function DetailsPanel({
       />
 
       {cards}
+
+      <TicketTags
+        tags={ticket.tags ?? []}
+        brandTags={brandTags}
+        canWrite={canWrite}
+        buttonRef={tagsButton}
+        onChange={onTagsChange}
+      />
 
       <Box component="section">
         <Typography variant="caption" component="h2" sx={{ color: 'text.secondary' }}>
@@ -376,6 +368,8 @@ export function DetailsPanel({
       />
 
       <LinkedTickets related={related} />
+
+      <ParticipantsCard ticketId={ticket.id} />
 
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {`${t('tickets:details.created')} · `}

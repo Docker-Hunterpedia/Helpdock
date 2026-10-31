@@ -62,12 +62,37 @@ const started = async (provider: 'google' | 'github') => {
 };
 
 describe('isEnabled', () => {
-  it('is off until a client id is set, which is what hides the button', async () => {
+  it('is off until a client id and secret are set, which is what hides the button', async () => {
     await expect(service.isEnabled('google')).resolves.toBe(false);
 
     await configure('google');
 
     await expect(service.isEnabled('google')).resolves.toBe(true);
+  });
+
+  it.each(['google', 'github'] as const)(
+    'keeps %s off with a client id and no secret, since its token exchange would fail',
+    async (provider) => {
+      await settings.set(`oauth.${provider}.clientId`, 'client-id', { updatedBy: 'test' });
+
+      await expect(service.isEnabled(provider)).resolves.toBe(false);
+      await expect(service.start(provider)).rejects.toBeInstanceOf(OauthError);
+    },
+  );
+
+  it.each(['google', 'github'] as const)(
+    'keeps %s off with a secret and no client id',
+    async (provider) => {
+      await settings.set(`oauth.${provider}.clientSecret`, 'client-secret', { updatedBy: 'test' });
+
+      await expect(service.isEnabled(provider)).resolves.toBe(false);
+    },
+  );
+
+  it.each(['google', 'github'] as const)('turns %s on with both', async (provider) => {
+    await configure(provider);
+
+    await expect(service.isEnabled(provider)).resolves.toBe(true);
   });
 });
 

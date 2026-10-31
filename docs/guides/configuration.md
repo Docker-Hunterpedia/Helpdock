@@ -443,14 +443,14 @@ Every setting in the registry (`packages/config/src/registry.ts`). **Scope** `br
 | `HD_SMTP_PASSWORD` | `smtp.password` | brand | yes | — | SMTP password. |
 | `HD_SMTP_FROM` | `smtp.from` | brand | no | — | Envelope and header From address. The display name is smtp.fromName. |
 | `HD_SMTP_FROM_NAME` | `smtp.fromName` | brand | no | — | Display name shown beside the From address, for example the brand name. |
-| `HD_OAUTH_GOOGLE_CLIENT_ID` | `oauth.google.clientId` | install | no | — | Google OAuth client id for staff sign-in. Empty disables the button. |
+| `HD_OAUTH_GOOGLE_CLIENT_ID` | `oauth.google.clientId` | install | no | — | Google OAuth client id for staff sign-in. Empty, or an empty client secret, disables the button. |
 | `HD_OAUTH_GOOGLE_CLIENT_SECRET` | `oauth.google.clientSecret` | install | yes | — | Google OAuth client secret. |
 | `HD_OAUTH_GOOGLE_ALLOWED_DOMAINS` | `oauth.google.allowedDomains` | install | no | `[]` | Google Workspace domains (the hd claim) whose accounts may use Google sign-in, as a JSON array. Empty allows any address Google vouches for; a list also refuses @gmail.com (ADR 0051). |
 | `HD_OAUTH_MICROSOFT_TENANT_ID` | `oauth.microsoft.tenantId` | install | no | — | Microsoft Entra directory (tenant) id whose work accounts may use Microsoft sign-in, as a GUID. common, organizations and the personal-accounts tenant are refused (ADR 0051). |
 | `HD_OAUTH_MICROSOFT_ALLOW_CONSUMERS` | `oauth.microsoft.allowConsumers` | install | no | `false` | Also let personal Microsoft accounts (Outlook.com, Hotmail) sign in, through the consumers tenant. They can only be connected from the security page, never linked by address. Off unless you need it (ADR 0051). |
-| `HD_OAUTH_MICROSOFT_CLIENT_ID` | `oauth.microsoft.clientId` | install | no | — | Microsoft Entra application (client) id for staff sign-in. Empty, or an empty tenant id, disables the button. |
+| `HD_OAUTH_MICROSOFT_CLIENT_ID` | `oauth.microsoft.clientId` | install | no | — | Microsoft Entra application (client) id for staff sign-in. Empty, or an empty tenant id or client secret, disables the button. |
 | `HD_OAUTH_MICROSOFT_CLIENT_SECRET` | `oauth.microsoft.clientSecret` | install | yes | — | Microsoft Entra client secret value. |
-| `HD_OAUTH_GITHUB_CLIENT_ID` | `oauth.github.clientId` | install | no | — | GitHub OAuth client id for staff sign-in. Empty disables the button. |
+| `HD_OAUTH_GITHUB_CLIENT_ID` | `oauth.github.clientId` | install | no | — | GitHub OAuth client id for staff sign-in. Empty, or an empty client secret, disables the button. |
 | `HD_OAUTH_GITHUB_CLIENT_SECRET` | `oauth.github.clientSecret` | install | yes | — | GitHub OAuth client secret. |
 | `HD_SSO_ENFORCED` | `sso.enforced` | install | no | `false` | Require staff SSO except designated break-glass install admins. |
 | `HD_SSO_BREAK_GLASS_USER_IDS` | `sso.breakGlassUserIds` | install | no | `[]` | Install admins who retain password and (authenticator code or passkey) sign-in during SSO enforcement. |

@@ -265,15 +265,15 @@ export class OauthService {
   }
 
   /**
-   * A provider with no client id is off, and `GET /api/auth/methods` says so.
-   * Microsoft is also off without a tenant, where there is no issuer to trust,
-   * and without a secret, which its flow cannot start without.
+   * A provider with no client id or no client secret is off, and
+   * `GET /api/auth/methods` says so: the token exchange cannot succeed without
+   * the secret, so drawing the button would only fail after the consent
+   * screen. Microsoft is also off without a tenant, where there is no issuer
+   * to trust.
    */
   async isEnabled(provider: OauthProvider): Promise<boolean> {
     const { clientId, clientSecret, tenantId } = await this.#credentials(provider);
-    return (
-      clientId !== '' && (provider !== 'microsoft' || (tenantId !== '' && clientSecret !== ''))
-    );
+    return clientId !== '' && clientSecret !== '' && (provider !== 'microsoft' || tenantId !== '');
   }
 
   /**
@@ -379,7 +379,7 @@ export class OauthService {
     }
 
     const { clientId, clientSecret } = await this.#credentials(provider);
-    if (!(await this.isEnabled(provider)) || clientSecret === '') {
+    if (!(await this.isEnabled(provider))) {
       throw new OauthError(`${provider} sign-in is not configured on this install`);
     }
 

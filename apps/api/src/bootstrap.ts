@@ -23,6 +23,7 @@ import { ApiKeyPrincipalResolver } from './api-keys/api-key-principal-resolver.j
 import { ApiKeysRepository } from './api-keys/api-keys.repository.js';
 import { RefusedApiKeys } from './api-keys/refused-api-key.js';
 import { AppModule, type AppModuleOptions } from './app.module.js';
+import { registerPasskeyBodyLimit } from './auth/passkeys/passkey-body.js';
 import { createPrincipalResolver } from './auth/principal-resolver.js';
 import { RateLimiter } from './auth/rate-limit.js';
 import { RefreshStore } from './auth/session/refresh-store.js';
@@ -377,6 +378,9 @@ export const createApiApp = async ({
     PROFILE_PHOTO_ROUTE,
     UNSUBSCRIBE_ROUTE,
   ]);
+
+  // M18, #424. Passkey bodies are under 40 KB, so these routes take 64 KiB, not 1 MB.
+  registerPasskeyBodyLimit(app.getHttpAdapter().getInstance());
 
   // M10-02. The webhook's signature covers the bytes Meta wrote, so its route's
   // parser checks it over them, and the address's budget, before it parses;

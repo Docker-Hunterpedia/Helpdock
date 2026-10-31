@@ -278,6 +278,12 @@ describe('the meta line and the assignee on a row (M14-20)', () => {
     expect(line?.textContent).toMatch(/^HD-1042·Mona Khalil·Open.*4h/);
   });
 
+  it('prints no stand-in for a contact whose name is empty', () => {
+    row(testTicket({ contact: { id: MONA.id, name: ' ' } }));
+
+    expect(screen.getByText('HD-1042').closest('p')?.textContent).toMatch(/^HD-1042·Open/);
+  });
+
   it('draws the status as a word, not a pill', () => {
     row();
 

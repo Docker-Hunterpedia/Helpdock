@@ -85,7 +85,7 @@ export function TicketRow({
   const t = useT();
   const { locale } = usePreferences();
   const reference = ticketReference(ticket);
-  const contactName = ticket.contact?.name ?? null;
+  const contactName = ticket.contact?.name.trim() ? ticket.contact.name : null;
   const pinnedValue = pinnedValueOf(ticket, pinnedField);
   const assigned = ticket.assigneeId !== null;
 

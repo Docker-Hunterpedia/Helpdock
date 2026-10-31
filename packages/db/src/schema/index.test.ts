@@ -144,6 +144,17 @@ describe('the schema', () => {
     expect(classified).toEqual([...byName.keys()].sort());
   });
 
+  it('keeps the passkey and OAuth identity tables install-scoped, not tenant-scoped', () => {
+    const global = GLOBAL_TABLES.map((table) => table.name);
+    const tenant = TENANT_TABLES.map((table) => table.name);
+
+    expect(global).toEqual(
+      expect.arrayContaining(['webauthn_credentials', 'user_oauth_identities']),
+    );
+    expect(tenant).not.toContain('webauthn_credentials');
+    expect(tenant).not.toContain('user_oauth_identities');
+  });
+
   it('gives every tenant table the brand_id the policies filter on', () => {
     for (const table of TENANT_TABLES) {
       expect(columnsOf(table.name)).toContain('brand_id');

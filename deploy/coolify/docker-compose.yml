@@ -1,7 +1,7 @@
 # Self-contained external-proxy topology for Coolify Docker Compose Empty.
 # Kept in-repo; upstream listing waits. No Caddy or published ports.
 x-helpdock: &helpdock
-  image: ghcr.io/docker-hunterpedia/helpdock:1.0.3
+  image: ghcr.io/docker-hunterpedia/helpdock:1.3.0
   restart: unless-stopped
   stop_grace_period: 30s
   environment: &environment

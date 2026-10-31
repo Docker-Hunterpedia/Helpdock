@@ -1,7 +1,7 @@
 {
   "id": "helpdock",
   "name": "Helpdock",
-  "version": "1.0.3",
+  "version": "1.3.0",
   "description": "Self-hosted customer support with ticketing, a help center, live chat and grounded AI, in English and Arabic. Requires an external S3-compatible bucket.",
   "logo": "helpdock.svg",
   "links": {

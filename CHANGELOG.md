@@ -14,6 +14,152 @@ is the procedure.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 a minor
 bump may change behaviour; upgrade notes call it out when it does.
 
+## 1.3.0 — 2026-11-01
+
+Inbox productivity (M14) and a security patch. Upgrade if you receive email
+into Helpdock.
+
+- **Security.** nodemailer 10.1.7 and mailparser 3.9.47 fix three
+  address-parsing flaws, where a nested comment, a `;` inside quotes or a `>`
+  inside a quoted local part could turn header text into an extra recipient or
+  a different domain. Fastify 5.12.7 fixes a header validation bypass. Entra ID
+  first links also check the ID token's `idp` claim, so a B2B member whose home
+  tenant vouches for the domain can no longer link by email. The passkey
+  routes refuse bodies over 64 KiB.
+- **A composer that leaves room for the thread.** The reply box is one line
+  until opened, grows with its text and is capped below half the column; the
+  details panel becomes a drawer below 1440 px; `[` hides the ticket list.
+  Below 1024 px the workspace opens on the list and a ticket is pushed over it
+  with a back button.
+- **Faster replies.** Saved replies and macros get a shortcut (`/refund`, then
+  Tab), placeholders take a fallback (`{{contact.first_name|there}}`) and are
+  checked on save, `{{` lists what the ticket can fill, and `@` in a note
+  mentions the people who can see the ticket.
+- **Mailbox-aware views and rules.** Filter tickets by the mailbox they arrived
+  at and the address the customer wrote to; rules can test both, set the reply
+  address and mark a ticket as spam.
+- **Custom fields.** Four new types: long text, link (https, never fetched),
+  email and person (staff of the brand).
+- **Notifications.** Optional sounds per event, with a once-a-minute reminder
+  while a live chat waits.
+- **Admin.** Ticket rows name the assignee for every role; first-run screens
+  say what goes there and offer the action that fills them; lists show a
+  skeleton while they load; Arabic directional icons point the right way.
+- **Sign-in.** Google and GitHub buttons appear only once both the client id
+  and the client secret are set.
+
+### Upgrade notes
+
+- Four migrations (0074 to 0077) run on start. 0076 backfills each email
+  ticket's arrival mailbox and address from its activity, which takes a moment
+  on a large install.
+- A Google or GitHub sign-in configured with a client id but no secret no
+  longer shows its button. Set `HD_OAUTH_GOOGLE_CLIENT_SECRET` or
+  `HD_OAUTH_GITHUB_CLIENT_SECRET` to bring it back.
+
+## 1.2.0 — 2026-10-24
+
+Inbox speed and passkeys.
+
+- **Work through the queue faster.** Bulk edit up to 50 tickets with a preview
+  and Undo; snooze a ticket until a chosen time, by hand or from a rule or
+  macro; a command palette on `Ctrl`/`⌘`+`K`; filters on custom fields with one
+  pinned field shown on every row; fields required before a ticket can close;
+  empty states that say why a view is empty.
+- **Routing you can test.** Automation › Routing explains the four steps a new
+  ticket goes through, and Test routing walks a sample message through them
+  without creating or sending anything.
+- **Notifications on your terms.** An email schedule (right away, hourly or
+  daily digest, or off), pause, and one-click unsubscribe (RFC 8058).
+- **Passkeys and Microsoft sign-in.** Staff can add passkeys, use one as the
+  second factor or as the whole sign-in; Microsoft work accounts join Google
+  and GitHub as a built-in provider; install admins can reset another person's
+  second factor and replace an authenticator app in one step; break-glass
+  install admins can sign in under SSO enforcement.
+- **Admin.** A "Get set up" checklist for Admins, one grouped Settings area
+  (old addresses redirect), a customer-facing profile (public name, title,
+  photo, time zone), outgoing email that can be changed after setup, and idle
+  agents marked away.
+- **Fixes.** Requests no longer hang when as many arrive together as the
+  database pool has connections; a stored secret is never sent to a destination
+  it was not saved for; old unsubscribe links stop working once email is turned
+  back on.
+
+### Upgrade notes
+
+- Existing departments get a 10-minute idle limit (Ticketing › Assignment),
+  replacing the admin's 5-minute away timer. Change or turn it off per
+  department.
+- Bookmarks to `/admin/…` and `/me/…` pages still work; they redirect to
+  Settings.
+
+## 1.1.1 — 2026-10-20
+
+A security patch. Enrolling an authenticator app now refuses to run while one
+is already turned on, so someone holding a staff password can no longer replace
+that person's app. Sign-in enrolment links issued before an app was set up
+expire instead of replacing it.
+
+## 1.1.0 — 2026-10-20
+
+Keyboard-first inbox, sign-in controls and more ways to deploy.
+
+- **Keyboard shortcuts** across the admin: `?` opens the sheet, `g` then a
+  letter opens a view, single keys act on the open ticket, and a switch turns
+  single-key shortcuts off (WCAG 2.1.4). They work on an Arabic layout.
+- **Sign-in.** Google sign-in can be limited to your Workspace domains; SSO
+  presets for Google Workspace and Microsoft Entra ID (OIDC); an invitation can
+  be accepted with Google or GitHub; the passkey foundation.
+- **Bot check without a third party.** A built-in proof-of-work check for the
+  widget and web form, plus stricter Turnstile binding and new rate limits.
+- **Tickets record how they arrived**, and lists sort by SLA due.
+- **Notification email is paced and batched** instead of one email per event.
+- **More webhook events** (assignment, status, merge, message, contact,
+  account) and two report cards: volume by tag, backlog by status.
+- **Deploy templates** for Dokploy, Coolify, Render, DigitalOcean and running
+  behind your own proxy ([deploy paths](docs/guides/deploy.md)).
+
+### Upgrade notes
+
+- Custom widget clients that render Turnstile themselves must pass
+  `action: 'widget-first-message'` and `cData: '<brandId>'`; the bundled widget
+  already does.
+- An Entra app registration used for OIDC must add the `email`, `xms_edov` and
+  `acct` optional claims. Review an existing Entra connection's email domains
+  before upgrading: it starts linking by email at the next sign-in.
+- Existing accounts move from one email per notification to batched email.
+- Installs from the 1.0.0 Caddyfiles: inbound email parse webhooks are now
+  allowed through; see [operations](docs/guides/operations.md).
+
+## 1.0.3 — 2026-10-20
+
+A wrong current password or authenticator code on the security page is sent
+once instead of twice, so one click no longer spends two of the five step-up
+attempts allowed in fifteen minutes.
+
+## 1.0.2 — 2026-10-20
+
+The security page connects and disconnects Google and GitHub, so nobody has to
+call the API to reconnect a provider after 1.0.1. The admin sidebar collapses
+to an icon rail (`⌘\` / `Ctrl+\`). Spam tickets no longer appear on a
+contact's timeline or in their counts.
+
+## 1.0.1 — 2026-10-20
+
+- **Security: Google and GitHub sign-in bind to the provider account** instead
+  of matching its email on every sign-in.
+- CAPTCHA checks the hostname the provider reports, so a token solved on
+  another site is refused.
+- Saving an SLA policy no longer fails when a timer fires at the same moment.
+- Mixed-direction text, dates and shortcuts work in the Arabic admin; ticket
+  rows read well in a screen reader; the desk draws skeletons while loading.
+
+### Upgrade notes
+
+- Everyone who signs in with GitHub, and anyone using a consumer Google account
+  on a company address, must sign in once with a password or sign-in link and
+  connect the provider again (from the security page since 1.0.2).
+
 ## 1.0.0 — 2026-10-20
 
 The first stable release. Every milestone of the 1.0 plan has shipped: the

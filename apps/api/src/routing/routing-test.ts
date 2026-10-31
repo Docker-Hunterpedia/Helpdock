@@ -362,6 +362,9 @@ export const walkRouting = async (
     contactLocale: found?.locale ?? null,
     accountId: found?.accountId ?? null,
     custom: {},
+    // The sample is a message to this entry point, so the address it names is the mailbox's own.
+    mailboxId: entry.entry === 'mailbox' ? entry.entryId : null,
+    toAddress: entry.entry === 'mailbox' ? (entry.label?.toLowerCase() ?? null) : null,
     inert: false,
   };
 

@@ -325,7 +325,11 @@
     "source": "Source",
     "allSources": "All sources",
     "imported": "Imported",
-    "native": "Created in Helpdock"
+    "native": "Created in Helpdock",
+    "mailbox": "Mailbox",
+    "writtenTo": "Written to",
+    "writtenToHint": "The exact address the customer wrote to. Press Enter to apply.",
+    "writtenToPlaceholder": "refunds@example.com"
   },
   "newTicket": {
     "action": "New ticket",

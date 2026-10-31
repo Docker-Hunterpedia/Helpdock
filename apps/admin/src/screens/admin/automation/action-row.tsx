@@ -44,6 +44,8 @@ const UI_TYPES = [
   'close',
   'snooze',
   'ai_triage',
+  'set_reply_mailbox',
+  'mark_spam',
 ] as const;
 type UiType = (typeof UI_TYPES)[number];
 
@@ -320,6 +322,27 @@ export function ActionRow({
             />
           </>
         );
+      case 'set_reply_mailbox':
+        return pick(
+          t('rules:builder.replyMailbox'),
+          action.mailboxId,
+          (options?.mailboxes ?? []).map((mailbox) => ({
+            id: mailbox.id,
+            name: t('rules:builder.mailboxOption', {
+              address: mailbox.address,
+              department: named(
+                options?.departments.find(
+                  (department) => department.id === mailbox.departmentId,
+                ) ?? {
+                  name: '',
+                },
+              ),
+            }),
+          })),
+          (mailboxId) => {
+            onChange({ ...action, mailboxId });
+          },
+        );
       case 'snooze':
         return (
           <Choice
@@ -458,6 +481,22 @@ export function ActionRow({
           sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
         >
           {t('rules:builder.triageHint')}
+        </Typography>
+      ) : null}
+      {action.type === 'set_reply_mailbox' ? (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
+        >
+          {t('rules:builder.replyMailboxNote')}
+        </Typography>
+      ) : null}
+      {action.type === 'mark_spam' ? (
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', fontWeight: 400, paddingInlineStart: 12 }}
+        >
+          {t('rules:builder.markSpamNote')}
         </Typography>
       ) : null}
       {action.type === 'snooze' ? (

@@ -1533,6 +1533,33 @@ address condition; the guide says so. Artboard `Admin/Ticketing-FieldFilters`
 gains the two filters and `Admin/RuleBuilder` (amended) the conditions and
 actions.
 
+**Status: built, in review** (issue [#313](https://github.com/Docker-Hunterpedia/Helpdock/issues/313)).
+Built as above, with these decisions:
+
+- [x] `mailboxId` / `toAddress` on `GET /tickets` (and so in views, the public
+  API and OpenAPI), read from the arrival record in `ticket_activity` with an
+  `EXISTS`-style subquery under the reader's own policies, indexed by the new
+  partial expression index `ticket_activity_arrival_idx`. No denormalised copy
+  of the arrival on the ticket.
+- [x] Filter popover rows "Mailbox" and "Written to", and the same two in the
+  Views tab's editor; the mailbox list comes from `GET /ticket-mailboxes`
+  (`ticket:read`), because `GET /mailboxes` needs `brand:manage`.
+- [x] Conditions `mailbox` (is, is not, any of) and `to_address` (is, contains).
+  A ticket without a mailbox arrival matches neither under any operator,
+  including *is not* (the plan's "pre-M14 tickets never match", extended to
+  tickets from other entry points, which also have no mailbox).
+- [x] `set_reply_mailbox` writes the new `tickets.reply_mailbox_id`
+  (migration `0074_ticket_reply_mailbox`, `ON DELETE SET NULL`); accepted only
+  for a mailbox of the ticket's department when the rule runs. The next public
+  email reply leaves from it unless the composer chose a sender; auto-replies,
+  surveys and transcripts keep the department's sender. Not exposed on the
+  ticket DTO (no screen shows it yet); the activity row is
+  `ticket.reply_mailbox.changed`, which the thread does not draw.
+- [x] `mark_spam` calls the existing lifecycle transition. A queued
+  acknowledgment, out-of-hours reply or survey for a ticket that became spam is
+  discarded unsent by the `email.send` job.
+- [x] Test routing's synthetic ticket carries the entry's mailbox and address.
+
 ### M14-27 More custom field types
 
 `customFieldTypeSchema` today holds text, number, date, select, multi-select

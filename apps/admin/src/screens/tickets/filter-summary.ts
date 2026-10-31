@@ -162,6 +162,12 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       label: tagName,
     },
     {
+      field: 'mailboxId' as const,
+      name: t('tickets:filters.mailbox'),
+      values: filters.mailboxId,
+      label: (id: string) => mailboxes.find((mailbox) => mailbox.id === id)?.address ?? shortId(id),
+    },
+    {
       field: 'channel' as const,
       name: t('tickets:channel.label'),
       values: filters.channel,
@@ -189,6 +195,16 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
             ...filters,
             fieldFilter: filters.fieldFilter.filter((other) => other.key !== filter.key),
           },
+        });
+      }
+      if (filters.toAddress !== '') {
+        parts.push({
+          key: 'toAddress',
+          label: t('tickets:summary.chip', {
+            field: t('tickets:filters.writtenTo'),
+            value: filters.toAddress,
+          }),
+          without: { ...filters, toAddress: '' },
         });
       }
       if (filters.overdue) {
@@ -239,6 +255,14 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
         ];
       });
       phrases.push(...filters.fieldFilter.map(fieldFilterText));
+      if (filters.toAddress !== '') {
+        phrases.push(
+          t('tickets:summary.is', {
+            field: t('tickets:filters.writtenTo'),
+            value: filters.toAddress,
+          }),
+        );
+      }
       if (filters.overdue) {
         phrases.push(t('tickets:summary.overdue'));
       }

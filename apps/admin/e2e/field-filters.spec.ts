@@ -229,6 +229,28 @@ test('puts the same rows in the Views tab’s editor and prints them in the "Sho
   await expect(row).toContainText(t('tickets:summary.is', { field: TIER[locale], value: 'gold' }));
 });
 
+test('puts the mailbox and the written-to address in the Views tab’s editor (M14-26)', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  await openTicketing(page, locale);
+  await settingsTab(page, t, 'ticketing:tabs.views').click();
+  await page.getByRole('button', { name: t('ticketing:views.add'), exact: true }).click();
+
+  const card = page.getByRole('form', { name: t('ticketing:views.editor.newHeading') });
+  await card.getByLabel(t('ticketing:views.editor.name'), { exact: true }).fill('Billing mail');
+  await card.getByRole('button', { name: 'billing@helpdock.test' }).click();
+  await card.getByLabel(t('tickets:filters.writtenTo')).fill('refunds@helpdock.test');
+  expect(await violations(page)).toEqual([]);
+  await card.getByRole('button', { name: t('ticketing:views.editor.create') }).click();
+
+  const row = page.getByRole('row').filter({ hasText: 'Billing mail' });
+  await expect(row).toContainText('billing@helpdock.test');
+  await expect(row).toContainText('refunds@helpdock.test');
+});
+
 test('stacks a row in the Views tab’s narrow card, so the value keeps room and nothing scrolls sideways', async ({
   page,
   appLocale: locale,
@@ -247,5 +269,76 @@ test('stacks a row in the Views tab’s narrow card, so the value keeps room and
   const value = card.getByLabel(t('tickets:fieldFilters.valueOf', { field: ORDER_ID[locale] }));
   expect((await value.boundingBox())?.width ?? 0).toBeGreaterThan(150);
   expect(await card.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(false);
+  expect(await violations(page)).toEqual([]);
+});
+
+test('filters the list by mailbox and by the address written to, and saves the filter as a view (M14-26)', async ({
+  page,
+  appLocale: locale,
+}) => {
+  const t = strings(locale);
+  await signIn(page, locale);
+  // "My open" is where HD-1042 is: a built-in view, so the change is saved as a new one.
+  await openTickets(page, locale);
+  expect(await rows(page).count()).toBeGreaterThan(0);
+
+  const popover = await openPopover(page, locale);
+  // Only the mailboxes of the brand are offered, by address.
+  await expect(popover.getByRole('switch', { name: 'billing@helpdock.test' })).toBeVisible();
+  await popover.getByRole('switch', { name: 'billing@helpdock.test' }).click();
+  expect(await violations(page)).toEqual([]);
+  await page.keyboard.press('Escape');
+
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByRole('link', { name: /HD-1042/ })).toBeVisible();
+  const chip = t('tickets:summary.chip', {
+    field: t('tickets:filters.mailbox'),
+    value: 'billing@helpdock.test',
+  });
+  await expect(
+    page.getByRole('button', { name: t('tickets:viewBar.remove', { filter: chip }) }),
+  ).toBeVisible();
+
+  // The address the customer wrote to narrows further; an address nobody wrote to finds nothing.
+  const reopened = await openPopover(page, locale);
+  const written = reopened.getByLabel(t('tickets:filters.writtenTo'));
+  await written.fill('nobody@helpdock.test');
+  await written.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('heading', { name: t('tickets:empty.filteredHeading') }),
+  ).toBeVisible();
+
+  const again = await openPopover(page, locale);
+  const field = again.getByLabel(t('tickets:filters.writtenTo'));
+  await field.fill('REFUNDS@helpdock.test');
+  await field.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(page.getByRole('link', { name: /HD-1042/ })).toBeVisible();
+
+  // A saved view keeps both.
+  const bar = page.getByRole('status').filter({ hasText: t('tickets:viewBar.changed') });
+  await bar.getByRole('button', { name: t('tickets:viewBar.saveAsNew') }).click();
+  const dialog = page.getByRole('dialog', { name: t('tickets:viewDialog.title') });
+  await dialog.getByLabel(t('tickets:viewDialog.name')).fill('Refund mailbox');
+  await dialog.getByRole('button', { name: t('tickets:viewDialog.submit') }).click();
+  await expect(page.getByRole('heading', { name: 'Refund mailbox', level: 1 })).toBeVisible();
+  await expect(rows(page)).toHaveCount(1);
+
+  await page
+    .getByRole('navigation')
+    .first()
+    .getByRole('link', { name: new RegExp(`^${t('tickets:views.myOpen')}`) })
+    .click();
+  await page
+    .getByRole('navigation')
+    .first()
+    .getByRole('link', { name: /^Refund mailbox/ })
+    .click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(
+    page.getByRole('button', { name: t('tickets:viewBar.remove', { filter: chip }) }),
+  ).toBeVisible();
   expect(await violations(page)).toEqual([]);
 });

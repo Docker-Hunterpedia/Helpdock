@@ -64,6 +64,7 @@ const ticket = (n: number, links: Partial<TicketRow> = {}): TicketRow => ({
   snoozedBy: null,
   snoozeResumeStatusId: null,
   snoozeVersion: 0,
+  replyMailboxId: null,
   statusChangedAt: AT,
   custom: {},
   aiPausedAt: null,

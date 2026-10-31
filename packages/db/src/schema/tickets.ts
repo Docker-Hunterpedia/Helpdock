@@ -19,6 +19,7 @@ import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
 import { importSourceEnum, ticketChannelEnum, ticketPriorityEnum } from './enums.js';
+import { mailboxes } from './mailboxes.js';
 import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
@@ -153,6 +154,14 @@ export const tickets = pgTable(
      * same reason.
      */
     mergedMs: bigint('merged_ms', { mode: 'number' }).notNull().default(0),
+    /**
+     * M14-26. The mailbox later public replies on email are sent from, set by a
+     * rule's "set reply address" action. Null: the department's sender, as before.
+     * `set null` so deleting a mailbox sends replies from the department again.
+     */
+    replyMailboxId: uuid('reply_mailbox_id').references((): AnyPgColumn => mailboxes.id, {
+      onDelete: 'set null',
+    }),
     /** M3-02. Null while no policy applies; `set null` so deleting a policy keeps the history. */
     slaPolicyId: uuid('sla_policy_id').references((): AnyPgColumn => slaPolicies.id, {
       onDelete: 'set null',

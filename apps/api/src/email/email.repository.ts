@@ -8,10 +8,12 @@ import {
   type EmailOutboundSettings,
   emailDeliveries,
   emailOutboundSettings,
+  mailboxes,
   type NewEmailDelivery,
   type NewEmailOutboundSettings,
   ticketMessages,
   ticketParticipants,
+  ticketStatuses,
   tickets,
   users,
 } from '@helpdock/db';
@@ -38,6 +40,8 @@ export interface SendFacts {
   readonly brandName: string;
   readonly departmentName: string;
   readonly contactName: string | null;
+  /** M14-26. A spam ticket is sent no auto-reply and no survey, whenever they were queued. */
+  readonly isSpam: boolean;
   readonly message: {
     readonly bodyHtml: string;
     readonly bodyText: string;
@@ -95,6 +99,8 @@ export interface ReplyAddressing {
   readonly contact: { readonly name: string; readonly address: string } | null;
   readonly locale: 'en' | 'ar';
   readonly cc: readonly string[];
+  /** M14-26. The mailbox a rule chose to send replies from; null: the department's sender. */
+  readonly replyMailbox: { readonly name: string; readonly address: string } | null;
 }
 
 const reference = (prefix: string, number: number): string => `${prefix}-${String(number)}`;
@@ -208,11 +214,14 @@ export class EmailRepository {
         contactName: contacts.name,
         contactLocale: contacts.locale,
         brandLocale: brands.defaultLocale,
+        replyMailboxAddress: mailboxes.address,
+        replyMailboxName: mailboxes.displayName,
       })
       .from(tickets)
       .innerJoin(brands, eq(brands.id, tickets.brandId))
       .innerJoin(departments, eq(departments.id, tickets.departmentId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
+      .leftJoin(mailboxes, eq(mailboxes.id, tickets.replyMailboxId))
       .where(eq(tickets.id, ticketId))
       .limit(1);
     if (ticket === undefined) {
@@ -247,6 +256,10 @@ export class EmailRepository {
       contact: address === null ? null : { name: ticket.contactName ?? '', address },
       locale,
       cc,
+      replyMailbox:
+        ticket.replyMailboxAddress === null
+          ? null
+          : { name: ticket.replyMailboxName ?? '', address: ticket.replyMailboxAddress },
     };
   }
 
@@ -354,6 +367,14 @@ export class EmailRepository {
     return rows.length === 1;
   }
 
+  /** M14-26. A queued send that must not go (its ticket became spam) is discarded unsent. */
+  async discardQueued(tx: DbTransaction, deliveryId: string): Promise<void> {
+    await tx
+      .update(emailDeliveries)
+      .set({ status: 'discarded' })
+      .where(and(eq(emailDeliveries.id, deliveryId), eq(emailDeliveries.status, 'queued')));
+  }
+
   async failedIds(tx: DbTransaction): Promise<string[]> {
     const rows = await tx
       .select({ id: emailDeliveries.id })
@@ -417,10 +438,12 @@ export class EmailRepository {
         departmentName: departments.name,
         departmentNameAr: departments.nameAr,
         contactName: contacts.name,
+        isSpam: ticketStatuses.isSpam,
       })
       .from(tickets)
       .innerJoin(brands, eq(brands.id, tickets.brandId))
       .innerJoin(departments, eq(departments.id, tickets.departmentId))
+      .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
       .where(eq(tickets.id, delivery.ticketId))
       .limit(1);
@@ -468,6 +491,7 @@ export class EmailRepository {
           ? ticket.departmentNameAr
           : ticket.departmentName,
       contactName: ticket.contactName,
+      isSpam: ticket.isSpam,
       message: message ?? null,
       author: author ?? null,
       transcript: delivery.kind === 'transcript' ? await this.#transcript(tx, ticket.id) : [],

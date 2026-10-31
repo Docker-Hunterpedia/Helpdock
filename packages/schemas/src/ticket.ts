@@ -610,6 +610,9 @@ export const TICKET_ASSIGNEE_ME = 'me';
  */
 const queryBoolean = z.union([z.boolean(), z.stringbool()]);
 
+/** An email address is at most 320 characters; the arrival record stores no more (ticket-routing.ts). */
+export const TICKET_ADDRESS_FILTER_MAX = 320;
+
 export const ticketListQuerySchema = z.object({
   imported: z
     .preprocess(
@@ -623,6 +626,14 @@ export const ticketListQuerySchema = z.object({
   priority: coerceArray(ticketPrioritySchema).optional(),
   departmentId: coerceArray(z.uuid()).optional(),
   channel: coerceArray(ticketChannelSchema).optional(),
+  /**
+   * M14-26. The mailbox the ticket arrived at (any of), read from the arrival
+   * record of M14-08. A ticket filed before M14, or through another entry
+   * point, has no mailbox and matches neither this nor `toAddress`.
+   */
+  mailboxId: coerceArray(z.uuid()).optional(),
+  /** M14-26. The address the customer wrote to, matched exactly and without regard to case. */
+  toAddress: z.string().trim().min(1).max(TICKET_ADDRESS_FILTER_MAX).optional(),
   /**
    * `unassigned` is a value rather than a separate flag, because "unassigned"
    * is one of the chips in the same filter and a second parameter would let a

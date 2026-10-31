@@ -90,6 +90,17 @@ describe('the rule draft', () => {
     expect(requestOf(draft)).not.toHaveProperty('trigger');
   });
 
+  it('builds the reply address and spam actions, and keeps a half-filled one from saving (M14-26)', () => {
+    expect(newAction('set_reply_mailbox')).toEqual({ type: 'set_reply_mailbox', mailboxId: '' });
+    expect(newAction('mark_spam')).toEqual({ type: 'mark_spam' });
+
+    const base = { ...emptyDraft('event'), name: 'Spam', groups: [] };
+    expect(requestOf({ ...base, actions: [actionDraft(newAction('mark_spam'))] })).not.toBeNull();
+    expect(
+      requestOf({ ...base, actions: [actionDraft(newAction('set_reply_mailbox'))] }),
+    ).toBeNull();
+  });
+
   it('resets a condition to its new field’s first operator, and trims a list to one value', () => {
     const channel = { ...withField(newCondition(), 'channel'), values: ['email', 'chat'] };
     expect(channel).toMatchObject({ field: 'channel', operator: 'is', values: ['email', 'chat'] });

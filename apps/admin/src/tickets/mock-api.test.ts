@@ -4,6 +4,7 @@ import { MOCK_CONTACT_MONA } from '../contacts/mock-api.js';
 import { MOCK_DEPARTMENTS, MOCK_SELF_ID } from '../staff/mock-api.js';
 import { TicketLifecycleError } from './api.js';
 import {
+  MOCK_MAILBOXES,
   MOCK_STATUS_AWAITING,
   MOCK_STATUS_CLOSED,
   MOCK_STATUS_MERGED,
@@ -387,6 +388,37 @@ describe('MockTicketsApi', () => {
     expect(note).toMatchObject({ kind: 'note', channel: 'manual' });
     const { activity } = await api.activity(BRAND, MOCK_TICKET_REFUND);
     expect(activity.at(-1)?.action).toBe('ticket.note_added');
+  });
+});
+
+describe('MockTicketsApi, mailbox filters (M14-26)', () => {
+  const api = new MockTicketsApi();
+  const [supportBox, billingBox] = MOCK_MAILBOXES;
+
+  it('offers the brand’s mailboxes', async () => {
+    expect((await api.mailboxes(BRAND)).mailboxes.map((box) => box.address)).toEqual([
+      'support@helpdock.test',
+      'billing@helpdock.test',
+    ]);
+  });
+
+  it('lists only the tickets that arrived at the mailbox, and never one with no record', async () => {
+    const at = async (mailboxId: string[]) =>
+      (await api.list(BRAND, { mailboxId, limit: 100 })).tickets.map((ticket) => ticket.id);
+
+    expect(await at([billingBox?.id ?? ''])).toEqual([MOCK_TICKET_REFUND]);
+    expect(await at([supportBox?.id ?? ''])).toEqual([MOCK_TICKET_SIGN_IN]);
+    expect((await at([supportBox?.id ?? '', billingBox?.id ?? ''])).sort()).toEqual(
+      [MOCK_TICKET_REFUND, MOCK_TICKET_SIGN_IN].sort(),
+    );
+  });
+
+  it('matches the address written to exactly and without regard to case', async () => {
+    const written = async (toAddress: string) =>
+      (await api.list(BRAND, { toAddress, limit: 100 })).tickets.map((ticket) => ticket.id);
+
+    expect(await written('REFUNDS@helpdock.test')).toEqual([MOCK_TICKET_REFUND]);
+    expect(await written('refunds@')).toEqual([]);
   });
 });
 

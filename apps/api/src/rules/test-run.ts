@@ -202,6 +202,20 @@ const previewOne = async (
       }
       return CHANGED;
     }
+    case 'set_reply_mailbox': {
+      // As the engine does: only a mailbox of the ticket's own department.
+      const mailbox = await deps.rules.mailbox(tx, action.mailboxId);
+      if (mailbox === undefined || mailbox.departmentId !== facts.departmentId) {
+        return UNAVAILABLE;
+      }
+      if (facts.replyMailboxId === mailbox.id) {
+        return UNCHANGED;
+      }
+      sim.facts = { ...facts, replyMailboxId: mailbox.id };
+      return CHANGED;
+    }
+    case 'mark_spam':
+      return moveStatusTo(tx, deps, sim, (await deps.rules.spamStatus(tx))?.id);
     case 'send_canned':
     case 'add_note':
       return CHANGED;

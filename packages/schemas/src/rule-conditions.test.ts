@@ -13,6 +13,8 @@ const BILLING = '01924f00-0000-7000-8000-000000000002';
 const VIP = '01924f00-0000-7000-8000-000000000003';
 const REFUND = '01924f00-0000-7000-8000-000000000004';
 const AWAITING = '01924f00-0000-7000-8000-000000000005';
+const MAILBOX = '01924f00-0000-7000-8000-000000000006';
+const OTHER_MAILBOX = '01924f00-0000-7000-8000-000000000007';
 
 const facts = (overrides: Partial<RuleTicketFacts> = {}): RuleTicketFacts => ({
   subject: 'Refund not received after 10 days',
@@ -28,6 +30,8 @@ const facts = (overrides: Partial<RuleTicketFacts> = {}): RuleTicketFacts => ({
   contactEmails: ['mona.k@example.com'],
   accountId: null,
   custom: { order_number: '88412' },
+  mailboxId: MAILBOX,
+  toAddress: 'refunds@acme.test',
   ...overrides,
 });
 
@@ -97,6 +101,50 @@ describe('conditionHolds', () => {
     const inside = condition({ field: 'business_hours', operator: 'is', values: ['inside'] });
     expect(conditionHolds(inside, facts(), context)).toBe(true);
     expect(conditionHolds(inside, facts(), { ...context, withinBusinessHours: false })).toBe(false);
+  });
+});
+
+describe('conditions on the arrival (M14-26)', () => {
+  it.each([
+    [{ field: 'mailbox', operator: 'is', values: [MAILBOX] }, true],
+    [{ field: 'mailbox', operator: 'is', values: [OTHER_MAILBOX] }, false],
+    [{ field: 'mailbox', operator: 'is_not', values: [OTHER_MAILBOX] }, true],
+    [{ field: 'mailbox', operator: 'is_not', values: [MAILBOX] }, false],
+    [{ field: 'mailbox', operator: 'any_of', values: [OTHER_MAILBOX, MAILBOX] }, true],
+    [{ field: 'to_address', operator: 'is', values: ['REFUNDS@acme.test'] }, true],
+    [{ field: 'to_address', operator: 'is', values: ['refunds@'] }, false],
+    [{ field: 'to_address', operator: 'contains', values: ['refunds@'] }, true],
+    [{ field: 'to_address', operator: 'contains', values: ['billing@'] }, false],
+  ])('answers %j', (input, expected) => {
+    expect(holds(input)).toBe(expected);
+  });
+
+  it.each([
+    { field: 'mailbox', operator: 'is', values: [MAILBOX] },
+    { field: 'mailbox', operator: 'is_not', values: [MAILBOX] },
+    { field: 'mailbox', operator: 'any_of', values: [MAILBOX] },
+    { field: 'to_address', operator: 'is', values: ['refunds@acme.test'] },
+    { field: 'to_address', operator: 'contains', values: ['refunds'] },
+  ])('never matches a ticket with no record of a mailbox arrival: %j', (input) => {
+    expect(holds(input, facts({ mailboxId: null, toAddress: null }))).toBe(false);
+  });
+
+  it('withholds the address from the stored log, as it does the subject', () => {
+    const outcome = evaluateConditions(
+      {
+        match: 'all',
+        groups: [
+          {
+            match: 'all',
+            conditions: [condition({ field: 'to_address', operator: 'contains', values: ['x'] })],
+          },
+        ],
+      },
+      facts(),
+      context,
+    );
+
+    expect(outcome.groups[0]?.conditions[0]?.actual).toBeNull();
   });
 });
 

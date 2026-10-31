@@ -9,6 +9,7 @@ import {
 } from '@helpdock/db';
 import type { RuleTicketFacts } from '@helpdock/schemas';
 import { and, asc, desc, eq } from 'drizzle-orm';
+import { arrivalFactsOf } from '../tickets/routing/arrival-facts.js';
 
 /**
  * What a rule's conditions are asked about, read once per ticket per rule
@@ -21,6 +22,8 @@ export interface TicketFacts extends RuleTicketFacts {
   readonly reference: string;
   readonly contactId: string | null;
   readonly contactLocale: 'en' | 'ar' | null;
+  /** M14-26. The mailbox later public replies leave from, when a rule set one. */
+  readonly replyMailboxId?: string | null;
   /** Spam, merged, soft-deleted: no rule acts on these (DOMAIN-RULES §2.2). */
   readonly inert: boolean;
   /** #368. When the ticket's snooze ends, so a `snooze` action can tell it would change nothing. */
@@ -96,13 +99,14 @@ export const loadTicketFacts = async (
   }
 
   const { ticket } = row;
-  const [body, contact, tags] = await Promise.all([
+  const [body, contact, tags, arrival] = await Promise.all([
     newestContactMessage(tx, ticketId),
     contactOf(tx, ticket.contactId),
     tx
       .select({ tagId: ticketTags.tagId })
       .from(ticketTags)
       .where(eq(ticketTags.ticketId, ticketId)),
+    arrivalFactsOf(tx, ticketId),
   ]);
 
   return {
@@ -127,6 +131,9 @@ export const loadTicketFacts = async (
     contactLocale: contact.locale,
     accountId: contact.accountId,
     custom: ticket.custom,
+    replyMailboxId: ticket.replyMailboxId,
+    mailboxId: arrival.mailboxId,
+    toAddress: arrival.toAddress,
     snoozedUntil: ticket.snoozedUntil,
     inert: row.isSpam || ticket.mergedIntoId !== null || ticket.deletedAt !== null,
   };

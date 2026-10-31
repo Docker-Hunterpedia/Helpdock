@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { activeFilterCount, EMPTY_FILTERS, type WorkspaceFilters } from '../../tickets/views.js';
+import { useTicketMailboxes, WrittenToField } from './arrival-filters.tsx';
 import { FieldFilterEditor } from './field-filter-editor.tsx';
 import { statusName } from './format.js';
 
@@ -109,6 +110,7 @@ export function FilterPopover({
 }): ReactNode {
   const t = useT();
   const { locale } = usePreferences();
+  const mailboxes = useTicketMailboxes();
 
   return (
     <Popover
@@ -225,6 +227,29 @@ export function FilterPopover({
               />
             ))}
           </Group>
+        )}
+
+        {mailboxes.length === 0 ? null : (
+          <Group label={t('tickets:filters.mailbox')}>
+            {mailboxes.map((mailbox) => (
+              <FilterChip
+                key={mailbox.id}
+                label={mailbox.address}
+                on={filters.mailboxId.includes(mailbox.id)}
+                onToggle={() => {
+                  onChange({ ...filters, mailboxId: toggle(filters.mailboxId, mailbox.id) });
+                }}
+              />
+            ))}
+          </Group>
+        )}
+        {mailboxes.length === 0 ? null : (
+          <WrittenToField
+            value={filters.toAddress}
+            onChange={(toAddress) => {
+              onChange({ ...filters, toAddress });
+            }}
+          />
         )}
 
         <Group label={t('tickets:filters.sla')}>

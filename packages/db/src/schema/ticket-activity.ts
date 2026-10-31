@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { uuidv7 } from '../uuid.js';
 import { brands } from './brands.js';
@@ -55,6 +56,11 @@ export const ticketActivity = pgTable(
     // brand's by age, which this covers from its leading column.
     index('ticket_activity_ticket_created_idx').on(table.ticketId, table.createdAt, table.id),
     index('ticket_activity_brand_department_idx').on(table.brandId, table.departmentId),
+    // M14-26: "arrived at this mailbox" reads the arrival record M14-08 writes
+    // into `to`; only the three rows that carry one are indexed.
+    index('ticket_activity_arrival_idx')
+      .on(table.brandId, sql`(${table.to} -> 'arrival' ->> 'entryId')`)
+      .where(sql`${table.action} IN ('ticket.created', 'ticket.continued', 'ticket.imported')`),
   ],
 );
 

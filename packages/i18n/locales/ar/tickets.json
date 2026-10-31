@@ -333,7 +333,11 @@
     "source": "المصدر",
     "allSources": "جميع المصادر",
     "imported": "مستوردة",
-    "native": "أُنشئت في Helpdock"
+    "native": "أُنشئت في Helpdock",
+    "mailbox": "صندوق البريد",
+    "writtenTo": "كُتب إلى",
+    "writtenToHint": "العنوان الذي كتب إليه العميل بالضبط. اضغط Enter للتطبيق.",
+    "writtenToPlaceholder": "refunds@example.com"
   },
   "newTicket": {
     "action": "تذكرة جديدة",

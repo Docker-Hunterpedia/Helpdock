@@ -31,6 +31,7 @@ import {
 import { alias, type PgColumn } from 'drizzle-orm/pg-core';
 import { decodeTicketCursor, encodeTicketCursor, type TicketCursor } from './cursor.js';
 import { fieldFilterClause, type ResolvedFieldFilter } from './field-filters.js';
+import { mailboxFilterClause, toAddressFilterClause } from './routing/arrival-facts.js';
 
 /**
  * The ticket list's `WHERE` and `ORDER BY`, built from the parsed query.
@@ -481,6 +482,13 @@ export const ticketFilters = ({
   }
   if (filters.channel !== undefined && filters.channel.length > 0) {
     clauses.push(inArray(tickets.channel, [...filters.channel]));
+  }
+  // M14-26: where the ticket arrived, read from its arrival record.
+  if (filters.mailboxId !== undefined && filters.mailboxId.length > 0) {
+    clauses.push(mailboxFilterClause(filters.mailboxId));
+  }
+  if (filters.toAddress !== undefined) {
+    clauses.push(toAddressFilterClause(filters.toAddress));
   }
   if (filters.imported !== undefined)
     clauses.push(filters.imported ? isNotNull(tickets.importedAt) : isNull(tickets.importedAt));

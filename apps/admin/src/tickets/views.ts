@@ -44,6 +44,10 @@ export interface WorkspaceFilters {
   readonly departmentId: readonly string[];
   readonly tagIds: readonly string[];
   readonly channel: readonly TicketChannel[];
+  /** M14-26. The mailboxes the ticket arrived at (any of). */
+  readonly mailboxId: readonly string[];
+  /** M14-26. The address the customer wrote to, exactly; empty is no filter. */
+  readonly toAddress: string;
   readonly overdue: boolean;
   readonly imported?: boolean | undefined;
   /** M14-16. Filters on ticket custom fields; all of them have to match. */
@@ -63,6 +67,8 @@ export const EMPTY_FILTERS: WorkspaceFilters = {
   departmentId: [],
   tagIds: [],
   channel: [],
+  mailboxId: [],
+  toAddress: '',
   overdue: false,
   imported: undefined,
   fieldFilter: [],
@@ -85,6 +91,8 @@ export const filtersOfView = (filters: TicketViewFilters): WorkspaceFilters => (
   // One filter, two spellings on the wire (M1-06); one here.
   tagIds: [...new Set([...(filters.tagId ?? []), ...(filters.tagIds ?? [])])],
   channel: filters.channel ?? [],
+  mailboxId: filters.mailboxId ?? [],
+  toAddress: filters.toAddress ?? '',
   overdue: filters.overdue ?? false,
   imported: filters.imported,
   fieldFilter: filters.fieldFilter ?? [],
@@ -107,6 +115,8 @@ export const viewFiltersOf = (filters: WorkspaceFilters): TicketViewFiltersInput
     departmentId: some(filters.departmentId),
     tagIds: some(filters.tagIds),
     channel: some(filters.channel),
+    mailboxId: some(filters.mailboxId),
+    toAddress: filters.toAddress === '' ? undefined : filters.toAddress,
     overdue: filters.overdue ? true : undefined,
     imported: filters.imported,
     fieldFilter: some(filters.fieldFilter),
@@ -143,10 +153,12 @@ const PARAM = {
   departmentId: 'department',
   tagIds: 'tag',
   channel: 'channel',
+  mailboxId: 'mailbox',
 } as const;
 
 /** One `field=<json>` per custom-field filter (M14-16). */
 const FIELD = 'field';
+const TO_ADDRESS = 'to';
 const OVERDUE = 'overdue';
 const IMPORTED = 'imported';
 const SNOOZED = 'snoozed';
@@ -184,6 +196,8 @@ export const filtersFromParams = (params: URLSearchParams): WorkspaceFilters => 
     departmentId: params.getAll(PARAM.departmentId),
     tagIds: params.getAll(PARAM.tagIds),
     channel: params.getAll(PARAM.channel) as TicketChannel[],
+    mailboxId: params.getAll(PARAM.mailboxId),
+    toAddress: params.get(TO_ADDRESS) ?? '',
     overdue: params.get(OVERDUE) === '1',
     imported:
       params.get(IMPORTED) === '1' ? true : params.get(IMPORTED) === '0' ? false : undefined,
@@ -203,6 +217,7 @@ export const withoutFilters = (params: URLSearchParams): URLSearchParams => {
   const next = new URLSearchParams(params);
   for (const key of [
     ...Object.values(PARAM),
+    TO_ADDRESS,
     OVERDUE,
     IMPORTED,
     FIELD,
@@ -228,6 +243,9 @@ export const withFilters = (
     for (const value of filters[field]) {
       next.append(key, value);
     }
+  }
+  if (filters.toAddress !== '') {
+    next.set(TO_ADDRESS, filters.toAddress);
   }
   if (filters.overdue) {
     next.set(OVERDUE, '1');
@@ -271,6 +289,8 @@ export const sameFilters = (left: WorkspaceFilters, right: WorkspaceFilters): bo
   sameSet(left.departmentId, right.departmentId) &&
   sameSet(left.tagIds, right.tagIds) &&
   sameSet(left.channel, right.channel) &&
+  sameSet(left.mailboxId, right.mailboxId) &&
+  left.toAddress === right.toAddress &&
   left.overdue === right.overdue &&
   left.imported === right.imported &&
   sameSet(left.fieldFilter.map(canonical), right.fieldFilter.map(canonical)) &&
@@ -348,6 +368,8 @@ export const activeFilterCount = (filters: WorkspaceFilters): number =>
   filters.departmentId.length +
   filters.tagIds.length +
   filters.channel.length +
+  filters.mailboxId.length +
+  (filters.toAddress === '' ? 0 : 1) +
   filters.fieldFilter.length +
   (filters.overdue ? 1 : 0) +
   (filters.imported === undefined ? 0 : 1);

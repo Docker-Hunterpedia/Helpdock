@@ -81,6 +81,10 @@ export const ruleConditionFieldSchema = z.enum([
   'time_in_status',
   'business_hours',
   'custom_field',
+  /** M14-26: the mailbox the ticket arrived at. */
+  'mailbox',
+  /** M14-26: the address the customer wrote to. */
+  'to_address',
 ]);
 export type RuleConditionField = z.infer<typeof ruleConditionFieldSchema>;
 
@@ -120,6 +124,8 @@ export const RULE_FIELD_VALUE_KIND: Readonly<Record<RuleConditionField, RuleFiel
   account: 'id',
   time_in_status: 'duration',
   business_hours: 'business_hours',
+  mailbox: 'id',
+  to_address: 'text',
 };
 
 /**
@@ -144,7 +150,17 @@ export const RULE_OPERATORS_BY_FIELD: Readonly<
   account: ['is', 'is_not', 'any_of', 'is_set'],
   time_in_status: ['more_than', 'less_than'],
   business_hours: ['is'],
+  mailbox: ['is', 'is_not', 'any_of'],
+  to_address: ['is', 'contains'],
 };
+
+/**
+ * M14-26. Conditions on the arrival record (DOMAIN-RULES §2.8). A ticket with no
+ * record of arriving at a mailbox — filed before M14, or through another entry
+ * point — matches none of them, whatever the operator, so "is not" cannot claim
+ * a ticket that never had a mailbox to be different from.
+ */
+export const RULE_ARRIVAL_FIELDS: readonly RuleConditionField[] = ['mailbox', 'to_address'];
 
 export const ruleDurationSchema = z.object({
   amount: z.int().min(1).max(10_000),
@@ -302,6 +318,17 @@ export const ruleActionSchema = z.discriminatedUnion('type', [
     recipient: ruleNotifyRecipientSchema,
     message: z.string().trim().max(RULE_NOTIFY_MESSAGE_MAX_LENGTH).nullish(),
   }),
+  /**
+   * M14-26. Later public replies on email leave from this mailbox. Only a mailbox
+   * of the ticket's department is accepted when the rule runs; one that is not,
+   * or no longer exists, is reported `unavailable`.
+   */
+  z.object({ type: z.literal('set_reply_mailbox'), mailboxId: z.uuid() }),
+  /**
+   * M14-26. The existing spam transition (DOMAIN-RULES §2.2): the ticket moves
+   * to Spam, which sends no auto-reply and no survey and is left out of reports.
+   */
+  z.object({ type: z.literal('mark_spam') }),
   /** Moves the ticket to the brand's Escalated status (DOMAIN-RULES §2.1). */
   z.object({ type: z.literal('escalate') }),
   /** Moves the ticket to the brand's Closed status, as an agent closing it would. */
@@ -350,6 +377,8 @@ export const RULE_ACTION_TYPES = [
   'close',
   'snooze',
   'ai_triage',
+  'set_reply_mailbox',
+  'mark_spam',
 ] as const satisfies readonly RuleActionType[];
 
 // ---------------------------------------------------------------------- rules
@@ -626,6 +655,15 @@ export const ruleBuilderOptionsSchema = z.object({
       labelAr: z.string().nullable(),
       /** M14-27: the builder offers a staff picker for `person` and `contains` for `long_text`. */
       type: customFieldTypeSchema,
+    }),
+  ),
+  /** M14-26: the brand's mailboxes, for the condition and for "set reply address" (limited to the ticket's department when it runs). */
+  mailboxes: z.array(
+    z.object({
+      id: z.uuid(),
+      address: z.string(),
+      displayName: z.string(),
+      departmentId: z.uuid(),
     }),
   ),
   /** M3-06's shared canned responses: a rule runs as nobody, so never a personal one. */

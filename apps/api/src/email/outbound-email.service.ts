@@ -49,7 +49,11 @@ export class OutboundEmailService {
     if (addressing?.contact == null) {
       return undefined;
     }
-    const sender = await this.#sender(tx, input.brandId, addressing.departmentId, input.senderKey);
+    // The composer's explicit From wins; otherwise a rule's "set reply address" (M14-26).
+    const sender =
+      input.senderKey === undefined && addressing.replyMailbox !== null
+        ? { from: addressing.replyMailbox, replyTo: null }
+        : await this.#sender(tx, input.brandId, addressing.departmentId, input.senderKey);
     if (sender === undefined) {
       return undefined;
     }

@@ -28,7 +28,7 @@ on the ticket.
 | Section | What it sets |
 |---|---|
 | Outgoing mail (SMTP) | The brand's own server: host, port, `TLS` / `STARTTLS` / none, username and password. **Test SMTP** sends one message to you through the server on screen and shows the relay's answer. A brand with no server of its own sends through the install's (`smtp.*`, set by the first-run wizard and changeable in **Admin › System › Outgoing email**). |
-| From and Reply-To per department | The default sender, and a `Name <address>` plus an optional Reply-To for each department that sends as someone else. A reply goes out as its ticket's department, then the default, then the install's `smtp.from`. |
+| From and Reply-To per department | The default sender, and a `Name <address>` plus an optional Reply-To for each department that sends as someone else. A reply goes out as its ticket's department, then the default, then the install's `smtp.from`. A rule's *Set reply address* (M14-26, [Automation](automation.md)) puts one of the brand's mailboxes, with its display name, ahead of the department for later public replies on that ticket; the composer's From choice still wins. Auto-replies, surveys and transcripts keep the department's sender. |
 | Auto-replies | See below. |
 | Failed sends | The dead-letter queue. See below. |
 

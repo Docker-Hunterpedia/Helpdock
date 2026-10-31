@@ -94,6 +94,55 @@ describe('OutboundEmailService.queueReply', () => {
   });
 });
 
+describe("OutboundEmailService.queueReply from a rule's reply mailbox (M14-26)", () => {
+  const mailbox = { name: 'Helpdock Refunds', address: 'refunds@helpdock.io' };
+
+  it('sends from the mailbox a rule chose, with no Reply-To of the department', async () => {
+    const { repository, service, tx } = setup();
+    repository.addressingRow = addressing({ replyMailbox: mailbox });
+
+    const delivery = await service.queueReply(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      messageId: MESSAGE,
+    });
+
+    expect(delivery).toMatchObject({
+      fromAddress: 'refunds@helpdock.io',
+      fromName: 'Helpdock Refunds',
+      replyTo: null,
+    });
+  });
+
+  it("lets the composer's explicit From win over the rule", async () => {
+    const { repository, service, tx } = setup();
+    repository.addressingRow = addressing({ replyMailbox: mailbox });
+
+    const delivery = await service.queueReply(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      messageId: MESSAGE,
+      senderKey: 'default',
+    });
+
+    expect(delivery?.fromAddress).toBe('support@helpdock.io');
+  });
+
+  it('keeps auto-replies and surveys on the department sender', async () => {
+    const { repository, service, tx } = setup();
+    repository.addressingRow = addressing({ replyMailbox: mailbox });
+
+    const delivery = await service.queueAutoReply(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      kind: 'acknowledgment',
+      to: { address: 'karim@acme.de' },
+    });
+
+    expect(delivery?.fromAddress).not.toBe('refunds@helpdock.io');
+  });
+});
+
 describe('OutboundEmailService.queueAutoReply', () => {
   it('addresses the sender, with no CCs, keyed by the ticket', async () => {
     const { service, tx, repository } = setup();

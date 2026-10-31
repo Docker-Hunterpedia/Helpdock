@@ -68,7 +68,7 @@ export const DOC_GROUPS: { title: string; guides: string[] }[] = [
     ],
   },
   { title: 'Knowledge and AI', guides: ['help-center', 'ai', 'importing'] },
-  { title: 'Sign-in and security', guides: ['authentication', 'sso', 'security', 'audit-log'] },
+  { title: 'Sign-in and security', guides: ['authentication', 'sign-in-providers', 'sso', 'security', 'audit-log'] },
   { title: 'Developers', guides: ['api', 'api-reference', 'webhooks', 'development'] },
   { title: 'Project', guides: ['release', 'security-scanning', 'screen-reader-pass'] },
 ];

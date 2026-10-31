@@ -39,9 +39,41 @@ Agents can also open a ticket by hand from the ticket list
   reply only for a time after the customer's last message. Helpdock refuses a
   reply outside that time when the agent writes it, and checks again when it
   sends ([reply windows](tickets.md#reply-windows)).
+- **Bot check.** The widget's first message and the web form can ask a visitor
+  to pass a check first, chosen once per brand on Channels › Widget: the
+  built-in proof-of-work check (`pow`, nothing sent to a third party),
+  Cloudflare Turnstile or hCaptcha. See [Bot check](#bot-check).
 - **Outbound connections** to a host a brand configured (an IMAP server, a
   webhook endpoint) go through the SSRF-safe client
   ([security](security.md#outbound-requests)).
+
+## Bot check
+
+A brand can ask visitors to pass a check before the widget accepts a first
+message or the web form accepts a submission. It is off by default, and
+the one setting serves both surfaces. An Admin of the brand sets it on
+**Channels › Widget** under "Where the widget may run": switch on **Check for
+bots before the first message**, then pick a **Provider**
+([configuration](configuration.md): `captcha.provider`).
+
+| Provider | What it is | Keys |
+|---|---|---|
+| **Built-in (no third party)**, `pow` | A signed proof-of-work challenge the visitor's browser solves, using ALTCHA's wire protocol ([ADR 0052](../decisions/0052-built-in-proof-of-work-captcha.md)). It slows simple floods; it does not stop a determined attacker. | None. **Difficulty**: Low (about half a second on a mid-range phone) or Medium (about two seconds), `captcha.difficulty`. |
+| **Cloudflare Turnstile** | Stronger bot detection, at the cost of sending visitor signals to Cloudflare. | Site key and secret key. |
+| **hCaptcha** | The same trade, with hCaptcha. | Site key and secret key. |
+
+- The check is per conversation in the widget and per submission on the form.
+- A Turnstile or hCaptcha pass must report one of the surface's own hosts, and
+  Turnstile is rendered with the `widget-first-message` or `web-form` action
+  and the brand id, so a pass earned on another surface or brand fails.
+  Details: [widget protocol](widget-protocol.md#the-built-in-check),
+  [web form](web-form.md#what-a-submission-does).
+- A built-in solution is good once, for one brand and one surface, for
+  15 minutes.
+- There is no check on the staff sign-in link and reset forms, which email only
+  an existing account and are limited per address and per IP
+  ([authentication](authentication.md#rate-limits)), nor on the help center's
+  "Was this helpful?" card ([help center](help-center.md)).
 
 ## Not in v1
 

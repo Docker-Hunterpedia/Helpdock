@@ -69,7 +69,8 @@ function destinationCatalog(
         WHERE source.brand_id = f.brand_id AND source.run_id = ${scope.runId}::uuid
           AND source.entity = 'field' AND source.external_id = ${compatibleWithField}
           AND f.target::text = CASE source.payload->>'target' WHEN 'organization' THEN 'account' ELSE source.payload->>'target' END
-          AND f.type::text = CASE source.payload->>'type' WHEN 'textarea' THEN 'text' WHEN 'multiselect' THEN 'multi_select' ELSE source.payload->>'type' END)`
+          AND (f.type::text = CASE source.payload->>'type' WHEN 'textarea' THEN 'text' WHEN 'multiselect' THEN 'multi_select' ELSE source.payload->>'type' END
+          OR (source.payload->>'type' = 'textarea' AND f.type::text = 'long_text')))`
       }`;
   }
 }

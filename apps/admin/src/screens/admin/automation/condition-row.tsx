@@ -1,8 +1,10 @@
 import {
+  type CustomFieldType,
   RULE_FIELD_VALUE_KIND,
   RULE_OPERATORS_BY_FIELD,
   type RuleBuilderOptions,
   type RuleConditionField,
+  type RuleOperator,
   ruleConditionFieldSchema,
   ruleOperatorSchema,
   ticketChannelSchema,
@@ -84,6 +86,17 @@ export function useValueOptions(
   };
 }
 
+const PERSON_OPERATORS: readonly RuleOperator[] = ['is', 'is_not', 'is_set'];
+
+/** The type of the custom field a condition names, or `undefined` for any other condition. */
+const customFieldType = (
+  options: RuleBuilderOptions | undefined,
+  condition: ConditionDraft,
+): CustomFieldType | undefined =>
+  condition.field === 'custom_field'
+    ? options?.customFields.find((field) => field.key === condition.customKey)?.type
+    : undefined;
+
 export function ConditionRow({
   condition,
   options,
@@ -103,6 +116,9 @@ export function ConditionRow({
   const kind = RULE_FIELD_VALUE_KIND[condition.field];
   const choices = valueOptions(condition.field);
   const described = text.field({ field: condition.field, key: condition.customKey });
+  const customType = customFieldType(options, condition);
+  // A person is chosen by name and stored by id, so a custom field of that type is an id field.
+  const personField = customType === 'person';
 
   const valueEditor = (): ReactNode => {
     if (condition.operator === 'is_set') {
@@ -136,6 +152,25 @@ export function ConditionRow({
             <option value="days">{t('rules:units.days')}</option>
           </Choice>
         </Box>
+      );
+    }
+    if (personField) {
+      return (
+        <Choice
+          label={t('rules:builder.value')}
+          value={condition.values[0] ?? ''}
+          onChange={(value) => {
+            onChange({ ...condition, values: value === '' ? [] : [value] });
+          }}
+          sx={{ width: '100%' }}
+        >
+          <option value="">{t('rules:builder.choose')}</option>
+          {(options?.members ?? []).map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name}
+            </option>
+          ))}
+        </Choice>
       );
     }
     if (kind === 'text') {
@@ -197,7 +232,14 @@ export function ConditionRow({
         value={fieldValue(condition)}
         onChange={(value) => {
           if (value.startsWith(CUSTOM_PREFIX)) {
-            onChange(withField(condition, 'custom_field', value.slice(CUSTOM_PREFIX.length)));
+            const key = value.slice(CUSTOM_PREFIX.length);
+            const next = withField(condition, 'custom_field', key);
+            // A person is compared for equality; `contains` has no meaning for an id.
+            onChange(
+              options?.customFields.find((field) => field.key === key)?.type === 'person'
+                ? { ...next, operator: 'is' }
+                : next,
+            );
             return;
           }
           const field = ruleConditionFieldSchema.safeParse(value);
@@ -229,11 +271,13 @@ export function ConditionRow({
           }
         }}
       >
-        {RULE_OPERATORS_BY_FIELD[condition.field].map((operator) => (
-          <option key={operator} value={operator}>
-            {t(`rules:operators.${operator}`)}
-          </option>
-        ))}
+        {RULE_OPERATORS_BY_FIELD[condition.field]
+          .filter((operator) => !personField || PERSON_OPERATORS.includes(operator))
+          .map((operator) => (
+            <option key={operator} value={operator}>
+              {t(`rules:operators.${operator}`)}
+            </option>
+          ))}
       </Choice>
       <Box sx={{ minWidth: 0 }}>{valueEditor()}</Box>
       <IconButton

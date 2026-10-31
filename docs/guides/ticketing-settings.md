@@ -407,6 +407,28 @@ reaches a column.
 | Select | one of the field's options | that option |
 | Multi-select | a set of the field's options, no duplicates | an array |
 | Checkbox | a boolean | a boolean |
+| Long text | plain text, up to 5,000 characters | the trimmed string |
+| Link | an `https` address, up to 2,000 characters, with no user name or password | the trimmed address |
+| Email | an email address, up to 254 characters | the trimmed, lower-cased address |
+| Person | the id of a member of staff of this brand | the id |
+
+The last four are M14-27. They work on tickets, contacts and accounts, through the
+API, in rules (`is`, `is not`, `is set`, and `contains` for long text), in
+[ticket filters](tickets.md#filtering-by-a-custom-field) and in templates'
+defaults. A **link** other than `https` (`http:`, `javascript:`, `data:`) is
+refused, and Helpdock never fetches it: it is shown as a link that opens in a new
+tab with `rel="noopener noreferrer"`. An **email** value is shown left to right
+even in an Arabic sentence. A **person** is shown by their public name with an
+avatar; a person who has since left the brand reads "Former staff member", and a
+write that names someone who is not staff of the brand is refused with `400`.
+**Long text** is shown collapsed to three lines with *Show all*. A person field
+cannot be shown on the web form or asked in the chat widget's pre-chat (a visitor
+cannot choose a staff member; an answer a visitor sends is ignored) and is
+not an import destination; a template default or a rule that names a person who
+is not staff is refused when saved, and a template default whose person has since
+left the brand is dropped when a ticket is filed from it; a multi-line field from a migration source can map to
+a Long text field. The picker reads `GET /api/brands/:brandId/custom-fields/people`
+(`ticket:read`: id and public name only).
 
 `true`, `[]` and `null` are **not** coerced into numbers. A checkbox ticked in
 the wrong field must not become the number one.

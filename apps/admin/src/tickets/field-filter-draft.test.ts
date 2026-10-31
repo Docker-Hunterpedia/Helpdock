@@ -16,6 +16,10 @@ describe('operatorsOf', () => {
     expect(operatorsOf('number')).toEqual(['between', 'before', 'after', 'not_set']);
     expect(operatorsOf('date')).toEqual(['between', 'before', 'after', 'not_set']);
     expect(operatorsOf('text')).toEqual(['contains', 'not_set']);
+    expect(operatorsOf('long_text')).toEqual(['contains', 'not_set']);
+    expect(operatorsOf('link')).toEqual(['contains', 'not_set']);
+    expect(operatorsOf('email')).toEqual(['contains', 'not_set']);
+    expect(operatorsOf('person')).toEqual(['any_of', 'not_set']);
     expect(blankDraft({ key: 'severity', type: 'select' }).op).toBe('any_of');
   });
 });

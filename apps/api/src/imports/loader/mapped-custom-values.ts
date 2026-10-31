@@ -35,9 +35,13 @@ export function mappedImportedCustom(request: {
     const destinationKey = binding.destination.key;
     mapped.set(destinationKey, value);
   }
-  const validated = customValuesSchema(request.definitions, {
-    partial: request.operation === 'patch',
-  }).parse(Object.fromEntries(mapped));
+  // Not an import destination: see `validatedImportedCustom`.
+  const validated = customValuesSchema(
+    request.definitions.filter((definition) => definition.type !== 'person'),
+    {
+      partial: request.operation === 'patch',
+    },
+  ).parse(Object.fromEntries(mapped));
   return z
     .record(z.string(), z.json())
     .parse(

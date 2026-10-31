@@ -248,7 +248,7 @@ export const customFieldTargetEnum = pgEnum('custom_field_target', [
 ]);
 
 /**
- * The six field types of REQUIREMENTS §4.1. The list is closed: every type has
+ * The field types of REQUIREMENTS §4.1 and M14-27. The list is closed: every type has
  * a validator in `@helpdock/schemas/custom-fields` and an editor in the admin,
  * so a seventh is a deliberate change in three places rather than a row a brand
  * can write.
@@ -260,6 +260,10 @@ export const customFieldTypeEnum = pgEnum('custom_field_type', [
   'select',
   'multi_select',
   'checkbox',
+  'long_text',
+  'link',
+  'email',
+  'person',
 ]);
 
 /**

@@ -86,8 +86,11 @@ export function ConversationCard({
     field.kind === 'custom'
       ? t(`channels:widget.conversation.types.${defByKey.get(field.key)?.type ?? 'text'}`)
       : t(`channels:widget.conversation.types.${field.kind === 'email' ? 'email' : 'text'}`);
+  // A visitor cannot choose a staff member, so a person field is never asked (M14-27).
   const unused = customFields.filter(
-    (def) => !draft.prechatFields.some((field) => field.kind === 'custom' && field.key === def.key),
+    (def) =>
+      def.type !== 'person' &&
+      !draft.prechatFields.some((field) => field.kind === 'custom' && field.key === def.key),
   );
 
   const submit = (event: FormEvent): void => {

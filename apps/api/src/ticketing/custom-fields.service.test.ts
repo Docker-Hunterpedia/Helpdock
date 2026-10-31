@@ -43,6 +43,7 @@ const def = (over: Partial<CustomFieldDefRow> & { id: string }): CustomFieldDefR
 });
 
 const repository = {
+  people: async () => [{ userId: 'u1', name: 'Sam' }],
   list: async (_tx: DbTransaction, target?: CustomFieldTarget) =>
     rows.filter((row) => target === undefined || row.target === target),
   find: async (_tx: DbTransaction, id: string) => rows.find((row) => row.id === id),
@@ -110,6 +111,14 @@ beforeEach(() => {
   failNextWrite = undefined;
   service = new CustomFieldsService(repository);
   transaction = fakeTransaction();
+});
+
+describe('people (M14-27)', () => {
+  it('answers the repository’s staff as { people }, ids and names only', async () => {
+    expect(await service.people(transaction.tx)).toEqual({
+      people: [{ userId: 'u1', name: 'Sam' }],
+    });
+  });
 });
 
 describe('list', () => {

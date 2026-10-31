@@ -30,7 +30,7 @@ import { readContentPolicy } from '../media/content-policy.js';
 import { AttachmentLinkError, linkAttachmentsToMessage } from '../media/link.js';
 import type { MediaRepository } from '../media/media.repository.js';
 import type { BusinessHoursService } from '../sla/business-hours.service.js';
-import { parseCustomValues } from '../ticketing/custom-values.js';
+import { parseCustomValues, readFieldRules } from '../ticketing/custom-values.js';
 import type { TicketLifecycleRepository } from '../tickets/lifecycle/lifecycle.repository.js';
 import type {
   LifecycleContext,
@@ -663,7 +663,16 @@ export class WidgetConversationsService {
         field.kind === 'custom' ? [field.key] : [],
       ),
     );
-    const answers = Object.fromEntries(Object.entries(custom).filter(([key]) => asked.has(key)));
+    // A person field is staff-only. A visitor's answer to one is dropped, not
+    // refused: a refusal would tell them whether an id is staff of the brand.
+    const staffOnly = new Set(
+      (await readFieldRules(scope.tx, 'ticket'))
+        .filter((rule) => rule.type === 'person')
+        .map((rule) => rule.key),
+    );
+    const answers = Object.fromEntries(
+      Object.entries(custom).filter(([key]) => asked.has(key) && !staffOnly.has(key)),
+    );
     if (Object.keys(answers).length === 0) {
       return undefined;
     }

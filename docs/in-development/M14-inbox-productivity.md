@@ -1476,6 +1476,14 @@ rules (`is`, `is set`, and `contains` for long text), in imports' field
 mapping, and in M14-16's filters. Artboard `Admin/Ticketing-CustomFields`
 (amended).
 
+Status: implemented for #314.
+
+- [x] `custom_field_type` gains `long_text`, `link`, `email` and `person` (migration `0074_custom_field_types`); one validator per type in `@helpdock/schemas` (https-only link without credentials, 254-character address stored lower-cased, 5,000-character long text, person by id).
+- [x] A person must be staff of the brand on every write that goes through `parseCustomValues` (tickets, contacts, accounts, rules, templates); `GET /api/brands/:brandId/custom-fields/people` (`ticket:read`) feeds the picker with ids and public names.
+- [x] Filters: `contains` for long text, link and email, `any_of` (ids) and `not_set` for person, in the API, the filter popover, saved views and the summary chips.
+- [x] Admin: the four types in the field editor and the template defaults, editors and read-only renderings on a ticket (`CustomFieldValue`, DESIGN §6.2), the bulk field dialog and the close gate through the shared `editorFor`.
+- [x] Deviations: the artboard's "new" markers on the four types are not drawn (they would be wrong a release later). A person field is not offered on the web form and is not an import destination; a multi-line migration field maps to Long text. Contacts and accounts have no custom-field UI yet, so their values are API-only.
+
 ### M14-28 More webhook events
 
 Rebase compatibility: SLA assignment notifications retain their automatic source in batched and digest emails, with English and Arabic labels. The notes opt-in migration is `0062_webhook_note_opt_in`, generated after `0061_ticket_sla_next_due`.

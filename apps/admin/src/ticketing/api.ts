@@ -13,6 +13,7 @@ import type {
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
+  CustomFieldPeople,
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
@@ -170,6 +171,8 @@ export interface TicketingApi {
     target: CustomFieldTarget,
     fieldIds: string[],
   ): Promise<CustomFieldDefList>;
+  /** The staff a `person` field can name, by public name (M14-27). */
+  customFieldPeople(brandId: string): Promise<CustomFieldPeople>;
   customFieldUsage(brandId: string, fieldId: string): Promise<CustomFieldUsage>;
   deleteCustomField(brandId: string, fieldId: string): Promise<void>;
 

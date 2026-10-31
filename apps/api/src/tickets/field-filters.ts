@@ -54,6 +54,11 @@ const OPERATORS: Readonly<Record<CustomFieldType, readonly TicketFieldFilter['op
   select: ['any_of', 'not_set'],
   multi_select: ['any_of', 'not_set'],
   checkbox: ['is', 'not_set'],
+  long_text: ['contains', 'not_set'],
+  link: ['contains', 'not_set'],
+  email: ['contains', 'not_set'],
+  // A person is stored by id, so the filter names ids; the picker shows names.
+  person: ['any_of', 'not_set'],
 };
 
 /** The bound a range names, as the type carries it: a number, or a `YYYY-MM-DD` day. */

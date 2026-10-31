@@ -9,6 +9,7 @@ import {
   customFieldDefListSchema,
   customFieldDefSchema,
   customFieldParamSchema,
+  customFieldPeopleSchema,
   customFieldQuerySchema,
   customFieldReorderRequestSchema,
   customFieldUpdateRequestSchema,
@@ -69,6 +70,7 @@ export class CustomFieldDefListDto extends createZodDto(customFieldDefListSchema
 export class CustomFieldUsageDto extends createZodDto(customFieldUsageSchema) {}
 export class CustomFieldParamDto extends createZodDto(customFieldParamSchema) {}
 export class CustomFieldQueryDto extends createZodDto(customFieldQuerySchema) {}
+export class CustomFieldPeopleDto extends createZodDto(customFieldPeopleSchema) {}
 export class CustomFieldCreateRequestDto extends createZodDto(customFieldCreateRequestSchema) {}
 export class CustomFieldUpdateRequestDto extends createZodDto(customFieldUpdateRequestSchema) {}
 export class CustomFieldReorderRequestDto extends createZodDto(customFieldReorderRequestSchema) {}

@@ -21,6 +21,10 @@ import { z } from 'zod';
  * | `select` | one of the definition's options | that option |
  * | `multi_select` | a set of the definition's options | an array, no duplicates |
  * | `checkbox` | a boolean | a boolean |
+ * | `long_text` | plain text up to 5,000 characters | the trimmed string |
+ * | `link` | an `https` URL | the trimmed URL |
+ * | `email` | an email address | the trimmed, lower-cased address |
+ * | `person` | the id of a staff member | the id |
  *
  * Three rules sit on top of the table. A key the brand has not defined is
  * **rejected**, never ignored, because a typo that is silently dropped is a
@@ -38,13 +42,18 @@ import { z } from 'zod';
 export const customFieldTargetSchema = z.enum(['ticket', 'contact', 'account']);
 export type CustomFieldTarget = z.infer<typeof customFieldTargetSchema>;
 
+// In the order the field editor lists them (`Admin/Ticketing-CustomFields`).
 export const customFieldTypeSchema = z.enum([
   'text',
+  'long_text',
   'number',
   'date',
   'select',
   'multi_select',
   'checkbox',
+  'link',
+  'email',
+  'person',
 ]);
 export type CustomFieldType = z.infer<typeof customFieldTypeSchema>;
 
@@ -58,6 +67,10 @@ export const CUSTOM_FIELD_LABEL_MAX = 120;
 export const CUSTOM_FIELD_OPTION_MAX = 80;
 export const CUSTOM_FIELD_OPTIONS_MAX = 50;
 export const CUSTOM_FIELD_TEXT_VALUE_MAX = 2000;
+export const CUSTOM_FIELD_LONG_TEXT_VALUE_MAX = 5000;
+export const CUSTOM_FIELD_LINK_VALUE_MAX = 2000;
+/** RFC 5321's limit on a forward path. */
+export const CUSTOM_FIELD_EMAIL_VALUE_MAX = 254;
 export const MAX_CUSTOM_FIELDS_PER_TARGET = 100;
 
 /**
@@ -260,6 +273,16 @@ export const customFieldUsageSchema = z.object({
 });
 export type CustomFieldUsage = z.infer<typeof customFieldUsageSchema>;
 
+/**
+ * The staff a `person` field may name (M14-27): an id and the public name the
+ * customer would see. No address and no role, because the route is
+ * `ticket:read`, which every Agent holds; the roster stays `staff:manage`.
+ */
+export const customFieldPeopleSchema = z.object({
+  people: z.array(z.object({ userId: z.uuid(), name: z.string().min(1) })),
+});
+export type CustomFieldPeople = z.infer<typeof customFieldPeopleSchema>;
+
 export const customFieldParamSchema = z.object({
   brandId: z.uuid(),
   fieldId: z.uuid(),
@@ -309,6 +332,65 @@ const dateValueSchema = z
 const textValueSchema = z.string().trim().min(1).max(CUSTOM_FIELD_TEXT_VALUE_MAX);
 
 /**
+ * Bidirectional control characters (U+202A to U+202E, U+2066 to U+2069) can
+ * reorder what a reader sees so that an address looks like another one. They
+ * are removed on write from the types that are shown as addresses or prose.
+ */
+export const stripBidiControls = (value: string): string =>
+  value.replace(/[\u202A-\u202E\u2066-\u2069]/gu, '');
+
+const noBidi = (value: unknown): unknown =>
+  typeof value === 'string' ? stripBidiControls(value) : value;
+
+const longTextValueSchema = z.preprocess(
+  noBidi,
+  z.string().trim().min(1).max(CUSTOM_FIELD_LONG_TEXT_VALUE_MAX),
+);
+
+/**
+ * An `https` URL and nothing else: `javascript:`, `data:` and plain `http` are
+ * refused here so the stored value is safe to put in an `href`, and a URL with
+ * credentials is refused because the value is shown to colleagues. Helpdock
+ * never fetches it.
+ */
+export const isHttpsUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+
+    return url.protocol === 'https:' && url.username === '' && url.password === '';
+  } catch {
+    return false;
+  }
+};
+
+const linkValueSchema = z.preprocess(
+  noBidi,
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(CUSTOM_FIELD_LINK_VALUE_MAX)
+    .refine(isHttpsUrl, 'A link is an https address'),
+);
+
+const emailValueSchema = z.preprocess(
+  noBidi,
+  z
+    .string()
+    .trim()
+    .max(CUSTOM_FIELD_EMAIL_VALUE_MAX)
+    .pipe(z.email())
+    .transform((value) => value.toLowerCase()),
+);
+
+/**
+ * A staff member, by id. Whether that person belongs to the brand is the api's
+ * to check against `user_brand_roles` (`apps/api/src/ticketing/custom-values.ts`):
+ * a schema in this package has no database to ask.
+ */
+const personValueSchema = z.uuid();
+
+/**
  * What a choice field with no options accepts: nothing. The definition
  * endpoints refuse to write one, so this catches a row that predates the rule
  * rather than a state the api can be talked into.
@@ -326,6 +408,14 @@ export const customValueSchema = (rule: CustomFieldRule): z.ZodType<unknown> => 
       return dateValueSchema;
     case 'checkbox':
       return z.boolean();
+    case 'long_text':
+      return longTextValueSchema;
+    case 'link':
+      return linkValueSchema;
+    case 'email':
+      return emailValueSchema;
+    case 'person':
+      return personValueSchema;
     case 'select':
       return rule.options.length === 0
         ? noChoices
@@ -449,6 +539,10 @@ export const customValueIsEmpty = (type: CustomFieldType, value: unknown): boole
 
   switch (type) {
     case 'text':
+    case 'long_text':
+    case 'link':
+    case 'email':
+    case 'person':
       return typeof value !== 'string' || value.trim() === '';
     case 'checkbox':
       return value !== true;

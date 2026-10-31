@@ -11,7 +11,7 @@ import { NotFoundException } from '@nestjs/common';
 import { leadsDepartment } from '../brands/department-scope.js';
 import { TicketingFailure } from '../brands/ticketing-failure.js';
 import { writeTicketingAudit } from './audit.js';
-import { parseCustomValues } from './custom-values.js';
+import { brandStaffAmong, parseCustomValues, readFieldRules } from './custom-values.js';
 import type { TagsService } from './tags.service.js';
 import { renderTemplate, templateValues } from './template-render.js';
 import type { TemplatesRepository } from './templates.repository.js';
@@ -243,8 +243,32 @@ export class TemplatesService {
       departmentId: template.departmentId,
       priority: template.priority,
       defaultTagIds: template.defaultTagIds.filter((id) => live.has(id)),
-      customDefaults: template.customDefaults,
+      customDefaults: await this.#liveDefaults(tx, template.customDefaults),
     };
+  }
+
+  /**
+   * A default naming a person who has left the brand is dropped, as a deleted
+   * tag is: it would otherwise make every ticket filed from the template a 400
+   * that the person filing it cannot fix (M14-27).
+   */
+  async #liveDefaults(
+    tx: DbTransaction,
+    defaults: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const people = (await readFieldRules(tx, 'ticket'))
+      .filter((rule) => rule.type === 'person' && typeof defaults[rule.key] === 'string')
+      .map((rule) => ({ key: rule.key, id: defaults[rule.key] as string }));
+    if (people.length === 0) {
+      return defaults;
+    }
+    const staff = await brandStaffAmong(
+      tx,
+      people.map((person) => person.id),
+    );
+    const gone = new Set(people.filter((person) => !staff.has(person.id)).map((p) => p.key));
+
+    return Object.fromEntries(Object.entries(defaults).filter(([key]) => !gone.has(key)));
   }
 
   // ------------------------------------------------------------------

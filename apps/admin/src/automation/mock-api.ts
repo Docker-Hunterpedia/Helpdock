@@ -89,7 +89,11 @@ const OPTIONS: RuleBuilderOptions = {
     { id: M.members.omar, name: 'Omar Aziz' },
   ],
   accounts: [{ id: id(801), name: 'Acme Trading' }],
-  customFields: [{ key: 'order_number', label: 'Order number', labelAr: 'رقم الطلب' }],
+  customFields: [
+    { key: 'order_number', label: 'Order number', labelAr: 'رقم الطلب', type: 'text' },
+    { key: 'notes', label: 'Notes', labelAr: 'ملاحظات', type: 'long_text' },
+    { key: 'owner', label: 'Owner', labelAr: 'المالك', type: 'person' },
+  ],
   cannedResponses: [
     { id: M.canned.refundReceived, name: 'Refund received' },
     { id: M.canned.orderStatus, name: 'Order status' },

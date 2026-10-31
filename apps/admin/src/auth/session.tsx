@@ -206,6 +206,17 @@ export function useSession(): Session {
   return session;
 }
 
+/**
+ * The brand id of the signed-in session, or `null` outside one. For the shared
+ * controls (a person picker, a filter summary) that are also drawn by tests and
+ * previews that have no session and so must not throw.
+ */
+export function useOptionalBrandId(): string | null {
+  const session = useContext(SessionContext);
+
+  return session ? currentBrand(session).id : null;
+}
+
 export function currentBrand(session: Session): SessionBrand {
   const brand =
     session.brands.find((candidate) => candidate.id === session.currentBrandId) ??

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customFieldTypeSchema } from './custom-fields.js';
 import { snoozeActionSchema, ticketChannelSchema, ticketPrioritySchema } from './ticket.js';
 
 /**
@@ -619,7 +620,13 @@ export const ruleBuilderOptionsSchema = z.object({
   members: z.array(z.object({ id: z.uuid(), name: z.string() })),
   accounts: z.array(z.object({ id: z.uuid(), name: z.string() })),
   customFields: z.array(
-    z.object({ key: z.string(), label: z.string(), labelAr: z.string().nullable() }),
+    z.object({
+      key: z.string(),
+      label: z.string(),
+      labelAr: z.string().nullable(),
+      /** M14-27: the builder offers a staff picker for `person` and `contains` for `long_text`. */
+      type: customFieldTypeSchema,
+    }),
   ),
   /** M3-06's shared canned responses: a rule runs as nobody, so never a personal one. */
   cannedResponses: z.array(z.object({ id: z.uuid(), name: z.string() })),

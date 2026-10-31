@@ -1,8 +1,8 @@
-import { customFieldDefs, type DbTransaction } from '@helpdock/db';
+import { customFieldDefs, type DbTransaction, userBrandRoles, users } from '@helpdock/db';
 import type { CustomFieldRule, CustomFieldTarget } from '@helpdock/schemas';
 import { customValuesSchema, mergeCustomValues } from '@helpdock/schemas';
 import { BadRequestException } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
 
 /**
@@ -66,6 +66,52 @@ const describe = (error: z.ZodError): string =>
     })
     .join('; ');
 
+/** The staff of the request's brand among `ids`: roles are tenant rows, so the transaction's policy is the brand filter. */
+export const brandStaffAmong = async (
+  tx: DbTransaction,
+  ids: readonly string[],
+): Promise<Set<string>> => {
+  if (ids.length === 0) {
+    return new Set();
+  }
+  const rows = await tx
+    .select({ id: userBrandRoles.userId })
+    .from(userBrandRoles)
+    .innerJoin(users, eq(users.id, userBrandRoles.userId))
+    .where(
+      and(inArray(userBrandRoles.userId, [...ids]), inArray(users.status, ['active', 'invited'])),
+    );
+
+  return new Set(rows.map((row) => row.id));
+};
+
+/**
+ * A `person` value names a staff member of the brand (M14-27). The schema can
+ * only say it is an id; this is the half that needs the database, and it runs
+ * on every write path that goes through {@link parseCustomValues}.
+ */
+const assertPeopleInBrand = async (
+  tx: DbTransaction,
+  rules: readonly CustomFieldRule[],
+  values: Record<string, unknown>,
+): Promise<void> => {
+  const named = rules.flatMap((rule) => {
+    const value = values[rule.key];
+
+    return rule.type === 'person' && typeof value === 'string'
+      ? [{ key: rule.key, id: value }]
+      : [];
+  });
+  const members = await brandStaffAmong(
+    tx,
+    named.map((entry) => entry.id),
+  );
+  const stranger = named.find((entry) => !members.has(entry.id));
+  if (stranger !== undefined) {
+    throw new BadRequestException(`${stranger.key}: That person is not staff of this brand`);
+  }
+};
+
 /**
  * `input` validated against the brand's definitions for `target`.
  *
@@ -93,6 +139,8 @@ export const parseCustomValues = async (
   if (!result.success) {
     throw new BadRequestException(describe(result.error));
   }
+
+  await assertPeopleInBrand(tx, rules, result.data);
 
   return result.data;
 };

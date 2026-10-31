@@ -9,6 +9,7 @@ import type {
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { fieldLabel } from '../../tickets/custom-values.js';
+import { useCustomFieldPeople } from '../../tickets/use-people.js';
 import { EMPTY_FILTERS, LIVE_STATES, type WorkspaceFilters } from '../../tickets/views.js';
 import { shortId } from './directory.js';
 import { statusName } from './format.js';
@@ -58,6 +59,10 @@ const snoozedKey = (snoozed: 'only' | 'include') =>
 export function useFilterSummary(directory: FilterDirectory): FilterSummary {
   const t = useT();
   const { locale } = usePreferences();
+  // A person filter holds ids; the names come from the people read, asked for only when a person field exists.
+  const { people } = useCustomFieldPeople(
+    directory.fields?.some((field) => field.type === 'person') === true,
+  );
 
   const named = <T extends { readonly id: string }>(
     rows: readonly T[],
@@ -92,7 +97,15 @@ export function useFilterSummary(directory: FilterDirectory): FilterSummary {
       case 'any_of':
         return t('tickets:summary.is', {
           field,
-          value: filter.values.join(t('tickets:summary.or')),
+          value: (def?.type === 'person'
+            ? filter.values.map(
+                (id) =>
+                  people.find((person) => person.userId === id)?.name ??
+                  directory.staff.find((member) => member.userId === id)?.name ??
+                  shortId(id),
+              )
+            : filter.values
+          ).join(t('tickets:summary.or')),
         });
       case 'not_set':
         return t('tickets:summary.fieldNotSet', { field });

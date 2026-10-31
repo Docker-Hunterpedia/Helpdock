@@ -13,6 +13,7 @@ import type {
   CustomFieldCreateRequest,
   CustomFieldDef,
   CustomFieldDefList,
+  CustomFieldPeople,
   CustomFieldTarget,
   CustomFieldUpdateRequest,
   CustomFieldUsage,
@@ -67,6 +68,7 @@ import {
   businessHoursOverviewSchema,
   customFieldDefListSchema,
   customFieldDefSchema,
+  customFieldPeopleSchema,
   customFieldUsageSchema,
   departmentAssignmentListSchema,
   departmentAssignmentSchema,
@@ -345,6 +347,12 @@ export class HttpTicketingApi implements TicketingApi {
 
     return customFieldDefListSchema.parse(
       await this.#transport.request('GET', `${this.#fields(brandId)}${query}`),
+    );
+  }
+
+  async customFieldPeople(brandId: string): Promise<CustomFieldPeople> {
+    return customFieldPeopleSchema.parse(
+      await this.#transport.request('GET', `${this.#fields(brandId)}/people`),
     );
   }
 

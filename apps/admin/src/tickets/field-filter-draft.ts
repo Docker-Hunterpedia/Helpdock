@@ -33,6 +33,10 @@ const OPERATORS: Readonly<Record<CustomFieldType, readonly FieldFilterOp[]>> = {
   number: ['between', 'before', 'after', 'not_set'],
   date: ['between', 'before', 'after', 'not_set'],
   text: ['contains', 'not_set'],
+  long_text: ['contains', 'not_set'],
+  link: ['contains', 'not_set'],
+  email: ['contains', 'not_set'],
+  person: ['any_of', 'not_set'],
 };
 
 export const operatorsOf = (type: CustomFieldType): readonly FieldFilterOp[] => OPERATORS[type];

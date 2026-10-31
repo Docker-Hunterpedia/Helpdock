@@ -10,6 +10,7 @@ import {
 } from '@helpdock/db';
 import { freshdeskValueMapping, zendeskValueMapping, zohoValueMapping } from '@helpdock/importers';
 import {
+  type CustomFieldType,
   type ImportMapping,
   type ImportMappingValue,
   type ImportSource,
@@ -136,8 +137,13 @@ async function fieldProposal(tx: DbTransaction, scope: Scope, row: ImportMapping
   if (!row.field) return null;
   const field = row.field;
   const target = field.target === 'organization' ? 'account' : field.target;
-  const type =
-    field.type === 'textarea' ? 'text' : field.type === 'multiselect' ? 'multi_select' : field.type;
+  // A multi-line source field fits a text field or a long text one (M14-27).
+  const types: CustomFieldType[] =
+    field.type === 'textarea'
+      ? ['text', 'long_text']
+      : field.type === 'multiselect'
+        ? ['multi_select']
+        : [field.type];
   const known = await nativeTarget(tx, scope, 'field', row.externalValue);
   const choices = await tx
     .select({ id: customFieldDefs.id, options: customFieldDefs.options })
@@ -146,7 +152,7 @@ async function fieldProposal(tx: DbTransaction, scope: Scope, row: ImportMapping
       and(
         eq(customFieldDefs.brandId, scope.brandId),
         eq(customFieldDefs.target, target),
-        eq(customFieldDefs.type, type),
+        inArray(customFieldDefs.type, types),
         known ? eq(customFieldDefs.id, known) : eq(customFieldDefs.key, field.key),
       ),
     )

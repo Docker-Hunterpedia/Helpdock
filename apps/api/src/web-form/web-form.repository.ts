@@ -10,7 +10,7 @@ import {
   webFormSettings,
 } from '@helpdock/db';
 import type { Locale } from '@helpdock/i18n';
-import { and, asc, eq, inArray, isNotNull, notInArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, ne, notInArray } from 'drizzle-orm';
 import type { WebFormFieldDef } from './layout.js';
 
 /** What the public page and the tab need of the brand itself. */
@@ -71,18 +71,21 @@ export class WebFormRepository {
 
   /** The brand's ticket custom fields, in the order the custom field editor shows them. */
   async ticketFieldDefs(tx: DbTransaction): Promise<WebFormFieldDef[]> {
-    return tx
-      .select({
-        key: customFieldDefs.key,
-        label: customFieldDefs.label,
-        labelAr: customFieldDefs.labelAr,
-        type: customFieldDefs.type,
-        options: customFieldDefs.options,
-        webForm: customFieldDefs.webForm,
-      })
-      .from(customFieldDefs)
-      .where(eq(customFieldDefs.target, 'ticket'))
-      .orderBy(asc(customFieldDefs.sortOrder), asc(customFieldDefs.key));
+    return (
+      tx
+        .select({
+          key: customFieldDefs.key,
+          label: customFieldDefs.label,
+          labelAr: customFieldDefs.labelAr,
+          type: customFieldDefs.type,
+          options: customFieldDefs.options,
+          webForm: customFieldDefs.webForm,
+        })
+        .from(customFieldDefs)
+        // A visitor cannot pick a staff member, so a person field is never on the form (M14-27).
+        .where(and(eq(customFieldDefs.target, 'ticket'), ne(customFieldDefs.type, 'person')))
+        .orderBy(asc(customFieldDefs.sortOrder), asc(customFieldDefs.key))
+    );
   }
 
   /** "Show on web form" on exactly the ticket fields named, and off on every other. */
@@ -99,7 +102,13 @@ export class WebFormRepository {
       await tx
         .update(customFieldDefs)
         .set({ webForm: true })
-        .where(and(eq(customFieldDefs.target, 'ticket'), inArray(customFieldDefs.key, [...keys])));
+        .where(
+          and(
+            eq(customFieldDefs.target, 'ticket'),
+            ne(customFieldDefs.type, 'person'),
+            inArray(customFieldDefs.key, [...keys]),
+          ),
+        );
     }
   }
 

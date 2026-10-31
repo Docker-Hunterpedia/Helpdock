@@ -445,7 +445,10 @@
         "date": "Date",
         "select": "Select",
         "multi_select": "Multi-select",
-        "checkbox": "Checkbox"
+        "checkbox": "Checkbox",
+        "long_text": "Long text",
+        "link": "Link",
+        "person": "Person"
       },
       "reorder": "Reorder {{field}}",
       "requiredField": "{{field}} is required",
@@ -607,7 +610,9 @@
         "date": "Date",
         "select": "Select",
         "multi_select": "Multi-select",
-        "checkbox": "Checkbox"
+        "checkbox": "Checkbox",
+        "link": "Link",
+        "person": "Person"
       }
     },
     "after": {

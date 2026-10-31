@@ -247,8 +247,17 @@
       "date": "Enter a date.",
       "select": "Choose one of the options.",
       "multi_select": "Choose from the options.",
-      "checkbox": "That value was not saved."
+      "checkbox": "That value was not saved.",
+      "long_text": "Enter some text, up to 5,000 characters.",
+      "link": "Enter an https address, such as https://example.com.",
+      "email": "Enter an email address.",
+      "person": "Choose a member of staff."
     },
+    "personFormer": "Former staff member",
+    "personNone": "Nobody",
+    "linkOpen": "Open {{field}} in a new tab",
+    "showAll": "Show all",
+    "showLess": "Show less",
     "linked": "Linked tickets",
     "noLinked": "None",
     "linkedHidden": "A ticket you cannot open",

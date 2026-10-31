@@ -6,6 +6,7 @@ import {
   customFieldKeySchema,
   customFieldUpdateRequestSchema,
   customValuesSchema,
+  isHttpsUrl,
   mergeCustomValues,
   missingRequiredToClose,
   type RequiredToCloseRule,
@@ -153,6 +154,105 @@ describe('customValuesSchema', () => {
 
     it.each(['true', 1, 'yes'])('refuses %s, so a ticked box is never a guess', (value) => {
       expect(parse(rules, { vip: value })).toBe('failed');
+    });
+  });
+
+  describe('long_text (M14-27)', () => {
+    const rules = [rule({ key: 'notes', type: 'long_text' })];
+
+    it('trims, and keeps the line breaks inside', () => {
+      expect(parse(rules, { notes: '  one\ntwo  ' })).toEqual({ notes: 'one\ntwo' });
+    });
+
+    it('takes 5,000 characters and refuses 5,001', () => {
+      expect(parse(rules, { notes: 'x'.repeat(5000) })).toEqual({ notes: 'x'.repeat(5000) });
+      expect(parse(rules, { notes: 'x'.repeat(5001) })).toBe('failed');
+    });
+
+    it('refuses spaces, which are not an answer', () => {
+      expect(parse(rules, { notes: '  ' })).toBe('failed');
+    });
+  });
+
+  describe('link (M14-27)', () => {
+    const rules = [rule({ key: 'page', type: 'link' })];
+
+    it('accepts an https address, trimmed', () => {
+      expect(parse(rules, { page: ' https://status.stripe.com/incidents/42 ' })).toEqual({
+        page: 'https://status.stripe.com/incidents/42',
+      });
+    });
+
+    it.each([
+      'http://example.com',
+      'javascript:alert(1)',
+      'JAVASCRIPT:alert(1)',
+      'data:text/html,hi',
+      'ftp://example.com',
+      '//example.com',
+      'example.com',
+      'https://user:pass@example.com',
+      'https://',
+      '',
+    ])('refuses %s, because the value is put in an href', (page) => {
+      expect(parse(rules, { page })).toBe('failed');
+    });
+
+    it('refuses an address over 2,000 characters', () => {
+      expect(parse(rules, { page: `https://example.com/${'a'.repeat(1990)}` })).toBe('failed');
+    });
+  });
+
+  describe('email (M14-27)', () => {
+    const rules = [rule({ key: 'billing', type: 'email' })];
+
+    it('stores a trimmed, lower-cased address', () => {
+      expect(parse(rules, { billing: ' Finance@Globex.COM ' })).toEqual({
+        billing: 'finance@globex.com',
+      });
+    });
+
+    it.each(['finance', 'a@', '@b.co', 'a b@c.co', ''])('refuses %s', (billing) => {
+      expect(parse(rules, { billing })).toBe('failed');
+    });
+  });
+
+  describe('person (M14-27)', () => {
+    const rules = [rule({ key: 'owner', type: 'person' })];
+    const id = '0192c3f0-1a2b-7c3d-8e4f-00000000000a';
+
+    it('accepts an id; whether it is staff of the brand is the api’s to check', () => {
+      expect(parse(rules, { owner: id })).toEqual({ owner: id });
+    });
+
+    it.each(['Sam', '', 12, true])('refuses %s, which is not an id', (owner) => {
+      expect(parse(rules, { owner })).toBe('failed');
+    });
+  });
+
+  describe('bidi controls (M14-27)', () => {
+    it('strips them from a link, an email and a long text on write', () => {
+      const rules = [
+        rule({ key: 'page', type: 'link' }),
+        rule({ key: 'billing', type: 'email' }),
+        rule({ key: 'notes', type: 'long_text' }),
+      ];
+
+      expect(
+        parse(rules, {
+          page: 'https://\u202Eexample.com/a\u2066',
+          billing: 'a\u202E@b.co',
+          notes: 'x\u2067y\u202Cz',
+        }),
+      ).toEqual({ page: 'https://example.com/a', billing: 'a@b.co', notes: 'xyz' });
+    });
+  });
+
+  describe('isHttpsUrl', () => {
+    it('is true for https and for nothing else', () => {
+      expect(isHttpsUrl('https://example.com')).toBe(true);
+      expect(isHttpsUrl('http://example.com')).toBe(false);
+      expect(isHttpsUrl('not a url')).toBe(false);
     });
   });
 
@@ -387,6 +487,30 @@ describe('missingRequiredToClose (M14-17)', () => {
 
     expect(missingRequiredToClose(rules, { refunded: false })).toEqual(['refunded']);
     expect(missingRequiredToClose(rules, { refunded: true })).toEqual([]);
+  });
+
+  it('reads a blank long text, link, email and person as empty, and a value as filled', () => {
+    const rules = [
+      gate({ key: 'notes', type: 'long_text' }),
+      gate({ key: 'page', type: 'link' }),
+      gate({ key: 'billing', type: 'email' }),
+      gate({ key: 'owner', type: 'person' }),
+    ];
+
+    expect(missingRequiredToClose(rules, { notes: '  ', page: '', billing: null })).toEqual([
+      'notes',
+      'page',
+      'billing',
+      'owner',
+    ]);
+    expect(
+      missingRequiredToClose(rules, {
+        notes: 'x',
+        page: 'https://a.co',
+        billing: 'a@b.co',
+        owner: 'id',
+      }),
+    ).toEqual([]);
   });
 
   it('reads a zero and a chosen option as filled', () => {

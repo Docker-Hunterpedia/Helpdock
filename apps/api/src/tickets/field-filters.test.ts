@@ -26,6 +26,10 @@ const FIELDS: FilterableField[] = [
   field('order_total', 'number'),
   field('renewal', 'date'),
   field('note', 'text'),
+  field('details', 'long_text'),
+  field('status_page', 'link'),
+  field('billing_email', 'email'),
+  field('owner', 'person'),
   field('internal_score', 'number', false),
 ];
 
@@ -53,6 +57,28 @@ describe('resolveFieldFilters', () => {
     ['is on a text', { key: 'note', op: 'is', value: true }],
     ['before on a checkbox', { key: 'vip', op: 'before', value: 1 }],
   ])('refuses an operator the type has no use for: %s', (_name, filter) => {
+    expect(() => resolve(filter)).toThrow(FieldFilterFailure);
+  });
+
+  it.each<[string, TicketFieldFilter]>([
+    ['contains on a long text', { key: 'details', op: 'contains', value: 'x' }],
+    ['contains on a link', { key: 'status_page', op: 'contains', value: 'x' }],
+    ['contains on an email', { key: 'billing_email', op: 'contains', value: 'x' }],
+    [
+      'any_of on a person',
+      { key: 'owner', op: 'any_of', values: ['0192c3f0-1a2b-7c3d-8e4f-00000000000a'] },
+    ],
+    ['not_set on every new type', { key: 'owner', op: 'not_set' }],
+  ])('accepts what the M14-27 types answer: %s', (_name, filter) => {
+    expect(resolve(filter)).toHaveLength(1);
+  });
+
+  it.each<[string, TicketFieldFilter]>([
+    ['contains on a person', { key: 'owner', op: 'contains', value: 'x' }],
+    ['any_of on an email', { key: 'billing_email', op: 'any_of', values: ['a@b.co'] }],
+    ['is on a link', { key: 'status_page', op: 'is', value: true }],
+    ['before on a long text', { key: 'details', op: 'before', value: 1 }],
+  ])('refuses what they have no use for: %s', (_name, filter) => {
     expect(() => resolve(filter)).toThrow(FieldFilterFailure);
   });
 
@@ -102,6 +128,24 @@ describe('fieldFilterClause', () => {
 
     expect(sql.sql).toBe('("tickets"."custom" @> $1::jsonb OR "tickets"."custom" @> $2::jsonb)');
     expect(sql.params).toEqual(['{"severity":"Sev 1"}', '{"severity":"Sev 2"}']);
+  });
+
+  it('asks a person by containment of the id, as a select is asked', () => {
+    const [resolved] = resolve({ key: 'owner', op: 'any_of', values: ['u-1'] });
+    const query = render(fieldFilterClause(resolved as never));
+
+    expect(query.sql).toContain('@>');
+    expect(query.params).toContain(JSON.stringify({ owner: 'u-1' }));
+  });
+
+  it('searches a link, an email and a long text as text', () => {
+    for (const key of ['status_page', 'billing_email', 'details']) {
+      const [resolved] = resolve({ key, op: 'contains', value: 'a_b' });
+      const query = render(fieldFilterClause(resolved as never));
+
+      expect(query.sql).toContain('ILIKE');
+      expect(query.params).toContain('%a\\_b%');
+    }
   });
 
   it('asks a multi-select for the member inside the stored array', () => {

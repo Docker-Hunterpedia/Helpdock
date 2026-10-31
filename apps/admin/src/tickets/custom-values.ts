@@ -15,6 +15,14 @@ import type { CustomFieldDef } from '@helpdock/schemas';
  * refusal is draw it under the field.
  */
 
+/** The free-text types, which the api stores trimmed. */
+const TRIMMED_TYPES: ReadonlySet<CustomFieldDef['type']> = new Set([
+  'text',
+  'long_text',
+  'link',
+  'email',
+]);
+
 export type CustomDraft = string | boolean | readonly string[];
 
 /** The editor's starting state for a stored value, or for none. */
@@ -45,7 +53,7 @@ export const valueOfDraft = (def: CustomFieldDef, draft: CustomDraft): unknown =
     return draft.length === 0 ? null : [...draft];
   }
 
-  const text = def.type === 'text' ? draft.trim() : draft;
+  const text = TRIMMED_TYPES.has(def.type) ? draft.trim() : draft;
   if (text === '') {
     return null;
   }

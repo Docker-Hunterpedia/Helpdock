@@ -319,7 +319,11 @@
       "date": "Date",
       "select": "Select",
       "multi_select": "Multi-select",
-      "checkbox": "Checkbox"
+      "checkbox": "Checkbox",
+      "long_text": "Long text",
+      "link": "Link",
+      "email": "Email",
+      "person": "Person"
     },
     "table": {
       "caption": "Custom fields on a {{target}}",

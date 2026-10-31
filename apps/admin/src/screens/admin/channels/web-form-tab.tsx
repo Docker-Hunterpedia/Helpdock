@@ -35,6 +35,7 @@ import {
 import { channelsKeys } from '../../../channels/api.js';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { moveBy } from '../ticketing/reorder.js';
 import { SectionCard, useEmailAction } from './section-card.tsx';
@@ -89,7 +90,7 @@ export function WebFormTab(): ReactNode {
     return <AlertBanner tone="danger">{t('channels:webForm.loadFailed')}</AlertBanner>;
   }
   if (settings.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   return (

@@ -11,8 +11,8 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Search, TriangleAlert, Users } from 'lucide-react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, Plus, Search, TriangleAlert, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -21,6 +21,8 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { AlertBanner } from '../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../ui/loading-skeleton.tsx';
 import { useDebounced } from '../../ui/use-debounced.js';
 import { AccountDialog } from './contact-dialogs.tsx';
 import { AccountsTable, ContactsTable } from './contact-tables.tsx';
@@ -55,6 +57,7 @@ export function ContactsPage(): ReactNode {
   const [params, setParams] = useSearchParams();
 
   const brand = currentBrand(session);
+  const canWrite = session.user.role !== 'viewer';
   const tab: Tab = params.get('tab') === 'accounts' ? 'accounts' : 'people';
   const search = params.get('q') ?? '';
   const accountId = params.get('account') ?? undefined;
@@ -99,12 +102,14 @@ export function ContactsPage(): ReactNode {
     queryKey: ['contacts', brand.id, query],
     queryFn: () => api.listContacts(brand.id, query),
     enabled: tab === 'people',
+    placeholderData: keepPreviousData,
   });
 
   const accounts = useQuery({
     queryKey: ['accounts', brand.id, search],
     queryFn: () => api.listAccounts(brand.id, search === '' ? {} : { search }),
     enabled: tab === 'accounts',
+    placeholderData: keepPreviousData,
   });
 
   // The caption counts the whole brand, whichever tab is open and whatever is
@@ -147,6 +152,14 @@ export function ContactsPage(): ReactNode {
   const total = contacts.data?.total ?? 0;
   const duplicateCount = contacts.data?.duplicateCount ?? 0;
   const accountRows = accounts.data?.accounts ?? [];
+  // Nothing typed and no filter set: the brand has no contacts at all, not "none match".
+  const firstRun =
+    !contacts.isPending &&
+    rows.length === 0 &&
+    search === '' &&
+    accountId === undefined &&
+    !openOnly &&
+    !duplicatesOnly;
   const range = pageRange(offset, rows.length, total);
 
   return (
@@ -158,18 +171,20 @@ export function ContactsPage(): ReactNode {
           accounts: t('contacts:accountCount', { count: brandAccounts.data?.total ?? 0 }),
         })}
         action={
-          <Button
-            variant="contained"
-            onClick={() => {
-              if (tab === 'accounts') {
-                setAccountDialogOpen(true);
-              } else {
-                void navigate(ROUTES.contactNew);
-              }
-            }}
-          >
-            {t(tab === 'accounts' ? 'contacts:newAccount' : 'contacts:newContact')}
-          </Button>
+          canWrite ? (
+            <Button
+              variant="contained"
+              onClick={() => {
+                if (tab === 'accounts') {
+                  setAccountDialogOpen(true);
+                } else {
+                  void navigate(ROUTES.contactNew);
+                }
+              }}
+            >
+              {t(tab === 'accounts' ? 'contacts:newAccount' : 'contacts:newContact')}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -282,22 +297,41 @@ export function ContactsPage(): ReactNode {
         </Box>
       ) : null}
 
-      {tab === 'people' ? (
+      {(tab === 'people' ? contacts : accounts).isError ? (
+        <AlertBanner tone="danger">{t('contacts:loadFailed')}</AlertBanner>
+      ) : tab === 'people' && contacts.isPending ? (
+        <LoadingSkeleton label={t('contacts:loading')} />
+      ) : tab === 'people' && firstRun ? (
+        <EmptyState
+          icon={Users}
+          heading={t('contacts:empty.heading')}
+          body={t('contacts:empty.body')}
+          action={
+            canWrite ? (
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  void navigate(ROUTES.contactNew);
+                }}
+              >
+                {t('contacts:empty.action')}
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : tab === 'people' ? (
         <ContactsTable
           contacts={rows}
           brandName={brand.name}
           empty={
-            rows.length === 0 && !contacts.isPending ? (
+            rows.length === 0 ? (
               <Box sx={{ padding: 8, textAlign: 'center' }}>
                 <Typography variant="h3" component="p">
-                  {search === ''
-                    ? t('contacts:empty.heading')
-                    : t('contacts:empty.noMatchesHeading')}
+                  {t('contacts:empty.noMatchesHeading')}
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', marginBlockStart: 2 }}>
-                  {search === ''
-                    ? t('contacts:empty.body', { brand: brand.name })
-                    : t('contacts:empty.noMatchesBody')}
+                  {t('contacts:empty.noMatchesBody')}
                 </Typography>
               </Box>
             ) : null
@@ -345,11 +379,26 @@ export function ContactsPage(): ReactNode {
             </Box>
           }
         />
-      ) : accountRows.length === 0 && !accounts.isPending ? (
+      ) : accounts.isPending ? (
+        <LoadingSkeleton label={t('contacts:loading')} />
+      ) : accountRows.length === 0 ? (
         <EmptyState
           icon={Users}
           heading={t('contacts:empty.accountsHeading')}
           body={t('contacts:empty.accountsBody')}
+          action={
+            canWrite ? (
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setAccountDialogOpen(true);
+                }}
+              >
+                {t('contacts:newAccount')}
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <AccountsTable accounts={accountRows} />

@@ -8,6 +8,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { csatPreviewRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { useTicketingAction, useTicketingReport } from './use-ticketing-action.js';
 
@@ -72,7 +73,7 @@ export function FeedbackTab(): ReactNode {
   );
 
   if (stored === undefined || draft === null) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const changed =

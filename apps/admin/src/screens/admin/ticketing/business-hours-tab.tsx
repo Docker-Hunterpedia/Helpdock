@@ -7,6 +7,7 @@ import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
 import { DepartmentHoursCard } from './department-hours.tsx';
 import { HolidaysCard } from './holidays-card.tsx';
@@ -89,7 +90,7 @@ export function BusinessHoursTab(): ReactNode {
   );
 
   if (overview.data === undefined || draft === null) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const stored = draftOf(overview.data);

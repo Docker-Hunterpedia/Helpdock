@@ -8,6 +8,7 @@ import { currentBrand, useSession } from '../../auth/session.tsx';
 import { helpCenterKeys, isHelpCenterError } from '../../help-center/api.js';
 import { useHelpCenterApi } from '../../help-center/context.tsx';
 import { useToast } from '../../ui/toasts.tsx';
+import { nameIn } from './article-rows.js';
 
 /** The brand, the adapter and the structure query every help center screen starts from. */
 export function useHelpCenter() {
@@ -93,6 +94,17 @@ export function useStructureChange<TInput, TResult>(
     },
     onError: report,
   });
+}
+
+/** Creates a category from its two names and says so in a toast. */
+export function useCreateCategory() {
+  const t = useT();
+  const locale = useReaderLocale();
+  const { brand, api } = useHelpCenter();
+  return useStructureChange(
+    (names: { en: string; ar: string }) => api.createCategory(brand.id, { names }),
+    (names) => t('helpCenter:toast.categoryCreated', { name: nameIn(names, locale) }),
+  );
 }
 
 const isStructure = (value: unknown): value is HcStructure =>

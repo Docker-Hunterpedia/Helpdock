@@ -1399,6 +1399,25 @@ Artboard: `Admin/Tickets-Narrow` (list, ticket and details drawer at 768 px,
 
 ### M14-23 Skeletons and empty states beyond 1.0.1
 
+**Status: built, in review** (issue #310). Built from `Admin/Empty-States`
+(`AdminEmptyStates.dc.html`): Contacts (people, and New account on the
+Accounts tab), the Help center (no categories; no articles, named after the
+selected section), Views, Macros and saved replies, and Rules (event rules;
+the time-based tab keeps its own sentence and gains the same action) each show
+the EmptyState with its one primary action. The Help center's first category is
+named in the same dialog the Structure card uses (`NewCategoryButton`). A search
+or filter that finds nobody keeps its "nothing matches" sentence and offers no
+action. The skeleton is `LoadingSkeleton` (a title bar and avatar-and-two-line
+rows from DESIGN §4 Skeleton) in a `role="status"` region that keeps
+`aria-busy`; it replaces the blank busy boxes of the AI, SLA, feedback,
+business-hours, channel, widget, web-form and Meta tabs and the help-center
+proposal, and is the loading state of the Contacts, Views, Macros and Rules
+lists. Not covered, because the board does not draw them: the list empty states
+of Tags, Templates, Departments, Custom fields, Statuses, Mailboxes, Domains,
+the audit log and Passkeys still show their sentence without an action. Browser
+tests start from an empty fixture with `localStorage["helpdock.mock.empty"]`
+(`["contacts","macros","rules","helpCenter"]`).
+
 From [UX-10 (c) and UX-12](../completed/ux-review-1-0.md#findings). The 1.0.1
 patch adds skeletons to the ticket list and the ticket view; M14-06 gives the
 ticket views their empty states. This deliverable covers the rest:

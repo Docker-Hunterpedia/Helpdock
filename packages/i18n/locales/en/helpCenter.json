@@ -151,8 +151,14 @@
     }
   },
   "empty": {
-    "heading": "No articles here yet",
-    "body": "Write the first article for this section. It stays a draft until you publish it."
+    "heading": "No articles yet",
+    "headingInSection": "No articles in {{section}}",
+    "body": "Write the answer you give most often."
+  },
+  "emptyCategories": {
+    "heading": "Start your help center",
+    "body": "Create a category first; articles live inside it.",
+    "action": "New category"
   },
   "list": {
     "label": "Articles",

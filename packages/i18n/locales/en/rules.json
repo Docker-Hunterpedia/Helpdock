@@ -10,12 +10,13 @@
     "macros": "Macros"
   },
   "list": {
+    "loading": "Loading rules",
     "rules": {
       "heading": "Workflow rules",
       "body": "On each event, enabled rules run top to bottom. Drag to change the order.",
       "caption": "Workflow rules, in the order they run",
-      "emptyHeading": "No workflow rules yet",
-      "emptyBody": "A rule acts on a ticket when something happens to it: it is created, assigned, replied to."
+      "emptyHeading": "No rules yet",
+      "emptyBody": "Route, tag and prioritise tickets as they arrive."
     },
     "timeBased": {
       "heading": "Time-based rules",
@@ -50,7 +51,8 @@
       "title": "Delete {{name}}?",
       "body": "The rule stops at once. Its runs stay in the execution log.",
       "submit": "Delete rule"
-    }
+    },
+    "loadFailed": "The rules could not be loaded."
   },
   "intervals": {
     "15": "15 minutes",

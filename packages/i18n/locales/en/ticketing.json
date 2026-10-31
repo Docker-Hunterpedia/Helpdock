@@ -635,6 +635,7 @@
     "deliveryBody": "The survey goes out when the ticket closes, on the ticket's channel: an email with the five scores, a card in the widget conversation, or a Telegram message with score buttons. The link is also shown on the ticket for the agent to share."
   },
   "views": {
+    "loading": "Loading views",
     "heading": "Shared views",
     "body": "Views every agent in the brand, or in the chosen departments, sees in the sidebar. Drag to reorder.",
     "add": "Add view",
@@ -660,8 +661,9 @@
       "delete": "Delete"
     },
     "empty": {
-      "heading": "No shared views",
-      "body": "Add a view to give a department a ready-made queue."
+      "heading": "No saved views",
+      "body": "Save a filter you use every day as a view.",
+      "action": "New view"
     },
     "editor": {
       "heading": "Edit view · {{name}}",
@@ -701,7 +703,8 @@
       "title": "Delete {{name}}?",
       "body": "It goes from the sidebar of everyone it is shared with. No ticket changes.",
       "submit": "Delete view"
-    }
+    },
+    "loadFailed": "The views could not be loaded."
   },
   "businessHours": {
     "heading": "Business hours",

@@ -10,6 +10,7 @@ import { currentBrand, useEmailApi, useSession, useTicketingApi } from '../../..
 import { emailKeys } from '../../../email/api.js';
 import { PageHeader } from '../../../shell/page-header.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { AutoRepliesCard } from './auto-replies-card.tsx';
 import { FailedSendsCard } from './failed-sends-card.tsx';
 import { MailboxesTab } from './mailboxes-tab.tsx';
@@ -176,7 +177,7 @@ function OutgoingTab({ brandId }: { readonly brandId: string }): ReactNode {
     return <AlertBanner tone="danger">{t('channels:loadFailed')}</AlertBanner>;
   }
   if (outgoing.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   return (

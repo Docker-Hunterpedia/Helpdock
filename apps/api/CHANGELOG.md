@@ -1,5 +1,39 @@
 # @helpdock/api
 
+## 1.3.0
+
+### Minor Changes
+
+- [#425](https://github.com/Docker-Hunterpedia/Helpdock/pull/425) [`aa37bb5`](https://github.com/Docker-Hunterpedia/Helpdock/commit/aa37bb554b6fab3d0d92f6e6e40f4adfe56c68d8) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Arabic copy: the break-glass picker no longer calls a biometric "بصمة" (fingerprint) in general.
+
+- [#435](https://github.com/Docker-Hunterpedia/Helpdock/pull/435) [`ae5e6c2`](https://github.com/Docker-Hunterpedia/Helpdock/commit/ae5e6c2dea625eb61debb1b4f911a24e4e941ec4) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Google and GitHub sign-in buttons are now drawn only when both a client id and a client secret are set, as Microsoft's already was, so a missing secret no longer fails after the consent screen. The passkey routes (`/api/auth/passkey/*`, `/api/auth/enrolment/passkey/*`, `/api/me/passkeys*`) now refuse bodies over 64 KiB with 413.
+
+- [#439](https://github.com/Docker-Hunterpedia/Helpdock/pull/439) [`924371e`](https://github.com/Docker-Hunterpedia/Helpdock/commit/924371e57208fbf63db3aeaee8ae61961a7fc861) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The ticket reply box is one line until opened and the details panel becomes a drawer below 1440 px, so the thread stays readable at 1280 x 720; `[` hides the ticket list and the header's Macro button gives way to the composer's and the command palette's.
+
+- [#429](https://github.com/Docker-Hunterpedia/Helpdock/pull/429) [`064ea3f`](https://github.com/Docker-Hunterpedia/Helpdock/commit/064ea3f53751a3ee6b6898f21d27e162135a2575) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Custom fields gain four types: long text, link, email and person. A link must be https and is never fetched, a person must be staff of the brand, and the ticket list filters answer all four.
+
+- [#436](https://github.com/Docker-Hunterpedia/Helpdock/pull/436) [`8672386`](https://github.com/Docker-Hunterpedia/Helpdock/commit/867238609ca8c18fe3a2cff91f30a63ee00bd0a8) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Admin first-run screens (Contacts, Help center, Views, Macros, Rules) now show an empty state with the action that fills them, and lists show a skeleton while they load.
+
+- [#422](https://github.com/Docker-Hunterpedia/Helpdock/pull/422) [`ee6a7db`](https://github.com/Docker-Hunterpedia/Helpdock/commit/ee6a7db6bb93d3d40937de51b5eab42d98da6317) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Entra ID first links (staff SSO OIDC and the Microsoft sign-in button) now also require the ID token's `idp` claim to be absent or to name the pinned tenant, so a B2B user made a member whose home tenant vouches for the domain can no longer link by email.
+
+- [#432](https://github.com/Docker-Hunterpedia/Helpdock/pull/432) [`9ea5515`](https://github.com/Docker-Hunterpedia/Helpdock/commit/9ea5515b7e20254a6ac40e4759f6b8a39b90a899) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Mailbox-aware views and rules (M14-26): filter tickets by the mailbox they arrived at and the address the customer wrote to; rule conditions on both; rule actions "set reply address" and "mark as spam".
+
+- [#434](https://github.com/Docker-Hunterpedia/Helpdock/pull/434) [`7708fbc`](https://github.com/Docker-Hunterpedia/Helpdock/commit/7708fbc2a1d3a421434b1e0eccaddb70c6bbf259) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Typing `@` in an internal note lists the people who can see the ticket's department, with presence, and writes the handle the notification resolver already reads. New `GET /api/brands/:brandId/tickets/:ticketId/mention-candidates`.
+
+- [#441](https://github.com/Docker-Hunterpedia/Helpdock/pull/441) [`69ceae5`](https://github.com/Docker-Hunterpedia/Helpdock/commit/69ceae51bf5d52729e03f691ef2134b92cd3f970) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Below 1024 px the ticket workspace opens on the list, a ticket is pushed over it with a back button, and the details open as a drawer.
+
+- [#431](https://github.com/Docker-Hunterpedia/Helpdock/pull/431) [`347861f`](https://github.com/Docker-Hunterpedia/Helpdock/commit/347861f8141a3601e8f9e77940187f687c0ff841) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Staff can turn on notification sounds per event in Your account, with a once-a-minute reminder while a live chat waits; the choice follows them to other browsers.
+
+- [#433](https://github.com/Docker-Hunterpedia/Helpdock/pull/433) [`78c6888`](https://github.com/Docker-Hunterpedia/Helpdock/commit/78c6888c730e41d7b2bb74b0c734aab0f85af28d) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Saved replies and macros gain a shortcut: type `/refund` in a reply, at the start of a line or after a space, and press Tab or Enter to insert it. A shortcut is unique where the item is offered and a taken one is refused. `{{contact.first_name|there}}` renders a fallback for an empty value, a reply with an unknown placeholder or an unclosed `{{` is refused on save with each one named, `{{` in the composer lists the placeholders this ticket can fill, and the picker puts your own and the most used items first (`use_count`, migration 0077).
+
+- [#427](https://github.com/Docker-Hunterpedia/Helpdock/pull/427) [`0725b7e`](https://github.com/Docker-Hunterpedia/Helpdock/commit/0725b7ea4d40f27d41e14fa3b92c146b8dbc649c) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - The ticket list now embeds each ticket's assignee name (`assignee: { id, name }`), so Agents, who cannot read the staff list, see who has each ticket.
+
+### Patch Changes
+
+- [#413](https://github.com/Docker-Hunterpedia/Helpdock/pull/413) [`b07f759`](https://github.com/Docker-Hunterpedia/Helpdock/commit/b07f759f6ece9b1d72c7d394aa2010f7bc421a7c) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Update nodemailer to 10.1.7 (with mailparser 3.9.47, which uses the same release) to fix three address-parsing flaws, where a nested comment, a `;` inside quotes or a `>` inside a quoted local part could turn header text into an extra recipient or a different domain. Update Fastify to 5.12.7 to fix a header validation bypass.
+
+- [#417](https://github.com/Docker-Hunterpedia/Helpdock/pull/417) [`c3d7d6c`](https://github.com/Docker-Hunterpedia/Helpdock/commit/c3d7d6c65f057b5a658ffa9f3746bbfde277eed9) Thanks [@Docker-Hunterpedia](https://github.com/Docker-Hunterpedia)! - Arabic back arrows and other directional icons in the admin now point the right way.
+
 ## 1.2.0
 
 ### Minor Changes

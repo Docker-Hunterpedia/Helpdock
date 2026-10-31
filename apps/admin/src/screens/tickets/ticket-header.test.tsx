@@ -104,12 +104,23 @@ describe('the subject (M14-19)', () => {
     expect(subject).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
   });
 
-  it('shows the whole subject in a tooltip on hover', async () => {
+  it('says nothing more on hover while the subject fits', async () => {
+    const { user } = renderHeader([]);
+
+    await user.hover(screen.getByRole('heading', { level: 2, name: 'Refund for order 42' }));
+
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('shows the whole subject in a tooltip on hover once it is cut off', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(100);
     const { user } = renderHeader([]);
 
     await user.hover(screen.getByRole('heading', { level: 2, name: 'Refund for order 42' }));
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Refund for order 42');
+    vi.restoreAllMocks();
   });
 
   it('has no Macro button: macros are the composer’s and the palette’s', () => {

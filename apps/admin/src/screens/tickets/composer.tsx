@@ -15,11 +15,13 @@ import {
   type ReactNode,
   type SyntheticEvent,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../../app/i18n.js';
 import { usePreferences } from '../../app/providers.tsx';
 import { useSemanticTokens } from '../../app/tokens.js';
@@ -141,6 +143,13 @@ export interface ComposerProps {
    * is this component's and nobody else should have to know which one it is.
    */
   readonly focusSignal?: number | undefined;
+  /** Changes whenever a send succeeded: the recipients line goes back to one line. */
+  readonly collapseSignal?: number | undefined;
+  /**
+   * Where the `/`, `{{` and `@` lists are drawn when the card scrolls inside a
+   * cap: outside it, so the list is never under the toolbar or out of view.
+   */
+  readonly suggestionHost?: HTMLElement | null | undefined;
   onModeChange(mode: ComposerMode): void;
   onBodyChange(body: string): void;
   onThenStatusChange(statusId: string): void;
@@ -194,6 +203,8 @@ export function Composer({
   uploading,
   attachmentsEnabled,
   focusSignal,
+  collapseSignal,
+  suggestionHost,
   onModeChange,
   onBodyChange,
   onThenStatusChange,
@@ -222,6 +233,13 @@ export function Composer({
   const surface = note ? tokens['status.warning.tint'] : tokens['bg.surface'];
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsId = useId();
+  // Nothing to choose from, or nobody to send to: the explanation is the line.
+  const forcedOpen = email !== undefined && (email.to === null || email.senders.length === 0);
+  const showDetails = detailsOpen || forcedOpen;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the signal is the trigger.
+  useEffect(() => {
+    setDetailsOpen(false);
+  }, [collapseSignal]);
   const emailReply = email !== undefined && !note;
   const telegramReply = telegram !== undefined && !note;
   const metaReply = meta !== undefined && !note;
@@ -260,6 +278,11 @@ export function Composer({
     keys: suggestionKeys,
     onDismiss: dismiss,
   };
+
+  const floated = (lists: ReactNode): ReactNode =>
+    suggestionHost === undefined || suggestionHost === null
+      ? lists
+      : createPortal(lists, suggestionHost);
 
   const syncTrigger = (area: HTMLInputElement | HTMLTextAreaElement): void => {
     const caret = area.selectionStart;
@@ -367,11 +390,11 @@ export function Composer({
         )}
       </Box>
 
-      {emailReply && email.to !== null ? (
+      {emailReply && !forcedOpen ? (
         <Button
           variant="text"
           size="small"
-          aria-expanded={detailsOpen}
+          aria-expanded={showDetails}
           aria-controls={detailsId}
           endIcon={
             <ChevronDown
@@ -395,8 +418,12 @@ export function Composer({
         </Button>
       ) : null}
 
-      {emailReply && (detailsOpen || email.to === null) ? (
-        <Box id={detailsId} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {emailReply ? (
+        <Box
+          id={detailsId}
+          hidden={!showDetails}
+          sx={{ display: showDetails ? 'flex' : 'none', flexDirection: 'column', gap: 2 }}
+        >
           <FromSelect email={email} />
           <RecipientLines email={email} />
         </Box>
@@ -441,55 +468,59 @@ export function Composer({
         }}
       />
 
-      {open && trigger.kind === 'slash' ? (
-        <SavedReplySuggestions
-          brandId={inline.brandId}
-          departmentId={inline.departmentId}
-          query={trigger.query}
-          list={suggestionList}
-          onPick={(macro) => {
-            const range = { start: trigger.start, end: trigger.end };
-            setTrigger(null);
-            void inline.onInsertSaved(macro, range).then((caret) => {
-              requestAnimationFrame(() => {
+      {floated(
+        <>
+          {open && trigger.kind === 'slash' ? (
+            <SavedReplySuggestions
+              brandId={inline.brandId}
+              departmentId={inline.departmentId}
+              query={trigger.query}
+              list={suggestionList}
+              onPick={(macro) => {
+                const range = { start: trigger.start, end: trigger.end };
+                setTrigger(null);
+                void inline.onInsertSaved(macro, range).then((caret) => {
+                  requestAnimationFrame(() => {
+                    bodyRef.current?.focus();
+                    if (caret !== null) {
+                      bodyRef.current?.setSelectionRange(caret, caret);
+                    }
+                  });
+                });
+              }}
+            />
+          ) : null}
+          {open && trigger.kind === 'mention' ? (
+            <MentionSuggestions
+              brandId={inline.brandId}
+              ticketId={inline.ticketId}
+              query={trigger.query}
+              list={suggestionList}
+              onPick={(handle) => {
+                insertAtTrigger(`@${handle} `);
+              }}
+            />
+          ) : null}
+          {open && trigger.kind === 'placeholder' ? (
+            <PlaceholderPicker
+              samples={inline.placeholderValues}
+              names={[...inline.placeholderValues]
+                .filter(([, value]) => value.trim() !== '')
+                .map(([name]) => name as CannedPlaceholder)}
+              hint={t('tickets:composer.suggest.placeholderHint')}
+              onPick={(name) => {
+                insertAtTrigger(inline.placeholderValues.get(name) ?? '');
+              }}
+              onClose={() => {
+                setDismissedAt(trigger.start);
                 bodyRef.current?.focus();
-                if (caret !== null) {
-                  bodyRef.current?.setSelectionRange(caret, caret);
-                }
-              });
-            });
-          }}
-        />
-      ) : null}
-      {open && trigger.kind === 'mention' ? (
-        <MentionSuggestions
-          brandId={inline.brandId}
-          ticketId={inline.ticketId}
-          query={trigger.query}
-          list={suggestionList}
-          onPick={(handle) => {
-            insertAtTrigger(`@${handle} `);
-          }}
-        />
-      ) : null}
-      {open && trigger.kind === 'placeholder' ? (
-        <PlaceholderPicker
-          samples={inline.placeholderValues}
-          names={[...inline.placeholderValues]
-            .filter(([, value]) => value.trim() !== '')
-            .map(([name]) => name as CannedPlaceholder)}
-          hint={t('tickets:composer.suggest.placeholderHint')}
-          onPick={(name) => {
-            insertAtTrigger(inline.placeholderValues.get(name) ?? '');
-          }}
-          onClose={() => {
-            setDismissedAt(trigger.start);
-            bodyRef.current?.focus();
-          }}
-        />
-      ) : null}
+              }}
+            />
+          ) : null}
+        </>,
+      )}
 
-      {emailReply && detailsOpen ? <SignaturePreview signature={email.signature} /> : null}
+      {emailReply && showDetails ? <SignaturePreview signature={email.signature} /> : null}
       {telegramReply ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           <bdi>{t('tickets:telegram.composerFoot', { bot: telegram.bot })}</bdi>

@@ -154,6 +154,9 @@ export function TicketView({
   // pending send carries which macro — kept by `clientId`, so a retry of a
   // failed send runs the same actions with the same reply.
   const [picking, setPicking] = useState(false);
+  // M14-19: where the composer's lists float, outside its scrolling box.
+  const [listHost, setListHost] = useState<HTMLElement | null>(null);
+  const [collapseSignal, setCollapseSignal] = useState(0);
   const [staged, setStaged] = useState<StagedMacro | null>(null);
   const macroBySend = useRef(new Map<string, StagedMacro>());
   // M10-08: the files of each send, so a reply the platform's window refuses
@@ -351,6 +354,8 @@ export function TicketView({
         tone: 'success',
         message: t(message.kind === 'note' ? 'tickets:toast.noted' : 'tickets:toast.replied'),
       });
+      // The next reply starts compact (M14-19).
+      setCollapseSignal(Date.now());
 
       // "Then set status" is applied after the send, never with it: a status
       // moved by a reply that never left would be a lie about what happened.
@@ -1227,6 +1232,17 @@ export function TicketView({
                 />
               </Box>
             ) : null}
+            <Box
+              ref={setListHost}
+              sx={{
+                position: 'absolute',
+                insetInline: 20,
+                insetBlockEnd: '100%',
+                // The lists cap and scroll themselves (SuggestionList), so this
+                // box does not: a scroller nobody can focus fails axe.
+                zIndex: 2,
+              }}
+            />
             <Box sx={{ padding: 5, maxHeight: COMPOSER_CAP, overflowY: 'auto' }}>
               {staged === null ? null : (
                 <StagedMacroChips
@@ -1258,6 +1274,8 @@ export function TicketView({
                 // measures against; the api is the one that decides either way.
                 attachmentsEnabled={!brand.isPending || brand.isError}
                 focusSignal={focusSignal}
+                collapseSignal={collapseSignal}
+                suggestionHost={listHost}
                 onModeChange={setMode}
                 onBodyChange={setBody}
                 onThenStatusChange={setThenStatusId}

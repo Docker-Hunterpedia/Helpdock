@@ -2,7 +2,7 @@ import type { CustomFieldDef, Ticket, TicketViewingActivity } from '@helpdock/sc
 import { importSourceLink } from '@helpdock/schemas';
 import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
 import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
@@ -65,6 +65,8 @@ export function TicketHeader({
   const t = useT();
   const tokens = useSemanticTokens();
   const [first, ...rest] = viewers;
+  const subjectRef = useRef<HTMLHeadingElement | null>(null);
+  const [subjectTip, setSubjectTip] = useState(false);
   const importedUrl = importSourceLink(ticket.imported?.url);
   const pinnedValue = pinnedValueOf(ticket, pinnedField);
 
@@ -90,8 +92,21 @@ export function TicketHeader({
           </Typography>
           {/* M14-19: one line, whatever the subject's length. The tooltip gives
               the heading its full text as its name and shows it on hover. */}
-          <Tooltip title={ticket.subject} placement="bottom-start">
+          <Tooltip
+            title={ticket.subject}
+            placement="bottom-start"
+            open={subjectTip}
+            // Only a subject that is cut off needs saying again.
+            onOpen={() => {
+              const node = subjectRef.current;
+              setSubjectTip(node !== null && node.scrollWidth > node.clientWidth);
+            }}
+            onClose={() => {
+              setSubjectTip(false);
+            }}
+          >
             <Typography
+              ref={subjectRef}
               variant="h2"
               component="h2"
               dir="auto"

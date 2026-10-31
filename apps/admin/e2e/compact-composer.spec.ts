@@ -105,6 +105,15 @@ test.describe('the compact composer at 1280 × 720', () => {
 
     await expect(heading).toHaveCSS('white-space', 'nowrap');
     await expect(heading).toHaveCSS('text-overflow', 'ellipsis');
+    // It fits here, so there is nothing more for a tooltip to say.
+    await heading.hover();
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+    // Cut off, it is read in full on hover.
+    await heading.evaluate((node) => {
+      node.style.maxWidth = '120px';
+    });
+    await page.mouse.move(0, 0);
     await heading.hover();
     await expect(page.getByRole('tooltip')).toHaveText(subject);
   });
@@ -135,18 +144,42 @@ test.describe('the compact composer at 1280 × 720', () => {
     await expect(list).toBeVisible();
     await page.keyboard.press('[');
     await expect(list).toBeHidden();
+    // Focus follows the list away, to the button that brings it back...
+    const show = page.getByRole('button', { name: t('tickets:list.open') });
+    await expect(show).toBeFocused();
     await page.keyboard.press('[');
     await expect(list).toBeVisible();
+    // ...and returns to the open ticket's row.
+    await expect(list.getByRole('link', { name: /HD-1042/ })).toBeFocused();
 
     await page.keyboard.press('[');
-    await page.getByRole('button', { name: t('tickets:list.open') }).click();
+    await show.click();
     await expect(list).toBeVisible();
   });
 
-  test('sends from the keyboard and keeps the composer as it was when the text goes', async ({
+  test('opens the slash list above the composer, with its active option in view', async ({
     page,
     appLocale: locale,
   }) => {
+    const { t, body } = await open(page, locale);
+
+    await body.click();
+    await body.pressSequentially('/');
+    const list = page.getByRole('listbox', { name: t('tickets:composer.suggest.savedReplies') });
+    await expect(list).toBeInViewport({ ratio: 1 });
+    const toolbar = page.getByRole('button', { name: t('tickets:email.send') });
+    const above = ((await list.boundingBox())?.y ?? 0) + ((await list.boundingBox())?.height ?? 0);
+    expect(above).toBeLessThanOrEqual((await toolbar.boundingBox())?.y ?? 0);
+
+    const options = list.getByRole('option');
+    const count = await options.count();
+    for (let step = 0; step < Math.min(count, 12); step += 1) {
+      await page.keyboard.press('ArrowDown');
+    }
+    await expect(list.getByRole('option', { selected: true })).toBeInViewport();
+  });
+
+  test('sends from the keyboard and goes back to one line', async ({ page, appLocale: locale }) => {
     const { t, summary, body } = await open(page, locale);
 
     await summary.click();
@@ -155,7 +188,8 @@ test.describe('the compact composer at 1280 × 720', () => {
 
     await expect(page.getByText(t('tickets:toast.replied'))).toBeVisible();
     await expect(body).toHaveValue('');
-    await expect(summary).toHaveAttribute('aria-expanded', 'true');
+    // The next reply starts compact.
+    await expect(summary).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('has one macro entry: no header button, the composer’s button, and the palette', async ({

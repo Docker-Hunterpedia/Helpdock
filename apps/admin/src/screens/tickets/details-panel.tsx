@@ -149,7 +149,7 @@ export function DetailsPanel({
   const statusKeys = useAriaKeyShortcuts('ticket.status');
   const priorityKeys = useAriaKeyShortcuts('ticket.priority');
 
-  // In the drawer below 1280 px the panel mounts with the request already
+  // In the drawer below 1440 px the panel mounts with the request already
   // set, so the buttons exist by the time this runs either way.
   useEffect(() => {
     if (request === null) {

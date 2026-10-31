@@ -100,6 +100,33 @@ describe('the composer on an email ticket', () => {
     ).toBeVisible();
   });
 
+  it('keeps the recipients open, with the reason, when the brand has no sender', async () => {
+    const email = new MockEmailApi();
+    const real = await email.ticketEmail('brand', MOCK_TICKET_REFUND);
+    vi.spyOn(email, 'ticketEmail').mockResolvedValue({ ...real, senders: [], selectedKey: null });
+    await open(MOCK_TICKET_REFUND, email);
+
+    expect(await within(composer()).findByText(/No sender is set up for this brand/)).toBeVisible();
+    expect(within(composer()).getByText('Signature · added when sent')).toBeVisible();
+    expect(
+      within(composer()).queryByRole('button', { name: /^To Mona Khalil/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('goes back to one line after a reply was sent', async () => {
+    const { user } = await open(MOCK_TICKET_REFUND);
+
+    const line = await summary();
+    await user.click(line);
+    await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'On its way.');
+    await user.click(within(composer()).getByRole('button', { name: 'Send email' }));
+
+    await screen.findByText('Reply sent');
+    await waitFor(() => {
+      expect(line).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   it("goes out from the department's sender, to the contact, with the signature it will carry", async () => {
     const { user } = await open(MOCK_TICKET_REFUND);
 

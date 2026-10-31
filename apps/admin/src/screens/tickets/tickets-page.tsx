@@ -79,8 +79,9 @@ import { SaveViewDialog } from './view-dialogs.tsx';
  * means — see it for the rules.
  *
  * **The columns of DESIGN §6.5** are 220 · 360 · flexible · 300. Below 1440 px
- * (M14-19: it was 1280, which left the thread about 400 px) the details panel becomes a drawer; below 1024 px the list does too, which is
- * the same breakpoint at which the shell's own sidebar becomes one.
+ * (M14-19: it was 1280, which left the thread about 400 px) the details panel
+ * becomes a drawer; below 1024 px the list does too, which is the same
+ * breakpoint at which the shell's own sidebar becomes one.
  */
 
 /** The list shortcuts the workspace answers; `e` is the open ticket's (`ticket-view.tsx`). */
@@ -136,6 +137,8 @@ export function TicketsPage(): ReactNode {
   const [listOpen, setListOpen] = useState(false);
   // M14-19: `[` puts the list column away on a wide screen, leaving the thread the room.
   const [listHidden, setListHidden] = useState(false);
+  const showListButton = useRef<HTMLButtonElement | null>(null);
+  const focusAfterToggle = useRef<'button' | 'row' | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -202,6 +205,25 @@ export function TicketsPage(): ReactNode {
   }, [intent, setParams]);
 
   const query = useMemo(() => queryOf(filters), [filters]);
+
+  // `[` moves the list away from under the caret: focus goes to the button that
+  // brings it back, and returns to the open ticket's row when it does.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `listHidden` is the trigger; `ticketId` is read at that moment.
+  useEffect(() => {
+    const target = focusAfterToggle.current;
+    focusAfterToggle.current = null;
+    if (target === 'button') {
+      showListButton.current?.focus();
+    } else if (target === 'row') {
+      requestAnimationFrame(() => {
+        const row =
+          ticketId === null ? null : document.querySelector(`[data-ticket-id="${ticketId}"] a`);
+        if (row instanceof HTMLElement) {
+          row.focus();
+        }
+      });
+    }
+  }, [listHidden]);
 
   // Until the views arrive the URL's `view` means nothing yet, and reading the
   // whole desk meanwhile would flash tickets the view does not hold.
@@ -416,7 +438,10 @@ export function TicketsPage(): ReactNode {
       : null,
     'list.toggleColumn': wideList
       ? () => {
-          setListHidden((hidden) => !hidden);
+          setListHidden((hidden) => {
+            focusAfterToggle.current = hidden ? 'row' : 'button';
+            return !hidden;
+          });
         }
       : null,
     // Attached only while something is ticked, so Esc is the page's otherwise.
@@ -589,10 +614,12 @@ export function TicketsPage(): ReactNode {
         {!wideList || listHidden ? (
           <Box sx={{ padding: 3, borderBlockEnd: `1px solid ${tokens['border.default']}` }}>
             <Button
+              ref={showListButton}
               variant="outlined"
               size="small"
               onClick={() => {
                 if (wideList) {
+                  focusAfterToggle.current = 'row';
                   setListHidden(false);
                 } else {
                   setListOpen(true);

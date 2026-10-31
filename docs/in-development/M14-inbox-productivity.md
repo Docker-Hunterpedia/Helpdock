@@ -1087,7 +1087,7 @@ owner decision D-31.
 Built as above, with these differences and details:
 
 - [x] `canned_responses` gains `shortcut` (varchar 32, lower-cased) and `use_count`
-  (migration `0074_canned_shortcuts`), with three partial unique indexes as the
+  (migration `0077_canned_shortcuts`), with three partial unique indexes as the
   backstop: the brand's items shared with every department, those shared with one
   department, and each person's own. The service checks the wider rule first
   (`shortcutsOverlap` in `macro-rules.ts`): a department's item meets an

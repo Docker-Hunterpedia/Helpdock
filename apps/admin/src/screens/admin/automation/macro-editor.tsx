@@ -111,7 +111,7 @@ export function MacroEditor({
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    const found = problemOf(draft);
+    const found = problemOf(draft, macro);
     setProblem(found === null ? null : t(`macros:editor.problems.${found}`));
     if (found === null) {
       onSubmit(draft);
@@ -383,7 +383,9 @@ export function MacroEditor({
                 <li key={`${language}-${problem.kind}-${problem.text}`}>
                   {problem.kind === 'unknown'
                     ? t('macros:editor.placeholderErrors.unknown', { text: problem.text })
-                    : t('macros:editor.placeholderErrors.unclosed', { text: problem.text })}
+                    : problem.kind === 'fallback'
+                      ? t('macros:editor.placeholderErrors.fallback', { text: problem.text })
+                      : t('macros:editor.placeholderErrors.unclosed', { text: problem.text })}
                   {problem.kind === 'unknown' && problem.suggestion !== null
                     ? ` ${t('macros:editor.placeholderErrors.didYouMean', { name: `{{${problem.suggestion}}}` })}`
                     : null}

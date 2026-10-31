@@ -56,7 +56,7 @@ a path into an object.
 **Fallbacks (M14-14).** `{{contact.first_name|there}}` renders "there" when the
 value is empty or this ticket cannot give one (a ticket with no contact). The
 words after `|` are literal text: they are never read as another placeholder,
-and a fallback cannot hold `{`, `}` or `|`. Without a fallback an empty value
+and a fallback cannot hold `{`, `}` or `|` (a save with one is refused). Without a fallback an empty value
 renders as nothing, as before.
 
 **Checked when you save (M14-14).** The editor lists every placeholder that is
@@ -64,10 +64,12 @@ not on the list above and every `{{` with no closing `}}`, under the reply and
 by language, with the nearest real name when it is a likely typo
 ("Unknown placeholder `{{agent.nmae}}`. Did you mean `{{agent.name}}`?"), and
 will not save until they are fixed. The api refuses the same text with
-`400` naming each one, on create and on any update that sends bodies. An item
-saved before this check that still holds a typo keeps working, and can be
-renamed or re-scoped without touching its text; rendering leaves the typo as
-written.
+`400` naming each one, on create and on any update that sends bodies. A
+fallback is one run of text without `|`, `{` or `}` (the renderer reads no
+more), so `{{contact.first_name|Sir|Madam}}` is refused too. An item saved
+before this check that still holds a typo keeps working, and can be renamed or
+re-scoped without touching its text (the editor and the api only re-check text
+that changed); rendering leaves the typo as written.
 
 ## Shortcuts
 
@@ -82,8 +84,13 @@ opening the picker.
   cannot share one, a personal item cannot take a shortcut a shared item has,
   and two people may each keep the same personal shortcut. Saving a taken one
   is refused with the ticketing refusal `shortcut-taken` (409) and the field
-  says so. A database index per scope backs the check against two saves at
-  once. If a person's personal shortcut and a shared one still meet (the shared
+  says so. Only items you can see count, so a refusal never reveals a
+  colleague's personal item or a department you do not work in. The check runs
+  under a transaction lock on the brand and the word, so two saves in different
+  scopes take turns; a partial unique index per scope backs up saves in one
+  scope. The check runs only when a save changes the shortcut, the scope or the
+  department, so an item whose shortcut later collided can still be renamed or
+  re-worded. If a person's personal shortcut and a shared one still meet (the shared
   item was created by someone who cannot see the personal one), `/word` offers
   the person's own first.
 - Nothing is inserted until you choose. `/` opens a list under the text as soon

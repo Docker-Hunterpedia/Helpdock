@@ -141,8 +141,15 @@ export function MacrosTab(): ReactNode {
   );
   const update = useTicketingAction(
     (input: { macro: Macro; draft: MacroDraft }) => {
-      const { kind: _kind, ...request } = requestOf(input.draft);
-      return api.updateMacro(brand.id, input.macro.id, request);
+      const { kind: _kind, bodies, ...request } = requestOf(input.draft);
+      // Text left as it was is not sent, so the api does not re-check an old typo.
+      const textChanged =
+        bodies.en !== input.macro.bodies.en || bodies.ar !== input.macro.bodies.ar;
+      return api.updateMacro(
+        brand.id,
+        input.macro.id,
+        textChanged ? { ...request, bodies } : request,
+      );
     },
     (input) => t('macros:toast.updated', { name: input.draft.name.trim() }),
     refresh,

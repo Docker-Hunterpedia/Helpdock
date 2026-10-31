@@ -16,7 +16,7 @@ import { useTicketingApi } from '../../auth/session.tsx';
 import { matchSavedReplies } from './saved-reply-order.js';
 
 /**
- * The lists that open under the composer's text as one types (DESIGN §6.3
+ * The lists that open under the composer's text as one types (DESIGN §6.1 SuggestionList and MentionPicker,
  * `Admin/Composer-Shortcuts`): `/refund` offers the saved replies and macros.
  *
  * Focus stays in the textarea. The list is a listbox the textarea points at

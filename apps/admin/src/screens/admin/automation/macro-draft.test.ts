@@ -149,6 +149,17 @@ describe('the shortcut (M14-14)', () => {
 });
 
 describe('the save-time placeholder check (M14-14)', () => {
+  it('does not re-check a reply left as it was, so an old item can be renamed', () => {
+    const old = { bodies: { en: 'Hi {{agent.nmae}}', ar: '' } };
+
+    expect(problemOf(draft({ en: 'Hi {{agent.nmae}}', name: 'Renamed' }), old)).toBeNull();
+    expect(problemOf(draft({ en: 'Hi {{agent.nmae}}!' }), old)).toBe('placeholders');
+  });
+
+  it('refuses a fallback the renderer would not read', () => {
+    expect(problemOf(draft({ en: '{{contact.first_name|Sir|Madam}}' }))).toBe('placeholders');
+  });
+
   it('refuses an unknown placeholder or an unclosed {{, in either language', () => {
     expect(problemOf(draft({ en: 'Hi {{agent.nmae}}' }))).toBe('placeholders');
     expect(problemOf(draft({ en: 'Hi', ar: 'مرحبا {{' }))).toBe('placeholders');

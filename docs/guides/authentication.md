@@ -5,7 +5,7 @@ has to configure. Specified by [REQUIREMENTS
 §5.1](../planning/REQUIREMENTS.md#51-security-non-negotiable), [ARCHITECTURE
 §7](../planning/ARCHITECTURE.md#7-auth-design) and [DOMAIN-RULES
 §1.4](../planning/DOMAIN-RULES.md#14-workers-and-websockets), §4.6 and §12.
-Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01, adding and managing passkeys by M18-02 and a passkey as a second factor by M18-03.
+Implemented by M0-05 and M11-01–06; the passkey foundation by M18-01, adding and managing passkeys by M18-02, a passkey as a second factor by M18-03, passwordless sign-in by M18-04, SSO and break-glass integration by M18-05, the passkey screens by M18-06, OAuth identities bound by subject by M18-07 and Microsoft sign-in by M18-08. Setting up the Google, Microsoft and GitHub apps, step by step, is [sign-in providers](sign-in-providers.md).
 
 Visitors (the widget, M4) and API keys (M8) are different principals with
 different credentials and are not covered here. What an account may *do* once it
@@ -1095,13 +1095,22 @@ the same.
 - **GitHub:** everybody who signed in with GitHub gets `oauth-link-required`
   once. They sign in with their password or a sign-in link, then connect GitHub
   from Your account → Security.
+- **Passkeys:** nothing changes until somebody adds one. The first successful
+  registration pins the relying party ID to the host of `APP_URL`
+  ([The RP ID is pinned](#the-rp-id-is-pinned)), so set `APP_URL` to the address
+  staff will keep using before the first passkey is added. If it changes later,
+  passkeys pause and every other method keeps working until an install admin
+  moves them, which removes every passkey.
 
 ### Configuring a provider
 
-An install admin sets these under **Settings → Install → Authentication** (or
+The step-by-step setup of each provider's app is [sign-in providers](sign-in-providers.md). An install admin sets these under **Settings → Install → Authentication** (or
 with the matching `HD_*` environment variable). The page shows the exact
-redirect URLs derived from `APP_URL`. A provider with no client id or client
-secret is reported as disabled and its button is not drawn.
+redirect URLs derived from `APP_URL`. A provider with no client id is reported as
+disabled and its button is not drawn; Microsoft also needs its tenant id and
+client secret. Google and GitHub are drawn on the client id alone, so a missing
+or wrong secret shows after the consent screen as "That account cannot sign in
+here. Ask an administrator to invite you." ([#428](https://github.com/Docker-Hunterpedia/Helpdock/issues/428)).
 
 Client secrets are write-only: after one is saved the browser receives only
 `clientSecretConfigured: true` and a fixed mask. Replacing it opens an empty
@@ -1171,6 +1180,8 @@ whole budget at the end of one window and again at the start of the next.
 | Sign-in password step, per address | 10 failures per 15 minutes |
 | Sign-in password, second-factor and passkey sign-in steps, per IP | 100 failures per 15 minutes |
 | Passkey sign-in options, per IP (`passkey-signin-options`) | 120 per 15 minutes |
+| Options for adding a passkey from the security page (`passkey-options`), per account | 30 per 15 minutes |
+| Options for a passkey second factor or enrolment while signing in (`passkey-ceremony-options`), per account | 30 per 15 minutes |
 | SSO discovery, per IP (`sso-discovery`) | 20 per minute |
 | SSO starts, per IP (`sso-start`) | 20 per minute |
 | SSO OIDC callbacks, per IP (`sso-callback`) | 40 per minute |
@@ -1181,6 +1192,7 @@ whole budget at the end of one window and again at the start of the next.
 | Sign-in link and password reset, per IP | 30 per 15 minutes |
 | Reading or accepting an invitation, per IP | 30 per 15 minutes |
 | Re-proving a credential from inside a session, per account | 5 per 15 minutes |
+| "Was this helpful?" on a help center article (`hc-feedback-ip`), per IP and brand | 30 per 15 minutes |
 
 The per-address bucket guards the password and is spent only by the password
 step. The per-IP bucket is spent by the password step, by a passwordless passkey

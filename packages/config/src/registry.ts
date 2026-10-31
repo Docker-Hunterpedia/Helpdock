@@ -135,7 +135,8 @@ export const SETTING_DEFINITIONS = [
     default: '',
     secret: false,
     scope: 'install',
-    description: 'Google OAuth client id for staff sign-in. Empty disables the button.',
+    description:
+      'Google OAuth client id for staff sign-in. Empty, or an empty client secret, disables the button.',
   }),
   defineSetting({
     key: 'oauth.google.clientSecret',
@@ -187,7 +188,7 @@ export const SETTING_DEFINITIONS = [
     secret: false,
     scope: 'install',
     description:
-      'Microsoft Entra application (client) id for staff sign-in. Empty, or an empty tenant id, disables the button.',
+      'Microsoft Entra application (client) id for staff sign-in. Empty, or an empty tenant id or client secret, disables the button.',
   }),
   defineSetting({
     key: 'oauth.microsoft.clientSecret',
@@ -203,7 +204,8 @@ export const SETTING_DEFINITIONS = [
     default: '',
     secret: false,
     scope: 'install',
-    description: 'GitHub OAuth client id for staff sign-in. Empty disables the button.',
+    description:
+      'GitHub OAuth client id for staff sign-in. Empty, or an empty client secret, disables the button.',
   }),
   defineSetting({
     key: 'oauth.github.clientSecret',

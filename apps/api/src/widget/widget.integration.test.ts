@@ -22,6 +22,7 @@ import {
   userBrandRoles,
   users,
   uuidv7,
+  widgetSettings,
   widgetVisitors,
   withSystem,
 } from '@helpdock/db';
@@ -590,37 +591,56 @@ describe.skipIf(!hasDocker)('the chat widget', () => {
         label: 'Order reference',
         type: 'text',
       });
-      const saved = await staff('PUT', `/api/brands/${seeded.brandId}/widget/conversation`, ada, {
+      const conversation = {
         prechatEnabled: true,
+        showAgentIdentity: true,
+        whenUnavailable: 'form',
+        transcriptEnabled: false,
+      };
+      const url = `/api/brands/${seeded.brandId}/widget/conversation`;
+      // The settings refuse a person field outright ...
+      const refused = await staff('PUT', url, ada, {
+        ...conversation,
         prechatFields: [
           { kind: 'custom', key: 'owner', required: false },
           { kind: 'custom', key: 'order_ref', required: false },
         ],
-        showAgentIdentity: true,
-        whenUnavailable: 'form',
-        transcriptEnabled: false,
+      });
+      expect(refused.status).toBe(400);
+      const saved = await staff('PUT', url, ada, {
+        ...conversation,
+        prechatFields: [{ kind: 'custom', key: 'order_ref', required: false }],
       });
       expect(saved.status).toBe(200);
+      // ... and if a row written before the rule asks for one anyway, neither
+      // the config nor a visitor's answer gets through.
+      await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.update(widgetSettings).set({
+          conversation: {
+            ...conversation,
+            prechatFields: [
+              { kind: 'custom', key: 'owner', required: false },
+              { kind: 'custom', key: 'order_ref', required: false },
+            ],
+          } as never,
+        }),
+      );
 
       const config = await widget<WidgetConfig>('GET', '/config');
       expect(config.body.prechat.fields.map((field) => field.key)).toEqual(['order_ref']);
 
-      const staffId = seeded.userId;
-      const strangerId = uuidv7();
-      for (const answer of [staffId, strangerId]) {
-        const visitor = await newVisitor();
-        const started = await start(visitor, {
-          prechat: { custom: { owner: answer, order_ref: 'A-1' } },
-        });
-        // Staff and not staff are answered alike: the field is simply not one a visitor has.
-        expect(started.status).toBe(201);
-        const ticket = await staff<TicketDetail>(
-          'GET',
-          `/api/brands/${seeded.brandId}/tickets/${started.body.conversation.id}`,
-          ada,
-        );
-        expect(ticket.body.ticket.custom).toEqual({ order_ref: 'A-1' });
-      }
+      // A member of staff's id is accepted by no other path for a visitor; here it is ignored.
+      const visitor = await newVisitor({}, '203.0.113.77');
+      const started = await start(visitor, {
+        prechat: { custom: { owner: seeded.userId, order_ref: 'A-1' } },
+      });
+      expect(started.status).toBe(201);
+      const ticket = await staff<TicketDetail>(
+        'GET',
+        `/api/brands/${seeded.brandId}/tickets/${started.body.conversation.id}`,
+        ada,
+      );
+      expect(ticket.body.ticket.custom).toEqual({ order_ref: 'A-1' });
     });
   });
 

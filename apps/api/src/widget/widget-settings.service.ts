@@ -10,8 +10,9 @@ import type {
   WidgetSignedIdentity,
   WidgetSigningSecret,
 } from '@helpdock/schemas';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { readContentPolicy } from '../media/content-policy.js';
+import { readFieldRules } from '../ticketing/custom-values.js';
 import { resolveCaptcha, resolveWidgetSettings } from './resolved-settings.js';
 import { issueSigningSecret } from './visitor-credential.js';
 import { CAPTCHA_KEYS, type WidgetSettingsRepository } from './widget-settings.repository.js';
@@ -116,6 +117,18 @@ export class WidgetSettingsService {
     context: WidgetAdminContext,
     conversation: WidgetConversationSettings,
   ): Promise<WidgetSettings> {
+    // A visitor cannot choose a staff member, so a person field is never asked (M14-27).
+    const customKeys = conversation.prechatFields.flatMap((field) =>
+      field.kind === 'custom' ? [field.key] : [],
+    );
+    if (customKeys.length > 0) {
+      const staffOnly = (await readFieldRules(context.tx, 'ticket')).filter(
+        (rule) => rule.type === 'person' && customKeys.includes(rule.key),
+      );
+      if (staffOnly.length > 0) {
+        throw new BadRequestException('A person field cannot be asked in the pre-chat');
+      }
+    }
     await this.#repository.upsert(context.tx, context.brandId, { conversation });
     await this.#audit(context, 'widget.conversation_updated', { ...conversation });
     return this.view(context);

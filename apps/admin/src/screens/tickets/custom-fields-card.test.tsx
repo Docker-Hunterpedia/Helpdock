@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { SessionProvider } from '../../auth/session.tsx';
 import { renderApp } from '../../test/render.tsx';
 import { signedInMockApis } from '../../test/signed-in.js';
+import { MockTicketingApi } from '../../ticketing/mock-api.js';
 import { CustomFieldsCard } from './custom-fields-card.tsx';
 
 /**
@@ -275,5 +276,54 @@ describe('CustomFieldsCard, the M14-27 types', () => {
 
       expect(screen.getAllByText('—')).toHaveLength(4);
     });
+  });
+});
+
+describe('CustomFieldsCard, a person field when the people cannot be read (M14-27)', () => {
+  const OWNER = def('person', 'Owner');
+  const STORED = '0192c3f0-1a2b-7c3d-8e4f-00000000000b';
+  let session: Session;
+  beforeAll(async () => {
+    const signedIn = await (await signedInMockApis()).auth.me();
+    if (!signedIn) throw new Error('Missing session');
+    session = signedIn;
+  });
+
+  const renderFailing = (canWrite: boolean) => {
+    const ticketingApi = new MockTicketingApi();
+    vi.spyOn(ticketingApi, 'customFieldPeople').mockRejectedValue(new Error('down'));
+
+    return renderApp(
+      <SessionProvider session={session}>
+        <CustomFieldsCard
+          fields={[OWNER]}
+          values={{ person: STORED }}
+          canWrite={canWrite}
+          onSave={vi.fn()}
+        />
+      </SessionProvider>,
+      { ticketingApi },
+    );
+  };
+
+  it('shows a neutral dash, not "Former staff member", for a reader', async () => {
+    renderFailing(false);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText('Former staff member')).toBeNull();
+  });
+
+  it('holds the stored value as a disabled "—" instead of "Nobody" in the editor', async () => {
+    renderFailing(true);
+
+    const select = screen.getByRole('combobox', { name: 'Owner' });
+    await waitFor(() => {
+      expect(select).toHaveAttribute('aria-disabled', 'true');
+    });
+    expect(select).toHaveTextContent('—');
+    expect(select).not.toHaveTextContent('Nobody');
+    expect(screen.queryByText('Former staff member')).toBeNull();
   });
 });

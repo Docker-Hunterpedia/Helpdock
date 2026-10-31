@@ -96,18 +96,21 @@ export function PersonSelect({
   onChange(next: string): void;
 }): ReactNode {
   const t = useT();
-  const { people, loaded } = usePeople();
+  const { people, loaded, failed } = usePeople();
   const former = value !== '' && loaded && !people.some((person) => person.userId === value);
   // Until the list arrives the select cannot show the stored name, so it holds an empty value rather than a mismatched one.
   const shown =
-    value === '' || former || people.some((person) => person.userId === value) ? value : '';
+    value === '' || former || failed || people.some((person) => person.userId === value)
+      ? value
+      : '';
 
   return (
     <TextField
       id={id}
       select
       size="small"
-      disabled={disabled}
+      // A failed read leaves nothing to choose from, and must not read as "Nobody".
+      disabled={disabled || failed}
       value={shown}
       onChange={(event) => {
         onChange(event.target.value);
@@ -124,6 +127,9 @@ export function PersonSelect({
       }}
     >
       <MenuItem value="">{t('tickets:details.personNone')}</MenuItem>
+      {failed && value !== '' ? (
+        <MenuItem value={value}>{t('tickets:details.customNone')}</MenuItem>
+      ) : null}
       {former ? <MenuItem value={value}>{t('tickets:details.personFormer')}</MenuItem> : null}
       {people.map((person) => (
         <MenuItem key={person.userId} value={person.userId}>

@@ -143,7 +143,9 @@ export function RulesTab({
           </AlertBanner>
         )}
 
-        {rules.data === undefined ? (
+        {rules.isError ? (
+          <AlertBanner tone="danger">{t('rules:list.loadFailed')}</AlertBanner>
+        ) : rules.data === undefined ? (
           <LoadingSkeleton label={t('rules:list.loading')} />
         ) : rows.length === 0 ? (
           <EmptyState

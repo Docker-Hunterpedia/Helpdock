@@ -51,7 +51,8 @@
       "title": "Delete {{name}}?",
       "body": "The rule stops at once. Its runs stay in the execution log.",
       "submit": "Delete rule"
-    }
+    },
+    "loadFailed": "The rules could not be loaded."
   },
   "intervals": {
     "15": "15 minutes",

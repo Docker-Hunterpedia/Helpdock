@@ -45,7 +45,8 @@
       "heading": "No saved replies yet",
       "body": "Answer common questions in one step, with /shortcut.",
       "action": "New saved reply"
-    }
+    },
+    "loadFailed": "The saved replies could not be loaded."
   },
   "editor": {
     "new": {

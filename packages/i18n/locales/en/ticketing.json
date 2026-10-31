@@ -703,7 +703,8 @@
       "title": "Delete {{name}}?",
       "body": "It goes from the sidebar of everyone it is shared with. No ticket changes.",
       "submit": "Delete view"
-    }
+    },
+    "loadFailed": "The views could not be loaded."
   },
   "businessHours": {
     "heading": "Business hours",

@@ -37,6 +37,7 @@ import { EmptyState } from '../../../shell/empty-state.tsx';
 import { ticketFieldsFor } from '../../../tickets/custom-values.js';
 import { ticketKeys } from '../../../tickets/keys.js';
 import { filtersOfView, viewLabel } from '../../../tickets/views.js';
+import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Label } from '../../../ui/label.tsx';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
@@ -198,7 +199,9 @@ export function ViewsTab(): ReactNode {
           </Button>
         </Box>
 
-        {views.isPending ? (
+        {views.isError ? (
+          <AlertBanner tone="danger">{t('ticketing:views.loadFailed')}</AlertBanner>
+        ) : views.isPending ? (
           <LoadingSkeleton label={t('ticketing:views.loading')} />
         ) : rows.length === 0 ? (
           <EmptyState

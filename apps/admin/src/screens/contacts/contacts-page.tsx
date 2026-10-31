@@ -11,7 +11,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Plus, Search, TriangleAlert, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -21,6 +21,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { AlertBanner } from '../../ui/alert-banner.tsx';
 import { LoadingSkeleton } from '../../ui/loading-skeleton.tsx';
 import { useDebounced } from '../../ui/use-debounced.js';
 import { AccountDialog } from './contact-dialogs.tsx';
@@ -56,6 +57,7 @@ export function ContactsPage(): ReactNode {
   const [params, setParams] = useSearchParams();
 
   const brand = currentBrand(session);
+  const canWrite = session.user.role !== 'viewer';
   const tab: Tab = params.get('tab') === 'accounts' ? 'accounts' : 'people';
   const search = params.get('q') ?? '';
   const accountId = params.get('account') ?? undefined;
@@ -100,12 +102,14 @@ export function ContactsPage(): ReactNode {
     queryKey: ['contacts', brand.id, query],
     queryFn: () => api.listContacts(brand.id, query),
     enabled: tab === 'people',
+    placeholderData: keepPreviousData,
   });
 
   const accounts = useQuery({
     queryKey: ['accounts', brand.id, search],
     queryFn: () => api.listAccounts(brand.id, search === '' ? {} : { search }),
     enabled: tab === 'accounts',
+    placeholderData: keepPreviousData,
   });
 
   // The caption counts the whole brand, whichever tab is open and whatever is
@@ -167,18 +171,20 @@ export function ContactsPage(): ReactNode {
           accounts: t('contacts:accountCount', { count: brandAccounts.data?.total ?? 0 }),
         })}
         action={
-          <Button
-            variant="contained"
-            onClick={() => {
-              if (tab === 'accounts') {
-                setAccountDialogOpen(true);
-              } else {
-                void navigate(ROUTES.contactNew);
-              }
-            }}
-          >
-            {t(tab === 'accounts' ? 'contacts:newAccount' : 'contacts:newContact')}
-          </Button>
+          canWrite ? (
+            <Button
+              variant="contained"
+              onClick={() => {
+                if (tab === 'accounts') {
+                  setAccountDialogOpen(true);
+                } else {
+                  void navigate(ROUTES.contactNew);
+                }
+              }}
+            >
+              {t(tab === 'accounts' ? 'contacts:newAccount' : 'contacts:newContact')}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -291,7 +297,9 @@ export function ContactsPage(): ReactNode {
         </Box>
       ) : null}
 
-      {tab === 'people' && contacts.isPending ? (
+      {(tab === 'people' ? contacts : accounts).isError ? (
+        <AlertBanner tone="danger">{t('contacts:loadFailed')}</AlertBanner>
+      ) : tab === 'people' && contacts.isPending ? (
         <LoadingSkeleton label={t('contacts:loading')} />
       ) : tab === 'people' && firstRun ? (
         <EmptyState
@@ -299,15 +307,17 @@ export function ContactsPage(): ReactNode {
           heading={t('contacts:empty.heading')}
           body={t('contacts:empty.body')}
           action={
-            <Button
-              variant="contained"
-              startIcon={<Plus size={16} aria-hidden="true" />}
-              onClick={() => {
-                void navigate(ROUTES.contactNew);
-              }}
-            >
-              {t('contacts:empty.action')}
-            </Button>
+            canWrite ? (
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  void navigate(ROUTES.contactNew);
+                }}
+              >
+                {t('contacts:empty.action')}
+              </Button>
+            ) : undefined
           }
         />
       ) : tab === 'people' ? (
@@ -377,15 +387,17 @@ export function ContactsPage(): ReactNode {
           heading={t('contacts:empty.accountsHeading')}
           body={t('contacts:empty.accountsBody')}
           action={
-            <Button
-              variant="contained"
-              startIcon={<Plus size={16} aria-hidden="true" />}
-              onClick={() => {
-                setAccountDialogOpen(true);
-              }}
-            >
-              {t('contacts:newAccount')}
-            </Button>
+            canWrite ? (
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  setAccountDialogOpen(true);
+                }}
+              >
+                {t('contacts:newAccount')}
+              </Button>
+            ) : undefined
           }
         />
       ) : (

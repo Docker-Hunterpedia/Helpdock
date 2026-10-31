@@ -2,9 +2,8 @@ import { Button } from '@mui/material';
 import { Plus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useT } from '../../app/i18n.js';
-import { nameIn } from './article-rows.js';
 import { NamesDialog } from './names-dialog.tsx';
-import { useHelpCenter, useReaderLocale, useStructureChange } from './use-help-center.js';
+import { useCreateCategory } from './use-help-center.js';
 
 /**
  * "New category" for an empty help center: the first category, named in the
@@ -12,14 +11,8 @@ import { useHelpCenter, useReaderLocale, useStructureChange } from './use-help-c
  */
 export function NewCategoryButton(): ReactNode {
   const t = useT();
-  const locale = useReaderLocale();
-  const { brand, api } = useHelpCenter();
   const [naming, setNaming] = useState(false);
-
-  const create = useStructureChange(
-    (names: { en: string; ar: string }) => api.createCategory(brand.id, { names }),
-    (names) => t('helpCenter:toast.categoryCreated', { name: nameIn(names, locale) }),
-  );
+  const create = useCreateCategory();
 
   return (
     <>

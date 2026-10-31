@@ -26,6 +26,7 @@ import {
   useTicketsApi,
 } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { latinNumbering } from '../../../ui/format.js';
 import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
@@ -257,7 +258,9 @@ export function MacrosTab(): ReactNode {
           </Box>
         </Box>
 
-        {macros.isPending ? (
+        {macros.isError ? (
+          <AlertBanner tone="danger">{t('macros:list.loadFailed')}</AlertBanner>
+        ) : macros.isPending ? (
           <LoadingSkeleton label={t('macros:list.loading')} />
         ) : rows.length === 0 ? (
           <EmptyState

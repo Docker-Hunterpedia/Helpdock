@@ -246,5 +246,6 @@
     "contacts": "Contacts",
     "domain": "Domain",
     "noDomain": "No domain"
-  }
+  },
+  "loadFailed": "The contacts could not be loaded."
 }

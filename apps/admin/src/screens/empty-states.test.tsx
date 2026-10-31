@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../app/routes.tsx';
+import { MOCK_ROLE_STORAGE } from '../auth/mock-api.js';
 import { renderApp } from '../test/render.tsx';
 import { signedInMockApis } from '../test/signed-in.js';
 
@@ -100,7 +101,7 @@ describe('Contacts', () => {
 });
 
 describe('Help center', () => {
-  it('starts with a category when there is none, and the button opens the naming dialog', async () => {
+  it('starts with a category when there is none, and the button names one', async () => {
     const { apis, rendered } = await render('/help-center');
     const structure = await apis.helpCenter.structure(BRAND);
     vi.spyOn(apis.helpCenter, 'structure').mockResolvedValue({
@@ -109,15 +110,25 @@ describe('Help center', () => {
       sections: [],
       articles: [],
     });
+    const create = vi.spyOn(apis.helpCenter, 'createCategory');
     const { user } = rendered();
 
     await screen.findByRole('heading', { name: 'Start your help center' });
     await user.click(screen.getByRole('button', { name: 'New category' }));
 
-    expect(await screen.findByRole('dialog', { name: 'New category' })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: 'New category' });
+    await user.type(within(dialog).getByLabelText('English name'), 'Payments');
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(expect.any(String), {
+        names: { en: 'Payments', ar: '' },
+      });
+    });
+    expect(await screen.findByText('Category "Payments" created')).toBeInTheDocument();
   });
 
-  it('names the section that has no article and offers New article', async () => {
+  it('says no article exists yet, with no section selected, and offers New article', async () => {
     const { apis, rendered } = await render('/help-center');
     const structure = await apis.helpCenter.structure(BRAND);
     vi.spyOn(apis.helpCenter, 'structure').mockResolvedValue({ ...structure, articles: [] });
@@ -189,5 +200,111 @@ describe('Rules', () => {
 
     const region = await screen.findByRole('status', { name: 'Loading rules' });
     expect(region).toHaveAttribute('aria-busy', 'true');
+  });
+});
+
+describe('a list that cannot be read', () => {
+  const unreadable = async (
+    path: string,
+    spy: (apis: Awaited<ReturnType<typeof render>>['apis']) => void,
+  ) => {
+    const { apis, rendered } = await render(path);
+    spy(apis);
+    rendered();
+  };
+
+  it('says Contacts could not be loaded instead of "No contacts yet"', async () => {
+    await unreadable('/contacts', ({ contacts }) => {
+      vi.spyOn(contacts, 'listContacts').mockRejectedValue(new Error('down'));
+    });
+
+    expect(await screen.findByText('The contacts could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No contacts yet' })).not.toBeInTheDocument();
+  });
+
+  it('says Macros could not be loaded instead of "No saved replies yet"', async () => {
+    await unreadable('/settings/inbox/macros', ({ ticketing }) => {
+      vi.spyOn(ticketing, 'macros').mockRejectedValue(new Error('down'));
+    });
+
+    expect(await screen.findByText('The saved replies could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No saved replies yet' })).not.toBeInTheDocument();
+  });
+
+  it('says Views could not be loaded instead of "No saved views"', async () => {
+    await unreadable('/settings/inbox/views', ({ tickets }) => {
+      vi.spyOn(tickets, 'views').mockRejectedValue(new Error('down'));
+    });
+
+    expect(await screen.findByText('The views could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'No saved views' })).not.toBeInTheDocument();
+  });
+
+  it('stops the Rules skeleton and says the rules could not be loaded', async () => {
+    await unreadable('/settings/inbox/rules', ({ automation }) => {
+      vi.spyOn(automation, 'rules').mockRejectedValue(new Error('down'));
+    });
+
+    expect(await screen.findByText('The rules could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading rules' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Contacts after the first read', () => {
+  it('keeps the table while a search is out, rather than swapping in the skeleton', async () => {
+    const { apis, rendered } = await render('/contacts');
+    const { user } = rendered();
+    await screen.findByText('Mona Khalil');
+    vi.spyOn(apis.contacts, 'listContacts').mockReturnValue(NEVER);
+
+    await user.type(screen.getByRole('textbox', { name: /Name, email/ }), 'jonas');
+
+    await waitFor(() => {
+      expect(apis.contacts.listContacts).toHaveBeenCalled();
+    });
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading contacts' })).not.toBeInTheDocument();
+  });
+});
+
+describe('a Viewer', () => {
+  const asViewer = async (path: string) => {
+    window.localStorage.setItem(MOCK_ROLE_STORAGE, 'viewer');
+    try {
+      return await render(path);
+    } finally {
+      window.localStorage.removeItem(MOCK_ROLE_STORAGE);
+    }
+  };
+
+  it('sees the empty Contacts sentence without Add contact or the header button', async () => {
+    const { apis, rendered } = await asViewer('/contacts');
+    const list = await apis.contacts.listContacts(BRAND);
+    vi.spyOn(apis.contacts, 'listContacts').mockResolvedValue({
+      ...list,
+      contacts: [],
+      total: 0,
+      duplicateCount: 0,
+      nextCursor: null,
+    });
+    rendered();
+
+    expect(await screen.findByRole('heading', { name: 'No contacts yet' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add contact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
+  });
+
+  it('sees the empty Accounts sentence without New account', async () => {
+    const { apis, rendered } = await asViewer('/contacts?tab=accounts');
+    const accounts = await apis.contacts.listAccounts(BRAND);
+    vi.spyOn(apis.contacts, 'listAccounts').mockResolvedValue({
+      ...accounts,
+      accounts: [],
+      total: 0,
+    });
+    rendered();
+
+    expect(await screen.findByRole('heading', { name: 'No accounts yet' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New account' })).not.toBeInTheDocument();
   });
 });

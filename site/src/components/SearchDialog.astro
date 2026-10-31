@@ -14,6 +14,7 @@ const t = {
     loading: 'Searching…',
     none: 'No results for “{q}”. Try another word, or browse the docs.',
     count: '{n} results',
+    countOne: '1 result',
     offline: 'Search is not available here. It works on the built site.',
     move: 'to move',
     open: 'to open',
@@ -29,6 +30,7 @@ const t = {
     loading: 'جارٍ البحث…',
     none: 'لا نتائج عن «{q}». جرّب كلمة أخرى.',
     count: 'عدد النتائج: {n}',
+    countOne: 'نتيجة واحدة',
     offline: 'البحث غير متاح هنا. يعمل في الموقع المبني.',
     move: 'للتنقل',
     open: 'للفتح',
@@ -48,6 +50,7 @@ const resultsId = `search-results-${locale}`;
   data-loading={t.loading}
   data-none={t.none}
   data-count={t.count}
+  data-count-one={t.countOne}
   data-offline={t.offline}
   data-pagefind-ignore
 >

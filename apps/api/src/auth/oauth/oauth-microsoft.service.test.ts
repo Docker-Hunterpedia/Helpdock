@@ -213,6 +213,10 @@ describe('Microsoft complete', () => {
     ['xms_edov false', { xms_edov: false }],
     ['a guest account (acct 1) with a verified domain', { acct: 1 }],
     ['no acct claim, so a guest cannot be told from a member', { acct: undefined }],
+    [
+      'an idp naming another tenant (a B2B member)',
+      { idp: 'https://sts.windows.net/9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d/' },
+    ],
   ])(
     'does not vouch for the address with %s, and verifies none for an invitation',
     async (_why, change) => {

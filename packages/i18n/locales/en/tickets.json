@@ -220,6 +220,15 @@
       "used_one": "Used {{count}} time · {{who}}",
       "used_other": "Used {{count}} times · {{who}}",
       "placeholderHint": "Choosing one inserts its value for this ticket."
+    },
+    "mention": {
+      "label": "People who can see this ticket",
+      "none": "No one who can see this ticket matches.",
+      "count_one": "{{count}} person",
+      "count_other": "{{count}} people",
+      "loading": "Loading people",
+      "error": "People couldn't be loaded.",
+      "retry": "Try again"
     }
   },
   "details": {

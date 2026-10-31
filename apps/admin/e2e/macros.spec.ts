@@ -287,6 +287,71 @@ test.describe('the composer’s macro picker', () => {
     await expect(page.getByText(t('tickets:composer.suggest.none'))).toBeVisible();
   });
 
+  test('@ in a note lists who can see the ticket and writes their handle (M14-15)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    await page.getByRole('button', { name: t('tickets:composer.note'), exact: true }).click();
+    const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+    await body.click();
+    await page.keyboard.type('Can you check this? @om');
+    const list = page.getByRole('listbox', { name: t('tickets:composer.mention.label') });
+    await expect(list.getByRole('option')).toHaveCount(1);
+    await expect(list.getByRole('option')).toContainText('@omar.nasser');
+    expect(await violations(page)).toEqual([]);
+
+    await page.keyboard.press('Enter');
+
+    await expect(list).toBeHidden();
+    await expect(body).toHaveValue('Can you check this? @omar.nasser ');
+    await expect(body).toBeFocused();
+  });
+
+  test('@ finds a colleague typed in Arabic (M14-15)', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    await page.getByRole('button', { name: t('tickets:composer.note'), exact: true }).click();
+    await page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') }).click();
+    await page.keyboard.type('@عمر');
+
+    const list = page.getByRole('listbox', { name: t('tickets:composer.mention.label') });
+    await expect(list.getByRole('option')).toHaveCount(1);
+    await expect(list.getByRole('option')).toContainText('@omar.nasser');
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('@ names nobody who cannot be found, and is not offered in a public reply (M14-15)', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await signIn(page, locale);
+    await openTicket(page, locale);
+
+    const body = page.getByRole('textbox', { name: t('tickets:composer.bodyLabel') });
+    await body.click();
+    await page.keyboard.type('ask @om');
+    await expect(
+      page.getByRole('listbox', { name: t('tickets:composer.mention.label') }),
+    ).toBeHidden();
+
+    await page.getByRole('button', { name: t('tickets:composer.note'), exact: true }).click();
+    await body.fill('');
+    await page.keyboard.type('@zzz');
+    await expect(page.getByText(t('tickets:composer.mention.none'))).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(
+      page.getByRole('listbox', { name: t('tickets:composer.mention.label') }),
+    ).toBeHidden();
+    await expect(body).toHaveValue('@zzz');
+  });
+
   test('{{ inserts the value this ticket gives a placeholder (M14-14)', async ({
     page,
     appLocale: locale,

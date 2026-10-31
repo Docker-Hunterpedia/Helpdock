@@ -7,6 +7,7 @@ import type {
   MacroRunRequest,
   MacroRunResponse,
   MarkSpamRequest,
+  MentionCandidateList,
   MessageCreateRequest,
   RenderedMacro,
   SnoozePresets,
@@ -44,6 +45,7 @@ import {
   bulkResponseSchema,
   bulkUndoResponseSchema,
   macroRunResponseSchema,
+  mentionCandidateListSchema,
   renderedMacroSchema,
   snoozePresetsSchema,
   ticketActivityListSchema,
@@ -392,6 +394,21 @@ export class HttpTicketsApi implements TicketsApi {
         `${this.#ticket(brandId, ticketId)}/macros/${encodeURIComponent(macroId)}/render${
           locale === undefined ? '' : `?locale=${locale}`
         }`,
+      ),
+    );
+  }
+
+  async mentionCandidates(
+    brandId: string,
+    ticketId: string,
+    query = '',
+  ): Promise<MentionCandidateList> {
+    const search = query.trim() === '' ? '' : `?q=${encodeURIComponent(query.trim())}`;
+
+    return mentionCandidateListSchema.parse(
+      await this.#transport.request(
+        'GET',
+        `${this.#ticket(brandId, ticketId)}/mention-candidates${search}`,
       ),
     );
   }

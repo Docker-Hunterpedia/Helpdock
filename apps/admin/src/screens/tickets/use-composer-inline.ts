@@ -77,6 +77,7 @@ export const useComposerInline = (args: UseComposerInlineArgs): ComposerInline =
   return {
     brandId,
     departmentId,
+    ticketId,
     placeholderValues,
     onInsertSaved: async (macro, range) => {
       const word = args.body.slice(range.start, range.end);

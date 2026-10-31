@@ -70,6 +70,37 @@ describe('detectTrigger: the braces', () => {
   });
 });
 
+describe('detectTrigger: the @ (M14-15)', () => {
+  const noteOptions = { slash: false, mention: true };
+
+  it.each([
+    ['@', 1, ''],
+    ['Can you confirm? @om', 20, 'om'],
+    ['line one\n@lina.had', 18, 'lina.had'],
+    ['(@عمر', 5, 'عمر'],
+  ])('opens in a note for %j', (text, caret, query) => {
+    expect(detectTrigger(text, caret, noteOptions)).toEqual({
+      kind: 'mention',
+      start: caret - query.length - 1,
+      end: caret,
+      query,
+    });
+  });
+
+  it.each([
+    ['write to lina@example.com', 25],
+    ['a.@x', 4],
+    ['done @lina.haddad please', 24],
+  ])('leaves %j alone', (text, caret) => {
+    expect(detectTrigger(text, caret, noteOptions)).toBeNull();
+  });
+
+  it('never opens in a public reply', () => {
+    expect(detectTrigger('@om', 3, { slash: true })).toBeNull();
+    expect(detectTrigger('@om', 3, { slash: true, mention: false })).toBeNull();
+  });
+});
+
 describe('replaceRange and replaceTrigger', () => {
   it('puts the text in place and the caret after it', () => {
     expect(replaceRange('Hi /ref bye', 3, 7, 'Refund')).toEqual({

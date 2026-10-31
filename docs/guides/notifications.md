@@ -31,8 +31,18 @@ A team reaches each member by that member's own settings.
 
 ### Mentions
 
-There is no mention picker in the composer; a mention is `@` followed by a
-handle, in any script. A handle names somebody in the brand by, in this order:
+A mention is `@` followed by a handle, in any script. In an internal note,
+typing `@` opens the **mention picker** (M14-15): a list under the text of the
+people who can see **this ticket's department**, with presence, narrowing as you
+type in either script (`@om`, `@عمر`). ↑ and ↓ move, **Tab** or **Enter** write
+the handle and a space, **Esc** puts the list away. It is not offered in a public
+reply, nor after a letter or digit (an email address). It lists only people the
+fan-out would tell (active, able to see the department, not you), and each is
+shown with a handle that resolves to them alone; someone no spelling names
+uniquely is not listed. Typing a handle by hand still works. The list comes from
+`GET /api/brands/:brandId/tickets/:ticketId/mention-candidates?q=`
+(`ticket:write`; a ticket the reader cannot see is `404`; names, handles and
+presence only, never an email address). A handle names somebody in the brand by, in this order:
 
 1. the part of their email address before the `@` — `@lina.haddad`;
 2. their whole name without spaces — `@LinaHaddad`;

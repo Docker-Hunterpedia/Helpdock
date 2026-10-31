@@ -106,8 +106,9 @@ export const mentionHandles = (text: string): readonly string[] => {
  *    note that says `@Omar` in a brand with two Omars tells neither, rather
  *    than telling the wrong one about a conversation they are not in.
  *
- * There is no autocomplete in the composer (no artboard draws one), so this is
- * the whole contract; `docs/guides/notifications.md` states it.
+ * Typing it by hand is the whole contract; the note composer's `@` picker
+ * (M14-15, `mention-candidates.ts`) only writes a handle this function resolves
+ * to the person chosen. `docs/guides/notifications.md` states it.
  */
 export const resolveMention = (
   handle: string,

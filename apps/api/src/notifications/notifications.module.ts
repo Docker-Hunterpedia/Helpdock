@@ -3,8 +3,11 @@ import type { Db } from '@helpdock/db';
 import { type DynamicModule, Module } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { RateLimiter } from '../auth/rate-limit.js';
+import { PresenceStore } from '../realtime/presence.store.js';
 import { DB, ENV, REDIS, SETTINGS } from '../runtime/tokens.js';
 import { InstallChannels } from './install-channels.js';
+import { MentionCandidatesController } from './mention-candidates.controller.js';
+import { MentionCandidatesService } from './mention-candidates.service.js';
 import {
   NotificationPreferencesController,
   NotificationsController,
@@ -31,6 +34,7 @@ export class NotificationsModule {
         NotificationsController,
         NotificationPreferencesController,
         UnsubscribeController,
+        MentionCandidatesController,
       ],
       providers: [
         {
@@ -55,6 +59,13 @@ export class NotificationsModule {
               },
             );
           },
+        },
+        {
+          // M14-15. Presence is read from M0-13's keys, as the assignee picker does.
+          provide: MentionCandidatesService,
+          inject: [REDIS],
+          useFactory: (redis: Redis): MentionCandidatesService =>
+            new MentionCandidatesService(new NotificationsRepository(), new PresenceStore(redis)),
         },
         {
           provide: UnsubscribeService,

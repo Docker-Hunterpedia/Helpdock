@@ -13,6 +13,7 @@ import type {
   MacroRunRequest,
   MacroRunResponse,
   MarkSpamRequest,
+  MentionCandidateList,
   MergedTicket,
   MessageCreateRequest,
   RelatedTicket,
@@ -126,6 +127,9 @@ import { MockViews } from './mock-views.js';
  */
 
 const [SUPPORT, BILLING] = MOCK_DEPARTMENTS;
+
+/** How a mention search finds a colleague typed in Arabic; the real api matches the name as stored. */
+const MOCK_ARABIC_NAMES: Readonly<Record<string, string>> = { 'Omar Nasser': 'عمر ناصر' };
 const SUPPORT_ID = SUPPORT?.id ?? '';
 const BILLING_ID = BILLING?.id ?? '';
 
@@ -2042,6 +2046,33 @@ export class MockTicketsApi implements TicketsApi {
     }
 
     return this.update(brandId, ticketId, { statusId: this.#defaultStatus().id });
+  }
+
+  async mentionCandidates(
+    _brandId: string,
+    ticketId: string,
+    query = '',
+  ): Promise<MentionCandidateList> {
+    const ticket = this.#require(ticketId);
+    const needle = query.trim().replace(/^@/, '').toLowerCase();
+
+    return {
+      candidates: mockAssignable(ticket.departmentId)
+        .agents.filter((agent) => agent.userId !== MOCK_SELF_ID)
+        .map((agent) => ({
+          userId: agent.userId,
+          name: agent.name,
+          handle: agent.name.trim().toLowerCase().replace(/\s+/g, '.'),
+          presence: agent.presence,
+        }))
+        .filter(
+          (row) =>
+            needle === '' ||
+            `${row.name} ${row.handle} ${MOCK_ARABIC_NAMES[row.name] ?? ''}`
+              .toLowerCase()
+              .includes(needle),
+        ),
+    };
   }
 
   async assignable(_brandId: string, departmentId: string): Promise<AssignableAgentList> {

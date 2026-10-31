@@ -381,6 +381,100 @@ describe.skipIf(!hasDocker)('notifications', () => {
       // Bo works Billing and cannot see a Support ticket (DOMAIN-RULES §1.2).
       expect((await panelOf(bo)).items).toEqual([]);
     });
+
+    describe('the @ picker (M14-15)', () => {
+      interface Candidates {
+        readonly candidates: readonly { userId: string; name: string; handle: string }[];
+      }
+
+      it('lists only people who can see the ticket’s department, never the writer or an email', async () => {
+        const ticket = (await createTicket()).ticket;
+        const path = `${brandPath()}/tickets/${ticket.id}/mention-candidates`;
+
+        const asAda = await call<Candidates>('GET', path, ada);
+        expect(asAda.status).toBe(200);
+        // Sam works Support; Bo works Billing only and is never offered here.
+        expect(asAda.body.candidates.map((row) => row.userId)).toEqual([sam.id]);
+        expect(JSON.stringify(asAda.body)).not.toContain('@helpdock.test');
+
+        const asSam = await call<Candidates>('GET', path, sam);
+        expect(asSam.body.candidates.map((row) => row.userId)).toEqual([ada.id]);
+      });
+
+      it('narrows by what is typed and answers 404 for a ticket the reader cannot see', async () => {
+        const ticket = (await createTicket()).ticket;
+        const path = `${brandPath()}/tickets/${ticket.id}/mention-candidates`;
+
+        expect((await call<Candidates>('GET', `${path}?q=zzz`, ada)).body.candidates).toEqual([]);
+        expect((await call<Candidates>('GET', `${path}?q=SA`, ada)).body.candidates).toHaveLength(
+          1,
+        );
+        // Bo cannot see a Support ticket at all.
+        expect((await call('GET', path, bo)).status).toBe(404);
+      });
+
+      it('offers a handle that notifies exactly the person it names', async () => {
+        const ticket = (await createTicket()).ticket;
+        const offered = await call<Candidates>(
+          'GET',
+          `${brandPath()}/tickets/${ticket.id}/mention-candidates?q=sam`,
+          ada,
+        );
+        const handle = offered.body.candidates[0]?.handle ?? '';
+        expect(handle).not.toBe('');
+
+        await call('POST', `${brandPath()}/tickets/${ticket.id}/messages`, ada, {
+          kind: 'note',
+          bodyHtml: `<p>@${handle} please take a look</p>`,
+        });
+        await drain();
+
+        const items = (await panelOf(sam)).items.filter((item) => item.ticketId === ticket.id);
+        expect(items.map((item) => item.kind)).toEqual(['mentioned']);
+        // Only the person the picker named was told: not the writer, not Billing's Bo.
+        for (const other of [ada, bo]) {
+          const theirs = (await panelOf(other)).items.filter((item) => item.ticketId === ticket.id);
+          expect(theirs).toEqual([]);
+        }
+      });
+
+      it('leaves out two people with one name when no spelling is theirs alone, and notifies neither', async () => {
+        const twins = [
+          await addPerson(runtime.db, 'Twin Person'),
+          await addPerson(runtime.db, 'Twin Person'),
+        ];
+        await withSystem(runtime.db, seeded.brandId, (tx) =>
+          tx.insert(userBrandRoles).values(
+            twins.map((twin) => ({
+              userId: twin.id,
+              brandId: seeded.brandId,
+              role: 'agent' as const,
+              departmentIds: [billing],
+            })),
+          ),
+        );
+        const ticket = (await createTicket({ departmentId: billing })).ticket;
+
+        // Their whole name and first name are shared, and the fixture’s address
+        // has a space in its name part, so no spelling is a handle: better a
+        // missing row than text that tells the wrong colleague.
+        const response = await call<Candidates>(
+          'GET',
+          `${brandPath()}/tickets/${ticket.id}/mention-candidates?q=twin`,
+          ada,
+        );
+        expect(response.body.candidates).toEqual([]);
+
+        await call('POST', `${brandPath()}/tickets/${ticket.id}/messages`, ada, {
+          kind: 'note',
+          bodyHtml: '<p>@Twin and @TwinPerson, please look</p>',
+        });
+        await drain();
+        for (const twin of twins) {
+          expect((await rowsFor(twin.id)).filter((row) => row.ticketId === ticket.id)).toEqual([]);
+        }
+      });
+    });
   });
 
   describe('replies', () => {

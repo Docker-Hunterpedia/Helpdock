@@ -52,6 +52,9 @@
     "assigned": "مسندة",
     "assignedTo": "مسندة إلى {{name}}"
   },
+  "narrow": {
+    "back": "العودة إلى {{view}}"
+  },
   "empty": {
     "noSelectionHeading": "لا توجد تذكرة مفتوحة",
     "noSelectionBody": "اختر تذكرة من القائمة لقراءتها، أو أنشئ واحدة.",

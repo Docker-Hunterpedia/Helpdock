@@ -8,7 +8,15 @@ import type {
 } from '@helpdock/schemas';
 import { Box, Button, Checkbox, Chip, InputAdornment, TextField, Typography } from '@mui/material';
 import { ListFilter, Search, TicketIcon } from 'lucide-react';
-import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
@@ -106,6 +114,8 @@ export function TicketList({
   failed,
   linkSearch,
   selection,
+  fill = false,
+  scrollMemory,
   onTypedChange,
   onFiltersChange,
   onLoadMore,
@@ -155,6 +165,14 @@ export function TicketList({
   readonly linkSearch: string;
   /** M14-04. */
   readonly selection?: ListSelection | undefined;
+  /** M14-22: the list is the whole screen (below 1024 px) rather than a 360 px column. */
+  readonly fill?: boolean;
+  /**
+   * M14-22: where the rows were scrolled to. The list is put away while a
+   * ticket is open on a narrow screen, so its scroll position is kept here and
+   * put back when it returns.
+   */
+  readonly scrollMemory?: { current: number };
   onTypedChange(value: string): void;
   onFiltersChange(filters: WorkspaceFilters): void;
   onLoadMore(): void;
@@ -192,6 +210,13 @@ export function TicketList({
       </Button>
     ) : undefined;
 
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (scroller.current !== null && scrollMemory !== undefined) {
+      scroller.current.scrollTop = scrollMemory.current;
+    }
+  }, [scrollMemory]);
+
   useEffect(() => {
     if (openFiltersToken !== null) {
       setFiltersOpen(true);
@@ -209,7 +234,7 @@ export function TicketList({
       component="section"
       aria-label={t('tickets:list.label')}
       sx={{
-        width: { xs: '100%', md: TICKET_LIST_WIDTH },
+        width: fill ? '100%' : TICKET_LIST_WIDTH,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -348,7 +373,16 @@ export function TicketList({
         />
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }} aria-busy={loading}>
+      <Box
+        ref={scroller}
+        sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+        aria-busy={loading}
+        onScroll={(event) => {
+          if (scrollMemory !== undefined) {
+            scrollMemory.current = event.currentTarget.scrollTop;
+          }
+        }}
+      >
         {failed ? (
           <EmptyState
             icon={TicketIcon}

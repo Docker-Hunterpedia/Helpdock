@@ -2,7 +2,7 @@
 
 How a brand answers customers on Telegram (M6-01 to M6-05). A customer writes to the brand's bot, the conversation becomes a ticket, and the agent's replies arrive in the same chat.
 
-Bots are managed on **Admin › Channels › Telegram**, which only an Admin of the brand can open (`brand:manage`). Each section below says what the screen does and which REST route it calls, for anyone automating the same steps.
+Bots are managed on **Settings › Channels › Telegram**, which only an Admin of the brand can open (`brand:manage`). Each section below says what the screen does and which REST route it calls, for anyone automating the same steps.
 
 ## Create a bot with BotFather
 
@@ -99,7 +99,7 @@ Files are fetched with the Bot API's `getFile`. Telegram serves files up to 20 M
 
 - **A chat is a contact.** The chat id is stored as a verified `telegram` identity (DOMAIN-RULES §4.4: it comes from the Bot API), so the same contact is found again on every message. The contact's name is the customer's Telegram name.
 - **One open ticket per chat.** A new message continues the chat's ticket. If that ticket is closed, the brand's reopen policy decides, exactly as for email: within the policy's days it reopens, otherwise a new ticket continues it. A ticket marked spam is left as it is. A merged ticket's messages go to the ticket it was merged into.
-- **Blocked senders** (Ticketing › Spam, kind `telegram` with the chat id) are dropped before any contact or ticket is written.
+- **Blocked senders** (Inbox › Spam, kind `telegram` with the chat id) are dropped before any contact or ticket is written.
 - **Redelivery is harmless.** Every message is keyed by bot, chat and message id, so a webhook Telegram retries, or a poll that sees an update again, files nothing twice.
 
 ## Agent replies

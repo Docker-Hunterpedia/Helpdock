@@ -1,6 +1,6 @@
 # 0038 One keyboard registry, physical keys, and a command palette without a new dependency
 
-Status: proposed
+Status: accepted (M14-01 and M14-05, built; owner decisions D-03 and D-32)
 Date: 2026-10-20
 
 ## Context
@@ -17,7 +17,7 @@ M14 adds a shortcut sheet, `g` sequences, ticket and list keys, and a command
 palette. The stack table (ARCHITECTURE §1) admits no new UI dependency without
 an ADR.
 
-The plan is [M14-01 and M14-05 in M14 Inbox productivity](../in-development/M14-inbox-productivity.md#m14-01-keyboard-foundation);
+The plan is [M14-01 and M14-05 in M14 Inbox productivity](../completed/M14-inbox-productivity.md#m14-01-keyboard-foundation);
 owner decisions D-03 and D-32.
 
 ## Decision

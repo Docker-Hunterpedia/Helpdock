@@ -5,15 +5,15 @@ workspace: the same statuses, SLAs, rules, assignment and agent replies,
 whichever way the customer wrote
 ([REQUIREMENTS §4.4](../planning/REQUIREMENTS.md#44-channels)).
 
-Each channel is configured per brand under **Admin › Channels**, which only an
+Each channel is configured per brand under **Settings › Channels**, which only an
 Admin of the brand can open (`brand:manage`).
 
 | Channel | Customer writes by | Agent's reply reaches them by | Set up on | Guide |
 |---|---|---|---|---|
-| Email | Mail to a mailbox address, fetched over IMAP or posted by the provider's inbound-parse webhook | Email from the brand's sender | Channels › Mailboxes, Channels › Outbound email | [Receiving mail](email.md), [Outbound email](outbound-email.md) |
+| Email | Mail to a mailbox address, fetched over IMAP or posted by the provider's inbound-parse webhook | Email from the brand's sender | Channels › Email, Channels › Outgoing email | [Receiving mail](email.md), [Outbound email](outbound-email.md) |
 | Telegram | A message to the brand's bot | The same chat | Channels › Telegram | [Telegram](telegram.md) |
 | WhatsApp, Messenger, Instagram | A message to the brand's WhatsApp number, Facebook Page or Instagram professional account | The same platform and conversation, inside Meta's reply window | Channels › Meta | [Meta channels](meta-channels.md) |
-| Chat widget | The widget on the brand's site, or a native app speaking its protocol | The widget, live | Channels › Widget | [Widget protocol](widget-protocol.md) |
+| Chat widget | The widget on the brand's site, or a native app speaking its protocol | The widget, live | Channels › Chat widget | [Widget protocol](widget-protocol.md) |
 | Web form | The hosted contact page, `/contact` on the help center domain | Email | Channels › Web form | [Web form](web-form.md) |
 | REST API | `POST /api/v1/tickets` with an API key | Your integration, which reads the thread with `GET /api/v1/tickets/{ticketId}/messages` | Developers › API keys | [API](api.md) |
 
@@ -40,7 +40,7 @@ Agents can also open a ticket by hand from the ticket list
   reply outside that time when the agent writes it, and checks again when it
   sends ([reply windows](tickets.md#reply-windows)).
 - **Bot check.** The widget's first message and the web form can ask a visitor
-  to pass a check first, chosen once per brand on Channels › Widget: the
+  to pass a check first, chosen once per brand on Channels › Chat widget: the
   built-in proof-of-work check (`pow`, nothing sent to a third party),
   Cloudflare Turnstile or hCaptcha. See [Bot check](#bot-check).
 - **Outbound connections** to a host a brand configured (an IMAP server, a
@@ -52,7 +52,7 @@ Agents can also open a ticket by hand from the ticket list
 A brand can ask visitors to pass a check before the widget accepts a first
 message or the web form accepts a submission. It is off by default, and
 the one setting serves both surfaces. An Admin of the brand sets it on
-**Channels › Widget** under "Where the widget may run": switch on **Check for
+**Channels › Chat widget** under "Where the widget may run": switch on **Check for
 bots before the first message**, then pick a **Provider**
 ([configuration](configuration.md): `captcha.provider`).
 

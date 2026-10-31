@@ -179,7 +179,7 @@ much it has spent today and this month.
 | Daily and monthly budget, US dollars | Admin | No limit |
 | System prompt — tone, language policy, forbidden topics — for English and for Arabic conversations | Admin and Team Leader (`ai:manage`) | Empty; an empty Arabic prompt means the English one serves both |
 | Modes: agent assist, auto-reply per channel (widget, email, Telegram) with a confidence threshold 0–1, the handoff message in English and Arabic, keep agent assist on after the hard stop | Admin | Every mode off; threshold 0.70; built-in handoff wording; keep assist on |
-| AI reply satisfies the first-response SLA | Admin | On. The same `aiCountsAsFirstResponse` Ticketing › SLAs edits |
+| AI reply satisfies the first-response SLA | Admin | On. The same `aiCountsAsFirstResponse` Inbox › SLA policies edits |
 
 PII redaction is not a setting: it runs before every call for every brand (see
 [PII redaction](#pii-redaction)), and the Assistant tab's Guardrails card shows
@@ -626,7 +626,7 @@ job:   brand tx     still open, not paused, still the newest message
   AI log.
 - **First response**: the answer meets the first-response clock when the
   brand's "AI reply satisfies the first-response SLA" is on (the default; it is
-  `aiCountsAsFirstResponse`, the same setting Ticketing › SLAs shows). A
+  `aiCountsAsFirstResponse`, the same setting Inbox › SLA policies shows). A
   handoff message never does. See [SLAs](slas.md#what-counts-as-a-response).
 - **Assignment** is untouched: the ticket was routed when it arrived, as any
   other, and sits in the queue while the assistant answers.
@@ -687,7 +687,7 @@ a moon and says "The team is away until Monday at 09:00 (Arabian Standard
 Time)", then "Your message is saved. A person will reply here and at
 omar.k@example.com when the team is back." (without the address when the
 visitor gave none). The team is the conversation's department, else the brand,
-by the calendar of [Ticketing › Business hours](slas.md#business-hours) (Monday to Friday 09:00–17:00
+by the calendar of [Inbox › Business hours](slas.md#business-hours) (Monday to Friday 09:00–17:00
 in the brand's zone until hours are saved; 24/7 hours are never closed), and
 the time is in that team's zone. The day reads "today", "tomorrow", the
 weekday within six days, or else the date. A calendar that never opens reads

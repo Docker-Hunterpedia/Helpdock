@@ -1066,7 +1066,7 @@ and the list is paged by the `tickets_brand_*` indexes anyway. `pnpm --filter @h
 
 **The Severity recipe.** Helpdock has no Severity field of its own; priority is
 what the SLA engine targets. A team that wants one: add a **Select** field named
-Severity with Sev 1 to Sev 4 under Ticketing › Custom fields and tick *Pin on
+Severity with Sev 1 to Sev 4 under Inbox › Custom fields and tick *Pin on
 rows and the ticket header*; filter the list by Severity is any of Sev 1, add
 *Open* as the state, and **Save as a view** called "Sev 1 open"; then add a rule
 (*When ticket updated, if Severity is Sev 1, set priority Urgent and notify the
@@ -1376,7 +1376,7 @@ its header and two messages, each under `aria-busy`.
 ### Views in the workspace
 
 The sidebar's **Views** group (`views-nav.tsx`, `Admin/View-Dialogs` panels 1–2)
-lists the brand's shared views in the order Ticketing › Views gives them, then
+lists the brand's shared views in the order Inbox › Views gives them, then
 the reader's own under **Mine**. The names and the counts are two reads, so the
 rows are usable before the numbers arrive; Overdue's number is in the danger
 hue while it is above zero. A ⋯ appears on hover and on focus for a view the
@@ -1564,7 +1564,7 @@ it off at once. **Add** opens a multi-select Combobox of the brand's tags:
 typing filters by either name, ↑ and ↓ move through the list, Enter toggles the
 highlighted tag, a click toggles too, and Esc closes it. A ticked tag is on the
 ticket. The picker never creates a tag. When nothing matches it says so and
-points to Ticketing › Tags, because what a brand labels its tickets with is
+points to Inbox › Tags, because what a brand labels its tickets with is
 configuration (`ticketing:manage`), not something to make up mid-ticket.
 
 Each change sends the whole new set to
@@ -1732,7 +1732,6 @@ that opened it.
 
 | Drawn | State | Owner |
 |---|---|---|
-| Canned response, Macro | disabled, with the reason | M3 |
 | Translate | disabled, with the reason | M7 |
 | The AI bubble's confidence | not drawn: `ai_meta` is deliberately not on the wire | M7 |
 The **assignee picker** (M1-07, `AdminTicketDialogs` panel 3) reads
@@ -2086,7 +2085,7 @@ p50 at 114 ms against 20 ms after the change.
 
 ## Time tracking
 
-M1-12, and optional per brand (REQUIREMENTS §4.1): **Ticketing › Feedback ›
+M1-12, and optional per brand (REQUIREMENTS §4.1): **Inbox › Feedback ›
 Track time on tickets**, off by default.
 
 `ticket_time_entries` holds one row per entry: who, how long in whole seconds
@@ -2121,7 +2120,7 @@ card updates on its next read.
 
 ## Satisfaction surveys
 
-M1-12 (REQUIREMENTS §4.1, DOMAIN-RULES §2.2 and §4.6). **Ticketing › Feedback ›
+M1-12 (REQUIREMENTS §4.1, DOMAIN-RULES §2.2 and §4.6). **Inbox › Feedback ›
 Ask for a rating when a ticket closes**, on by default.
 
 **One survey per close.** A close that is not spam or a merge (read off the
@@ -2151,7 +2150,7 @@ Email and Telegram go through the outbox like every message to a customer: an
 `email.send`, or a `telegram.notice` of kind `csat_survey`. A ticket with nobody
 to reach (no address, no chat, a brand with no sender) keeps its survey
 `pending`, and the agent can still share the link. The survey goes out at once,
-on the one channel the ticket came in by: Ticketing › Feedback has no delay and
+on the one channel the ticket came in by: Inbox › Feedback has no delay and
 no channel choice.
 
 **The email's five links only open the page.** Each is the survey's link with
@@ -2250,7 +2249,7 @@ public to read: at least one published public article and access not set to
 internal-only. Otherwise it is null and the link is left out. The preview never
 shows it, as it reads nothing.
 
-**The preview.** Ticketing › Feedback › **Open the rating page as a customer
+**The preview.** Inbox › Feedback › **Open the rating page as a customer
 sees it** opens `/csat/preview?lang=<admin's language>` in a new tab. That is
 the same page over a fixed sample (`apps/admin/src/csat/preview-api.ts`), under
 a line that says it is a preview. It makes no request: it holds no token, reads

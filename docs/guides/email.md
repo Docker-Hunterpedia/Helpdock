@@ -2,7 +2,7 @@
 
 How a brand receives customer email (M2-02, M2-03, M2-04, M2-07, M2-08). Sending replies and auto-replies is the other half of M2: see [Outbound email](outbound-email.md).
 
-Everything here is on **Admin › Channels › Mailboxes**, which only an Admin of the brand can open (`brand:manage`).
+Everything here is on **Settings › Channels › Email**, which only an Admin of the brand can open (`brand:manage`).
 
 ## Mailboxes
 
@@ -57,7 +57,7 @@ Answers: `200 {"outcome":"accepted"}` for a new message, `duplicate` for one alr
 
 1. **Duplicates** of live email are recognised by `Message-ID` and dropped. Imported historical IDs do not suppress new live deliveries.
 2. **Automated mail** — `Auto-Submitted`, `Precedence: bulk/list/junk`, mailing-list headers, out-of-office markers, `noreply@`-style senders — never opens a ticket unless its address is in the mailbox's **Automated senders that may open tickets** list. It is logged.
-3. **Blocked senders** (Ticketing › Spam) are dropped and counted.
+3. **Blocked senders** (Inbox › Spam) are dropped and counted.
 4. **Threading** (DOMAIN-RULES §4.3). A message joins an existing ticket only when it references it — by `In-Reply-To`/`References` naming a message Helpdock received or sent on the ticket (an agent's emailed reply or an auto-reply counts), or the brand's `[HD-1042]` token in the subject — **and** the sender is a participant: the ticket's contact, a CC, or staff on the ticket. Anyone else gets a new ticket in the same department with the note "Referenced HD-1042 but sender is not a participant", from which an agent can open or merge.
    Migration support is in development. If an imported Message-ID names multiple
    tickets, Helpdock starts a new ticket rather than guessing; a subject token does

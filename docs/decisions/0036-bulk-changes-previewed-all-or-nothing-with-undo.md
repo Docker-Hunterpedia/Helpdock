@@ -15,7 +15,7 @@ department is `not_found`.
 A bulk change multiplies the cost of a mistake: fifty surveys, fifty customer
 emails, fifty irreversible deletes.
 
-The plan is [M14-03 and M14-04 in M14 Inbox productivity](../in-development/M14-inbox-productivity.md#m14-03-bulk-edit-api);
+The plan is [M14-03 and M14-04 in M14 Inbox productivity](../completed/M14-inbox-productivity.md#m14-03-bulk-edit-api);
 owner decisions D-22, D-23 and D-24.
 
 ## Decision

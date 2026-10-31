@@ -106,7 +106,7 @@ older history needs **Rebuild reports for all imported history** on the import
 wizard's Scope step (`rebuildAllReports`). A clipped rebuild records a warning.
 
 Only a ticket's **initial** clocks count, unless the brand turns on "count
-reopens" (`slaCountReopens`, Ticketing › SLAs): then a reopened ticket's
+reopens" (`slaCountReopens`, Inbox › SLA policies): then a reopened ticket's
 next-response clock counts as a response and its later resolution clocks as
 resolutions, in times and in compliance alike (DOMAIN-RULES §3.5). The rollup
 reads the setting when it runs, so a change shows in the trailing week at the

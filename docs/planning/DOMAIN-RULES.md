@@ -38,6 +38,8 @@ Team membership follows the same ceiling as role changes: a Team Leader may add 
 
 Moving a ticket to a department the actor cannot see is allowed (it is how escalation works); the ticket disappears from their view afterwards and the activity log records it.
 
+**The command palette and quick search** (M14-05) give nobody a wider view. Quick search answers its three sections (tickets, contacts, articles) one at a time, each under the reader's own scope: tickets by department policy, contacts and articles by their own read permission, and a section the reader may not read comes back `skipped` rather than empty. A Viewer may open the palette and the shortcut sheet and is offered navigation only; an action the reader's role lacks is not listed, and the api refuses it whatever the keys do. The palette calls no model.
+
 ### 1.3 Enforcement layers
 
 Every request goes through all four. Any one of them failing closed is enough to block; none may be skipped.
@@ -279,6 +281,8 @@ Every ticket has at most two running clocks, each with `target_minutes`, `starte
 | Resolution | Ticket creation, or reopen | Transition to `closed` |
 
 Elapsed time is counted only inside the business hours of the ticket's department (falling back to the brand's), skipping holidays. A ticket created outside business hours starts its clocks at the next opening.
+
+**Sorting by SLA due** (M14-07) orders tickets by the earliest due time of their running clocks (`sla_next_due_at`), a due time in the past, which is a breach, first, and tickets with no running clock last. Paused, satisfied and stopped clocks do not count. The order is fixed (a direction does not reverse it), ties break on the ticket id, and the department scope that applies to every ticket read applies to it unchanged.
 
 ### 3.2 Pause and resume
 
@@ -653,3 +657,4 @@ How staff notification **email** reaches a person (M14-10, [ADR 0037](../decisio
 | 2026-10-23 | §2.2: a status moved into a closed state closes its live tickets after a typed count is confirmed, in batches and without surveys; moving it out of one is refused while it holds tickets (#361). |
 | 2026-10-23 | §2.1 and §2.2: a rule's or a macro's **snooze action** — one of the Snooze menu's presets, resolved by the server against the ticket's department calendar when it runs, with the wake timer, activity and outbox event a person's snooze writes; `snoozed_by` stays null for a rule (#368). |
 | 2026-10-23 | §2.2: the Agent-closes row gains the required-to-close gate (M14-17, owner decision D-30) — a person's or an API key's close of a ticket with an empty required-to-close field is refused `fields-required-to-close` naming the keys, the system's closes (rules, time-based rules, merges, spam) go through and record `closedWithout` in the activity. |
+| 2026-11-01 | §1.2 and §3.1: the palette's and quick search's scope, and the sort by SLA due (M14-05, M14-07), written down at the M14 close-out (M14-24). |

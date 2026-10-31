@@ -27,7 +27,7 @@ on the ticket.
 
 | Section | What it sets |
 |---|---|
-| Outgoing mail (SMTP) | The brand's own server: host, port, `TLS` / `STARTTLS` / none, username and password. **Test SMTP** sends one message to you through the server on screen and shows the relay's answer. A brand with no server of its own sends through the install's (`smtp.*`, set by the first-run wizard and changeable in **Admin › System › Outgoing email**). |
+| Outgoing mail (SMTP) | The brand's own server: host, port, `TLS` / `STARTTLS` / none, username and password. **Test SMTP** sends one message to you through the server on screen and shows the relay's answer. A brand with no server of its own sends through the install's (`smtp.*`, set by the first-run wizard and changeable in **Settings › Install › System › Outgoing email**). |
 | From and Reply-To per department | The default sender, and a `Name <address>` plus an optional Reply-To for each department that sends as someone else. A reply goes out as its ticket's department, then the default, then the install's `smtp.from`. A rule's *Set reply address* (M14-26, [Automation](automation.md)) puts one of the brand's mailboxes, with its display name, ahead of the department for later public replies on that ticket, preselected in the composer's From select (an agent's other choice wins), for as long as the mailbox belongs to the ticket's department. Auto-replies, surveys and transcripts keep the department's sender. |
 | Auto-replies | See below. |
 | Failed sends | The dead-letter queue. See below. |
@@ -125,7 +125,7 @@ shipped follows the catalog wording as it improves.
 
 - **Acknowledge new tickets**: sent once when an email opens a new ticket.
 - **Out-of-hours reply**: sent *instead of* the acknowledgment when the email
-  arrives outside the department's business hours (Ticketing › Business hours;
+  arrives outside the department's business hours (Inbox › Business hours;
   see [Business hours and SLAs](slas.md#business-hours)): the department's own
   hours and holidays if it has them, otherwise the brand's. A brand that never
   saved hours counts Monday–Friday 09:00–17:00 in its time zone.

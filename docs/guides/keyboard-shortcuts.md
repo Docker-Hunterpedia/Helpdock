@@ -85,11 +85,11 @@ navigation only, and the api refuses a change whatever the keys do.
 | `/` | Insert a saved reply | everyone but a Viewer |
 <!-- shortcuts:end -->
 
-Not yet: `{{` for the placeholder picker in the composer (M14-14), and `Enter`
-on a focused row, which would need a roving focus the list does not have (a row
-is a link, so `Enter` on it already opens the ticket). Each is added to the
-registry, and so to the sheet and this guide, with the deliverable that builds
-it.
+Two things are typed, not pressed, and so have no registry entry: `{{` opens
+the placeholder picker and `@` in an internal note opens the mention picker
+([Macros](macros.md#shortcuts), [Notifications](notifications.md#mentions). Nor is there
+a key for `Enter` on a focused row, which would need a roving focus the list
+does not have (a row is a link, so `Enter` on it already opens the ticket).
 
 ## Where a shortcut answers
 

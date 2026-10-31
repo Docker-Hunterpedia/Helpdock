@@ -106,7 +106,7 @@ Creating staff through agent mappings additionally requires `staff:manage`.
 Inputs and outputs use Zod and the generated OpenAPI schemas. These routes are
 separate from the scoped public REST API.
 
-The local admin implementation now mounts Brand › Import and individual run
+The local admin implementation now mounts Install › Imports and individual run
 routes. It includes source availability, recent runs, connection/scope forms,
 progress, column/value mapping, saved presets and dry-run contact/ticket samples
 with file availability. Focused browser checks and the real-API import wizard

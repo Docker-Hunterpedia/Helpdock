@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Search, TriangleAlert, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Search, TriangleAlert, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -21,6 +21,7 @@ import { useSemanticTokens } from '../../app/tokens.js';
 import { currentBrand, useContactsApi, useSession } from '../../auth/session.tsx';
 import { EmptyState } from '../../shell/empty-state.tsx';
 import { PageHeader } from '../../shell/page-header.tsx';
+import { LoadingSkeleton } from '../../ui/loading-skeleton.tsx';
 import { useDebounced } from '../../ui/use-debounced.js';
 import { AccountDialog } from './contact-dialogs.tsx';
 import { AccountsTable, ContactsTable } from './contact-tables.tsx';
@@ -147,6 +148,14 @@ export function ContactsPage(): ReactNode {
   const total = contacts.data?.total ?? 0;
   const duplicateCount = contacts.data?.duplicateCount ?? 0;
   const accountRows = accounts.data?.accounts ?? [];
+  // Nothing typed and no filter set: the brand has no contacts at all, not "none match".
+  const firstRun =
+    !contacts.isPending &&
+    rows.length === 0 &&
+    search === '' &&
+    accountId === undefined &&
+    !openOnly &&
+    !duplicatesOnly;
   const range = pageRange(offset, rows.length, total);
 
   return (
@@ -282,22 +291,37 @@ export function ContactsPage(): ReactNode {
         </Box>
       ) : null}
 
-      {tab === 'people' ? (
+      {tab === 'people' && contacts.isPending ? (
+        <LoadingSkeleton label={t('contacts:loading')} />
+      ) : tab === 'people' && firstRun ? (
+        <EmptyState
+          icon={Users}
+          heading={t('contacts:empty.heading')}
+          body={t('contacts:empty.body')}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => {
+                void navigate(ROUTES.contactNew);
+              }}
+            >
+              {t('contacts:empty.action')}
+            </Button>
+          }
+        />
+      ) : tab === 'people' ? (
         <ContactsTable
           contacts={rows}
           brandName={brand.name}
           empty={
-            rows.length === 0 && !contacts.isPending ? (
+            rows.length === 0 ? (
               <Box sx={{ padding: 8, textAlign: 'center' }}>
                 <Typography variant="h3" component="p">
-                  {search === ''
-                    ? t('contacts:empty.heading')
-                    : t('contacts:empty.noMatchesHeading')}
+                  {t('contacts:empty.noMatchesHeading')}
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary', marginBlockStart: 2 }}>
-                  {search === ''
-                    ? t('contacts:empty.body', { brand: brand.name })
-                    : t('contacts:empty.noMatchesBody')}
+                  {t('contacts:empty.noMatchesBody')}
                 </Typography>
               </Box>
             ) : null
@@ -345,11 +369,24 @@ export function ContactsPage(): ReactNode {
             </Box>
           }
         />
-      ) : accountRows.length === 0 && !accounts.isPending ? (
+      ) : accounts.isPending ? (
+        <LoadingSkeleton label={t('contacts:loading')} />
+      ) : accountRows.length === 0 ? (
         <EmptyState
           icon={Users}
           heading={t('contacts:empty.accountsHeading')}
           body={t('contacts:empty.accountsBody')}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => {
+                setAccountDialogOpen(true);
+              }}
+            >
+              {t('contacts:newAccount')}
+            </Button>
+          }
         />
       ) : (
         <AccountsTable accounts={accountRows} />

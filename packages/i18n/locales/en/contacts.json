@@ -7,6 +7,7 @@
   "accountCount_other": "{{count}} accounts",
   "newContact": "New contact",
   "newAccount": "New account",
+  "loading": "Loading contacts",
   "searchPlaceholder": "Name, email, phone, @telegram",
   "accountSearchPlaceholder": "Company or domain",
   "segment": {
@@ -70,7 +71,8 @@
   },
   "empty": {
     "heading": "No contacts yet",
-    "body": "People appear here the first time they write to {{brand}} on any channel.",
+    "body": "People appear here when they write in, or you can add one.",
+    "action": "Add contact",
     "noMatchesHeading": "Nothing matches that search",
     "noMatchesBody": "Try part of a name, an address, a phone number or a Telegram id.",
     "accountsHeading": "No accounts yet",

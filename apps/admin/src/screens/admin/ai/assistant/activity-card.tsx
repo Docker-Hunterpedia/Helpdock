@@ -10,6 +10,7 @@ import { usePreferences } from '../../../../app/providers.tsx';
 import { ticketRoute } from '../../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { SectionCard } from '../../channels/section-card.tsx';
 import { timeOf, usd } from '../format.js';
 
@@ -54,7 +55,7 @@ export function ActivityCard({ brandId }: { readonly brandId: string }): ReactNo
       {calls.isError ? (
         <AlertBanner tone="danger">{t('aiSettings:loadFailed')}</AlertBanner>
       ) : calls.data === undefined ? (
-        <Box aria-busy="true" />
+        <LoadingSkeleton />
       ) : items.length === 0 ? (
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           {t('aiSettings:activity.empty')}

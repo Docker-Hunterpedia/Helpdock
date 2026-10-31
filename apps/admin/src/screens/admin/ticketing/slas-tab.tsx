@@ -8,6 +8,7 @@ import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useStaffApi, useTicketingApi } from '../../../auth/session.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { moveBy, moveTo } from './reorder.js';
 import type { PickOptions } from './sla-action-picker.tsx';
 import {
@@ -168,7 +169,7 @@ export function SlasTab(): ReactNode {
   );
 
   if (policies.data === undefined || brandQuery.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const order = ordered.map((policy) => policy.id);

@@ -24,6 +24,7 @@ import type {
   ContactUpdateRequest,
 } from '@helpdock/schemas';
 import { CONTACT_PAGE_SIZE, normaliseIdentity } from '@helpdock/schemas';
+import { isMockEmpty } from '../auth/mock-empty.js';
 import {
   MOCK_CONTACT_DANIEL,
   MOCK_CONTACT_MESSENGER_USER,
@@ -391,7 +392,7 @@ export class MockContactsApi implements ContactsApi {
 
   async listContacts(_brandId: string, query: ContactSearchQuery = {}): Promise<ContactList> {
     const term = query.search?.trim().toLowerCase() ?? '';
-    const matches = this.#live().filter((contact) => {
+    const matches = (isMockEmpty('contacts') ? [] : this.#live()).filter((contact) => {
       const searched =
         term === '' ||
         contact.name.toLowerCase().includes(term) ||
@@ -683,7 +684,7 @@ export class MockContactsApi implements ContactsApi {
 
   async listAccounts(_brandId: string, query: AccountSearchQuery = {}): Promise<AccountList> {
     const term = query.search?.trim().toLowerCase() ?? '';
-    const matches = this.#accounts.filter(
+    const matches = (isMockEmpty('contacts') ? [] : this.#accounts).filter(
       (account) =>
         term === '' ||
         account.name.toLowerCase().includes(term) ||

@@ -24,6 +24,7 @@ import {
   type WorkflowRunList,
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
+import { isMockEmpty } from '../auth/mock-empty.js';
 import type { AutomationApi } from './api.js';
 import { mockRoutingOverview, mockRoutingTest } from './mock-routing.js';
 
@@ -480,7 +481,7 @@ export class MockAutomationApi implements AutomationApi {
   async rules(_brandId: string, kind?: RuleKind): Promise<WorkflowRuleList> {
     await Promise.resolve();
     return {
-      rules: this.#rules
+      rules: (isMockEmpty('rules') ? [] : this.#rules)
         .filter((rule) => kind === undefined || rule.kind === kind)
         .sort((a, b) => a.kind.localeCompare(b.kind) || a.position - b.position),
     };

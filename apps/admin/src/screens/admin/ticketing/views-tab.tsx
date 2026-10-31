@@ -21,10 +21,11 @@ import {
   EllipsisVertical,
   Eye,
   EyeOff,
+  Funnel,
   GripVertical,
   Info,
-  ListFilter,
   Pencil,
+  Plus,
   Trash2,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -38,6 +39,7 @@ import { ticketKeys } from '../../../tickets/keys.js';
 import { filtersOfView, viewLabel } from '../../../tickets/views.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Label } from '../../../ui/label.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useFilterSummary } from '../../tickets/filter-summary.js';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
 import { moveBy, moveTo } from './reorder.js';
@@ -172,6 +174,11 @@ export function ViewsTab(): ReactNode {
       : String(found.count);
   };
 
+  const startCreating = (): void => {
+    setCreating(true);
+    setSelectedId(null);
+  };
+
   const menuView = menuFor?.view ?? null;
 
   return (
@@ -186,22 +193,27 @@ export function ViewsTab(): ReactNode {
               {t('ticketing:views.body')}
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            onClick={() => {
-              setCreating(true);
-              setSelectedId(null);
-            }}
-          >
+          <Button variant="contained" onClick={startCreating}>
             {t('ticketing:views.add')}
           </Button>
         </Box>
 
-        {rows.length === 0 && !views.isPending ? (
+        {views.isPending ? (
+          <LoadingSkeleton label={t('ticketing:views.loading')} />
+        ) : rows.length === 0 ? (
           <EmptyState
-            icon={ListFilter}
+            icon={Funnel}
             heading={t('ticketing:views.empty.heading')}
             body={t('ticketing:views.empty.body')}
+            action={
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={startCreating}
+              >
+                {t('ticketing:views.empty.action')}
+              </Button>
+            }
           />
         ) : (
           <TableContainer

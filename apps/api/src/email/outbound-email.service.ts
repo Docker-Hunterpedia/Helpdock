@@ -1,9 +1,9 @@
 import { outboundMessageId } from '@helpdock/channels';
 import { type DbTransaction, type EmailDelivery, uuidv7 } from '@helpdock/db';
-import type { EmailSenderKey } from '@helpdock/schemas';
-import type { EmailRepository } from './email.repository.js';
+import { type EmailSenderKey, mailboxSenderKey } from '@helpdock/schemas';
+import type { EmailRepository, ReplyAddressing } from './email.repository.js';
 import { enqueueEmailSend } from './email-events.js';
-import { resolveSender } from './outgoing-settings.js';
+import { type ResolvedSender, resolveSender } from './outgoing-settings.js';
 import type { InstallSmtp } from './transport.js';
 
 /**
@@ -49,7 +49,7 @@ export class OutboundEmailService {
     if (addressing?.contact == null) {
       return undefined;
     }
-    const sender = await this.#sender(tx, input.brandId, addressing.departmentId, input.senderKey);
+    const sender = await this.#replySender(tx, input, addressing);
     if (sender === undefined) {
       return undefined;
     }
@@ -72,6 +72,33 @@ export class OutboundEmailService {
         fromAddress: sender.from.address,
       }),
     });
+  }
+
+  /**
+   * A rule's "set reply address" (M14-26) is the From a reply starts on: the
+   * composer offers and preselects it, and a send with no choice uses it. It is
+   * honoured only as the ticket's own, department-checked reply mailbox
+   * (`replyAddressing`); a key naming any other mailbox falls back to the
+   * department's sender. A different From the agent picked wins.
+   */
+  async #replySender(
+    tx: DbTransaction,
+    input: QueueReplyInput,
+    addressing: ReplyAddressing,
+  ): Promise<ResolvedSender | undefined> {
+    const mailbox = addressing.replyMailbox;
+    const key = input.senderKey;
+    if (mailbox !== null && (key === undefined || key === mailboxSenderKey(mailbox.id))) {
+      return { from: { name: mailbox.name, address: mailbox.address }, replyTo: null };
+    }
+    const explicit = key !== undefined && !key.startsWith('mailbox:') ? key : undefined;
+
+    return this.#sender(
+      tx,
+      input.brandId,
+      addressing.departmentId,
+      explicit as EmailSenderKey | undefined,
+    );
   }
 
   /** An auto-reply to the sender of the email that opened the ticket (M2-06). */

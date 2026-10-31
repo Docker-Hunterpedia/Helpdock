@@ -19,6 +19,7 @@ import { brands } from './brands.js';
 import { contacts } from './contacts.js';
 import { departments } from './departments.js';
 import { importSourceEnum, ticketChannelEnum, ticketPriorityEnum } from './enums.js';
+import { mailboxes } from './mailboxes.js';
 import { slaPolicies } from './sla-policies.js';
 import { ticketStatuses } from './ticket-statuses.js';
 import { tsvector } from './tsvector.js';
@@ -153,6 +154,26 @@ export const tickets = pgTable(
      * same reason.
      */
     mergedMs: bigint('merged_ms', { mode: 'number' }).notNull().default(0),
+    /**
+     * M14-26. The mailbox later public replies on email are sent from, set by a
+     * rule's "set reply address" action. Null: the department's sender, as before.
+     * `set null` so deleting a mailbox sends replies from the department again.
+     */
+    replyMailboxId: uuid('reply_mailbox_id').references((): AnyPgColumn => mailboxes.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * M14-26. Where the ticket arrived, copied once from the M14-08 arrival
+     * record at email intake: the mailbox and the address the customer wrote to
+     * (lower-cased). Kept on the ticket so the list filters on an indexed,
+     * brand-scoped column instead of scanning activity JSON per query, and so
+     * the fact stays stable whatever happens to the activity log. Null for any
+     * ticket that did not arrive at a mailbox; `set null` on mailbox deletion.
+     */
+    arrivalMailboxId: uuid('arrival_mailbox_id').references((): AnyPgColumn => mailboxes.id, {
+      onDelete: 'set null',
+    }),
+    arrivalToAddress: text('arrival_to_address'),
     /** M3-02. Null while no policy applies; `set null` so deleting a policy keeps the history. */
     slaPolicyId: uuid('sla_policy_id').references((): AnyPgColumn => slaPolicies.id, {
       onDelete: 'set null',
@@ -347,6 +368,13 @@ export const tickets = pgTable(
       table.statusId,
       table.statusChangedAt,
     ),
+    // M14-26: the list's Mailbox and Written to filters.
+    index('tickets_brand_arrival_mailbox_idx')
+      .on(table.brandId, table.arrivalMailboxId)
+      .where(sql`${table.arrivalMailboxId} is not null`),
+    index('tickets_brand_arrival_to_idx')
+      .on(table.brandId, sql`lower(${table.arrivalToAddress})`)
+      .where(sql`${table.arrivalToAddress} is not null`),
   ],
 );
 

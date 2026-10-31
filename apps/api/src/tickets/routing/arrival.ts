@@ -29,6 +29,21 @@ export const recordedArrival = (
 };
 
 /**
+ * M14-26: the arrival facts the ticket keeps itself — the mailbox and the
+ * address written to — from the same entry point the activity row records, so
+ * the two cannot disagree. Empty for any entry point that is not a mailbox.
+ */
+export const arrivalColumnsOf = (
+  entry: ArrivalEntryPoint,
+): { arrivalMailboxId?: string; arrivalToAddress?: string } =>
+  entry.entry === 'mailbox' && entry.entryId !== null
+    ? {
+        arrivalMailboxId: entry.entryId,
+        ...(entry.address === undefined ? {} : { arrivalToAddress: entry.address.toLowerCase() }),
+      }
+    : {};
+
+/**
  * A ticket filed by a request — `POST /tickets` or a split: a key names its
  * department, a person chooses it. The request's actor is the entry point.
  */

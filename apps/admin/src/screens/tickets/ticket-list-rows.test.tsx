@@ -37,6 +37,7 @@ const renderList = (tickets: ReturnType<typeof testTicket>[], statusId: string[]
       tags={[]}
       staff={[]}
       fields={[]}
+      mailboxes={[]}
       pinnedField={undefined}
       viewerId={LINA}
       changes={null}

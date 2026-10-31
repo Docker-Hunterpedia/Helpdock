@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -5,6 +6,7 @@ import {
   type Db,
   type DbHandle,
   departments,
+  mailboxes,
   outbox,
   tags,
   teams,
@@ -38,6 +40,7 @@ import { and, asc, count, eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { EmailRepository } from '../email/email.repository.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
@@ -1558,5 +1561,364 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     expect((await testRun('inside')).body.outcome?.wouldRun).toBe(false);
 
     await disableAll();
+  });
+  describe('mailbox arrival (M14-26)', () => {
+    let supportBox: string;
+    let billingBox: string;
+
+    /** What email intake keeps on the ticket from M14-08's arrival record. */
+    const arriveAt = (ticketId: string, mailboxId: string, address: string) =>
+      inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ arrivalMailboxId: mailboxId, arrivalToAddress: address.toLowerCase() })
+          .where(eq(tickets.id, ticketId)),
+      );
+
+    const listIds = async (who: Person, query: string): Promise<string[]> => {
+      const response = await call<{ tickets: Ticket[] }>(
+        'GET',
+        `${brandPath()}/tickets?${query}`,
+        who,
+      );
+      expect(response.status).toBe(200);
+      return response.body.tickets.map((ticket) => ticket.id);
+    };
+
+    beforeAll(async () => {
+      await inBrand(async (tx) => {
+        const rows = await tx
+          .insert(mailboxes)
+          .values([
+            {
+              brandId: seeded.brandId,
+              address: 'support@acme.test',
+              displayName: 'Acme Support',
+              departmentId: support,
+              method: 'inbound_parse',
+            },
+            {
+              brandId: seeded.brandId,
+              address: 'billing@acme.test',
+              displayName: 'Acme Billing',
+              departmentId: billing,
+              method: 'inbound_parse',
+            },
+          ])
+          .returning({ id: mailboxes.id, address: mailboxes.address });
+        supportBox = rows.find((row) => row.address === 'support@acme.test')?.id ?? '';
+        billingBox = rows.find((row) => row.address === 'billing@acme.test')?.id ?? '';
+      });
+    });
+
+    it('matches conditions on the mailbox and the address written to, and never a ticket with no mailbox arrival', async () => {
+      await disableAll();
+      await saveRule({
+        name: 'Refund mailbox',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: {
+          match: 'all',
+          groups: [
+            {
+              match: 'all',
+              conditions: [
+                { field: 'mailbox', operator: 'is', values: [supportBox] },
+                { field: 'to_address', operator: 'contains', values: ['refunds@'] },
+              ],
+            },
+          ],
+        },
+        actions: [{ type: 'add_tag', tagId: refundTag }],
+      });
+      await saveRule({
+        name: 'Not the billing mailbox',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: {
+          match: 'all',
+          groups: [
+            {
+              match: 'all',
+              conditions: [{ field: 'mailbox', operator: 'is_not', values: [billingBox] }],
+            },
+          ],
+        },
+        actions: [{ type: 'set_priority', priority: 'high' }],
+      });
+
+      const written = await createTicket('Wrote to the refunds alias');
+      const other = await createTicket('Wrote to the main address');
+      const legacy = await createTicket('Filed before M14');
+      await arriveAt(written.id, supportBox, 'refunds@acme.test');
+      await arriveAt(other.id, supportBox, 'support@acme.test');
+      // The legacy ticket has no mailbox arrival: its creation row says it was typed in by staff.
+      await drain();
+
+      const tagged = (ticketId: string) =>
+        inBrand((tx) => tx.select().from(ticketTags).where(eq(ticketTags.ticketId, ticketId)));
+      expect((await tagged(written.id)).map((row) => row.tagId)).toEqual([refundTag]);
+      expect(await tagged(other.id)).toEqual([]);
+      expect(await tagged(legacy.id)).toEqual([]);
+
+      // "Is not" does not claim a ticket that never had a mailbox to differ from.
+      expect((await ticketRow(written.id))?.priority).toBe('high');
+      expect((await ticketRow(legacy.id))?.priority).toBe('medium');
+      const legacyRuns = await runsOf(legacy.id);
+      expect(legacyRuns.length).toBeGreaterThan(0);
+      expect(legacyRuns.every((run) => run.result === 'skipped')).toBe(true);
+
+      // The test run answers the same, and the options list the mailboxes for the builder.
+      const options = await call<RuleBuilderOptions>('GET', `${brandPath()}/rules/options`, ada);
+      expect(options.body.mailboxes.map((mailbox) => mailbox.address).sort()).toEqual([
+        'billing@acme.test',
+        'support@acme.test',
+      ]);
+      await disableAll();
+    });
+
+    it('filters the list by mailbox and by the address written to, and only within the reader’s departments', async () => {
+      const first = await createTicket('Arrived at support');
+      const second = await createTicket('Arrived at support, other alias');
+      const billed = await createTicket('Arrived at billing', billing);
+      await arriveAt(first.id, supportBox, 'support@acme.test');
+      await arriveAt(second.id, supportBox, 'help@acme.test');
+      await arriveAt(billed.id, billingBox, 'billing@acme.test');
+
+      const bySupport = await listIds(ada, `mailboxId=${supportBox}`);
+      expect(bySupport).toEqual(expect.arrayContaining([first.id, second.id]));
+      expect(bySupport).not.toContain(billed.id);
+
+      expect(await listIds(ada, `mailboxId=${supportBox}&mailboxId=${billingBox}`)).toEqual(
+        expect.arrayContaining([first.id, second.id, billed.id]),
+      );
+      expect(await listIds(ada, 'toAddress=HELP@acme.test')).toEqual([second.id]);
+      expect(await listIds(ada, `mailboxId=${supportBox}&toAddress=help@acme.test`)).toEqual([
+        second.id,
+      ]);
+      expect(await listIds(ada, `mailboxId=${billingBox}&toAddress=help@acme.test`)).toEqual([]);
+
+      // Sam works Support only: the filter narrows what he may see, never widens it.
+      expect(await listIds(sam, `mailboxId=${billingBox}`)).toEqual([]);
+      expect(await listIds(sam, `mailboxId=${supportBox}`)).toEqual(
+        expect.arrayContaining([first.id, second.id]),
+      );
+      expect(await listIds(sam, `mailboxId=${supportBox}`)).not.toContain(billed.id);
+
+      // A view saves the filter and resolves it.
+      const view = await call<{
+        id: string;
+        filters: { mailboxId?: string[]; toAddress?: string };
+      }>('POST', `${brandPath()}/views`, ada, {
+        name: 'Help alias',
+        visibility: { kind: 'personal' },
+        filters: { toAddress: 'help@acme.test' },
+      });
+      expect(view.status).toBe(201);
+      expect(view.body.filters.toAddress).toBe('help@acme.test');
+
+      const boxes = await call<{ mailboxes: { address: string }[] }>(
+        'GET',
+        `${brandPath()}/ticket-mailboxes`,
+        sam,
+      );
+      expect(boxes.status).toBe(200);
+      expect(boxes.body.mailboxes.map((mailbox) => mailbox.address)).toContain('support@acme.test');
+    });
+
+    it('keeps a ticket in the mailbox view after it moves to another department (M14-26 regression)', async () => {
+      const bea = await addPerson(runtime.db, 'bea');
+      await inBrand((tx) =>
+        tx.insert(userBrandRoles).values({
+          userId: bea.id,
+          brandId: seeded.brandId,
+          role: 'agent',
+          departmentIds: [billing],
+        }),
+      );
+      bea.token = await signIn(bea.email, PASSWORD);
+
+      const moved = await createTicket('Arrived at support, then transferred', support);
+      await arriveAt(moved.id, supportBox, 'support@acme.test');
+      // Before the transfer a Billing-only Agent cannot see it.
+      expect(await listIds(bea, `mailboxId=${supportBox}`)).not.toContain(moved.id);
+
+      await inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ departmentId: billing, teamId: null })
+          .where(eq(tickets.id, moved.id)),
+      );
+
+      // Regression: a transferred ticket stays in its mailbox view for whoever works it now.
+      expect(await listIds(bea, `mailboxId=${supportBox}`)).toContain(moved.id);
+      expect(await listIds(bea, 'toAddress=support@acme.test')).toContain(moved.id);
+    });
+
+    it('backfills the arrival columns of existing tickets from their arrival activity (migration 0076)', async () => {
+      const migration = readFileSync(
+        new URL(
+          '../../../../packages/db/drizzle/0076_ticket_arrival_and_reply_mailbox.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      );
+      const update = migration
+        .split('--> statement-breakpoint')
+        .map((statement) => statement.trim())
+        .find((statement) => statement.includes('UPDATE "tickets" AS t'));
+      expect(update).toBeDefined();
+
+      const arrived = await createTicket('Old email ticket');
+      const typed = await createTicket('Old staff ticket');
+      await inBrand((tx) =>
+        tx
+          .update(ticketActivity)
+          .set({
+            to: {
+              arrival: {
+                entry: 'mailbox',
+                entryId: supportBox,
+                address: 'Refunds@Acme.test',
+                departmentId: support,
+                reason: 'entry_department',
+              },
+            },
+          })
+          .where(
+            and(
+              eq(ticketActivity.ticketId, arrived.id),
+              eq(ticketActivity.action, 'ticket.created'),
+            ),
+          ),
+      );
+
+      await inBrand((tx) => tx.execute(sql.raw(update ?? '')));
+
+      expect(await ticketRow(arrived.id)).toMatchObject({
+        arrivalMailboxId: supportBox,
+        arrivalToAddress: 'refunds@acme.test',
+      });
+      expect(await ticketRow(typed.id)).toMatchObject({
+        arrivalMailboxId: null,
+        arrivalToAddress: null,
+      });
+    });
+
+    it('falls back to the department sender when the ticket leaves the reply mailbox’s department', async () => {
+      const ticket = await createTicket('Replies from support', support);
+      await inBrand((tx) =>
+        tx.update(tickets).set({ replyMailboxId: supportBox }).where(eq(tickets.id, ticket.id)),
+      );
+      const addressingOf = () =>
+        inBrand((tx) => new EmailRepository().replyAddressing(tx, ticket.id));
+
+      expect((await addressingOf())?.replyMailbox?.id).toBe(supportBox);
+
+      await inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ departmentId: billing, teamId: null })
+          .where(eq(tickets.id, ticket.id)),
+      );
+      expect((await addressingOf())?.replyMailbox).toBeNull();
+    });
+
+    it('sets the reply mailbox only to a mailbox of the ticket’s department, and says so when it cannot', async () => {
+      await disableAll();
+      await saveRule({
+        name: 'Reply from the support mailbox',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: { match: 'all', groups: [] },
+        actions: [{ type: 'set_reply_mailbox', mailboxId: supportBox }],
+      });
+      const inSupport = await createTicket('Support ticket', support);
+      const inBilling = await createTicket('Billing ticket', billing);
+      await drain();
+
+      expect((await ticketRow(inSupport.id))?.replyMailboxId).toBe(supportBox);
+      expect((await ticketRow(inBilling.id))?.replyMailboxId).toBeNull();
+
+      const log = await call<WorkflowRunList>('GET', `${brandPath()}/rules/runs`, ada);
+      const effects = (ticketId: string) =>
+        log.body.runs
+          .find((run) => run.ticketId === ticketId)
+          ?.actions.map((outcome) => outcome.effect);
+      expect(effects(inSupport.id)).toEqual(['changed']);
+      expect(effects(inBilling.id)).toEqual(['unavailable']);
+
+      const trail = await inBrand((tx) =>
+        tx
+          .select({ to: ticketActivity.to })
+          .from(ticketActivity)
+          .where(
+            and(
+              eq(ticketActivity.ticketId, inSupport.id),
+              eq(ticketActivity.action, 'ticket.reply_mailbox.changed'),
+            ),
+          ),
+      );
+      expect(trail.map((entry) => entry.to)).toEqual([{ replyMailboxId: supportBox }]);
+
+      // The mailbox is deleted: replies leave from the department's sender again.
+      await inBrand((tx) => tx.delete(mailboxes).where(eq(mailboxes.id, supportBox)));
+      expect((await ticketRow(inSupport.id))?.replyMailboxId).toBeNull();
+      await disableAll();
+    });
+
+    it('marks a ticket as spam by rule, with the spam transition’s trail', async () => {
+      await disableAll();
+      await saveRule({
+        name: 'Spam by subject',
+        kind: 'event',
+        trigger: 'ticket_created',
+        conditions: {
+          match: 'all',
+          groups: [
+            {
+              match: 'all',
+              conditions: [{ field: 'subject', operator: 'contains', values: ['lottery'] }],
+            },
+          ],
+        },
+        actions: [{ type: 'mark_spam' }, { type: 'add_tag', tagId: refundTag }],
+      });
+      const spam = await createTicket('You won the lottery');
+      const fine = await createTicket('A real question');
+      await drain();
+
+      const statusOf = (ticketId: string) =>
+        inBrand(async (tx) => {
+          const [row] = await tx
+            .select({ isSpam: ticketStatuses.isSpam })
+            .from(tickets)
+            .innerJoin(ticketStatuses, eq(ticketStatuses.id, tickets.statusId))
+            .where(eq(tickets.id, ticketId));
+          return row?.isSpam;
+        });
+      expect(await statusOf(spam.id)).toBe(true);
+      expect(await statusOf(fine.id)).toBe(false);
+
+      const actions = await inBrand((tx) =>
+        tx
+          .select({ action: ticketActivity.action, actorId: ticketActivity.actorId })
+          .from(ticketActivity)
+          .where(eq(ticketActivity.ticketId, spam.id)),
+      );
+      expect(actions.map((entry) => entry.action)).toContain('ticket.marked_spam');
+      const events = await inBrand((tx) =>
+        tx.select({ payload: outbox.payload }).from(outbox).where(eq(outbox.event, 'ticket.spam')),
+      );
+      expect(events.map((entry) => entry.payload)).toContainEqual(
+        expect.objectContaining({ ticketId: spam.id }),
+      );
+
+      const log = await call<WorkflowRunList>('GET', `${brandPath()}/rules/runs`, ada);
+      expect(
+        log.body.runs.find((run) => run.ticketId === spam.id)?.actions.map((o) => o.effect),
+      ).toEqual(['changed', 'changed']);
+      await disableAll();
+    });
   });
 });

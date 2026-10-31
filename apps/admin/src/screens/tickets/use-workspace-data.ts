@@ -4,6 +4,7 @@ import type {
   Department,
   StaffMember,
   TagSummary,
+  TicketMailbox,
   TicketStatus,
 } from '@helpdock/schemas';
 import { useQuery } from '@tanstack/react-query';
@@ -45,6 +46,8 @@ export interface WorkspaceData {
   readonly tags: readonly TagSummary[];
   /** M14-16: every custom field of the brand, which the filters and the pinned chip are drawn from. */
   readonly fields: readonly CustomFieldDef[];
+  /** M14-26: what the Mailbox filter offers and the chips name. */
+  readonly mailboxes: readonly TicketMailbox[];
 }
 
 /**
@@ -99,12 +102,21 @@ export function useWorkspaceData(brandId: string): WorkspaceData {
     staleTime: DIRECTORY_STALE_MS,
   });
 
+  // A failed read hides the Mailbox filter rather than blocking the list.
+  const mailboxes = useQuery({
+    queryKey: ticketKeys.mailboxes(brandId),
+    queryFn: () => tickets.mailboxes(brandId),
+    staleTime: DIRECTORY_STALE_MS,
+    retry: false,
+  });
+
   return {
     statuses: statuses.data?.statuses ?? [],
     departments,
     staff: staff.data?.staff ?? [],
     tags: tags.data?.tags ?? [],
     fields: fields.data?.fields ?? [],
+    mailboxes: mailboxes.data?.mailboxes ?? [],
   };
 }
 

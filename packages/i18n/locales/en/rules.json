@@ -101,6 +101,8 @@
     "time_in_status": "Time in status",
     "business_hours": "Business hours",
     "custom_field": "Custom field",
+    "mailbox": "Mailbox",
+    "to_address": "Written to",
     "custom": "Custom field · {{label}}"
   },
   "operators": {
@@ -151,7 +153,9 @@
     "escalate": "Escalate",
     "close": "Close",
     "snooze": "Snooze",
-    "ai_triage": "AI triage"
+    "ai_triage": "AI triage",
+    "set_reply_mailbox": "Set reply address",
+    "mark_spam": "Mark as spam"
   },
   "assignTargets": {
     "assign_team": "Team",
@@ -195,6 +199,8 @@
       "notify": "Notify {{who}}",
       "escalate": "Escalate",
       "close": "Close",
+      "set_reply_mailbox": "Reply from {{mailbox}}",
+      "mark_spam": "Mark as spam",
       "snooze": {
         "in_1_hour": "Snooze for 1 hour",
         "in_4_hours": "Snooze for 4 hours",
@@ -279,6 +285,10 @@
     "note": "Note",
     "notifyWho": "Notify",
     "notifyMessage": "Message (optional)",
+    "replyMailbox": "Reply address",
+    "mailboxOption": "{{address}} ({{department}} may use it)",
+    "replyMailboxNote": "Later public replies on email leave from this address. It applies only when the mailbox belongs to the ticket’s department when the rule runs.",
+    "markSpamNote": "Moves the ticket to Spam: no auto-reply, no survey, left out of reports.",
     "snoozeFor": "Wake time",
     "snoozeNote": "Snoozes the ticket like the Snooze menu. Not run when the ticket was just woken (a reply, an SLA step or its time), so a reply always stays visible. Next business day and next week are the department's next opening.",
     "incomplete": "Fill in every condition and action before saving.",

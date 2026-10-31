@@ -4,6 +4,7 @@ import type {
   TicketActivityList,
   TicketDetail,
   TicketList,
+  TicketMailboxList,
   TicketMessage,
   TicketMessagePage,
   TicketStatusList,
@@ -39,6 +40,7 @@ import {
   TicketDto,
   TicketListDto,
   TicketListQueryDto,
+  TicketMailboxListDto,
   TicketMessageDto,
   TicketMessagePageDto,
   TicketParamDto,
@@ -80,6 +82,16 @@ export class TicketsController {
     @Param(new ZodValidationPipe(TicketBrandParamDto)) _params: TicketBrandParamDto,
   ): Promise<TicketStatusList> {
     return this.#tickets.statuses();
+  }
+
+  /** M14-26. The mailboxes the list can be filtered by. */
+  @Get('ticket-mailboxes')
+  @Requires('ticket:read')
+  @ZodSerializerDto(TicketMailboxListDto)
+  async mailboxes(
+    @Param(new ZodValidationPipe(TicketBrandParamDto)) _params: TicketBrandParamDto,
+  ): Promise<TicketMailboxList> {
+    return this.#tickets.mailboxes();
   }
 
   @Get('tickets')

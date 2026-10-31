@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ticketAiStateSchema, ticketMessageAiSchema } from './ai.js';
 import { ticketCsatSchema } from './csat.js';
 import { emailMessageViewSchema } from './email-inbound.js';
+import { emailSenderKeySchema } from './email-sender-key.js';
 import { importMessageDetailsSchema, importSourceSchema } from './import.js';
 import { importSourceLink } from './import-source-link.js';
 import { ATTACHMENTS_PER_MESSAGE_CEILING, attachmentSchema } from './media.js';
@@ -610,6 +611,9 @@ export const TICKET_ASSIGNEE_ME = 'me';
  */
 const queryBoolean = z.union([z.boolean(), z.stringbool()]);
 
+/** An email address is at most 320 characters; the arrival record stores no more (ticket-routing.ts). */
+export const TICKET_ADDRESS_FILTER_MAX = 320;
+
 export const ticketListQuerySchema = z.object({
   imported: z
     .preprocess(
@@ -623,6 +627,14 @@ export const ticketListQuerySchema = z.object({
   priority: coerceArray(ticketPrioritySchema).optional(),
   departmentId: coerceArray(z.uuid()).optional(),
   channel: coerceArray(ticketChannelSchema).optional(),
+  /**
+   * M14-26. The mailbox the ticket arrived at (any of), read from the arrival
+   * record of M14-08. A ticket filed before M14, or through another entry
+   * point, has no mailbox and matches neither this nor `toAddress`.
+   */
+  mailboxId: coerceArray(z.uuid()).optional(),
+  /** M14-26. The address the customer wrote to, matched exactly and without regard to case. */
+  toAddress: z.string().trim().min(1).max(TICKET_ADDRESS_FILTER_MAX).optional(),
   /**
    * `unassigned` is a value rather than a separate flag, because "unassigned"
    * is one of the chips in the same filter and a second parameter would let a
@@ -851,10 +863,10 @@ export const messageCreateRequestSchema = z.object({
   timeSpentSeconds: timeEntrySecondsSchema.optional(),
   /**
    * M2-05. On a public reply to an email ticket, the sender it goes out as:
-   * `default` or a department id (`emailSenderKeySchema`). Left out, the
+   * `default`, a department id or `mailbox:<id>` (`emailSenderKeySchema`). Left out, the
    * ticket's own department's sender is used. Ignored on anything else.
    */
-  emailFrom: z.union([z.literal('default'), z.uuid()]).optional(),
+  emailFrom: emailSenderKeySchema.optional(),
 });
 export type MessageCreateRequest = z.infer<typeof messageCreateRequestSchema>;
 

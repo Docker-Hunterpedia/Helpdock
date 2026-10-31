@@ -33,6 +33,8 @@ import type {
   TicketFieldFilter,
   TicketLink,
   TicketList,
+  TicketMailbox,
+  TicketMailboxList,
   TicketMergeRequest,
   TicketMergeResult,
   TicketMessage,
@@ -128,6 +130,26 @@ const SUPPORT_ID = SUPPORT?.id ?? '';
 const BILLING_ID = BILLING?.id ?? '';
 
 const YARA_ID = '0192c3f0-1a2b-7c3d-8e4f-00000000000c';
+
+/**
+ * M14-26: the brand's mailboxes, and the mailbox each fixture email ticket
+ * arrived at (the arrival record of M14-08). The rest arrived elsewhere, or
+ * before M14, and have none.
+ */
+export const MOCK_MAILBOXES: readonly TicketMailbox[] = [
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000b01',
+    address: 'support@helpdock.test',
+    displayName: 'Helpdock Support',
+    departmentId: SUPPORT_ID,
+  },
+  {
+    id: '0192c3f0-1a2b-7c3d-8e4f-000000000b02',
+    address: 'billing@helpdock.test',
+    displayName: 'Helpdock Billing',
+    departmentId: BILLING_ID,
+  },
+];
 
 export const MOCK_TICKET_REFUND = '0192c3f0-1a2b-7c3d-8e4f-000000001042';
 export const MOCK_TICKET_SIGN_IN = '0192c3f0-1a2b-7c3d-8e4f-000000001041';
@@ -872,6 +894,10 @@ export class MockTicketsApi implements TicketsApi {
       expiresAt: new Date(now + 24 * DAY).toISOString(),
       ratedAt: new Date(now - 5 * DAY).toISOString(),
     });
+  }
+
+  async mailboxes(_brandId: string): Promise<TicketMailboxList> {
+    return Promise.resolve({ mailboxes: [...MOCK_MAILBOXES] });
   }
 
   async statuses(_brandId: string): Promise<TicketStatusList> {
@@ -2328,6 +2354,7 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     inList(query.priority, ticket.priority) &&
     inList(query.departmentId, ticket.departmentId) &&
     inList(query.channel, ticket.channel) &&
+    arrivedAt(ticket, query) &&
     assignee &&
     (query.tagIds ?? []).every((tagId) => tagIds.has(tagId)) &&
     (query.overdue !== true || isOverdue(ticket, now)) &&
@@ -2335,6 +2362,37 @@ const matchesQuery = (ticket: Ticket, query: TicketQuery, term: string, now: num
     (query.fieldFilter ?? []).every((filter) => matchesFieldFilter(ticket.custom, filter)) &&
     snoozeMatches(ticket, query.snoozed) &&
     (term === '' || ticket.subject.toLowerCase().includes(term))
+  );
+};
+
+/**
+ * M14-26: the arrival filters. Only the two email fixtures below arrived at a
+ * mailbox; every other ticket has no record and matches neither filter, as a
+ * ticket filed before M14 does not in the api.
+ */
+const MOCK_ARRIVALS: ReadonlyMap<string, { mailboxId: string; address: string }> = new Map([
+  [
+    MOCK_TICKET_REFUND,
+    { mailboxId: MOCK_MAILBOXES[1]?.id ?? '', address: 'refunds@helpdock.test' },
+  ],
+  [
+    MOCK_TICKET_SIGN_IN,
+    { mailboxId: MOCK_MAILBOXES[0]?.id ?? '', address: 'support@helpdock.test' },
+  ],
+]);
+
+const arrivedAt = (ticket: Ticket, query: TicketQuery): boolean => {
+  const wantsMailbox = (query.mailboxId?.length ?? 0) > 0;
+  const wantsAddress = query.toAddress !== undefined && query.toAddress !== '';
+  if (!wantsMailbox && !wantsAddress) {
+    return true;
+  }
+  const arrival = MOCK_ARRIVALS.get(ticket.id);
+
+  return (
+    arrival !== undefined &&
+    (!wantsMailbox || query.mailboxId?.includes(arrival.mailboxId) === true) &&
+    (!wantsAddress || arrival.address === query.toAddress?.toLowerCase())
   );
 };
 

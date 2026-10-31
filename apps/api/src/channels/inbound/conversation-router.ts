@@ -27,6 +27,7 @@ import type {
 import {
   type ArrivalEntryPoint,
   addressWrittenTo,
+  arrivalColumnsOf,
   arrivalOf,
 } from '../../tickets/routing/arrival.js';
 import { type ActivityActor, writeTicketActivity } from '../../tickets/ticket-activity.js';
@@ -334,6 +335,7 @@ export class ConversationRouter {
       priority: 'medium',
       channel: 'email',
       contactId,
+      ...arrivalColumnsOf(mailboxEntry(context, message)),
     });
 
     const messageId = await this.#writeMessage(context, ticket, 1, message, contactId, sink);

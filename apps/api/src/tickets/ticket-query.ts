@@ -482,6 +482,13 @@ export const ticketFilters = ({
   if (filters.channel !== undefined && filters.channel.length > 0) {
     clauses.push(inArray(tickets.channel, [...filters.channel]));
   }
+  // M14-26: where the ticket arrived, read from its arrival record.
+  if (filters.mailboxId !== undefined && filters.mailboxId.length > 0) {
+    clauses.push(inArray(tickets.arrivalMailboxId, [...new Set(filters.mailboxId)]));
+  }
+  if (filters.toAddress !== undefined) {
+    clauses.push(sql`lower(${tickets.arrivalToAddress}) = ${filters.toAddress.toLowerCase()}`);
+  }
   if (filters.imported !== undefined)
     clauses.push(filters.imported ? isNotNull(tickets.importedAt) : isNull(tickets.importedAt));
   if (filters.assigneeId !== undefined && filters.assigneeId.length > 0) {

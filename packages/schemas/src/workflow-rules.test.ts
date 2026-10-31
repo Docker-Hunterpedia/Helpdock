@@ -37,6 +37,11 @@ describe('ruleConditionSchema', () => {
     { field: 'custom_field', key: 'order_number', operator: 'is_set' },
     { field: 'time_in_status', operator: 'more_than', duration: { amount: 3, unit: 'days' } },
     { field: 'business_hours', operator: 'is', values: ['outside'] },
+    { field: 'mailbox', operator: 'is', values: [ID] },
+    { field: 'mailbox', operator: 'is_not', values: [ID] },
+    { field: 'mailbox', operator: 'any_of', values: [ID, ID] },
+    { field: 'to_address', operator: 'is', values: ['refunds@acme.test'] },
+    { field: 'to_address', operator: 'contains', values: ['refunds@'] },
   ])('accepts %j', (condition) => {
     expect(ruleConditionSchema.safeParse(condition).success).toBe(true);
   });
@@ -55,6 +60,15 @@ describe('ruleConditionSchema', () => {
     ['a custom field without its key', { field: 'custom_field', operator: 'is_set' }],
     ['a key on another field', { field: 'subject', key: 'x', operator: 'is_set' }],
     ['time in status without a duration', { field: 'time_in_status', operator: 'more_than' }],
+    [
+      'a mailbox named by address rather than id',
+      { field: 'mailbox', operator: 'is', values: ['a@b.test'] },
+    ],
+    [
+      'an operator the address does not take',
+      { field: 'to_address', operator: 'any_of', values: ['a'] },
+    ],
+    ['a blank address', { field: 'to_address', operator: 'contains', values: [' '] }],
     [
       'business hours that are neither',
       { field: 'business_hours', operator: 'is', values: ['sometimes'] },
@@ -96,6 +110,19 @@ describe('ruleActionSchema', () => {
       false,
     );
     expect(ruleActionSchema.safeParse({ type: 'snooze' }).success).toBe(false);
+  });
+
+  it('takes the reply mailbox and mark as spam actions (M14-26)', () => {
+    expect(ruleActionSchema.parse({ type: 'set_reply_mailbox', mailboxId: ID })).toEqual({
+      type: 'set_reply_mailbox',
+      mailboxId: ID,
+    });
+    expect(ruleActionSchema.parse({ type: 'mark_spam' })).toEqual({ type: 'mark_spam' });
+    expect(ruleActionSchema.safeParse({ type: 'set_reply_mailbox' }).success).toBe(false);
+    expect(
+      ruleActionSchema.safeParse({ type: 'set_reply_mailbox', mailboxId: 'billing@acme.test' })
+        .success,
+    ).toBe(false);
   });
 
   it('refuses an action that does not exist, which is how v1 keeps webhooks and AI out', () => {

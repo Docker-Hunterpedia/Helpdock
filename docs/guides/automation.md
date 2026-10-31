@@ -57,6 +57,8 @@ event reaches. Conditions:
 | Team, Assignee, Tag, Account | is, is not, is any of, is set |
 | Time in status | for more than, for less than (hours or days) |
 | Business hours | is inside, is outside |
+| Mailbox (the one the ticket arrived at) | is, is not, is any of |
+| Written to (the address the customer wrote to) | is, contains |
 
 Text matching ignores case and Unicode compatibility forms, so "Refund" finds
 "refund" and an Arabic word matches however it was typed. Time in status is
@@ -68,7 +70,7 @@ department: its own hours and holidays if it has them, otherwise the brand's
 **Then.** Actions run in order: set status, set priority, set a custom field,
 assign to a team, an agent or the department's round-robin, add or remove a tag,
 send a canned response, add an internal note, notify, escalate, close, snooze,
-and AI triage.
+set the reply address, mark as spam, and AI triage.
 
 - Assigning to a team in another department **moves the ticket there**, and
   takes it off an assignee who cannot follow; a ticket left unassigned is handed
@@ -94,6 +96,29 @@ and AI triage.
   ticket was just woken*, so a `ticket_updated` rule cannot put the ticket back
   to sleep for ever and a customer's reply is never hidden
   ([DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions)).
+- **Mailbox and Written to** (M14-26) are judged on the ticket's *arrival
+  record* ([DOMAIN-RULES §2.8](../planning/DOMAIN-RULES.md#28-arrival-and-the-routing-trail)):
+  the mailbox it came in at, and the address the customer wrote to, which is
+  how an alias that forwards into one mailbox is told apart. **A ticket that did
+  not arrive at a mailbox never matches either condition, whatever the
+  operator**, so *is not* cannot claim a ticket with no mailbox. That covers
+  every ticket filed before 1.1 (they have no arrival record) and every ticket
+  from the widget, a form, Telegram or Meta. The address is withheld from the
+  stored run log, like the subject.
+- **Set reply address** (M14-26) makes later public replies on email leave from
+  one of the brand's mailboxes, in place of the department's sender. It is
+  accepted only for a mailbox *of the ticket's department*, checked when the rule
+  runs: another department's, or a deleted one, is logged as *not carried out*.
+  The composer's From select lists it first and preselects it, and an agent who picks another From wins for that reply. It only counts while the mailbox still belongs to the ticket's department: after a transfer, replies go back to the department's sender.
+  Auto-replies, surveys and transcripts keep the department's sender. Deleting
+  the mailbox puts the department's sender back.
+- **Mark as spam** (M14-26) is the same transition as a person's *Mark as spam*:
+  the Spam status, no auto-reply, no survey, left out of reports
+  ([DOMAIN-RULES §2.2](../planning/DOMAIN-RULES.md#22-transitions)). An
+  acknowledgment, out-of-hours reply or survey that was already queued when the
+  rule ran is discarded unsent, not delivered. A merged or deleted ticket is
+  recorded as *not carried out*. It does not block the sender; do that from the
+  ticket.
 - A canned reply is a public message written by the system. It **does not stop
   the first-response clock** unless the action's *Counts as first response* box
   is ticked (`counts_as_response`, DOMAIN-RULES §3.1). The builder offers the

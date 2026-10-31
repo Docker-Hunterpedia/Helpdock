@@ -62,6 +62,9 @@ export class NoSmtpServerError extends Error {
   }
 }
 
+/** The deliveries nobody asked for: they stop when their ticket becomes spam. */
+const SPAM_SILENT_KINDS: ReadonlySet<string> = new Set(['acknowledgment', 'out_of_hours', 'csat']);
+
 export const createEmailSendHandler =
   ({
     repository,
@@ -86,6 +89,16 @@ export const createEmailSendHandler =
     const facts = await repository.sendFacts(tx, delivery);
     if (facts === undefined) {
       log.info({ brandId, deliveryId: delivery.id }, 'email.send skipped: the ticket is gone');
+      return;
+    }
+    // M14-26: a rule can mark a ticket as spam after its acknowledgment or survey was
+    // queued (§2.2 row 7: no auto-responder, no CSAT). Nothing is sent for it.
+    if (facts.isSpam && SPAM_SILENT_KINDS.has(delivery.kind)) {
+      await repository.discardQueued(tx, delivery.id);
+      log.info(
+        { brandId, deliveryId: delivery.id, kind: delivery.kind },
+        'email.send skipped: the ticket is spam',
+      );
       return;
     }
     const survey = delivery.kind === 'csat' ? await surveys.forDelivery(tx, delivery) : undefined;

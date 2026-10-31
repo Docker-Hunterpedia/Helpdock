@@ -1533,6 +1533,39 @@ address condition; the guide says so. Artboard `Admin/Ticketing-FieldFilters`
 gains the two filters and `Admin/RuleBuilder` (amended) the conditions and
 actions.
 
+**Status: built, in review** (issue [#313](https://github.com/Docker-Hunterpedia/Helpdock/issues/313)).
+Built as above, with these decisions:
+
+- [x] `mailboxId` / `toAddress` on `GET /tickets` (and so in views, the public
+  API and OpenAPI), read from two new columns on the ticket,
+  `tickets.arrival_mailbox_id` (FK, `ON DELETE SET NULL`) and
+  `tickets.arrival_to_address` (lower-cased), indexed per brand. They are
+  written once at email intake (a new ticket, and a reopen-policy continuation)
+  from the same entry point the M14-08 arrival activity records. The plan said
+  "no new column"; a copy is kept so the list filters on an indexed,
+  brand-scoped column instead of scanning activity JSON per query, and the fact
+  is stable. Migration `0076` backfills existing tickets from their arrival activity.
+- [x] Filter popover rows "Mailbox" and "Written to", and the same two in the
+  Views tab's editor; the mailbox list comes from `GET /ticket-mailboxes`
+  (`ticket:read`), because `GET /mailboxes` needs `brand:manage`.
+- [x] Conditions `mailbox` (is, is not, any of) and `to_address` (is, contains).
+  A ticket without a mailbox arrival matches neither under any operator,
+  including *is not* (the plan's "pre-M14 tickets never match", extended to
+  tickets from other entry points, which also have no mailbox).
+- [x] `set_reply_mailbox` writes the new `tickets.reply_mailbox_id`
+  (same migration, `ON DELETE SET NULL`); accepted only for a mailbox of the
+  ticket's department when the rule runs, and honoured only while the mailbox
+  still belongs to the ticket's department. The composer's From
+  select lists it first and preselects it (`mailbox:<id>`); an agent who picks
+  another From wins; auto-replies,
+  surveys and transcripts keep the department's sender. Not exposed on the
+  ticket DTO (no screen shows it yet); the activity row is
+  `ticket.reply_mailbox.changed`, drawn in the thread.
+- [x] `mark_spam` calls the existing lifecycle transition. A queued
+  acknowledgment, out-of-hours reply or survey for a ticket that became spam is
+  discarded unsent by the `email.send` job.
+- [x] Test routing's synthetic ticket carries the entry's mailbox and address.
+
 ### M14-27 More custom field types
 
 `customFieldTypeSchema` today holds text, number, date, select, multi-select

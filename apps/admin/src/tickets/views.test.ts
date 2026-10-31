@@ -368,3 +368,41 @@ describe('custom-field filters (M14-16)', () => {
     ).toBe(false);
   });
 });
+
+describe('mailbox and written-to filters (M14-26)', () => {
+  const BOX = '0192c3f0-1a2b-7c3d-8e4f-000000000b01';
+  const filters = { ...EMPTY_FILTERS, mailboxId: [BOX], toAddress: 'refunds@acme.test' };
+
+  it('travels in the URL and survives a round trip', () => {
+    const params = withFilters(new URLSearchParams(), filters);
+
+    expect(params.getAll('mailbox')).toEqual([BOX]);
+    expect(params.get('to')).toBe('refunds@acme.test');
+    expect(filtersFromParams(params)).toMatchObject({
+      mailboxId: [BOX],
+      toAddress: 'refunds@acme.test',
+    });
+    expect(withoutFilters(params).has('to')).toBe(false);
+    expect(withoutFilters(params).has('mailbox')).toBe(false);
+  });
+
+  it('is saved with a view, read back from it, and asked of the list as it is', () => {
+    const saved = ticketViewFiltersSchema.parse(viewFiltersOf(filters));
+
+    expect(saved).toMatchObject({ mailboxId: [BOX], toAddress: 'refunds@acme.test' });
+    expect(filtersOfView(saved)).toMatchObject({
+      mailboxId: [BOX],
+      toAddress: 'refunds@acme.test',
+    });
+    expect(queryOf(filters)).toMatchObject({ mailboxId: [BOX], toAddress: 'refunds@acme.test' });
+    expect(Object.keys(queryOf(EMPTY_FILTERS))).not.toContain('toAddress');
+    expect(Object.keys(queryOf(EMPTY_FILTERS))).not.toContain('mailboxId');
+  });
+
+  it('counts one for the mailboxes and one for the address, and tells a change from the same filter', () => {
+    expect(activeFilterCount(filters)).toBe(2);
+    expect(sameFilters(filters, { ...filters })).toBe(true);
+    expect(sameFilters(filters, { ...filters, toAddress: 'help@acme.test' })).toBe(false);
+    expect(sameFilters(filters, { ...filters, mailboxId: [] })).toBe(false);
+  });
+});

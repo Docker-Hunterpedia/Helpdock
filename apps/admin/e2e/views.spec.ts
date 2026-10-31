@@ -229,7 +229,7 @@ test.describe('the Views tab', () => {
       card.getByRole('button', { name: t('ticketing:views.editor.create') }),
     ).toBeDisabled();
 
-    await card.getByRole('button', { name: 'Billing' }).click();
+    await card.getByRole('button', { name: 'Billing', exact: true }).click();
     await card.getByRole('button', { name: t('ticketing:views.editor.create') }).click();
     await expect(
       page.getByRole('button', {

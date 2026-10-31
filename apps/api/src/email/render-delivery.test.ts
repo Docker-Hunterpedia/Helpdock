@@ -19,6 +19,7 @@ const facts: SendFacts = {
   brandName: 'Helpdock',
   departmentName: 'Billing',
   contactName: 'Mona Khalil',
+  isSpam: false,
   message: {
     bodyHtml: '<p>Your refund was issued.</p>',
     bodyText: 'Your refund was issued.',

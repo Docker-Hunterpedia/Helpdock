@@ -41,6 +41,8 @@ export type TicketActivityAction =
   | 'ticket.escalated'
   /** M1-06. Its own verb rather than `ticket.updated`, because the thread draws chips. */
   | 'ticket.tags.changed'
+  /** M14-26. A rule chose the mailbox replies leave from; `from`/`to` carry `replyMailboxId`. The thread does not draw it. */
+  | 'ticket.reply_mailbox.changed'
   /** M1-11. Beside `ticket.status.changed`, as `ticket.closed` is, so the log says why. */
   | 'ticket.marked_spam'
   | 'ticket.unmarked_spam'

@@ -4,10 +4,10 @@ import {
   type SoundEvent,
   WAITING_CHAT_REMINDER_MS,
 } from '@helpdock/schemas';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { currentBrand, useSession, useTicketsApi } from '../../auth/session.tsx';
+import { currentBrand, useSession, useStaffApi, useTicketsApi } from '../../auth/session.tsx';
 import { useRealtime } from '../../realtime/realtime-provider.tsx';
-import { useDepartments } from '../../screens/tickets/use-workspace-data.js';
 import { useNotificationsApi } from '../context.tsx';
 import { useNotificationPreferences } from '../use-preferences.js';
 import { soundPlayer } from './player.js';
@@ -49,7 +49,16 @@ export function useNotificationSounds(): void {
   const tickets = useTicketsApi();
   const notifications = useNotificationsApi();
   const sounds = useNotificationPreferences().data?.sounds;
-  const departments = useDepartments(brandId, sounds !== undefined && needsDepartmentRooms(sounds));
+  const staffApi = useStaffApi();
+  // A key of its own: the Departments tab caches `['departments', brandId]`
+  // from another api, and two queryFns on one key reorder each other's lists.
+  const departments =
+    useQuery({
+      queryKey: ['notification-sounds', 'departments', brandId],
+      queryFn: () => staffApi.departments(brandId),
+      staleTime: 5 * 60_000,
+      enabled: sounds !== undefined && needsDepartmentRooms(sounds),
+    }).data?.departments ?? [];
 
   // The handlers below are set up once per brand and read the latest choice
   // from here, so toggling a switch does not tear the subscription down.

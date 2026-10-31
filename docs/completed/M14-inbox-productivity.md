@@ -15,8 +15,7 @@ Snooze, bulk edit with undo, a keyboard registry and command palette, a routing 
 
 ## Close-out (2026-11-01)
 
-All 29 deliverables are merged; M14-22 (#441) was in review when this was
-written and is described as shipped. The plan below is kept as it was built:
+All 29 deliverables are merged; All of them shipped. The plan below is kept as it was built:
 each deliverable's section ends with a **Status: shipped** line and the
 differences from the plan, and the guides under `docs/guides/` describe what
 runs today.
@@ -1553,6 +1552,22 @@ Where the build departs from the board, and why:
   does the same (it was after Reports).
 
 ### M14-22 List-first tickets on narrow screens
+
+**Status: shipped** (issue #309). Built from `Admin/Tickets-Narrow`
+(`AdminTicketsNarrow.dc.html`) as below, with these differences: the bar over
+the pushed ticket holds Back and Details, but not the ticket's reference, which
+the header directly under it already shows (and the header's own Details icon
+steps aside so there is one button); Back is an explicit navigation to the
+list with the same query string rather than `history.back()`, because `j` and
+`k` push a history entry per ticket and "back" would otherwise step through
+them; the list is unmounted while a ticket is open, so its scroll position is
+kept in a ref (`scrollMemory`) and restored on return, and focus returns to the
+row that was open (without scrolling). `[` does nothing below 1024 px, as
+before; `/` and a filter chosen from the sidebar navigate to the list first.
+The layout choice is `workspaceLayout` (`split`, `list`, `ticket`). Guide:
+[Tickets on a narrow screen](../guides/tickets.md#tickets-on-a-narrow-screen-m14-22).
+The old "list in a drawer" Playwright test is replaced by
+`apps/admin/e2e/narrow-tickets.spec.ts`.
 
 From [UX-13](../completed/ux-review-1-0.md#findings). Below 1024 px
 (`LIST_BREAKPOINT`) the list moves into a drawer today and the main area shows

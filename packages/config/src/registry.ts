@@ -323,7 +323,7 @@ export const SETTING_DEFINITIONS = [
     secret: false,
     scope: 'brand',
     description:
-      'How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Channels › Widget.',
+      'How much work the built-in `pow` check asks of a visitor: `low` is about half a second on a mid-range phone, `medium` about two seconds (ADR 0052). Set on Settings › Channels › Chat widget.',
     // The widget and the web form read the brand's `captcha.*` rows directly,
     // so an `HD_` pin would not reach them (M18 plan, open item 8).
     envKey: null,

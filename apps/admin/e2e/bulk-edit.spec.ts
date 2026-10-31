@@ -264,10 +264,6 @@ for (const width of [1280, 768]) {
     await signIn(page, locale);
     await openTickets(page, locale, 'all');
     await page.setViewportSize({ width, height: 800 });
-    if (width < 1024) {
-      // Below 1024 px the list is a drawer.
-      await page.getByRole('button', { name: t('tickets:list.open') }).click();
-    }
     await boxOf(page, locale, 'HD-1042').click();
     const bar = page.getByRole('toolbar', { name: t('tickets:bulk.bar.label') });
     await expect(bar).toBeVisible();

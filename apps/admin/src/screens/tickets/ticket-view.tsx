@@ -111,6 +111,7 @@ export function TicketView({
   viewer,
   now,
   detailsInDrawer,
+  detailsButtonInHeader = true,
   detailsOpen,
   onDetailsOpenChange,
   onGoToList,
@@ -122,6 +123,8 @@ export function TicketView({
   readonly viewer: { readonly id: string; readonly name: string };
   readonly now: number;
   readonly detailsInDrawer: boolean;
+  /** M14-22: false when the page draws the Details button itself (the narrow bar). */
+  readonly detailsButtonInHeader?: boolean;
   readonly detailsOpen: boolean;
   onDetailsOpenChange(open: boolean): void;
   onGoToList(): void;
@@ -1048,7 +1051,7 @@ export function TicketView({
           pinnedField={fieldDefs.data?.fields.find((def) => def.pinned && def.target === 'ticket')}
           viewers={headerViewers}
           now={now}
-          showDetailsButton={detailsInDrawer}
+          showDetailsButton={detailsInDrawer && detailsButtonInHeader}
           // One menu (the artboard's panel 2): Merge, Split, Log time, then
           // Mark as spam behind its divider.
           actions={[...mergeActions, ...logTimeActions, ...spam.items]}

@@ -831,7 +831,7 @@ binding, Workspace domains, the Entra rule (`entra.ts`), break-glass and
 | A second subject for a bound provider is refused | `oauth-identity.integration.test.ts`, `oauth-microsoft.integration.test.ts` |
 | Microsoft: wrong `tid`, missing `xms_edov` | `oauth-microsoft.integration.test.ts`, `oauth-microsoft.service.test.ts`, `entra.test.ts`, `oidc-contracts.test.ts` |
 | Proof-of-work single spend under concurrency | `pow-captcha.test.ts`, `widget.integration.test.ts` and `web-form.integration.test.ts` (a replay is refused) |
-| Both new tables are in `GLOBAL_TABLES` | `packages/db/src/schema/index.test.ts` |
+| Both new tables are in `GLOBAL_TABLES` | `packages/db/src/schema/index.test.ts` (classified, and asserted global and not tenant-scoped) |
 | Malformed `authenticatorData` and `clientDataJSON` | `webauthn.service.test.ts` (too-short authenticator data, client data that is not JSON, an attestation that is not CBOR) |
 
 No test was missing, so none was added in this pass.

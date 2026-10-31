@@ -93,6 +93,23 @@ flow, which has no PKCE verifier (the paragraph under the V2 table). 13.1.3
 stays Partial because email-link tokens and the Bot API's token sit in URLs, as
 their protocols require.
 
+### Found in the M18 re-walk
+
+Walked on 2026-10-31 against `main` after M18-01 to M18-11 (M18-13, #287), with
+a source review of the passkey, OAuth, SSO preset, break-glass, built-in
+CAPTCHA and step-up code; the threat-model notes and the one finding are in the
+[milestone doc](../in-development/M18-sign-in-options.md#security-pass-m18-13).
+Also read: the 1.1.1 fix that stops a challenge handed out earlier from adding
+or replacing a second factor the account has since set (`auth.service.ts`
+`completeEnrolment`, tests in `passkey-second-factor.integration.test.ts`).
+
+| Row | Was | Now | Why |
+|---|---|---|---|
+| 2.3.2 | Partial | Met | WebAuthn passkeys |
+| 2.9.1, 2.9.2, 2.9.3 | N/A | Met | Passkeys are cryptographic authenticators |
+| 3.7.1 | Partial | Partial | Passkey and sign-in-method changes now re-prove a credential; the API key, webhook, bot and provider-key changes still do not |
+| 2.2.1, 2.2.3, 2.5.5, 2.5.7, 2.6.1, 3.2.1, 4.3.1, 7.1.3, 11.1.4, 13.2.3 | as before | as before | Evidence extended to the M18 paths |
+
 ## V1 Architecture, design and threat modeling
 
 | # | Requirement | Status | Evidence |
@@ -154,7 +171,7 @@ their protocols require.
 | 2.1.12 | Show the masked password on request | Met | A show/hide toggle with `aria-pressed` on every field that chooses a password, hidden again on submit (`password-field.tsx`, `password-field.test.tsx`, `e2e/password-field.spec.ts`). The sign-in field has none: it chooses nothing |
 | 2.2.1 | Anti-automation | Met | Sliding-window limits per address and per IP (`api/auth/rate-limit.ts`), challenge lock after three second-factor failures. Passkey sign-in and its options share the sign-in IP budget or have buckets of their own (`passkey-signin-options`, `passkey-ceremony-options`), a passkey answer spends the same three attempts as a code, sign-in-link and reset requests have a per-IP bucket (`email-dispatch-ip`) (`passkey-sign-in.integration.test.ts`, `passkey-second-factor.integration.test.ts` › "evaluates at most three guesses across a parallel burst"). Behind a proxy the address is the visitor's only when `TRUST_PROXY` names that proxy (`packages/config/src/env.ts`, F2) |
 | 2.2.2 | Weak authenticators limited | Met | Email links are single-use and short-lived; SMS is not offered |
-| 2.2.3 | Notification after authentication details change | Met | A `securityChange` email on password change and reset, second factor on and off, recovery codes redrawn, a passkey added, renamed or removed, a sign-in method connected or disconnected, passkeys moved to a new host, through the outbox in the change's transaction, `en` and `ar` (`auth.service.ts` `#notifySecurityChange`, `email-templates.test.ts`) |
+| 2.2.3 | Notification after authentication details change | Met | A `securityChange` email on password change and reset, second factor on and off, recovery codes redrawn, a passkey added or removed, a sign-in method connected or disconnected, passkeys moved to a new host, through the outbox in the change's transaction, `en` and `ar` (`auth.service.ts` `#notifySecurityChange`, `email-templates.test.ts`) |
 | 2.3.1 | Initial secrets random, expire, not long-term | Met | Invitation tokens 256 bits, 7 days, single use (`api/auth/email-token.store.ts`) |
 | 2.3.2 | Hardware authenticator enrolment supported | Met | Staff register passkeys (platform or security key) over WebAuthn, with a step-up and at most ten per account (`api/auth/passkeys/`, `api/auth/webauthn/`, ADR 0050; `passkeys.integration.test.ts`), or enrol one in place of an authenticator app when the account must have a second factor (`passkey-second-factor.integration.test.ts`) |
 | 2.3.3 | Renewal instructions for time-bound authenticators | N/A | No time-bound authenticators issued |
@@ -170,7 +187,7 @@ their protocols require.
 | 2.5.5 | Notification when an authentication factor changes | Met | As 2.2.3 |
 | 2.5.6 | Forgotten password uses a secure recovery mechanism | Met | 10-minute single-use reset link; the second factor is still asked afterwards |
 | 2.5.7 | Lost second factor re-proven at enrolment strength | Partial | Recovery codes (one set, shared by an app and passkeys), or an Admin resets the factor, which removes passkeys too (`staff` lifecycle); no identity proofing beyond the Admin's judgement |
-| 2.6.1 | Lookup secrets used once | Met | Recovery codes consumed on use (`replaceRecoveryCodes`) |
+| 2.6.1 | Lookup secrets used once | Met | Recovery codes consumed on use (`replaceRecoveryCodes`); one set, drawn with the account's first second factor and shared by an app and passkeys (`passkey-second-factor.integration.test.ts` › "draws recovery codes with the first passkey, and not with the second") |
 | 2.6.2 | Lookup secrets have enough randomness | Met | Ten codes from `randomBytes`, argon2-hashed (`authentication.md` "Recovery codes") |
 | 2.6.3 | Lookup secrets resist offline attack | Met | Argon2id with the pepper |
 | 2.7.1 | Cleartext OOB (SMS, PSTN) not offered by default | N/A | Not offered at all |
@@ -434,23 +451,6 @@ verifier (`api/knowledge/oauth-state.ts`, `sources.service.ts` `oauthCallback`).
 | 14.5.2 | Origin not used for authentication | Met | Origin only narrows the widget (an allow list on top of the visitor credential) and the staff socket |
 | 14.5.3 | CORS with a strict allow list | Partial | Widget routes echo the origin on preflight and refuse a disallowed one at the gate, without credentials; the staff API and `/api/v1` send no CORS headers |
 | 14.5.4 | Proxy-added headers authenticated | Met | `X-Forwarded-*` are believed only from the proxies `TRUST_PROXY` names: addresses, CIDRs, or `loopback`, `linklocal` and `uniquelocal`. Compose sets `uniquelocal`, so only the hop from Caddy is believed, and a hop count is refused; `true` still believes every hop (`packages/config/src/env.ts`, `api/bootstrap.ts`, F2). Behind Cloudflare, `CF-Connecting-IP` is read only from Cloudflare's ranges (`docker/caddy/Caddyfile.cloudflare`). Caddy overwrites `X-Request-Id` |
-
-### Found in the M18 re-walk
-
-Walked on 2026-10-31 against `main` after M18-01 to M18-11 (M18-13, #287), with
-a source review of the passkey, OAuth, SSO preset, break-glass, built-in
-CAPTCHA and step-up code; the threat-model notes and the one finding are in the
-[milestone doc](../in-development/M18-sign-in-options.md#security-pass-m18-13).
-Also read: the 1.1.1 fix that stops a challenge handed out earlier from adding
-or replacing a second factor the account has since set (`auth.service.ts`
-`completeEnrolment`, tests in `passkey-second-factor.integration.test.ts`).
-
-| Row | Was | Now | Why |
-|---|---|---|---|
-| 2.3.2 | Partial | Met | WebAuthn passkeys |
-| 2.9.1, 2.9.2, 2.9.3 | N/A | Met | Passkeys are cryptographic authenticators |
-| 3.7.1 | Partial | Partial | Passkey and sign-in-method changes now re-prove a credential; the API key, webhook, bot and provider-key changes still do not |
-| 2.2.1, 2.2.3, 2.5.5, 2.5.7, 2.6.1, 3.2.1, 4.3.1, 7.1.3, 11.1.4, 13.2.3 | as before | as before | Evidence extended to the M18 paths |
 
 ## How to keep this current
 

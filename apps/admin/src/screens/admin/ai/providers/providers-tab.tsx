@@ -10,6 +10,7 @@ import { aiKeys } from '../../../../ai/api.js';
 import { useAiApi } from '../../../../ai/context.tsx';
 import { useT } from '../../../../app/i18n.js';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { envKeyOf } from '../format.js';
 import { ChatModelCard } from './chat-model-card.tsx';
 import { EmbeddingsCard } from './embeddings-card.tsx';
@@ -42,7 +43,7 @@ export function ProvidersTab(): ReactNode {
     transcription.data === undefined ||
     embedding.data === undefined
   ) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const overview = providers.data;

@@ -19,6 +19,7 @@ import {
 } from '../../../../auth/session.tsx';
 import { widgetKeys } from '../../../../channels/api.js';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { SectionCard } from '../section-card.tsx';
 import { AccessCard } from './access-card.tsx';
@@ -70,7 +71,7 @@ export function WidgetTab(): ReactNode {
     return <AlertBanner tone="danger">{t('channels:widget.loadFailed')}</AlertBanner>;
   }
   if (settings.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   return (

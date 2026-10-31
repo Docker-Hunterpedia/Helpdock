@@ -120,6 +120,8 @@ export const notificationPrefs = pgTable(
       .primaryKey()
       .references(() => users.id, { onDelete: 'cascade' }),
     preferences: jsonb('preferences').$type<Record<string, unknown>>().notNull(),
+    /** M14-25: which events play a sound in this person's browsers; missing keys are off. */
+    sounds: jsonb('sounds').$type<Record<string, boolean>>().notNull().default({}),
     /** M14-10: how notification email reaches them. Right away is the default (D-25). */
     emailSchedule: notificationEmailScheduleEnum('email_schedule').notNull().default('immediate'),
     /** The daily digest's hour, 0–23, in the person's time zone. */

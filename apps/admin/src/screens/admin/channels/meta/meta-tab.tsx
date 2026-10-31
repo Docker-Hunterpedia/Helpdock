@@ -9,6 +9,7 @@ import { metaKeys } from '../../../../meta/api.js';
 import { useMetaApi } from '../../../../meta/context.tsx';
 import { EmptyState } from '../../../../shell/empty-state.tsx';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { NoteCard } from '../note-card.tsx';
 import { AccountHealthLegend } from './account-health.tsx';
 import { AccountTable } from './account-table.tsx';
@@ -65,7 +66,7 @@ export function MetaTab({
         app.isError ? (
           <AlertBanner tone="danger">{t('channels:meta.app.loadFailed')}</AlertBanner>
         ) : app.data === undefined ? (
-          <Box aria-busy="true" />
+          <LoadingSkeleton />
         ) : (
           <MetaAppCard app={app.data} lastEventAt={lastEventAt} />
         )

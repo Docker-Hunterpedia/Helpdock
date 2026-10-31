@@ -15,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Pencil, Zap } from 'lucide-react';
+import { ChevronDown, Pencil, Plus, Zap } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
@@ -28,8 +28,10 @@ import {
 } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { isTicketingError } from '../../../ticketing/api.js';
+import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { latinNumbering } from '../../../ui/format.js';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { useWorkspaceData } from '../../tickets/use-workspace-data.js';
 import { useTicketingAction, useTicketingReport } from '../ticketing/use-ticketing-action.js';
 import {
@@ -127,6 +129,15 @@ export function MacrosTab(): ReactNode {
   const open = (next: Editing): void => {
     setEditing(next);
     setDepartment(next.draft.scope === 'personal' ? '' : next.draft.departmentId);
+  };
+
+  const startNew = (kind: MacroKind): void => {
+    open({
+      key: `new-${kind}-${Date.now()}`,
+      macro: null,
+      // An Agent may only keep personal ones.
+      draft: emptyDraft(kind, session.user.role === 'agent' ? 'personal' : 'shared'),
+    });
   };
 
   const refresh = async (): Promise<void> => {
@@ -238,12 +249,7 @@ export function MacrosTab(): ReactNode {
                 key={kind}
                 onClick={() => {
                   setNewMenu(null);
-                  open({
-                    key: `new-${kind}-${Date.now()}`,
-                    macro: null,
-                    // An Agent may only keep personal ones.
-                    draft: emptyDraft(kind, session.user.role === 'agent' ? 'personal' : 'shared'),
-                  });
+                  startNew(kind);
                 }}
               >
                 {t(`macros:list.newKind.${kind}`)}
@@ -275,11 +281,26 @@ export function MacrosTab(): ReactNode {
           </Box>
         </Box>
 
-        {rows.length === 0 && !macros.isPending ? (
+        {macros.isError ? (
+          <AlertBanner tone="danger">{t('macros:list.loadFailed')}</AlertBanner>
+        ) : macros.isPending ? (
+          <LoadingSkeleton label={t('macros:list.loading')} />
+        ) : rows.length === 0 ? (
           <EmptyState
             icon={Zap}
             heading={t('macros:list.empty.heading')}
             body={t('macros:list.empty.body')}
+            action={
+              <Button
+                variant="contained"
+                startIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => {
+                  startNew('canned');
+                }}
+              >
+                {t('macros:list.empty.action')}
+              </Button>
+            }
           />
         ) : (
           <TableContainer

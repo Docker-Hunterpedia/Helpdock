@@ -829,6 +829,7 @@ which departments it reaches is the policies'.
 | Route | Declares | Answers |
 |---|---|---|
 | `GET /ticket-statuses` | `ticket:read` | The brand's statuses, for the picker and the badge |
+| `GET /ticket-mailboxes` | `ticket:read` | The brand's mailboxes (id, address, display name, department), for the list's Mailbox filter. No connection settings; those stay behind `brand:manage` |
 | `GET /tickets` | `ticket:read` | A filtered, sorted, cursor-paged list |
 | `POST /tickets` | `ticket:write` | A ticket and its first message |
 | `GET /tickets/:ticketId` | `ticket:read` | The ticket, the first page of its thread and its activity |
@@ -904,6 +905,8 @@ GET /api/brands/:brandId/tickets
   &tagId=<uuid>               repeatable; `tagIds` is the same filter under another name
   &q=printer                  the words, the contact's name, or a reference or original number (first, past the other filters)
   &overdue=true               only tickets whose SLA has run out (M1-05)
+  &mailboxId=<uuid>           repeatable; the mailbox the ticket arrived at (M14-26)
+  &toAddress=refunds@acme.com the address the customer wrote to, exact, any case (M14-26)
   &fieldFilter={"key":"severity","op":"any_of","values":["Sev 1"]}   repeatable; one JSON object per custom-field filter, all must match (M14-16)
   &snoozed=exclude            exclude (default) | only | include: snoozed tickets (M14-02); a reference in `q` finds one regardless
   &sort=updatedAt             updatedAt | createdAt | number | priority | slaDue

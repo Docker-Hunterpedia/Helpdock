@@ -7,7 +7,9 @@ import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useStaffApi, useTicketingApi } from '../../../auth/session.tsx';
+import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { moveBy, moveTo } from './reorder.js';
 import type { PickOptions } from './sla-action-picker.tsx';
 import {
@@ -57,10 +59,7 @@ export function SlasTab(): ReactNode {
     queryKey: ['ticket-statuses', brand.id],
     queryFn: () => api.statuses(brand.id),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => api.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
   const tags = useQuery({ queryKey: ['tags', brand.id], queryFn: () => api.tags(brand.id) });
   const staff = useQuery({
     queryKey: ['staff', brand.id],
@@ -168,7 +167,7 @@ export function SlasTab(): ReactNode {
   );
 
   if (policies.data === undefined || brandQuery.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const order = ordered.map((policy) => policy.id);

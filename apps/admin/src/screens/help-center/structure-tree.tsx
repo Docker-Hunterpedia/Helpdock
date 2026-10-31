@@ -24,7 +24,12 @@ import {
   titleOf,
 } from './article-rows.js';
 import { NamesDialog } from './names-dialog.tsx';
-import { useHelpCenter, useReaderLocale, useStructureChange } from './use-help-center.js';
+import {
+  useCreateCategory,
+  useHelpCenter,
+  useReaderLocale,
+  useStructureChange,
+} from './use-help-center.js';
 
 /**
  * The Structure card of `Admin/HelpCenter` (DESIGN §6.3 ContentTree): the
@@ -87,10 +92,7 @@ export function StructureTree({
       api.reorder(brand.id, kind, { parentId, ids: [...ids] }),
     () => t('helpCenter:toast.reordered'),
   );
-  const createCategory = useStructureChange(
-    (names: { en: string; ar: string }) => api.createCategory(brand.id, { names }),
-    (names) => t('helpCenter:toast.categoryCreated', { name: nameIn(names, locale) }),
-  );
+  const createCategory = useCreateCategory();
   const createSection = useStructureChange(
     ({ categoryId, names }: { categoryId: string; names: { en: string; ar: string } }) =>
       api.createSection(brand.id, { categoryId, names }),

@@ -15,6 +15,7 @@ import {
   type PushSubscriptionView,
   pushSubscriptionCreateSchema,
   resolveNotificationPreferences,
+  resolveNotificationSounds,
 } from '@helpdock/schemas';
 import {
   BadRequestException,
@@ -170,16 +171,25 @@ export class NotificationsService {
     userId: string,
     brandId: string | null = null,
   ): Promise<NotificationPreferencesView> {
-    const [stored, account, publicKey, subscriptions, emailDelivery, emailConfigured, zone] =
-      await Promise.all([
-        this.#repository.storedPreferences(tx, userId),
-        this.#repository.account(tx, userId),
-        this.#push.vapidPublicKey(),
-        this.#repository.subscriptionsOf(tx, userId),
-        this.#repository.emailDelivery(tx, userId),
-        this.#push.smtpConfigured(),
-        brandId === null ? Promise.resolve(undefined) : this.#repository.brandTimeZone(tx, brandId),
-      ]);
+    const [
+      stored,
+      sounds,
+      account,
+      publicKey,
+      subscriptions,
+      emailDelivery,
+      emailConfigured,
+      zone,
+    ] = await Promise.all([
+      this.#repository.storedPreferences(tx, userId),
+      this.#repository.storedSounds(tx, userId),
+      this.#repository.account(tx, userId),
+      this.#push.vapidPublicKey(),
+      this.#repository.subscriptionsOf(tx, userId),
+      this.#repository.emailDelivery(tx, userId),
+      this.#push.smtpConfigured(),
+      brandId === null ? Promise.resolve(undefined) : this.#repository.brandTimeZone(tx, brandId),
+    ]);
     /* c8 ignore next 3 -- the guard has already proved the account exists. */
     if (account === undefined) {
       throw new NotFoundException('No such account');
@@ -187,6 +197,7 @@ export class NotificationsService {
 
     return {
       preferences: resolveNotificationPreferences(stored),
+      sounds: resolveNotificationSounds(sounds),
       email: account.email,
       locale: account.locale,
       push: {
@@ -216,6 +227,7 @@ export class NotificationsService {
         ? update.pausedUntil
         : this.#pauseEnd(update.pausedUntil);
     await this.#repository.savePreferences(tx, userId, update.preferences, {
+      sounds: update.sounds,
       emailSchedule: update.emailSchedule,
       digestHour: update.digestHour,
       pausedUntil,

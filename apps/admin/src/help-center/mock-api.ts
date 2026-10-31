@@ -39,6 +39,7 @@ import {
   slugify,
 } from '@helpdock/schemas';
 import { MOCK_USER } from '../auth/mock-api.js';
+import { isMockEmpty } from '../auth/mock-empty.js';
 import { type HelpCenterApi, HelpCenterError } from './api.js';
 
 /**
@@ -332,12 +333,13 @@ export class MockHelpCenterApi implements HelpCenterApi {
 
   async structure(): Promise<HcStructure> {
     await delay();
+    const empty = isMockEmpty('helpCenter');
     return {
       defaultLocale: 'en',
       timezone: 'Asia/Riyadh',
-      categories: [...this.categories].sort((a, b) => a.position - b.position),
-      sections: [...this.sections].sort((a, b) => a.position - b.position),
-      articles: this.stored.map(summary).sort((a, b) => a.position - b.position),
+      categories: [...(empty ? [] : this.categories)].sort((a, b) => a.position - b.position),
+      sections: [...(empty ? [] : this.sections)].sort((a, b) => a.position - b.position),
+      articles: (empty ? [] : this.stored).map(summary).sort((a, b) => a.position - b.position),
     };
   }
 

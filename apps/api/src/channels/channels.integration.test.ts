@@ -733,6 +733,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         department: { id: support },
       });
 
+      // M14-26: the ticket keeps the same facts for the filters and the rule conditions.
+      expect(ticket).toMatchObject({
+        arrivalMailboxId: expect.any(String),
+        arrivalToAddress: 'hello@helpdock.test',
+      });
+
       // The thread's read: the card's facts, and no remote URL.
       const page = await call<TicketMessagePage>(
         'GET',
@@ -996,6 +1002,12 @@ describe.skipIf(!hasDocker)('the inbound email channel', () => {
         address: 'refunds@helpdock.test',
         reason: 'continued_from',
         department: { id: support },
+      });
+      // M14-26: the continuation keeps where the reply came in, on the ticket itself.
+      const continued = await ticketOf(reply?.ticketId ?? '');
+      expect(continued).toMatchObject({
+        arrivalMailboxId: expect.any(String),
+        arrivalToAddress: 'refunds@helpdock.test',
       });
     });
 

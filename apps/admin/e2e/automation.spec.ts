@@ -214,3 +214,115 @@ test.describe('the builder and its test run', () => {
     expect(await violations(page)).toEqual([]);
   });
 });
+
+test.describe('mailbox-aware rules (M14-26, Admin/RuleBuilder amended)', () => {
+  const BILLING_BOX = 'billing@helpdock.com';
+  const DEPARTMENT = { en: 'Billing', ar: 'الفوترة' } as const;
+
+  const buildMailboxRule = async (page: Page, locale: Locale): Promise<void> => {
+    const t = strings(locale);
+    await openAutomation(page, locale);
+    await page.getByRole('link', { name: t('rules:newRule') }).click();
+    await page
+      .getByLabel(`${t('rules:builder.name')} · ${t('rules:builder.required')}`)
+      .fill('Refund mailbox to the refund team');
+
+    await page.getByRole('combobox', { name: t('rules:builder.field') }).selectOption('mailbox');
+    await page
+      .getByRole('combobox', { name: t('rules:builder.value') })
+      .selectOption({ label: BILLING_BOX });
+    await page.getByRole('button', { name: t('rules:builder.addCondition') }).click();
+    await page
+      .getByRole('combobox', { name: t('rules:builder.field') })
+      .nth(1)
+      .selectOption('to_address');
+    await page
+      .getByRole('combobox', { name: t('rules:builder.operator') })
+      .nth(1)
+      .selectOption('contains');
+    await page.getByLabel(t('rules:builder.text')).fill('refunds@');
+
+    await page
+      .getByRole('combobox', { name: t('rules:builder.action', { n: 1 }) })
+      .selectOption({ label: t('rules:actionTypes.set_reply_mailbox') });
+    await page.getByRole('combobox', { name: t('rules:builder.replyMailbox') }).selectOption({
+      label: t('rules:builder.mailboxOption', {
+        address: BILLING_BOX,
+        department: DEPARTMENT[locale],
+      }),
+    });
+    await page.getByRole('button', { name: t('rules:builder.addAction') }).click();
+    await page
+      .getByRole('combobox', { name: t('rules:builder.action', { n: 2 }) })
+      .selectOption({ label: t('rules:actionTypes.mark_spam') });
+  };
+
+  test('builds the conditions and both actions, tries them on a ticket that arrived at the mailbox, and saves', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await buildMailboxRule(page, locale);
+    await expect(page.getByText(t('rules:builder.replyMailboxNote'))).toBeVisible();
+    await expect(page.getByText(t('rules:builder.markSpamNote'))).toBeVisible();
+
+    await page.getByLabel(t('rules:testRun.sample')).fill('HD-1042');
+    await page.getByRole('button', { name: t('rules:testRun.run') }).click();
+    await expect(page.getByText(t('rules:testRun.wouldRun', { ticket: 'HD-1042' }))).toBeVisible();
+    const result = page.getByRole('complementary');
+    await expect(
+      result.getByText(t('rules:text.action.set_reply_mailbox', { mailbox: BILLING_BOX })),
+    ).toBeVisible();
+    await expect(result.getByText(t('rules:text.action.mark_spam'))).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: t('rules:builder.save') }).click();
+    await expect(
+      page.getByRole('form', {
+        name: t('rules:builder.formLabel', { name: 'Refund mailbox to the refund team' }),
+      }),
+    ).toBeVisible();
+
+    await openSettingsArea(page, t, 'automation');
+    const row = page.getByRole('listitem').filter({ hasText: 'Refund mailbox to the refund team' });
+    await expect(row).toContainText(
+      t('rules:text.condition', {
+        field: t('rules:fields.mailbox'),
+        operator: t('rules:operators.is'),
+        value: BILLING_BOX,
+      }),
+    );
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('does not run on a ticket that did not arrive at a mailbox', async ({
+    page,
+    appLocale: locale,
+  }) => {
+    const t = strings(locale);
+    await buildMailboxRule(page, locale);
+
+    // HD-1039 came in through the chat widget: no mailbox, so the mailbox condition cannot hold.
+    await page.getByLabel(t('rules:testRun.sample')).fill('HD-1039');
+    await page.getByRole('button', { name: t('rules:testRun.run') }).click();
+    await expect(
+      page.getByText(t('rules:testRun.wouldNotRun', { ticket: 'HD-1039' })),
+    ).toBeVisible();
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('keeps a half-filled reply address from saving', async ({ page, appLocale: locale }) => {
+    const t = strings(locale);
+    await openAutomation(page, locale);
+    await page.getByRole('link', { name: t('rules:newRule') }).click();
+    await page
+      .getByLabel(`${t('rules:builder.name')} · ${t('rules:builder.required')}`)
+      .fill('Half a rule');
+    await page
+      .getByRole('combobox', { name: t('rules:builder.action', { n: 1 }) })
+      .selectOption({ label: t('rules:actionTypes.set_reply_mailbox') });
+    await page.getByRole('button', { name: t('rules:builder.save') }).click();
+
+    await expect(page.getByText(t('rules:builder.incomplete'))).toBeVisible();
+  });
+});

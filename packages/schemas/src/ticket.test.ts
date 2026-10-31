@@ -75,6 +75,18 @@ describe('ticketListQuerySchema', () => {
     expect(ticketListQuerySchema.safeParse({ q: 'x'.repeat(201) }).success).toBe(false);
   });
 
+  it('takes the mailbox arrival filters (M14-26): ids as a list, an address trimmed and bounded', () => {
+    const parsed = ticketListQuerySchema.parse({
+      mailboxId: UUID,
+      toAddress: '  refunds@acme.test ',
+    });
+    expect(parsed.mailboxId).toEqual([UUID]);
+    expect(parsed.toAddress).toBe('refunds@acme.test');
+    expect(ticketListQuerySchema.safeParse({ mailboxId: 'billing@acme.test' }).success).toBe(false);
+    expect(ticketListQuerySchema.safeParse({ toAddress: '  ' }).success).toBe(false);
+    expect(ticketListQuerySchema.safeParse({ toAddress: 'a'.repeat(321) }).success).toBe(false);
+  });
+
   it('refuses a sort it does not have an index for', () => {
     expect(ticketListQuerySchema.safeParse({ sort: 'subject' }).success).toBe(false);
   });

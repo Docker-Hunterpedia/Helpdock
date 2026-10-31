@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { EllipsisVertical, FileText, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Book, EllipsisVertical, File, Pencil, Search, Trash2, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 import { useT } from '../../app/i18n.js';
@@ -38,6 +38,7 @@ import {
 } from './article-rows.js';
 import { ArticleStatusBadge, LanguageChip, VisibilityLabel } from './badges.tsx';
 import { NewArticleButton } from './new-article-button.tsx';
+import { NewCategoryButton } from './new-category-button.tsx';
 import { StructureTree } from './structure-tree.tsx';
 import { formatStamp } from './time.js';
 import { useHelpCenter, useSelectedSection, useStructureChange } from './use-help-center.js';
@@ -62,6 +63,17 @@ export function ArticlesTab({ canManage }: { readonly canManage: boolean }): Rea
         {t('helpCenter:toast.failed')}
       </Typography>
     ) : null;
+  }
+
+  if (structure.data.categories.length === 0) {
+    return (
+      <EmptyState
+        icon={Book}
+        heading={t('helpCenter:emptyCategories.heading')}
+        body={t('helpCenter:emptyCategories.body')}
+        action={canManage ? <NewCategoryButton /> : undefined}
+      />
+    );
   }
 
   return (
@@ -256,10 +268,14 @@ function ArticleList({
 
       {inSection === 0 ? (
         <EmptyState
-          icon={FileText}
-          heading={t('helpCenter:empty.heading')}
+          icon={File}
+          heading={
+            sectionName === null
+              ? t('helpCenter:empty.heading')
+              : t('helpCenter:empty.headingInSection', { section: sectionName })
+          }
           body={t('helpCenter:empty.body')}
-          action={canManage ? <NewArticleButton variant="outlined" /> : undefined}
+          action={canManage ? <NewArticleButton /> : undefined}
         />
       ) : (
         <Box

@@ -609,6 +609,8 @@ that does not exist (`404`).
 | `PATCH /api/me/passkeys/:id` | `{ name, proof }` |
 | `DELETE /api/me/passkeys/:id` | `{ proof }` |
 
+**Body size.** Every passkey route takes a body of at most 64 KiB and answers `413` above it, instead of the api's 1 MB default: `/api/auth/passkey/*`, `/api/auth/enrolment/passkey/*` and `/api/me/passkeys*`. The largest legitimate body, a registration response with every field at its cap, is about 34 KB. The rest of `/api/me` keeps its own limits, the profile photo upload included.
+
 **Every change needs a proof** (ASVS 3.7.1): the current password, a live
 authenticator code, or an assertion from a passkey the account already holds
 (`{ passkey: { ceremonyId, response } }`, answering the ceremony from
@@ -1106,11 +1108,11 @@ the same.
 
 The step-by-step setup of each provider's app is [sign-in providers](sign-in-providers.md). An install admin sets these under **Settings → Install → Authentication** (or
 with the matching `HD_*` environment variable). The page shows the exact
-redirect URLs derived from `APP_URL`. A provider with no client id is reported as
-disabled and its button is not drawn; Microsoft also needs its tenant id and
-client secret. Google and GitHub are drawn on the client id alone, so a missing
-or wrong secret shows after the consent screen as "That account cannot sign in
-here. Ask an administrator to invite you." ([#428](https://github.com/Docker-Hunterpedia/Helpdock/issues/428)).
+redirect URLs derived from `APP_URL`. A provider with no client id or no client
+secret is reported as disabled and its button is not drawn; Microsoft also needs
+its tenant id. A secret that is set but wrong still draws the button and shows
+after the consent screen as "That account cannot sign in here. Ask an
+administrator to invite you."
 
 Client secrets are write-only: after one is saved the browser receives only
 `clientSecretConfigured: true` and a fixed mask. Replacing it opens an empty
@@ -1258,12 +1260,12 @@ is never editable.
 | `roles.viewerEnabled` | `true` | Whether the read-only Viewer role can be assigned ([staff and roles](staff-and-roles.md#the-viewer-toggle)) |
 | `auth.jwtSigningKey` | generated | The ES256 key pair. Secret, generated at first boot, never set by hand |
 | `auth.webauthn.rpId` | empty | The passkey RP ID, written by the first passkey registration and not edited ([The RP ID is pinned](#the-rp-id-is-pinned)) |
-| `oauth.google.clientId` / `…clientSecret` | empty | Empty disables the button |
+| `oauth.google.clientId` / `…clientSecret` | empty | Either one empty disables the button |
 | `oauth.google.allowedDomains` | `[]` | Workspace domains whose accounts may use Google sign-in. Empty allows any address Google vouches for |
 | `oauth.microsoft.tenantId` | empty | One Entra tenant GUID, in either case. Empty disables the button |
 | `oauth.microsoft.allowConsumers` | `false` | Also accept personal Microsoft accounts, connect-only |
-| `oauth.microsoft.clientId` / `…clientSecret` | empty | Empty disables the button |
-| `oauth.github.clientId` / `…clientSecret` | empty | Empty disables the button |
+| `oauth.microsoft.clientId` / `…clientSecret` | empty | Either one empty disables the button |
+| `oauth.github.clientId` / `…clientSecret` | empty | Either one empty disables the button |
 
 From `.env`: `APP_MASTER_KEY`, and the two session limits in
 [How long a sign-in lasts](#how-long-a-sign-in-lasts).

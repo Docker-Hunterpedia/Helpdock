@@ -221,6 +221,11 @@ export const mockRoutingTest = (
     contactEmails: input.from === '' ? [] : [input.from],
     accountId: null,
     custom: {},
+    mailboxId:
+      door.entry === 'mailbox'
+        ? (options.mailboxes.find((mailbox) => mailbox.address === door.label)?.id ?? null)
+        : null,
+    toAddress: door.entry === 'mailbox' ? door.label : null,
   };
   const initial = facts;
   const context = { now: NOW, withinBusinessHours: true, includeText: true };

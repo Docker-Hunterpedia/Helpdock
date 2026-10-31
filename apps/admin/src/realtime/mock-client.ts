@@ -72,6 +72,9 @@ export class MockRealtimeClient implements RealtimeClient {
   }
 
   start(brandId: string): void {
+    // The browser suite plays the server through the client that is live (not
+    // one a StrictMode render made and dropped); the mock adapter never ships.
+    (globalThis as { __helpdockMockRealtime?: MockRealtimeClient }).__helpdockMockRealtime = this;
     this.#brandId = brandId;
     this.#status = 'online';
     this.#idle = false;

@@ -22,6 +22,7 @@ const facts = (locale: 'en' | 'ar'): SendFacts => ({
   brandName: 'Helpdock',
   departmentName: 'Billing',
   contactName: locale === 'ar' ? 'سارة منصور' : 'Mona Khalil',
+  isSpam: false,
   message: null,
   author: null,
   transcript: [],

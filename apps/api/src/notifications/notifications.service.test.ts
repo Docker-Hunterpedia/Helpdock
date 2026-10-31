@@ -1,5 +1,9 @@
 import type { DbTransaction } from '@helpdock/db';
-import { NOTIFICATION_PREFERENCE_DEFAULTS, type NotificationPreferences } from '@helpdock/schemas';
+import {
+  NOTIFICATION_PREFERENCE_DEFAULTS,
+  NOTIFICATION_SOUND_DEFAULTS,
+  type NotificationPreferences,
+} from '@helpdock/schemas';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type {
@@ -47,6 +51,7 @@ interface Calls {
   unreadOnly?: boolean;
   outbox: { event: string; payload: unknown }[];
   saved?: NotificationPreferences | undefined;
+  sounds?: unknown;
   email: Record<string, unknown>;
 }
 
@@ -79,6 +84,7 @@ const service = ({
     markAllRead: async () => undefined,
     subscription: async () => ({ ...subscription, userId: subscriptionOwner }),
     storedPreferences: async () => calls.saved,
+    storedSounds: async () => calls.sounds,
     savePreferences: async (
       _tx: DbTransaction,
       _user: string,
@@ -87,6 +93,9 @@ const service = ({
     ) => {
       calls.saved = saved;
       calls.email = email;
+      if (email.sounds !== undefined) {
+        calls.sounds = email.sounds;
+      }
     },
     emailDelivery: async () => ({
       schedule: 'immediate' as const,
@@ -232,6 +241,7 @@ describe('NotificationsService — preferences', () => {
 
     expect(await notifications.preferences(tx, ME)).toEqual({
       preferences: NOTIFICATION_PREFERENCE_DEFAULTS,
+      sounds: NOTIFICATION_SOUND_DEFAULTS,
       email: 'lina@helpdock.test',
       locale: 'en',
       push: {
@@ -317,6 +327,27 @@ describe('NotificationsService — preferences', () => {
 
     expect(calls.saved).toBeUndefined();
     expect(calls.email).toEqual({ emailSchedule: 'daily', digestHour: 7, pausedUntil: undefined });
+  });
+
+  it('has every sound off until the person turns one on, and saves them without touching the matrix (M14-25)', async () => {
+    const { notifications, tx, calls } = service();
+    expect((await notifications.preferences(tx, ME)).sounds).toEqual(NOTIFICATION_SOUND_DEFAULTS);
+
+    const sounds = { ...NOTIFICATION_SOUND_DEFAULTS, waitingChat: true, waitingChatReminder: true };
+    const saved = await notifications.updatePreferences(tx, ME, { sounds });
+
+    expect(saved.sounds).toEqual(sounds);
+    expect(calls.saved).toBeUndefined();
+  });
+
+  it('reads a stored sound row with a missing or malformed key as off', async () => {
+    const { notifications, tx, calls } = service();
+    calls.sounds = { waitingChat: true, customerReply: 'yes', unknown: true };
+
+    expect((await notifications.preferences(tx, ME)).sounds).toEqual({
+      ...NOTIFICATION_SOUND_DEFAULTS,
+      waitingChat: true,
+    });
   });
 
   it('pauses until a time ahead, and resumes with null', async () => {

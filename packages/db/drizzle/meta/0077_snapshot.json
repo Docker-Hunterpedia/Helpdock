@@ -1,6 +1,6 @@
 {
-  "id": "3356617a-f033-40ea-8cfb-847032a15843",
-  "prevId": "43937599-2c83-4e47-bff8-1a6e5b1dee11",
+  "id": "346624fc-9c2e-41ad-9e97-1b821fefc300",
+  "prevId": "746e0da8-1612-45b1-9c47-f79d0e9de2ba",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -9608,6 +9608,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "sounds": {
+          "name": "sounds",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
         "email_schedule": {
           "name": "email_schedule",
           "type": "notification_email_schedule",
@@ -14255,6 +14262,24 @@
           "notNull": true,
           "default": 0
         },
+        "reply_mailbox_id": {
+          "name": "reply_mailbox_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrival_mailbox_id": {
+          "name": "arrival_mailbox_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrival_to_address": {
+          "name": "arrival_to_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sla_policy_id": {
           "name": "sla_policy_id",
           "type": "uuid",
@@ -14795,6 +14820,50 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "tickets_brand_arrival_mailbox_idx": {
+          "name": "tickets_brand_arrival_mailbox_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "arrival_mailbox_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"arrival_mailbox_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tickets_brand_arrival_to_idx": {
+          "name": "tickets_brand_arrival_to_idx",
+          "columns": [
+            {
+              "expression": "brand_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"arrival_to_address\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tickets\".\"arrival_to_address\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -14902,6 +14971,24 @@
           "tableFrom": "tickets",
           "tableTo": "departments",
           "columnsFrom": ["pre_merge_department_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_reply_mailbox_id_mailboxes_id_fk": {
+          "name": "tickets_reply_mailbox_id_mailboxes_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "mailboxes",
+          "columnsFrom": ["reply_mailbox_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_arrival_mailbox_id_mailboxes_id_fk": {
+          "name": "tickets_arrival_mailbox_id_mailboxes_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "mailboxes",
+          "columnsFrom": ["arrival_mailbox_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"

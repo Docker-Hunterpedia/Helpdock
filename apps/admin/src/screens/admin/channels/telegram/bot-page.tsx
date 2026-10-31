@@ -21,10 +21,11 @@ import { useT } from '../../../../app/i18n.js';
 import { usePreferences } from '../../../../app/providers.tsx';
 import { channelsRoute, ROUTES } from '../../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../../app/tokens.js';
-import { currentBrand, useSession, useTicketingApi } from '../../../../auth/session.tsx';
+import { currentBrand, useSession } from '../../../../auth/session.tsx';
 import { EmptyState } from '../../../../shell/empty-state.tsx';
 import { isTelegramError, telegramKeys } from '../../../../telegram/api.js';
 import { useTelegramApi } from '../../../../telegram/context.tsx';
+import { useDepartmentsQuery } from '../../../../ticketing/use-departments.js';
 import { Field } from '../../../../ui/field.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { ago, clockTime, shortDate } from '../format.js';
@@ -50,7 +51,6 @@ import { WelcomeSection } from './welcome-section.tsx';
 export function TelegramBotPage({ botId }: { readonly botId: string }): ReactNode {
   const t = useT();
   const api = useTelegramApi();
-  const ticketing = useTicketingApi();
   const brand = currentBrand(useSession());
 
   const bot = useQuery({
@@ -61,10 +61,7 @@ export function TelegramBotPage({ botId }: { readonly botId: string }): ReactNod
     queryKey: telegramKeys.status(brand.id, botId),
     queryFn: () => api.status(brand.id, botId),
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
 
   if (bot.isError) {
     return (

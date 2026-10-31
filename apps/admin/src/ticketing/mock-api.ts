@@ -67,6 +67,7 @@ import {
   renderTemplate,
 } from '@helpdock/schemas';
 import { AuthError } from '../auth/api.js';
+import { isMockEmpty } from '../auth/mock-empty.js';
 import { MOCK_DEPARTMENTS } from '../staff/mock-api.js';
 import { type TicketingApi, TicketingError } from './api.js';
 import {
@@ -492,7 +493,8 @@ export class MockTicketingApi implements TicketingApi {
   // ---------------------------------------------------------------- M3-06
 
   async macros(_brandId: string, query?: MacroListQuery): Promise<MacroList> {
-    return this.macroStore.list(query);
+    const list = this.macroStore.list(query);
+    return isMockEmpty('macros') ? { ...list, macros: [] } : list;
   }
 
   async createMacro(_brandId: string, request: MacroCreateRequest): Promise<Macro> {

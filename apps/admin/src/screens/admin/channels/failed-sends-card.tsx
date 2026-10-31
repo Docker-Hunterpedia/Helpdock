@@ -21,6 +21,7 @@ import { ticketRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { useEmailApi } from '../../../auth/session.tsx';
 import { emailKeys } from '../../../email/api.js';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { visuallyHidden } from '../../../ui/visually-hidden.js';
 import { messageTime } from '../../tickets/format.js';
 import { SectionCard, useEmailAction } from './section-card.tsx';
@@ -104,7 +105,7 @@ export function FailedSendsCard({ brandId }: { readonly brandId: string }): Reac
       }
     >
       {failed.isPending ? (
-        <Box aria-busy="true" sx={{ minHeight: 44 }} />
+        <LoadingSkeleton rows={1} />
       ) : rows.length === 0 ? (
         <Typography
           variant="body2"

@@ -21,6 +21,7 @@ import { useKnowledgeApi } from '../../../../knowledge/context.tsx';
 import { leaveTo } from '../../../../knowledge/leave.js';
 import { AlertBanner } from '../../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../../ui/confirm-dialog.tsx';
+import { LoadingSkeleton } from '../../../../ui/loading-skeleton.tsx';
 import { useToast } from '../../../../ui/toasts.tsx';
 import { visuallyHidden } from '../../../../ui/visually-hidden.js';
 import { SectionCard } from '../../channels/section-card.tsx';
@@ -110,7 +111,7 @@ export function KnowledgeTab({
     return <AlertBanner tone="danger">{t('aiSettings:loadFailed')}</AlertBanner>;
   }
   if (sources.data === undefined) {
-    return <Box aria-busy="true" />;
+    return <LoadingSkeleton />;
   }
 
   const list = sources.data;

@@ -4,6 +4,7 @@ import {
   currentDepartmentScope,
   type DbTransaction,
   departments,
+  mailboxes,
   type NewTicket,
   type NewTicketMessage,
   nextMessageSeq,
@@ -19,7 +20,12 @@ import {
   userBrandRoles,
   users,
 } from '@helpdock/db';
-import type { TicketFieldFilter, TicketListQuery, TicketViewFilters } from '@helpdock/schemas';
+import type {
+  TicketFieldFilter,
+  TicketListQuery,
+  TicketMailbox,
+  TicketViewFilters,
+} from '@helpdock/schemas';
 import { and, asc, desc, eq, gt, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { enqueueWebhookEvent } from '../webhooks/enqueue-webhook-event.js';
 import { decodeTicketCursor, type TicketCursor } from './cursor.js';
@@ -94,6 +100,19 @@ export class TicketRepository {
       .select()
       .from(ticketStatuses)
       .orderBy(asc(ticketStatuses.sortOrder), asc(ticketStatuses.name));
+  }
+
+  /** M14-26. The brand's mailboxes for the list's "Mailbox" filter; no connection settings. */
+  async listMailboxes(tx: DbTransaction): Promise<TicketMailbox[]> {
+    return tx
+      .select({
+        id: mailboxes.id,
+        address: mailboxes.address,
+        displayName: mailboxes.displayName,
+        departmentId: mailboxes.departmentId,
+      })
+      .from(mailboxes)
+      .orderBy(asc(mailboxes.address));
   }
 
   /** Undefined when the id is not this brand's, which the policy decides. */

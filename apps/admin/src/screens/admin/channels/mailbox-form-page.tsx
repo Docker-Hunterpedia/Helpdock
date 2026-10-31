@@ -21,15 +21,11 @@ import { useT } from '../../../app/i18n.js';
 import { usePreferences } from '../../../app/providers.tsx';
 import { channelsRoute, mailboxRoute } from '../../../app/route-paths.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
-import {
-  currentBrand,
-  useChannelsApi,
-  useSession,
-  useTicketingApi,
-} from '../../../auth/session.tsx';
+import { currentBrand, useChannelsApi, useSession } from '../../../auth/session.tsx';
 import { isChannelsError } from '../../../channels/api.js';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { SettingsBreadcrumb } from '../../../shell/page-header.tsx';
+import { useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { Field, fieldDescribedBy } from '../../../ui/field.tsx';
 import { useToast } from '../../../ui/toasts.tsx';
@@ -60,7 +56,6 @@ const INTERVALS = [30, 60, 120, 300] as const;
 export function MailboxFormPage(): ReactNode {
   const t = useT();
   const api = useChannelsApi();
-  const ticketing = useTicketingApi();
   const brand = currentBrand(useSession());
   const { mailboxId } = useParams();
   const creating = mailboxId === undefined;
@@ -70,10 +65,7 @@ export function MailboxFormPage(): ReactNode {
     queryFn: () => api.mailbox(brand.id, mailboxId ?? ''),
     enabled: !creating,
   });
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => ticketing.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
 
   if (!creating && mailbox.isError) {
     return (

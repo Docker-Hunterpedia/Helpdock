@@ -23,6 +23,7 @@ import type {
   TicketFieldFilter,
   TicketLifecycleRefusal,
   TicketList,
+  TicketMailboxList,
   TicketMergeRequest,
   TicketMergeResult,
   TicketMessage,
@@ -67,6 +68,8 @@ import type {
 export interface TicketsApi {
   /** The brand's statuses: the picker's options and what a badge is drawn from. */
   statuses(brandId: string): Promise<TicketStatusList>;
+  /** M14-26: the brand's mailboxes, for the "Mailbox" filter. */
+  mailboxes(brandId: string): Promise<TicketMailboxList>;
   list(brandId: string, query?: TicketQuery): Promise<TicketList>;
   ticket(brandId: string, ticketId: string): Promise<TicketDetail>;
   /** The catch-up read of DOMAIN-RULES §7: everything after a `seq`. */
@@ -230,6 +233,10 @@ export interface TicketQuery {
   readonly priority?: readonly TicketPriority[];
   readonly departmentId?: readonly string[];
   readonly channel?: readonly TicketChannel[];
+  /** M14-26. The mailboxes the ticket arrived at (any of). */
+  readonly mailboxId?: readonly string[];
+  /** M14-26. The address the customer wrote to, exactly. */
+  readonly toAddress?: string;
   /** People, `unassigned`, or `me` — the reader, resolved by the api (M1-05). */
   readonly assigneeId?: readonly string[];
   /** All-of: a ticket matches when it carries every tag named (M1-06). */

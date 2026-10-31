@@ -55,6 +55,12 @@ describe('listQueryString', () => {
     expect(query).not.toContain('[object Object]');
   });
 
+  it('sends the mailbox arrival filters as plain parameters (M14-26)', () => {
+    expect(listQueryString({ mailboxId: ['a', 'b'], toAddress: 'refunds@acme.test' })).toBe(
+      '?mailboxId=a&mailboxId=b&toAddress=refunds%40acme.test',
+    );
+  });
+
   it('leaves an empty filter off entirely rather than sending nothing', () => {
     expect(listQueryString({ statusId: [], q: '' })).toBe('');
   });

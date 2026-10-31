@@ -30,6 +30,7 @@ import { useAssistApi } from '../../assist/context.tsx';
 import { currentBrand, useSession } from '../../auth/session.tsx';
 import { helpCenterKeys } from '../../help-center/api.js';
 import { useHelpCenterApi } from '../../help-center/context.tsx';
+import { LoadingSkeleton } from '../../ui/loading-skeleton.tsx';
 import { useToast } from '../../ui/toasts.tsx';
 import { AIBadge } from '../tickets/ai/ai-badge.tsx';
 import { formatCost } from '../tickets/ai/ai-log-disclosure.tsx';
@@ -285,7 +286,7 @@ function ProposalReview({ proposalId }: { readonly proposalId: string }): ReactN
 
   const detail = proposal.data;
   if (detail === undefined) {
-    return <Box aria-busy="true" sx={{ minHeight: 200 }} />;
+    return <LoadingSkeleton />;
   }
   const waiting = detail.status === 'waiting';
 

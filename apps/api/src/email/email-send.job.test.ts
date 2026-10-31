@@ -24,6 +24,7 @@ const facts: SendFacts = {
   brandName: 'Helpdock',
   departmentName: 'Billing',
   contactName: 'Mona Khalil',
+  isSpam: false,
   message: { bodyHtml: '<p>Done.</p>', bodyText: 'Done.', authorId: null, authorType: 'staff' },
   author: null,
   transcript: [],
@@ -59,6 +60,31 @@ const setup = (
     });
   return { repository, transports, run };
 };
+
+describe('the email.send handler and spam (M14-26)', () => {
+  it.each(['acknowledgment', 'out_of_hours', 'csat'] as const)(
+    'discards a queued %s unsent once its ticket is spam',
+    async (kind) => {
+      const { repository, transports, run } = setup();
+      repository.deliveries = [deliveryRow({ kind })];
+      repository.facts = { ...facts, isSpam: true };
+
+      await run();
+
+      expect(transports.sent).toHaveLength(0);
+      expect(repository.deliveries[0]?.status).toBe('discarded');
+    },
+  );
+
+  it('still sends an agent reply on a spam ticket', async () => {
+    const { repository, transports, run } = setup();
+    repository.facts = { ...facts, isSpam: true };
+
+    await run();
+
+    expect(transports.sent).toHaveLength(1);
+  });
+});
 
 describe('the email.send handler', () => {
   it("sends through the install's server and marks the row sent", async () => {

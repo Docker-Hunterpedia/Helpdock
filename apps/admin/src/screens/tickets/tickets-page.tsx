@@ -485,6 +485,7 @@ export function TicketsPage(): ReactNode {
       tags={directory.tags}
       staff={directory.staff.map((member) => ({ userId: member.userId, name: member.name }))}
       fields={filterableFields}
+      mailboxes={directory.mailboxes}
       pinnedField={directory.fields.find((def) => def.pinned && def.target === 'ticket')}
       viewerId={session.user.id}
       changes={changes}

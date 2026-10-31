@@ -165,6 +165,8 @@
       "bulk_undo": "بالتراجع عن تعديل جماعي"
     },
     "sourceArticle": "جاء من مقالة مركز المساعدة «{{title}}»",
+    "replyMailboxSet": "حدّد {{actor}} صندوق البريد الذي تخرج منه الردود",
+    "replyMailboxCleared": "أعاد {{actor}} الردود إلى مُرسِل القسم",
     "articleProposed": "اقترح {{actor}} مقالًا · بانتظار الموافقة",
     "imported": "استُوردت من {{source}} بتاريخ {{importedAt}} · التذكرة الأصلية #{{number}}",
     "importedCreated": "استُوردت من {{source}} بتاريخ {{importedAt}} · التذكرة الأصلية #{{number}} · أُنشئت بتاريخ {{createdAt}}",
@@ -366,7 +368,11 @@
     "source": "المصدر",
     "allSources": "جميع المصادر",
     "imported": "مستوردة",
-    "native": "أُنشئت في Helpdock"
+    "native": "أُنشئت في Helpdock",
+    "mailbox": "صندوق البريد",
+    "writtenTo": "كُتب إلى",
+    "writtenToHint": "العنوان الذي كتب إليه العميل بالضبط. اضغط Enter للتطبيق.",
+    "writtenToPlaceholder": "refunds@example.com"
   },
   "newTicket": {
     "action": "تذكرة جديدة",

@@ -1,5 +1,5 @@
 import type { RuleKind, WorkflowRule, WorkflowRuleList, WorkflowRun } from '@helpdock/schemas';
-import { Box, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
+import { Box, Button, IconButton, ListItemIcon, Menu, MenuItem, Typography } from '@mui/material';
 import { type UseQueryResult, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
@@ -7,8 +7,9 @@ import {
   EllipsisVertical,
   GripVertical,
   Pencil,
+  Plus,
   Trash2,
-  Workflow,
+  Zap,
 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router';
@@ -21,6 +22,7 @@ import { useAutomationApi } from '../../../automation/context.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
 import { AlertBanner } from '../../../ui/alert-banner.tsx';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
+import { LoadingSkeleton } from '../../../ui/loading-skeleton.tsx';
 import { Switch } from '../../../ui/switch.tsx';
 import { moveBy, moveTo } from '../ticketing/reorder.js';
 import { useTicketingAction, useTicketingReport } from '../ticketing/use-ticketing-action.js';
@@ -141,11 +143,25 @@ export function RulesTab({
           </AlertBanner>
         )}
 
-        {rules.data === undefined ? null : rows.length === 0 ? (
+        {rules.isError ? (
+          <AlertBanner tone="danger">{t('rules:list.loadFailed')}</AlertBanner>
+        ) : rules.data === undefined ? (
+          <LoadingSkeleton label={t('rules:list.loading')} />
+        ) : rows.length === 0 ? (
           <EmptyState
-            icon={Workflow}
+            icon={Zap}
             heading={t(`rules:list.${heading}.emptyHeading`)}
             body={t(`rules:list.${heading}.emptyBody`)}
+            action={
+              <Button
+                variant="contained"
+                component={Link}
+                to={`${ruleRoute('new')}?kind=${kind}`}
+                startIcon={<Plus size={16} aria-hidden="true" />}
+              >
+                {t('rules:newRule')}
+              </Button>
+            }
           />
         ) : (
           <Box

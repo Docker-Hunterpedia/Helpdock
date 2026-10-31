@@ -17,6 +17,7 @@ import type {
   TicketDetail,
   TicketList,
   TicketListQuery,
+  TicketMailboxList,
   TicketMessage,
   TicketMessagePage,
   TicketPriority,
@@ -210,6 +211,10 @@ export class TicketsService {
   }
 
   // -------------------------------------------------------------------- reads
+
+  async mailboxes(): Promise<TicketMailboxList> {
+    return { mailboxes: await this.#tickets.listMailboxes(getTx()) };
+  }
 
   async statuses(): Promise<TicketStatusList> {
     const rows = await this.#tickets.listStatuses(getTx());

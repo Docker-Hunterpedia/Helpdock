@@ -595,6 +595,15 @@ export const describeEvent = (
       : 'time';
     return `${t(`tickets:event.woke.${reason}`, { actor })} · ${at}`;
   }
+  // M14-26: a rule chose the mailbox replies leave from.
+  if (entry.action === 'ticket.reply_mailbox.changed') {
+    return `${t(
+      entry.to?.replyMailboxId
+        ? 'tickets:event.replyMailboxSet'
+        : 'tickets:event.replyMailboxCleared',
+      { actor },
+    )} ${via} · ${at}`;
+  }
   // M5-08: "Still need help?" from a help center article.
   if (entry.action === 'ticket.source_article') {
     return `${t('tickets:event.sourceArticle', { title: String(entry.to?.title ?? '') })} · ${at}`;

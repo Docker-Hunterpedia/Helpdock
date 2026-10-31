@@ -29,6 +29,7 @@ import { useT } from '../../../app/i18n.js';
 import { useSemanticTokens } from '../../../app/tokens.js';
 import { currentBrand, useSession, useTicketingApi } from '../../../auth/session.tsx';
 import { EmptyState } from '../../../shell/empty-state.tsx';
+import { departmentsKey, useDepartmentsQuery } from '../../../ticketing/use-departments.js';
 import { ConfirmDialog } from '../../../ui/confirm-dialog.tsx';
 import { type DepartmentDraft, DepartmentEditor } from './department-editor.tsx';
 import { DepartmentTeams } from './department-teams.tsx';
@@ -75,10 +76,7 @@ export function DepartmentsTab(): ReactNode {
   >(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
-  const departments = useQuery({
-    queryKey: ['departments', brand.id],
-    queryFn: () => api.departments(brand.id),
-  });
+  const departments = useDepartmentsQuery(brand.id);
 
   const rows = departments.data?.departments ?? [];
   const selected = rows.find((row) => row.id === selectedId) ?? null;
@@ -97,7 +95,7 @@ export function DepartmentsTab(): ReactNode {
 
   const refresh = async (): Promise<void> => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['departments', brand.id] }),
+      queryClient.invalidateQueries({ queryKey: departmentsKey(brand.id) }),
       queryClient.invalidateQueries({ queryKey: ['teams', brand.id] }),
     ]);
   };

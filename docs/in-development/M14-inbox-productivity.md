@@ -1461,6 +1461,25 @@ Artboard: `Admin/Tickets-Narrow` (list, ticket and details drawer at 768 px,
 
 ### M14-23 Skeletons and empty states beyond 1.0.1
 
+**Status: built, in review** (issue #310). Built from `Admin/Empty-States`
+(`AdminEmptyStates.dc.html`): Contacts (people, and New account on the
+Accounts tab), the Help center (no categories; no articles, named after the
+selected section), Views, Macros and saved replies, and Rules (event rules;
+the time-based tab keeps its own sentence and gains the same action) each show
+the EmptyState with its one primary action. The Help center's first category is
+named in the same dialog the Structure card uses (`NewCategoryButton`). A search
+or filter that finds nobody keeps its "nothing matches" sentence and offers no
+action. The skeleton is `LoadingSkeleton` (a title bar and avatar-and-two-line
+rows from DESIGN §4 Skeleton) in a `role="status"` region that keeps
+`aria-busy`; it replaces the blank busy boxes of the AI, SLA, feedback,
+business-hours, channel, widget, web-form and Meta tabs and the help-center
+proposal, and is the loading state of the Contacts, Views, Macros and Rules
+lists. Not covered, because the board does not draw them: the list empty states
+of Tags, Templates, Departments, Custom fields, Statuses, Mailboxes, Domains,
+the audit log and Passkeys still show their sentence without an action. Browser
+tests start from an empty fixture with `localStorage["helpdock.mock.empty"]`
+(`["contacts","macros","rules","helpCenter"]`).
+
 From [UX-10 (c) and UX-12](../completed/ux-review-1-0.md#findings). The 1.0.1
 patch adds skeletons to the ticket list and the ticket view; M14-06 gives the
 ticket views their empty states. This deliverable covers the rest:
@@ -1499,11 +1518,62 @@ assigned to me or mentioned), each off by default, and a **Remind me every
 minute while a chat waits** option for the first. Sounds play only in a tab
 that holds the `/staff` socket, at most one at a time, never for the person's
 own actions, and never while the tab is hidden if the browser blocks it (the
-card says so). Every sound has a visible equivalent already (the bell, the
-waiting-chat count), so nothing depends on hearing it (DESIGN §10). The sound
+card says so). Every sound has a visible equivalent already (the ticket list and
+the bell), so nothing depends on hearing it (DESIGN §10). The sound
 files are short, bundled, and lazy-loaded with the settings; the choice is
 stored with the notification preferences (install scope, per person) so it
 follows the person to another browser. Artboard `Admin/Account-Notifications-Sounds`.
+
+**Status: built, in review** (issue #312). Built as above, with these
+differences and choices:
+
+- **Storage.** A `sounds` jsonb column on `notification_prefs` (migration
+  `0075_notification_sounds`, default `{}`), read and saved through
+  `GET`/`PUT /api/me/notification-preferences` as `sounds` (five booleans: the
+  four events and `waitingChatReminder`). A missing or malformed key reads as
+  off. No new table, so no RLS-test addition: the row is global per person like
+  the rest of `notification_prefs`.
+- **Detection.** The socket frames carry ids only, so the shell's
+  `useNotificationSounds` reads the ticket over REST (which also applies the
+  person's department scope) before anything plays. A *waiting chat* is a
+  `chat` ticket that is unassigned, not merged and open or escalated; the
+  *new conversation* sound is any other newly created ticket except a
+  `manual` one (typed in on the desk, mostly the person's own); *a customer
+  replied* is a public message by a contact, after the opening one, on a ticket
+  assigned to the person; *assigned or mentioned* is the `notification:created`
+  frame of those two kinds (the server never makes one for its actor). The
+  hook joins the brand's department rooms only while a ticket sound is on.
+- **Reminder.** One interval per waiting chat, once a minute, re-reading the
+  chat each beat and stopping when it is assigned, closed, merged or can no
+  longer be read; a `ticket:changed` frame stops it at once. A chat already
+  waiting when the tab opens does not ring: only chats that arrive while the
+  tab is open do.
+- **One at a time.** A single player per tab drops a sound that arrives while
+  another is playing (a Play button cuts in). Two open tabs each play; a
+  cross-tab lock is not built.
+- **Files.** Four short WAVs under `apps/admin/public/sounds/`, synthesised by
+  `apps/admin/scripts/generate-sounds.ts` (sine tones, 16 kHz mono, 9 to 21 KB
+  each, about 59 KB in all), so they are the project's own work and released
+  under CC0 1.0. They are created only when a sound is first played, so a person
+  with every sound off never downloads one. No dependency was added.
+- **Card.** The Sounds card saves as each control moves (the board draws no
+  Save), with an optimistic switch that goes back with a toast if the save
+  fails; the reminder checkbox is disabled, not hidden, while its switch is
+  off. The board's note mentions "the waiting-chat count", which the admin does
+  not have, so the note says what is true: new and waiting conversations also
+  appear in the ticket list, and assignments, replies and mentions in the bell.
+  A ticket split off another is never an arrival, so it is silent.
+- **Tests.** Unit: `rules.test.ts`, `player.test.ts`, `waiting-reminder.test.ts`,
+  `use-notification-sounds.test.tsx`, `sounds-card.test.tsx`, the schema,
+  service and `http-api` tests; integration: the preferences route in
+  `notifications.integration.test.ts` (default off, saved on its own, seen by a
+  second read, refused when malformed) and the migration list; Playwright:
+  `notification-sounds.spec.ts` (en and ar, audio stubbed, `page.clock`).
+
+- [x] `sounds` on the preferences view and update; migration `0075`.
+- [x] `useNotificationSounds`, the player, the reminder and the rules.
+- [x] The Sounds card, en and ar, with Play buttons and the background-tab note.
+- [x] The four sound files and `generate-sounds.ts`; guide, DESIGN §6.4 and change log 1.60.
 
 ### M14-26 Mailbox-aware views and rules
 
@@ -1524,6 +1594,39 @@ Tickets created before M14 have no arrival record and never match a mailbox or
 address condition; the guide says so. Artboard `Admin/Ticketing-FieldFilters`
 gains the two filters and `Admin/RuleBuilder` (amended) the conditions and
 actions.
+
+**Status: built, in review** (issue [#313](https://github.com/Docker-Hunterpedia/Helpdock/issues/313)).
+Built as above, with these decisions:
+
+- [x] `mailboxId` / `toAddress` on `GET /tickets` (and so in views, the public
+  API and OpenAPI), read from two new columns on the ticket,
+  `tickets.arrival_mailbox_id` (FK, `ON DELETE SET NULL`) and
+  `tickets.arrival_to_address` (lower-cased), indexed per brand. They are
+  written once at email intake (a new ticket, and a reopen-policy continuation)
+  from the same entry point the M14-08 arrival activity records. The plan said
+  "no new column"; a copy is kept so the list filters on an indexed,
+  brand-scoped column instead of scanning activity JSON per query, and the fact
+  is stable. Migration `0076` backfills existing tickets from their arrival activity.
+- [x] Filter popover rows "Mailbox" and "Written to", and the same two in the
+  Views tab's editor; the mailbox list comes from `GET /ticket-mailboxes`
+  (`ticket:read`), because `GET /mailboxes` needs `brand:manage`.
+- [x] Conditions `mailbox` (is, is not, any of) and `to_address` (is, contains).
+  A ticket without a mailbox arrival matches neither under any operator,
+  including *is not* (the plan's "pre-M14 tickets never match", extended to
+  tickets from other entry points, which also have no mailbox).
+- [x] `set_reply_mailbox` writes the new `tickets.reply_mailbox_id`
+  (same migration, `ON DELETE SET NULL`); accepted only for a mailbox of the
+  ticket's department when the rule runs, and honoured only while the mailbox
+  still belongs to the ticket's department. The composer's From
+  select lists it first and preselects it (`mailbox:<id>`); an agent who picks
+  another From wins; auto-replies,
+  surveys and transcripts keep the department's sender. Not exposed on the
+  ticket DTO (no screen shows it yet); the activity row is
+  `ticket.reply_mailbox.changed`, drawn in the thread.
+- [x] `mark_spam` calls the existing lifecycle transition. A queued
+  acknowledgment, out-of-hours reply or survey for a ticket that became spam is
+  discarded unsent by the `email.send` job.
+- [x] Test routing's synthetic ticket carries the entry's mailbox and address.
 
 ### M14-27 More custom field types
 

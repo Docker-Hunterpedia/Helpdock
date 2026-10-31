@@ -318,6 +318,13 @@ describe('the meta line and the assignee on a row (M14-20)', () => {
     expect(getComputedStyle(ring as Element).borderStyle).toBe('dashed');
   });
 
+  it('drops the status word on a snoozed row, whose clock label already says it', () => {
+    row(testTicket({ snoozedUntil: new Date(NOW + 3 * 24 * HOUR).toISOString() }));
+
+    expect(screen.queryByText('Open')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Snoozed until /)).toBeInTheDocument();
+  });
+
   it('says "Assigned" when the assignee is not in the staff list', () => {
     row(testTicket({ assigneeId: LINA }), { assigneeName: null });
 

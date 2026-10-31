@@ -2147,8 +2147,19 @@ export class MockTicketsApi implements TicketsApi {
   #withContact(ticket: Ticket): Ticket {
     const name = ticket.contactId === null ? undefined : this.#contactName(ticket.contactId);
 
+    const assigneeName =
+      ticket.assigneeId === MOCK_SELF_ID
+        ? 'Lina Haddad'
+        : ticket.assigneeId === YARA_ID
+          ? 'Yara Salem'
+          : undefined;
+
     return {
       ...ticket,
+      assignee:
+        ticket.assigneeId === null || assigneeName === undefined
+          ? null
+          : { id: ticket.assigneeId, name: assigneeName },
       contact:
         ticket.contactId === null || name === undefined ? null : { id: ticket.contactId, name },
       // M3-02: the SlaTimer the api judges, drawn from the fixture's due dates.

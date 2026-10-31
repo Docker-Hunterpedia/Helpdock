@@ -265,6 +265,18 @@ export const ticketContactSchema = z.object({
 export type TicketContact = z.infer<typeof ticketContactSchema>;
 
 /**
+ * Who a ticket is with, by name (M14-20): a list row draws the assignee's
+ * initials, and `GET /staff` (`staff:manage`) is not something an Agent may
+ * read, so the name travels with the ticket as the contact's does. Only the
+ * name colleagues already see; photos are not embedded, rows draw initials.
+ */
+export const ticketAssigneeSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+});
+export type TicketAssignee = z.infer<typeof ticketAssigneeSchema>;
+
+/**
  * One ticket. `number` and `prefix` travel together because `HD-1042` is what a
  * person reads and neither half means anything alone.
  *
@@ -329,6 +341,12 @@ export const ticketSchema = z.object({
    * alone — who still has `contactId`. `null` means the ticket names nobody.
    */
   contact: ticketContactSchema.nullable().optional(),
+  /**
+   * M14-20: the assignee's name, filled by the list and the ticket read.
+   * `null` when the ticket is unassigned or the person is no longer in the
+   * brand; optional for the reason `tags` is.
+   */
+  assignee: ticketAssigneeSchema.nullable().optional(),
   /**
    * The SlaTimer of a list row (M3-02): the worst clock still counting,
    * already judged against the brand's calendar. Null when no policy applies.

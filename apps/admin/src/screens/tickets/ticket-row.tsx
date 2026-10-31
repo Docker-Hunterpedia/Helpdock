@@ -169,14 +169,18 @@ export function TicketRow({
                 </Box>
               </>
             )}
-            {hideStatus ? null : (
+            {hideStatus || ticket.snoozedUntil != null ? null : (
               <>
                 <span aria-hidden="true">·</span>
-                <Box component="span">{statusName(ticket.status, locale)}</Box>
+                <Box component="span" sx={{ flexShrink: 0 }}>
+                  {statusName(ticket.status, locale)}
+                </Box>
               </>
             )}
             {ticket.snoozedUntil == null ? (
-              <SlaTimer ticket={ticket} now={now} compact />
+              <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
+                <SlaTimer ticket={ticket} now={now} compact />
+              </Box>
             ) : (
               <Box
                 component="span"
@@ -189,6 +193,7 @@ export function TicketRow({
                   gap: 1,
                   color: 'text.primary',
                   fontSize: 12,
+                  flexShrink: 0,
                 }}
               >
                 <Clock size={12} aria-hidden="true" />

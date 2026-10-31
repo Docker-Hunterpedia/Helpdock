@@ -124,7 +124,9 @@ export function ParticipantsCard({ ticketId }: { readonly ticketId: string }): R
           }}
         >
           <Box component="span" sx={{ flexGrow: 1 }}>
-            {t('tickets:participants.summary', { count })}
+            {list === undefined
+              ? t('tickets:participants.title')
+              : t('tickets:participants.summary', { count })}
           </Box>
           {open ? (
             <ChevronDown size={16} aria-hidden="true" />

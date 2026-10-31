@@ -85,6 +85,11 @@ test('a one-status view leaves the status word out of its rows', async ({
   for (const text of await rows.allInnerTexts()) {
     expect(text).not.toContain(escalated);
   }
+
+  // A search names a ticket outside the view's filters (#221): that row is not
+  // an Escalated one, so it keeps its own status word.
+  await page.getByLabel(t('tickets:list.searchLabel')).fill('HD-1042');
+  await expect(refund).toContainText(open);
 });
 
 test('the details panel runs in order, with the labels above the selects', async ({

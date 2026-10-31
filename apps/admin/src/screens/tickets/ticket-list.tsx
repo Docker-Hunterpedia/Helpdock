@@ -7,7 +7,7 @@ import type {
 } from '@helpdock/schemas';
 import { Box, Button, Checkbox, Chip, InputAdornment, TextField, Typography } from '@mui/material';
 import { ListFilter, Search, TicketIcon } from 'lucide-react';
-import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
 import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
@@ -21,7 +21,7 @@ import { visuallyHidden } from '../../ui/visually-hidden.js';
 import { FilterPopover } from './filter-popover.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { MenuTriggerTooltip } from './menu-trigger-tooltip.tsx';
-import { isSingleStatusView } from './single-status.js';
+import { singleStatusOf } from './single-status.js';
 import { SortMenu } from './sort-menu.tsx';
 import { TicketRow } from './ticket-row.tsx';
 import { TicketListSkeleton } from './ticket-skeletons.tsx';
@@ -169,11 +169,7 @@ export function TicketList({
   const filterLabel =
     active === 0 ? t('tickets:list.filter') : t('tickets:list.filterActive', { count: active });
   const summary = useFilterSummary({ statuses, departments, tags, staff, fields });
-  const staffNames = useMemo(
-    () => new Map(staff.map((person) => [person.userId, person.name])),
-    [staff],
-  );
-  const hideStatus = isSingleStatusView(filters, statuses);
+  const viewStatusId = singleStatusOf(filters, statuses);
   const chips = summary.chips(filters);
 
   const emptyAction =
@@ -384,10 +380,8 @@ export function TicketList({
                   now={now}
                   search={linkSearch}
                   pinnedField={pinnedField}
-                  assigneeName={
-                    ticket.assigneeId === null ? null : (staffNames.get(ticket.assigneeId) ?? null)
-                  }
-                  hideStatus={hideStatus}
+                  assigneeName={ticket.assignee?.name ?? null}
+                  hideStatus={ticket.status.id === viewStatusId}
                   selection={
                     selection === undefined
                       ? undefined

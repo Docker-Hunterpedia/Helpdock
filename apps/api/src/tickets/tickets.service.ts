@@ -86,6 +86,7 @@ import {
 } from './ticket-events.js';
 import { cursorAfter, sortValueOf } from './ticket-query.js';
 import {
+  ticketAssigneeOf,
   ticketContactOf,
   toTicket,
   toTicketActivity,
@@ -250,6 +251,11 @@ export class TicketsService {
           page.flatMap(({ ticket }) => (ticket.contactId === null ? [] : [ticket.contactId])),
         )
       : undefined;
+    const assigneeNames = await this.#tickets.assigneeNames(
+      tx,
+      reader.brandId,
+      page.flatMap(({ ticket }) => (ticket.assigneeId === null ? [] : [ticket.assigneeId])),
+    );
     // M3-02: one read of the clocks for the whole page, for the same reason.
     const sla = await this.#sla.summaries(
       tx,
@@ -267,6 +273,7 @@ export class TicketsService {
           contactNames === undefined ? undefined : ticketContactOf(ticket.contactId, contactNames),
           sla.get(ticket.id) ?? null,
           imported.get(ticket.id) ?? null,
+          ticketAssigneeOf(ticket.assigneeId, assigneeNames),
         ),
       ),
       nextCursor:

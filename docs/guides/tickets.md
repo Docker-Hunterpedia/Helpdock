@@ -924,7 +924,8 @@ GET /api/brands/:brandId/tickets
       "priority": "medium",
       "channel": "manual",
       "departmentId": "0199f4b2-…",
-      "assigneeId": null,
+      "assigneeId": "0199f4b2-…",
+      "assignee": { "id": "0199f4b2-…", "name": "Lina Haddad" },
       "contactId": "0199f4b2-…",
       "contact": { "id": "0199f4b2-…", "name": "Nadia Karim" },
       "slaBreached": false,
@@ -1726,6 +1727,11 @@ The rows name their contact from the ticket itself: the list embeds
 contact being on the first page of `GET /contacts`, and the workspace no longer
 reads that page at all. The open ticket reads its one contact in full, for the
 details card and the thread's address line.
+
+The list also embeds `assignee: { id, name }` (M14-20; `null` for an unassigned
+ticket or a person who no longer holds a role in the brand), read for the page in
+one query. A row draws the initials from it, because `GET /staff` needs
+`staff:manage` and an Agent holds no such permission.
 
 ## Bulk edit
 

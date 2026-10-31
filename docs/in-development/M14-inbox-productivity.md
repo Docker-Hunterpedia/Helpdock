@@ -1276,8 +1276,13 @@ unassigned, snoozed and selected) and `Admin/Ticket-Details-Order`.
   word · SLA timer or snooze time · AI mark · pinned chip) and, at the end, the
   mono time over `AssigneeMark`: an Avatar 24 with initials in solid
   `action.primary`, or the dashed `border.strong` ring when `assigneeId` is null.
-  The name comes from the staff list the page already holds (`ticket-list.tsx`
-  builds a map once); a person it does not name reads "Assigned". The link's
+  The name is the ticket's embedded `assignee` (the list read fills it from
+  `user_brand_roles` and `users`, as `contact` is filled; `TicketAssignee`),
+  because `GET /staff` needs `staff:manage`, which an Agent lacks; a person no
+  longer in the brand reads "Assigned". Snoozed rows drop the status word.
+  `isSingleStatusView` became `singleStatusOf`, returning the status id, and a row
+  hides the word only when its own status is that one (a search can name tickets
+  outside the view's filters). The link's
   accessible name ends in "Assigned to …", "Assigned" or "Unassigned".
 - [x] `isSingleStatusView` (`single-status.ts`) decides `hideStatus`: one status
   in the filter, or one system state that exactly one status of the brand has.

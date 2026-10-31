@@ -1275,6 +1275,27 @@ describe.skipIf(!hasDocker)('tickets', () => {
       expect(read.body.ticket.contact).toEqual({ id: contact.body.id, name: 'Idris Vantorre' });
     });
 
+    it('names each row’s assignee for an Agent, who cannot read the staff list (M14-20)', async () => {
+      const assigned = await createTicket(sam, { subject: 'Wexford assigned' });
+      const unassigned = await createTicket(sam, { subject: 'Wexford loose' });
+      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${assigned.ticket.id}`, sam, {
+        assigneeId: sam.id,
+      });
+
+      const staff = await call('GET', `${brandPath(seeded.brandId)}/staff`, sam);
+      expect(staff.status).toBe(403);
+
+      const { body } = await call<TicketList>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets?q=wexford&limit=100`,
+        sam,
+      );
+      const byId = new Map(body.tickets.map((row) => [row.id, row]));
+
+      expect(byId.get(assigned.ticket.id)?.assignee).toEqual({ id: sam.id, name: 'sam' });
+      expect(byId.get(unassigned.ticket.id)?.assignee).toBeNull();
+    });
+
     it('finds both tickets whose subject matches the search', async () => {
       const jammed = await createTicket(sam, { subject: 'Kymera printer jammed again' });
       const silent = await createTicket(sam, { subject: 'Kymera printer will not print' });

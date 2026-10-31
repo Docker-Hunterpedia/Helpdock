@@ -1326,6 +1326,24 @@ transitions (M1-08), merge and split (M1-09) and attachments (M1-10) add to it
 rather than change it; what the screen still cannot do is at the end of this
 section.
 
+### The compact composer and the 1280 px layout (M14-19)
+
+At 1280 × 720 the thread has about 700 px: the details panel is a drawer below
+1440 px (the **Details** button in the ticket header opens it), and **`[`** puts the
+list away for more room (`[` again, or **Show the ticket list**, brings it
+back). The reply box is short on purpose. On a ticket answered by email it is
+one line, "To Mona Khalil · from billing@helpdock.io", with **Cc 2** after it
+when there are copies; press it to see From, To, Cc and your signature, and
+press it again to put them away. The text starts at two lines and grows as you
+type, up to 45 % of the ticket's height, after which the box scrolls inside
+itself with the Send row kept in view. A reply that fails to send leaves the box
+as it was and the text in a "Not sent, retry" message in the thread. The ticket's
+subject is one line in the header; hover it for the whole subject.
+
+There is one way in to macros: **Macros** in the reply box, `/` in the text,
+`m`, or **Apply a macro** in the command palette (`⌘K`). The header has no Macro
+button.
+
 ### One screen, one route
 
 `/tickets` is the list with nothing open and `/tickets/<id>` is that ticket
@@ -1593,7 +1611,7 @@ there for a screen reader ("Severity: Sev 1").
 
 ### The ⋯ menu
 
-The button beside Macro in the header opens the ticket's actions menu
+The ⋯ button in the header opens the ticket's actions menu
 (`Admin · ticket dialogs`, panel 2). Its items are an array each deliverable
 contributes to — `ticket-actions-menu.tsx` draws whatever it is handed — so
 merge and split (M1-09) and log time (M1-12) add entries rather than markup.

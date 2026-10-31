@@ -34,7 +34,26 @@ export interface ComposerEmail {
   readonly signature: string | null;
 }
 
-/** The From select, beside the Reply / Internal note control. */
+/**
+ * The collapsed composer's one line (M14-19): "To Mona Khalil · from
+ * billing@helpdock.com", then "· Cc 2" while there are any. The sender is the
+ * address alone when its label is "Name <address>", to keep the line short.
+ */
+export function summaryOf(t: ReturnType<typeof useT>, email: ComposerEmail): string {
+  const sender = email.senders.find((candidate) => candidate.key === email.fromKey);
+  const address = sender?.label.match(/<([^>]+)>/)?.[1] ?? sender?.label ?? null;
+  const to = email.to?.name || email.to?.address || '';
+  const line =
+    address === null
+      ? t('tickets:composer.summaryTo', { name: to })
+      : t('tickets:composer.summary', { name: to, from: address });
+
+  return email.ccs.length === 0
+    ? line
+    : `${line} · ${t('tickets:composer.summaryCc', { n: email.ccs.length })}`;
+}
+
+/** The From select, with the To and Cc lines in the opened composer. */
 export function FromSelect({ email }: { readonly email: ComposerEmail }): ReactNode {
   const t = useT();
   const id = useId();

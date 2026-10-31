@@ -81,7 +81,6 @@
   "header": {
     "label": "ترويسة التذكرة",
     "more": "إجراءات أخرى",
-    "macro": "ماكرو",
     "viewingOne": "{{name}} يطالع التذكرة",
     "viewingMany": "{{name}} و{{others}} آخرون يطالعون التذكرة",
     "details": "التفاصيل",
@@ -205,6 +204,10 @@
     "attach": "إرفاق ملف",
     "attachFiles": "اختر ملفات للإرفاق",
     "canned": "الماكرو والردود الجاهزة",
+    "macros": "الماكرو",
+    "summary": "إلى {{name}} · من {{from}}",
+    "summaryTo": "إلى {{name}}",
+    "summaryCc": "نسخة إلى {{n}}",
     "thenSetStatus": "ثم اضبط الحالة",
     "keepStatus": "اترك الحالة",
     "suggestion": "رد مقترح",
@@ -454,7 +457,8 @@
         "close": "إغلاق",
         "select": "تحديد التذكرة المركّزة",
         "selectRange": "تحديد نطاق من التذاكر",
-        "clearSelection": "إلغاء التحديد"
+        "clearSelection": "إلغاء التحديد",
+        "toggleColumn": "إخفاء القائمة أو إظهارها"
       },
       "ticket": {
         "reply": "رد",

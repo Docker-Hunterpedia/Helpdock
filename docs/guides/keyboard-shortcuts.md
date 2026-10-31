@@ -61,6 +61,7 @@ navigation only, and the api refuses a change whatever the keys do.
 | `x` | Select the focused ticket | everyone but a Viewer |
 | `Shift` + `x` | Select a range of tickets | everyone but a Viewer |
 | `Escape` | Clear the selection | everyone but a Viewer |
+| `[` | Hide or show the list | everyone |
 
 ### Ticket
 
@@ -100,10 +101,13 @@ it.
   row holding keyboard focus or, failing that, the open ticket's; `Shift`+`x`
   ticks every row from the one ticked last to it; `Esc` clears the selection
   (it answers only while something is ticked). See
-  [Bulk edit](tickets.md#bulk-edit).
+  [Bulk edit](tickets.md#bulk-edit). `[` puts the ticket list away so the
+  thread has the whole width, and brings it back; on a screen narrower than
+  1024 px, where the list is already a drawer, it does nothing. While the list
+  is away, **Show the ticket list** above the thread brings it back too.
 - **Ticket** answers while a ticket is open. `a`, `s`, `p` and `t` open the
   assignee picker, the status and priority menus and the tag picker in the
-  details panel, opening the panel first on a window narrower than 1280 px.
+  details panel, opening the panel first on a window narrower than 1440 px.
   `h` opens the Snooze menu on the header's button; a closed or merged ticket
   has none, so `h` does nothing there ([Snooze](snooze.md)).
 - **Composer** answers only while the caret is in the composer, so `⌘`+`Enter`

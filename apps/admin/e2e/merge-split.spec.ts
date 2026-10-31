@@ -107,7 +107,11 @@ test.describe('split', () => {
         hasText: t('tickets:toast.created', { reference: 'HD-1043' }),
       }),
     ).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1 }).last()).toContainText('The return label');
+    await expect(
+      page
+        .getByRole('region', { name: t('tickets:header.label') })
+        .getByRole('heading', { level: 2 }),
+    ).toContainText('The return label');
     await expect(
       page
         .getByRole('list', { name: t('tickets:thread.label') })

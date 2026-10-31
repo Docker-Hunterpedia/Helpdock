@@ -10,7 +10,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import { Paperclip, Send, Zap } from 'lucide-react';
+import { ChevronDown, Paperclip, Send, Zap } from 'lucide-react';
 import {
   type ReactNode,
   type SyntheticEvent,
@@ -43,6 +43,7 @@ import {
   FromSelect,
   RecipientLines,
   SignaturePreview,
+  summaryOf,
 } from './email-compose.tsx';
 import { statusName } from './format.js';
 import { MESSAGE_MAX_WIDTH } from './message-bubble.tsx';
@@ -74,6 +75,14 @@ import type { ComposerMeta } from './meta/use-ticket-meta.tsx';
  * them in the same transaction. A file the brand's policy would refuse is
  * refused here, in the picker, rather than after a minute of uploading — and
  * again by the api, because a client's opinion is not an authorisation.
+ *
+ * **Compact (M14-19, `Admin/Ticket-CompactComposer`).** The reply of an email
+ * ticket is one line, "To Mona Khalil · from billing@", until it is opened:
+ * From, To, Cc and the signature are behind it. The text starts at two rows and
+ * grows with what is typed, one toolbar row, and the card is as tall as the
+ * ticket view lets it be (`ticket-view.tsx` caps it at 45 % of the column and
+ * scrolls inside it), with the toolbar kept in reach. The open state belongs
+ * here, so a send that failed leaves it as it was.
  *
  * **Note mode tints the whole card.** It is the one state where getting it
  * wrong is unrecoverable — a note posted as a public reply has left the
@@ -210,6 +219,9 @@ export function Composer({
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const note = mode === 'note';
+  const surface = note ? tokens['status.warning.tint'] : tokens['bg.surface'];
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
   const emailReply = email !== undefined && !note;
   const telegramReply = telegram !== undefined && !note;
   const metaReply = meta !== undefined && !note;
@@ -303,7 +315,7 @@ export function Composer({
         display: 'flex',
         flexDirection: 'column',
         gap: 3,
-        backgroundColor: note ? tokens['status.warning.tint'] : tokens['bg.surface'],
+        backgroundColor: surface,
         border: `1px solid ${note ? tokens['status.warning'] : tokens['border.default']}`,
       }}
     >
@@ -327,9 +339,7 @@ export function Composer({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        {emailReply ? (
-          <FromSelect email={email} />
-        ) : metaReply ? (
+        {emailReply ? null : metaReply ? (
           <MetaRecipient meta={meta} />
         ) : telegramReply ? (
           <Typography
@@ -357,7 +367,40 @@ export function Composer({
         )}
       </Box>
 
-      {emailReply ? <RecipientLines email={email} /> : null}
+      {emailReply && email.to !== null ? (
+        <Button
+          variant="text"
+          size="small"
+          aria-expanded={detailsOpen}
+          aria-controls={detailsId}
+          endIcon={
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              style={{ transform: detailsOpen ? 'rotate(180deg)' : undefined }}
+            />
+          }
+          onClick={() => {
+            setDetailsOpen((open) => !open);
+          }}
+          sx={{
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            justifyContent: 'flex-start',
+            color: 'text.secondary',
+            textAlign: 'start',
+          }}
+        >
+          <bdi>{summaryOf(t, email)}</bdi>
+        </Button>
+      ) : null}
+
+      {emailReply && (detailsOpen || email.to === null) ? (
+        <Box id={detailsId} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <FromSelect email={email} />
+          <RecipientLines email={email} />
+        </Box>
+      ) : null}
 
       {suggestion}
 
@@ -365,7 +408,7 @@ export function Composer({
         id={bodyId}
         inputRef={bodyRef}
         multiline
-        minRows={3}
+        minRows={2}
         value={body}
         onChange={(event) => {
           onBodyChange(event.target.value);
@@ -446,7 +489,7 @@ export function Composer({
         />
       ) : null}
 
-      {emailReply ? <SignaturePreview signature={email.signature} /> : null}
+      {emailReply && detailsOpen ? <SignaturePreview signature={email.signature} /> : null}
       {telegramReply ? (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           <bdi>{t('tickets:telegram.composerFoot', { bot: telegram.bot })}</bdi>
@@ -471,7 +514,18 @@ export function Composer({
 
       {metaReply ? <MetaCount meta={meta} body={body} attachments={attachments} /> : null}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
+          // Kept in reach when the card scrolls inside its cap.
+          position: 'sticky',
+          insetBlockEnd: 0,
+          backgroundColor: surface,
+        }}
+      >
         <input
           ref={fileRef}
           type="file"
@@ -511,10 +565,11 @@ export function Composer({
           aria-haspopup="dialog"
           aria-expanded={macrosOpen}
           aria-keyshortcuts={macrosKeys}
+          aria-label={t('tickets:composer.canned')}
           startIcon={<Zap size={14} aria-hidden="true" />}
           onClick={onOpenMacros}
         >
-          {t('tickets:composer.canned')}
+          {t('tickets:composer.macros')}
         </Button>
 
         <TextField

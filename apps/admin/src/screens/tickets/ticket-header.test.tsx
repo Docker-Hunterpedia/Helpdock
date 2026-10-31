@@ -77,10 +77,46 @@ it('keeps provenance visible without making an unsafe source address clickable',
 it('lets the subject take its own direction, whatever the page’s is', () => {
   renderHeader([]);
 
-  expect(screen.getByRole('heading', { level: 1, name: 'Refund for order 42' })).toHaveAttribute(
+  expect(screen.getByRole('heading', { level: 2, name: 'Refund for order 42' })).toHaveAttribute(
     'dir',
     'auto',
   );
+});
+
+describe('the subject (M14-19)', () => {
+  const long =
+    'Refund not received after 10 days, order 8841 returned on the 2nd and confirmed by email on the 3rd';
+
+  it('is one clamped line whose accessible name is the whole subject', () => {
+    renderApp(
+      <TicketHeader
+        ticket={{ ...testTicket(), subject: long }}
+        departmentName="Billing"
+        viewers={[]}
+        actions={[]}
+        now={NOW}
+        showDetailsButton={false}
+        onShowDetails={() => {}}
+      />,
+    );
+
+    const subject = screen.getByRole('heading', { level: 2, name: long });
+    expect(subject).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis' });
+  });
+
+  it('shows the whole subject in a tooltip on hover', async () => {
+    const { user } = renderHeader([]);
+
+    await user.hover(screen.getByRole('heading', { level: 2, name: 'Refund for order 42' }));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Refund for order 42');
+  });
+
+  it('has no Macro button: macros are the composer’s and the palette’s', () => {
+    renderHeader([]);
+
+    expect(screen.queryByRole('button', { name: 'Macro' })).not.toBeInTheDocument();
+  });
 });
 
 describe('the collision pill', () => {

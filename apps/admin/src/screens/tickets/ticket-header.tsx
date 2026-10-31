@@ -1,11 +1,10 @@
 import type { CustomFieldDef, Ticket, TicketViewingActivity } from '@helpdock/schemas';
 import { importSourceLink } from '@helpdock/schemas';
-import { Box, Button, Chip, IconButton, Typography } from '@mui/material';
+import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
 import { ExternalLink, Eye, PanelRightOpen, PenLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../app/i18n.js';
 import { useSemanticTokens } from '../../app/tokens.js';
-import { useAriaKeyShortcuts } from '../../keyboard/keyboard-provider.tsx';
 import { ChannelLabel, PriorityBadge, SlaTimer, StatusBadge } from './badges.tsx';
 import { ticketReference } from './format.js';
 import { PinnedFieldChip, pinnedValueOf } from './pinned-field-chip.tsx';
@@ -16,6 +15,9 @@ import { type TicketAction, TicketActionsMenu } from './ticket-actions-menu.tsx'
  * one row carrying every badge, then the collision pill when somebody else has
  * the same ticket open — "is viewing", or "is replying" when their composer has
  * something in it (M1-09), which is the one worth stopping for.
+ *
+ * The subject is a one-line `h2` (M14-19). Macros are not here: they are the
+ * composer's button and `/`, and "Apply a macro" in the command palette (UX-21).
  *
  * The ⋯ menu's entries are the caller's ({@link TicketActionsMenu}), so the
  * deliverables that add to it do not edit the header.
@@ -39,8 +41,6 @@ export function TicketHeader({
   now,
   showDetailsButton,
   onShowDetails,
-  onMacro,
-  macroOpen = false,
   snooze,
   pinnedField,
 }: {
@@ -57,9 +57,6 @@ export function TicketHeader({
   readonly now: number;
   readonly showDetailsButton: boolean;
   onShowDetails(): void;
-  /** M3-06: opens the composer's macro picker. Absent for a reader who cannot reply. */
-  onMacro?: (() => void) | undefined;
-  readonly macroOpen?: boolean | undefined;
   /** M14-02: the Snooze button and its menu. Absent when the ticket cannot be snoozed. */
   readonly snooze?: ReactNode;
   /** M14-16: the brand's pinned field, shown beside the priority when the ticket has a value. */
@@ -68,7 +65,6 @@ export function TicketHeader({
   const t = useT();
   const tokens = useSemanticTokens();
   const [first, ...rest] = viewers;
-  const macroKeys = useAriaKeyShortcuts('ticket.macros');
   const importedUrl = importSourceLink(ticket.imported?.url);
   const pinnedValue = pinnedValueOf(ticket, pinnedField);
 
@@ -92,25 +88,22 @@ export function TicketHeader({
           <Typography variant="mono" component="p" sx={{ color: 'text.secondary', fontSize: 12 }}>
             <bdi>{ticketReference(ticket)}</bdi>
           </Typography>
-          <Typography variant="h2" component="h1" dir="auto">
-            {ticket.subject}
-          </Typography>
+          {/* M14-19: one line, whatever the subject's length. The tooltip gives
+              the heading its full text as its name and shows it on hover. */}
+          <Tooltip title={ticket.subject} placement="bottom-start">
+            <Typography
+              variant="h2"
+              component="h2"
+              dir="auto"
+              noWrap
+              sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {ticket.subject}
+            </Typography>
+          </Tooltip>
         </Box>
 
         {snooze}
-
-        {onMacro === undefined ? null : (
-          <Button
-            variant="outlined"
-            size="small"
-            aria-haspopup="dialog"
-            aria-expanded={macroOpen}
-            aria-keyshortcuts={macroKeys}
-            onClick={onMacro}
-          >
-            {t('tickets:header.macro')}
-          </Button>
-        )}
 
         <TicketActionsMenu items={actions} />
 

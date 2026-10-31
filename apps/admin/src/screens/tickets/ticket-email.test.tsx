@@ -47,15 +47,63 @@ const open = async (
 
 const composer = (): HTMLElement => screen.getByRole('form', { name: 'Reply or internal note' });
 
+/** M14-19: the recipients are behind the summary line until it is opened. */
+const summary = (): Promise<HTMLElement> =>
+  within(composer()).findByRole('button', { name: /^To Mona Khalil/ });
+
 describe('the composer on an email ticket', () => {
   beforeEach(wideViewport);
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("goes out from the department's sender, to the contact, with the signature it will carry", async () => {
-    await open(MOCK_TICKET_REFUND);
+  it('is one line until it is opened, then shows From, To, Cc and the signature', async () => {
+    const { user } = await open(MOCK_TICKET_REFUND);
 
+    const line = await summary();
+    expect(line).toHaveTextContent('To Mona Khalil · from billing@helpdock.io');
+    expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(within(composer()).queryByRole('combobox', { name: 'From' })).not.toBeInTheDocument();
+    expect(within(composer()).queryByText('Signature · added when sent')).not.toBeInTheDocument();
+
+    await user.click(line);
+    expect(line).toHaveAttribute('aria-expanded', 'true');
+    expect(within(composer()).getByRole('combobox', { name: 'From' })).toBeVisible();
+    expect(within(composer()).getByText('Signature · added when sent')).toBeVisible();
+
+    await user.click(line);
+    expect(within(composer()).queryByRole('combobox', { name: 'From' })).not.toBeInTheDocument();
+  });
+
+  it('caps the composer at 45 % of the ticket column and scrolls inside it', async () => {
+    await open(MOCK_TICKET_REFUND);
+    await summary();
+
+    const scroller = composer().parentElement;
+    expect(scroller).toHaveStyle({ maxHeight: '45cqh', overflowY: 'auto' });
+  });
+
+  it('stays open when a send fails, with the text kept in the thread to retry', async () => {
+    const tickets = new MockTicketsApi();
+    vi.spyOn(tickets, 'reply').mockRejectedValue(new Error('offline'));
+    const { user } = await open(MOCK_TICKET_REFUND, new MockEmailApi(), tickets);
+
+    const line = await summary();
+    await user.click(line);
+    await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'On its way.');
+    await user.click(within(composer()).getByRole('button', { name: 'Send email' }));
+
+    await screen.findAllByText(/not sent/i);
+    expect(line).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      within(screen.getByRole('list', { name: 'Conversation' })).getByText('On its way.'),
+    ).toBeVisible();
+  });
+
+  it("goes out from the department's sender, to the contact, with the signature it will carry", async () => {
+    const { user } = await open(MOCK_TICKET_REFUND);
+
+    await user.click(await summary());
     const form = composer();
     expect(await within(form).findByRole('combobox', { name: 'From' })).toHaveTextContent(
       'Helpdock Billing <billing@helpdock.io>',
@@ -74,6 +122,7 @@ describe('the composer on an email ticket', () => {
     const reply = vi.spyOn(tickets, 'reply');
     const { user } = await open(MOCK_TICKET_REFUND, new MockEmailApi(), tickets);
 
+    await user.click(await summary());
     await user.click(await within(composer()).findByRole('combobox', { name: 'From' }));
     await user.click(await screen.findByRole('option', { name: /support@helpdock\.io/ }));
     await user.type(within(composer()).getByRole('textbox', { name: 'Message' }), 'On its way.');
@@ -91,6 +140,7 @@ describe('the composer on an email ticket', () => {
   it('copies somebody in from the Cc line and takes them out again', async () => {
     const { user } = await open(MOCK_TICKET_REFUND);
 
+    await user.click(await summary());
     const add = await within(composer()).findByRole('textbox', { name: 'Add Cc' });
     await user.type(add, 'finance@example.com{Enter}');
     expect(await screen.findByText('finance@example.com added as a CC.')).toBeVisible();
@@ -104,11 +154,15 @@ describe('the composer on an email ticket', () => {
   it('leaves a note as it was: no From, no recipients', async () => {
     const { user } = await open(MOCK_TICKET_REFUND);
 
+    await user.click(await summary());
     await within(composer()).findByRole('combobox', { name: 'From' });
     await user.click(within(composer()).getByRole('button', { name: 'Internal note' }));
 
     expect(within(composer()).queryByRole('combobox', { name: 'From' })).not.toBeInTheDocument();
     expect(within(composer()).queryByText('Signature · added when sent')).not.toBeInTheDocument();
+    expect(
+      within(composer()).queryByRole('button', { name: /^To Mona Khalil/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps a chat ticket out of email mode', async () => {

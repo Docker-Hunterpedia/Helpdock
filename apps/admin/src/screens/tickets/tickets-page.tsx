@@ -78,8 +78,8 @@ import { SaveViewDialog } from './view-dialogs.tsx';
  * the whole filter set beside it, and `tickets/views.ts` works out what that
  * means — see it for the rules.
  *
- * **The columns of DESIGN §6.5** are 220 · 360 · flexible · 300. Below 1280 px
- * the details panel becomes a drawer; below 1024 px the list does too, which is
+ * **The columns of DESIGN §6.5** are 220 · 360 · flexible · 300. Below 1440 px
+ * (M14-19: it was 1280, which left the thread about 400 px) the details panel becomes a drawer; below 1024 px the list does too, which is
  * the same breakpoint at which the shell's own sidebar becomes one.
  */
 
@@ -90,9 +90,10 @@ export const LIST_SHORTCUTS = [
   'list.select',
   'list.selectRange',
   'list.clearSelection',
+  'list.toggleColumn',
 ] as const satisfies readonly ShortcutId[];
 
-const DETAILS_BREAKPOINT = '(min-width:1280px)';
+const DETAILS_BREAKPOINT = '(min-width:1440px)';
 const LIST_BREAKPOINT = '(min-width:1024px)';
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -133,6 +134,8 @@ export function TicketsPage(): ReactNode {
 
   const [typed, setTyped] = useState(search);
   const [listOpen, setListOpen] = useState(false);
+  // M14-19: `[` puts the list column away on a wide screen, leaving the thread the room.
+  const [listHidden, setListHidden] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -182,8 +185,10 @@ export function TicketsPage(): ReactNode {
     } else if (intent === 'new') {
       setDialogOpen(true);
     } else {
-      // `/` (M14-01). Below 1024 px the search box is in the list's drawer.
+      // `/` (M14-01). Below 1024 px the search box is in the list's drawer, and
+      // a list put away with `[` (M14-19) comes back for it.
       setListOpen(true);
+      setListHidden(false);
       setFocusSearchToken(Date.now());
     }
     setParams(
@@ -409,6 +414,11 @@ export function TicketsPage(): ReactNode {
           }
         }
       : null,
+    'list.toggleColumn': wideList
+      ? () => {
+          setListHidden((hidden) => !hidden);
+        }
+      : null,
     // Attached only while something is ticked, so Esc is the page's otherwise.
     'list.clearSelection':
       canWrite && selection.ids.length > 0
@@ -560,7 +570,9 @@ export function TicketsPage(): ReactNode {
       }}
     >
       {wideList ? (
-        listColumn
+        listHidden ? null : (
+          listColumn
+        )
       ) : (
         <Drawer
           open={listOpen}
@@ -574,13 +586,17 @@ export function TicketsPage(): ReactNode {
       )}
 
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {!wideList ? (
+        {!wideList || listHidden ? (
           <Box sx={{ padding: 3, borderBlockEnd: `1px solid ${tokens['border.default']}` }}>
             <Button
               variant="outlined"
               size="small"
               onClick={() => {
-                setListOpen(true);
+                if (wideList) {
+                  setListHidden(false);
+                } else {
+                  setListOpen(true);
+                }
               }}
             >
               {t('tickets:list.open')}

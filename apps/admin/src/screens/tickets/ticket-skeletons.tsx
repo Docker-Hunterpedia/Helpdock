@@ -15,7 +15,7 @@ export const LIST_SKELETON_ROWS = 6;
 
 const ROW_KEYS = Array.from({ length: LIST_SKELETON_ROWS }, (_, row) => `row-${row}`);
 
-/** TicketRow's anatomy: the priority dot, two lines, the badge at the inline end. */
+/** TicketRow's anatomy: the priority dot, two lines, the assignee circle at the inline end. */
 export function TicketListSkeleton(): ReactNode {
   const tokens = useSemanticTokens();
 
@@ -39,7 +39,7 @@ export function TicketListSkeleton(): ReactNode {
             <Skeleton variant="text" width="70%" />
             <Skeleton variant="text" width="40%" />
           </Box>
-          <Skeleton variant="rounded" width={56} height={20} />
+          <Skeleton variant="circular" width={24} height={24} />
         </Box>
       ))}
     </Box>

@@ -250,3 +250,98 @@ describe('the pinned field on a row (M14-16)', () => {
     expect(screen.queryByText('Pro')).not.toBeInTheDocument();
   });
 });
+
+describe('the meta line and the assignee on a row (M14-20)', () => {
+  const MONA = { id: '0192c3f0-1a2b-7c3d-8e4f-0000000000c1', name: 'Mona Khalil' };
+  const LINA = '0192c3f0-1a2b-7c3d-8e4f-0000000000a1';
+
+  const row = (
+    ticket = testTicket(),
+    props: { assigneeName?: string | null; hideStatus?: boolean } = {},
+  ) =>
+    renderApp(
+      <ul>
+        <TicketRow ticket={ticket} selected={false} now={NOW} search="" {...props} />
+      </ul>,
+    );
+
+  it('puts reference, contact, status and the SLA time on one line, in that order', () => {
+    row(
+      testTicket({
+        contact: MONA,
+        firstResponseDueAt: new Date(NOW + 4 * HOUR).toISOString(),
+      }),
+    );
+
+    const line = screen.getByText('HD-1042').closest('p');
+    expect(line).not.toBeNull();
+    expect(line?.textContent).toMatch(/^HD-1042·Mona Khalil·Open.*4h/);
+  });
+
+  it('prints no stand-in for a contact whose name is empty', () => {
+    row(testTicket({ contact: { id: MONA.id, name: ' ' } }));
+
+    expect(screen.getByText('HD-1042').closest('p')?.textContent).toMatch(/^HD-1042·Open/);
+  });
+
+  it('draws the status as a word, not a pill', () => {
+    row();
+
+    expect(screen.getByText('Open').closest('p')).not.toBeNull();
+  });
+
+  it('leaves the status out when the view is filtered to one status', () => {
+    row(testTicket({ firstResponseDueAt: new Date(NOW + 4 * HOUR).toISOString() }), {
+      hideStatus: true,
+    });
+
+    expect(screen.queryByText('Open')).not.toBeInTheDocument();
+    expect(screen.getByRole('link').textContent).not.toMatch(/Open/);
+    expect(screen.getByRole('link', { name: /4h left/ })).toBeInTheDocument();
+  });
+
+  it('shows the assignee as initials and says their name in the link', () => {
+    row(testTicket({ assigneeId: LINA }), { assigneeName: 'Lina Haddad' });
+
+    expect(screen.getByText('LH')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('link', { name: /Assigned to Lina Haddad$/ })).toBeInTheDocument();
+  });
+
+  it('draws a dashed ring and says "Unassigned" when nobody has the ticket', () => {
+    row(testTicket({ assigneeId: null }));
+
+    const link = screen.getByRole('link');
+    expect(link).toHaveAccessibleName(/Unassigned$/);
+    // The priority dot is the first empty drawing; the ring is the last.
+    const ring = [...link.querySelectorAll('span[aria-hidden="true"]:empty')].at(-1);
+    expect(ring).not.toBeNull();
+    expect(getComputedStyle(ring as Element).borderStyle).toBe('dashed');
+  });
+
+  it('drops the status word on a snoozed row, whose clock label already says it', () => {
+    row(testTicket({ snoozedUntil: new Date(NOW + 3 * 24 * HOUR).toISOString() }));
+
+    expect(screen.queryByText('Open')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Snoozed until /)).toBeInTheDocument();
+  });
+
+  it('says "Assigned" when the assignee is not in the staff list', () => {
+    row(testTicket({ assigneeId: LINA }), { assigneeName: null });
+
+    expect(screen.getByRole('link', { name: /Assigned$/ })).toBeInTheDocument();
+  });
+
+  it('names the link by status, SLA and assignee together', () => {
+    row(
+      testTicket({
+        assigneeId: LINA,
+        firstResponseDueAt: new Date(NOW + 4 * HOUR).toISOString(),
+      }),
+      { assigneeName: 'Lina Haddad' },
+    );
+
+    expect(
+      screen.getByRole('link', { name: /Open 4h left.* Assigned to Lina Haddad$/ }),
+    ).toBeInTheDocument();
+  });
+});

@@ -924,7 +924,8 @@ GET /api/brands/:brandId/tickets
       "priority": "medium",
       "channel": "manual",
       "departmentId": "0199f4b2-…",
-      "assigneeId": null,
+      "assigneeId": "0199f4b2-…",
+      "assignee": { "id": "0199f4b2-…", "name": "Lina Haddad" },
       "contactId": "0199f4b2-…",
       "contact": { "id": "0199f4b2-…", "name": "Nadia Karim" },
       "slaBreached": false,
@@ -1296,6 +1297,20 @@ accessible name. Every counted filter has a removable chip, including Source.
 The tooltips do not capture clicks and close when you open a menu or move focus
 away. Closing a menu restores focus without reopening its tooltip; tab away and
 back to read it again.
+
+A **row** in the list (M14-20) has one meta line under the subject: the
+reference, the contact, the status as a plain word, the SLA time (or the wake time
+of a snoozed ticket) and the pinned field. At the end of the row sit the time of
+the last update and the assignee: their initials in a teal circle, or a dashed
+ring when nobody has the ticket. The status word is left out when the view is
+already filtered to one status, such as Escalated. A screen reader hears the same
+things in the row link's name, ending in "Assigned to Lina Haddad" or
+"Unassigned".
+
+In the **details panel** the order is the contact, Assignee, Status, Priority,
+Department, SLA, Tags, custom fields and Participants. Each select has its label
+above it. Participants is one line, "2 participants · Add CC"; press it to see
+the list and the field for copying somebody in.
 
 `apps/admin/src/screens/tickets/` is the `Admin · ticket view` artboard: the
 list, the thread and the details panel, on one route. The boundary it reads
@@ -1713,6 +1728,11 @@ The rows name their contact from the ticket itself: the list embeds
 contact being on the first page of `GET /contacts`, and the workspace no longer
 reads that page at all. The open ticket reads its one contact in full, for the
 details card and the thread's address line.
+
+The list also embeds `assignee: { id, name }` (M14-20; `null` for an unassigned
+ticket or a person who no longer holds a role in the brand), read for the page in
+one query. A row draws the initials from it, because `GET /staff` needs
+`staff:manage` and an Agent holds no such permission.
 
 ## Bulk edit
 

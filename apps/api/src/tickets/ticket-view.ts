@@ -9,6 +9,7 @@ import type {
   Tag,
   Ticket,
   TicketActivityEntry,
+  TicketAssignee,
   TicketContact,
   TicketMessage,
   TicketSlaSummary,
@@ -55,6 +56,16 @@ export const ticketContactOf = (
   return contactId === null || name === undefined ? null : { id: contactId, name };
 };
 
+/** The assignee a ticket names, from a page's `id → name` lookup; `null` for nobody or a person outside the brand. */
+export const ticketAssigneeOf = (
+  assigneeId: string | null,
+  names: ReadonlyMap<string, string>,
+): TicketAssignee | null => {
+  const name = assigneeId === null ? undefined : names.get(assigneeId);
+
+  return assigneeId === null || name === undefined ? null : { id: assigneeId, name };
+};
+
 export const toTicketStatus = (row: TicketStatusRow): TicketStatus => ({
   id: row.id,
   name: row.name,
@@ -89,6 +100,7 @@ export const toTicket = (
   contact?: TicketContact | null,
   sla?: TicketSlaSummary | null,
   imported?: Ticket['imported'],
+  assignee?: TicketAssignee | null,
 ): Ticket => ({
   id: ticket.id,
   number: ticket.number,
@@ -119,6 +131,7 @@ export const toTicket = (
   custom: ticket.custom,
   tags: [...tags],
   ...(contact === undefined ? {} : { contact }),
+  ...(assignee === undefined ? {} : { assignee }),
   // M3-02: the list's SlaTimer, judged by the api against the brand's hours.
   ...(sla === undefined ? {} : { sla }),
   // M7-06: only on a conversation the assistant has taken part in, so a

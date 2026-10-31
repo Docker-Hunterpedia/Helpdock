@@ -98,12 +98,23 @@ describe('Entra ID email verification by xms_edov (M18-09)', () => {
   });
 
   it.each([
+    ['idp is the issuer', `https://login.microsoftonline.com/${tenant}/v2.0`],
+    ['idp is the sts.windows.net form of the tenant', `https://sts.windows.net/${tenant}/`],
+  ])('vouches for a member whose %s', (_case, idp) => {
+    expect(oidcAssertion({ ...entra, claims: { ...entra.claims, idp } }).emailVerified).toBe(true);
+  });
+
+  it.each([
     ['xms_edov is missing', { claims: { ...entra.claims, xms_edov: undefined } }],
     ['xms_edov is false', { claims: { ...entra.claims, xms_edov: false } }],
     ['xms_edov is a string', { claims: { ...entra.claims, xms_edov: 'true' } }],
     ['acct is missing', { claims: { ...entra.claims, acct: undefined } }],
     ['the account is a guest (acct 1)', { claims: { ...entra.claims, acct: 1 } }],
     ['acct is a string', { claims: { ...entra.claims, acct: '0' } }],
+    [
+      'a B2B member whose idp names another tenant',
+      { claims: { ...entra.claims, idp: `https://sts.windows.net/${uuidv7()}/` } },
+    ],
     ['the token names another tenant', { claims: { ...entra.claims, tid: uuidv7() } }],
     [
       'the token has another issuer',

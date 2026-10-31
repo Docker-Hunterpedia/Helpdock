@@ -24,7 +24,7 @@ const wideViewport = (): void => {
   }));
 };
 
-const renderCard = async (ticketsApi?: MockTicketsApi) => {
+const renderCard = async (ticketsApi?: MockTicketsApi, { expanded = true } = {}) => {
   const apis = await signedInMockApis();
   const rendered = renderApp(<AppRoutes />, {
     authApi: apis.auth,
@@ -37,15 +37,65 @@ const renderCard = async (ticketsApi?: MockTicketsApi) => {
   });
 
   const card = await screen.findByRole('region', { name: 'Participants' }, { timeout: 5_000 });
-  await within(card).findByText('finance@acme.de');
+  const toggle = await within(card).findByRole('button', { name: /^\d+ participants? · Add CC$/ });
+  if (expanded) {
+    await rendered.user.click(toggle);
+    await within(card).findByText('finance@acme.de');
+  }
 
-  return { ...rendered, card };
+  return { ...rendered, card, toggle };
 };
 
 describe('the participants card', () => {
   beforeEach(wideViewport);
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('starts collapsed to one line that counts the contact and the CCs (M14-20)', async () => {
+    const { card, toggle } = await renderCard(undefined, { expanded: false });
+
+    expect(toggle).toHaveTextContent('2 participants · Add CC');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(card).queryByRole('textbox', { name: 'Add a CC' })).not.toBeInTheDocument();
+    expect(within(card).queryByText('finance@acme.de')).not.toBeInTheDocument();
+  });
+
+  it('shows the neutral "Participants" label, not a count, while the list is loading', async () => {
+    class PendingApi extends MockTicketsApi {
+      override participants(): ReturnType<MockTicketsApi['participants']> {
+        return new Promise(() => {});
+      }
+    }
+    const apis = await signedInMockApis();
+    renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      contactsApi: apis.contacts,
+      ticketingApi: apis.ticketing,
+      ticketsApi: new PendingApi(),
+      uploader: apis.uploader,
+      initialEntries: [`/tickets/${MOCK_TICKET_REFUND}?view=all`],
+    });
+
+    const card = await screen.findByRole('region', { name: 'Participants' }, { timeout: 5_000 });
+    const toggle = within(card).getByRole('button');
+
+    expect(toggle).toHaveTextContent(/^Participants$/);
+    expect(toggle).not.toHaveTextContent(/\d/);
+  });
+
+  it('opens and closes from the same line, keyboard included', async () => {
+    const { user, card, toggle } = await renderCard(undefined, { expanded: false });
+
+    toggle.focus();
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(card).getByRole('textbox', { name: 'Add a CC' })).toBeVisible();
+
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(card).queryByRole('textbox', { name: 'Add a CC' })).not.toBeInTheDocument();
   });
 
   it('shows the contact and the CCs, each with what they are', async () => {

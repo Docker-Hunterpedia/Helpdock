@@ -152,7 +152,8 @@ describe('while the first read is out', () => {
     await renderTickets('/tickets?view=all', new SlowListApi());
 
     const busy = list().querySelector('[aria-busy="true"]');
-    expect(busy?.querySelectorAll('.MuiSkeleton-circular')).toHaveLength(LIST_SKELETON_ROWS);
+    // Each row draws two circles: the priority dot and the assignee (M14-20).
+    expect(busy?.querySelectorAll('.MuiSkeleton-circular')).toHaveLength(LIST_SKELETON_ROWS * 2);
     expect(within(list()).queryByText('Nothing in this view')).not.toBeInTheDocument();
   });
 

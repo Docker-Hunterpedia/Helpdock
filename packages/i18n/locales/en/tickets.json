@@ -48,7 +48,9 @@
     "priority": "{{priority}} priority",
     "aiPaused": "AI paused",
     "aiAnswered": "AI answered",
-    "open": "Show the ticket list"
+    "open": "Show the ticket list",
+    "assigned": "Assigned",
+    "assignedTo": "Assigned to {{name}}"
   },
   "empty": {
     "noSelectionHeading": "No ticket open",
@@ -292,7 +294,9 @@
     "hint": "CCs receive public replies and may reply by email.",
     "added": "{{address}} added as a CC.",
     "removed": "{{address}} removed.",
-    "failed": "That did not work. Try again."
+    "failed": "That did not work. Try again.",
+    "summary_one": "{{count}} participant · Add CC",
+    "summary_other": "{{count}} participants · Add CC"
   },
   "filters": {
     "title": "Filter tickets",

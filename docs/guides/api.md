@@ -86,6 +86,7 @@ Errors have the shape every Helpdock route answers with: `{ "error": { "code", "
 The request and answer of each are in the OpenAPI document. What is worth knowing beyond it:
 
 - **Tickets go through the desk's own rules.** A ticket created here is on the `api` channel and gets the same routing, SLA clocks, workflow rules and events as one typed into the admin. `DELETE` is the admin's soft delete: the ticket disappears from every view and retention purges it later.
+- **Tickets name their assignee.** The list and the detail read carry `assignee: { id, name } | null` (M14-20): the assignee's name, `null` for an unassigned ticket or a person who no longer holds a role in the brand. It needs no scope beyond `tickets:read`. Webhook payloads and write responses omit it.
 - **Messages from a key** are recorded with `authorType: system`, and the activity log names the key, via `api`. A public message from a key is part of the thread; it is not emailed to the customer, because only an agent's public reply is.
 - **Contact upsert.** `POST /api/v1/contacts` updates the contact with the same `externalId`, or else the first one holding one of the given identifiers, and adds the identifiers it lacks; otherwise it creates one. The answer is always `200` with `created: true` or `false`. An identifier that belongs to another contact is refused (`409`), never merged.
 - **Articles** are read as a visitor reads them: published and public only. A key's searches are not recorded in the help center's search insights.

@@ -1326,6 +1326,20 @@ transitions (M1-08), merge and split (M1-09) and attachments (M1-10) add to it
 rather than change it; what the screen still cannot do is at the end of this
 section.
 
+### Tickets on a narrow screen (M14-22)
+
+Below 1024 px, on a tablet or a narrow window, the ticket list is the whole
+screen: there is no empty "No ticket open" area to get past. Tapping a ticket
+opens it over the list, under a bar with **Back to** the view you came from (for
+example "Back to My open"; the arrow points the other way in Arabic) and a
+**Details** button, which opens the ticket's details as a drawer from the
+inline end. **Back**, or your browser's back, returns to the list where you left
+it, scrolled to the same place, with the ticket you read focused. Ticking rows,
+the bulk bar and `j`, `k`, `Enter`, `x` and `/` work as they do on a wide
+screen (`/` and a filter chosen from the sidebar bring the list back first);
+`[` does nothing, since there is no second column to put away. Phone layouts
+under 600 px are a later milestone (M17-07).
+
 ### The compact composer and the 1280 px layout (M14-19)
 
 At 1280 × 720 the thread has about 700 px: the details panel is a drawer below

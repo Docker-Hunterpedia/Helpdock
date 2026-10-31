@@ -52,6 +52,9 @@
     "assigned": "Assigned",
     "assignedTo": "Assigned to {{name}}"
   },
+  "narrow": {
+    "back": "Back to {{view}}"
+  },
   "empty": {
     "noSelectionHeading": "No ticket open",
     "noSelectionBody": "Choose a ticket on the left to read it, or create one.",

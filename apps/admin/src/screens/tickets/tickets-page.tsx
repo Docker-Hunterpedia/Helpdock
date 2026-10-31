@@ -1,4 +1,4 @@
-import { Box, Button, Drawer, useMediaQuery } from '@mui/material';
+import { Box, Button, useMediaQuery } from '@mui/material';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TicketIcon } from 'lucide-react';
 import {
@@ -58,13 +58,15 @@ import { BulkPreviewDialog } from './bulk/bulk-preview-dialog.tsx';
 import { useBulkEdit } from './bulk/use-bulk-edit.tsx';
 import { useFilterSummary } from './filter-summary.js';
 import { paragraph, ticketReference } from './format.js';
+import { NarrowBar } from './narrow-bar.tsx';
 import { NewTicketDialog, type NewTicketValue } from './new-ticket-dialog.tsx';
-import { TICKET_LIST_WIDTH, TicketList } from './ticket-list.tsx';
+import { TicketList } from './ticket-list.tsx';
 import { TicketView } from './ticket-view.tsx';
 import { useDepartmentRooms } from './use-ticket-realtime.js';
 import { useViewActions } from './use-view-actions.js';
 import { useContactSearch, useWorkspaceData } from './use-workspace-data.js';
 import { SaveViewDialog } from './view-dialogs.tsx';
+import { workspaceLayout } from './workspace-layout.js';
 
 /**
  * The ticket workspace: `/tickets` and `/tickets/:ticketId` are the same
@@ -80,8 +82,11 @@ import { SaveViewDialog } from './view-dialogs.tsx';
  *
  * **The columns of DESIGN §6.5** are 220 · 360 · flexible · 300. Below 1440 px
  * (M14-19: it was 1280, which left the thread about 400 px) the details panel
- * becomes a drawer; below 1024 px the list does too, which is the same
- * breakpoint at which the shell's own sidebar becomes one.
+ * becomes a drawer. Below 1024 px (the breakpoint at which the shell's own
+ * sidebar becomes one) the screen is list-first (M14-22): the list fills it,
+ * opening a ticket pushes the ticket over it with a back button, and the
+ * browser's back returns to the list where it was scrolled to. `[` does
+ * nothing there, since there is no second column to put away.
  */
 
 /** The list shortcuts the workspace answers; `e` is the open ticket's (`ticket-view.tsx`). */
@@ -115,6 +120,7 @@ export function TicketsPage(): ReactNode {
   const brand = currentBrand(session);
   const wideDetails = useMediaQuery(DETAILS_BREAKPOINT, { noSsr: true });
   const wideList = useMediaQuery(LIST_BREAKPOINT, { noSsr: true });
+  const layout = workspaceLayout({ wide: wideList, ticketId });
 
   const views = useQuery({
     queryKey: ticketKeys.views(brand.id),
@@ -134,11 +140,14 @@ export function TicketsPage(): ReactNode {
   );
 
   const [typed, setTyped] = useState(search);
-  const [listOpen, setListOpen] = useState(false);
   // M14-19: `[` puts the list column away on a wide screen, leaving the thread the room.
   const [listHidden, setListHidden] = useState(false);
   const showListButton = useRef<HTMLButtonElement | null>(null);
   const focusAfterToggle = useRef<'button' | 'row' | null>(null);
+  // M14-22: the list's scroll position, and what to focus when it comes back.
+  const listScroll = useRef(0);
+  const backButton = useRef<HTMLButtonElement | null>(null);
+  const lastOpened = useRef<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -188,11 +197,20 @@ export function TicketsPage(): ReactNode {
     } else if (intent === 'new') {
       setDialogOpen(true);
     } else {
-      // `/` (M14-01). Below 1024 px the search box is in the list's drawer, and
-      // a list put away with `[` (M14-19) comes back for it.
-      setListOpen(true);
+      // `/` (M14-01). A list put away with `[` (M14-19) comes back for it.
       setListHidden(false);
       setFocusSearchToken(Date.now());
+    }
+    if (layout === 'ticket' && (intent === 'filters' || intent === 'search')) {
+      // Both live in the list, which a pushed ticket (M14-22) has put away.
+      const next = new URLSearchParams(params);
+      next.delete(INTENT);
+      const rest = next.toString();
+      void navigate(
+        { pathname: ROUTES.tickets, search: rest === '' ? '' : `?${rest}` },
+        { replace: true },
+      );
+      return;
     }
     setParams(
       (previous) => {
@@ -202,7 +220,38 @@ export function TicketsPage(): ReactNode {
       },
       { replace: true },
     );
-  }, [intent, setParams]);
+  }, [intent, layout, params, navigate, setParams]);
+
+  // The list was asked for from a ticket and has now come back; later returns
+  // to it, by the back button, should not repeat the request.
+  useEffect(() => {
+    if (layout === 'ticket') {
+      setOpenFiltersToken(null);
+      setFocusSearchToken(null);
+    }
+  }, [layout]);
+
+  // A pushed ticket takes focus to its back button when the row that opened it
+  // has gone, and the list gives it back to that row (without scrolling it).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `layout` is the trigger; `ticketId` is read at that moment.
+  useEffect(() => {
+    if (layout === 'ticket') {
+      lastOpened.current = ticketId;
+      if (document.activeElement === document.body || document.activeElement === null) {
+        backButton.current?.focus();
+      }
+    } else if (layout === 'list' && lastOpened.current !== null) {
+      setDetailsOpen(false);
+      const id = lastOpened.current;
+      lastOpened.current = null;
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`[data-ticket-id="${id}"] a`);
+        if (row instanceof HTMLElement) {
+          row.focus({ preventScroll: true });
+        }
+      });
+    }
+  }, [layout]);
 
   const query = useMemo(() => queryOf(filters), [filters]);
 
@@ -507,6 +556,8 @@ export function TicketsPage(): ReactNode {
 
   const listColumn = (
     <TicketList
+      fill={layout !== 'split'}
+      scrollMemory={listScroll}
       heading={view === null ? t('tickets:views.all') : viewLabel(view, locale)}
       tickets={tickets}
       selectedId={ticketId}
@@ -594,73 +645,75 @@ export function TicketsPage(): ReactNode {
         backgroundColor: tokens['bg.canvas'],
       }}
     >
-      {wideList ? (
-        listHidden ? null : (
-          listColumn
-        )
-      ) : (
-        <Drawer
-          open={listOpen}
-          onClose={() => {
-            setListOpen(false);
-          }}
-          slotProps={{ paper: { sx: { width: TICKET_LIST_WIDTH, maxWidth: '100%' } } }}
-        >
-          {listColumn}
-        </Drawer>
-      )}
+      {layout === 'split'
+        ? listHidden
+          ? null
+          : listColumn
+        : layout === 'list'
+          ? listColumn
+          : null}
 
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {!wideList || listHidden ? (
-          <Box sx={{ padding: 3, borderBlockEnd: `1px solid ${tokens['border.default']}` }}>
-            <Button
-              ref={showListButton}
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                if (wideList) {
+      {layout === 'list' ? null : (
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          {layout === 'ticket' ? (
+            <NarrowBar
+              viewName={view === null ? t('tickets:views.all') : viewLabel(view, locale)}
+              backRef={backButton}
+              onBack={() => {
+                void navigate({ pathname: ROUTES.tickets, search: linkSearch });
+              }}
+              onDetails={() => {
+                setDetailsOpen(true);
+              }}
+            />
+          ) : listHidden ? (
+            <Box sx={{ padding: 3, borderBlockEnd: `1px solid ${tokens['border.default']}` }}>
+              <Button
+                ref={showListButton}
+                variant="outlined"
+                size="small"
+                onClick={() => {
                   focusAfterToggle.current = 'row';
                   setListHidden(false);
-                } else {
-                  setListOpen(true);
-                }
-              }}
-            >
-              {t('tickets:list.open')}
-            </Button>
-          </Box>
-        ) : null}
+                }}
+              >
+                {t('tickets:list.open')}
+              </Button>
+            </Box>
+          ) : null}
 
-        {ticketId === null ? (
-          <Box sx={{ padding: 8 }}>
-            {/* No action here: the list beside it already carries the one
-                primary action this screen has, and two would be two. */}
-            <EmptyState
-              icon={TicketIcon}
-              heading={t('tickets:empty.noSelectionHeading')}
-              body={t('tickets:empty.noSelectionBody')}
+          {ticketId === null ? (
+            <Box sx={{ padding: 8 }}>
+              {/* No action here: the list beside it already carries the one
+                  primary action this screen has, and two would be two. */}
+              <EmptyState
+                icon={TicketIcon}
+                heading={t('tickets:empty.noSelectionHeading')}
+                body={t('tickets:empty.noSelectionBody')}
+              />
+            </Box>
+          ) : (
+            <TicketView
+              key={ticketId}
+              brandId={brand.id}
+              ticketId={ticketId}
+              directory={directory}
+              viewer={{ id: session.user.id, name: session.user.name }}
+              now={now}
+              detailsInDrawer={!wideDetails}
+              detailsButtonInHeader={layout !== 'ticket'}
+              detailsOpen={detailsOpen}
+              onDetailsOpenChange={setDetailsOpen}
+              onGoToList={() => {
+                void navigate({ pathname: ROUTES.tickets, search: linkSearch });
+              }}
+              onOpenTicket={(next) => {
+                void navigate({ pathname: ticketRoute(next), search: linkSearch });
+              }}
             />
-          </Box>
-        ) : (
-          <TicketView
-            key={ticketId}
-            brandId={brand.id}
-            ticketId={ticketId}
-            directory={directory}
-            viewer={{ id: session.user.id, name: session.user.name }}
-            now={now}
-            detailsInDrawer={!wideDetails}
-            detailsOpen={detailsOpen}
-            onDetailsOpenChange={setDetailsOpen}
-            onGoToList={() => {
-              void navigate({ pathname: ROUTES.tickets, search: linkSearch });
-            }}
-            onOpenTicket={(next) => {
-              void navigate({ pathname: ticketRoute(next), search: linkSearch });
-            }}
-          />
-        )}
-      </Box>
+          )}
+        </Box>
+      )}
 
       <NewTicketDialog
         open={dialogOpen}

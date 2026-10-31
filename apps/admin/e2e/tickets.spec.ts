@@ -567,24 +567,6 @@ test.describe('the breakpoints of DESIGN §6.5', () => {
     await page.keyboard.press('Escape');
     await expect(details).toBeHidden();
   });
-
-  test('puts the list in a drawer below 1024 px', async ({ page, appLocale: locale }) => {
-    const t = strings(locale);
-    // Signed in at the artboard's width first: below 1024 px the shell's own
-    // navigation is a drawer too, and the flow that gets here clicks it.
-    await signIn(page, locale);
-    await openTicket(page, locale);
-    await page.setViewportSize({ width: 900, height: 800 });
-
-    const list = page.getByRole('region', { name: t('tickets:list.label') });
-    await expect(list).toBeHidden();
-
-    await page.getByRole('button', { name: t('tickets:list.open') }).click();
-    await expect(list).toBeVisible();
-
-    await page.keyboard.press('Escape');
-    await expect(list).toBeHidden();
-  });
 });
 
 test.describe('right to left', () => {

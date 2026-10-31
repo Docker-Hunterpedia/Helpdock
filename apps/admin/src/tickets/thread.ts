@@ -35,6 +35,7 @@ const THREAD_EVENT_ACTIONS: readonly string[] = [
   'ticket.article_proposed',
   'ticket.snoozed',
   'ticket.woke',
+  'ticket.reply_mailbox.changed',
 ];
 
 /**

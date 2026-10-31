@@ -144,6 +144,24 @@ describe('snooze activity (M14-02)', () => {
   });
 });
 
+describe('the reply mailbox line (M14-26)', () => {
+  const NOW = Date.parse('2026-10-21T12:00:00Z');
+  it('is drawn in the thread, in English and Arabic, for a mailbox chosen and for one cleared', () => {
+    const make = (to: Record<string, unknown>): TicketActivityEntry => ({
+      ...entry,
+      action: 'ticket.reply_mailbox.changed',
+      to,
+    });
+    const set = make({ replyMailboxId: 'm1' });
+    const cleared = make({ replyMailboxId: null });
+
+    expect(buildThread([], [set], [])).toMatchObject([{ kind: 'event' }]);
+    expect(describeEvent(set, names, en, 'en', NOW)).toContain('mailbox replies leave from');
+    expect(describeEvent(cleared, names, en, 'en', NOW)).toContain('department’s sender');
+    expect(describeEvent(set, names, ar, 'ar', NOW)).toContain('صندوق البريد');
+  });
+});
+
 describe('the closed-without line in the thread (M14-17)', () => {
   const activity = (action: string, to: Record<string, unknown>): TicketActivityEntry => ({
     id: `0193b000-0000-7000-8000-00000000${action.length}907`,

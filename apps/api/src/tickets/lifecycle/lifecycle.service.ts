@@ -8,7 +8,12 @@ import { createI18n, type Locale } from '@helpdock/i18n';
 import { type BrandSettings, BULK_UNDO_WINDOW_SECONDS, isSpamStatus } from '@helpdock/schemas';
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { missingRequiredToCloseKeys } from '../close-requirements.js';
-import { type ArrivalEntryPoint, arrivalOf, continuationArrival } from '../routing/arrival.js';
+import {
+  type ArrivalEntryPoint,
+  arrivalColumnsOf,
+  arrivalOf,
+  continuationArrival,
+} from '../routing/arrival.js';
 import { isSnoozedStatus, type WakeReason, writeWokeActivity } from '../snooze/snooze-wake.js';
 import type { ActivityActor } from '../ticket-activity.js';
 import { writeTicketActivity } from '../ticket-activity.js';
@@ -610,6 +615,8 @@ export class TicketLifecycleService {
       ...(closed.teamId === null ? {} : { teamId: closed.teamId }),
       // M4-02: a widget conversation's continuation is still the visitor's.
       ...(closed.visitorId === null ? {} : { visitorId: closed.visitorId }),
+      // M14-26: where the customer's reply came in.
+      ...arrivalColumnsOf(inbound),
     });
 
     // M3-02: the continuation is a new ticket, so it gets fresh clocks.

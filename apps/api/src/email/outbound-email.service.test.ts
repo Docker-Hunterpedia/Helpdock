@@ -1,3 +1,4 @@
+import { mailboxSenderKey } from '@helpdock/schemas';
 import { describe, expect, it } from 'vitest';
 import {
   addressing,
@@ -95,7 +96,8 @@ describe('OutboundEmailService.queueReply', () => {
 });
 
 describe("OutboundEmailService.queueReply from a rule's reply mailbox (M14-26)", () => {
-  const mailbox = { name: 'Helpdock Refunds', address: 'refunds@helpdock.io' };
+  const MAILBOX = '0199f4b2-0000-7000-8000-0000000000aa';
+  const mailbox = { id: MAILBOX, name: 'Helpdock Refunds', address: 'refunds@helpdock.io' };
 
   it('sends from the mailbox a rule chose, with no Reply-To of the department', async () => {
     const { repository, service, tx } = setup();
@@ -114,7 +116,7 @@ describe("OutboundEmailService.queueReply from a rule's reply mailbox (M14-26)",
     });
   });
 
-  it("lets the composer's explicit From win over the rule", async () => {
+  it('sends from the mailbox when the composer sends the key it preselected', async () => {
     const { repository, service, tx } = setup();
     repository.addressingRow = addressing({ replyMailbox: mailbox });
 
@@ -122,10 +124,48 @@ describe("OutboundEmailService.queueReply from a rule's reply mailbox (M14-26)",
       brandId: BRAND,
       ticketId: TICKET,
       messageId: MESSAGE,
-      senderKey: 'default',
+      senderKey: mailboxSenderKey(MAILBOX),
     });
 
-    expect(delivery?.fromAddress).toBe('support@helpdock.io');
+    expect(delivery?.fromAddress).toBe('refunds@helpdock.io');
+  });
+
+  it.each([['default'], [REFUNDS]] as const)(
+    'lets an agent who picked another From (%s) win over the rule',
+    async (senderKey) => {
+      const { repository, service, tx } = setup();
+      repository.addressingRow = addressing({ replyMailbox: mailbox });
+
+      const delivery = await service.queueReply(tx, {
+        brandId: BRAND,
+        ticketId: TICKET,
+        messageId: MESSAGE,
+        senderKey,
+      });
+
+      expect(delivery?.fromAddress).not.toBe('refunds@helpdock.io');
+    },
+  );
+
+  it("refuses a mailbox key that is not the ticket's own reply mailbox", async () => {
+    const { repository, service, tx } = setup();
+    repository.addressingRow = addressing({ replyMailbox: mailbox });
+    const other = await service.queueReply(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      messageId: MESSAGE,
+      senderKey: mailboxSenderKey('0199f4b2-0000-7000-8000-0000000000ff'),
+    });
+    expect(other?.fromAddress).not.toBe('refunds@helpdock.io');
+
+    repository.addressingRow = addressing({ replyMailbox: null });
+    const none = await service.queueReply(tx, {
+      brandId: BRAND,
+      ticketId: TICKET,
+      messageId: MESSAGE + 'x',
+      senderKey: mailboxSenderKey(MAILBOX),
+    });
+    expect(none?.fromAddress).not.toBe('refunds@helpdock.io');
   });
 
   it('keeps auto-replies and surveys on the department sender', async () => {

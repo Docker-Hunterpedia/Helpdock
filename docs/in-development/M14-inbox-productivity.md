@@ -1537,10 +1537,15 @@ actions.
 Built as above, with these decisions:
 
 - [x] `mailboxId` / `toAddress` on `GET /tickets` (and so in views, the public
-  API and OpenAPI), read from the arrival record in `ticket_activity` with an
-  `EXISTS`-style subquery under the reader's own policies, indexed by the new
-  partial expression index `ticket_activity_arrival_idx`. No denormalised copy
-  of the arrival on the ticket.
+  API and OpenAPI), read from two new columns on the ticket,
+  `tickets.arrival_mailbox_id` (FK, `ON DELETE SET NULL`) and
+  `tickets.arrival_to_address` (lower-cased), indexed per brand. They are
+  written once at email intake (a new ticket, and a reopen-policy continuation)
+  from the same entry point the M14-08 arrival activity records. The plan said
+  "no new column"; a copy is kept because activity rows keep their original
+  `department_id` under row-level security, so a ticket transferred to another
+  department would vanish from its mailbox view for the people now working it.
+  Migration `0076` backfills existing tickets from their arrival activity.
 - [x] Filter popover rows "Mailbox" and "Written to", and the same two in the
   Views tab's editor; the mailbox list comes from `GET /ticket-mailboxes`
   (`ticket:read`), because `GET /mailboxes` needs `brand:manage`.
@@ -1549,12 +1554,14 @@ Built as above, with these decisions:
   including *is not* (the plan's "pre-M14 tickets never match", extended to
   tickets from other entry points, which also have no mailbox).
 - [x] `set_reply_mailbox` writes the new `tickets.reply_mailbox_id`
-  (migration `0074_ticket_reply_mailbox`, `ON DELETE SET NULL`); accepted only
-  for a mailbox of the ticket's department when the rule runs. The next public
-  email reply leaves from it unless the composer chose a sender; auto-replies,
+  (same migration, `ON DELETE SET NULL`); accepted only for a mailbox of the
+  ticket's department when the rule runs, and honoured only while the mailbox
+  still belongs to the ticket's department. The composer's From
+  select lists it first and preselects it (`mailbox:<id>`); an agent who picks
+  another From wins; auto-replies,
   surveys and transcripts keep the department's sender. Not exposed on the
   ticket DTO (no screen shows it yet); the activity row is
-  `ticket.reply_mailbox.changed`, which the thread does not draw.
+  `ticket.reply_mailbox.changed`, drawn in the thread.
 - [x] `mark_spam` calls the existing lifecycle transition. A queued
   acknowledgment, out-of-hours reply or survey for a ticket that became spam is
   discarded unsent by the `email.send` job.

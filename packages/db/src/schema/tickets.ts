@@ -162,6 +162,18 @@ export const tickets = pgTable(
     replyMailboxId: uuid('reply_mailbox_id').references((): AnyPgColumn => mailboxes.id, {
       onDelete: 'set null',
     }),
+    /**
+     * M14-26. Where the ticket arrived, copied once from the M14-08 arrival
+     * record at email intake: the mailbox and the address the customer wrote to
+     * (lower-cased). Kept on the ticket because the activity rows keep their
+     * original department under row-level security, so a transferred ticket
+     * would vanish from a mailbox view if the filter read them. Null for any
+     * ticket that did not arrive at a mailbox; `set null` on mailbox deletion.
+     */
+    arrivalMailboxId: uuid('arrival_mailbox_id').references((): AnyPgColumn => mailboxes.id, {
+      onDelete: 'set null',
+    }),
+    arrivalToAddress: text('arrival_to_address'),
     /** M3-02. Null while no policy applies; `set null` so deleting a policy keeps the history. */
     slaPolicyId: uuid('sla_policy_id').references((): AnyPgColumn => slaPolicies.id, {
       onDelete: 'set null',
@@ -356,6 +368,13 @@ export const tickets = pgTable(
       table.statusId,
       table.statusChangedAt,
     ),
+    // M14-26: the list's Mailbox and Written to filters.
+    index('tickets_brand_arrival_mailbox_idx')
+      .on(table.brandId, table.arrivalMailboxId)
+      .where(sql`${table.arrivalMailboxId} is not null`),
+    index('tickets_brand_arrival_to_idx')
+      .on(table.brandId, sql`lower(${table.arrivalToAddress})`)
+      .where(sql`${table.arrivalToAddress} is not null`),
   ],
 );
 

@@ -9,7 +9,6 @@ import {
 } from '@helpdock/db';
 import type { RuleTicketFacts } from '@helpdock/schemas';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { arrivalFactsOf } from '../tickets/routing/arrival-facts.js';
 
 /**
  * What a rule's conditions are asked about, read once per ticket per rule
@@ -99,14 +98,13 @@ export const loadTicketFacts = async (
   }
 
   const { ticket } = row;
-  const [body, contact, tags, arrival] = await Promise.all([
+  const [body, contact, tags] = await Promise.all([
     newestContactMessage(tx, ticketId),
     contactOf(tx, ticket.contactId),
     tx
       .select({ tagId: ticketTags.tagId })
       .from(ticketTags)
       .where(eq(ticketTags.ticketId, ticketId)),
-    arrivalFactsOf(tx, ticketId),
   ]);
 
   return {
@@ -132,8 +130,8 @@ export const loadTicketFacts = async (
     accountId: contact.accountId,
     custom: ticket.custom,
     replyMailboxId: ticket.replyMailboxId,
-    mailboxId: arrival.mailboxId,
-    toAddress: arrival.toAddress,
+    mailboxId: ticket.arrivalMailboxId,
+    toAddress: ticket.arrivalToAddress,
     snoozedUntil: ticket.snoozedUntil,
     inert: row.isSpam || ticket.mergedIntoId !== null || ticket.deletedAt !== null,
   };

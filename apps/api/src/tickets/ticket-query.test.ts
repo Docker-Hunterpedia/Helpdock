@@ -56,25 +56,22 @@ describe('ticketFilters', () => {
     expect(sql?.params).toEqual([BRAND]);
   });
 
-  it('reads the mailbox and the written-to address from the arrival record, binding every value (M14-26)', () => {
+  it('reads the mailbox and the written-to address from the ticket, binding every value (M14-26)', () => {
     const mailbox = '01937f5e-7e53-7000-8000-0000000000b1';
     const sql = render(
       ticketFilters(query({ mailboxId: [mailbox, mailbox], toAddress: "Refunds@Acme.test'; --" })),
     );
 
-    expect(sql?.sql).toContain('"ticket_activity"."action" in ($');
-    expect(sql?.sql).toContain("\"ticket_activity\".\"to\" -> 'arrival' ->> 'entry' = 'mailbox'");
-    expect(sql?.sql).toContain("->> 'entryId') in ($");
-    expect(sql?.sql).toContain('lower("ticket_activity"."to" -> \'arrival\' ->> \'address\') = $');
-    // The mailbox once, however often it was named; the address folded; nothing pasted into the text.
-    expect(sql?.params).toContain(mailbox);
+    expect(sql?.sql).toContain('"tickets"."arrival_mailbox_id" in ($');
+    expect(sql?.sql).toContain('lower("tickets"."arrival_to_address") = $');
     expect(sql?.params.filter((param) => param === mailbox)).toHaveLength(1);
     expect(sql?.params).toContain("refunds@acme.test'; --");
     expect(sql?.sql).not.toContain('acme.test');
+    expect(sql?.sql).not.toContain('ticket_activity');
   });
 
   it('adds no arrival clause when neither filter was asked for', () => {
-    expect(render(ticketFilters(query()))?.sql).not.toContain('ticket_activity');
+    expect(render(ticketFilters(query()))?.sql).not.toContain('arrival');
   });
 
   it('leaves snoozed tickets out unless asked, and reads only them for the Snoozed view (M14-02)', () => {

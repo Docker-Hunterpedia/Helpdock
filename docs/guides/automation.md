@@ -109,7 +109,7 @@ set the reply address, mark as spam, and AI triage.
   one of the brand's mailboxes, in place of the department's sender. It is
   accepted only for a mailbox *of the ticket's department*, checked when the rule
   runs: another department's, or a deleted one, is logged as *not carried out*.
-  A person's choice in the composer's From select still wins for that reply.
+  The composer's From select lists it first and preselects it, and an agent who picks another From wins for that reply. It only counts while the mailbox still belongs to the ticket's department: after a transfer, replies go back to the department's sender.
   Auto-replies, surveys and transcripts keep the department's sender. Deleting
   the mailbox puts the department's sender back.
 - **Mark as spam** (M14-26) is the same transition as a person's *Mark as spam*:

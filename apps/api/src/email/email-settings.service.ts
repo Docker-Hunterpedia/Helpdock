@@ -8,6 +8,7 @@ import {
   type EmailSenders,
   type EmailSignature,
   type FailedSendList,
+  mailboxSenderKey,
   type OutgoingSmtpTestResult,
   type OutgoingSmtpUpdate,
   SMTP_RESPONSE_MAX_LENGTH,
@@ -329,14 +330,30 @@ export class EmailSettingsService {
 
     const row = await this.#repository.settings(tx, brandId);
     const install = await this.#installSmtp.read();
-    const senders = senderOptions(row, install?.from);
+    // M14-26: the mailbox a rule chose leads the From select and is preselected;
+    // `replyAddressing` has already dropped it if the ticket left its department.
+    const mailbox = addressing.replyMailbox;
+    const senders = [
+      ...(mailbox === null
+        ? []
+        : [
+            {
+              key: mailboxSenderKey(mailbox.id),
+              from: { name: mailbox.name, address: mailbox.address },
+            },
+          ]),
+      ...senderOptions(row, install?.from),
+    ];
     const author = (await this.#repository.author(tx, userId)) ?? null;
     const brand = await this.#repository.brand(tx, brandId);
     const deliveries = await this.#repository.deliveriesForTicket(tx, ticketId);
 
     return {
       senders,
-      selectedKey: selectedSenderKey(addressing.departmentId, senders),
+      selectedKey:
+        mailbox === null
+          ? selectedSenderKey(addressing.departmentId, senders)
+          : mailboxSenderKey(mailbox.id),
       to: addressing.contact,
       signature: signatureFor(author, addressing.locale, {
         brandName: brand?.name ?? '',

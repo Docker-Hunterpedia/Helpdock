@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { decodeMasterKey, type Env } from '@helpdock/config';
 import {
   auditLog,
@@ -39,6 +40,7 @@ import { and, asc, count, eq, isNull, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordHasher } from '../auth/password.js';
 import { type ApiApp, createApiApp, createRuntime, type Runtime } from '../bootstrap.js';
+import { EmailRepository } from '../email/email.repository.js';
 import { createLogger } from '../logging/logger.js';
 import { type SeededInstall, seedDevInstall } from '../seed/dev-seed.js';
 import { dockerAvailable } from '../testing/docker-available.js';
@@ -1564,25 +1566,18 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
     let supportBox: string;
     let billingBox: string;
 
-    /** The arrival record M14-08's writers put on the creation row. */
-    const arriveAt = (ticketId: string, mailboxId: string, address: string, departmentId: string) =>
+    /** What email intake keeps on the ticket from M14-08's arrival record. */
+    const arriveAt = (
+      ticketId: string,
+      mailboxId: string,
+      address: string,
+      _departmentId: string,
+    ) =>
       inBrand((tx) =>
         tx
-          .update(ticketActivity)
-          .set({
-            to: {
-              arrival: {
-                entry: 'mailbox',
-                entryId: mailboxId,
-                address,
-                departmentId,
-                reason: 'entry_department',
-              },
-            },
-          })
-          .where(
-            and(eq(ticketActivity.ticketId, ticketId), eq(ticketActivity.action, 'ticket.created')),
-          ),
+          .update(tickets)
+          .set({ arrivalMailboxId: mailboxId, arrivalToAddress: address.toLowerCase() })
+          .where(eq(tickets.id, ticketId)),
       );
 
     const listIds = async (who: Person, query: string): Promise<string[]> => {
@@ -1735,6 +1730,104 @@ describe.skipIf(!hasDocker)('workflow rules', () => {
       );
       expect(boxes.status).toBe(200);
       expect(boxes.body.mailboxes.map((mailbox) => mailbox.address)).toContain('support@acme.test');
+    });
+
+    it('still finds a ticket in the mailbox view after it moves to another department (M14-26)', async () => {
+      const bea = await addPerson(runtime.db, 'bea');
+      await inBrand((tx) =>
+        tx.insert(userBrandRoles).values({
+          userId: bea.id,
+          brandId: seeded.brandId,
+          role: 'agent',
+          departmentIds: [billing],
+        }),
+      );
+      bea.token = await signIn(bea.email, PASSWORD);
+
+      const moved = await createTicket('Arrived at support, then transferred', support);
+      await arriveAt(moved.id, supportBox, 'support@acme.test', support);
+      // Before the transfer a Billing-only Agent cannot see it.
+      expect(await listIds(bea, `mailboxId=${supportBox}`)).not.toContain(moved.id);
+
+      await inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ departmentId: billing, teamId: null })
+          .where(eq(tickets.id, moved.id)),
+      );
+
+      // The arrival activity row keeps the old department under RLS; the ticket's own columns do not.
+      expect(await listIds(bea, `mailboxId=${supportBox}`)).toContain(moved.id);
+      expect(await listIds(bea, 'toAddress=support@acme.test')).toContain(moved.id);
+    });
+
+    it('backfills the arrival columns of existing tickets from their arrival activity (migration 0076)', async () => {
+      const migration = readFileSync(
+        new URL(
+          '../../../../packages/db/drizzle/0076_ticket_arrival_and_reply_mailbox.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      );
+      const update = migration
+        .split('--> statement-breakpoint')
+        .map((statement) => statement.trim())
+        .find((statement) => statement.includes('UPDATE "tickets" AS t'));
+      expect(update).toBeDefined();
+
+      const arrived = await createTicket('Old email ticket');
+      const typed = await createTicket('Old staff ticket');
+      await inBrand((tx) =>
+        tx
+          .update(ticketActivity)
+          .set({
+            to: {
+              arrival: {
+                entry: 'mailbox',
+                entryId: supportBox,
+                address: 'Refunds@Acme.test',
+                departmentId: support,
+                reason: 'entry_department',
+              },
+            },
+          })
+          .where(
+            and(
+              eq(ticketActivity.ticketId, arrived.id),
+              eq(ticketActivity.action, 'ticket.created'),
+            ),
+          ),
+      );
+
+      await inBrand((tx) => tx.execute(sql.raw(update ?? '')));
+
+      expect(await ticketRow(arrived.id)).toMatchObject({
+        arrivalMailboxId: supportBox,
+        arrivalToAddress: 'refunds@acme.test',
+      });
+      expect(await ticketRow(typed.id)).toMatchObject({
+        arrivalMailboxId: null,
+        arrivalToAddress: null,
+      });
+    });
+
+    it('falls back to the department sender when the ticket leaves the reply mailbox’s department', async () => {
+      const ticket = await createTicket('Replies from support', support);
+      await inBrand((tx) =>
+        tx.update(tickets).set({ replyMailboxId: supportBox }).where(eq(tickets.id, ticket.id)),
+      );
+      const addressingOf = () =>
+        inBrand((tx) => new EmailRepository().replyAddressing(tx, ticket.id));
+
+      expect((await addressingOf())?.replyMailbox?.id).toBe(supportBox);
+
+      await inBrand((tx) =>
+        tx
+          .update(tickets)
+          .set({ departmentId: billing, teamId: null })
+          .where(eq(tickets.id, ticket.id)),
+      );
+      expect((await addressingOf())?.replyMailbox).toBeNull();
     });
 
     it('sets the reply mailbox only to a mailbox of the ticket’s department, and says so when it cannot', async () => {

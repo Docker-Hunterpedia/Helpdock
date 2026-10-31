@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addressWrittenTo, arrivalOf, recordedArrival, requestArrival } from './arrival.js';
+import {
+  addressWrittenTo,
+  arrivalColumnsOf,
+  arrivalOf,
+  recordedArrival,
+  requestArrival,
+} from './arrival.js';
 
 const DEPARTMENT = '0199f4b2-0000-7000-8000-0000000000d1';
 
@@ -79,5 +85,18 @@ describe('addressWrittenTo', () => {
 
   it('accepts a delivery header at the 320-character limit', () => {
     expect(addressWrittenTo([], 'inbox@helpdock.test', 'a'.repeat(320))).toBe('a'.repeat(320));
+  });
+});
+
+describe('arrivalColumnsOf (M14-26)', () => {
+  it('keeps the mailbox and the lower-cased address of a mailbox arrival, and nothing for any other entry', () => {
+    expect(
+      arrivalColumnsOf({ entry: 'mailbox', entryId: 'box-1', address: 'Refunds@Acme.test' }),
+    ).toEqual({ arrivalMailboxId: 'box-1', arrivalToAddress: 'refunds@acme.test' });
+    expect(arrivalColumnsOf({ entry: 'mailbox', entryId: 'box-1' })).toEqual({
+      arrivalMailboxId: 'box-1',
+    });
+    expect(arrivalColumnsOf({ entry: 'widget', entryId: null })).toEqual({});
+    expect(arrivalColumnsOf({ entry: 'telegram_bot', entryId: 'bot' })).toEqual({});
   });
 });

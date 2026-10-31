@@ -100,7 +100,11 @@ export interface ReplyAddressing {
   readonly locale: 'en' | 'ar';
   readonly cc: readonly string[];
   /** M14-26. The mailbox a rule chose to send replies from; null: the department's sender. */
-  readonly replyMailbox: { readonly name: string; readonly address: string } | null;
+  readonly replyMailbox: {
+    readonly id: string;
+    readonly name: string;
+    readonly address: string;
+  } | null;
 }
 
 const reference = (prefix: string, number: number): string => `${prefix}-${String(number)}`;
@@ -214,6 +218,7 @@ export class EmailRepository {
         contactName: contacts.name,
         contactLocale: contacts.locale,
         brandLocale: brands.defaultLocale,
+        replyMailboxId: mailboxes.id,
         replyMailboxAddress: mailboxes.address,
         replyMailboxName: mailboxes.displayName,
       })
@@ -221,7 +226,15 @@ export class EmailRepository {
       .innerJoin(brands, eq(brands.id, tickets.brandId))
       .innerJoin(departments, eq(departments.id, tickets.departmentId))
       .leftJoin(contacts, eq(contacts.id, tickets.contactId))
-      .leftJoin(mailboxes, eq(mailboxes.id, tickets.replyMailboxId))
+      .leftJoin(
+        mailboxes,
+        // A mailbox only speaks for the department it belongs to now: after a transfer, or
+        // when the mailbox moved, replies fall back to the department's sender.
+        and(
+          eq(mailboxes.id, tickets.replyMailboxId),
+          eq(mailboxes.departmentId, tickets.departmentId),
+        ),
+      )
       .where(eq(tickets.id, ticketId))
       .limit(1);
     if (ticket === undefined) {
@@ -257,9 +270,13 @@ export class EmailRepository {
       locale,
       cc,
       replyMailbox:
-        ticket.replyMailboxAddress === null
+        ticket.replyMailboxId === null || ticket.replyMailboxAddress === null
           ? null
-          : { name: ticket.replyMailboxName ?? '', address: ticket.replyMailboxAddress },
+          : {
+              id: ticket.replyMailboxId,
+              name: ticket.replyMailboxName ?? '',
+              address: ticket.replyMailboxAddress,
+            },
     };
   }
 

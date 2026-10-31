@@ -2,6 +2,7 @@ import { createKeyring, decryptSecret, encryptSecret } from '@helpdock/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import {
+  addressing,
   FakeEmailRepository,
   installSmtp,
   recordingTransports,
@@ -350,6 +351,25 @@ describe('the ticket view', () => {
     expect(context.deliveries).toEqual([
       { messageId: MESSAGE, status: 'failed', attempts: 5, lastError: '550' },
     ]);
+  });
+
+  it("leads the From select with the rule's reply mailbox and preselects it (M14-26)", async () => {
+    const { service, tx, repository } = setup();
+    repository.settingsRow = settingsRow();
+    const id = '0199f4b2-0000-7000-8000-0000000000aa';
+    repository.addressingRow = addressing({
+      replyMailbox: { id, name: 'Helpdock Refunds', address: 'refunds@helpdock.io' },
+    });
+
+    const context = await service.ticketContext(tx, BRAND, TICKET, USER);
+
+    expect(context.senders.map((option) => option.key)).toEqual([
+      `mailbox:${id}`,
+      'default',
+      BILLING,
+    ]);
+    expect(context.senders[0]?.from.address).toBe('refunds@helpdock.io');
+    expect(context.selectedKey).toBe(`mailbox:${id}`);
   });
 
   it("fills the reader's signature placeholders from their profile, in the reply's language (M14-12)", async () => {

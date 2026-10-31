@@ -90,6 +90,8 @@ const row = (contactId: string | null): TicketRow => ({
   snoozeResumeStatusId: null,
   snoozeVersion: 0,
   replyMailboxId: null,
+  arrivalMailboxId: null,
+  arrivalToAddress: null,
   statusChangedAt: AT,
   custom: {},
   aiPausedAt: null,

@@ -342,7 +342,8 @@ export const ticketSchema = z.object({
    */
   contact: ticketContactSchema.nullable().optional(),
   /**
-   * M14-20: the assignee's name, filled by the list and the ticket read.
+   * M14-20: the assignee's name, filled by the list and the detail read only;
+   * create, update and webhook payloads leave it off.
    * `null` when the ticket is unassigned or the person is no longer in the
    * brand; optional for the reason `tags` is.
    */

@@ -303,6 +303,14 @@ export class TicketsService {
           await this.#tickets.contactNames(tx, contactId === null ? [] : [contactId]),
         )
       : undefined;
+    const assignee = ticketAssigneeOf(
+      found.ticket.assigneeId,
+      await this.#tickets.assigneeNames(
+        tx,
+        found.ticket.brandId,
+        found.ticket.assigneeId === null ? [] : [found.ticket.assigneeId],
+      ),
+    );
 
     const now = new Date();
     const sla = await this.#sla.view(tx, found.ticket.brandId, found.ticket, now);
@@ -321,6 +329,7 @@ export class TicketsService {
         found.ticket.importSource
           ? ((await importedTicketSources(tx, [ticketId])).get(ticketId) ?? null)
           : null,
+        assignee,
       ),
       // `#messagePage` rather than `messages`, which would re-run the ticket
       // read this method has already done.

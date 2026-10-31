@@ -1278,9 +1278,19 @@ describe.skipIf(!hasDocker)('tickets', () => {
     it('names each row’s assignee for an Agent, who cannot read the staff list (M14-20)', async () => {
       const assigned = await createTicket(sam, { subject: 'Wexford assigned' });
       const unassigned = await createTicket(sam, { subject: 'Wexford loose' });
-      await call('PATCH', `${brandPath(seeded.brandId)}/tickets/${assigned.ticket.id}`, sam, {
-        assigneeId: sam.id,
-      });
+      // A colleague, not the reader: the name has to come from the brand's people.
+      const patched = await call<Ticket>(
+        'PATCH',
+        `${brandPath(seeded.brandId)}/tickets/${assigned.ticket.id}`,
+        ada,
+        { assigneeId: ada.id },
+      );
+      expect(patched.status).toBe(200);
+      const colleague = await withSystem(runtime.db, seeded.brandId, (tx) =>
+        tx.select({ name: users.name }).from(users).where(eq(users.id, ada.id)),
+      );
+      const colleagueName = colleague[0]?.name ?? '';
+      expect(colleagueName).not.toBe('');
 
       const staff = await call('GET', `${brandPath(seeded.brandId)}/staff`, sam);
       expect(staff.status).toBe(403);
@@ -1292,8 +1302,17 @@ describe.skipIf(!hasDocker)('tickets', () => {
       );
       const byId = new Map(body.tickets.map((row) => [row.id, row]));
 
-      expect(byId.get(assigned.ticket.id)?.assignee).toEqual({ id: sam.id, name: 'sam' });
+      expect(byId.get(assigned.ticket.id)?.assignee).toEqual({ id: ada.id, name: colleagueName });
       expect(byId.get(unassigned.ticket.id)?.assignee).toBeNull();
+
+      // The detail read says the same, and a write response leaves the field off.
+      const read = await call<TicketDetail>(
+        'GET',
+        `${brandPath(seeded.brandId)}/tickets/${assigned.ticket.id}`,
+        sam,
+      );
+      expect(read.body.ticket.assignee).toEqual({ id: ada.id, name: colleagueName });
+      expect(patched.body.assignee).toBeUndefined();
     });
 
     it('finds both tickets whose subject matches the search', async () => {

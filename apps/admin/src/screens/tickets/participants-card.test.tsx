@@ -61,6 +61,30 @@ describe('the participants card', () => {
     expect(within(card).queryByText('finance@acme.de')).not.toBeInTheDocument();
   });
 
+  it('shows the neutral "Participants" label, not a count, while the list is loading', async () => {
+    class PendingApi extends MockTicketsApi {
+      override participants(): ReturnType<MockTicketsApi['participants']> {
+        return new Promise(() => {});
+      }
+    }
+    const apis = await signedInMockApis();
+    renderApp(<AppRoutes />, {
+      authApi: apis.auth,
+      staffApi: apis.staff,
+      contactsApi: apis.contacts,
+      ticketingApi: apis.ticketing,
+      ticketsApi: new PendingApi(),
+      uploader: apis.uploader,
+      initialEntries: [`/tickets/${MOCK_TICKET_REFUND}?view=all`],
+    });
+
+    const card = await screen.findByRole('region', { name: 'Participants' }, { timeout: 5_000 });
+    const toggle = within(card).getByRole('button');
+
+    expect(toggle).toHaveTextContent(/^Participants$/);
+    expect(toggle).not.toHaveTextContent(/\d/);
+  });
+
   it('opens and closes from the same line, keyboard included', async () => {
     const { user, card, toggle } = await renderCard(undefined, { expanded: false });
 
